@@ -216,10 +216,21 @@ impl World {
         }
     }
 
-    /// Removes the world's folder.
+    /// Checks that every request and notification the adapter wrote matches the contract, then
+    /// removes the world's folder.
     fn remove(self) {
         let base = self.base.clone();
         drop(self);
+        let contract = Contract::load();
+        for line in std::fs::read_to_string(base.join("stdin")).unwrap_or_default().lines() {
+            let value: Value = serde_json::from_str(line).unwrap_or_else(|e| panic!("the adapter wrote a line that is not JSON ({e}): {line}"));
+            match (value.get("method"), value.get("id")) {
+                (Some(_), Some(_)) => assert!(contract.fits("ClientRequest", &value), "outside the contract: {line}"),
+                (Some(_), None) => assert!(contract.fits("ClientNotification", &value), "outside the contract: {line}"),
+                // Answers to Codex's own requests: checked where a test knows the request.
+                _ => {}
+            }
+        }
         std::fs::remove_dir_all(&base).unwrap();
     }
 }
@@ -928,6 +939,82 @@ fn a_refused_sign_in_is_cancelled_only_with_a_checked_login_id() {
     world.remove();
 }
 
+/// A browser sign-in that is cancelled ends as cancelled: Codex 0.166.0 says "Login server error:
+/// Login was not completed" for it.
+#[test]
+fn a_cancelled_browser_sign_in_reads_as_cancelled() {
+    let id = "019a0000-0000-7000-8000-00000000c004";
+    let body = format!(
+        "hello\nreq\nok \"$id\" '{{\"type\":\"chatgpt\",\"loginId\":\"{id}\",\"authUrl\":\"https://auth.openai.com/x\"}}'\n\
+         req\nok \"$id\" '{{\"status\":\"canceled\"}}'\n\
+         say '{{\"method\":\"account/login/completed\",\"params\":{{\"loginId\":\"{id}\",\"success\":false,\"error\":\"Login server error: Login was not completed\"}}}}'\n\
+         say '{{\"method\":\"account/login/completed\",\"params\":{{\"loginId\":\"{id}\",\"success\":false,\"error\":\"Login server error: port 1455 is busy\"}}}}'\ndrain"
+    );
+    let world = World::new("account-browser-cancel", &body);
+    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let login = account.login_chatgpt(Duration::from_secs(5)).unwrap();
+    assert_eq!(account.cancel_login(&login.login_id, Duration::from_secs(5)).unwrap(), CancelStatus::Canceled);
+    assert_eq!(
+        account.next_event(Duration::from_secs(5)),
+        Some(AccountEvent::LoginCompleted { login_id: Some(login.login_id.clone()), outcome: LoginOutcome::Cancelled })
+    );
+    let failed = account.next_event(Duration::from_secs(5));
+    assert!(
+        matches!(failed, Some(AccountEvent::LoginCompleted { outcome: LoginOutcome::Failed { ref detail }, .. }) if detail.contains("1455")),
+        "{failed:?}"
+    );
+    drop(account);
+    world.remove();
+}
+
+/// The key an account process sends is scrubbed from what Codex writes back: an error answer
+/// echoing it and the error stream's tail show `<redacted>`.
+#[test]
+fn an_echoed_key_is_scrubbed_from_the_account_process() {
+    capture_logs();
+    let body = r#"hello
+req
+key=$(printf '%s\n' "$line" | sed -n 's/.*"apiKey":"\([^"]*\)".*/\1/p')
+printf 'rejected key %s\n' "$key" >&2
+err "$id" -32600 "invalid api key $key"
+req
+exit 2"#;
+    let world = World::new("account-echo", body);
+    let mut account = world.account(CredentialStore::Ephemeral, Duration::from_secs(5));
+    let error = account.login_api_key(&canary(), Duration::from_secs(5)).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::InvalidCredential);
+    let shown = format!("{error:?}{error:#?}{error}");
+    assert!(!shown.contains(CANARY) && shown.contains("<redacted>"), "{shown}");
+    let error = account.read(false, Duration::from_secs(5)).unwrap_err();
+    let shown = format!("{error:?}{error:#?}{error}");
+    assert!(!shown.contains(CANARY) && shown.contains("rejected key <redacted>"), "{shown}");
+    assert!(!account.process().stderr_tail().contains(CANARY));
+    assert!(!LOG.lock().unwrap_or_else(PoisonError::into_inner).iter().any(|l| l.contains(CANARY)), "the key reached the log");
+    drop(account);
+    world.remove();
+}
+
+/// An API-key sign-in that times out is not taken for a ChatGPT sign-in: its late answer sends no
+/// cancel.
+#[test]
+fn a_late_key_sign_in_sends_no_cancel() {
+    let body = "hello\nreq\nlate=$id\n/bin/sleep 0.3\nok \"$late\" '{\"type\":\"apiKey\"}'\nreq\nok \"$id\" '{\"account\":{\"type\":\"apiKey\"},\"requiresOpenaiAuth\":true}'\ndrain";
+    capture_logs();
+    let world = World::new("account-late-key", body);
+    let mut account = world.account(CredentialStore::Ephemeral, Duration::from_millis(100));
+    assert!(matches!(account.login_api_key(&canary(), Duration::from_secs(5)), Err(AgentError::TimedOut { .. })));
+    std::thread::sleep(Duration::from_millis(400));
+    let state = account.read(false, Duration::from_secs(5)).unwrap();
+    assert!(state.account.is_some());
+    assert_eq!(world.methods(4), vec!["initialize", "initialized", "account/login/start", "account/read"]);
+    assert!(
+        !LOG.lock().unwrap_or_else(PoisonError::into_inner).iter().any(|l| l.contains("a sign-in started late")),
+        "a key's late answer is not handled as a ChatGPT sign-in"
+    );
+    drop(account);
+    world.remove();
+}
+
 /// A sign-in whose start timed out but that Codex starts late is cancelled with its login id once
 /// the late answer is read.
 #[test]
@@ -984,7 +1071,7 @@ fn model_list_follows_cursors_and_refuses_bad_ones() {
 }
 
 /// A call Codex never answers because it ends gets the end's reason (its exit code and error tail);
-/// the end stays queued as an event, and later calls are refused.
+/// the end stays queued as an event, and later calls fail with the same reason.
 #[test]
 fn a_call_codex_never_answers_gets_its_exit_reason() {
     let world = World::new("account-crash", "hello\nreq\nprintf 'fatal: the keyring is locked\\n' >&2\nexit 3");
@@ -997,7 +1084,8 @@ fn a_call_codex_never_answers_gets_its_exit_reason() {
         "{event:?}"
     );
     assert_eq!(account.next_event(Duration::ZERO), None);
-    assert!(matches!(account.read(false, Duration::from_secs(1)), Err(AgentError::InputClosed { .. })));
+    let later = account.read(false, Duration::from_secs(1)).unwrap_err();
+    assert!(matches!(later, AgentError::Exited { code: Some(3), .. }), "a later call keeps the end's reason: {later:?}");
     drop(account);
     world.remove();
 }
@@ -1154,10 +1242,14 @@ fn a_failed_session_ends_within_a_bound() {
     let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     let started = Instant::now();
     let mut end = None;
+    let mut polls = 0u32;
     while started.elapsed() < Duration::from_secs(5) {
+        // Zero-timeout polls between the others: none waits while Codex is being ended.
+        let wait = if polls.is_multiple_of(2) { Duration::ZERO } else { Duration::from_millis(50) };
+        polls += 1;
         let call = Instant::now();
-        let event = session.next_event(Duration::from_millis(50));
-        assert!(call.elapsed() < Duration::from_millis(120), "a poll waited {:?}", call.elapsed());
+        let event = session.next_event(wait);
+        assert!(call.elapsed() < wait + Duration::from_millis(70), "a poll of {wait:?} waited {:?}", call.elapsed());
         if let Some(SessionEvent::Ended { exit, error }) = event {
             end = Some((exit, error, started.elapsed()));
             break;
@@ -1241,14 +1333,14 @@ fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
 /// request expires: B keeps running with no deadline, as the refusal belongs to turn A.
 #[test]
 fn a_late_stop_refusal_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_millis(400));
+    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_secs(1));
 }
 
 /// The same, but A's stop is never answered: its request expires while B runs, and B keeps running
 /// with no deadline.
 #[test]
 fn a_late_stop_timeout_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-timeout", "", Duration::from_millis(400));
+    late_stop_leaves_b_running("late-timeout", "", Duration::from_secs(1));
 }
 
 /// A shell line writing a piece of turn A's answer, which tells a test that A was named.
@@ -1548,6 +1640,32 @@ hang"#;
     assert!(sizes[0] > 4 * 1024 * 1024, "the long message alone: {sizes:?}");
     assert!(sizes[1] < 1024, "the two short ones together: {sizes:?}");
     assert!(session.damaged_copy().is_none());
+    drop(session);
+    world.remove();
+}
+
+/// `Debug` of a session never shows the key, while it is held for the handshake or after.
+#[test]
+fn a_session_s_debug_never_shows_the_key() {
+    let world = World::new("session-debug", "hang");
+    let session = world.session(config(Start::New, Duration::from_secs(5)), Auth::ApiKey(canary()));
+    for shown in [format!("{session:?}"), format!("{session:#?}")] {
+        assert!(!shown.contains(CANARY) && shown.contains("key_held: true"), "{shown}");
+    }
+    drop(session);
+    world.remove();
+}
+
+/// A key Codex does not accept ends the session as an invalid credential.
+#[test]
+fn a_refused_key_ends_the_session() {
+    let body = "hello\nreq\nok \"$id\" '{\"type\":\"apiKey\"}'\nsay '{\"method\":\"account/login/completed\",\"params\":{\"loginId\":null,\"success\":false,\"error\":\"bad key\"}}'\ndrain";
+    let world = World::new("session-refused-key", body);
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), Auth::ApiKey(canary()));
+    session.send("hello").unwrap();
+    let events = events_until(&mut session, 5, ended);
+    assert!(matches!(last_outcome(&events), TurnOutcome::Failed(e) if e.kind() == ErrorKind::InvalidCredential), "{events:?}");
+    assert!(matches!(events.last(), Some(SessionEvent::Ended { error: Some(e), .. }) if e.kind() == ErrorKind::InvalidCredential));
     drop(session);
     world.remove();
 }

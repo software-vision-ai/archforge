@@ -1,6 +1,7 @@
 //! What Codex's notifications mean in the neutral session events, and how its failures map to the
 //! neutral categories (the error mapping of `docs/agent-runtimes/README.md`). Every function here
-//! reads one message and keeps nothing; every text taken from Codex is capped.
+//! reads one message and keeps nothing. Ids, names, tool input, summaries and error words taken from
+//! Codex are capped; an answer's text and its pieces only by the line limit, as for Claude.
 
 use serde_json::Value;
 
@@ -181,8 +182,8 @@ pub(crate) fn server_status(params: &Value) -> Option<(Option<String>, ToolServe
     Some((thread_of(params), ToolServer { name: capped(name, MAX_NAME_BYTES), status: super::rpc::kind_name(status) }))
 }
 
-/// `text` cut to at most `max` bytes at a character boundary, with an ellipsis after the cut; a cut
-/// is logged by its length alone.
+/// `text` cut to at most `max` bytes at a character boundary, an ellipsis added after a cut (so a
+/// cut text is up to three bytes longer); a cut is logged by its length alone.
 pub(crate) fn capped(text: &str, max: usize) -> String {
     if text.len() > max {
         log::debug!("codex wrote a text of {} bytes; the first {max} are kept", text.len());

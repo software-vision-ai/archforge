@@ -23,7 +23,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
     `crates/agents/tests/runtimes.rs` against fake runtimes (shell scripts), never an installed
     `claude` or `codex`: give `find` a whole `HostEnv` so the machine's own PATH is not searched;
     the Claude adapter in `crates/agents/tests/claude.rs`, over the transcripts in
-    `crates/agents/tests/fixtures/` and fake `claude` scripts that replay them
+    `crates/agents/tests/fixtures/` and fake `claude` scripts that replay them; the Codex adapter in
+    `crates/agents/tests/codex.rs`, over `crates/agents/tests/fixtures/codex/`, the schema cut in
+    `crates/agents/schema/` and fake `codex` scripts, never an installed `codex` or `~/.codex`
   - the command engine: `crates/engine/tests/engine.rs` with its toy notation; a notation's own
     commands are checked with `archforge_engine::testing::round_trip` (feature `testing`)
 - A screen test builds the real `Shell` in an `egui_kittest` harness, draws it in both appearances

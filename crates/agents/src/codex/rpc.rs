@@ -27,6 +27,16 @@ pub const MAX_ID_BYTES: usize = 256;
 /// The longest kind name kept from a line Codex wrote, for the log and [`Skipped::Unknown`].
 const MAX_KIND_BYTES: usize = 64;
 
+/// The deadline `timeout` from now; a timeout too long for the clock waits as long as the clock
+/// allows (about a century or a year), never zero.
+pub(crate) fn deadline_in(timeout: Duration) -> Instant {
+    let now = Instant::now();
+    now.checked_add(timeout)
+        .or_else(|| now.checked_add(Duration::from_secs(100 * 365 * 24 * 3600)))
+        .or_else(|| now.checked_add(Duration::from_secs(365 * 24 * 3600)))
+        .unwrap_or(now)
+}
+
 /// The JSON-RPC code Codex 0.166.0 answers an unknown method with (an invalid request, not -32601).
 pub const INVALID_REQUEST: i64 = -32600;
 /// The JSON-RPC code for a method the server does not have, which other versions may use.
@@ -235,10 +245,19 @@ impl Conn {
     }
 
     /// Ends Codex as [`RuntimeProcess::shutdown`] does (waiting up to twice `grace`); the end it
-    /// then reports carries no error, unless Archforge was already ending it for one.
+    /// then reports carries no error, unless Archforge was already ending it for one or Codex had
+    /// already closed its output on its own (a crash keeps its reason).
     pub(crate) fn shutdown(&mut self, grace: Duration) -> Result<Exit, AgentError> {
-        self.shutting_down = true;
+        if matches!(self.phase, Phase::Open) {
+            self.shutting_down = true;
+        }
         self.process.shutdown(grace)
+    }
+
+    /// Adds a secret sent over the input after the start to what is scrubbed from Codex's output and
+    /// error tail ([`RuntimeProcess::add_input_secret`]).
+    pub(crate) fn add_input_secret(&mut self, secret: archforge_secrets::Secret) {
+        self.process.add_input_secret(secret);
     }
 
     /// Collects an ended Codex without waiting, for the owner's drop and polls.

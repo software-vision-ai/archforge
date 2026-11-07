@@ -24,7 +24,7 @@ folders, so the shell never depends on it and it is never built for the portable
 | `ConversationId`, `ConversationFolder` | 1 to 64 of `[a-z0-9-]`; `path()`, `home()`, `config()`, `work()`, `tmp()` |
 | `spawn` | `pub fn spawn(&Runtime, &ConversationFolder, SpawnRequest) -> Result<RuntimeProcess, AgentError>` |
 | `SpawnRequest`, `Limits` | `args`, `vars`, `secret_vars: Vec<(String, Secret)>`, `input_secrets` (secrets that go over standard input, never into the environment: refused in the command line and plain variables, kept only to scrub), `config_dir` (a shared private settings folder in place of the conversation's `config`), `limits`; `max_line_bytes` (8 MiB), `stderr_tail_bytes` (16 KiB), `queued_lines` (16), each refused at zero or past its maximum, and `max_line_bytes × (queued_lines + 1)` refused past `MAX_BUFFERED_BYTES` (256 MiB) |
-| `RuntimeProcess` | `send_line` (never waits), `close_input`, `next_event(timeout)`, `try_next_event`, `interrupt`, `status`, `shutdown(grace)` (waits up to twice `grace`, so on a worker), `terminate` (never waits), `try_reap` (never waits), `stderr_tail`, `stderr_closed`, `exit_error(Exit)`, `pid`; kills its group on drop |
+| `RuntimeProcess` | `send_line` (never waits), `close_input`, `next_event(timeout)`, `try_next_event`, `interrupt`, `status`, `shutdown(grace)` (waits up to twice `grace`, so on a worker), `terminate` (never waits), `try_reap` (never waits), `add_input_secret` (a secret sent over the input after the start, scrubbed from then on), `stderr_tail`, `stderr_closed`, `exit_error(Exit)`, `pid`; kills its group on drop |
 | `OutputEvent`, `Dropped`, `Exit` | `Line`, `Dropped(TooLong \| NotText { bytes })`, `ReadFailed`, `End`; `code`, `signal` |
 | `AgentError`, `ErrorKind` | every failure; `kind()` gives `MissingRuntime`, `InvalidCredential`, `SignInExpired`, `RateLimited`, `Network`, `ModelUnavailable` or `Other`; `AgentError::reported(kind, detail)` for the adapters |
 | `RuntimeProcess::redact` | `fn redact(&self, String) -> String`: the runtime's secrets replaced, for what an adapter shows from standard output |
@@ -35,7 +35,7 @@ folders, so the shell never depends on it and it is never built for the portable
 | `claude::ClaudeConfig` | `session: SessionId` (the conversation's UUID), `start: Start` (`New`, `Resume`), `model: Model`, `bridge: Bridge { cli, port, origin, allow_changes, home: BridgeHome }`, `limits` |
 | `claude::command_line`, `mcp_config`, `write_mcp_config` | the arguments; the tool server configuration as JSON; that configuration written to `claude-mcp.json` in the conversation's folder (atomic, 0600) |
 | `claude::ClaudeParser`, `kind_of` | stream-json lines to events, usable alone; an error category to its `ErrorKind` |
-| `codex::CodexSession` | `start(&Runtime, &ConversationFolder, &CodexHome, CodexConfig, Auth) -> Result<CodexSession, _>`, `AgentSession`, `history`, `damaged_copy`, `skipped`, `turn_running`, `process` |
+| `codex::CodexSession` | `start(&Runtime, &ConversationFolder, &CodexHome, CodexConfig, Auth) -> Result<CodexSession, _>`, `AgentSession`, `history`, `damaged_copy`, `copy_error`, `skipped`, `turn_running`, `process` |
 | `codex::CodexConfig`, `Auth`, `ChatGptStore`, `CredentialStore` | `start: Start`, `model: Option<Model>`, `bridge: Bridge`, `instructions` (64 KiB), `limits` (`max_line_bytes` at least 8 MiB), `request_timeout` (10 ms to 600 s, default 30 s); `Auth::ApiKey(Secret)` or `Auth::ChatGpt(ChatGptStore::{Keyring, File})`; `CredentialStore::{Ephemeral, Keyring, File}` |
 | `codex::CodexHome` | `open(&Workspace)`: `codex-home` in the workspace, 0700, Archforge's private `CODEX_HOME` |
 | `codex::CodexAccount` | `start(&Runtime, &Workspace, &CodexHome, CredentialStore, Limits, request_timeout, timeout)`, `read`, `login_api_key`, `login_chatgpt`, `login_device_code`, `cancel_login`, `logout`, `models`, `next_event`, `shutdown`, `folder`, `skipped`, `process` |
@@ -211,13 +211,17 @@ paths). That `-c mcp_servers.*` works like the spike's `config.toml` is not yet 
 *Stores (owner decisions).* An API key (`Auth::ApiKey`) goes to Codex over its standard input in
 `account/login/start {"type":"apiKey"}`, with `cli_auth_credentials_store="ephemeral"`: never a file,
 the keyring, the environment or the command line (it is an `input_secrets` entry, so it is refused
-there and scrubbed from the error tail and `redact`). The line is built in one buffer of its final
+there and scrubbed from the error tail and `redact`; an account process adds the key it is given to
+what it scrubs before sending it, as Codex may echo it). The line is built in one buffer of its final
 size and overwritten when dropped; a key with characters JSON would escape is refused first. A
 ChatGPT sign-in is kept in the system keyring (`ChatGptStore::Keyring`) or, where no usable keyring
 exists, in Codex's own files in `codex-home` (`ChatGptStore::File`); the application chooses.
 
 *Requests and bounds.* Every request has its own timeout (`request_timeout`). The session's methods
-never wait, but `next_event` (at most its timeout) and `shutdown` (at most twice its grace):
+never wait, but `next_event` (at most its timeout) and `shutdown` (at most twice its grace). The one
+exception to the timeout: when a turn is accepted or ends, `next_event` writes the conversation's copy
+within the call (one file of at most `LARGEST_COPY_BYTES`, synchronised with its folder). A timeout
+too long for the clock waits as long as the clock allows, never zero.
 
 | Call | Requests | Bound |
 |---|---|---|
@@ -245,24 +249,32 @@ so an unknown parameter value is not. `model/list`: a missing or null `nextCurso
 other is passed back unchanged; an empty, non-text, repeated or over 64 KiB cursor fails the call.
 Sign-in addresses must be `https` with a host and no user part, printable ASCII, at most 8 KiB;
 device codes 1 to 32 letters, digits and hyphens; login ids UUIDs. A cancelled sign-in's end is
-`LoginOutcome::Cancelled` (Codex says "Login was not completed"). The `Debug` of everything holding a
+`LoginOutcome::Cancelled` (Codex says "Login was not completed" for a device code and "Login server
+error: Login was not completed" for the browser); only a ChatGPT sign-in whose start timed out is
+cancelled when it starts late. The `Debug` of everything holding a
 sign-in address, a device code, an email, a key or a message shows lengths only. A turn ends by
 `turn/completed`'s status as the spike's error mapping says, `unauthorized` being `InvalidCredential`
 with a key and `SignInExpired` with ChatGPT. Approvals and elicitations are declined, a permission
 request gets an empty grant, any other request of Codex's a JSON-RPC error.
 
 *Ending.* When a call's Codex ends first, the call fails with the end's reason (the exit code or
-signal and the error tail) and `Ended` stays queued. When Codex closes its output, its exit status
-and whole error tail are awaited for up to 500 ms, so `Ended` carries them; only when the exit is not
-seen in that time is the reason generic, and Codex, its output closed but running, is then
-terminated. When Archforge must end a session or an account process (an unreadable, refused or
-timed-out handshake, a refused key, a refused stop's grace spent), its input is closed, it gets 500 ms
-to end, then `RuntimeProcess::terminate`, and `Ended` comes within 500 ms more carrying the original
-reason (without an exit status if the system has not collected it yet: it is collected later, without
-waiting, in `next_event`, `shutdown` or the drop). None of it ever blocks a caller past its timeout.
+signal and the error tail) and `Ended` stays queued; every later call of an account process fails
+with that reason too. When Codex closes its output, its exit status and whole error tail are awaited
+for up to 500 ms, so `Ended` carries them (also after a `shutdown` that came later); only when the exit
+is not seen in that time is the reason generic, and Codex, its output closed but running, is then
+terminated (a session or an account process alike). When Archforge must end a session (an
+unreadable, refused or timed-out handshake, a refused key, a refused stop's grace spent), its input is
+closed, it gets 500 ms to end, then `RuntimeProcess::terminate`, and `Ended` comes within 500 ms more
+carrying the original reason (without an exit status if the system has not collected it yet: it is
+collected later, without waiting, in `next_event`, `shutdown` or the drop). None of it blocks a caller
+past its timeout. An account process whose start fails is dropped. Dropping a session or an account
+process kills Codex's group and collects it as `RuntimeProcess`'s drop does, which waits for a
+process stuck in an uninterruptible system call.
 
-*Threads.* Every thread is ephemeral, so nothing of the conversation is written to the shared
-`CODEX_HOME`. A thread a timeout abandons is released with `thread/unsubscribe`: after a
+*Threads.* Every thread is started `ephemeral` and Codex runs with `history.persistence="none"`, so
+no thread history is kept in the shared `CODEX_HOME`; whether Codex's own databases there (the spike
+saw `logs_2.sqlite`, `state_5.sqlite` and `memories_1.sqlite` appear after one ephemeral thread) hold
+any of a conversation is not verified yet and needs a real round trip. A thread a timeout abandons is released with `thread/unsubscribe`: after a
 `thread/start` timeout the request is remembered (at most 16, each for ten request timeouts) and the
 thread a late answer names is released; after a `thread/inject_items` timeout the thread is released at
 once; after a `turn/start` timeout the old thread is kept only until a late turn on it (named by the
@@ -287,7 +299,13 @@ and a 1 MiB question, every byte a control character JSON writes in six); the re
 32 MiB. A copy of exactly 4097 is trimmed to 4096; one with more, or one unreadable, too long or not a
 regular file, is damaged and set aside whole as `codex-history.json.damaged-<n>`, its name claimed first
 with an exclusive create (a file, or a folder for a folder), so an earlier damaged copy is never
-replaced; the conversation goes on without it and `damaged_copy` names it. Every write goes through
+replaced; the conversation goes on without it and `damaged_copy` names it. Before parsing, a copy's
+commas and opening brackets outside strings are counted (three a message), so a file of tiny values
+cannot make the parser build millions of them; the file is opened without following a link or
+blocking, and must be a regular file on the open handle. The copy is written when a turn is accepted
+(the question) and when it ends (its answers), so a crash during a turn loses that turn's answers but
+not its question; a failed write is logged and kept for `copy_error` until a later write succeeds.
+Every write goes through
 `write_private_file`: a new temporary file beside the target (exclusive, 0600, never following a
 link), written and synchronised, checked to be the very file written (device and inode), a regular
 0600 file of this user, then renamed over the target, so a link at the target's place is replaced, never
@@ -318,8 +336,8 @@ exit during a turn. Its one real round trip is `#[ignore]`d: it needs a real key
 `tests/fixtures/codex/` (their note lines kept; `docs/agent-runtimes/README.md` says how they were
 sanitised) and fake `codex` scripts that replay them or answer as a test needs; every fixture message
 the contract covers is validated against `schema/codex-app-server-0.166.0.contract.json`, a 65 KB cut
-of Codex 0.166.0's generated schema (Apache-2.0, credited in its `$comment` and in NOTICE), as are the
-lines the adapter writes. No test runs a real `codex`, uses a real key or reads `~/.codex`. Unix only.
+of Codex 0.166.0's generated schema (Apache-2.0, credited in its `$comment` and in NOTICE), as is
+every request and notification the adapter writes in those tests. No test runs a real `codex`, uses a real key or reads `~/.codex`. Unix only.
 
 **Non-goals.** Windows: every entry point answers `AgentError::NotAvailable` ("not available on this
 system yet"). Storing conversations in the project (AR-206) and the Settings and Chat screens come

@@ -159,6 +159,9 @@ impl History {
 
     /// Adds one of Codex's answers, cut at [`MAX_MESSAGE_BYTES`], then trims to the budget.
     pub fn push_answer(&mut self, text: &str) {
+        if text.len() > MAX_MESSAGE_BYTES {
+            log::debug!("an answer of {} bytes is cut to {MAX_MESSAGE_BYTES} in the conversation's copy", text.len());
+        }
         let text = crate::error::capped_to(text.to_owned(), MAX_MESSAGE_BYTES.saturating_sub('…'.len_utf8()));
         self.messages.push(Message { role: Role::Assistant, text });
         self.trim();
@@ -180,6 +183,7 @@ impl History {
             cut = cut.saturating_add(1);
         }
         if cut > 0 {
+            log::debug!("the conversation's copy drops its {cut} oldest messages to stay within its budget");
             self.messages.drain(..cut.min(self.messages.len()));
         }
     }
@@ -194,6 +198,9 @@ impl History {
     /// and a text of at most [`MAX_MESSAGE_BYTES`]; then trimmed to the budget (a copy of exactly
     /// [`MAX_COPY_ENTRIES`] loses its oldest message). Anything else is damaged.
     pub(crate) fn from_json(bytes: &[u8]) -> Result<History, Damage> {
+        if !structure_fits(bytes) {
+            return Err(Damage(format!("it holds more values than a copy of {MAX_COPY_ENTRIES} messages can")));
+        }
         let value: Value = serde_json::from_slice(bytes).map_err(|e| Damage(format!("it is not JSON ({e})")))?;
         let object = value.as_object().ok_or_else(|| Damage("it is not a JSON object".to_owned()))?;
         if object.get("version").and_then(Value::as_u64) != Some(VERSION) {
@@ -266,9 +273,42 @@ fn message(entry: Option<&Map<String, Value>>) -> Result<Message, &'static str> 
     Ok(Message { role, text: text.to_owned() })
 }
 
-/// The file at `path`, refused when longer than [`MAX_COPY_FILE_BYTES`]; never more is read.
+/// Whether `bytes` hold no more JSON values than a copy can, counted before anything is parsed, so
+/// a file of tiny values cannot make the parser build millions of them: every comma and every
+/// opening bracket or brace outside strings counts, and a copy has three a message (its brace, its
+/// inner comma and the comma after it) and a few around them.
+fn structure_fits(bytes: &[u8]) -> bool {
+    let limit = MAX_COPY_ENTRIES.saturating_mul(3).saturating_add(16);
+    let (mut in_string, mut escaped, mut count) = (false, false, 0usize);
+    for &b in bytes {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b',' | b'[' | b'{' => {
+                count = count.saturating_add(1);
+                if count > limit {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+/// The file at `path`, refused when longer than [`MAX_COPY_FILE_BYTES`]; never more is read. It is
+/// opened without following a link or blocking, and must be a regular file on the open handle.
 fn read_capped(path: &Path) -> Result<Vec<u8>, Damage> {
-    let file = std::fs::File::open(path).map_err(|e| Damage(format!("it cannot be opened ({e})")))?;
+    let file = crate::sys::open_regular(path).map_err(|e| Damage(format!("it cannot be opened as a regular file ({e})")))?;
     let mut bytes = Vec::new();
     let limit = u64::try_from(MAX_COPY_FILE_BYTES).unwrap_or(u64::MAX).saturating_add(1);
     file.take(limit).read_to_end(&mut bytes).map_err(|e| Damage(format!("it cannot be read ({e})")))?;
@@ -407,6 +447,17 @@ mod tests {
         assert_eq!(read.messages(), expected.messages());
         assert_eq!(read.messages().last().map(|m| (m.role, m.text.len())), Some((Role::User, MAX_MESSAGE_BYTES)));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A copy of tiny values is refused before it is parsed; the largest real copies pass the count.
+    #[test]
+    fn a_copy_of_tiny_values_is_refused_before_parsing() {
+        let tiny = format!("{{\"messages\":[{}0],\"version\":1}}", "0,".repeat(1_000_000));
+        let error = History::from_json(tiny.as_bytes()).unwrap_err();
+        assert!(error.0.contains("more values"), "{error:?}");
+        assert!(structure_fits(answers(MAX_COPY_ENTRIES).to_json().as_bytes()));
+        let commas_in_text = History { messages: vec![Message { role: Role::User, text: ",[{".repeat(300_000) }], snapshot: None };
+        assert!(History::from_json(commas_in_text.to_json().as_bytes()).is_ok(), "brackets inside a text do not count");
     }
 
     /// A copy of exactly 4097 messages loses its oldest; one more is damaged.

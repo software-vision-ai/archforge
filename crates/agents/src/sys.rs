@@ -160,6 +160,16 @@ mod imp {
         std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).custom_flags(no_follow).open(path)
     }
 
+    /// Opens the file at `path` for reading without following a link and without blocking on a
+    /// pipe or a device, and refuses anything but a regular file (checked on the open handle).
+    pub(crate) fn open_regular(path: &Path) -> io::Result<File> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let flags = rustix::fs::OFlags::NOFOLLOW | rustix::fs::OFlags::NONBLOCK;
+        let flags = i32::try_from(flags.bits()).map_err(|_| io::Error::other("the open flags do not fit an int"))?;
+        let file = std::fs::OpenOptions::new().read(true).custom_flags(flags).open(path)?;
+        if file.metadata()?.is_file() { Ok(file) } else { Err(io::Error::other("it is not a regular file")) }
+    }
+
     /// Why the file at `path` is not the file `handle` describes, a regular file of `uid` with mode
     /// 0600 (the same device and inode), or `None` when it is. `path` is looked at without following
     /// a link.
@@ -246,6 +256,11 @@ mod imp {
 
     /// Not available on this system.
     pub(crate) fn create_private_file(_path: &Path) -> io::Result<File> {
+        Err(unavailable())
+    }
+
+    /// Not available on this system.
+    pub(crate) fn open_regular(_path: &Path) -> io::Result<File> {
         Err(unavailable())
     }
 

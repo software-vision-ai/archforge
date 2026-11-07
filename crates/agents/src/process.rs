@@ -399,6 +399,16 @@ impl RuntimeProcess {
         }
     }
 
+    /// Adds `secret` to what the error tail and [`redact`](Self::redact) replace, for a secret the
+    /// adapter sends over the input after the start (an account process's API key sign-in); it is
+    /// overwritten when the process is dropped, as the others are. A secret already held is not
+    /// added twice.
+    pub fn add_input_secret(&mut self, secret: Secret) {
+        if !self.scrub.iter().any(|held| held.expose() == secret.expose()) {
+            self.scrub.push(secret);
+        }
+    }
+
     /// Closes the runtime's input once the lines already queued are written, which asks both
     /// runtimes to finish and exit.
     pub fn close_input(&mut self) {

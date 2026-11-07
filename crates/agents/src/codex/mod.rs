@@ -3,7 +3,8 @@
 //!
 //! - [`CodexSession`] drives one conversation: it starts `codex app-server` in the conversation's
 //!   private folder, with Archforge's bridge as its only tool server, makes the handshake (signing in
-//!   with the API key when the conversation uses one), and runs each turn on an ephemeral thread.
+//!   with the API key when the conversation uses one), and runs its turns on ephemeral threads: a
+//!   thread serves turn after turn until a timeout abandons it, and the next turn starts another.
 //!   Its text messages are kept in the conversation's copy ([`history`]), so a resumed conversation
 //!   starts a new thread and hands it the copy.
 //! - [`CodexAccount`] is a short-lived app-server for Settings: the account, ChatGPT sign-in in the
@@ -439,7 +440,6 @@ enum Stop {
 }
 
 /// The open turn.
-#[derive(Debug)]
 struct Turn {
     /// The turn's number among this session's turns, which its stop request is tied to.
     number: u64,
@@ -448,11 +448,38 @@ struct Turn {
     thread: Option<String>,
     sent: bool,
     accepted: bool,
+    /// When Codex accepted the turn.
+    accepted_at: Option<Instant>,
     /// Codex's id for the turn, once it named it.
     id: Option<String>,
     stop: Stop,
     last_error: Option<AgentError>,
     retries: u32,
+}
+
+impl fmt::Debug for Turn {
+    /// Writes the state and the message's length, never the message.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Turn")
+            .field("number", &self.number)
+            .field("text_bytes", &self.text.len())
+            .field("sent", &self.sent)
+            .field("accepted", &self.accepted)
+            .field("named", &self.id.is_some())
+            .field("stop", &self.stop)
+            .finish()
+    }
+}
+
+impl Turn {
+    /// When a stop that waits for this turn's name gives up: one request timeout after the later of
+    /// the stop and the turn's acceptance; `None` unless the turn is accepted and unnamed.
+    fn unnamed_stop_due(&self, timeout: Duration) -> Option<Instant> {
+        match (self.stop, self.accepted_at, &self.id) {
+            (Stop::Wanted { at }, Some(accepted), None) => at.max(accepted).checked_add(timeout),
+            _ => None,
+        }
+    }
 }
 
 /// A `thread/start` that timed out: a late answer's thread is released until `forget_at`.
@@ -469,7 +496,6 @@ struct Retired {
     thread: String,
     request: u64,
     forget_at: Instant,
-    interrupting: bool,
 }
 
 /// A running Codex conversation.
@@ -495,6 +521,8 @@ pub struct CodexSession {
     servers: Vec<ToolServer>,
     /// The model the ready thread runs, as Codex named it.
     thread_model: String,
+    /// Why the last save of the copy failed, until one succeeds.
+    unsaved: Option<AgentError>,
     turn: Option<Turn>,
     turns: u64,
     events: VecDeque<SessionEvent>,
@@ -627,6 +655,7 @@ impl CodexSession {
             held_bytes: 0,
             servers: Vec::new(),
             thread_model: String::new(),
+            unsaved: None,
             turn: None,
             turns: 0,
             events: VecDeque::new(),
@@ -641,6 +670,13 @@ impl CodexSession {
     /// its earlier messages.
     pub fn damaged_copy(&self) -> Option<&Path> {
         self.damaged_copy.as_deref()
+    }
+
+    /// Why the last save of the conversation's copy failed, while no later save has succeeded:
+    /// the copy on disk is behind the conversation then, and a resume would miss its newest
+    /// messages.
+    pub fn copy_error(&self) -> Option<&AgentError> {
+        self.unsaved.as_ref()
     }
 
     /// The conversation's messages as the copy holds them.
@@ -699,11 +735,16 @@ impl CodexSession {
         }
     }
 
-    /// Saves the copy; a failure is logged (the folder and the purpose, never the content), and the
-    /// next save tries again.
-    fn save(&self) {
-        if let Err(e) = self.history.save(&self.copy_path) {
-            log::warn!("the conversation's copy could not be saved: {e}");
+    /// Saves the copy. A failure is logged (the folder and the purpose, never the content) and kept
+    /// for [`CodexSession::copy_error`] until a later save, at the next turn's acceptance or end,
+    /// succeeds.
+    fn save(&mut self) {
+        match self.history.save(&self.copy_path) {
+            Ok(()) => self.unsaved = None,
+            Err(e) => {
+                log::warn!("the conversation's copy could not be saved: {e}");
+                self.unsaved = Some(e);
+            }
         }
     }
 
@@ -862,7 +903,7 @@ impl CodexSession {
                 self.timed_out(id, pending);
             }
         }
-        if let Some((stop, accepted, unnamed)) = self.turn.as_ref().map(|t| (t.stop, t.accepted, t.id.is_none())) {
+        if let Some((stop, unnamed_due)) = self.turn.as_ref().map(|t| (t.stop, t.unnamed_stop_due(self.request_timeout))) {
             match stop {
                 Stop::Failed { deadline } if deadline <= now => {
                     self.fail(AgentError::reported(
@@ -871,7 +912,7 @@ impl CodexSession {
                     ));
                     return;
                 }
-                Stop::Wanted { at } if accepted && unnamed && now.saturating_duration_since(at) >= self.request_timeout => {
+                Stop::Wanted { .. } if unnamed_due.is_some_and(|due| due <= now) => {
                     // The turn never got a name to stop it by: its thread is released, which ends
                     // it, and the next turn starts a new one.
                     log::warn!("codex never named the turn being stopped; its thread is released");
@@ -899,7 +940,7 @@ impl CodexSession {
         let calls = self.calls.values().map(|p| p.deadline);
         let stop = self.turn.as_ref().and_then(|t| match t.stop {
             Stop::Failed { deadline } => Some(deadline),
-            Stop::Wanted { at } if t.accepted && t.id.is_none() => at.checked_add(self.request_timeout),
+            Stop::Wanted { .. } => t.unnamed_stop_due(self.request_timeout),
             _ => None,
         });
         let late = self.late_starts.iter().map(|l| l.forget_at);
@@ -939,7 +980,7 @@ impl CodexSession {
                 {
                     self.unsubscribe(&oldest.thread);
                 }
-                self.retired.push_back(Retired { thread, request: id, forget_at: late_deadline(self.request_timeout), interrupting: false });
+                self.retired.push_back(Retired { thread, request: id, forget_at: late_deadline(self.request_timeout) });
                 self.thread = ThreadState::None;
                 self.close_turn(TurnOutcome::Failed(error));
             }
@@ -1015,8 +1056,11 @@ impl CodexSession {
             Call::ThreadStart => match result {
                 Ok(answer) => match rpc::checked_id(answer.get("thread").and_then(|t| t.get("id"))) {
                     Some(thread) => {
-                        let model =
-                            answer.get("model").and_then(Value::as_str).map(|m| parse::capped(m, crate::claude::MAX_NAME_BYTES)).unwrap_or_default();
+                        let model = answer.get("model").and_then(Value::as_str).map(|m| parse::capped(m, crate::claude::MAX_NAME_BYTES));
+                        if model.is_none() {
+                            log::warn!("codex's thread names no model; Started says none");
+                        }
+                        let model = model.unwrap_or_default();
                         let held = std::mem::take(&mut self.held);
                         self.held_bytes = 0;
                         self.servers.clear();
@@ -1055,6 +1099,7 @@ impl CodexSession {
                         let mut interrupt = false;
                         if let Some(open) = self.turn.as_mut() {
                             open.accepted = true;
+                            open.accepted_at = Some(Instant::now());
                             open.thread = Some(thread);
                             if open.id.is_none() {
                                 open.id = named;
@@ -1148,16 +1193,11 @@ impl CodexSession {
         log::debug!("codex answered request {id} after it was given up; the answer is dropped");
     }
 
-    /// Stops the late turn `turn_id` on the retired thread at `at` (once); the thread is released
-    /// when the stop is answered or times out.
+    /// Stops the late turn `turn_id` on the retired thread at `at`, which leaves the list, so it is
+    /// stopped once; the thread is released when the stop is answered or times out.
     fn interrupt_retired(&mut self, at: usize, turn_id: &str) {
-        let Some(retired) = self.retired.get_mut(at) else { return };
-        if retired.interrupting {
-            return;
-        }
-        retired.interrupting = true;
-        let thread = retired.thread.clone();
-        self.retired.remove(at);
+        let Some(retired) = self.retired.remove(at) else { return };
+        let thread = retired.thread;
         if self.request(Call::LateInterrupt { thread: thread.clone() }, Some(json!({ "threadId": thread, "turnId": turn_id }))).is_err() {
             self.unsubscribe(&thread);
         }
@@ -1234,7 +1274,7 @@ impl CodexSession {
                     && let Some((event, answer)) = parse::item_completed(params)
                 {
                     if let Some(text) = answer
-                        && self.turn.as_ref().is_some_and(|t| t.accepted)
+                        && self.turn.as_ref().is_some_and(|t| t.sent)
                     {
                         self.history.push_answer(&text);
                     }
@@ -1399,6 +1439,7 @@ impl AgentSession for CodexSession {
             thread: None,
             sent: false,
             accepted: false,
+            accepted_at: None,
             id: None,
             stop: Stop::None,
             last_error: None,
@@ -1441,10 +1482,11 @@ impl AgentSession for CodexSession {
     /// second and the time left) and reading at most [`rpc::LINES_PER_CALL`] lines: with a zero
     /// timeout every line already there is read within that budget, without waiting, so an event
     /// behind lines that mean nothing still comes. Requests past their timeout are handled on the
-    /// way. Once Codex has ended it is collected here without waiting.
+    /// way. Once Codex has ended it is collected here without waiting. The one thing a timeout does
+    /// not cut short: when a turn is accepted or ends, the conversation's copy is written within the
+    /// call (one file of at most [`history::LARGEST_COPY_BYTES`], synchronised with its folder).
     fn next_event(&mut self, timeout: Duration) -> Option<SessionEvent> {
-        let start = Instant::now();
-        let deadline = start.checked_add(timeout).unwrap_or(start);
+        let deadline = rpc::deadline_in(timeout);
         let mut budget = LINES_PER_CALL;
         loop {
             if let Some(event) = self.events.pop_front() {

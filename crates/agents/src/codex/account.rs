@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use zeroize::Zeroizing;
 
-use super::rpc::{Conn, Incoming, LINES_PER_CALL, RpcError};
+use super::rpc::{Conn, Incoming, LINES_PER_CALL, RpcError, deadline_in};
 use super::{CodexHome, CredentialStore, checked_api_key, initialize, timeout_check};
 use crate::folder::ScratchFolder;
 use crate::{AgentError, ErrorKind, Exit, Limits, Runtime, RuntimeKind, SpawnRequest, Workspace, spawn};
@@ -37,6 +37,9 @@ const MAX_TEXT_BYTES: usize = 320;
 const MAX_LATE_LOGINS: usize = 16;
 /// The error text Codex 0.166.0 gives a sign-in cancelled with `account/login/cancel`.
 pub const LOGIN_NOT_COMPLETED: &str = "Login was not completed";
+/// The error text Codex 0.166.0 gives a browser sign-in cancelled with `account/login/cancel`: its
+/// login server's error, prefixed (`codex-rs/app-server` and `codex-rs/login/src/server.rs`).
+pub const BROWSER_LOGIN_NOT_COMPLETED: &str = "Login server error: Login was not completed";
 
 /// The id Codex gives a sign-in in progress: a UUID, checked before it is ever sent back.
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -140,7 +143,8 @@ pub struct AccountState {
 pub enum LoginOutcome {
     /// Signed in.
     SignedIn,
-    /// Cancelled with [`CodexAccount::cancel_login`] (Codex says [`LOGIN_NOT_COMPLETED`]).
+    /// Cancelled with [`CodexAccount::cancel_login`] (Codex says [`LOGIN_NOT_COMPLETED`] for a device
+    /// code, [`BROWSER_LOGIN_NOT_COMPLETED`] for the browser).
     Cancelled,
     /// Failed; `detail` is Codex's words, cut short, for the log.
     Failed { detail: String },
@@ -190,6 +194,8 @@ pub struct CodexAccount {
     late_logins: VecDeque<u64>,
     skipped: u64,
     ended: bool,
+    /// Why the process ended, for every call after the end.
+    end_reason: Option<AgentError>,
     scratch: ScratchFolder,
 }
 
@@ -209,9 +215,10 @@ impl fmt::Debug for CodexAccount {
 impl CodexAccount {
     /// Starts `codex app-server` with `store` and Archforge's private `CODEX_HOME` in a new scratch
     /// folder of `workspace`, and makes the handshake: one request (`initialize`, waited for up to
-    /// the smaller of `timeout` and `request_timeout`), then the `initialized` notification. A Codex
-    /// whose handshake names a version outside the accepted range is refused; a newer one than tested
-    /// is logged. Any failure ends the process and removes the folder.
+    /// the smaller of `timeout` and `request_timeout`, counted from the call with the folder and the
+    /// start), then the `initialized` notification. A Codex whose handshake names a version outside
+    /// the accepted range is refused; a newer one than tested is logged. Any failure ends the
+    /// process (it is dropped) and removes the folder.
     pub fn start(
         runtime: &Runtime,
         workspace: &Workspace,
@@ -233,6 +240,8 @@ impl CodexAccount {
         }
         timeout_check(request_timeout)?;
         limits.check()?;
+        // The setup below counts against the caller's time too.
+        let deadline = deadline_in(timeout.min(request_timeout));
         let scratch = workspace.scratch("codex")?;
         let folder = scratch
             .folder()
@@ -248,9 +257,9 @@ impl CodexAccount {
             late_logins: VecDeque::new(),
             skipped: 0,
             ended: false,
+            end_reason: None,
             scratch,
         };
-        let deadline = account.deadline(timeout);
         let answer = account.call("initialize", Some(initialize::params()), deadline, None)?;
         initialize::check(&answer)?;
         account.conn.notify("initialized")?;
@@ -297,8 +306,18 @@ impl CodexAccount {
         }
         checked_api_key(key)?;
         let deadline = self.deadline(timeout);
+        // Scrubbed from everything Codex writes from now on, as Codex may echo what it was sent.
+        let scrub = archforge_secrets::Secret::new(key.expose().to_owned()).map_err(|e| AgentError::InvalidSetting {
+            setting: "Codex API key",
+            bytes: 0,
+            reason: e.to_string(),
+        })?;
+        self.conn.add_input_secret(scrub);
+        if !self.conn.is_open() {
+            return Err(self.closed(deadline));
+        }
         let id = self.conn.request_secret(|id| super::api_key_line(id, key))?;
-        let answer = self.wait(id, "account/login/start", deadline, Some(ErrorKind::InvalidCredential))?;
+        let answer = self.wait(id, "account/login/start", deadline, Some(ErrorKind::InvalidCredential), false)?;
         match answer.get("type").and_then(Value::as_str) {
             Some("apiKey") => Ok(()),
             _ => Err(unreadable("account/login/start", "its type is not apiKey")),
@@ -315,7 +334,7 @@ impl CodexAccount {
     pub fn login_chatgpt(&mut self, timeout: Duration) -> Result<BrowserLogin, AgentError> {
         self.check_chatgpt_store()?;
         let deadline = self.deadline(timeout);
-        let answer = self.call("account/login/start", Some(json!({ "type": "chatgpt" })), deadline, None)?;
+        let answer = self.call_with("account/login/start", Some(json!({ "type": "chatgpt" })), deadline, None, true)?;
         let raw_id = answer.get("loginId").and_then(Value::as_str).and_then(LoginId::checked);
         let checked = (|| {
             if answer.get("type").and_then(Value::as_str) != Some("chatgpt") {
@@ -335,7 +354,7 @@ impl CodexAccount {
     pub fn login_device_code(&mut self, timeout: Duration) -> Result<DeviceLogin, AgentError> {
         self.check_chatgpt_store()?;
         let deadline = self.deadline(timeout);
-        let answer = self.call("account/login/start", Some(json!({ "type": "chatgptDeviceCode" })), deadline, None)?;
+        let answer = self.call_with("account/login/start", Some(json!({ "type": "chatgptDeviceCode" })), deadline, None, true)?;
         let raw_id = answer.get("loginId").and_then(Value::as_str).and_then(LoginId::checked);
         let checked = (|| {
             if answer.get("type").and_then(Value::as_str) != Some("chatgptDeviceCode") {
@@ -442,14 +461,12 @@ impl CodexAccount {
 
     /// The deadline of one request made now: the smaller of `timeout` and the request timeout.
     fn deadline(&self, timeout: Duration) -> Instant {
-        let now = Instant::now();
-        now.checked_add(timeout.min(self.request_timeout)).unwrap_or(now)
+        deadline_in(timeout.min(self.request_timeout))
     }
 
     /// The deadline of a call made of several requests: `timeout` from now.
     fn deadline_total(&self, timeout: Duration) -> Instant {
-        let now = Instant::now();
-        now.checked_add(timeout).unwrap_or(now)
+        deadline_in(timeout)
     }
 
     /// A ChatGPT sign-in needs a store that outlives the process.
@@ -486,24 +503,55 @@ impl CodexAccount {
 
     /// Sends one request and waits for its answer until `deadline`.
     fn call(&mut self, method: &'static str, params: Option<Value>, deadline: Instant, refused: Option<ErrorKind>) -> Result<Value, AgentError> {
+        self.call_with(method, params, deadline, refused, false)
+    }
+
+    /// [`CodexAccount::call`]; with `late_login`, a ChatGPT sign-in start that times out is
+    /// remembered, so a sign-in Codex starts late is cancelled. Once Codex is ending, the call
+    /// sends nothing and fails with the end's reason (read until `deadline`).
+    fn call_with(
+        &mut self,
+        method: &'static str,
+        params: Option<Value>,
+        deadline: Instant,
+        refused: Option<ErrorKind>,
+        late_login: bool,
+    ) -> Result<Value, AgentError> {
+        if !self.conn.is_open() {
+            return Err(self.closed(deadline));
+        }
         let id = self.conn.request(method, params)?;
-        self.wait(id, method, deadline, refused)
+        self.wait(id, method, deadline, refused, late_login)
+    }
+
+    /// The error of a call made once Codex is ending: the end's reason, read (keeping the events
+    /// read meanwhile) until the end comes or `deadline` passes; the input closed otherwise.
+    fn closed(&mut self, deadline: Instant) -> AgentError {
+        while !self.ended {
+            let mut budget = LINES_PER_CALL;
+            match self.conn.poll(deadline, &mut budget) {
+                Some(incoming) => self.take(incoming),
+                None if Instant::now() >= deadline => break,
+                None => {}
+            }
+        }
+        self.end_reason.clone().unwrap_or(AgentError::InputClosed { runtime: RuntimeKind::Codex })
     }
 
     /// Reads until the answer to request `id` comes, keeping every event read meanwhile, and never
     /// past `deadline`. A refusal is the request's error (`refused` names its category, if any);
     /// when Codex ends first, the call fails with the end's reason (the exit code or signal and the
     /// error stream's tail), and the end stays queued for [`CodexAccount::next_event`].
-    fn wait(&mut self, id: u64, method: &'static str, deadline: Instant, refused: Option<ErrorKind>) -> Result<Value, AgentError> {
+    fn wait(&mut self, id: u64, method: &'static str, deadline: Instant, refused: Option<ErrorKind>, late_login: bool) -> Result<Value, AgentError> {
         let started = Instant::now();
         loop {
             if self.ended {
-                return Err(AgentError::InputClosed { runtime: RuntimeKind::Codex });
+                return Err(self.end_reason.clone().unwrap_or(AgentError::InputClosed { runtime: RuntimeKind::Codex }));
             }
             let mut budget = LINES_PER_CALL;
             let Some(incoming) = self.conn.poll(deadline, &mut budget) else {
                 if Instant::now() >= deadline {
-                    if method == "account/login/start" {
+                    if late_login {
                         self.remember_late_login(id);
                     }
                     return Err(AgentError::TimedOut { runtime: RuntimeKind::Codex, request: method, after_ms: started.elapsed().as_millis() });
@@ -515,10 +563,8 @@ impl CodexAccount {
                     return result.map_err(|e: RpcError| e.into_error(method, refused));
                 }
                 Incoming::Ended { exit, error } => {
-                    let reason = error.clone().unwrap_or_else(|| AgentError::reported(ErrorKind::Other, "codex ended before it answered"));
-                    self.ended = true;
-                    self.push(AccountEvent::Ended { exit, error });
-                    return Err(reason);
+                    self.end(exit, error);
+                    return Err(self.end_reason.clone().unwrap_or(AgentError::InputClosed { runtime: RuntimeKind::Codex }));
                 }
                 other => self.take(other),
             }
@@ -541,10 +587,7 @@ impl CodexAccount {
                 log::debug!("codex wrote a line the account process skipped: {why:?}");
                 self.skipped = self.skipped.saturating_add(1);
             }
-            Incoming::Ended { exit, error } => {
-                self.ended = true;
-                self.push(AccountEvent::Ended { exit, error });
-            }
+            Incoming::Ended { exit, error } => self.end(exit, error),
         }
     }
 
@@ -567,6 +610,13 @@ impl CodexAccount {
         }
     }
 
+    /// Codex has ended: the end is kept as the reason of every later call and queued as an event.
+    fn end(&mut self, exit: Option<Exit>, error: Option<AgentError>) {
+        self.ended = true;
+        self.end_reason = Some(error.clone().unwrap_or_else(|| AgentError::reported(ErrorKind::Other, "codex ended before it answered")));
+        self.push(AccountEvent::Ended { exit, error });
+    }
+
     /// Remembers a sign-in start that timed out, so one that starts late is cancelled.
     fn remember_late_login(&mut self, id: u64) {
         if self.late_logins.len() >= MAX_LATE_LOGINS {
@@ -582,7 +632,7 @@ impl CodexAccount {
                 let login_id = params.get("loginId").and_then(Value::as_str).and_then(LoginId::checked);
                 let outcome = match (params.get("success").and_then(Value::as_bool), params.get("error").and_then(Value::as_str)) {
                     (Some(true), _) => LoginOutcome::SignedIn,
-                    (_, Some(LOGIN_NOT_COMPLETED)) => LoginOutcome::Cancelled,
+                    (_, Some(LOGIN_NOT_COMPLETED | BROWSER_LOGIN_NOT_COMPLETED)) => LoginOutcome::Cancelled,
                     (_, error) => LoginOutcome::Failed {
                         detail: cut(&self.conn.redact(error.unwrap_or("no reason given").to_owned()), crate::MAX_DETAIL_BYTES),
                     },
@@ -621,6 +671,9 @@ impl Drop for CodexAccount {
 
 /// `text` cut to at most `max` bytes at a character boundary, with an ellipsis after the cut.
 fn cut(text: &str, max: usize) -> String {
+    if text.len() > max {
+        log::debug!("codex wrote a text of {} bytes to the account process; the first {max} are kept", text.len());
+    }
     crate::error::capped_to(text.to_owned(), max)
 }
 

@@ -192,7 +192,8 @@ pub(crate) fn capped(text: String) -> String {
     capped_to(text, MAX_DETAIL_BYTES)
 }
 
-/// `text` cut to at most `max` bytes at a character boundary, with an ellipsis after the cut.
+/// `text` cut to at most `max` bytes at a character boundary, an ellipsis added after a cut (so a
+/// cut text is up to three bytes longer).
 pub(crate) fn capped_to(mut text: String, max: usize) -> String {
     if text.len() > max {
         let mut end = max;
