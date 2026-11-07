@@ -14,14 +14,17 @@
 //! A guard on every thread ([`Guard`]) gives everything back however the thread ends, a panic
 //! included: the conversation leaves the running list, its token is revoked, agent access closes
 //! with the last conversation that held it, and the window is told the conversation ended. The
-//! token goes first: once the thread takes the request to end (within [`TICK`]), or its program
-//! ends, before the program is shut down, which can take seconds (AR-228). Meanwhile the window
-//! refuses requests in the name of a conversation whose program is being ended.
+//! token goes first: asking a conversation to end ([`command`] with [`Command::End`],
+//! [`Handle::end`]) revokes its token on the asking thread, before the call returns, so no later
+//! request can use it whatever origin it names; its thread then closes the opening, when nothing
+//! else holds it, before the program is shut down, which can take seconds; so does a program that
+//! ends by itself (AR-228). The window also refuses requests in the name of a conversation whose
+//! program is being ended.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use archforge_agents::claude::{ClaudeConfig, ClaudeSession, Model, SessionId, Start};
@@ -55,16 +58,42 @@ impl std::fmt::Debug for Command {
     }
 }
 
-/// A running conversation as the host keeps it: the way to its thread.
+/// A running conversation as the host keeps it: the way to its thread, and its token.
 pub struct Handle {
     commands: Sender<Command>,
+    token: Token,
 }
 
 impl Handle {
-    /// Asks the conversation to end; a thread already gone needs nothing.
+    /// Asks the conversation to end, its token revoked first (AR-228); a thread already gone
+    /// needs nothing.
     pub fn end(&self) {
+        revoke_now(&self.token);
         let _ = self.commands.send(Command::End);
     }
+}
+
+/// A conversation's token, shared by its thread and its handle, so that asking it to end revokes
+/// the token on the asking thread, before the call returns, and no later call can use it whatever
+/// origin it names (AR-228). `ended` keeps a grant that comes after that from being kept.
+type Token = Arc<Mutex<Held>>;
+
+/// What [`Token`] holds.
+#[derive(Default)]
+struct Held {
+    grant: Option<archforge_control::Grant>,
+    ended: bool,
+}
+
+/// Revokes the token now and marks it ended: its grant drops, which revokes it (its file removed,
+/// its connections refused); closing the opening is left to the conversation's thread.
+fn revoke_now(token: &Token) {
+    let grant = {
+        let mut held = locked(token);
+        held.ended = true;
+        held.grant.take()
+    };
+    drop(grant);
 }
 
 /// Starts the conversation `request` names, answering at once.
@@ -77,6 +106,7 @@ pub fn start(inner: &Arc<Inner>, request: ChatStart) -> Result<(), ChatRefusal> 
     let session = SessionId::new(&request.chat).map_err(|_| bad())?;
     archforge_control::check_origin(&request.origin).map_err(|e| ChatRefusal::Refused { why: format!("the origin label: {e}") })?;
     let (commands, rx) = std::sync::mpsc::channel();
+    let token = Token::default();
     {
         // Held while the conversation joins the running list, so a removal of its folder either
         // began before (refused here, and the folder kept for the panel that asked) or finds it
@@ -93,25 +123,29 @@ pub fn start(inner: &Arc<Inner>, request: ChatStart) -> Result<(), ChatRefusal> 
         if running.len() >= MAX_RUNNING {
             return Err(ChatRefusal::TooMany { most: MAX_RUNNING });
         }
-        running.insert(request.chat.clone(), Handle { commands });
+        running.insert(request.chat.clone(), Handle { commands, token: token.clone() });
     }
     log::info!("the conversation {:?} starts with {}", request.chat, request.provider.name());
     let chat = request.chat.clone();
     let thread = inner.clone();
-    if !inner.spawn("agents-chat", move || run(&thread, request, id, session, &rx)) {
+    if !inner.spawn("agents-chat", move || run(&thread, request, id, session, &rx, token)) {
         locked(&inner.sessions).remove(&chat);
         return Err(if inner.quitting() { ChatRefusal::Closing } else { ChatRefusal::Refused { why: "a thread could not start".into() } });
     }
     Ok(())
 }
 
-/// Passes `command` to the running conversation `chat`.
+/// Passes `command` to the running conversation `chat`; [`Command::End`] revokes its token first,
+/// before this returns (AR-228).
 pub fn command(inner: &Inner, chat: &str, command: Command) -> Result<(), ChatRefusal> {
     if ConversationId::new(chat).is_err() || SessionId::new(chat).is_err() {
         return Err(ChatRefusal::BadId { bytes: chat.len() });
     }
     let running = locked(&inner.sessions);
     let handle = running.get(chat).ok_or(ChatRefusal::NotRunning)?;
+    if matches!(command, Command::End) {
+        revoke_now(&handle.token);
+    }
     handle.commands.send(command).map_err(|_| ChatRefusal::NotRunning)
 }
 
@@ -286,7 +320,10 @@ fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited, 
 struct Guard {
     inner: Arc<Inner>,
     chat: String,
-    grant: Option<archforge_control::Grant>,
+    /// The conversation's token, shared with its handle.
+    token: Token,
+    /// Whether a grant was taken for it, so the opening is released once, however it was revoked.
+    granted: bool,
     /// Why the conversation ended, when nobody asked; sent with its end.
     failure: Option<ChatFailure>,
     /// The events waiting in the window, counted against the cap.
@@ -310,14 +347,16 @@ impl Guard {
         sink.send(HostEvent::Chat { chat: self.chat.clone(), event, ticket });
     }
 
-    /// Revokes the conversation's token now, when it holds one, and closes agent access when no
-    /// conversation holds it any more (AR-228): a conversation asked to end, or whose program
-    /// ended, gives its access back before its program is shut down, so nothing it asks for after
-    /// that is run (a request the window already took finishes). Closing the opening is guarded as
-    /// the guard's drop guards it: a panic there is said in the log, never carried on.
+    /// Revokes the conversation's token, when the handle has not already, and closes agent access
+    /// when no conversation holds it any more (AR-228): a conversation asked to end, or whose
+    /// program ended, gives its access back before its program is shut down, so nothing it asks for
+    /// after that is run (a request the window already took finishes). Closing the opening is
+    /// guarded as the guard's drop guards it: a panic there is said in the log, never carried on.
     fn revoke(&mut self) {
-        // The token is revoked as the grant drops, whatever follows.
-        if self.grant.take().is_none() {
+        // The token is revoked as the grant drops, whatever follows (the handle may have revoked it
+        // already, when the end was asked).
+        revoke_now(&self.token);
+        if !std::mem::take(&mut self.granted) {
             return;
         }
         let inner = self.inner.clone();
@@ -338,7 +377,8 @@ impl Drop for Guard {
         locked(&self.inner.sessions).remove(&self.chat);
         let sink = self.inner.sink();
         // The token is revoked as the grant drops, whatever follows.
-        let held = self.grant.take().is_some();
+        revoke_now(&self.token);
+        let held = std::mem::take(&mut self.granted);
         let failure = self.failure.take();
         let chat = self.chat.clone();
         let inner = self.inner.clone();
@@ -392,12 +432,20 @@ fn model(name: &str) -> Result<Model, ChatFailure> {
     Model::new(name).map_err(|e| failure(&e))
 }
 
-/// A conversation's thread: everything but the checks [`start`] made. Once it takes the request to
-/// end (within one wait for an event, at most [`TICK`]), or its program ends, its token is revoked
-/// before the program is shut down (AR-228).
-fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: SessionId, commands: &Receiver<Command>) {
-    let mut guard =
-        Guard { inner: inner.clone(), chat: request.chat.clone(), grant: None, failure: None, waiting: Arc::new(Waiting::default()), dropped: false };
+/// A conversation's thread: everything but the checks [`start`] made, with `token`, shared with its
+/// handle. Asking it to end revokes the token at once, on the asking thread; this thread then
+/// closes the opening, when nothing else holds it, before the program is shut down; so does its
+/// program ending (AR-228).
+fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: SessionId, commands: &Receiver<Command>, token: Token) {
+    let mut guard = Guard {
+        inner: inner.clone(),
+        chat: request.chat.clone(),
+        token,
+        granted: false,
+        failure: None,
+        waiting: Arc::new(Waiting::default()),
+        dropped: false,
+    };
     let mut program = match begin(inner, &request, &id, session, &mut guard) {
         Ok(p) => p,
         Err(f) => {
@@ -440,7 +488,7 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             break;
         }
         // Whether the conversation holds access now: the opt-in may have closed it since the start.
-        let access = guard.grant.as_ref().is_some_and(archforge_control::Grant::live);
+        let access = locked(&guard.token).grant.as_ref().is_some_and(archforge_control::Grant::live);
         if let Some(event) = chat_event(event, access) {
             guard.emit(event);
         }
@@ -473,13 +521,24 @@ fn begin(
         (Provider::Codex, CodexSignIn::ChatGpt) => None,
     };
     let sink = inner.sink();
-    // Held by the guard from the moment it exists, so any end after it gives it back.
-    guard.grant = locked(&inner.access).grant(request.allow_changes, sink.as_ref()).map_err(other)?;
-    let bridge = match &guard.grant {
-        Some(grant) => Some(Bridge {
+    // Held by the guard from the moment it exists, so any end after it gives it back; one asked to
+    // end meanwhile has it revoked here, never kept.
+    let grant = locked(&inner.access).grant(request.allow_changes, sink.as_ref()).map_err(other)?;
+    guard.granted = grant.is_some();
+    let place = grant.as_ref().map(|g| (g.port(), g.path().to_path_buf()));
+    {
+        let mut held = locked(&guard.token);
+        if held.ended {
+            drop(grant);
+        } else {
+            held.grant = grant;
+        }
+    }
+    let bridge = match place {
+        Some((port, token_file)) => Some(Bridge {
             cli: (inner.cli)().map_err(other)?,
-            port: grant.port(),
-            token_file: grant.path().to_path_buf(),
+            port,
+            token_file,
             origin: request.origin.clone(),
             allow_changes: request.allow_changes,
         }),

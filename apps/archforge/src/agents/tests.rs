@@ -651,6 +651,50 @@ fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
     host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
 }
 
+/// Asking a conversation to end revokes its token before the asking call returns (AR-228, review):
+/// a call with that full-access token right after, with no origin or in another conversation's
+/// name, so the window's gate cannot tell it is the ending conversation's, is refused and changes
+/// nothing; another conversation's own token still works.
+#[test]
+fn a_conversation_asked_to_end_has_its_token_revoked_before_the_call_returns() {
+    let host = Host::new("revoke-at-ask", Setup::default());
+    host.agents.set_model_access(true);
+    let (ending, other) = (id(1), id(2));
+    host.agents.start(claude(&ending, "Chat 1", true)).unwrap();
+    host.agents.start(claude(&other, "Chat 2", false)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(&ending));
+    let (_, other_file) = bridge_of(&host.mcp(&other));
+    let token = archforge_control::read_token(&file).unwrap();
+    host.agents.end(&ending).unwrap();
+    assert!(!file.exists(), "its token file went as the end was asked");
+    let calls = std::thread::spawn(move || {
+        let change = |c: Client| c.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } }));
+        let other_reads = Client::from_token_file(&other_file, port).unwrap().with_origin(Some("Chat 2".into())).unwrap();
+        vec![
+            ("no origin", change(Client::with_token(port, token.clone()))),
+            ("another conversation's origin", change(Client::with_token(port, token).with_origin(Some("Chat 2".into())).unwrap())),
+            ("the other conversation's own token", other_reads.call("document.inspect", json!({}))),
+        ]
+    });
+    let mut window = shell();
+    host.window(&mut window, || calls.is_finished());
+    for (what, answer) in calls.join().unwrap() {
+        if what == "the other conversation's own token" {
+            assert!(answer.is_ok(), "{what}: {answer:?}");
+        } else {
+            assert!(
+                matches!(&answer, Err(CallError::Unreachable(_))) || answer == Err(CallError::Refused(archforge_control::REVOKED.into())),
+                "{what}: refused: {answer:?}"
+            );
+        }
+    }
+    let schemas = archforge_ui_egui::control::answer(&mut window, "engine.execute", &json!({ "command": "er.schema.list" })).unwrap();
+    assert_eq!(schemas["result"].as_array().map(Vec::len), Some(0), "nothing changed: {schemas}");
+    host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if *chat == ending));
+    host.agents.end(&other).unwrap();
+}
+
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
 /// "revoked", and never runs when the window comes to it.
 #[test]
