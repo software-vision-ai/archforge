@@ -8,7 +8,8 @@
 # outside the changed lines opens no thread, so before this file such a finding did not hold the
 # approval back (#211 was approved seven seconds after two "Major" outside-diff findings). The
 # custom check below turns every unresolved finding into a failing pre-merge check, so no
-# approval comes while one is open.
+# automatic approval comes while one is open. The merge-risk limit holds approve and resolve
+# commands back the same way, since those commands honour risk limits but not pre-merge checks.
 inheritance: true
 reviews:
   profile: chill
@@ -16,6 +17,18 @@ reviews:
     enabled: true
     # The author's own @coderabbitai approve or resolve would get around the findings check.
     allow_author_approval: false
+    # Approve and resolve commands do not wait for pre-merge checks, but they do honour this
+    # limit. With the merge-risk instructions below, an open finding rates the pull request
+    # Critical, so no approval, by command or automatic, comes while one is open.
+    max_merge_risk: high
+  merge_risk_instructions: |
+    Rate merge risk Critical while any Critical, Major or Minor finding CodeRabbit has raised on
+    this pull request is still unresolved for the latest commit, whether it was posted in a review
+    thread, as an "outside diff range" comment, or as an actionable comment in a review summary.
+    A finding is resolved only when the latest commit changes the code so it no longer applies, or
+    when its review thread is resolved after a reply that shows why it does not apply. Nitpick and
+    Trivial comments do not raise the rating. With no such finding open, rate the change on its own
+    merits.
   auto_review:
     # Review every commit; a paused review left #210's last commit unreviewed for half an hour.
     auto_pause_after_reviewed_commits: 0
