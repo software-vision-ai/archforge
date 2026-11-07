@@ -619,11 +619,11 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
 /// allowed changes, is refused and changes nothing.
 #[test]
 fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
-    // The program says when its input closed, that is when it was asked to end, then takes a
-    // second to go.
+    // The program says when its input closed, that is when it was asked to end, then takes most of
+    // the shutdown's grace to go.
     let host = Host::new(
         "revoke-on-end",
-        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1\n", ..Setup::default() },
+        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1.5\n", ..Setup::default() },
     );
     host.agents.set_model_access(true);
     host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();

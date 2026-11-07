@@ -14,8 +14,9 @@
 //! A guard on every thread ([`Guard`]) gives everything back however the thread ends, a panic
 //! included: the conversation leaves the running list, its token is revoked, agent access closes
 //! with the last conversation that held it, and the window is told the conversation ended. The
-//! token goes first: as soon as the conversation is asked to end, or its program ends, before the
-//! program is shut down, which can take seconds (AR-228).
+//! token goes first: once the thread takes the request to end (within [`TICK`]), or its program
+//! ends, before the program is shut down, which can take seconds (AR-228). Meanwhile the window
+//! refuses requests in the name of a conversation whose program is being ended.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -311,11 +312,21 @@ impl Guard {
 
     /// Revokes the conversation's token now, when it holds one, and closes agent access when no
     /// conversation holds it any more (AR-228): a conversation asked to end, or whose program
-    /// ended, gives its access back before its program is shut down, so nothing it asks for while
-    /// it ends is answered.
+    /// ended, gives its access back before its program is shut down, so nothing it asks for after
+    /// that is run (a request the window already took finishes). Closing the opening is guarded as
+    /// the guard's drop guards it: a panic there is said in the log, never carried on.
     fn revoke(&mut self) {
-        if self.grant.take().is_some() {
-            locked(&self.inner.access).released(self.inner.sink().as_ref());
+        // The token is revoked as the grant drops, whatever follows.
+        if self.grant.take().is_none() {
+            return;
+        }
+        let inner = self.inner.clone();
+        let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let sink = inner.sink();
+            locked(&inner.access).released(sink.as_ref());
+        }));
+        if closed.is_err() {
+            log::error!("agent access could not be closed after the conversation {:?} gave its token back", self.chat);
         }
     }
 }
@@ -381,8 +392,9 @@ fn model(name: &str) -> Result<Model, ChatFailure> {
     Model::new(name).map_err(|e| failure(&e))
 }
 
-/// A conversation's thread: everything but the checks [`start`] made. Once it is asked to end, or
-/// its program ends, its token is revoked before the program is shut down (AR-228).
+/// A conversation's thread: everything but the checks [`start`] made. Once it takes the request to
+/// end (within one wait for an event, at most [`TICK`]), or its program ends, its token is revoked
+/// before the program is shut down (AR-228).
 fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: SessionId, commands: &Receiver<Command>) {
     let mut guard =
         Guard { inner: inner.clone(), chat: request.chat.clone(), grant: None, failure: None, waiting: Arc::new(Waiting::default()), dropped: false };
@@ -433,8 +445,8 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             guard.emit(event);
         }
     }
-    // Its access goes first, at once (AR-228): the program takes seconds to shut down, and nothing
-    // it asks for meanwhile is answered.
+    // Its access goes first (AR-228): the program takes seconds to shut down, and nothing it asks
+    // for after this is run.
     guard.revoke();
     // The program is shut down while the guard still holds the conversation, so a new start of the
     // same id waits for it.
