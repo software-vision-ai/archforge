@@ -272,7 +272,8 @@ project that cannot be written.
 - **The chips** above the box are sent with your question: the project, the open diagram and what
   is selected, by name. Remove one with its ×; it stays removed while this conversation stays
   shown. Open another conversation and then this one again from **Conversations**, and the chip
-  is back and goes with the next question: check the chips before you ask. The line under them is
+  is back and goes with the next question: check the chips before you ask. **Send again** keeps a
+  question's first chips (see [When something goes wrong](#when-something-goes-wrong)). The line under them is
   a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
@@ -377,12 +378,17 @@ A card in the conversation says what went wrong and what to do.
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
 | *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**: the Codex card says the sign-in expired. Choose **Sign in again…**, then ask again. |
-| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**, then press Enter (the question is back in the box) or **Send again**. |
+| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**. If the question is back in the box, press Enter. If the box held something else, the question stayed in the conversation: choose **Send again** on its card, as Enter would send what is in the box as a new question. |
 | *Not started yet* | The conversation's working files are being removed: a copy of the project deleted it, or it was just brought back with Undo. | **Send again** in a moment. Reopened from **Conversations** later, the same turn shows *No answer*, as the reason is not kept. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
 
 **Send again** asks the same question again in the same place: the conversation keeps it once. A
 question whose turn already changed the model is not sent again; ask again in your own words.
+
+**Send again** sends the question with the chips it had the first time, even one you removed
+since. A question that came back into the box and is sent from there goes with the chips shown
+now. To send only the chips shown now, ask a new question. The earlier question, with its chips'
+line, stays part of the conversation so far, so it may still reach the provider.
 
 While the provider does not answer (no network, or the provider is busy), the agent's program
 keeps trying again for a while: Claude for about three minutes without a network. The reply says

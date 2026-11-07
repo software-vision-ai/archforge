@@ -32,7 +32,8 @@ Set up the shell you run the checks from, in bash or zsh. Keep it open for the w
 pass's own files go in your home folder, outside every place the key search looks:
 
 ```sh
-WORK="$(mktemp -d "$HOME/archforge-acceptance.XXXXXX")"; chmod 700 "$WORK"   # removed at the end
+WORK="$(mktemp -d "$HOME/archforge-acceptance.XXXXXX")" && chmod 700 "$WORK"   # removed at the end
+[ -n "$WORK" ] && [ -d "$WORK" ] && echo "work folder ready" || echo "STOP: no work folder made"
 PROJECT="$HOME/Documents/Archforge/Chat acceptance.archforge"                # made in step P1
 case "$(uname -s)" in
   Darwin) SETTINGS="$HOME/Library/Application Support/Archforge" ;;
@@ -80,7 +81,8 @@ You need:
 1. Start Archforge. Make a project named *Chat acceptance* in the default location.
 2. Build the class model of the manual's
    [A first UML class model](../manual/05-uml-class-model.md) up to its first few classes, or any
-   class diagram with three classes or more.
+   class diagram with three classes or more. Leave at least two of them without a description:
+   R1 step 7 asks the agent to describe them, and step 8 undoes it.
 3. Save it (⌘S).
 
 **Expect:** the status bar says *Saved* and *Agent access off*.
@@ -280,14 +282,18 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
    conversation**, +):
 
    ```sh
-   if [ -e "$CLAUDE_AT.away" ]; then echo "STOP: $CLAUDE_AT.away exists already"; else mv -n "$CLAUDE_AT" "$CLAUDE_AT.away"; fi
+   if [ -e "$CLAUDE_AT.away" ]; then echo "STOP: $CLAUDE_AT.away exists already"
+   elif mv -n "$CLAUDE_AT" "$CLAUDE_AT.away" && [ ! -e "$CLAUDE_AT" ]; then echo "moved away"
+   else echo "MOVE FAILED: the program is still there; this step proves nothing"; fi
    ```
 
    **Expect:** the card *Program not found* with **Open Settings**. Record what shows if not.
 5. Put it back and choose **Look again** in Settings:
 
    ```sh
-   if [ -e "$CLAUDE_AT" ]; then echo "STOP: $CLAUDE_AT exists"; else mv -n "$CLAUDE_AT.away" "$CLAUDE_AT"; fi
+   if [ -e "$CLAUDE_AT" ]; then echo "STOP: $CLAUDE_AT exists"
+   elif mv -n "$CLAUDE_AT.away" "$CLAUDE_AT" && [ -e "$CLAUDE_AT" ]; then echo "put back"
+   else echo "MOVE FAILED: put $CLAUDE_AT.away back by hand"; fi
    ```
 
    **Expect:** *Found* or *Not yet tested with this version*, with its version; a question gets a
@@ -539,11 +545,14 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    compressed, so read every table and every saved version of it through Dolt:
 
    ```sh
-   cp -R "$PROJECT" "$WORK/project-copy.archforge"
-   mkdir -p "$WORK/dolt-home"
+   COPY="$WORK/project-copy-$(date +%Y%m%d-%H%M%S).archforge"   # a new name for every try
+   if cp -R "$PROJECT" "$COPY" && [ -d "$COPY/project/.dolt" ]; then echo "copied to $COPY"
+   else echo "COPY FAILED: stop here, fix the error above and run this step again"; COPY=""; fi
    dump() {   # every table and every saved version of it; stops at the first query that fails
-     ( export DOLT_ROOT_PATH="$WORK/dolt-home"   # in this subshell only: leaves your ~/.dolt alone
-       cd "$WORK/project-copy.archforge/project" || exit 1
+     ( [ -n "$COPY" ] || { echo "failed: no complete copy" >&2; exit 1; }
+       mkdir -p "$WORK/dolt-home" || { echo "failed: no Dolt home" >&2; exit 1; }
+       export DOLT_ROOT_PATH="$WORK/dolt-home"   # in this subshell only: leaves your ~/.dolt alone
+       cd "$COPY/project" || exit 1
        dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$WORK/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
        tail -n +2 "$WORK/tables.csv" > "$WORK/tables"
        [ -s "$WORK/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
@@ -555,7 +564,7 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
        dolt log < /dev/null > "$WORK/project-log.txt" || { echo "failed: dolt log" >&2; exit 1; } )
    }
    if dump; then
-     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-history.csv" "$WORK/project-log.txt" "$WORK/project-copy.archforge"
+     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-history.csv" "$WORK/project-log.txt" "$COPY"
    else
      echo "DUMP FAILED: the project was not searched; fix the error above and run this step again"
    fi
@@ -571,7 +580,7 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    directly, in the conversation list now and in the saved versions:
 
    ```sh
-   ( export DOLT_ROOT_PATH="$WORK/dolt-home"; cd "$WORK/project-copy.archforge/project" || exit 1
+   ( export DOLT_ROOT_PATH="$WORK/dolt-home"; cd "$COPY/project" || { echo "no copy: run the dump first"; exit 1; }
      for t in chat_message dolt_history_chat_message; do
        printf '%s: ' "$t"
        if dolt sql -r csv -q "SELECT COUNT(*) FROM \`$t\` WHERE body LIKE '%$MARKER_DELETED%'" < /dev/null > "$WORK/count"
