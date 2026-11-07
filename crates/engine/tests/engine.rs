@@ -392,6 +392,95 @@ fn a_step_made_for_an_origin_carries_it_through_undo_and_redo_and_never_merges_a
     assert!(s.batch_from(&format!("{long}x"), Some("Chat 1"), |b| b.execute("item.add", &json!({ "name": "F" })).map(|_| ())).is_err());
 }
 
+/// An origin's group is one undo step of its changes, ended by anyone else's change, and capped.
+#[test]
+fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "Mine" })).unwrap();
+    assert!(s.end_group("Chat 1").is_none(), "no group, nothing to end");
+    s.begin_group("Chat 1", "Turn 1").unwrap();
+    assert!(s.grouping("Chat 1") && !s.grouping("Chat 2"));
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "A" }), Some("Chat 1")).unwrap();
+    s.execute_from("item.rename", &json!({ "index": 1, "name": "A2" }), Some("Chat 1")).unwrap();
+    s.batch_from("Add two", Some("Chat 1"), |b| {
+        b.execute("item.add", &json!({ "name": "B" }))?;
+        b.execute("item.add", &json!({ "name": "C" }))?;
+        Ok(())
+    })
+    .unwrap();
+    // A query of the origin changes nothing and joins nothing.
+    s.execute_from("item.count", &json!({}), Some("Chat 1")).unwrap();
+    assert_eq!((s.undo_label(), s.undo_origin()), (Some("Chat 1: Turn 1"), Some("Chat 1")));
+    assert_eq!(s.undo_revision(), Some(before), "one step, from the state before the group's first change");
+    let after = s.revision();
+    let end = s.end_group("Chat 1").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, after, 1, 4));
+    assert_eq!(
+        end.delta.map(|d| (d.before.0, d.after.0)),
+        Some((vec!["Mine".to_string()], vec!["Mine".to_string(), "A2".into(), "B".into(), "C".into()])),
+        "the whole of what it changed"
+    );
+    // One undo takes the group back, and only the group: the user's own item stays.
+    s.undo().unwrap();
+    assert_eq!(names(&s), ["Mine"]);
+    s.redo().unwrap();
+    assert_eq!(names(&s), ["Mine", "A2", "B", "C"]);
+    // Once ended, the origin's changes are steps of their own again.
+    s.execute_from("item.add", &json!({ "name": "D" }), Some("Chat 1")).unwrap();
+    assert_eq!(s.undo_label(), Some("Chat 1: Add item"));
+
+    // Anyone else's change in between ends the group's step there; the group's next change starts
+    // another, so undoing it never takes the change in between.
+    s.begin_group("Chat 1", "Turn 2").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "E" }), Some("Chat 1")).unwrap();
+    s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
+    s.execute_from("item.add", &json!({ "name": "F" }), Some("Chat 2")).unwrap();
+    s.execute_from("item.add", &json!({ "name": "G" }), Some("Chat 1")).unwrap();
+    let end = s.end_group("Chat 1").unwrap();
+    assert_eq!((end.before, end.steps, end.changes), (before, 2, 2));
+    assert_ne!(s.undo_revision(), Some(end.before), "its last step does not start where the group did");
+    s.undo().unwrap();
+    assert_eq!(s.undo_origin(), Some("Chat 2"), "Chat 2's step stayed its own");
+    s.undo().unwrap();
+    assert_eq!(s.undo_label(), Some("Add item"), "and the user's too");
+
+    // Undone and changed again, the group starts a new step rather than reaching under the undo.
+    s.begin_group("Chat 3", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "H" }), Some("Chat 3")).unwrap();
+    s.undo().unwrap();
+    s.execute_from("item.add", &json!({ "name": "I" }), Some("Chat 3")).unwrap();
+    assert_eq!(s.end_group("Chat 3").map(|e| e.steps), Some(2));
+    // A group that changed nothing ends with nothing; a bad group is refused.
+    s.begin_group("Chat 4", "Turn 1").unwrap();
+    assert!(s.end_group("Chat 4").is_none());
+    // A step that cancels out mid-group no longer counts: what follows is still one step.
+    s.begin_group("Chat 7", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "K" }), Some("Chat 7")).unwrap();
+    let last = s.doc().0.len() - 1;
+    s.execute_from("item.remove", &json!({ "index": last }), Some("Chat 7")).unwrap();
+    s.execute_from("item.add", &json!({ "name": "L" }), Some("Chat 7")).unwrap();
+    assert_eq!(s.undo_revision(), Some(before));
+    let end = s.end_group("Chat 7").unwrap();
+    assert_eq!((end.before, end.steps), (before, 1));
+    s.undo().unwrap();
+    // Changes that cancel out leave nothing to undo, and no group.
+    s.begin_group("Chat 6", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "J" }), Some("Chat 6")).unwrap();
+    let last = s.doc().0.len() - 1;
+    s.execute_from("item.remove", &json!({ "index": last }), Some("Chat 6")).unwrap();
+    assert!(s.end_group("Chat 6").is_none());
+    assert!(s.begin_group("", "Turn 1").is_err());
+    assert!(s.begin_group("Chat 5", &"x".repeat(257)).is_err());
+    for n in 0..archforge_engine::MAX_GROUPS {
+        s.begin_group(&format!("G{n}"), "Turn 1").unwrap();
+    }
+    assert!(s.begin_group("one more", "Turn 1").is_err(), "the open groups are capped");
+    assert!(s.begin_group("G0", "Turn 2").is_ok(), "an origin's group opened again replaces its own");
+}
+
 #[test]
 fn a_batch_is_one_step_and_one_entry_or_nothing() {
     let mut s = session();
