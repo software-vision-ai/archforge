@@ -280,14 +280,18 @@ CANARY_CODEX="sk-proj-AFCANARY$(openssl rand -hex 12)"
 MARKER="AFMARKER$(openssl rand -hex 6)"           # a class name, added through Claude
 MARKER_CODEX_KEY="AFQKEY$(openssl rand -hex 6)"   # one question to Codex on an API key
 MARKER_CODEX_GPT="AFQGPT$(openssl rand -hex 6)"   # one question to Codex signed in with ChatGPT
+MARKER_DELETED="AFQDEL$(openssl rand -hex 6)"     # one question in the conversation K3 deletes
 printf '%s\n%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" > "$WORK/canaries"
 printf '%s\n' "$MARKER" > "$WORK/marker"
-printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER" "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT"   # to paste
+printf '%s\n' "$MARKER_DELETED" > "$WORK/marker-deleted"
+printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER" "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT" "$MARKER_DELETED"   # to paste
 ```
 
 The markers are words that must be found. `$MARKER` is a class name: it proves the project search
 finds what was written. Each Codex marker goes in one question of one Codex route and nowhere
-else, never in the model, so a match tells which route's question was kept.
+else, never in the model, so a match tells which route's question was kept. `$MARKER_DELETED`
+goes in the one conversation that K3 deletes; the conversations that hold the other markers are
+never deleted, so K4 finds their copies.
 
 ### K2. The real keys, and the programs while a turn runs
 
@@ -306,8 +310,8 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 [ -s "$WORK/keys" ] || echo "NO KEYS READ: the searches for the real keys would prove nothing"
 ```
 
-1. With Claude, **Allow changes to the model** on, ask: *Add a class named* and paste `$MARKER`'s
-   value.
+1. Make Claude the default agent, and start a new conversation (**New conversation**, +). Turn
+   **Allow changes to the model** on and ask: *Add a class named* and paste `$MARKER`'s value.
    **Expect:** the class appears. Save (⌘S).
 2. Ask a long question. While the reply runs, list the processes whose command line or
    environment holds a key (process id and program only):
@@ -329,10 +333,14 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 3. Repeat step 2 with Codex on **API key**. **Expect:** no line: the key goes over the program's
    input.
 4. With Codex the default agent and still on **API key**, ask in a new conversation: *Reply with
-   this one word and read nothing:* and paste `$MARKER_CODEX_KEY`'s value. Then sign Codex in with
-   ChatGPT (R3), switch the card to **Sign in with ChatGPT**, and ask the same in another new
-   conversation with `$MARKER_CODEX_GPT`'s value. **Expect:** a reply each time, repeating the
-   word. Each Codex route has now sent one question with a marker of its own, for K4 step 8.
+   this one word and read nothing:* and paste `$MARKER_CODEX_KEY`'s value. Then switch the card to
+   **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed in*), and ask the same in
+   another new conversation with `$MARKER_CODEX_GPT`'s value. **Expect:** a reply each time,
+   repeating the word. Each Codex route has now sent one question with a marker of its own, for
+   K4 step 8.
+5. Make Claude the default agent again, start a new conversation and ask: *Reply with this one
+   word and read nothing:* and paste `$MARKER_DELETED`'s value. **Expect:** a reply. This is the
+   conversation K3 step 5 deletes; its title starts with the question.
 
 ### K3. Send the canaries everywhere they can go
 
@@ -344,7 +352,9 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 4. With Claude, ask a question that holds the canary: *Is … a key?*, pasting `$CANARY_CLAUDE`'s
    value. **Expect:** *This question holds your saved Claude API key, so it was neither sent nor
    saved.*, the question left in the box. Clear the box.
-5. Delete one conversation and let its note go (about eight seconds).
+5. Open **Conversations** and delete the conversation of K2 step 5, the one titled with
+   `$MARKER_DELETED`'s question, and no other. Let its note go (about eight seconds). The
+   conversations of K2 steps 1 and 4 stay, for K4.
 6. Select the diagram, open **Generate…** (⇧⌘G) and choose **Copy request**. Keep what it
    copied (it holds no key, only the request), before Archforge quits and the clipboard may go
    with it:
@@ -405,23 +415,32 @@ search() {
        dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$WORK/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
        tail -n +2 "$WORK/tables.csv" > "$WORK/tables"
        [ -s "$WORK/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
-       : > "$WORK/project-rows.csv"
+       : > "$WORK/project-rows.csv"; : > "$WORK/project-history.csv"
        while read -r t; do
-         for q in "\`$t\`" "\`dolt_history_$t\`"; do
-           dolt sql -r csv -q "SELECT * FROM $q" < /dev/null >> "$WORK/project-rows.csv" || { echo "failed: $q" >&2; exit 1; }
-         done
+         dolt sql -r csv -q "SELECT * FROM \`$t\`" < /dev/null >> "$WORK/project-rows.csv" || { echo "failed: $t" >&2; exit 1; }
+         dolt sql -r csv -q "SELECT * FROM \`dolt_history_$t\`" < /dev/null >> "$WORK/project-history.csv" || { echo "failed: dolt_history_$t" >&2; exit 1; }
        done < "$WORK/tables"
        dolt log < /dev/null > "$WORK/project-log.txt" || { echo "failed: dolt log" >&2; exit 1; } )
    }
    if dump; then
-     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-log.txt" "$WORK/project-copy.archforge"
+     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-history.csv" "$WORK/project-log.txt" "$WORK/project-copy.archforge"
    else
      echo "DUMP FAILED: the project was not searched; fix the error above and run this step again"
    fi
    ```
 
-   Run the later searches of this step's files (with `$WORK/keys` and `$WORK/marker`) only after
-   a dump that did not fail. *DUMP FAILED* is neither a pass nor a fail.
+   `project-rows.csv` holds the tables as they are now, `project-history.csv` every saved version.
+   Run the later searches of this step's files (with `$WORK/keys`, `$WORK/marker` and, below,
+   `$WORK/marker-deleted`) only after a dump that did not fail. *DUMP FAILED* is neither a pass
+   nor a fail.
+
+   The deleted conversation, which the manual says stays in the saved history:
+
+   ```sh
+   search "$WORK/marker-deleted" "$WORK/project-rows.csv"      # expect: none found
+   search "$WORK/marker-deleted" "$WORK/project-history.csv"   # expect: found
+   search "$WORK/marker-deleted" "$SETTINGS/agents"            # expect: none found (its folder went)
+   ```
 
    If Dolt says a server holds the database, remove `.dolt/sql-server.lock` from the copy only.
    The last place also searches the raw files, as a quick extra look.
@@ -447,13 +466,15 @@ search() {
      printf '%s\n' "$m" > "$WORK/one-marker"
      echo "== $m in codex-home"
      search "$WORK/one-marker" "$SETTINGS/agents/codex-home"
-     grep -r -a -o -E ".{0,80}$m.{0,40}" "$SETTINGS/agents/codex-home" | head -n 10   # each match in context
+     grep -r -a -o -E ".{0,80}$m.{0,40}" "$SETTINGS/agents/codex-home" > "$WORK/matches-$m.txt"
+     echo "$(wc -l < "$WORK/matches-$m.txt") matches, every one in $WORK/matches-$m.txt"
      echo "== $m in the conversations' own folders"
      search "$WORK/one-marker" "$SETTINGS/agents"
    done
    ```
 
-   For each route, look at every match in `codex-home` before recording it. A context line that
+   For each route, read its `matches-…` file to the end, every line, before recording it: each
+   line is one match, its file first, then up to 80 characters before the marker and 40 after. A context line that
    reads *Reply with this one word and read nothing:* before the marker is the question kept by
    Codex: record its file. A match with other text around it (the reply, a log line) is recorded
    as what it is, with its file. No match means that route's question is not in `codex-home`. The
@@ -465,9 +486,8 @@ search() {
 store itself is the only place that holds a key.
 
 **Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `project-rows.csv`
-(the class and the question); this proves the search reads the project. Elsewhere, record where
-it shows: Claude's own transcript in that conversation's `conversation-…` folder is expected. The
-conversation deleted in K3 step 5 is still in the `dolt_history_` rows, as the manual says.
+and `project-history.csv` (the class and the question); this proves the search reads the project. Elsewhere, record where
+it shows: Claude's own transcript in that conversation's `conversation-…` folder is expected.
 
 ### K5. Put things back
 
@@ -478,7 +498,7 @@ key files the searches read.
 2. Remove the pass's files, which hold the real keys and the project's rows:
 
    ```sh
-   rm -rf "$WORK"; unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT
+   rm -rf "$WORK"; unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED
    ```
 
 ## Results
