@@ -791,14 +791,15 @@ fn read_when_idle(shell: &mut crate::Shell) {
 
 /// Keeps `account` as Codex's, as the window shows it: an expired sign-in the codex program names
 /// no one for keeps the email known, and one still read as signed in after a turn found it expired
-/// shows expired. Remembers the email; a sign-out forgets it.
+/// shows expired, as that email or, when no email was known yet, as the first one read.
+/// Remembers the email; a sign-out forgets it.
 fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountError>) {
     let a = &mut shell.agents;
     let account = match account {
         Ok(CodexAccount::Expired { email }) if email.is_empty() && !a.known_email.is_empty() => {
             Ok(CodexAccount::Expired { email: a.known_email.clone() })
         }
-        Ok(CodexAccount::SignedIn { email, .. }) if a.expired_seen && !email.is_empty() && email == a.known_email => {
+        Ok(CodexAccount::SignedIn { email, .. }) if a.expired_seen && !email.is_empty() && (a.known_email.is_empty() || email == a.known_email) => {
             Ok(CodexAccount::Expired { email })
         }
         other => other,
@@ -849,6 +850,15 @@ pub fn sign_out(shell: &mut crate::Shell) {
     let Some(accounts) = host(shell) else { return };
     shell.agents.login_error = None;
     shell.agents.logout = Some(accounts.codex_logout());
+}
+
+/// Keeps the account a sign-in or a sign-out just made: a read of the account that began before it
+/// is dropped unanswered, so its older answer never undoes it, and a read again asked before is
+/// done with.
+fn account_changed(shell: &mut crate::Shell, account: CodexAccount) {
+    shell.agents.reading = None;
+    shell.agents.account_stale = false;
+    take_account(shell, Ok(account));
 }
 
 /// Starts reading Codex's account once the look found the program, unless a read runs already.
@@ -902,7 +912,8 @@ fn finish_check(shell: &mut crate::Shell) {
 }
 
 /// Takes in what the host has answered; once per frame. A sign-in's page opens in the browser
-/// through `ctx` when it is the codex program's sign-in host.
+/// through `ctx` when it is the codex program's sign-in host; a sign-in or a sign-out done drops an
+/// account read that began before it.
 pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
     if let Some(rx) = &shell.agents.looking {
         match rx.try_recv() {
@@ -1049,7 +1060,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                 Ok(LoginEvent::Done(account)) => {
                     // A sign-in made now is not the one found expired.
                     shell.agents.expired_seen = false;
-                    take_account(shell, Ok(account));
+                    account_changed(shell, account);
                     login_over = true;
                     break;
                 }
@@ -1079,7 +1090,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         if let Some(answer) = answer {
             shell.agents.logout = None;
             match answer {
-                Ok(()) => take_account(shell, Ok(CodexAccount::NotSignedIn)),
+                Ok(()) => account_changed(shell, CodexAccount::NotSignedIn),
                 Err(e) => shell.agents.login_error = Some(e),
             }
         }
@@ -1186,6 +1197,12 @@ pub mod fake {
         /// The conversations a start was refused for while their removal waited: their folders are
         /// kept, as the host keeps them.
         pub wanted: Mutex<Vec<String>>,
+        /// While set, a read of Codex's account is taken but answered only by
+        /// [`Fake::release_account`], with what the account was when it began, as a slow codex
+        /// program would.
+        pub hold_account: std::sync::atomic::AtomicBool,
+        /// The account reads held, each with what it read.
+        pub held_account: Mutex<Vec<(std::sync::mpsc::Sender<Result<CodexAccount, AccountError>>, Result<CodexAccount, AccountError>)>>,
     }
 
     impl Default for Fake {
@@ -1210,6 +1227,8 @@ pub mod fake {
                 forgotten: Mutex::new(Vec::new()),
                 after: Mutex::new(Vec::new()),
                 wanted: Mutex::new(Vec::new()),
+                hold_account: std::sync::atomic::AtomicBool::new(false),
+                held_account: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1339,9 +1358,16 @@ pub mod fake {
             self.calls.test.fetch_add(1, Ordering::Relaxed);
             answered(lock(&self.test).clone())
         }
+        /// Reads the account as set up: at once, or held while [`Fake::hold_account`] is set.
         fn codex_account_read(&self) -> Receiver<Result<CodexAccount, AccountError>> {
             self.calls.account.fetch_add(1, Ordering::Relaxed);
-            answered(lock(&self.account).clone())
+            let account = lock(&self.account).clone();
+            if self.hold_account.load(Ordering::Relaxed) {
+                let (tx, rx) = std::sync::mpsc::channel();
+                lock(&self.held_account).push((tx, account));
+                return rx;
+            }
+            answered(account)
         }
         fn codex_login_start(&self, _way: LoginWay) -> Receiver<LoginEvent> {
             self.calls.login.fetch_add(1, Ordering::Relaxed);
@@ -1404,6 +1430,13 @@ pub mod fake {
         pub fn access(&self, held: bool) -> bool {
             let sink = lock(&self.sink).clone();
             sink.is_some_and(|s| s.send(crate::chat::HostEvent::Access { held }))
+        }
+
+        /// Answers the account reads held so far, with what the account was when each began.
+        pub fn release_account(&self) {
+            for (tx, account) in lock(&self.held_account).drain(..) {
+                let _ = tx.send(account);
+            }
         }
 
         /// Answers the reads of the keys held so far, with what the store held when each began.
