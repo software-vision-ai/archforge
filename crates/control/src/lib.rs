@@ -1,7 +1,10 @@
 //! The control channel an agent drives the running application through (agent-control-surfaces
-//! §10.1): a loopback port the application opens only when started with `--control <port>`, a
-//! token minted for each start and kept in a file only its owner can read, one JSON object per
-//! line. The application answers through its command engine, so the window shows every change and
+//! §10.1): a loopback port the application opens when started with `--control <port>` (the
+//! person's own access, [`Server::start`], one full-access token in `control-<port>.token`), or on
+//! a free port while a Chat conversation needs agent access ([`Server::open`], one token per
+//! conversation from [`Server::grant`], each in a new file of its own and with its own [`Role`]).
+//! Tokens are minted from the system's random source and kept in files only their owner can read;
+//! one JSON object per line. The application answers through its command engine, so the window shows every change and
 //! undo covers it. `archforge-cli` reaches the port through [`Client`].
 //!
 //! The wire: a request is `{id, method, params}`, the first on a connection also carrying `token`,
@@ -11,6 +14,12 @@
 //! one who chooses the parameters (an agent through `call_app`) cannot choose it. A first line that is not a
 //! well-formed request with the right token closes the connection without a word, so a web page
 //! cannot drive the port (CS-6). Lines, requests, replies, connections and waits are capped (CS-7).
+//!
+//! Every request reaches the handler with the role and the liveness of the token its connection
+//! showed ([`Call`]). Revoking a token (dropping its [`Grant`]) answers its held connections
+//! [`REVOKED`] and closes them, and its queued requests see their liveness go false; closing a
+//! server (dropping it) revokes every token it granted, so a connection authenticated before the
+//! close is never served after it.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 #[cfg(unix)]
@@ -18,8 +27,8 @@ use std::io::Read;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -144,31 +153,28 @@ fn is_token(t: &str) -> bool {
     t.len() == TOKEN_LEN && t.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
-/// Writes `token` to `path`, created exclusively and readable by its owner alone. A file left there
-/// by an earlier start of ours (a regular file we own) is replaced; anything else refuses.
+/// Writes `token` to `path`, created exclusively and readable by its owner alone, and gives the
+/// file's identity, by which it is removed later. A file left there by an earlier start of ours (a
+/// regular file we own) is replaced; anything else refuses.
 #[cfg(unix)]
-pub fn write_token(path: &Path, token: &str) -> Result<(), String> {
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+pub fn write_token(path: &Path, token: &str) -> Result<FileId, String> {
+    use std::os::unix::fs::MetadataExt;
     if let Ok(m) = std::fs::symlink_metadata(path) {
         if !m.file_type().is_file() || m.uid() != euid() {
             return Err(format!("{} is there and is not a token file of ours", path.display()));
         }
         std::fs::remove_file(path).map_err(|e| format!("the old token file {} could not be removed: {e}", path.display()))?;
     }
-    let mut f = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|e| format!("the token file {} could not be created: {e}", path.display()))?;
-    f.write_all(token.as_bytes())
-        .and_then(|()| f.write_all(b"\n"))
-        .and_then(|()| f.sync_all())
-        .map_err(|e| format!("the token file could not be written: {e}"))
+    match create_token_file(path, token) {
+        Ok(file) => Ok(file),
+        Err(Created::Taken) => Err(format!("{} appeared while the token file was written", path.display())),
+        Err(Created::Failed(e)) => Err(e),
+    }
 }
 
+/// Refused on this platform: agent access is Unix only for now.
 #[cfg(not(unix))]
-pub fn write_token(_path: &Path, _token: &str) -> Result<(), String> {
+pub fn write_token(_path: &Path, _token: &str) -> Result<FileId, String> {
     Err(NOT_HERE.to_string())
 }
 
@@ -251,10 +257,36 @@ fn read_line_with(r: &mut impl BufRead, max: usize, mut before: impl FnMut() -> 
     }
 }
 
-/// What answers a request: the method, its parameters and its origin (checked by [`check_origin`])
-/// in, the result or why not out. It may block until the application has answered, at most
-/// [`TIMEOUT`].
-pub type Handler = Arc<dyn Fn(&str, Value, Option<&str>) -> Result<Value, String> + Send + Sync>;
+/// What a token may do on the channel. The person's own access (`--control`) is [`Role::Full`];
+/// a Chat conversation's token is [`Role::ReadOnly`] unless that conversation allows changes. The
+/// server hands the role to the handler with every request, and the handler refuses what the role
+/// does not allow (the application classifies each method and command once).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// Reads only: no change to the model or the project, no undo or redo, no save.
+    ReadOnly,
+    /// Everything the channel offers.
+    Full,
+}
+
+/// One request as the handler gets it: the method, its parameters, its origin (checked by
+/// [`check_origin`]), the role of the token the connection showed, and that token's liveness,
+/// true until the token is revoked or its server closes. A request queued for later must check
+/// `live` before it runs: a revoked token's queued request never runs.
+pub struct Call<'a> {
+    pub method: &'a str,
+    pub params: Value,
+    pub origin: Option<&'a str>,
+    pub role: Role,
+    pub live: &'a Arc<AtomicBool>,
+}
+
+/// What answers a request: a [`Call`] in, the result or why not out. It may block until the
+/// application has answered, at most [`TIMEOUT`].
+pub type Handler = Arc<dyn Fn(Call<'_>) -> Result<Value, String> + Send + Sync>;
+
+/// The error a revoked token's requests get, and the last line a connection holding it receives.
+pub const REVOKED: &str = "revoked: the access this token gave has ended";
 
 /// The longest origin, in characters.
 pub const MAX_ORIGIN: usize = 64;
@@ -318,82 +350,362 @@ fn printable(c: char) -> bool {
         || matches!(c, '\u{13430}'..='\u{1343F}' | '\u{1BCA0}'..='\u{1BCA3}' | '\u{1D173}'..='\u{1D17A}' | '\u{E0000}'..='\u{E0FFF}'))
 }
 
-/// The listening port, its token file and its threads; dropping it stops listening and removes
-/// the token file.
+/// A token file's identity, its device and inode as created: the file is removed only while the
+/// name still holds this very file, so a file someone else put there is never removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FileId {
+    pub dev: u64,
+    pub ino: u64,
+}
+
+/// A token granted on a server: its id, role, liveness and the file that holds it.
+struct Granted {
+    id: u64,
+    token: String,
+    role: Role,
+    live: Arc<AtomicBool>,
+    file: Option<(PathBuf, FileId)>,
+}
+
+/// A connection the server serves: the grant it authenticated with (0 before it has), a handle to
+/// shut its socket, and its thread.
+struct Held {
+    bound: Arc<AtomicU64>,
+    /// `None` once the connection has ended.
+    stream: Option<TcpStream>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+/// What a server's threads and its grants share. Each opening has its own: a connection
+/// authenticated on one is never served by another.
+struct Shared {
+    /// True while the server is open; its gate for every request.
+    open: AtomicBool,
+    grants: Mutex<Vec<Granted>>,
+    held: Mutex<Vec<Held>>,
+    next_grant: AtomicU64,
+}
+
+/// A lock that a panicking thread poisoned is taken over: the lists stay usable for the close.
+fn locked<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+impl Shared {
+    /// Revokes the grant `id`: its liveness goes false, its connections are shut for reading (each
+    /// answers [`REVOKED`] and closes), and its file is removed by its identity.
+    fn revoke(&self, id: u64) {
+        let gone = {
+            let mut grants = locked(&self.grants);
+            let at = grants.iter().position(|g| g.id == id);
+            at.map(|i| grants.remove(i))
+        };
+        let Some(gone) = gone else { return };
+        gone.live.store(false, Ordering::SeqCst);
+        for h in locked(&self.held).iter().filter(|h| h.bound.load(Ordering::SeqCst) == id) {
+            if let Some(s) = &h.stream {
+                let _ = s.shutdown(std::net::Shutdown::Read);
+            }
+        }
+        if let Some((path, file)) = &gone.file {
+            remove_token_file(path, *file);
+        }
+    }
+}
+
+/// A listening control channel and its threads. Dropping it closes it: no request runs after,
+/// every token it granted is revoked and its file removed, held connections are answered
+/// [`REVOKED`] and closed, and its threads are joined.
 pub struct Server {
     port: u16,
-    token_file: PathBuf,
-    stop: Arc<AtomicBool>,
+    shared: Arc<Shared>,
+    accept: Option<std::thread::JoinHandle<()>>,
+    settings: PathBuf,
+}
+
+impl std::fmt::Debug for Server {
+    /// The port and how many tokens are granted; never a token.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Server").field("port", &self.port).field("grants", &self.grants()).finish()
+    }
 }
 
 impl Server {
-    /// Listens on `port` of the loopback interface (0 for any free port), writes a fresh token to
-    /// the settings folder and answers each connection's requests through `handler`.
+    /// The person's own access, for `--control <port>`: listens on `port` of the loopback
+    /// interface (0 for any free port), writes a fresh full-access token to `control-<port>.token`
+    /// in the settings folder and answers each connection's requests through `handler`.
     pub fn start(port: u16, settings: &Path, handler: Handler) -> Result<Server, String> {
+        let server = Server::listen(port, settings, handler)?;
+        let token = mint_token()?;
+        let path = token_path(settings, server.port);
+        let file = write_token(&path, &token)?;
+        server.add(token, Role::Full, Some((path, file)));
+        log::info!("agent access is on: the control channel listens on 127.0.0.1:{}", server.port);
+        Ok(server)
+    }
+
+    /// An opening with no token yet, on a free port of the loopback interface: Chat's agent access,
+    /// opened while a conversation needs it. Each conversation gets its own token with
+    /// [`Server::grant`].
+    pub fn open(settings: &Path, handler: Handler) -> Result<Server, String> {
+        let server = Server::listen(0, settings, handler)?;
+        log::info!("agent access opened for Chat on 127.0.0.1:{}", server.port);
+        Ok(server)
+    }
+
+    /// Grants a new token with `role`, written to a new file of its own,
+    /// `control-<port>-<16 hex>.token` in the settings folder, created exclusively and readable by
+    /// its owner alone; a name already taken is never replaced, another is tried. Dropping the
+    /// [`Grant`] revokes it.
+    pub fn grant(&self, role: Role) -> Result<Grant, String> {
+        if !self.shared.open.load(Ordering::SeqCst) {
+            return Err("the control channel is closed".into());
+        }
+        let token = mint_token()?;
+        let mut last = String::new();
+        for _ in 0..16 {
+            let path = self.settings.join(format!("control-{}-{}.token", self.port, name_suffix()?));
+            match create_token_file(&path, &token) {
+                Ok(file) => {
+                    let (id, live) = self.add(token, role, Some((path.clone(), file)));
+                    return Ok(Grant { id, path, port: self.port, live, shared: self.shared.clone() });
+                }
+                Err(Created::Taken) => last = format!("{} is taken", path.display()),
+                Err(Created::Failed(e)) => return Err(e),
+            }
+        }
+        Err(format!("no free token file name was found: {last}"))
+    }
+
+    /// How many tokens are granted and not revoked.
+    pub fn grants(&self) -> usize {
+        locked(&self.shared.grants).len()
+    }
+
+    /// The port it listens on.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Records a token and gives its grant's id and liveness.
+    fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>) -> (u64, Arc<AtomicBool>) {
+        let id = self.shared.next_grant.fetch_add(1, Ordering::SeqCst).saturating_add(1);
+        let live = Arc::new(AtomicBool::new(true));
+        locked(&self.shared.grants).push(Granted { id, token, role, live: live.clone(), file });
+        (id, live)
+    }
+
+    /// Binds the loopback port and starts the accepting thread.
+    fn listen(port: u16, settings: &Path, handler: Handler) -> Result<Server, String> {
         trusted_folder(settings)?;
         let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)))
             .map_err(|e| format!("port {port} on the loopback interface could not be opened: {e}"))?;
         let port = listener.local_addr().map_err(|e| format!("the port could not be read: {e}"))?.port();
-        let token = mint_token()?;
-        let token_file = token_path(settings, port);
-        write_token(&token_file, &token)?;
-        let stop = Arc::new(AtomicBool::new(false));
-        let (flag, open) = (stop.clone(), Arc::new(AtomicUsize::new(0)));
-        let token = Arc::new(token);
-        std::thread::Builder::new()
+        let shared = Arc::new(Shared {
+            open: AtomicBool::new(true),
+            grants: Mutex::new(Vec::new()),
+            held: Mutex::new(Vec::new()),
+            next_grant: AtomicU64::new(0),
+        });
+        let accepting = shared.clone();
+        let accept = std::thread::Builder::new()
             .name("control-accept".into())
-            .spawn(move || {
-                let mut warned = false;
-                for stream in listener.incoming() {
-                    if flag.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    let stream = match stream {
-                        Ok(s) => s,
-                        Err(e) => {
-                            // Out of file handles and the like: said once, then a pause, never a spin.
-                            if !warned {
-                                log::warn!("the control channel could not take a connection: {e}");
-                                warned = true;
-                            }
-                            std::thread::sleep(Duration::from_millis(100));
-                            continue;
-                        }
-                    };
-                    // Past the cap a connection is closed at once.
-                    if open.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
-                        open.fetch_sub(1, Ordering::SeqCst);
-                        continue;
-                    }
-                    let (slots, token, handler) = (open.clone(), token.clone(), handler.clone());
-                    let spawned = std::thread::Builder::new().name("control-connection".into()).spawn(move || {
-                        serve_connection(stream, &token, &handler);
-                        slots.fetch_sub(1, Ordering::SeqCst);
-                    });
-                    if spawned.is_err() {
-                        open.fetch_sub(1, Ordering::SeqCst);
-                        log::warn!("a control connection could not be served");
-                    }
-                }
-            })
+            .spawn(move || accept_loop(&listener, &accepting, &handler))
             .map_err(|e| format!("the control channel could not start: {e}"))?;
-        log::info!("agent access is on: the control channel listens on 127.0.0.1:{port}");
-        Ok(Server { port, token_file, stop })
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
+        Ok(Server { port, shared, accept: Some(accept), settings: settings.to_path_buf() })
     }
 }
 
 impl Drop for Server {
+    /// Closes the opening: the gate shuts, every grant is revoked (files removed by identity), the
+    /// accepting thread is woken and joined, held connections are shut for reading so each answers
+    /// [`REVOKED`] and ends, and their threads are joined; one that has not ended within a second
+    /// has its socket shut both ways first, so every wait is bounded.
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
-        // Wakes the accepting thread so it sees the stop.
-        let _ = TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, self.port)), Duration::from_millis(200));
-        let _ = std::fs::remove_file(&self.token_file);
+        self.shared.open.store(false, Ordering::SeqCst);
+        let ids: Vec<u64> = locked(&self.shared.grants).iter().map(|g| g.id).collect();
+        for id in ids {
+            self.shared.revoke(id);
+        }
+        if let Some(accept) = self.accept.take() {
+            // Wakes the accepting thread so it sees the gate shut; without a wake it is left, never waited on.
+            let woken =
+                (0..3).any(|_| TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, self.port)), Duration::from_millis(200)).is_ok());
+            if woken {
+                let _ = accept.join();
+            } else {
+                log::warn!("the control channel's accepting thread on port {} could not be woken; it ends with the application", self.port);
+            }
+        }
+        let mut held = std::mem::take(&mut *locked(&self.shared.held));
+        for s in held.iter().filter_map(|h| h.stream.as_ref()) {
+            let _ = s.shutdown(std::net::Shutdown::Read);
+        }
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while held.iter().any(|h| h.thread.as_ref().is_some_and(|t| !t.is_finished())) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        for h in &mut held {
+            if h.thread.as_ref().is_some_and(|t| !t.is_finished())
+                && let Some(s) = &h.stream
+            {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+            if let Some(t) = h.thread.take() {
+                let _ = t.join();
+            }
+        }
+        log::info!("agent access closed on 127.0.0.1:{}", self.port);
     }
 }
+
+/// A token a server granted. Dropping it revokes it: its connections are answered [`REVOKED`] and
+/// closed, its queued requests see their liveness go false, and its file is removed.
+pub struct Grant {
+    id: u64,
+    path: PathBuf,
+    port: u16,
+    live: Arc<AtomicBool>,
+    shared: Arc<Shared>,
+}
+
+impl std::fmt::Debug for Grant {
+    /// The port and the file; never the token.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Grant").field("port", &self.port).field("path", &self.path).finish()
+    }
+}
+
+impl Grant {
+    /// The absolute path of the file that holds the token (`archforge-cli --token-file`).
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The port of the server that granted it.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Whether the token still opens anything: false once its server closed.
+    pub fn live(&self) -> bool {
+        self.live.load(Ordering::SeqCst) && self.shared.open.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for Grant {
+    /// Revokes the token.
+    fn drop(&mut self) {
+        self.shared.revoke(self.id);
+    }
+}
+
+/// Accepts connections until the gate shuts: each within the cap gets a thread of its own,
+/// registered so a revocation or the close can reach it; finished ones are joined as it goes.
+fn accept_loop(listener: &TcpListener, shared: &Arc<Shared>, handler: &Handler) {
+    let mut warned = false;
+    for stream in listener.incoming() {
+        if !shared.open.load(Ordering::SeqCst) {
+            break;
+        }
+        let stream = match stream {
+            Ok(s) => s,
+            Err(e) => {
+                // Out of file handles and the like: said once, then a pause, never a spin.
+                if !warned {
+                    log::warn!("the control channel could not take a connection: {e}");
+                    warned = true;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+        };
+        let mut held = locked(&shared.held);
+        // Finished connections are joined and forgotten, so the list holds only live ones.
+        held.retain_mut(|h| {
+            let done = h.thread.as_ref().is_none_or(std::thread::JoinHandle::is_finished);
+            if done && let Some(t) = h.thread.take() {
+                let _ = t.join();
+            }
+            !done
+        });
+        // Past the cap a connection is closed at once.
+        if held.len() >= MAX_CONNECTIONS {
+            continue;
+        }
+        let Ok(handle) = stream.try_clone() else { continue };
+        let bound = Arc::new(AtomicU64::new(0));
+        let (serving, by, answer) = (shared.clone(), bound.clone(), handler.clone());
+        match std::thread::Builder::new().name("control-connection".into()).spawn(move || serve_connection(stream, &serving, &by, &answer)) {
+            Ok(thread) => held.push(Held { bound, stream: Some(handle), thread: Some(thread) }),
+            Err(_) => log::warn!("a control connection could not be served"),
+        }
+    }
+}
+
+/// The 16 hexadecimal characters that make a granted token's file name unpredictable.
+fn name_suffix() -> Result<String, String> {
+    let mut bytes = [0u8; 8];
+    getrandom::fill(&mut bytes).map_err(|e| format!("the system's random source failed: {e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// Why a new token file was not made.
+enum Created {
+    /// The name is taken by something else, which is left alone.
+    Taken,
+    Failed(String),
+}
+
+/// Creates `path` exclusively (never through a link, never over anything), readable by its owner
+/// alone, writes `token` and gives the file's identity from the open handle.
+#[cfg(unix)]
+fn create_token_file(path: &Path, token: &str) -> Result<FileId, Created> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let mut f = match std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Err(Created::Taken),
+        Err(e) => return Err(Created::Failed(format!("the token file {} could not be created: {e}", path.display()))),
+    };
+    let written = f.write_all(token.as_bytes()).and_then(|()| f.write_all(b"\n")).and_then(|()| f.sync_all()).and_then(|()| f.metadata());
+    match written {
+        Ok(m) => Ok(FileId { dev: m.dev(), ino: m.ino() }),
+        Err(e) => {
+            // Made by this call, so it is ours to remove.
+            if let Ok(m) = f.metadata() {
+                remove_token_file(path, FileId { dev: m.dev(), ino: m.ino() });
+            }
+            Err(Created::Failed(format!("the token file {} could not be written: {e}", path.display())))
+        }
+    }
+}
+
+/// Refused on this platform: agent access is Unix only for now.
+#[cfg(not(unix))]
+fn create_token_file(_path: &Path, _token: &str) -> Result<FileId, Created> {
+    Err(Created::Failed(NOT_HERE.to_string()))
+}
+
+/// Removes the token file at `path` only while that name still holds the file `id` names; anything
+/// else there (another start's file, a link, a folder) is left and the fact logged.
+#[cfg(unix)]
+pub fn remove_token_file(path: &Path, id: FileId) {
+    use std::os::unix::fs::MetadataExt;
+    match std::fs::symlink_metadata(path) {
+        Ok(m) if m.file_type().is_file() && m.dev() == id.dev && m.ino() == id.ino => {
+            if let Err(e) = std::fs::remove_file(path) {
+                log::warn!("the token file {} could not be removed: {e}", path.display());
+            }
+        }
+        Ok(_) => log::warn!("{} is no longer the token file written there, so it is left alone", path.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("the token file {} could not be checked: {e}", path.display()),
+    }
+}
+
+/// Nothing to remove on this platform: no token file is made.
+#[cfg(not(unix))]
+pub fn remove_token_file(_path: &Path, _id: FileId) {}
 
 /// Makes sure no one else can write to the settings folder, where the token file could otherwise
 /// be swapped or removed: a folder of ours that others may write to (made under a umask of 002,
@@ -422,16 +734,51 @@ fn trusted_folder(_settings: &Path) -> Result<(), String> {
 /// The keys a request may carry.
 const REQUEST_KEYS: [&str; 5] = ["id", "method", "params", "token", "origin"];
 
-/// Serves one connection until it closes, an unauthorised or malformed first line, or a failure.
-fn serve_connection(stream: TcpStream, token: &str, handler: &Handler) {
+/// The grant whose token `shown` is, compared with every grant in constant time each, and bound to
+/// the connection under the grants' lock, so a revocation either sees the binding or the token is
+/// already gone.
+fn authorise(shared: &Shared, shown: &str, bound: &AtomicU64) -> Option<(Role, Arc<AtomicBool>)> {
+    let grants = locked(&shared.grants);
+    if !shared.open.load(Ordering::SeqCst) {
+        return None;
+    }
+    let mut found: Option<&Granted> = None;
+    for g in grants.iter() {
+        if same_token(shown, &g.token) {
+            found = Some(g);
+        }
+    }
+    let g = found?;
+    bound.store(g.id, Ordering::SeqCst);
+    Some((g.role, g.live.clone()))
+}
+
+/// Serves one connection until it closes, an unauthorised or malformed first line, a failure, or
+/// its token's revocation, which is answered [`REVOKED`] before the connection closes. At the end
+/// the socket is shut both ways and the server's own handle to it (kept for revocations) is
+/// dropped, so the connection is closed at once.
+fn serve_connection(stream: TcpStream, shared: &Shared, bound: &Arc<AtomicU64>, handler: &Handler) {
+    let closer = stream.try_clone();
+    serve(stream, shared, bound, handler);
+    if let Ok(c) = closer {
+        let _ = c.shutdown(std::net::Shutdown::Both);
+    }
+    for h in locked(&shared.held).iter_mut().filter(|h| Arc::ptr_eq(&h.bound, bound)) {
+        h.stream = None;
+    }
+}
+
+/// [`serve_connection`]'s loop.
+fn serve(stream: TcpStream, shared: &Shared, bound: &AtomicU64, handler: &Handler) {
     if stream.set_read_timeout(Some(TIMEOUT)).is_err() || stream.set_write_timeout(Some(TIMEOUT)).is_err() {
         return;
     }
     let (Ok(write), Ok(timer)) = (stream.try_clone(), stream.try_clone()) else { return };
     let mut writer = std::io::BufWriter::new(write);
     let mut reader = BufReader::new(stream);
-    let mut first = true;
+    let mut access: Option<(Role, Arc<AtomicBool>)> = None;
     loop {
+        let first = access.is_none();
         // A whole line has a deadline, however slowly its bytes arrive: the first a short one and
         // at most a request's size, so an unauthenticated peer cannot hold its slot.
         let deadline = Instant::now() + if first { FIRST_LINE } else { TIMEOUT };
@@ -444,40 +791,66 @@ fn serve_connection(stream: TcpStream, token: &str, handler: &Handler) {
         };
         let line = match read_line_with(&mut reader, if first { MAX_REQUEST } else { MAX_LINE }, keep_time) {
             Ok(Some(line)) => line,
-            _ => return,
+            _ => {
+                // Shut by a revocation or the close: the peer is told before the connection ends.
+                if let Some((_, live)) = &access
+                    && !(live.load(Ordering::SeqCst) && shared.open.load(Ordering::SeqCst))
+                {
+                    let _ = timer.set_write_timeout(Some(Duration::from_secs(1)));
+                    let _ = send(&mut writer, &fail(Value::Null, REVOKED));
+                }
+                return;
+            }
         };
         let request = serde_json::from_slice::<Value>(&line).ok().filter(Value::is_object);
         let well_formed = request.as_ref().is_some_and(|r| r.get("method").is_some_and(Value::is_string));
         if first {
-            // The first line must be a request with the right token, else the connection closes.
-            let authorised = request.as_ref().and_then(|r| r.get("token")).and_then(Value::as_str).is_some_and(|t| same_token(t, token));
-            if !(well_formed && authorised) || line.len() > MAX_REQUEST {
+            // The first line must be a request with a granted token, else the connection closes.
+            let shown = request.as_ref().and_then(|r| r.get("token")).and_then(Value::as_str);
+            if !well_formed || line.len() > MAX_REQUEST {
                 return;
             }
-            first = false;
+            match shown.and_then(|t| authorise(shared, t, bound)) {
+                Some(granted) => access = Some(granted),
+                None => return,
+            }
+        }
+        let Some((role, live)) = access.clone() else { return };
+        let id = request.as_ref().and_then(|r| r.get("id")).cloned().unwrap_or(Value::Null);
+        if !(live.load(Ordering::SeqCst) && shared.open.load(Ordering::SeqCst)) {
+            let _ = send(&mut writer, &fail(id, REVOKED));
+            return;
         }
         let reply = match request {
-            Some(r) if well_formed => answer(&r, line.len(), handler),
-            Some(r) => fail(r.get("id").cloned().unwrap_or(Value::Null), "a request needs a method"),
+            Some(r) if well_formed => answer(&r, line.len(), role, &live, handler),
+            Some(_) => fail(id, "a request needs a method"),
             None => fail(Value::Null, "the line is not a JSON object"),
         };
-        let mut text = serde_json::to_vec(&reply).unwrap_or_default();
-        if text.len() > MAX_REPLY {
-            let why = if reply.get("ok") == Some(&Value::Bool(true)) {
-                "the request was carried out, but its reply is larger than 16 MiB"
-            } else {
-                "the reply is larger than 16 MiB"
-            };
-            text = serde_json::to_vec(&fail(reply.get("id").cloned().unwrap_or(Value::Null), why)).unwrap_or_default();
-        }
-        text.push(b'\n');
-        if writer.write_all(&text).and_then(|()| writer.flush()).is_err() {
+        if send(&mut writer, &reply).is_err() {
             return;
         }
     }
 }
 
-fn answer(r: &Value, size: usize, handler: &Handler) -> Value {
+/// Writes one reply line, bounded: a reply past [`MAX_REPLY`] is replaced by an error that says so.
+fn send(writer: &mut impl Write, reply: &Value) -> std::io::Result<()> {
+    let mut text = serde_json::to_vec(reply).unwrap_or_default();
+    if text.len() > MAX_REPLY {
+        let why = if reply.get("ok") == Some(&Value::Bool(true)) {
+            "the request was carried out, but its reply is larger than 16 MiB"
+        } else {
+            "the reply is larger than 16 MiB"
+        };
+        text = serde_json::to_vec(&fail(reply.get("id").cloned().unwrap_or(Value::Null), why)).unwrap_or_default();
+    }
+    text.push(b'\n');
+    writer.write_all(&text).and_then(|()| writer.flush())
+}
+
+/// Answers one well-formed request through `handler`, with the role and liveness of the token the
+/// connection showed; a request past the size cap, with an unknown key, params that are not an
+/// object or a bad origin is refused first.
+fn answer(r: &Value, size: usize, role: Role, live: &Arc<AtomicBool>, handler: &Handler) -> Value {
     let id = r.get("id").cloned().unwrap_or(Value::Null);
     if size > MAX_REQUEST {
         return fail(id, &format!("the request is larger than {MAX_REQUEST} bytes"));
@@ -499,7 +872,8 @@ fn answer(r: &Value, size: usize, handler: &Handler) -> Value {
         Some(_) => return fail(id, "origin must be a string"),
     };
     // A handler that panics answers with an error; the connection and the application go on.
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(method, params, origin))) {
+    let call = Call { method, params, origin, role, live };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(call))) {
         Ok(Ok(result)) => json!({ "id": id, "ok": true, "result": result }),
         Ok(Err(e)) => fail(id, &e),
         Err(_) => fail(id, "the request failed inside the application"),
@@ -542,6 +916,14 @@ impl Client {
         let path = token_path(settings, port);
         let token = read_token(&path)
             .map_err(|e| CallError::Unreachable(format!("no Archforge with agent access on port {port} (start it with --control {port}): {e}")))?;
+        Ok(Client { port, token, origin: None })
+    }
+
+    /// The client for the application on `port`, its token read from `path`, a file one Chat
+    /// conversation was granted (`archforge-cli --token-file`), trusted only as [`read_token`] says.
+    pub fn from_token_file(path: &Path, port: u16) -> Result<Client, CallError> {
+        let token =
+            read_token(path).map_err(|e| CallError::Unreachable(format!("no Archforge agent access on port {port} with that token file: {e}")))?;
         Ok(Client { port, token, origin: None })
     }
 

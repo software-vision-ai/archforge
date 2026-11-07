@@ -152,6 +152,8 @@ fn account_error(e: &AccountError) -> String {
         AccountError::NotAvailableYet => tr("Not available yet"),
         AccountError::KeyRefused { detail } => fmt(&tr("The provider refused the key ({detail})."), &[("detail", detail)]),
         AccountError::NoCredential => tr("There is no key or sign-in to use."),
+        AccountError::SignInTimedOut => tr("The sign-in was not finished in time. Sign in again."),
+        AccountError::SignInCancelled => tr("The codex program cancelled the sign-in. Sign in again."),
         AccountError::Failed { detail } => detail.clone(),
     }
 }
@@ -190,8 +192,10 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     if system != Some(System::Supported) {
         return unavailable(ui, p, system, left, top, width);
     }
-    // The keys are read from the secure store the first time the page is drawn, and kept.
+    // The keys are read from the secure store the first time the page is drawn, and kept; Codex's
+    // account too, which starts the codex program, so never before the page shows.
     agents::need_keys(shell);
+    agents::need_account(shell);
     let mut y = top + 52.0;
     y += wrapped(&paint, pos2(left, y), width, &tr(INTRO), types::UI, p.text_secondary, 3) + 20.0;
     if let Store::Missing { why } = &shell.agents.look.store {
@@ -216,6 +220,8 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     let on = shell.state.agents.chat_uses_model;
     if toggle(shell, ui, p, "settings.agents.chat-uses-model", toggle_rect, on, &tr("Let Chat use the model")).clicked() {
         shell.state.agents.chat_uses_model = !on;
+        // Told at once: turning it off closes agent access in this frame.
+        crate::chat::tell_access(shell);
     }
     y += 16.0;
     paint.hline(left..=left + width, y, Stroke::new(1.0, p.border));
@@ -242,7 +248,7 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     let default = shell.state.agents.default_agent;
     // A refused key may be tested again, as the provider may have been wrong for a moment.
     let ready = matches!(agents::readiness(shell, default), Readiness::Ready | Readiness::KeyRefused);
-    let accounts = shell.services.agent_accounts.is_some();
+    let accounts = shell.services.agents.is_some();
     let live = ready && accounts && !shell.agents.testing();
     let hover = if !accounts {
         Some(tr("Not available yet"))
@@ -763,7 +769,7 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
     }
     let account = shell.agents.codex.clone();
     let (line, action): (String, Option<(String, Look, bool, Option<String>)>) = match &account {
-        None if shell.agents.looking() => (tr("Reading the sign-in…"), None),
+        None if shell.agents.looking() || shell.agents.reading_account() => (tr("Reading the sign-in…"), None),
         None => (tr("Not checked yet"), None),
         Some(Ok(CodexAccount::NotSignedIn)) => (tr("Not signed in"), Some((tr("Sign in…"), Look::Primary, true, None))),
         Some(Ok(CodexAccount::SignedIn { email, plan })) => (
@@ -773,6 +779,10 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
             },
             Some((tr("Sign out"), Look::Secondary, !shell.agents.signing_out(), None)),
         ),
+        // Codex may not say whose sign-in expired.
+        Some(Ok(CodexAccount::Expired { email })) if email.is_empty() => {
+            (tr("Sign-in expired"), Some((tr("Sign in again…"), Look::Primary, true, None)))
+        }
         Some(Ok(CodexAccount::Expired { email })) => {
             (fmt(&tr("The ChatGPT sign-in for {email} has expired."), &[("email", email)]), Some((tr("Sign in again…"), Look::Primary, true, None)))
         }
@@ -800,7 +810,8 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
         y += wrapped(&paint, pos2(x, y), inner, &account_error(e), types::CAPTION, p.danger, 2) + 4.0;
     }
     let help = match &account {
-        Some(Ok(CodexAccount::SignedIn { .. })) if store_missing => tr(OWN_FILES),
+        // Said only where the host keeps it so, which is where no secure store opened.
+        Some(Ok(CodexAccount::SignedIn { .. })) if shell.agents.look.sign_in_files => tr(OWN_FILES),
         Some(Ok(CodexAccount::SignedIn { .. })) => tr("The codex program keeps this sign-in itself."),
         Some(Ok(_)) => tr("Sign in opens your browser; the codex program keeps the sign-in itself."),
         _ => tr("The codex program keeps the sign-in itself."),

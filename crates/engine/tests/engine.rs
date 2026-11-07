@@ -195,6 +195,25 @@ fn the_registry_refuses_duplicate_and_malformed_ids_and_undocumented_parameters(
     assert!(Registry::new(vec![cmd!("item.x", "X", &["Item"], None, "n: integer", always, count)]).is_err(), "no meaning");
 }
 
+/// What a query is has one answer: neither journaled nor undoable and run by its own handler, so
+/// undo and redo, which are neither too, are not queries; an unknown id has no answer.
+#[test]
+fn a_query_is_neither_journaled_nor_undoable_and_runs_its_own_handler() {
+    let reg = registry();
+    let queries: Vec<&str> = reg.ids().filter(|id| reg.is_query(id) == Some(true)).collect();
+    assert_eq!(queries, vec!["item.count"]);
+    for id in ["edit.undo", "edit.redo", "view.select", "item.sneak", "item.add"] {
+        assert_eq!(reg.is_query(id), Some(false), "{id}");
+    }
+    assert_eq!(reg.is_query("item.nope"), None);
+    // The session runs a query as one: it may run while nothing else may, and changes nothing.
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let before = state(&s);
+    assert_eq!(s.execute("item.count", &json!({})).unwrap().value, json!(1));
+    assert_eq!(state(&s), before);
+}
+
 #[test]
 fn every_command_applies_undoes_and_redoes_to_the_identical_document() {
     let mut s = session();

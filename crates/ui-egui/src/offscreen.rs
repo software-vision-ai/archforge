@@ -397,6 +397,13 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         crate::support::open(&mut shell);
     }
     sample_agents(&mut shell, screen);
+    // Every screen has the agents host the app has: the programs found, nothing set up, so the
+    // status bar shows Chat's agent access as the app does.
+    if shell.services.agents.is_none() {
+        use crate::ai_agents::{Look, Provider, fake};
+        let look = Look { claude: fake::found(Provider::Claude), codex: fake::found(Provider::Codex), ..Look::default() };
+        shell.services.agents = Some(std::sync::Arc::new(fake::Fake { look: std::sync::Mutex::new(look), ..fake::Fake::default() }));
+    }
     if screen == Screen::HomeDoltMissing {
         shell.dolt_missing = Some("ARCHFORGE_DOLT is not set and no dolt is on the PATH".into());
     }
@@ -881,6 +888,7 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         codex: fake::found(Provider::Codex),
         claude_key: Key::Absent,
         codex_key: Key::Absent,
+        sign_in_files: false,
     };
     let mut account = CodexAccount::NotSignedIn;
     match screen {
@@ -903,6 +911,8 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         }
         Screen::SettingsAgentsNoStore => {
             look.store = Store::Missing { why: "no Secret Service answers on the session bus".into() };
+            // Without a secure store the host keeps the ChatGPT sign-in in the codex program's files.
+            look.sign_in_files = true;
             account = signed_in.clone();
             shell.state.agents.claude_model = "sonnet".into();
             shell.state.agents.chat_uses_model = true;
@@ -922,7 +932,6 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         ..fake::Fake::default()
     });
     shell.services.agents = Some(host.clone());
-    shell.services.agent_accounts = Some(host);
     // What the look at start found, as its answer leaves it.
     shell.agents.set_look(look);
     shell.agents.codex = Some(Ok(account));

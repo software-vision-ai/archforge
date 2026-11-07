@@ -386,11 +386,7 @@ fn an_api_key_goes_to_the_secure_store_and_never_into_the_preferences() {
     let store = std::sync::Arc::new(archforge_secrets::MemoryStore::new());
     let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let host = crate::agents::Agents::with(&base, Box::new(Shared(store.clone(), reads.clone())), archforge_agents::HostEnv::default());
-    let services = Services {
-        agents: Some(std::sync::Arc::new(host)),
-        agent_accounts: Some(std::sync::Arc::new(archforge_ui_egui::ai_agents::NotYet)),
-        ..Services::default()
-    };
+    let services = Services { agents: Some(std::sync::Arc::new(host)), ..Services::default() };
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
             shell.logic(ui.ctx());

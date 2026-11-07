@@ -314,7 +314,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
   starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
   needs them, and kept until Look again, Check connection, a save or a removal, or a restart.
-  Opening the page sends nothing over the network; that first local read is all it does. Check connection is free
+  Codex's account is read the first time the page shows or a Codex conversation starts, never at
+  launch (owner, 2026-11-06), as reading it starts the codex program; a plain launch runs only the
+  programs' version look.
+  Opening the page sends nothing over the network; those first local reads are all it does. Check connection is free
   and local (the programs, their versions, the keys or sign-in); Send test message carries its
   cost note and goes to the default agent's provider. The badge says when it was checked as a
   time ago ("Checked just now", "5 min ago"), not a clock time, as the window has no time zone.
@@ -324,7 +327,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   with why under it; the refusal comes from a test message, since Check connection sends nothing.
 - Codex has a segmented control, Sign in with ChatGPT or API key. The codex program keeps the
   ChatGPT sign-in itself; Archforge starts it, shows its device code inline (the code with Copy,
-  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. On an API key
+  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. A sign-in not
+  finished within 15 minutes, or cancelled by the codex program, ends with a line saying so and
+  Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently. On an API key
   the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
 - A missing program shows why, the maker's install command with Copy, Look again (primary) and
   Installation guide; a program newer than tested is accepted with an amber badge, "Not yet
@@ -336,6 +341,16 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   from frame A7, which could not keep its promise). On Windows the page says AI Agents are not available on this system yet.
 - What is kept in the preferences: the default agent, each agent's model, Codex's way of signing
   in and Let Chat use the model (off until turned on). Never a key, nor any part of one.
+- The codex program keeps a ChatGPT sign-in in the system keyring where the secure store opens,
+  and otherwise in its own files in Archforge's private folder (owner, 2026-11-06), so the
+  without-a-store note's "keeps its ChatGPT sign-in in its own files" is exactly what happens.
+- Agent access for Chat (AR-203) opens only while a conversation holds it and Let Chat use the
+  model is on, and closes with the last conversation, at once when the opt-in turns off, and on
+  quit. The status bar's Agent item (page 07, the dot and text beside the location) says which:
+  an accent dot and "Chat is using the model" while a conversation holds access, a purple dot and
+  "Agent access off" otherwise, one at a time. It is a control (pointer, Tab, Enter, its id
+  `workspace.status.agent`); either state opens Settings on AI Agents, as the design's agent setup
+  overlay does.
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,

@@ -273,6 +273,8 @@ str		Saving…	保存中…
 str		Opening…	開いています…
 str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
+str		Chat is using the model	チャットがモデルを使用中
+str		Agent access off	エージェントのアクセスはオフ
 str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました
@@ -344,6 +346,8 @@ str		{agent} too old	{agent} が古すぎます
 str		{agent} can't be used	{agent} は使えません
 str		{agent} sign-in could not be read	{agent} のサインインを読み取れません
 str		The sign-in gave a code that is not letters, digits and hyphens.	サインインが英字・数字・ハイフン以外を含むコードを返しました。
+str		The sign-in was not finished in time. Sign in again.	サインインが時間内に完了しませんでした。もう一度サインインしてください。
+str		The codex program cancelled the sign-in. Sign in again.	codex プログラムがサインインをキャンセルしました。もう一度サインインしてください。
 str		{agent} has no key	{agent} にキーがありません
 str		{agent} key refused	{agent} のキーが拒否されました
 str		{agent} not signed in	{agent} 未サインイン

@@ -9,6 +9,7 @@
 pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
+pub mod chat;
 pub mod checks;
 pub mod close_ask;
 pub mod connect;
@@ -97,12 +98,10 @@ pub struct Services {
     /// Where About Archforge sends support: the provider pages the host has set up; a
     /// destination left out says it is not set up yet.
     pub support: support::Destinations,
-    /// Settings → AI Agents' local work: finding the agent programs and keeping their API keys in
-    /// the system's secure store; none leaves the page saying it is not available.
+    /// AI Agents and Chat: finding the agent programs, keeping their API keys in the system's secure
+    /// store, the test message, Codex's ChatGPT sign-in, and Chat's conversations with their agent
+    /// access; none leaves the page saying it is not available and runs no conversation.
     pub agents: Option<std::sync::Arc<dyn ai_agents::AgentHost>>,
-    /// What talks to an agent's provider or to the codex program's sign-in: the test message and
-    /// Codex's ChatGPT sign-in; none keeps them unavailable.
-    pub agent_accounts: Option<std::sync::Arc<dyn ai_agents::AgentAccounts>>,
 }
 
 /// The host's search for projects in folders: the folders and a wake in, the projects found sent
@@ -363,6 +362,8 @@ pub struct Shell {
     pub about: Option<support::Dialog>,
     /// AI Agents as this run knows it: the programs and keys found, the sign-in, what is under way.
     pub agents: ai_agents::State,
+    /// Chat's conversations as this window knows them, and whether one holds agent access.
+    pub chats: chat::State,
     /// The open projects, one tab each, in the bar's order; the one shown has its state in the
     /// fields below, the others keep theirs parked in their tab.
     pub tabs: Vec<Tab>,
@@ -425,7 +426,7 @@ pub struct Shell {
     pub problems: std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
     /// Set by `request_quit`; the next frame closes the window.
     quit_requested: bool,
-    /// The control channel's requests, while agent access is on.
+    /// The control channel's requests, from every opening of agent access.
     pub(crate) control: Option<std::sync::mpsc::Receiver<control::ControlRequest>>,
 }
 
@@ -449,6 +450,7 @@ impl Shell {
             settings: None,
             about: None,
             agents: ai_agents::State::default(),
+            chats: chat::State::default(),
             tabs: Vec::new(),
             active: None,
             project: None,
@@ -1254,7 +1256,9 @@ impl Shell {
         self.write_changes();
     }
 
-    /// Turns agent access on: the shell answers the requests `requests` brings once per frame.
+    /// Gives the shell the control channel's requests, from every opening (the person's own access
+    /// and Chat's): it answers what `requests` brings once per frame, as each request's token
+    /// allows.
     pub fn attach_control(&mut self, requests: std::sync::mpsc::Receiver<control::ControlRequest>) {
         self.control = Some(requests);
     }
@@ -1297,7 +1301,9 @@ impl Shell {
         self.poll_host();
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
-        ai_agents::poll(self);
+        ai_agents::poll(self, ctx);
+        // Chat's conversations: the host's events, and the opt-in told to the host.
+        chat::frame(self, ctx);
         control::drain(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.

@@ -56,6 +56,7 @@ sends can change them.
 | Flag | What it does |
 |---|---|
 | `--bridge <port>` | Connects to Archforge started with `--control <port>`. Needed. |
+| `--token-file <path>` | Reads the token from that file, an absolute path, instead of the settings folder's `control-<port>.token`. Archforge gives each Chat conversation a file of its own; you do not need it for your own agent. |
 | `--compact` | Lists the general tools and `search_tools` in place of one tool per command. |
 | `--read-only` | Offers only the tools that read: listing commands, `inspect_document`, the reads such as `er_entity_list` or `uml_class_get` (listed even with `--compact`), and the resources. Every other tool is left out of the list, and a call to one is refused with an error that names it and says the session is read-only. Nothing reaches the model. |
 | `--origin <label>` | Labels every change the agent makes. Its undo step is named *label: change*, for example `Chat 1: Add entity`, or `Chat 1: Add tables` for a batch, and each result gives the label back as `origin`. The window does not show undo step names yet; the agent's results and `inspect_document` do, and `inspect_document` names the origin of the steps undo and redo would take (`undo_origin`, `redo_origin`). |
@@ -219,26 +220,38 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   Linux) and nowhere else: never in the project and never in the preferences. Afterwards it shows
   only the key's last four characters, with **Replace** and **Remove**. Its model can be chosen
   once a key is saved.
-- **Codex** uses an API key from your OpenAI account: choose **API key** and save it as for Claude.
-  **Sign in with ChatGPT** is not available in this version yet; the page says so. It becomes
-  available once Archforge drives the codex program's own sign-in: **Sign in…** will let the codex
-  program open your browser, and on a computer without a browser **Sign in with a device code**
-  will show a code to enter on any device with a browser. The codex program will keep that
-  sign-in itself.
-- **Let Chat use the model** is off until you turn it on. While a conversation holds this access,
-  Chat reads the project's model and the status bar says so; changes still wait for **Allow
-  changes** in each conversation.
+- **Codex** signs in with your ChatGPT account or uses an API key from your OpenAI account. With
+  **Sign in with ChatGPT**, **Sign in…** opens the sign-in page in your browser, and on a computer
+  without a browser **Sign in with a device code** shows a code to enter on any device with a
+  browser. The codex program keeps that sign-in itself: in the system's secure store, or, where
+  there is none, in its own files in Archforge's private settings folder. A sign-in not finished
+  within 15 minutes, or one the codex program cancels, says so under it; sign in again. **Sign
+  out** ends it.
+  With **API key**, save the key as for Claude.
+- **Let Chat use the model** is off until you turn it on. While it is on, each Chat conversation
+  gets agent access of its own while it runs: Chat reads the project's model through it, and a
+  conversation changes the model only when **Allow changes** is on in it. Archforge enforces
+  that itself: through its agent access, a conversation without Allow changes is refused every
+  change, undo and save it asks for. The access opens on your computer alone when a conversation needs it
+  and closes when the last conversation ends, at once when you turn the switch off, and when you
+  quit.
+
+The status bar says which, at its right beside the project's location: *Chat is using the model*
+with a blue dot while a conversation holds agent access, *Agent access off* with a purple dot
+otherwise. Click it, or reach it with Tab and press Enter, to open **Settings ▸ AI Agents**.
 
 Opening the page sends nothing over the network. Archforge looked for the programs when it
 started; your keys are read from the secure store the first time you open the page, never when
-Archforge starts, so the system asks for access only once you use AI agents.
+Archforge starts, so the system asks for access only once you use AI agents. Who Codex is signed
+in as is read then too, by starting the codex program on your computer; it is never started just
+because Archforge did.
 
 - **Check connection** is free and runs on your computer: it looks again for each program and its
-  version and reads which API keys are saved, and sends nothing. The badge under it sums up each
-  agent. It cannot read a Codex ChatGPT sign-in yet; that comes with the sign-in itself.
-- **Send test message** is not available in this version yet. Once Archforge talks to the agents'
-  providers, it will send one short message to the default agent's provider, which uses a little
-  of your plan or API credit.
+  version, reads which API keys are saved and who Codex is signed in as, and sends nothing. The
+  badge under it sums up each agent.
+- **Send test message** sends one short message to the default agent's provider, which uses a
+  little of your plan or API credit. It runs without access to your model, and leaves nothing
+  behind on your computer.
 
 When a program is missing, its card shows how to install it, as its maker documents it:
 
@@ -251,9 +264,9 @@ Then choose **Look again**; **Installation guide** opens the maker's own page. A
 the version Archforge was tested with works, and its badge says *Not yet tested with this version*.
 
 On Linux without a running Secret Service (such as GNOME Keyring or KWallet), API keys cannot be
-saved until you start one and restart Archforge, and Archforge keeps them nowhere else. Once
-Sign in with ChatGPT is available, it will work without a secure store, as the codex program
-keeps that sign-in in its own files. On Windows, AI Agents are not available yet; everything else
+saved until you start one and restart Archforge, and Archforge keeps them nowhere else. Sign in
+with ChatGPT works without a secure store: the codex program then keeps that sign-in in its own
+files, in Archforge's private settings folder, readable by you alone. On Windows, AI Agents are not available yet; everything else
 works as usual.
 
 ## The Generate handoff

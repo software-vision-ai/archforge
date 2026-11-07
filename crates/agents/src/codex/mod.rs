@@ -39,7 +39,7 @@ pub use history::History;
 pub use parse::{SignedInWith, kind_of};
 pub use rpc::{EXPIRED_SIGN_IN_MESSAGES, RpcError};
 
-pub use crate::claude::{Bridge, BridgeHome, Model, Start};
+pub use crate::claude::{Bridge, Model, Start};
 use crate::session::{AgentSession, SessionEvent, Skipped, ToolServer, TurnOutcome};
 use crate::{AgentError, ConversationFolder, ErrorKind, Exit, Limits, Runtime, RuntimeKind, SpawnRequest, Workspace, spawn};
 use rpc::{Conn, Incoming, LINES_PER_CALL};
@@ -180,8 +180,9 @@ pub struct CodexConfig {
     pub start: Start,
     /// The model to ask for; Codex's default when `None`.
     pub model: Option<Model>,
-    /// Archforge's tool server.
-    pub bridge: Bridge,
+    /// Archforge's tool server; none when the conversation has no agent access (or for a test
+    /// message): Codex then starts with no tool server at all.
+    pub bridge: Option<Bridge>,
     /// The thread's developer instructions, at most [`MAX_INSTRUCTIONS_BYTES`].
     pub instructions: Option<String>,
     /// The caps on the process's input and output; `max_line_bytes` at least
@@ -193,12 +194,11 @@ pub struct CodexConfig {
 }
 
 /// The command line after `codex`: `app-server --strict-config`, the credential store, no history
-/// file, no analytics, no web search, the spike's features switched off, and (for a session) the
-/// bridge as the tool server `archforge` through `-c mcp_servers.archforge.*`: its command, its
-/// arguments (`mcp --bridge <port> [--read-only] --origin <label>`), the person's `HOME` (and
-/// `XDG_CONFIG_HOME` where set) for the control token, and the spike's timeouts. Refused: a relative
-/// or non-UTF-8 path, a port of 0, an origin label `archforge-cli` would refuse, an unknown home, and
-/// a control character in any value.
+/// file, no analytics, no web search, the spike's features switched off, and (for a session with
+/// agent access) the bridge as the tool server `archforge` through `-c mcp_servers.archforge.*`: its
+/// command, its arguments (`mcp --bridge <port> --token-file <file> [--read-only] --origin
+/// <label>`) and the spike's timeouts. Refused: a relative or non-UTF-8 path, a port of 0, an origin
+/// label `archforge-cli` would refuse, and a control character in any value.
 pub fn command_line(store: CredentialStore, bridge: Option<&Bridge>) -> Result<Vec<OsString>, AgentError> {
     let mut args: Vec<String> = vec!["app-server".into(), "--strict-config".into()];
     for value in [
@@ -225,48 +225,14 @@ pub fn command_line(store: CredentialStore, bridge: Option<&Bridge>) -> Result<V
 
 /// The `-c` values that give Codex Archforge's tool server.
 fn bridge_overrides(bridge: &Bridge) -> Result<Vec<String>, AgentError> {
-    let path_text = |what: &'static str, path: &Path| -> Result<String, AgentError> {
-        if !path.is_absolute() {
-            return Err(AgentError::InvalidSetting { setting: what, bytes: path.as_os_str().len(), reason: "it is not an absolute path".to_owned() });
-        }
-        let text = path.to_str().ok_or_else(|| AgentError::InvalidSetting {
-            setting: what,
-            bytes: path.as_os_str().len(),
-            reason: "it is not UTF-8 text".to_owned(),
-        })?;
-        toml_string(what, text)
-    };
-    let cli = path_text("archforge-cli path", &bridge.cli)?;
-    if bridge.port == 0 {
-        return Err(AgentError::InvalidSetting { setting: "bridge port", bytes: 1, reason: "the port is 1 to 65535".to_owned() });
-    }
-    if bridge.origin.starts_with('-') {
-        return Err(setting("origin label", &bridge.origin, "a label may not start with -"));
-    }
-    archforge_control::check_origin(&bridge.origin).map_err(|e| setting("origin label", &bridge.origin, &e.to_string()))?;
-    let mut bridge_args = vec!["mcp".to_owned(), "--bridge".to_owned(), bridge.port.to_string()];
-    if !bridge.allow_changes {
-        bridge_args.push("--read-only".to_owned());
-    }
-    bridge_args.push("--origin".to_owned());
-    bridge_args.push(bridge.origin.clone());
+    let (cli, bridge_args) = crate::claude::bridge_command(bridge)?;
     let mut quoted = Vec::new();
     for arg in &bridge_args {
         quoted.push(toml_string("bridge argument", arg)?);
     }
-    let home = bridge.home.home.as_ref().ok_or_else(|| AgentError::InvalidSetting {
-        setting: "home folder",
-        bytes: 0,
-        reason: "the person's home folder is unknown, so the tool server could not find the control token".to_owned(),
-    })?;
-    let mut env = vec![format!("HOME={}", path_text("home folder", home)?)];
-    if let Some(xdg) = &bridge.home.xdg_config_home {
-        env.push(format!("XDG_CONFIG_HOME={}", path_text("XDG_CONFIG_HOME", xdg)?));
-    }
     Ok(vec![
-        format!("mcp_servers.{SERVER_NAME}.command={cli}"),
+        format!("mcp_servers.{SERVER_NAME}.command={}", toml_string("archforge-cli path", &cli)?),
         format!("mcp_servers.{SERVER_NAME}.args=[{}]", quoted.join(",")),
-        format!("mcp_servers.{SERVER_NAME}.env={{{}}}", env.join(",")),
         format!("mcp_servers.{SERVER_NAME}.startup_timeout_sec=10"),
         format!("mcp_servers.{SERVER_NAME}.tool_timeout_sec=60"),
     ])
@@ -627,7 +593,7 @@ impl CodexSession {
             Auth::ChatGpt(_) => (Vec::new(), None),
         };
         let request = SpawnRequest {
-            args: command_line(store, Some(&config.bridge))?,
+            args: command_line(store, config.bridge.as_ref())?,
             input_secrets,
             config_dir: Some(home.path().to_path_buf()),
             limits: config.limits,
@@ -1541,7 +1507,7 @@ mod tests {
             port: 47000,
             origin: "Chat 1".to_owned(),
             allow_changes: false,
-            home: BridgeHome { home: Some(PathBuf::from("/Users/person")), xdg_config_home: None },
+            token_file: PathBuf::from("/Users/person/Library/Application Support/Archforge/control-47000-0123456789abcdef.token"),
         };
         let args: Vec<String> =
             command_line(CredentialStore::Keyring, Some(&bridge)).unwrap().into_iter().map(|a| a.into_string().unwrap()).collect();
@@ -1551,10 +1517,13 @@ mod tests {
         }
         assert!(args.contains(&"mcp_servers.archforge.command=\"/opt/archforge/bin/archforge-cli\"".to_owned()), "{args:?}");
         assert!(
-            args.contains(&"mcp_servers.archforge.args=[\"mcp\",\"--bridge\",\"47000\",\"--read-only\",\"--origin\",\"Chat 1\"]".to_owned()),
+            args.contains(
+                &"mcp_servers.archforge.args=[\"mcp\",\"--bridge\",\"47000\",\"--token-file\",\"/Users/person/Library/Application Support/Archforge/control-47000-0123456789abcdef.token\",\"--read-only\",\"--origin\",\"Chat 1\"]"
+                    .to_owned()
+            ),
             "{args:?}"
         );
-        assert!(args.contains(&"mcp_servers.archforge.env={HOME=\"/Users/person\"}".to_owned()), "{args:?}");
+        assert!(!args.iter().any(|a| a.contains("mcp_servers.archforge.env")), "the bridge needs no home of its own: {args:?}");
         let allowed = Bridge { allow_changes: true, ..bridge.clone() };
         let args: Vec<String> =
             command_line(CredentialStore::Ephemeral, Some(&allowed)).unwrap().into_iter().map(|a| a.into_string().unwrap()).collect();
@@ -1566,7 +1535,7 @@ mod tests {
             Bridge { cli: PathBuf::from("archforge-cli"), ..bridge.clone() },
             Bridge { port: 0, ..bridge.clone() },
             Bridge { origin: "-x".into(), ..bridge.clone() },
-            Bridge { home: BridgeHome::default(), ..bridge.clone() },
+            Bridge { token_file: PathBuf::from("control.token"), ..bridge.clone() },
             Bridge { cli: PathBuf::from("/opt/a\u{7}b"), ..bridge.clone() },
         ] {
             assert!(matches!(command_line(CredentialStore::Keyring, Some(&bad)), Err(AgentError::InvalidSetting { .. })), "{bad:?}");

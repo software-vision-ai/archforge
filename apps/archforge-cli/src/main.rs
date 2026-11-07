@@ -8,19 +8,22 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use archforge_control::{CallError, Client};
 use serde_json::{Value, json};
 
 const USAGE: &str = "usage: archforge-cli <verb>
-  mcp --bridge <port> [--compact] [--read-only] [--origin <label>]
+  mcp --bridge <port> [--token-file <path>] [--compact] [--read-only] [--origin <label>]
                                       serve MCP on the standard streams, bridged to Archforge started with --control <port>;
+                                      --token-file reads the token from that file (an absolute path Archforge gave a Chat
+                                      conversation) instead of the settings folder's control-<port>.token;
                                       --compact lists only the general tools and search_tools, not one tool per command;
                                       --read-only offers only the tools that read and refuses every other;
                                       --origin labels every change this server makes, on its undo step and in its result
                                       (1 to 64 characters of printable text)
-  app <method> [<json>] --port <port> send one request to the running Archforge and print its result
+  app <method> [<json>] --port <port> [--token-file <path>]
+                                      send one request to the running Archforge and print its result
   commands [<filter>]                 list Archforge's commands
   describe <command>                  print one command's documentation
   --version | --help";
@@ -29,8 +32,8 @@ const USAGE: &str = "usage: archforge-cli <verb>
 enum Verb {
     Help,
     Version,
-    Mcp { port: u16, compact: bool, read_only: bool, origin: Option<String> },
-    App { method: String, params: Value, port: u16 },
+    Mcp { port: u16, token_file: Option<PathBuf>, compact: bool, read_only: bool, origin: Option<String> },
+    App { method: String, params: Value, port: u16, token_file: Option<PathBuf> },
     Commands { filter: String },
     Describe { id: String },
 }
@@ -38,6 +41,17 @@ enum Verb {
 fn port(text: Option<&String>) -> Result<u16, String> {
     let text = text.ok_or("a port is needed")?;
     text.parse::<u16>().ok().filter(|p| *p > 0).ok_or_else(|| format!("{text:?} is not a port (1 to 65535)"))
+}
+
+/// The path `--token-file` names: absolute, as Archforge gives it, so it never depends on the
+/// folder the tool was started in.
+fn token_file(text: Option<&String>) -> Result<PathBuf, String> {
+    let text = text.ok_or("--token-file needs a path")?;
+    let path = PathBuf::from(text);
+    if text.starts_with("--") || !path.is_absolute() {
+        return Err(format!("--token-file needs an absolute path, not {text:?}"));
+    }
+    Ok(path)
 }
 
 fn parse(args: &[String]) -> Result<Verb, String> {
@@ -49,11 +63,14 @@ fn parse(args: &[String]) -> Result<Verb, String> {
         "mcp" => mcp(rest),
         "app" => {
             let mut positional = Vec::new();
-            let mut at = None;
+            let (mut at, mut file) = (None, None);
             let mut i = 0;
             while let Some(a) = rest.get(i) {
-                if a == "--port" {
+                if a == "--port" && at.is_none() {
                     at = Some(port(rest.get(i + 1))?);
+                    i += 2;
+                } else if a == "--token-file" && file.is_none() {
+                    file = Some(token_file(rest.get(i + 1))?);
                     i += 2;
                 } else if a.starts_with("--") {
                     return Err(format!("app has no flag {a:?}"));
@@ -68,7 +85,7 @@ fn parse(args: &[String]) -> Result<Verb, String> {
                 [m, p] => (m.clone(), serde_json::from_str(p).map_err(|e| format!("the parameters are not JSON: {e}"))?),
                 _ => return Err("app takes a method and optionally its parameters as JSON".into()),
             };
-            Ok(Verb::App { method, params, port })
+            Ok(Verb::App { method, params, port, token_file: file })
         }
         "commands" => match rest {
             [] => Ok(Verb::Commands { filter: String::new() }),
@@ -85,14 +102,18 @@ fn parse(args: &[String]) -> Result<Verb, String> {
 
 /// The `mcp` verb's flags, in any order, each at most once.
 fn mcp(rest: &[String]) -> Result<Verb, String> {
-    const TAKES: &str = "mcp takes --bridge <port> and optionally --compact, --read-only and --origin <label>";
-    let (mut at, mut compact, mut read_only, mut origin) = (None, false, false, None);
+    const TAKES: &str = "mcp takes --bridge <port> and optionally --token-file <path>, --compact, --read-only and --origin <label>";
+    let (mut at, mut file, mut compact, mut read_only, mut origin) = (None, None, false, false, None);
     let mut i = 0;
     while let Some(flag) = rest.get(i) {
         let twice = || format!("{flag} is given twice");
         match flag.as_str() {
             "--bridge" if at.is_none() => {
                 at = Some(port(rest.get(i + 1))?);
+                i += 1;
+            }
+            "--token-file" if file.is_none() => {
+                file = Some(token_file(rest.get(i + 1))?);
                 i += 1;
             }
             "--origin" if origin.is_none() => {
@@ -108,29 +129,44 @@ fn mcp(rest: &[String]) -> Result<Verb, String> {
             }
             "--compact" if !compact => compact = true,
             "--read-only" if !read_only => read_only = true,
-            "--bridge" | "--origin" | "--compact" | "--read-only" => return Err(twice()),
+            "--bridge" | "--token-file" | "--origin" | "--compact" | "--read-only" => return Err(twice()),
             "--demo" => return Err("the headless MCP server is not built yet; use --bridge <port>".into()),
             other => return Err(format!("mcp has no flag {other:?}; {TAKES}")),
         }
         i += 1;
     }
     let port = at.ok_or(TAKES)?;
-    Ok(Verb::Mcp { port, compact, read_only, origin })
+    Ok(Verb::Mcp { port, token_file: file, compact, read_only, origin })
 }
 
 /// The tools' backend in bridge mode: the token is read for every call, so the server can start
-/// before Archforge and goes on across its restarts. The origin, set on the command line by the
-/// one who started the server, goes with every request beside its parameters; nothing an agent
-/// sends through the tools can set or change it.
+/// before Archforge and goes on across its restarts, and a revoked token's file, gone, ends its
+/// access. The origin, set on the command line by the one who started the server, goes with every
+/// request beside its parameters; nothing an agent sends through the tools can set or change it.
 struct Bridge {
     settings: PathBuf,
     port: u16,
+    /// The file `--token-file` named, in place of the settings folder's `control-<port>.token`.
+    token_file: Option<PathBuf>,
     origin: Option<String>,
 }
 
+/// The client for `port`, its token from `token_file` when one was named, else from the settings
+/// folder.
+fn client(settings: &Path, port: u16, token_file: Option<&Path>) -> Result<Client, CallError> {
+    match token_file {
+        Some(file) => Client::from_token_file(file, port),
+        None => Client::new(settings, port),
+    }
+}
+
 impl archforge_mcp::Backend for Bridge {
+    /// Sends one request with a client made for it, so the token is read afresh.
     fn call(&self, method: &str, params: Value) -> Result<Value, CallError> {
-        Client::new(&self.settings, self.port)?.with_origin(self.origin.clone()).map_err(|e| CallError::Refused(e.to_string()))?.call(method, params)
+        client(&self.settings, self.port, self.token_file.as_deref())?
+            .with_origin(self.origin.clone())
+            .map_err(|e| CallError::Refused(e.to_string()))?
+            .call(method, params)
     }
 }
 
@@ -169,14 +205,14 @@ fn run(args: &[String]) -> i32 {
     match verb {
         Verb::Help => done(out(USAGE)),
         Verb::Version => done(out(&format!("archforge-cli {}", env!("CARGO_PKG_VERSION")))),
-        Verb::Mcp { port, compact, read_only, origin } => {
+        Verb::Mcp { port, token_file, compact, read_only, origin } => {
             // The tools come from the command table this build carries, so they are listed even
             // before Archforge runs.
             let catalog = match infos() {
                 Ok(all) => archforge_mcp::Catalog::new(&all, compact).read_only(read_only),
                 Err(e) => return fail(&e, 1),
             };
-            let bridge = Bridge { settings: archforge_control::settings_folder(), port, origin };
+            let bridge = Bridge { settings: archforge_control::settings_folder(), port, token_file, origin };
             let mut input = std::io::stdin().lock();
             let mut output = std::io::stdout().lock();
             match archforge_mcp::serve(&mut input, &mut output, &bridge, &catalog) {
@@ -185,8 +221,8 @@ fn run(args: &[String]) -> i32 {
                 Err(e) => fail(&format!("the MCP server stopped: {e}"), 1),
             }
         }
-        Verb::App { method, params, port } => {
-            let answer = Client::new(&archforge_control::settings_folder(), port).and_then(|c| c.call(&method, params));
+        Verb::App { method, params, port, token_file } => {
+            let answer = client(&archforge_control::settings_folder(), port, token_file.as_deref()).and_then(|c| c.call(&method, params));
             match answer {
                 Ok(v) => done(out(&serde_json::to_string_pretty(&v).unwrap_or_default())),
                 Err(CallError::Unreachable(e)) => fail(&e, 3),
@@ -234,7 +270,9 @@ mod tests {
     #[test]
     fn arguments_are_parsed_by_hand_and_anything_unknown_is_a_usage_error() {
         assert_eq!(parse(&args(&["--help"])), Ok(Verb::Help));
-        let mcp = |compact, read_only, origin: Option<&str>| Ok(Verb::Mcp { port: 47000, compact, read_only, origin: origin.map(str::to_string) });
+        let mcp = |compact, read_only, origin: Option<&str>| {
+            Ok(Verb::Mcp { port: 47000, token_file: None, compact, read_only, origin: origin.map(str::to_string) })
+        };
         assert_eq!(parse(&args(&["mcp", "--bridge", "47000"])), mcp(false, false, None));
         assert_eq!(parse(&args(&["mcp", "--bridge", "47000", "--compact"])), mcp(true, false, None));
         assert_eq!(parse(&args(&["mcp", "--compact", "--bridge", "47000"])), mcp(true, false, None));
@@ -243,7 +281,17 @@ mod tests {
         assert_eq!(parse(&args(&["mcp", "--origin", "Bestellungen prüfen", "--bridge", "47000"])), mcp(false, false, Some("Bestellungen prüfen")));
         assert_eq!(
             parse(&args(&["app", "engine.execute", "{\"command\":\"x\"}", "--port", "47000"])),
-            Ok(Verb::App { method: "engine.execute".into(), params: json!({ "command": "x" }), port: 47000 })
+            Ok(Verb::App { method: "engine.execute".into(), params: json!({ "command": "x" }), port: 47000, token_file: None })
+        );
+        // A granted token's file, by its absolute path.
+        let file = "/home/a/.config/archforge/control-47000-0123456789abcdef.token";
+        assert_eq!(
+            parse(&args(&["mcp", "--bridge", "47000", "--token-file", file, "--read-only", "--origin", "Chat 1"])),
+            Ok(Verb::Mcp { port: 47000, token_file: Some(file.into()), compact: false, read_only: true, origin: Some("Chat 1".into()) })
+        );
+        assert_eq!(
+            parse(&args(&["app", "document.inspect", "--port", "47000", "--token-file", file])),
+            Ok(Verb::App { method: "document.inspect".into(), params: json!({}), port: 47000, token_file: Some(file.into()) })
         );
         for bad in [
             &[][..],
@@ -264,6 +312,12 @@ mod tests {
             &["mcp", "--bridge", "1", "--origin", "--read-only"],
             &["mcp", "--bridge", "1", "--origin", "--compact"],
             &["mcp", "--demo"],
+            &["mcp", "--bridge", "1", "--token-file"],
+            &["mcp", "--bridge", "1", "--token-file", "control-1.token"],
+            &["mcp", "--bridge", "1", "--token-file", "--read-only"],
+            &["mcp", "--bridge", "1", "--token-file", "/a", "--token-file", "/b"],
+            &["app", "x", "--port", "1", "--token-file", "relative"],
+            &["app", "x", "--port", "1", "--port", "2"],
             &["app", "x"],
             &["app", "x", "--port", "1", "--force"],
             &["serve"],

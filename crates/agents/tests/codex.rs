@@ -20,8 +20,7 @@ use std::time::{Duration, Instant};
 
 use archforge_agents::codex::history::{COPY_FILE, Role};
 use archforge_agents::codex::{
-    AccountEvent, Auth, Bridge, BridgeHome, CancelStatus, ChatGptStore, CodexAccount, CodexConfig, CodexHome, CodexSession, CredentialStore,
-    LoginOutcome, Start,
+    AccountEvent, Auth, Bridge, CancelStatus, ChatGptStore, CodexAccount, CodexConfig, CodexHome, CodexSession, CredentialStore, LoginOutcome, Start,
 };
 use archforge_agents::{
     AgentError, AgentSession, ConversationFolder, ConversationId, ErrorKind, HostEnv, Limits, Runtime, RuntimeKind, SessionEvent, Skipped,
@@ -242,13 +241,13 @@ fn bridge() -> Bridge {
         port: 47000,
         origin: "Chat 1".to_owned(),
         allow_changes: false,
-        home: BridgeHome { home: Some(PathBuf::from("/Users/person")), xdg_config_home: None },
+        token_file: PathBuf::from("/Users/person/Library/Application Support/Archforge/control-47000-0123456789abcdef.token"),
     }
 }
 
 /// A configuration for `start` with a request timeout of `timeout`.
 fn config(start: Start, timeout: Duration) -> CodexConfig {
-    CodexConfig { start, model: None, bridge: bridge(), instructions: None, limits: Limits::default(), request_timeout: timeout }
+    CodexConfig { start, model: None, bridge: Some(bridge()), instructions: None, limits: Limits::default(), request_timeout: timeout }
 }
 
 /// A ChatGPT sign-in in the keyring: no sign-in request in the handshake.

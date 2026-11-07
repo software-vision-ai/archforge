@@ -13,6 +13,7 @@ mod layers;
 mod manual;
 mod resize;
 mod screens;
+mod shell_io;
 mod shot;
 mod skills;
 mod stats;

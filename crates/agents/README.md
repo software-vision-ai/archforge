@@ -32,11 +32,11 @@ folders, so the shell never depends on it and it is never built for the portable
 | `SessionEvent` | `Started { session_id, model, tools, servers }` (Codex: the thread's id, no tool list, and again when a tool server's state changes), `TextDelta`, `MessageDone`, `ToolStarted { id, server, tool, input }`, `ToolFinished { id, tool, ok, summary }`, `Retrying { attempt, max_attempts, delay_ms, kind }`, `TurnFinished { outcome, usage }`, `Ignored(Skipped)`, `Ended { exit, error }` |
 | `TurnOutcome`, `Usage`, `ToolServer`, `Skipped` | `Completed`, `Stopped`, `Failed(AgentError)`; token counts without a cost; a tool server's name and state; why a line was skipped |
 | `claude::ClaudeSession` | `start(&Runtime, &ConversationFolder, ClaudeConfig, Secret) -> Result<ClaudeSession, _>`, `AgentSession`, `session_id`, `skipped`, `turn_running`, `process` |
-| `claude::ClaudeConfig` | `session: SessionId` (the conversation's UUID), `start: Start` (`New`, `Resume`), `model: Model`, `bridge: Bridge { cli, port, origin, allow_changes, home: BridgeHome }`, `limits` |
+| `claude::ClaudeConfig` | `session: SessionId` (the conversation's UUID), `start: Start` (`New`, `Resume`), `model: Model`, `bridge: Option<Bridge { cli, port, token_file, origin, allow_changes }>` (`None`: no tool server at all), `limits` |
 | `claude::command_line`, `mcp_config`, `write_mcp_config` | the arguments; the tool server configuration as JSON; that configuration written to `claude-mcp.json` in the conversation's folder (atomic, 0600) |
 | `claude::ClaudeParser`, `kind_of` | stream-json lines to events, usable alone; an error category to its `ErrorKind` |
 | `codex::CodexSession` | `start(&Runtime, &ConversationFolder, &CodexHome, CodexConfig, Auth) -> Result<CodexSession, _>`, `AgentSession`, `history`, `damaged_copy`, `copy_error`, `skipped`, `turn_running`, `process` |
-| `codex::CodexConfig`, `Auth`, `ChatGptStore`, `CredentialStore` | `start: Start`, `model: Option<Model>`, `bridge: Bridge`, `instructions` (64 KiB), `limits` (`max_line_bytes` at least 8 MiB), `request_timeout` (10 ms to 600 s, default 30 s); `Auth::ApiKey(Secret)` or `Auth::ChatGpt(ChatGptStore::{Keyring, File})`; `CredentialStore::{Ephemeral, Keyring, File}` |
+| `codex::CodexConfig`, `Auth`, `ChatGptStore`, `CredentialStore` | `start: Start`, `model: Option<Model>`, `bridge: Option<Bridge>` (`None`: no tool server), `instructions` (64 KiB), `limits` (`max_line_bytes` at least 8 MiB), `request_timeout` (10 ms to 600 s, default 30 s); `Auth::ApiKey(Secret)` or `Auth::ChatGpt(ChatGptStore::{Keyring, File})`; `CredentialStore::{Ephemeral, Keyring, File}` |
 | `codex::CodexHome` | `open(&Workspace)`: `codex-home` in the workspace, 0700, Archforge's private `CODEX_HOME` |
 | `codex::CodexAccount` | `start(&Runtime, &Workspace, &CodexHome, CredentialStore, Limits, request_timeout, timeout)`, `read`, `login_api_key`, `login_chatgpt`, `login_device_code`, `cancel_login`, `logout`, `models`, `next_event`, `shutdown`, `folder`, `skipped`, `process` |
 | `codex::command_line`, `kind_of`, `RpcError`, `EXPIRED_SIGN_IN_MESSAGES` | the arguments; a `codexErrorInfo` to its `ErrorKind`; an error answer (`unknown_method`, `expired_sign_in`); Codex's exact refresh sentences |
@@ -139,23 +139,23 @@ claude -p --bare --input-format stream-json --output-format stream-json --verbos
 
 with `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` and the key as `ANTHROPIC_API_KEY`, its only way
 in. The model is named on every start, as a resume does not keep it; the session id is the
-conversation's UUID, and the transcripts stay under the conversation's `CLAUDE_CONFIG_DIR`. The
-configuration names one server:
+conversation's UUID, and the transcripts stay under the conversation's `CLAUDE_CONFIG_DIR`. With a
+bridge, the configuration names one server:
 
 ```json
 {"mcpServers":{"archforge":{"command":"<abs>/archforge-cli",
-  "args":["mcp","--bridge","<port>","--read-only","--origin","<label>"],
-  "env":{"ANTHROPIC_API_KEY":"","HOME":"<the person's home>"}}}}
+  "args":["mcp","--bridge","<port>","--token-file","<abs token file>","--read-only","--origin","<label>"],
+  "env":{"ANTHROPIC_API_KEY":""}}}}
 ```
 
-`--read-only` goes only when "Allow changes" is off; switching it is a shutdown and a new start with
+and without one (a conversation without agent access, a test message) none: `{"mcpServers":{}}`.
+`--token-file` is the file the application granted this conversation alone
+(`archforge_control::Server::grant`), so the bridge needs no home folder of its own. `--read-only`
+goes only when "Allow changes" is off, a second layer over the read-only role of the conversation's
+token, which the control channel enforces; switching it is a shutdown and a new start with
 `Start::Resume`, which rewrites the file (not yet verified live: the spike's round-trip item 5).
 Claude hands its whole environment to the server, so every secret variable is blanked in `env`
-(verified live later: item 4). The bridge finds the control token in the settings folder it derives
-from `HOME` (or `XDG_CONFIG_HOME`), and takes no token path yet, while `claude` gets a private
-`HOME`; `env` therefore gives the bridge the person's own (`BridgeHome::from_process`), and a start
-without it is refused. AR-203 can drop that once `archforge-cli mcp` takes the token file or settings
-folder itself. A configuration that holds the key (pasted into the origin label, say) is refused
+(verified live later: item 4). A configuration that holds the key (pasted into the origin label, say) is refused
 before it is written, as `SecretExposed`; whatever stands at the file's place, a link among them, is
 removed first, and the new file must come out a regular file only this user can read.
 
@@ -197,16 +197,15 @@ codex app-server --strict-config -c cli_auth_credentials_store="<store>" \
   --disable view_image --disable image_generation --disable browser_use --disable computer_use \
   --disable goals --disable hooks --disable skill_search --disable tool_suggest --disable sleep_tool \
   -c mcp_servers.archforge.command="<abs>/archforge-cli" \
-  -c mcp_servers.archforge.args=["mcp","--bridge","<port>","--read-only","--origin","<label>"] \
-  -c mcp_servers.archforge.env={HOME="<the person's home>"} \
+  -c mcp_servers.archforge.args=["mcp","--bridge","<port>","--token-file","<abs token file>","--read-only","--origin","<label>"] \
   -c mcp_servers.archforge.startup_timeout_sec=10 -c mcp_servers.archforge.tool_timeout_sec=60
 ```
 
 in the conversation's folder (its `home`, `work` and `tmp`), with `CODEX_HOME` at Archforge's private
 `codex-home` (`CodexHome`, 0700, shared by every Codex process of the person). The bridge goes in
-`-c` values, not a `config.toml`, as `CODEX_HOME` is shared; `--read-only` and the `env` table follow
-the Claude adapter's rules, and every value is checked (no control character, absolute UTF-8
-paths). That `-c mcp_servers.*` works like the spike's `config.toml` is not yet verified live.
+`-c` values, not a `config.toml`, as `CODEX_HOME` is shared; the arguments follow the Claude
+adapter's rules, every value is checked (no control character, absolute UTF-8 paths), and without a
+bridge no `mcp_servers` value is given at all. That `-c mcp_servers.*` works like the spike's `config.toml` is not yet verified live.
 
 *Stores (owner decisions).* An API key (`Auth::ApiKey`) goes to Codex over its standard input in
 `account/login/start {"type":"apiKey"}`, with `cli_auth_credentials_store="ephemeral"`: never a file,
@@ -340,7 +339,17 @@ the contract covers is validated against `schema/codex-app-server-0.166.0.contra
 of Codex 0.166.0's generated schema (Apache-2.0, credited in its `$comment` and in NOTICE), as is
 every request and notification the adapter writes in those tests. No test runs a real `codex`, uses a real key or reads `~/.codex`. Unix only.
 
+**Agent access and its limits** (AR-203). The application gives each conversation with agent access
+its own token, read-only unless that conversation allows changes, in a file of its own beside the
+others in Archforge's settings folder; the control channel refuses every change a read-only token
+asks for. That promise assumes the runtime has no tool that reads files: a model that could read a
+sibling `control-<port>-<hex>.token` of a conversation that allows changes could use that token.
+Claude runs with `--tools ""` and only the bridge's tools allowed, and Codex with its shell, apps and
+plugins disabled, so neither has one as configured here; a runtime version that adds a file-reading
+tool outside these switches would break it. Token files are removed when their conversation ends,
+when agent access closes and on quit; a crash leaves them behind. Their tokens are dead with the
+process that minted them (a later start mints new ones on a new port), and nothing sweeps the files.
+
 **Non-goals.** Windows: every entry point answers `AgentError::NotAvailable` ("not available on this
-system yet"). Storing conversations in the project (AR-206) and the Settings and Chat screens come
-later; a Codex turn's token use is not read yet (its `usage` is zero). The bridge's token lookup through `HOME` (the spike's open question 6) is bridged by the
-Claude adapter's configuration for now.
+system yet"). Storing conversations in the project (AR-206) and the Chat screen come later; a Codex
+turn's token use is not read yet (its `usage` is zero).

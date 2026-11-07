@@ -80,6 +80,16 @@ impl<D, V> Clone for CommandSpec<D, V> {
     }
 }
 
+impl<D, V> CommandSpec<D, V> {
+    /// Whether the command is a query: neither journaled nor undoable, run by its own handler (not
+    /// the session's undo or redo). The engine refuses a query that changes anything, so a query
+    /// only reads. The one test of what a query is: the session's checks and the control channel's
+    /// read-only access both ask it.
+    pub fn is_query(&self) -> bool {
+        !self.journal && !self.undoable && matches!(self.handler, Handler::Run(_))
+    }
+}
+
 /// The reason a command whose predicate failed is listed as unavailable.
 pub const INTERNAL: &str = "Its availability could not be checked.";
 
@@ -190,6 +200,11 @@ impl<D: Document, V: View<D>> Registry<D, V> {
     /// The error for an identifier no command has, naming close ones.
     pub(crate) fn unknown(&self, id: &str) -> crate::EngineError {
         crate::EngineError::UnknownCommand { id: crate::error::echo(id), close: self.close_to(id), count: self.len() }
+    }
+
+    /// Whether the command `id` is a query ([`CommandSpec::is_query`]); `None` for an unknown id.
+    pub fn is_query(&self, id: &str) -> Option<bool> {
+        self.find(id).map(|(spec, _)| spec.is_query())
     }
 
     /// Every identifier, in registration order.

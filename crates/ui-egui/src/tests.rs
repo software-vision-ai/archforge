@@ -13598,10 +13598,11 @@ fn agents_harness(
         codex: fake::found(Provider::Codex),
         claude_key: crate::ai_agents::Key::Absent,
         codex_key: crate::ai_agents::Key::Absent,
+        sign_in_files: false,
     };
     setup(&mut f);
     let f = std::sync::Arc::new(f);
-    let mut shell = Shell::new(Services { agents: Some(f.clone()), agent_accounts: Some(f.clone()), ..Services::default() });
+    let mut shell = Shell::new(Services { agents: Some(f.clone()), ..Services::default() });
     shell.state.theme = theme;
     let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1400.0)).build_ui_state(
         |ui, shell: &mut Shell| {
@@ -13686,20 +13687,25 @@ fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
     }
 }
 
+/// Launching looks for the programs alone; opening AI Agents reads the keys and Codex's account once and sends nothing.
 #[test]
 fn opening_ai_agents_reads_the_keys_once_and_sends_nothing() {
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    // The look at start: the programs once, with Codex's account read after it; no key read and
-    // nothing sent.
+    // The look at start: the programs once; no key read, no account read (it starts the codex
+    // program) and nothing sent.
+    for _ in 0..5 {
+        h.run();
+    }
     let at_start = calls(&f);
-    assert_eq!(at_start, [1, 0, 0, 0, 0, 1, 0, 0, 0], "the programs' look at start and the account read");
+    assert_eq!(at_start, [1, 0, 0, 0, 0, 0, 0, 0, 0], "the programs' look at start, and nothing else");
     open_agents(&mut h);
     for _ in 0..5 {
         h.run();
     }
     let mut keys_read = at_start;
     keys_read[1] = 1;
-    assert_eq!(calls(&f), keys_read, "opening the page read the keys from the store once, and asked for nothing else");
+    keys_read[5] = 1;
+    assert_eq!(calls(&f), keys_read, "opening the page read the keys and Codex's account once, and asked for nothing else");
     assert!(painted_has(&h, "Saved in the macOS Keychain"), "the store the read found");
     // Kept: closed and opened again, the page reads nothing more.
     let at = rect_of(&h, "settings.done").center();
@@ -13910,6 +13916,25 @@ fn without_a_secure_store_keys_cannot_be_saved_but_chatgpt_sign_in_works() {
     }
 }
 
+/// The note that the codex program keeps its ChatGPT sign-in in its own files shows exactly where
+/// the host keeps it there.
+#[test]
+fn the_own_files_note_follows_where_the_host_keeps_the_sign_in() {
+    use crate::ai_agents::{CodexAccount, Store};
+    let note = "keeps its ChatGPT sign-in in its own files";
+    for (files, shown) in [(true, true), (false, false)] {
+        let (mut h, _) = agents_harness(ThemeKind::Light, |f| {
+            let mut look = f.look.lock().unwrap();
+            look.store = Store::Missing { why: "no Secret Service".into() };
+            look.sign_in_files = files;
+            *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        });
+        open_agents(&mut h);
+        h.run();
+        assert_eq!(painted_has(&h, note), shown, "files {files}");
+    }
+}
+
 #[test]
 fn let_chat_use_the_model_is_off_until_turned_on_and_kept() {
     let (mut h, _) = agents_harness(ThemeKind::Dark, |_| {});
@@ -13980,6 +14005,33 @@ fn a_key_typed_and_not_saved_is_dropped_with_the_fields_memory_of_it() {
         assert!(state.is_none_or(|s| !s.undoer().has_undo(&Default::default())), "{leave}: the field's memory is cleared");
     }
     assert_eq!(f.calls.save.load(std::sync::atomic::Ordering::Relaxed), 0, "nothing was saved");
+}
+
+/// A sign-in that runs out of time, or that the codex program cancels, says so under the sign-in
+/// in the page's words, and the sign-in can start again.
+#[test]
+fn a_sign_in_that_times_out_or_is_cancelled_by_codex_says_so() {
+    use crate::ai_agents::{AccountError, LoginEvent};
+    for (error, said) in [
+        (AccountError::SignInTimedOut, "The sign-in was not finished in time. Sign in again."),
+        (AccountError::SignInCancelled, "The codex program cancelled the sign-in. Sign in again."),
+    ] {
+        let (mut h, f) = agents_harness(ThemeKind::Light, |f| {
+            *f.login.lock().unwrap() = vec![
+                LoginEvent::DeviceCode { code: "WXYZ-4821".into(), url: "https://auth.openai.com/codex/device".into(), minutes: 15 },
+                LoginEvent::Failed(error.clone()),
+            ];
+        });
+        open_agents(&mut h);
+        let at = rect_of(&h, "settings.agents.codex.device-code").center();
+        click(&mut h, at);
+        h.run();
+        assert!(h.state().agents.login.is_none(), "{error:?}: the sign-in is over");
+        assert!(painted_has(&h, said), "{error:?}");
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        click(&mut h, at);
+        assert_eq!(f.calls.login.load(std::sync::atomic::Ordering::Relaxed), 2, "{error:?}: it can start again");
+    }
 }
 
 #[test]
@@ -14068,6 +14120,224 @@ fn a_key_saved_while_the_keys_are_being_read_stays_when_the_read_answers() {
     f.release_keys();
     h.run();
     assert_eq!(h.state().agents.look.claude_key, saved, "the store holds it now");
+}
+
+/// The workspace over a project with the fake agents host: its programs found, nothing else set up.
+fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<crate::ai_agents::fake::Fake>) {
+    use crate::ai_agents::{Look, Provider, fake};
+    crate::i18n::set_language("en");
+    let f = fake::Fake::default();
+    *f.look.lock().unwrap() = Look { claude: fake::found(Provider::Claude), codex: fake::found(Provider::Codex), ..Look::default() };
+    let f = std::sync::Arc::new(f);
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), agents: Some(f.clone()), ..Services::default() });
+    shell.state.theme = theme;
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+        |ui, shell: &mut Shell| {
+            shell.logic(ui.ctx());
+            shell.ui(ui);
+        },
+        shell,
+    );
+    h.run();
+    (h, f)
+}
+
+/// The fill colours of the filled circles drawn in the last frame.
+fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
+    /// Collects the fill of every filled circle under `s`.
+    fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
+        match s {
+            egui::Shape::Circle(c) => out.push(c.fill),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for clipped in &h.output().shapes {
+        walk(&clipped.shape, &mut out);
+    }
+    out
+}
+
+/// A conversation id: a lowercase UUID numbered `n`.
+fn chat_id(n: u64) -> String {
+    format!("00000000-0000-4000-8000-{n:012x}")
+}
+
+/// A Claude conversation `n` that may only read.
+fn chat_start(n: u64, provider: crate::ai_agents::Provider) -> crate::chat::ChatStart {
+    crate::chat::ChatStart {
+        chat: chat_id(n),
+        provider,
+        model: "default".into(),
+        origin: format!("Chat {n}"),
+        allow_changes: false,
+        resume: false,
+        codex_sign_in: crate::ai_agents::CodexSignIn::ChatGpt,
+    }
+}
+
+/// The status bar's Agent item: one state at a time, a real control that opens Settings on AI Agents by click or by Tab and Enter.
+#[test]
+fn the_status_bar_says_whether_chat_holds_agent_access_and_opens_ai_agents() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = chat_workspace(theme);
+        let p = crate::ux::palette(theme.is_dark());
+        // Off: the purple dot and its words, one state at a time.
+        assert!(painted_has(&h, "Agent access off") && !painted_has(&h, "Chat is using the model"), "{theme:?}");
+        assert!(painted_dots(&h).contains(&p.purple), "{theme:?}: the purple dot");
+        assert!(ids(&h).iter().any(|i| i == "workspace.status.agent"));
+        // Held: the accent dot and "Chat is using the model".
+        assert!(f.access(true));
+        h.run();
+        assert!(h.state().chats.holds_access());
+        assert!(painted_has(&h, "Chat is using the model") && !painted_has(&h, "Agent access off"), "{theme:?}");
+        assert!(painted_dots(&h).contains(&p.accent) && !painted_dots(&h).contains(&p.purple), "{theme:?}: the accent dot alone");
+        // A control: the pointer over it shows the hand and says where it leads.
+        let at = rect_of(&h, "workspace.status.agent").center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..90 {
+            h.step();
+        }
+        assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::PointingHand, "{theme:?}");
+        assert!(painted_has(&h, "AI Agents"), "{theme:?}: its tooltip");
+        // A click opens Settings on AI Agents.
+        click(&mut h, at);
+        assert_eq!(h.state().settings.as_ref().map(|d| d.section), Some(crate::settings::Section::Agents), "{theme:?}");
+        h.state_mut().settings = None;
+        h.run();
+        // Closed again: off. Reached with Tab, Enter opens Settings on AI Agents too.
+        assert!(f.access(false));
+        h.run();
+        assert!(painted_has(&h, "Agent access off") && !painted_has(&h, "Chat is using the model"), "{theme:?}");
+        let target = crate::widgets::egui_id("workspace.status.agent");
+        let mut reached = false;
+        for _ in 0..400 {
+            key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+            if h.ctx.memory(|m| m.focused()) == Some(target) {
+                reached = true;
+                break;
+            }
+        }
+        assert!(reached, "{theme:?}: Tab reaches the item");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(h.state().settings.as_ref().map(|d| d.section), Some(crate::settings::Section::Agents), "{theme:?}: Enter opens it");
+    }
+}
+
+/// A conversation's id, duplicate and the 64 kept are checked in the shell; its events are kept in order within the cap, the end never dropped.
+#[test]
+fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in_order() {
+    use crate::ai_agents::Provider;
+    use crate::chat::{ChatEvent, ChatRefusal, MAX_SESSIONS, MAX_WAITING};
+    use std::sync::atomic::Ordering::Relaxed;
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    assert_eq!(f.calls.connect.load(Relaxed), 1, "the window connected its events once");
+    // A bad id is refused here, never asked of the host.
+    for bad in ["", "Chat 1", "00000000-0000-4000-8000-00000000000G", "00000000-0000-4000-8000-0000000000001", "../../etc/passwd"] {
+        let mut start = chat_start(1, Provider::Claude);
+        start.chat = bad.into();
+        assert_eq!(crate::chat::start(h.state_mut(), start), Err(ChatRefusal::BadId { bytes: bad.len() }), "{bad:?}");
+        assert!(crate::chat::send(h.state(), bad, "hi".into()).is_err());
+    }
+    assert_eq!(f.calls.start.load(Relaxed), 0);
+    // A Claude conversation: started once, a second start refused; Codex's account stays unread.
+    crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)).unwrap();
+    assert_eq!(crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)), Err(ChatRefusal::AlreadyRunning));
+    h.run();
+    assert_eq!(f.calls.account.load(Relaxed), 0, "a Claude conversation does not read Codex's account");
+    // A Codex conversation reads it, the first time only.
+    crate::chat::start(h.state_mut(), chat_start(2, Provider::Codex)).unwrap();
+    h.run();
+    assert_eq!(f.calls.account.load(Relaxed), 1, "a Codex conversation reads Codex's account");
+    // Events in order; past the cap the later ones are dropped and counted, but the end is kept.
+    let one = chat_id(1);
+    assert!(f.emit(&one, ChatEvent::Started { model: "sonnet".into(), access: false }));
+    for n in 0..MAX_WAITING + 9 {
+        f.emit(&one, ChatEvent::Text { delta: n.to_string() });
+    }
+    crate::chat::end(h.state(), &one).unwrap();
+    h.run();
+    assert!(!h.state().chats.running(&one));
+    assert_eq!(h.state().chats.dropped(&one), 11, "ten past the cap, and one to make room for the end");
+    let events = crate::chat::take_events(h.state_mut(), &one);
+    assert_eq!(events.len(), MAX_WAITING);
+    // The oldest gave its place to the end: the events from the first text on, in order.
+    assert_eq!(events.first(), Some(&ChatEvent::Text { delta: "0".into() }));
+    assert_eq!(events.get(MAX_WAITING - 2), Some(&ChatEvent::Text { delta: (MAX_WAITING - 2).to_string() }));
+    assert_eq!(events.last(), Some(&ChatEvent::Ended { failure: None }), "the end is never dropped");
+    assert!(crate::chat::take_events(h.state_mut(), &one).is_empty(), "an ended conversation, its events taken, is forgotten");
+    // At most 64 kept: ended conversations whose events wait count, the 65th is refused.
+    crate::chat::end(h.state(), &chat_id(2)).unwrap();
+    h.run();
+    for n in 3..=(MAX_SESSIONS as u64 + 1) {
+        crate::chat::start(h.state_mut(), chat_start(n, Provider::Claude)).unwrap();
+        crate::chat::end(h.state(), &chat_id(n)).unwrap();
+        h.run();
+    }
+    assert_eq!(h.state().chats.kept(), MAX_SESSIONS);
+    let refused = crate::chat::start(h.state_mut(), chat_start(100, Provider::Claude));
+    assert_eq!(refused, Err(ChatRefusal::TooMany { most: MAX_SESSIONS }));
+    // Taking one conversation's events makes room again.
+    crate::chat::take_events(h.state_mut(), &chat_id(3));
+    assert!(crate::chat::start(h.state_mut(), chat_start(100, Provider::Claude)).is_ok());
+}
+
+/// Waiting events are capped by their bytes in the shell and on the host's ticket.
+#[test]
+fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
+    use crate::ai_agents::Provider;
+    use crate::chat::{ChatEvent, MAX_WAITING_BYTES};
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)).unwrap();
+    let one = chat_id(1);
+    let big = || ChatEvent::Message { text: "x".repeat(MAX_WAITING_BYTES / 3 + 1) };
+    for _ in 0..3 {
+        f.emit(&one, big());
+    }
+    h.run();
+    assert_eq!(h.state().chats.dropped(&one), 1, "the third would pass the bytes' cap");
+    // The end still comes, making room by dropping the oldest: here a failure as long as a message.
+    let failure = crate::chat::ChatFailure { kind: crate::chat::FailureKind::Other, detail: "y".repeat(MAX_WAITING_BYTES / 3) };
+    let end = ChatEvent::Ended { failure: Some(failure) };
+    f.emit(&one, end.clone());
+    h.run();
+    assert_eq!(h.state().chats.dropped(&one), 2, "the oldest message gave its place to the end");
+    let events = crate::chat::take_events(h.state_mut(), &one);
+    assert_eq!(events.len(), 2, "one message and the end");
+    assert_eq!(events.last(), Some(&end));
+    // The host's own count: places are taken by events and bytes, and given back as tickets drop.
+    let waiting = std::sync::Arc::new(crate::chat::Waiting::default());
+    let first = crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2 + 1).unwrap();
+    assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_none(), "past the bytes' cap");
+    drop(first);
+    assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
+}
+
+/// Let Chat use the model is told to the host when it changes, off in the frame of the click.
+#[test]
+fn the_opt_in_is_told_to_the_host_and_turning_it_off_is_told_in_the_same_frame() {
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    assert_eq!(*f.model_access.lock().unwrap(), vec![false], "told once at the start: off");
+    open_agents(&mut h);
+    let at = rect_of(&h, "settings.agents.chat-uses-model").center();
+    // One frame: the click is handled and the host told in it.
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    assert_eq!(*f.model_access.lock().unwrap(), vec![false, true]);
+    h.run();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    assert_eq!(*f.model_access.lock().unwrap(), vec![false, true, false], "off is told at once");
+    h.run();
+    assert_eq!(f.model_access.lock().unwrap().len(), 3, "and only when it changes");
 }
 
 /// Order and OrderLine joined by `contains`, its OrderLine end `line` at 0..1, on two class

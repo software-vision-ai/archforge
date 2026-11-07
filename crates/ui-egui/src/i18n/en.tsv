@@ -272,6 +272,8 @@ str		Saving…	Saving…
 str		Opening…	Opening…
 str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
+str		Chat is using the model	Chat is using the model
+str		Agent access off	Agent access off
 str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer
@@ -343,6 +345,8 @@ str		{agent} too old	{agent} too old
 str		{agent} can't be used	{agent} can't be used
 str		{agent} sign-in could not be read	{agent} sign-in could not be read
 str		The sign-in gave a code that is not letters, digits and hyphens.	The sign-in gave a code that is not letters, digits and hyphens.
+str		The sign-in was not finished in time. Sign in again.	The sign-in was not finished in time. Sign in again.
+str		The codex program cancelled the sign-in. Sign in again.	The codex program cancelled the sign-in. Sign in again.
 str		{agent} has no key	{agent} has no key
 str		{agent} key refused	{agent} key refused
 str		{agent} not signed in	{agent} not signed in

@@ -273,6 +273,8 @@ str		Saving…	Wird gesichert…
 str		Opening…	Wird geöffnet…
 str		Saved	Gesichert
 str		Unsaved changes · {chord} saves	Ungesicherte Änderungen · {chord} sichert
+str		Chat is using the model	Chat nutzt das Modell
+str		Agent access off	Agentenzugriff aus
 str		Not saved	Nicht gesichert
 str		Changes could not be written to the project	Änderungen konnten nicht ins Projekt geschrieben werden
 str		The save stopped without an answer	Das Sichern endete ohne Antwort
@@ -344,6 +346,8 @@ str		{agent} too old	{agent} zu alt
 str		{agent} can't be used	{agent} nicht nutzbar
 str		{agent} sign-in could not be read	{agent}-Anmeldung nicht lesbar
 str		The sign-in gave a code that is not letters, digits and hyphens.	Die Anmeldung lieferte einen Code, der nicht nur aus Buchstaben, Ziffern und Bindestrichen besteht.
+str		The sign-in was not finished in time. Sign in again.	Die Anmeldung wurde nicht rechtzeitig abgeschlossen. Melden Sie sich erneut an.
+str		The codex program cancelled the sign-in. Sign in again.	Das Programm codex hat die Anmeldung abgebrochen. Melden Sie sich erneut an.
 str		{agent} has no key	{agent} hat keinen Schlüssel
 str		{agent} key refused	{agent}-Schlüssel abgelehnt
 str		{agent} not signed in	{agent} nicht angemeldet

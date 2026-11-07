@@ -439,6 +439,31 @@ fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str)
     crate::panels::draw(shell, ui, p, r, 58.0, which, name);
 }
 
+/// Chat's agent access in the status bar (the design's "Agent" item), its right edge at `right`:
+/// an accent dot and "Chat is using the model" while a conversation holds it, a purple dot and
+/// "Agent access off" while none does. A control like any other (pointer, Tab, Enter, its id);
+/// either opens Settings on AI Agents, where the opt-in is. Gives its left edge.
+fn agent_status(shell: &mut Shell, ui: &egui::Ui, p: &Palette, bar: Rect, right: f32) -> f32 {
+    let held = shell.chats.holds_access();
+    let (text, dot) = if held { (tr("Chat is using the model"), p.accent) } else { (tr("Agent access off"), p.purple) };
+    let paint = ui.painter();
+    let g = ux::galley(paint, &text, types::CAPTION, p.text_secondary, None);
+    // The design's frame: 8 before the dot, the 6 dot, 9 to the text, 24 after it; 32 tall.
+    let r = Rect::from_min_max(pos2(right - (8.0 + 6.0 + 9.0 + g.size().x + 24.0), bar.center().y - 16.0), pos2(right, bar.center().y + 16.0));
+    let resp = control(shell, ui, "workspace.status.agent", "button", r, true).on_hover_text(tr("AI Agents"));
+    let _ = resp.clone().accessible_name(&text);
+    if resp.hovered() {
+        paint.rect_filled(r, 6.0, p.page);
+    }
+    crate::settings::focus_ring(paint, p, r, 6.0, &resp);
+    paint.circle_filled(pos2(r.left() + 11.0, r.center().y), 3.0, dot);
+    paint.galley(pos2(r.left() + 23.0, r.center().y - g.size().y / 2.0), g, p.text_secondary);
+    if resp.clicked() {
+        crate::settings::open_at(shell, crate::settings::Section::Agents);
+    }
+    r.left()
+}
+
 /// The status bar: what is true about the project at the left, where it lives at the right.
 fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
@@ -485,13 +510,19 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     };
     paint.circle_filled(pos2(r.left() + 24.0, r.center().y), 3.0, dot);
     let y = r.center().y - 8.0;
-    // The location first, right-aligned; the status and its reason take what is left.
+    // The location first, right-aligned, then Chat's agent access beside it; the status and its
+    // reason take what is left.
     let mut right = r.right() - 24.0;
     if let Some(location) = shell.location() {
         let g = ux::galley(paint, &location, types::CAPTION, p.text_secondary, room(r.width() / 2.0 - 60.0));
         right -= g.size().x;
         paint.galley(pos2(right, y), g, p.text_secondary);
-        right -= 24.0;
+        right -= 8.0;
+    }
+    if shell.services.agents.is_some() {
+        right = agent_status(shell, ui, p, r, right) - 8.0;
+    } else if shell.location().is_some() {
+        right -= 16.0;
     }
     let start = r.left() + 36.0;
     let status = ux::text(paint, pos2(start, y), &text, types::CAPTION, p.text_secondary, room(right - start));
