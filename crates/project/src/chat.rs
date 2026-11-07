@@ -312,6 +312,15 @@ pub struct Chat {
     pub updated_at: String,
 }
 
+/// A conversation deleted (AR-217): its label, and the commit just before the deletion, which
+/// holds it whole and brings it back ([`Project::restore_chat`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Deleted {
+    pub origin: String,
+    /// The commit's hash: 32 of Dolt's base-32 digits.
+    pub before: String,
+}
+
 /// A conversation in the list: its row and its count of questions and replies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatSummary {
@@ -719,6 +728,20 @@ fn first_int(row: Option<mysql::Row>) -> Result<i64, String> {
     row.as_ref().ok_or_else(|| "a count gave no row".to_string()).and_then(|r| int_at(r, 0))
 }
 
+/// Whether `text` has the shape of a Dolt commit hash: 32 of the digits and lower-case letters `a`
+/// to `v` Dolt writes them in. Only such a text is put into a query's `AS OF`.
+fn is_commit(text: &str) -> bool {
+    text.len() == 32 && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'v').contains(&b))
+}
+
+/// The hash of the commit the project's branch is at, checked to be one.
+fn head(c: &mut impl Queryable) -> Result<String, String> {
+    let row: Option<mysql::Row> =
+        c.query_first("SELECT LEFT(CAST(HASHOF('HEAD') AS CHAR), 64)").map_err(|e| format!("its last commit cannot be read: {e}"))?;
+    let hash = row.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).unwrap_or_default();
+    if is_commit(&hash) { Ok(hash) } else { Err("its last commit does not read as one".into()) }
+}
+
 /// The next number of a sequence whose highest is `highest`, within what an `INT` holds.
 fn next(what: &'static str, highest: i64) -> Result<u32, Error> {
     highest.checked_add(1).and_then(|n| u32::try_from(n).ok()).filter(|n| *n <= INT_MAX).ok_or_else(|| value(what, "the numbering is full"))
@@ -781,7 +804,7 @@ impl Project {
     }
 
     /// The format the project's settings hold now, written or not.
-    fn stored_format(&self, c: &mut mysql::Conn) -> Result<u32, Error> {
+    fn stored_format(&self, c: &mut impl Queryable) -> Result<u32, Error> {
         let row: Option<mysql::Row> = c
             .query_first("SELECT LEFT(CAST(`value` AS CHAR), 16) FROM settings WHERE `key` = 'format'")
             .map_err(sql("cannot read the project's format"))?;
@@ -797,7 +820,7 @@ impl Project {
     /// fingerprint an upgrade wrote on opening is never committed without its tables. Otherwise the
     /// new format waits in the working set for the next Save, and is written again by the next chat
     /// commit should Don't save put it back.
-    fn raise_format(&self, c: &mut mysql::Conn, changed: &BTreeSet<String>) -> Result<bool, Error> {
+    fn raise_format(&self, c: &mut impl Queryable, changed: &BTreeSet<String>) -> Result<bool, Error> {
         if self.stored_format(c)? >= FORMAT {
             return Ok(false);
         }
@@ -821,8 +844,10 @@ impl Project {
 
     /// A chat commit: whatever of the chat tables changed, and the settings when they hold only the
     /// raised format, staged by name and committed with `message`, by [`CHAT_AUTHOR`]. The model's
-    /// changes stay unsaved in the working set. False when nothing waited.
-    fn chat_commit(&self, c: &mut mysql::Conn, message: &str) -> Result<bool, Error> {
+    /// changes stay unsaved in the working set. False when nothing waited. Run inside a transaction,
+    /// the commit takes the transaction's rows with it, and a commit that fails leaves the
+    /// transaction to be rolled back: the rows and the commit land together or not at all.
+    fn chat_commit(&self, c: &mut impl Queryable, message: &str) -> Result<bool, Error> {
         let changed = changed_tables(c, self.path())?;
         let mut tables: Vec<String> = changed.iter().filter(|name| is_chat_table(name)).cloned().collect();
         if self.raise_format(c, &changed)? {
@@ -1323,10 +1348,30 @@ impl Project {
         text_at(&row, 0, ORIGIN_CHARS).map_err(|why| self.unreadable(why))
     }
 
-    /// Deletes a conversation: its rows in all seven tables in one transaction, then a chat commit.
-    /// It stays in the project's earlier commits (owner decision); no model element changes.
-    pub fn delete_chat(&self, chat: Uuid) -> Result<(), Error> {
-        let mut c = self.chat_connection(|| Error::ChatMissing { what: "conversation", id: chat.to_string() })?;
+    /// Deletes a conversation (AR-217): whatever of the conversations waits is committed first
+    /// ("Conversations kept"), so the commit before the deletion holds this one whole; then its rows
+    /// in all seven tables go, in one transaction that ends in exactly one chat commit
+    /// (`Chat N: deleted`), the rows and the commit together or not at all. Gives its label and that
+    /// commit before, which [`Project::restore_chat`] brings it back from. It stays in the project's
+    /// earlier commits (owner decision); no model element changes, and the model's changes not
+    /// saved stay unsaved.
+    pub fn delete_chat(&self, chat: Uuid) -> Result<Deleted, Error> {
+        let missing = || Error::ChatMissing { what: "conversation", id: chat.to_string() };
+        let not_deleted = |why: String| Error::ChatNotDeleted { id: chat.to_string(), why };
+        let mut c = self.chat_connection(missing)?;
+        // Missing is said before anything is committed.
+        let there: Option<mysql::Row> =
+            c.exec_first("SELECT 1 FROM `chat` WHERE `id` = ?", (id_value(chat),)).map_err(sql("cannot read the conversation"))?;
+        if there.is_none() {
+            return Err(missing());
+        }
+        self.chat_commit(&mut c, "Conversations kept").map_err(|e| not_deleted(e.to_string()))?;
+        let left: Vec<String> =
+            changed_tables(&mut c, self.path()).map_err(|e| not_deleted(e.to_string()))?.into_iter().filter(|n| is_chat_table(n)).collect();
+        if !left.is_empty() {
+            return Err(not_deleted(format!("{} still holds changes not committed", left.join(", "))));
+        }
+        let before = head(&mut c).map_err(not_deleted)?;
         let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
         let origin = self.origin_of(&mut tx, chat)?;
         for statement in [
@@ -1340,9 +1385,79 @@ impl Project {
         ] {
             tx.exec_drop(statement, (id_value(chat),)).map_err(sql("cannot delete the conversation"))?;
         }
+        // A failed commit drops the transaction, which rolls the deletion back.
+        if !self.chat_commit(&mut tx, &format!("{origin}: deleted")).map_err(|e| not_deleted(e.to_string()))? {
+            return Err(not_deleted("the deletion changed no table".into()));
+        }
         tx.commit().map_err(sql("cannot finish deleting the conversation"))?;
-        self.chat_commit_after(&mut c, &format!("{origin}: deleted"));
-        Ok(())
+        // Its turns stay in the session's ledger: Don't save passes a turn without a change link,
+        // and puts a restored one back as any other.
+        Ok(Deleted { origin, before })
+    }
+
+    /// Brings a deleted conversation back (AR-217, owner decision): every one of its rows in the
+    /// seven tables as the commit `from` held them, written in one transaction that ends in one chat
+    /// commit (`Chat N: restored`), all or nothing. `from` must be a commit of this project's
+    /// history that holds the conversation, as [`Project::delete_chat`] gave it. Refused, with
+    /// nothing written, when the conversation is listed already, `from` is not such a commit,
+    /// another conversation has taken its label since, or the project holds as many conversations
+    /// as it may. Gives its label.
+    pub fn restore_chat(&self, chat: Uuid, from: &str) -> Result<String, Error> {
+        let refuse = |why: String| Error::ChatNotRestored { id: chat.to_string(), why };
+        if !is_commit(from) {
+            return Err(refuse(format!("{:?} is not a commit of the project's saved history", from.chars().take(40).collect::<String>())));
+        }
+        let mut c = self.chat_connection(|| refuse("the project holds no conversations".into()))?;
+        let known: Option<mysql::Row> =
+            c.exec_first("SELECT 1 FROM `dolt_log` WHERE `commit_hash` = ?", (from,)).map_err(sql("cannot read the project's history"))?;
+        if known.is_none() {
+            return Err(refuse(format!("{from} is not a commit of the project's saved history")));
+        }
+        let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
+        let listed: Option<mysql::Row> =
+            tx.exec_first("SELECT 1 FROM `chat` WHERE `id` = ?", (id_value(chat),)).map_err(sql("cannot read the conversations"))?;
+        if listed.is_some() {
+            return Err(refuse("it is in the conversation list already".into()));
+        }
+        // `from` is checked to be 32 letters and digits of a commit hash, so it is safe in the text.
+        let then: Option<mysql::Row> = tx
+            .exec_first(format!("SELECT `origin` FROM `chat` AS OF '{from}' WHERE `id` = ?"), (id_value(chat),))
+            .map_err(|e| refuse(format!("the commit {from} cannot be read: {e}")))?;
+        let Some(then) = then else {
+            return Err(refuse(format!("the commit {from} does not hold it")));
+        };
+        let origin = text_at(&then, 0, ORIGIN_CHARS).map_err(|why| self.unreadable(why))?;
+        let taken: Option<mysql::Row> =
+            tx.exec_first("SELECT 1 FROM `chat` WHERE `origin` = ?", (origin.as_str(),)).map_err(sql("cannot read the conversations"))?;
+        if taken.is_some() {
+            return Err(refuse(format!("another conversation is labelled {origin:?} now")));
+        }
+        let held = first_int(tx.query_first("SELECT COUNT(*) FROM `chat`").map_err(sql("cannot count the conversations"))?)
+            .map_err(|why| self.unreadable(why))?;
+        if usize::try_from(held).unwrap_or(usize::MAX) >= CHATS_PER_PROJECT {
+            return Err(Error::Full { what: "the project's list of conversations", max: CHATS_PER_PROJECT });
+        }
+        for def in &TABLES {
+            let columns: Vec<String> = def.columns.iter().map(|(name, _)| format!("`{name}`")).collect();
+            let columns = columns.join(", ");
+            let rows = match def.name {
+                "chat" => "`id` = ?".to_string(),
+                "chat_turn" | "chat_message" => "`chat` = ?".to_string(),
+                "chat_tool_call" | "chat_anchor" => format!("`message` IN (SELECT `id` FROM `chat_message` AS OF '{from}' WHERE `chat` = ?)"),
+                _ => format!("`turn` IN (SELECT `id` FROM `chat_turn` AS OF '{from}' WHERE `chat` = ?)"),
+            };
+            tx.exec_drop(
+                format!("INSERT INTO `{0}` ({columns}) SELECT {columns} FROM `{0}` AS OF '{from}' WHERE {rows}", def.name),
+                (id_value(chat),),
+            )
+            .map_err(|e| refuse(format!("its rows of {} cannot be written back: {e}", def.name)))?;
+        }
+        // A failed commit drops the transaction, which rolls every row back.
+        if !self.chat_commit(&mut tx, &format!("{origin}: restored")).map_err(|e| refuse(e.to_string()))? {
+            return Err(refuse("no row was written back".into()));
+        }
+        tx.commit().map_err(sql("cannot finish bringing the conversation back"))?;
+        Ok(origin)
     }
 
     /// Commits whatever of the conversations waits, before closing or when asked: false when

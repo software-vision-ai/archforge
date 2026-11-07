@@ -445,7 +445,7 @@ impl Project {
 const MAX_STATUS: usize = 2 * MAX_TABLES + 2;
 
 /// The tables `dolt_status` lists as changed, by name: a renamed table under both its names.
-pub(crate) fn changed_tables(c: &mut mysql::Conn, path: &std::path::Path) -> Result<std::collections::BTreeSet<String>, Error> {
+pub(crate) fn changed_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<std::collections::BTreeSet<String>, Error> {
     let rows: Vec<mysql::Row> = c
         .query(format!("SELECT LEFT(CAST(table_name AS CHAR), 160) FROM dolt_status LIMIT {}", MAX_STATUS + 1))
         .map_err(sql("cannot read the project's status"))?;
@@ -471,12 +471,12 @@ pub(crate) fn changed_tables(c: &mut mysql::Conn, path: &std::path::Path) -> Res
 }
 
 /// The changed tables a Save commits: every one but the conversations'.
-fn unsaved_tables(c: &mut mysql::Conn, path: &std::path::Path) -> Result<Vec<String>, Error> {
+fn unsaved_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<Vec<String>, Error> {
     Ok(changed_tables(c, path)?.into_iter().filter(|name| !is_chat_table(name)).collect())
 }
 
 /// Stages exactly `tables`, by name.
-pub(crate) fn stage(c: &mut mysql::Conn, tables: &[String]) -> Result<(), mysql::Error> {
+pub(crate) fn stage(c: &mut impl Queryable, tables: &[String]) -> Result<(), mysql::Error> {
     for chunk in tables.chunks(BATCH) {
         c.exec_drop(format!("CALL DOLT_ADD({})", vec!["?"; chunk.len()].join(", ")), chunk.to_vec())?;
     }
