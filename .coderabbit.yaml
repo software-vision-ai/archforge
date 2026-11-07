@@ -20,6 +20,8 @@ reviews:
     # Review every commit; a paused review left #210's last commit unreviewed for half an hour.
     auto_pause_after_reviewed_commits: 0
   pre_merge_checks:
+    # The author cannot override or ignore a failing check; only a requested reviewer can.
+    override_requested_reviewers_only: true
     docstrings:
       mode: error
       threshold: 80
