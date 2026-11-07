@@ -20,8 +20,9 @@
 //!   conversation never takes the deleted one's label.
 //! - **The private folder** of the conversation's program is removed only once its toast has
 //!   closed without Undo, when an Undo failed, when its project closes or when Archforge quits
-//!   ([`settle`]): the host ends the program first and waits a bounded time. A folder of a
-//!   conversation a project open here still shows (a copy of the project) stays.
+//!   ([`settle`]): the host ends the program first and waits a bounded time, and refuses to start
+//!   the conversation until it is done. A folder of a conversation a project open here still shows
+//!   (a copy of the project) stays.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -29,7 +30,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use archforge_mof::Uuid;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
-use crate::ai_agents::FolderGoes;
+use crate::ai_agents::{Awaited, FolderGoes};
 use crate::chat_panel::{Panel, TurnState, View, clock};
 use crate::chat_store::{Answer, Listed, Refusal, Row, Write};
 use crate::i18n::{fmt, tr, trn};
@@ -325,17 +326,17 @@ fn held_elsewhere(shell: &Shell, key: &str) -> bool {
 }
 
 /// Asks the host to remove the private folder of the conversation `key`, its program ended first;
-/// with `after`, once the project's answer lets it go.
-fn forget(shell: &mut Shell, key: &str, after: Option<(Receiver<Result<Answer, Refusal>>, FolderGoes)>) {
+/// with `after`, once every one of the project's answers lets it go. Until the host is done it
+/// refuses to start that conversation, so a panel that asks it something meanwhile (a copy of the
+/// project) gets "No answer" and Send again, and its folder is kept, rather than losing its new
+/// program or folder (AR-218).
+fn forget(shell: &mut Shell, key: &str, after: Awaited) {
     if held_elsewhere(shell, key) {
         log::info!("the private folder of the conversation {key:?} is kept as an orphan: a project open here shows that conversation");
         return;
     }
     let Some(host) = shell.services.agents.clone() else { return };
-    let rx = match after {
-        None => host.forget(key),
-        Some((answer, goes)) => host.forget_after(key, answer, goes),
-    };
+    let rx = if after.is_empty() { host.forget(key) } else { host.forget_after(key, after) };
     shell.chats.forgetting.push((key.to_string(), rx));
 }
 
@@ -365,7 +366,7 @@ pub(crate) fn frame(shell: &mut Shell) {
         let here = shown.as_deref() == Some(d.project.as_path());
         match step(shell, d, now, here) {
             Next::Keep(d) => shell.chats.deletions.push(d),
-            Next::Done { forget: true } => forget(shell, &key, None),
+            Next::Done { forget: true } => forget(shell, &key, Vec::new()),
             Next::Done { forget: false } => {}
         }
     }
@@ -482,10 +483,11 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
 /// once, and their folders are settled without waiting here. A deletion that has finished lets its
 /// folder go; one still under way hands its answer to the host, which removes the folder once it
 /// says deleted; an Undo still under way hands the restoration's, which removes the folder only
-/// when the conversation stays deleted. The host waits a bounded time for each, and at quit is
-/// waited for with its own threads; an answer that does not come in time keeps the folder, as a
-/// crash does. An Undo pressed before its deletion answered is on the writer already, ahead of the
-/// closing.
+/// when the conversation stays deleted, and with it the deletion's when that has not answered
+/// either, so the folder goes only once the deletion said deleted (AR-218). The host waits a
+/// bounded time, and at quit is waited for with its own threads; an answer that does not come in
+/// time keeps the folder, as a crash does. An Undo pressed before its deletion answered is on the
+/// writer already, ahead of the closing.
 pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>) {
     // A deletion still waiting for its conversation's question to land is not made: said in the
     // log, as the window has no frame left to make it in.
@@ -510,15 +512,15 @@ pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>) {
     for d in ours {
         let key = d.key.clone();
         match d.stage {
-            Stage::Deleted { .. } => forget(shell, &key, None),
-            Stage::Deleting { rx } => forget(shell, &key, Some((rx, FolderGoes::IfDeleted))),
-            Stage::Restoring { rx, deleting: None } => forget(shell, &key, Some((rx, FolderGoes::IfNotRestored))),
-            Stage::Restoring { rx, deleting: Some(deleting) } => match deleting.try_recv() {
-                // Not deleted: nothing to remove.
-                Ok(Err(_)) | Err(TryRecvError::Disconnected) => log::info!("the conversation {key:?} was not deleted; its folder stays"),
-                // Deleted, or not answered yet: the restoration after it decides.
-                _ => forget(shell, &key, Some((rx, FolderGoes::IfNotRestored))),
-            },
+            Stage::Deleted { .. } => forget(shell, &key, Vec::new()),
+            Stage::Deleting { rx } => forget(shell, &key, vec![(rx, FolderGoes::IfDeleted)]),
+            Stage::Restoring { rx, deleting: None } => forget(shell, &key, vec![(rx, FolderGoes::IfNotRestored)]),
+            // Both answers decide: a deletion that failed, or whose answer is lost, keeps the
+            // folder whatever the restoration after it says (a failed one may only mean the
+            // project's list could not be read).
+            Stage::Restoring { rx, deleting: Some(deleting) } => {
+                forget(shell, &key, vec![(deleting, FolderGoes::IfDeleted), (rx, FolderGoes::IfNotRestored)]);
+            }
         }
     }
 }

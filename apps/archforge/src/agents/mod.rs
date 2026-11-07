@@ -72,6 +72,13 @@ pub(crate) struct Inner {
     access: Mutex<access::Access>,
     /// The running conversations, by id.
     sessions: Mutex<HashMap<String, sessions::Handle>>,
+    /// The conversations whose private folders are being removed: none of them starts meanwhile,
+    /// and a start refused keeps the folder (AR-218). Taken before `sessions` when both are held.
+    forgetting: Mutex<HashMap<String, sessions::Removing>>,
+    /// For the tests: run by a removal once it decided, before the folder goes, to put a start in
+    /// that exact place.
+    #[cfg(test)]
+    as_folder_goes: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// The sign-in under way: its cancel flag.
     login: Mutex<Option<Arc<AtomicBool>>>,
     /// How long a sign-in waits for the person to finish, in milliseconds (`accounts::SIGN_IN_BUDGET`;
@@ -207,6 +214,9 @@ impl Agents {
                 sink: Mutex::new(None),
                 access: Mutex::new(access::Access::new(settings, window)),
                 sessions: Mutex::new(HashMap::new()),
+                forgetting: Mutex::new(HashMap::new()),
+                #[cfg(test)]
+                as_folder_goes: Mutex::new(None),
                 login: Mutex::new(None),
                 sign_in_millis: AtomicU64::new(u64::try_from(accounts::SIGN_IN_BUDGET.as_millis()).unwrap_or(u64::MAX)),
             }),
@@ -469,16 +479,11 @@ impl AgentHost for Agents {
 
     /// Removes a deleted conversation's private folder ([`sessions::forget`]).
     fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
-        sessions::forget(&self.inner, chat, None)
+        sessions::forget(&self.inner, chat, Vec::new())
     }
 
-    /// Removes it once the project's answer lets it go ([`sessions::forget`]).
-    fn forget_after(
-        &self,
-        chat: &str,
-        answer: Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>,
-        goes: archforge_ui_egui::ai_agents::FolderGoes,
-    ) -> Receiver<Result<bool, String>> {
-        sessions::forget(&self.inner, chat, Some((answer, goes)))
+    /// Removes it once every one of the project's answers lets it go ([`sessions::forget`]).
+    fn forget_after(&self, chat: &str, answers: archforge_ui_egui::ai_agents::Awaited) -> Receiver<Result<bool, String>> {
+        sessions::forget(&self.inner, chat, answers)
     }
 }

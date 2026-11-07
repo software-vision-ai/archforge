@@ -843,10 +843,13 @@ fn person_row(paint: &egui::Painter, p: &Palette, x: f32, y: f32, text: &str, in
     ux::text_mid(paint, x + 24.0, y + 14.0, text, types::UI, ink, Some(room.max(0.0)));
 }
 
-/// The device code while Codex's sign-in waits for it to be entered (A6).
+/// The device code while Codex's sign-in waits for it to be entered (A6): the code with Copy, the
+/// sign-in page's address under it as selectable text with Copy (or, for an address off the
+/// sign-in host, a line saying Archforge does not open it), then Open sign-in page and Cancel.
+/// Gives where the card's caption ends.
 fn device_code(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, y: f32, inner: f32, code: &str, url: &str, minutes: u32) -> f32 {
     let paint = ui.painter().clone();
-    let r = Rect::from_min_size(pos2(x, y), vec2(inner, 138.0));
+    let r = Rect::from_min_size(pos2(x, y), vec2(inner, 168.0));
     paint.rect_filled(r, 8.0, p.page);
     let ix = r.left() + 12.0;
     ux::text(&paint, pos2(ix, r.top() + 12.0), &tr("Sign in with a device code"), types::UI, p.text, Some(inner - 24.0));
@@ -857,8 +860,9 @@ fn device_code(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, y: f32
     if icon_button(shell, ui, p, "settings.agents.codex.copy-code", copy, &icons::COPY, &tr("Copy the code")).clicked() {
         ui.ctx().copy_text(code.to_string());
     }
-    let row = r.top() + 98.0;
     let approved = agents::approved_sign_in_page(url).map(str::to_string);
+    sign_in_address(shell, ui, p, ix, r.top() + 102.0, inner - 64.0, approved.as_deref());
+    let row = r.top() + 128.0;
     let (b, resp) = button(
         shell,
         ui,
@@ -899,6 +903,40 @@ fn device_code(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, y: f32
         2,
     );
     r.bottom() + 8.0 + h
+}
+
+/// The row under the device code centred on `mid`: the sign-in page's address, at most `room` wide,
+/// as read-only text a person can select, with an icon that copies it, so the code can be entered
+/// on another device. Only an address on the sign-in host (`approved`) is shown; for any other the
+/// row says Archforge does not open it, and nothing copies it.
+fn sign_in_address(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, mid: f32, room: f32, approved: Option<&str>) {
+    let id = "settings.agents.codex.address";
+    let Some(url) = approved else {
+        let shown = ux::text_mid(ui.painter(), x, mid, &tr("Not an address Archforge opens"), types::SMALL, p.danger, Some(room.max(0.0)));
+        widgets::record_visible(ui, &mut shell.registry, id, "text", shown);
+        return;
+    };
+    let font = types::UI.font();
+    let row = ui.fonts_mut(|f| f.row_height(&font));
+    let width = ux::galley(ui.painter(), url, types::UI, p.text, None).size().x.min(room.max(0.0));
+    let at = Rect::from_min_size(pos2(x, mid - row / 2.0), vec2(width, row));
+    // Read-only: a `&str` buffer takes no typing, yet its text can be selected and copied.
+    let mut text = url;
+    let edit = egui::TextEdit::singleline(&mut text)
+        .id(widgets::egui_id(id))
+        .font(font)
+        .text_color(p.text)
+        .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
+        .desired_width(width);
+    // A field too narrow for the whole address cuts it without a mark: the pointer shows it whole.
+    let resp = ui.put(at, edit).on_hover_text(url);
+    let _ = resp.clone().accessible_name(tr("Sign-in page address"));
+    widgets::record_visible(ui, &mut shell.registry, id, "text", at);
+    let copy = Rect::from_center_size(pos2(at.right() + 18.0, mid), Vec2::splat(24.0));
+    if icon_button(shell, ui, p, "settings.agents.codex.copy-address", copy, &icons::COPY, &tr("Copy the address")).clicked() {
+        ui.ctx().copy_text(url.to_string());
+    }
 }
 
 /// Codex on an API key: the saved key's row (A3), or the field to paste one.

@@ -127,21 +127,24 @@ For **Codex** with your ChatGPT account:
 2. Choose **Sign in…**. Your browser opens the sign-in page.
 3. Sign in there. The card then says *Signed in as* your email and plan.
 
-When the browser sign-in cannot finish on this computer, choose **No browser on this computer?
-Sign in with a device code.** instead of step 2. The card shows a code, which runs out in 15
-minutes; the icon beside it copies it. **Cancel** stops the sign-in.
+On a computer without a browser, choose **No browser on this computer? Sign in with a device
+code.** instead of step 2. The card shows a code, which runs out in 15 minutes, and under it the
+sign-in page's address:
 
-Then open the sign-in page and enter the code there. The codex program names that page each time.
-Archforge opens it only when it is on `https://auth.openai.com/`; for any other address **Open
-sign-in page** is greyed out, and pointing at it says *Not an address Archforge opens*. The card
-does not show the page's address yet:
+1. On any device with a browser, open that address. Type it, or select it on the card or copy it
+   with the icon beside it (**Copy the address**) and send it to the device.
+2. Enter the code there. The icon beside the code copies it (**Copy the code**).
+3. Sign in. The card then says *Signed in as* your email and plan.
 
-- **Open sign-in page** opens it in this computer's browser. To sign in on another device, copy
-  the address from that browser's address bar and open it there.
-- On a computer with no browser at all, Archforge cannot show you the address yet. There, use
-  Codex with an API key instead: the sign-in is kept on the computer that made it.
+**Open sign-in page** opens the same address in this computer's browser, if it has one.
+**Cancel** stops the sign-in.
 
-<!-- picture: settings-ai-agents-device-code light | Settings, AI Agents: Codex's device code, with Copy the code and Open sign-in page -->
+The codex program names the page each time. Archforge shows the address, and opens it, only when
+it is on `https://auth.openai.com/`. For any other address the card says *Not an address
+Archforge opens* in its place, in red, with nothing to copy, and **Open sign-in page** is greyed
+out; choose **Cancel**.
+
+<!-- picture: settings-ai-agents-device-code light | Settings, AI Agents: Codex's device code and the sign-in page's address, each with its copy icon, Open sign-in page and Cancel -->
 
 A sign-in not finished within 15 minutes, or one the codex program cancels, says so under it; sign
 in again. **Sign out** ends the sign-in.
@@ -389,7 +392,9 @@ or brings back a conversation: it stays the model's undo.
 <!-- picture: workspace-chat-deleted light | The conversation deleted: the list without it, and the note with Undo -->
 
 When the note has gone (or the project closes, or Archforge quits), the agent program's own working
-files for that conversation are removed from your computer. When the project's conversations
+files for that conversation are removed from your computer. If a copy of the project open beside
+it asks that conversation something in those few seconds, the answer is *No answer*; its files are
+then kept, and **Send again** a moment later goes through. When the project's conversations
 cannot be changed (for example because one of its tables is damaged), the bin and the menu item
 are greyed out and say why.
 

@@ -326,8 +326,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   select waits until a key is saved. A key the provider refused is outlined in the danger colour
   with why under it; the refusal comes from a test message, since Check connection sends nothing.
 - Codex has a segmented control, Sign in with ChatGPT or API key. The codex program keeps the
-  ChatGPT sign-in itself; Archforge starts it, shows its device code inline (the code with Copy,
-  Open sign-in page, the wait and Cancel) and shows who is signed in with Sign out. A sign-in not
+  ChatGPT sign-in itself; Archforge starts it, shows its device code inline (the code with Copy;
+  under it the sign-in page's address as selectable text with Copy, only on the sign-in host, else
+  "Not an address Archforge opens" in the danger colour (AR-223, decided by UX); Open sign-in page,
+  the wait and Cancel) and shows who is signed in with Sign out. A sign-in not
   finished within 15 minutes, or cancelled by the codex program, ends with a line saying so and
   Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently. On an API key
   the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
@@ -431,9 +433,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   brings it back in its place, with the keyboard on its row. ⌘Z never deletes or restores one.
   The private folder of its program goes when the toast closes without Undo, when Undo fails,
   when its project closes or when Archforge quits; a copy of the project open beside it showing
-  that conversation keeps it. While a history row's menu or the confirmation is open, the canvas
-  and ⌘Z take no keys. While the list cannot be read again (chat
-  writing off) the rows read before stay, and the bin and the item are disabled saying "The
+  that conversation keeps it. While the folder is being removed the conversation does not start:
+  its turn says "No answer", the folder is kept for it, and Send again starts it once the removal
+  is done. While a history row's menu or the confirmation is open, the canvas and ⌘Z take no keys.
+  While the list cannot be read again (chat writing off) the rows read before stay, and the bin
+  and the item are disabled saying "The
   conversations in this project cannot be changed: {why}"; an unreadable row's bin says "This
   conversation cannot be read". Failures say "This conversation could not be deleted: {why}" or
   "… could not be brought back: {why}" under the history. While a toast is up, a new
