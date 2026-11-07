@@ -174,9 +174,10 @@ pub fn kinds(metaclass: &str, n: u64) -> String {
 }
 
 /// Whether an element of `metaclass` counts as one a person reads about: a diagram's own nodes,
-/// lines, labels and styles, and a description's comment, are its parts, not elements of their own.
+/// lines, labels and styles, and a description's comment (core's or UML's), are its parts, not
+/// elements of their own.
 pub fn counted(metaclass: &str) -> bool {
-    !(metaclass.starts_with("diagram_") && metaclass != "diagram_diagram") && metaclass != "core_comment"
+    !(metaclass.starts_with("diagram_") && metaclass != "diagram_diagram") && metaclass != "core_comment" && metaclass != "uml_comment"
 }
 
 /// The elements a row's answer named, summed by kind, the two most first: "8 classes",

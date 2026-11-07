@@ -517,7 +517,7 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
                 first.get_or_insert(id);
                 let origin = format!("Chat {}", 5 - n);
                 let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages };
-                rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new() });
+                rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
             }
             if let Some(id) = first {
                 crate::chat_panel::open(shell, id);

@@ -747,13 +747,23 @@ impl Shell {
         }
     }
 
-    /// Tab `i`'s project closes: its Chat conversation's program ends, a running turn with it.
+    /// Tab `i`'s project closes: its Chat conversation's program ends, a running turn with it. The
+    /// turn is ended here as stopped, its reply so far kept, and written to its own project before
+    /// it closes: once the conversation is let go of, the program's own end is not taken any more.
     fn end_chats(&mut self, i: usize) {
         let chat = |p: &chat_panel::Panel| p.chat.as_ref().map(|c| (c.key.clone(), c.origin.clone()));
         let shown = if self.active == Some(i) {
             chat_panel::leaving(self);
+            chat_panel::end_here(self, chat_panel::TurnState::Stopped);
             chat(&self.chat_panel)
         } else {
+            let out = self.tabs.get(i).map(|t| chat_panel::Out::of(self, t.path.clone(), false));
+            if let (Some(out), Some(parked)) = (out, self.tabs.get_mut(i).and_then(|t| t.parked.as_mut())) {
+                let Parked { chat_panel: panel, session, .. } = &mut **parked;
+                if let Some(c) = panel.chat.as_mut() {
+                    chat_panel::finish(c, session.as_mut(), &out, chat_panel::TurnState::Stopped);
+                }
+            }
             self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| chat(&p.chat_panel))
         };
         chat_panel::closing(self, shown);

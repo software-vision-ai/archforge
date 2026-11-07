@@ -440,18 +440,36 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     s.execute_from("item.add", &json!({ "name": "G" }), Some("Chat 1")).unwrap();
     let end = s.end_group("Chat 1").unwrap();
     assert_eq!((end.before, end.steps, end.changes), (before, 2, 2));
+    // The steps' deltas are put together from the state the first started at to the last's end.
+    let d = end.delta.unwrap();
+    assert_eq!((d.before.0.last().map(String::as_str), d.after.0.last().map(String::as_str)), (Some("D"), Some("G")));
     assert_ne!(s.undo_revision(), Some(end.before), "its last step does not start where the group did");
     s.undo().unwrap();
     assert_eq!(s.undo_origin(), Some("Chat 2"), "Chat 2's step stayed its own");
     s.undo().unwrap();
     assert_eq!(s.undo_label(), Some("Add item"), "and the user's too");
 
-    // Undone and changed again, the group starts a new step rather than reaching under the undo.
+    // Undone and changed again: the undone step is gone from the group as from the history, and what
+    // the group gives is its one step still applied, from the state it started at.
     s.begin_group("Chat 3", "Turn 1").unwrap();
     s.execute_from("item.add", &json!({ "name": "H" }), Some("Chat 3")).unwrap();
     s.undo().unwrap();
+    let before = s.revision();
     s.execute_from("item.add", &json!({ "name": "I" }), Some("Chat 3")).unwrap();
-    assert_eq!(s.end_group("Chat 3").map(|e| e.steps), Some(2));
+    let end = s.end_group("Chat 3").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 1, 1), "the undone change is not counted");
+    assert_eq!(s.undo_revision(), Some(end.before), "one undo takes the group back");
+    let d = end.delta.unwrap();
+    assert!(!d.after.0.contains(&"H".to_string()) && d.after.0.last().map(String::as_str) == Some("I"));
+    // Undone and redone before the next change: still applied, and joined by what follows.
+    s.begin_group("Chat 9", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "M" }), Some("Chat 9")).unwrap();
+    s.undo().unwrap();
+    s.redo().unwrap();
+    s.execute_from("item.add", &json!({ "name": "N" }), Some("Chat 9")).unwrap();
+    let end = s.end_group("Chat 9").unwrap();
+    assert_eq!((end.before, end.steps, end.changes), (before, 1, 2));
     // A group that changed nothing ends with nothing; a bad group is refused.
     s.begin_group("Chat 4", "Turn 1").unwrap();
     assert!(s.end_group("Chat 4").is_none());

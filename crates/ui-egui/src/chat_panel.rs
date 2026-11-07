@@ -507,7 +507,7 @@ pub(crate) struct Out {
 
 impl Out {
     /// The writes of the project at `project`, as the shell's services give them.
-    fn of(shell: &Shell, project: PathBuf, draft_empty: bool) -> Out {
+    pub(crate) fn of(shell: &Shell, project: PathBuf, draft_empty: bool) -> Out {
         Out { store: store_of(shell), project, clock: clock(shell), ids: shell.services.ids.clone(), draft_empty }
     }
 
@@ -675,9 +675,14 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                 t.state = TurnState::Running;
                 t.question = pending.text.clone();
                 t.chips = pending.chips.clone();
+                // What belonged to the failed attempt goes: its stop, its cut, its streaming
+                // layout. Its rows and reply stay in the timeline as what it did.
                 t.returned = false;
                 t.stopping = false;
                 t.stopping_since = None;
+                t.cut = false;
+                t.streaming = None;
+                t.laid = None;
                 t.model = chat.named.clone().unwrap_or_else(|| chat.model.clone());
                 t.number
             } else {
@@ -769,7 +774,7 @@ fn deliver(shell: &mut Shell, text: String) {
 
 /// Ends the running turn of `chat` as `state`: the reply so far is kept (cut off unless it
 /// completed), the turn's changes are taken from its undo group, and the turn is written.
-fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::Session>, out: &Out, state: TurnState) -> bool {
+pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::Session>, out: &Out, state: TurnState) -> bool {
     let origin = chat.origin.clone().unwrap_or_default();
     let Some(turn) = chat.turns.last_mut().filter(|t| t.state == TurnState::Running) else { return false };
     let complete = state == TurnState::Completed;
@@ -884,7 +889,7 @@ pub fn stop(shell: &mut Shell) {
 }
 
 /// Ends the running turn of the panel shown as `state`, without the program.
-fn end_here(shell: &mut Shell, state: TurnState) {
+pub(crate) fn end_here(shell: &mut Shell, state: TurnState) {
     let out = Out::shown(shell);
     let mut session = shell.session.take();
     if let Some(c) = shell.chat_panel.chat.as_mut() {

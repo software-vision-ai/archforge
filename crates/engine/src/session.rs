@@ -88,23 +88,29 @@ struct Group<X> {
     /// The state after the group's step while it is the step on top of undo; none once the
     /// history moved past it, or before its first change.
     top: Option<u64>,
-    /// The state before the group's first change, and after its last.
-    before: Option<u64>,
-    after: Option<u64>,
-    /// The undo steps the group made: more than one when other changes came between.
-    steps: u32,
-    /// The commands that changed the document.
-    changes: u32,
-    /// Everything the group changed, composed in order; none once it outgrew the history's
-    /// weight cap (`lost`).
-    delta: Option<X>,
+    /// The undo steps the group made, in order: more than one when other changes came between.
+    /// A delta is composed only within one step, where each change starts at the state the one
+    /// before it ended at, never across another's change or an undo.
+    segments: Vec<Segment<X>>,
+    /// The deltas outgrew the history's weight cap and are given up; the rest is still known.
     lost: bool,
 }
 
-/// What an origin's group changed, once it ends: the state before its first change and after its
-/// last, the undo steps it took (one unless other changes came between), the commands that
-/// changed the document, and everything they changed, composed in order (none when it outgrew
-/// the history's weight cap).
+/// One undo step of a group: the state before it and after it, the commands that made it, what it
+/// changed, and whether it is applied now (undo took it back; redo brings it again, until a new
+/// change clears the redo history and it is gone for good).
+struct Segment<X> {
+    before: u64,
+    after: u64,
+    changes: u32,
+    delta: X,
+    applied: bool,
+}
+
+/// What an origin's group changed, once it ends, counting only its steps still applied: the state
+/// before its first and after its last, those undo steps (one unless other changes came between),
+/// the commands that made them, and everything they changed, each step's own delta put after the
+/// one before (none when it outgrew the history's weight cap).
 #[derive(Debug, Clone)]
 pub struct GroupEnd<X> {
     pub before: u64,
@@ -292,34 +298,35 @@ impl<D: Document, V: View<D>> Session<D, V> {
         if self.groups.len() >= MAX_GROUPS {
             return Err(failed("a group", "too many groups are open at once"));
         }
-        self.groups.push(Group {
-            origin: origin.to_string(),
-            label: label.to_string(),
-            top: None,
-            before: None,
-            after: None,
-            steps: 0,
-            changes: 0,
-            delta: None,
-            lost: false,
-        });
+        self.groups.push(Group { origin: origin.to_string(), label: label.to_string(), top: None, segments: Vec::new(), lost: false });
         Ok(())
     }
 
-    /// Ends `origin`'s group and gives what it changed; none when it changed nothing (its changes
-    /// cancelling out included) or none is open. The origin's later changes are steps of their own again.
+    /// Ends `origin`'s group and gives what it changed: its steps still applied, a step undone
+    /// since left out; none when nothing of it is applied (its changes cancelling out included) or
+    /// none is open. The origin's later changes are steps of their own again.
     pub fn end_group(&mut self, origin: &str) -> Option<GroupEnd<D::Delta>> {
         let at = self.groups.iter().position(|g| g.origin == origin)?;
         let g = self.groups.remove(at);
-        let (Some(before), Some(after)) = (g.before, g.after) else { return None };
-        // Changes that cancelled out left nothing to undo.
-        (g.changes > 0 && before != after).then_some(GroupEnd {
-            before,
-            after,
-            steps: g.steps,
-            changes: g.changes,
-            delta: if g.lost { None } else { g.delta },
-        })
+        let applied: Vec<Segment<D::Delta>> = g.segments.into_iter().filter(|s| s.applied && s.changes > 0 && s.before != s.after).collect();
+        let (before, after) = (applied.first()?.before, applied.last()?.after);
+        let changes = applied.iter().fold(0u32, |n, s| n.saturating_add(s.changes));
+        let steps = u32::try_from(applied.len()).unwrap_or(u32::MAX);
+        // Each step's delta is whole; steps apart are put together for listing what changed, as
+        // independent changes, each from the state its own step started at.
+        let mut delta: Option<D::Delta> = None;
+        if !g.lost {
+            for s in applied {
+                delta = Some(match delta {
+                    None => s.delta,
+                    Some(whole) => match guard("a group", || Ok(D::compose(whole, s.delta))) {
+                        Ok(d) => d,
+                        Err(_) => return Some(GroupEnd { before, after, steps, changes, delta: None }),
+                    },
+                });
+            }
+        }
+        Some(GroupEnd { before, after, steps, changes, delta })
     }
 
     /// Whether a group is open for `origin`.
@@ -345,7 +352,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             self.id = self.fresh_id();
             self.push_undo(Step { delta, id: before, label, origin: Some(origin.clone()), weight })
         };
-        // The whole of what the group changed, for the host to list; past the weight cap it is
+        // What the group changed, kept per step for the host to list; past the weight cap it is
         // given up rather than held twice.
         let max = self.options.max_weight;
         let id_now = self.id;
@@ -353,24 +360,32 @@ impl<D: Document, V: View<D>> Session<D, V> {
         // (the step then went, and the one under it starts from another state).
         let top_is_ours = !cleared && self.undo.last().is_some_and(|s| Some(s.id) == base && s.origin.as_deref() == Some(origin.as_str()));
         let Some(g) = self.groups.get_mut(at) else { return Ok(cleared) };
-        if !on_top {
-            g.steps = g.steps.saturating_add(1);
-        } else if !cleared && !top_is_ours {
-            // The merge cancelled the group's step out: it no longer counts.
-            g.steps = g.steps.saturating_sub(1);
+        // A change joins the step it merged into only where it starts at the state that step
+        // ended at; otherwise it is a step of its own.
+        let joins = on_top && g.segments.last().is_some_and(|s| s.applied && s.after == before);
+        if joins {
+            if let Some(last) = g.segments.last_mut() {
+                if top_is_ours {
+                    let whole = std::mem::replace(&mut last.delta, kept.clone());
+                    match guard(id, || Ok(D::compose(whole, kept))) {
+                        Ok(d) => last.delta = d,
+                        Err(_) => g.lost = true,
+                    }
+                    last.after = id_now;
+                    last.changes = last.changes.saturating_add(changes);
+                } else if !cleared {
+                    // The merge cancelled the step out: nothing of it is left.
+                    g.segments.pop();
+                }
+            }
+        } else {
+            g.segments.push(Segment { before, after: id_now, changes, delta: kept, applied: true });
         }
-        g.before.get_or_insert(before);
-        g.after = Some(id_now);
-        g.changes = g.changes.saturating_add(changes);
         g.top = top_is_ours.then_some(id_now);
         if !g.lost {
-            let composed = match g.delta.take() {
-                None => Some(kept),
-                Some(whole) => guard(id, || Ok(D::compose(whole, kept))).ok(),
-            };
-            match composed {
-                Some(d) if guard(id, || Ok(D::weight(&d))).is_ok_and(|w| w <= max) => g.delta = Some(d),
-                _ => g.lost = true,
+            let weight = g.segments.iter().map(|s| guard(id, || Ok(D::weight(&s.delta))).unwrap_or(usize::MAX)).fold(0usize, usize::saturating_add);
+            if weight > max {
+                g.lost = true;
             }
         }
         Ok(cleared)
@@ -712,6 +727,13 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(e);
         }
         let s = if undo { self.undo.pop() } else { self.redo.pop() }.ok_or_else(|| disabled(id, reason))?;
+        // A group's step taken back is no longer applied; brought back by redo, it is again.
+        let (from, to) = if undo { (s.id, self.id) } else { (self.id, s.id) };
+        if let Some(g) = s.origin.as_deref().and_then(|o| self.groups.iter_mut().find(|g| g.origin == o))
+            && let Some(seg) = g.segments.iter_mut().find(|seg| seg.before == from && seg.after == to && seg.applied == undo)
+        {
+            seg.applied = !undo;
+        }
         let current = Step { delta: s.delta, id: self.id, label: s.label.clone(), origin: s.origin, weight: s.weight };
         self.id = s.id;
         if undo {
@@ -904,6 +926,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
     fn clear_redo(&mut self) {
         for s in self.redo.drain(..) {
             self.weight = self.weight.saturating_sub(s.weight);
+        }
+        // A group's step undone can no longer come back: it is gone from the group too.
+        for g in &mut self.groups {
+            g.segments.retain(|s| s.applied);
         }
     }
 

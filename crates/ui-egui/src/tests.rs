@@ -7835,6 +7835,128 @@ fn a_cut_reply_is_kept_shortened_and_a_conversation_reopened_while_ending_waits_
     assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("Go on")));
 }
 
+/// A turn's changes are counted from its steps still applied: a change the person undid between
+/// two of the turn's changes is neither counted nor listed, and the person's own change between
+/// is not the turn's.
+#[test]
+fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    use crate::chat_store::ChangeKind;
+    let describe = |h: &mut Harness<'static, Shell>, name: &str, text: &str| {
+        let id = fx::element(h.state(), archforge_uml::CLASS, name).unwrap();
+        fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+        )
+        .unwrap();
+        h.run();
+        id
+    };
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    // An undo between: the undone change is not the turn's.
+    ask_in_chat(&mut h, "Describe two classes");
+    describe(&mut h, "Customer", "A buyer");
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    let product = describe(&mut h, "Product", "A thing sold");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let kept = kept_chat(&h, &rig);
+    let (_, changes) = kept.ends.last().unwrap();
+    let changes = changes.clone().unwrap();
+    assert_eq!(changes.changes, 1, "the undone change is not counted");
+    assert_eq!(changes.changed.iter().map(|e| (e.element, e.kind)).collect::<Vec<_>>(), [(product, ChangeKind::Changed)]);
+    assert!(painted_has(&h, "1 change to the model"), "{:?}", painted(&h));
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.turn.1.undo"), "one step: it can be undone");
+    // The person's own change between two of the turn's: listed is the turn's, not the person's.
+    ask_in_chat(&mut h, "Describe two more");
+    let catalog = describe(&mut h, "Catalog", "Products together");
+    let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+        .unwrap();
+    let payment = describe(&mut h, "Payment", "Money paid");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let kept = kept_chat(&h, &rig);
+    let changes = kept.ends.last().unwrap().1.clone().unwrap();
+    let mut listed: Vec<_> = changes.changed.iter().map(|e| e.element).collect();
+    listed.sort();
+    let mut expected = vec![catalog, payment];
+    expected.sort();
+    assert_eq!((changes.changes, listed), (2, expected));
+}
+
+/// A failed attempt's cut reply does not mark the next attempt's: Send again starts the turn's
+/// per-attempt state afresh.
+#[test]
+fn send_again_starts_the_attempts_state_afresh() {
+    use crate::chat::{ChatEvent, FailureKind};
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Write a lot");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "y".repeat(crate::chat_panel::REPLY_BYTES + 10) });
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Other));
+    // (The long reply has scrolled its card's Send again out of view: sent again as the card does.)
+    crate::chat_panel::retry(h.state_mut(), None);
+    h.run();
+    let turn = h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap();
+    assert!(!turn.cut && !turn.stopping && turn.stopping_since.is_none() && turn.streaming.is_none() && !turn.returned);
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Short.".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let kept = kept_chat(&h, &rig);
+    let replies: Vec<bool> = kept
+        .messages
+        .iter()
+        .filter_map(|m| if let crate::chat_store::StoredBody::Reply { shortened, .. } = &m.body { Some(*shortened) } else { None })
+        .collect();
+    assert_eq!(replies, [true, false], "the first attempt's reply was cut, the second's not");
+}
+
+/// Closing a project while a reply runs ends its turn as stopped there and then, the reply so far
+/// kept, written to that project: for the project shown and for a parked one.
+#[test]
+fn closing_a_project_while_a_reply_runs_keeps_the_reply_and_the_stopped_turn() {
+    use crate::chat::ChatEvent;
+    use crate::chat_store::{Outcome, StoredBody};
+    let replies = |k: &crate::chat_store::fake::Kept| -> Vec<(String, bool)> {
+        k.messages
+            .iter()
+            .filter_map(|m| if let StoredBody::Reply { text, complete, .. } = &m.body { Some((text.clone(), *complete)) } else { None })
+            .collect()
+    };
+    // Shown.
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Explain Order");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Order holds".into() });
+    let id = h.state().chat_panel.chat.as_ref().unwrap().id;
+    let tab = h.state().active.unwrap();
+    h.state_mut().close_tab(tab);
+    h.run();
+    let kept = rig.store.kept(id).unwrap();
+    assert_eq!(kept.turns[0].outcome, Outcome::Stopped);
+    assert_eq!(replies(&kept), [("Order holds".to_string(), false)]);
+    // Parked: its stop asked when its tab was left, not answered before it closes.
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Explain Payment");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is".into() });
+    let id = h.state().chat_panel.chat.as_ref().unwrap().id;
+    let first = h.state().active.unwrap();
+    h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+    h.run();
+    assert_eq!(rig.store.kept(id).unwrap().turns[0].outcome, Outcome::Running, "its stop is not answered yet");
+    rig.store.projects.lock().unwrap().clear();
+    h.state_mut().close_tab(first);
+    h.run();
+    let kept = rig.store.kept(id).unwrap();
+    assert_eq!(kept.turns[0].outcome, Outcome::Stopped);
+    assert_eq!(replies(&kept), [("Payment is".to_string(), false)]);
+    assert!(rig.store.projects.lock().unwrap().iter().all(|p| p.ends_with("Commerce platform.archforge")), "written to its own project");
+}
+
 /// Leaving the tab stops the running turn, written to its own project; closing ends the conversation.
 #[test]
 fn leaving_the_projects_tab_stops_its_running_turn_and_closing_it_ends_its_conversation() {

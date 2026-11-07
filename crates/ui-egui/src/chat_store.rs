@@ -277,6 +277,8 @@ pub mod fake {
         pub messages: Vec<StoredMessage>,
         /// Each tool row's arguments and answer as written, by message.
         pub calls: Vec<(Uuid, Option<String>, Option<String>)>,
+        /// What each turn's end said it changed, by turn.
+        pub ends: Vec<(Uuid, Option<Changes>)>,
     }
 
     /// The fake store: what it holds, the keys it refuses, and a refusal for the writes to come.
@@ -337,7 +339,7 @@ pub mod fake {
                     let title: String =
                         title.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().trim().chars().take(200).collect();
                     let row = Row { id: chat, origin: origin.clone(), title, provider, model, updated_at: now, messages: 0 };
-                    chats.insert(0, Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new() });
+                    chats.insert(0, Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
                     Ok(Answer::Created { origin })
                 }
                 Write::Ask { chat, turn, question, text, chips, model, allow_changes, now } => {
@@ -419,7 +421,8 @@ pub mod fake {
                     }
                     row.outcome = outcome;
                     row.error = error;
-                    row.change = changes.map(|c| StoredChange { changes: c.changes, state: ChangeState::Applied });
+                    row.change = changes.as_ref().map(|c| StoredChange { changes: c.changes, state: ChangeState::Applied });
+                    chats[c].ends.push((turn, changes));
                     chats[c].row.updated_at = now;
                     Ok(Answer::Done)
                 }
