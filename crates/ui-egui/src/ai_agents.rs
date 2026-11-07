@@ -792,8 +792,9 @@ fn read_when_idle(shell: &mut crate::Shell) {
 
 /// Keeps `account` as Codex's, as the window shows it: an expired sign-in the codex program names
 /// no one for keeps the email known, and one still read as signed in after a turn found it expired
-/// shows expired, as that email or, when no email was known yet, as the first one read.
-/// Remembers the email; a sign-out forgets it.
+/// shows expired, as that email or, when no email was known yet, as the first one read; another
+/// account read as signed in clears what the conversation found. Remembers the email; a sign-out
+/// forgets it.
 fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountError>) {
     let a = &mut shell.agents;
     let account = match account {
@@ -806,7 +807,13 @@ fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountE
         other => other,
     };
     match &account {
-        Ok(CodexAccount::SignedIn { email, .. } | CodexAccount::Expired { email }) if !email.is_empty() => a.known_email = email.clone(),
+        Ok(CodexAccount::SignedIn { email, .. } | CodexAccount::Expired { email }) if !email.is_empty() => {
+            // Another account read as signed in is not the one a conversation found expired.
+            if matches!(&account, Ok(CodexAccount::SignedIn { .. })) && !a.known_email.is_empty() && *email != a.known_email {
+                a.expired_seen = false;
+            }
+            a.known_email = email.clone();
+        }
         Ok(CodexAccount::NotSignedIn) => {
             a.known_email.clear();
             a.expired_seen = false;

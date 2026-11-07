@@ -15901,6 +15901,30 @@ fn an_account_read_older_than_a_sign_in_does_not_undo_it_nor_hold_check_connecti
     }
 }
 
+/// A sign-in found expired, then read as another account signed in, is that other account's: its
+/// later reads show it signed in, not expired, as no conversation found it so (AR-222, review). In
+/// both appearances.
+#[test]
+fn another_account_read_after_an_expiry_is_not_taken_as_expired() {
+    use crate::ai_agents::CodexAccount;
+    let signed_in = |email: &str| Ok(CodexAccount::SignedIn { email: email.into(), plan: None });
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| *f.account.lock().unwrap() = signed_in("a@example.com"));
+        open_agents(&mut h);
+        crate::ai_agents::sign_in_expired(h.state_mut());
+        h.run();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "a@example.com".into() })), "{theme:?}");
+        // Another account is signed in now, outside this window.
+        *f.account.lock().unwrap() = signed_in("b@example.com");
+        for read in ["first", "second"] {
+            crate::ai_agents::reread_account(h.state_mut());
+            h.run();
+            assert_eq!(h.state().agents.codex, Some(signed_in("b@example.com")), "{theme:?}: {read} read");
+        }
+        assert!(painted_has(&h, "Signed in as b@example.com"), "{theme:?}: {:?}", painted(&h));
+    }
+}
+
 /// A sign-in that runs out of time, or that the codex program cancels, says so under the sign-in
 /// in the page's words, and the sign-in can start again.
 #[test]
