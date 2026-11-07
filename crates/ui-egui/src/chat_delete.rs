@@ -350,7 +350,9 @@ enum Next {
 /// Once per frame: takes the project's answers to deletions and restorations, closes a toast whose
 /// time is up, and lets the folders of those that are settled go.
 pub(crate) fn frame(shell: &mut Shell) {
-    // A deletion that waited for its conversation's question to land goes on once it has.
+    // A deletion that waited for its conversation's question to land goes on once it has, in the
+    // frame the question is answered: nothing else can open meanwhile, as a conversation with a
+    // question on its way opens no other.
     if shell.chat_panel.delete_after.is_some() && !shell.chat_panel.chat.as_ref().is_some_and(|c| c.step.busy()) {
         shell.chat_panel.ask = shell.chat_panel.delete_after.take();
         confirm(shell);
@@ -484,6 +486,23 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
 /// crash does. An Undo pressed before its deletion answered is on the writer already, ahead of the
 /// closing.
 pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>) {
+    // A deletion still waiting for its conversation's question to land is not made: said in the
+    // log, as the window has no frame left to make it in.
+    let mut waiting: Vec<(PathBuf, Uuid)> = Vec::new();
+    if let Some(open) = shell.project.as_ref().map(|p| p.path.clone())
+        && project.is_none_or(|p| p == open)
+        && let Some(a) = shell.chat_panel.delete_after.take()
+    {
+        waiting.push((open, a.chat));
+    }
+    for tab in shell.tabs.iter_mut().filter(|t| project.is_none_or(|p| p == t.path)) {
+        if let Some(a) = tab.parked.as_mut().and_then(|p| p.chat_panel.delete_after.take()) {
+            waiting.push((tab.path.clone(), a.chat));
+        }
+    }
+    for (path, chat) in waiting {
+        log::warn!("the conversation {chat} of {} is not deleted: its project closed while its question was on its way", path.display());
+    }
     let (ours, others): (Vec<Deletion>, Vec<Deletion>) =
         std::mem::take(&mut shell.chats.deletions).into_iter().partition(|d| project.is_none_or(|p| d.project == p));
     shell.chats.deletions = others;
