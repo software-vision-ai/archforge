@@ -66,6 +66,9 @@ pub enum ChatRefusal {
     Closing,
     /// Let Chat use the model is off: no conversation starts or is sent anything.
     ModelUseOff,
+    /// The conversation's private folder is being removed, after a deletion of it (AR-218): it
+    /// starts once that is done, so asking again shortly after succeeds.
+    Forgetting,
     /// Anything else, in the host's words.
     Refused { why: String },
 }
@@ -81,6 +84,7 @@ impl std::fmt::Display for ChatRefusal {
             ChatRefusal::NotAvailable => f.write_str("conversations are not available here"),
             ChatRefusal::Closing => f.write_str("Archforge is closing"),
             ChatRefusal::ModelUseOff => f.write_str("Let Chat use the model is off"),
+            ChatRefusal::Forgetting => f.write_str("the conversation's private folder is being removed; it starts once that is done"),
             ChatRefusal::Refused { why } => f.write_str(why),
         }
     }

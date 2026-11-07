@@ -706,18 +706,37 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   `Write::Create` names the labels of deletions still undoable, which a new conversation
   skips. A refusal because the conversation is listed is `Refusal::Listed`.
 - **The private folder.** `AgentHost::forget` ends the conversation's program if it runs, waits
-  for it at most five seconds, then removes `conversation-<id>` alone; a folder whose program has
+  for it at most five seconds, then removes `conversation-<id>` alone (moved aside first, as
+  below); a folder whose program has
   not ended is kept. The shell asks it when the toast closes without Undo (eight seconds after the
   pointer and the focus last left it), and when an Undo is refused for any reason but the
   conversation being listed. When the project closes or Archforge quits, its toasts close at once
   and nothing waits on the window's thread: a finished deletion's folder goes; one still under way
-  goes to `AgentHost::forget_after`, which waits at most five seconds for the project's answer and
-  removes the folder only when it says deleted (or, for an Undo under way, when it was refused for
-  any reason but the conversation being listed). At quit the host's threads are joined within its
-  quit budget. An answer that does not come in time, an answer lost, or a crash leaves the folder
-  as an orphan; sweeping orphans stays for later, as section 8 says. The folder is named by the
+  goes to `AgentHost::forget_after`, which waits at most five seconds in all for the project's
+  answers and removes the folder only when every one lets it go. A deletion's answer lets it go
+  when it says deleted. A restoration's answer lets it go when the restoration was refused for any
+  reason but the conversation being listed. An Undo pressed before its deletion answered hands over
+  both answers (AR-218), so a deletion that failed keeps the folder even when the restoration after
+  it failed too, as it does when the project cannot read its list. At quit the host's threads are
+  joined within its quit budget. An answer that does not come in time, an answer lost, or a crash
+  leaves the folder as an orphan (one moved aside included); sweeping orphans stays for later, as
+  section 8 says. The folder is named by the
   conversation's id alone, so a copy of the project open beside it shares it: it is kept while an
-  open project's panel shows that conversation.
+  open project's panel shows that conversation. From the moment the shell asks for a removal until
+  the host has set the folder aside or kept it, the host refuses to start that conversation
+  (`ChatRefusal::Forgetting`, AR-218), checked under the same lock that adds a conversation to the
+  running list, so the removal never ends a program started after it was asked. A start refused
+  meanwhile means a panel shows the conversation (a copy of the project that opened it after the
+  check above), so the removal then keeps the folder. Otherwise, under that same lock and in one
+  step, the folder is moved aside by one rename (`Workspace::move_conversation`, to
+  `conversation-<id>-rm-<pid>-<n>`) and the refusal ends; the folder moved aside is removed after,
+  outside the lock. So every refused start keeps the folder, a start after the move makes a new
+  folder, and no start waits for a removal. The refused turn ends with "No answer", and Send again
+  starts it once the removal has decided (at most about ten seconds: five for the answers, five for
+  the program to end). A program that started before the removal was asked is ended first, as
+  before. A copy that opens the conversation without sending until the folder is gone finds no
+  transcript, as one opened after the removal does; so does a start during a second removal of the
+  same conversation, after the first one moved the folder aside.
 - **Chat writing off.** When reading the list again fails, the rows read before stay shown and
   nothing in them can be deleted, saying why; a row that cannot be read cannot be deleted either.
 - **Known limit.** ⌘Z while a toast is up is the model's undo: it may take back the deleted

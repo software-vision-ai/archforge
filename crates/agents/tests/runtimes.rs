@@ -407,6 +407,20 @@ fn conversation_folders_are_private_and_removed() {
     assert!(ws.remove_conversation(&id).unwrap());
     assert!(!folder.path().exists());
     assert!(!ws.remove_conversation(&id).unwrap(), "removing it twice finds nothing");
+    // Moved aside: gone from its id at once, whole under the other, which is then removed; a taken
+    // name is refused and moves nothing.
+    let folder = ws.conversation(&id).unwrap();
+    std::fs::write(folder.config().join("transcript.jsonl"), "{}").unwrap();
+    let aside = ConversationId::new("6f1c0a52-9d3e-rm-1").unwrap();
+    let taken = ConversationId::new("6f1c0a52-taken").unwrap();
+    ws.conversation(&taken).unwrap();
+    assert!(matches!(ws.move_conversation(&id, &taken), Err(AgentError::Folder { .. })));
+    assert!(folder.config().join("transcript.jsonl").is_file(), "nothing moved onto a taken name");
+    assert!(ws.move_conversation(&id, &aside).unwrap());
+    assert!(!folder.path().exists());
+    assert!(ws.root().join("conversation-6f1c0a52-9d3e-rm-1/config/transcript.jsonl").is_file());
+    assert!(!ws.move_conversation(&id, &aside).unwrap(), "nothing left to move");
+    assert!(ws.remove_conversation(&aside).unwrap());
     std::fs::remove_dir_all(&base).unwrap();
 }
 
@@ -430,7 +444,8 @@ fn folders_that_are_not_private_are_refused_and_left_alone() {
     let id = ConversationId::new("linked").unwrap();
     assert!(matches!(ws.conversation(&id), Err(AgentError::Folder { problem, .. }) if problem.contains("link")));
     assert!(matches!(ws.remove_conversation(&id), Err(AgentError::Folder { .. })));
-    assert!(target.join("keep").is_file());
+    assert!(matches!(ws.move_conversation(&id, &ConversationId::new("moved").unwrap()), Err(AgentError::Folder { .. })));
+    assert!(ws.root().join("conversation-linked").is_symlink() && target.join("keep").is_file());
     std::fs::remove_dir_all(&base).unwrap();
 }
 
