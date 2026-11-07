@@ -462,6 +462,20 @@ pub struct NewTurn {
     pub now: String,
 }
 
+/// A failed turn to run again in place (owner decision, AR-205): the same turn row and question,
+/// the question replaced when it was edited before being sent again.
+#[derive(Debug, Clone)]
+pub struct Rerun {
+    pub turn: Uuid,
+    /// The model the turn asks for this time.
+    pub model: String,
+    pub allow_changes: bool,
+    /// The question as edited, with the context chips sent with it this time; none sends the
+    /// stored question and its chips again.
+    pub question: Option<(String, Vec<NewAnchor>)>,
+    pub now: String,
+}
+
 /// An element to anchor to a message.
 #[derive(Debug, Clone)]
 pub struct NewAnchor {
@@ -487,6 +501,8 @@ pub struct NewReply {
     pub turn: Uuid,
     pub body: String,
     pub complete: bool,
+    /// The caller cut it already (to the limit, or to what it may hold): kept marked shortened.
+    pub shortened: bool,
     pub now: String,
 }
 
@@ -995,6 +1011,75 @@ impl Project {
         Ok(number)
     }
 
+    /// Runs a failed turn again in place (owner decision, AR-205): the same row goes back to
+    /// running, with the model and the switch of this attempt and a new start time; an edited
+    /// question replaces the stored one and its context chips, so the question is stored once
+    /// however often it is sent. What the failed attempt left in the timeline stays as it was.
+    /// Refused, with nothing written, when the question is longer than [`limits::QUESTION_BYTES`]
+    /// or holds one of the API keys in `keys`, when the turn did not fail, is not its
+    /// conversation's last, or changed the model (running it again could make those changes a
+    /// second time). Committed with the turn's end.
+    pub fn rerun_turn(&self, rerun: &Rerun, keys: &dyn SecretStore) -> Result<(), Error> {
+        let chips = match &rerun.question {
+            Some((body, anchors_given)) => {
+                if body.len() > QUESTION_BYTES {
+                    return Err(Error::TooLarge { what: "a question", size: body.len(), max: QUESTION_BYTES, unit: "bytes" });
+                }
+                no_key(keys, body)?;
+                Some(anchors(anchors_given, true)?)
+            }
+            None => None,
+        };
+        line("the model", &rerun.model, MODEL_CHARS)?;
+        time(&rerun.now)?;
+        let missing = || Error::ChatMissing { what: "turn", id: rerun.turn.to_string() };
+        let mut c = self.chat_connection(missing)?;
+        let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
+        let row: Option<mysql::Row> = tx
+            .exec_first("SELECT `chat`, `outcome`, `number` FROM `chat_turn` WHERE `id` = ?", (id_value(rerun.turn),))
+            .map_err(sql("cannot read the turn"))?;
+        let row = row.ok_or_else(missing)?;
+        let chat = id_at(&row, 0).map_err(|why| self.unreadable(why))?;
+        let outcome = text_at(&row, 1, 16).and_then(|t| TurnOutcome::from_code(&t)).map_err(|why| self.unreadable(why))?;
+        let number = int_at(&row, 2).map_err(|why| self.unreadable(why))?;
+        if outcome != TurnOutcome::Failed {
+            return Err(value("the turn", format!("only a failed turn runs again, and it {}", outcome.code())));
+        }
+        let highest = first_int(
+            tx.exec_first("SELECT COALESCE(MAX(`number`), 0) FROM `chat_turn` WHERE `chat` = ?", (id_value(chat),))
+                .map_err(sql("cannot read the conversation's turns"))?,
+        )
+        .map_err(|why| self.unreadable(why))?;
+        if highest != number {
+            return Err(value("the turn", "only the conversation's last turn runs again"));
+        }
+        let changed: Option<mysql::Row> =
+            tx.exec_first("SELECT 1 FROM `chat_change` WHERE `turn` = ?", (id_value(rerun.turn),)).map_err(sql("cannot read the turn's changes"))?;
+        if changed.is_some() {
+            return Err(value("the turn", "it changed the model, so running it again could make those changes twice"));
+        }
+        let question: Option<mysql::Row> = tx
+            .exec_first("SELECT `id` FROM `chat_message` WHERE `turn` = ? AND `role` = 'user' ORDER BY `position` LIMIT 1", (id_value(rerun.turn),))
+            .map_err(sql("cannot read the turn's question"))?;
+        let question = id_at(&question.ok_or_else(|| self.unreadable("a turn has no question"))?, 0).map_err(|why| self.unreadable(why))?;
+        tx.exec_drop(
+            "UPDATE `chat_turn` SET `outcome` = 'running', `error` = NULL, `ended_at` = NULL, `started_at` = ?, `model` = ?, `allow_changes` = ? WHERE `id` = ?",
+            vec![text_value(&rerun.now), text_value(&rerun.model), flag_value(rerun.allow_changes), id_value(rerun.turn)],
+        )
+        .map_err(sql("cannot write the turn"))?;
+        if let (Some((body, _)), Some((chips, cut))) = (&rerun.question, &chips) {
+            tx.exec_drop(
+                "UPDATE `chat_message` SET `body` = ?, `anchors_cut` = ?, `created_at` = ? WHERE `id` = ?",
+                vec![text_value(body), flag_value(*cut), text_value(&rerun.now), id_value(question)],
+            )
+            .map_err(sql("cannot write the question"))?;
+            tx.exec_drop("DELETE FROM `chat_anchor` WHERE `message` = ?", (id_value(question),)).map_err(sql("cannot write the question's chips"))?;
+            insert_anchors(&mut tx, question, chips)?;
+        }
+        touch(&mut tx, chat, &rerun.now)?;
+        tx.commit().map_err(sql("cannot finish writing the conversations"))
+    }
+
     /// The next position in a conversation's timeline; refused when it is full.
     fn next_position(&self, tx: &mut mysql::Transaction<'_>, chat: Uuid) -> Result<u32, Error> {
         let row: Option<mysql::Row> = tx
@@ -1033,7 +1118,8 @@ impl Project {
     /// boundary and marked when longer; gives its position.
     pub fn append_reply(&self, reply: &NewReply) -> Result<u32, Error> {
         time(&reply.now)?;
-        let (body, shortened) = cut_bytes(&reply.body, REPLY_BYTES);
+        let (body, cut) = cut_bytes(&reply.body, REPLY_BYTES);
+        let shortened = cut || reply.shortened;
         let mut c = self.chat_connection(|| Error::ChatMissing { what: "turn", id: reply.turn.to_string() })?;
         let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
         let (chat, _, _) = self.running_turn(&mut tx, reply.turn)?;

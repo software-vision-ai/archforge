@@ -14,7 +14,7 @@ use archforge_mof::{Uuid, rows};
 use archforge_notations::Session;
 use archforge_project::{
     AnchorRole, CHAT_TABLES, ChangeKind, ChangeState, ChangedElement, Error, FORMAT, ModelSchema, NewAnchor, NewChat, NewQuestion, NewReply,
-    NewToolCall, NewTurn, Project, Provider, Role, ToolStatus, TurnChanges, TurnEnd, TurnError, TurnOutcome, TurnSpan, limits, timestamp,
+    NewToolCall, NewTurn, Project, Provider, Rerun, Role, ToolStatus, TurnChanges, TurnEnd, TurnError, TurnOutcome, TurnSpan, limits, timestamp,
 };
 use archforge_secrets::{MemoryStore, Secret, SecretName, SecretStore};
 use mysql::prelude::Queryable;
@@ -153,8 +153,9 @@ fn question(n: u64, body: &str) -> NewQuestion {
     NewQuestion { id: id(n), body: body.into(), anchors: Vec::new() }
 }
 
+/// A complete reply of the test's own, `body` at `when`.
 fn reply(n: u64, turn: Uuid, body: &str, when: u64) -> NewReply {
-    NewReply { id: id(n), turn, body: body.into(), complete: true, now: at(when) }
+    NewReply { id: id(n), turn, body: body.into(), complete: true, shortened: false, now: at(when) }
 }
 
 fn ended(turn: Uuid, when: u64, changes: Option<TurnChanges>) -> TurnEnd {
@@ -660,6 +661,79 @@ fn a_question_holding_a_kept_api_key_is_refused_and_never_stored() {
     let committed: i64 = count(&p, &format!("SELECT COUNT(*) FROM chat AS OF 'HEAD' WHERE title LIKE '%{CANARY}%'"));
     assert_eq!((history, committed), (0, 0), "no commit holds it");
     p.close().unwrap();
+}
+
+/// Send again runs a failed turn in place, its question kept once; the refusals write nothing.
+#[test]
+fn a_failed_turn_runs_again_in_place_with_its_question_stored_once() {
+    let env = Env::new("rerun");
+    let schema = schema();
+    let p = env.create("Rerun", &schema);
+    let chat = id(1);
+    p.create_chat(&new_chat(1, "Chat 1", 0), &no_keys()).unwrap();
+    let mut q = question(3, "Which classes have no description yet?");
+    q.anchors = vec![anchor(id(900), AnchorRole::Selection, "Order")];
+    p.start_turn(&turn(2, chat, 1), &q, &no_keys()).unwrap();
+    let failed = |when| TurnEnd { turn: id(2), outcome: TurnOutcome::Failed, error: Some(TurnError::Network), now: at(when), changes: None };
+    p.end_turn(&failed(2)).unwrap();
+    let rerun = |question: Option<(&str, Vec<NewAnchor>)>, when| Rerun {
+        turn: id(2),
+        model: "opus".into(),
+        allow_changes: false,
+        question: question.map(|(b, a)| (b.to_string(), a)),
+        now: at(when),
+    };
+    // Sent again as it was: the same row runs again, nothing new is stored.
+    p.rerun_turn(&rerun(None, 3), &no_keys()).unwrap();
+    p.append_reply(&reply(4, id(2), "Five of them.", 4)).unwrap();
+    p.end_turn(&failed(5)).unwrap();
+    // Edited and sent again: the stored question and its chips are replaced, not added to.
+    let edited = vec![anchor(id(901), AnchorRole::Diagram, "Commerce")];
+    p.rerun_turn(&rerun(Some(("Which classes lack a description?", edited)), 6), &no_keys()).unwrap();
+    p.end_turn(&ended(id(2), 7, None)).unwrap();
+    let c = p.load_chat(chat).unwrap();
+    assert_eq!(c.turns.len(), 1, "one stored row per turn");
+    let t = &c.turns[0].turn;
+    assert_eq!((t.number, t.outcome, t.error, t.model.as_str(), t.allow_changes), (1, TurnOutcome::Completed, None, "opus", false));
+    assert_eq!((t.started_at.as_str(), t.ended_at.as_deref()), (at(6).as_str(), Some(at(7).as_str())));
+    let questions: Vec<_> = c.messages.iter().filter(|m| m.message.role == Role::User).collect();
+    assert_eq!(questions.len(), 1, "the question is stored once");
+    assert_eq!(questions[0].message.body.as_deref(), Some("Which classes lack a description?"));
+    assert_eq!(questions[0].anchors.iter().map(|a| (a.element, a.role)).collect::<Vec<_>>(), [(id(901), AnchorRole::Diagram)]);
+    assert_eq!(c.messages.iter().filter(|m| m.message.role == Role::Assistant).count(), 1, "the failed attempt's reply stays as it was");
+    assert!(uncommitted_chats(&p).is_empty(), "the turn's end committed it");
+
+    // Refused, with nothing written: a turn that did not fail, one not the last, one that changed
+    // the model, and an edited question holding a kept key.
+    let refused = |r: &Rerun, keys: &MemoryStore| p.rerun_turn(r, keys).unwrap_err();
+    assert!(matches!(refused(&rerun(None, 8), &no_keys()), Error::ChatValue { .. }), "a completed turn");
+    p.start_turn(&turn(10, chat, 9), &question(11, "And now?"), &no_keys()).unwrap();
+    let changes = TurnChanges {
+        changes: 1,
+        elements: 1,
+        changed: vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "uml_class".into(), name: Some("Order".into()) }],
+    };
+    p.end_turn(&TurnEnd { turn: id(10), outcome: TurnOutcome::Failed, error: Some(TurnError::Other), now: at(10), changes: Some(changes) }).unwrap();
+    let again = Rerun { turn: id(10), ..rerun(None, 11) };
+    assert!(matches!(refused(&again, &no_keys()), Error::ChatValue { .. }), "a turn that changed the model");
+    let first = TurnEnd { turn: id(20), outcome: TurnOutcome::Failed, error: Some(TurnError::Network), now: at(13), changes: None };
+    let other = id(30);
+    p.create_chat(&NewChat { id: other, ..new_chat(30, "Chat 2", 12) }, &no_keys()).unwrap();
+    p.start_turn(&turn(20, other, 12), &question(21, "First"), &no_keys()).unwrap();
+    p.end_turn(&first).unwrap();
+    p.start_turn(&turn(22, other, 14), &question(23, "Second"), &no_keys()).unwrap();
+    p.end_turn(&ended(id(22), 15, None)).unwrap();
+    assert!(matches!(refused(&Rerun { turn: id(20), ..rerun(None, 16) }, &no_keys()), Error::ChatValue { .. }), "a turn not the last");
+    p.start_turn(&turn(24, other, 17), &question(25, "Third"), &no_keys()).unwrap();
+    p.end_turn(&TurnEnd { turn: id(24), ..first.clone() }).unwrap();
+    const CANARY: &str = "sk-ant-api03-canary-rerun-0000-4F2a";
+    let keys = MemoryStore::new();
+    keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(CANARY.to_string()).unwrap()).unwrap();
+    let pasted = Rerun { turn: id(24), ..rerun(Some((&format!("Try {CANARY}"), Vec::new())), 18) };
+    assert!(matches!(refused(&pasted, &keys), Error::HeldKey { .. }));
+    let stored = p.load_chat(other).unwrap();
+    assert_eq!(stored.turns.last().map(|t| t.turn.outcome), Some(TurnOutcome::Failed), "nothing was written");
+    assert_eq!(count(&p, &format!("SELECT COUNT(*) FROM chat_message WHERE body LIKE '%{CANARY}%'")), 0);
 }
 
 #[test]
