@@ -7891,6 +7891,56 @@ fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change(
     assert_eq!((changes.changes, listed), (2, expected));
 }
 
+/// A turn's change that cleared the whole history, merged into the turn's step, is still the
+/// turn's: counted with the change before it, with nothing left to undo.
+#[test]
+fn a_turns_change_that_clears_the_history_still_counts() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    let describe = |h: &mut Harness<'static, Shell>, name: &str, text: &str| {
+        let id = fx::element(h.state(), archforge_uml::CLASS, name).unwrap();
+        fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+        )
+        .unwrap();
+        h.run();
+    };
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    // The project's model again, under a history capped small enough for one long description to
+    // clear it.
+    let (tables, junctions) = archforge_notations::storage();
+    let old = h.state_mut().session.take().unwrap();
+    let rows = archforge_mof::rows::snapshot(old.doc(), &tables, &junctions).unwrap();
+    // Ids at a later time than the sample's, so none is given twice.
+    let mut n = 0u64;
+    let mint = move || {
+        n += 1;
+        let mut r = [0u8; 10];
+        r[2..].copy_from_slice(&n.to_be_bytes());
+        archforge_mof::Uuid::v7(1_761_670_900_000, r)
+    };
+    let st = archforge_notations::store(Box::new(mint)).unwrap();
+    let st = archforge_mof::rows::restore_into_empty(st, &rows, &tables, &junctions).unwrap();
+    let options = archforge_engine::Options { max_weight: 4_096, ..archforge_engine::Options::default() };
+    h.state_mut().session =
+        Some(archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), st, old.counter(), options, archforge_notations::view()));
+    h.run();
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Describe two classes");
+    describe(&mut h, "Customer", "A buyer");
+    assert!(h.state().session.as_ref().unwrap().can_undo(), "the first change fits the cap");
+    describe(&mut h, "Product", &"x".repeat(archforge_uml::descriptions::MAX_DESCRIPTION));
+    assert!(!h.state().session.as_ref().unwrap().can_undo(), "the second cleared the history");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let changes = kept_chat(&h, &rig).ends.last().unwrap().1.clone().unwrap();
+    assert_eq!(changes.changes, 2, "both of the turn's changes");
+    assert!(painted_has(&h, "2 changes to the model"), "{:?}", painted(&h));
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.1.undo"), "nothing left to undo");
+}
+
 /// A failed attempt's cut reply does not mark the next attempt's: Send again starts the turn's
 /// per-attempt state afresh.
 #[test]

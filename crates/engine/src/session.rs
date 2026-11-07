@@ -364,19 +364,20 @@ impl<D: Document, V: View<D>> Session<D, V> {
         // ended at; otherwise it is a step of its own.
         let joins = on_top && g.segments.last().is_some_and(|s| s.applied && s.after == before);
         if joins {
-            if let Some(last) = g.segments.last_mut() {
-                if top_is_ours {
-                    let whole = std::mem::replace(&mut last.delta, kept.clone());
-                    match guard(id, || Ok(D::compose(whole, kept))) {
-                        Ok(d) => last.delta = d,
-                        Err(_) => g.lost = true,
-                    }
-                    last.after = id_now;
-                    last.changes = last.changes.saturating_add(changes);
-                } else if !cleared {
-                    // The merge cancelled the step out: nothing of it is left.
-                    g.segments.pop();
+            // Only a merge that cancelled the step out takes the state back to where the step
+            // began; any other merge made the change, even one that cleared the history (the step
+            // is gone from undo, never from the document), so it stays the group's.
+            let cancelled = Some(id_now) == base;
+            if cancelled {
+                g.segments.pop();
+            } else if let Some(last) = g.segments.last_mut() {
+                let whole = std::mem::replace(&mut last.delta, kept.clone());
+                match guard(id, || Ok(D::compose(whole, kept))) {
+                    Ok(d) => last.delta = d,
+                    Err(_) => g.lost = true,
                 }
+                last.after = id_now;
+                last.changes = last.changes.saturating_add(changes);
             }
         } else {
             g.segments.push(Segment { before, after: id_now, changes, delta: kept, applied: true });
@@ -923,6 +924,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
         r
     }
 
+    /// Drops the redo history after a new change, and with it every group's step undone, which
+    /// can no longer come back.
     fn clear_redo(&mut self) {
         for s in self.redo.drain(..) {
             self.weight = self.weight.saturating_sub(s.weight);

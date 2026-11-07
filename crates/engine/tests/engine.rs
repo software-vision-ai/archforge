@@ -499,6 +499,106 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     assert!(s.begin_group("G0", "Turn 2").is_ok(), "an origin's group opened again replaces its own");
 }
 
+/// A group keeps what it changed on every path the history takes: a merge or a step of its own
+/// that clears the whole history, a step undone and then cleared from redo by someone else's
+/// change, undo and redo just before the group ends, a step cancelled out after someone else's
+/// change, and the oldest steps dropped by the caps. A step cancelled out or cleared from redo is
+/// gone from the group, its weight included.
+#[test]
+fn a_group_keeps_its_changes_on_every_path_the_history_takes() {
+    // A merge heavier than the whole cap clears the history; the change it merged stays the group's.
+    let options = Options { max_weight: 1_000, ..Options::default() };
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
+    s.begin_group("Chat 1", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "a" }), Some("Chat 1")).unwrap();
+    assert!(s.can_undo(), "the first change fits the cap");
+    let out = s.execute_from("item.add", &json!({ "name": "x".repeat(2_000) }), Some("Chat 1")).unwrap();
+    assert!(out.history_cleared && !s.can_undo());
+    let end = s.end_group("Chat 1").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 1, 2), "both changes, up to the state now");
+    assert!(end.delta.is_none(), "what it changed outgrew the cap");
+
+    // A step of its own heavier than the cap clears the history too: still the group's, and the
+    // next change is a step after it.
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
+    s.begin_group("Chat 2", "Turn 1").unwrap();
+    let before = s.revision();
+    let out = s.execute_from("item.add", &json!({ "name": "x".repeat(2_000) }), Some("Chat 2")).unwrap();
+    assert!(out.history_cleared);
+    s.execute_from("item.add", &json!({ "name": "b" }), Some("Chat 2")).unwrap();
+    let end = s.end_group("Chat 2").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 2, 2));
+
+    // Undone, then cleared from redo by someone else's change: nothing of the group is left.
+    let mut s = session();
+    s.begin_group("Chat 3", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "c" }), Some("Chat 3")).unwrap();
+    s.undo().unwrap();
+    s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
+    assert!(!s.can_redo());
+    assert!(s.end_group("Chat 3").is_none(), "the step cleared from redo is gone from the group");
+    // Undone just before the group ends: not applied, so nothing; redone: applied again.
+    s.begin_group("Chat 4", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "d" }), Some("Chat 4")).unwrap();
+    s.undo().unwrap();
+    assert!(s.end_group("Chat 4").is_none(), "an undone step is not the group's change");
+    s.begin_group("Chat 5", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "e" }), Some("Chat 5")).unwrap();
+    s.undo().unwrap();
+    s.redo().unwrap();
+    let end = s.end_group("Chat 5").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 1, 1));
+
+    // Cancelled out after someone else's change: only that step goes, the one before stays.
+    s.begin_group("Chat 6", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "f" }), Some("Chat 6")).unwrap();
+    let first = s.revision();
+    s.execute("item.add", &json!({ "name": "Mine" })).unwrap();
+    s.execute_from("item.add", &json!({ "name": "g" }), Some("Chat 6")).unwrap();
+    let last = s.doc().0.len() - 1;
+    s.execute_from("item.remove", &json!({ "index": last }), Some("Chat 6")).unwrap();
+    let end = s.end_group("Chat 6").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, first, 1, 1));
+    let d = end.delta.unwrap();
+    assert_eq!(d.after.0.last().map(String::as_str), Some("f"));
+    // A step cancelled out leaves nothing in the group, its weight included: what follows is
+    // still known.
+    let mut s = Session::new(registry(), Doc::default(), 1, Options { max_weight: 1_000, ..Options::default() });
+    s.execute("item.add", &json!({ "name": "p".repeat(250) })).unwrap();
+    s.begin_group("Chat 8", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "j" }), Some("Chat 8")).unwrap();
+    s.execute_from("item.remove", &json!({ "index": 1 }), Some("Chat 8")).unwrap();
+    s.execute_from("item.add", &json!({ "name": "k" }), Some("Chat 8")).unwrap();
+    let end = s.end_group("Chat 8").unwrap();
+    assert_eq!((end.steps, end.changes), (1, 1));
+    assert!(end.delta.is_some(), "the step cancelled out weighs nothing in the group");
+    // Likewise a step undone and cleared from redo: gone from the group, its weight included.
+    s.begin_group("Chat 9", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "l" }), Some("Chat 9")).unwrap();
+    s.undo().unwrap();
+    s.execute("item.add", &json!({ "name": "u" })).unwrap();
+    s.execute_from("item.add", &json!({ "name": "m" }), Some("Chat 9")).unwrap();
+    let end = s.end_group("Chat 9").unwrap();
+    assert_eq!((end.steps, end.changes), (1, 1));
+    assert!(end.delta.is_some(), "the step cleared from redo weighs nothing in the group");
+
+    // The caps drop the group's oldest steps from the history, never from the group: the
+    // document still holds them.
+    let options = Options { max_steps: 1, ..Options::default() };
+    let mut s = Session::new(registry(), Doc::default(), 1, options);
+    s.begin_group("Chat 7", "Turn 1").unwrap();
+    let before = s.revision();
+    s.execute_from("item.add", &json!({ "name": "h" }), Some("Chat 7")).unwrap();
+    s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
+    s.execute_from("item.add", &json!({ "name": "i" }), Some("Chat 7")).unwrap();
+    assert_eq!(s.undo_origin(), Some("Chat 7"));
+    let end = s.end_group("Chat 7").unwrap();
+    assert_eq!((end.before, end.after, end.steps, end.changes), (before, s.revision(), 2, 2));
+}
+
 #[test]
 fn a_batch_is_one_step_and_one_entry_or_nothing() {
     let mut s = session();
