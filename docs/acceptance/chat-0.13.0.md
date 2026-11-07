@@ -10,7 +10,8 @@ Run it on macOS, and on Linux where a step says so. Windows has no Chat yet: che
 
 ## How to record
 
-1. Copy this file to the ignored `plan/` folder, as `plan/acceptance/chat-0.13.0-<date>.md`.
+1. Copy this file to the ignored `plan/` folder under a name no earlier record has, such as
+   `plan/acceptance/chat-0.13.0-$(date +%Y%m%d-%H%M).md`.
 2. Fill the [Results](#results) table there, one row per step: **pass**, **fail** or **skipped**,
    with a note. For a fail, note what showed instead, and the time, so the log can be found.
 3. Paste the filled table into AR-207. Open a Fireline bug for each fail.
@@ -38,7 +39,15 @@ case "$(uname -s)" in
   *)      SETTINGS="${XDG_CONFIG_HOME:-$HOME/.config}/archforge" ;;
 esac
 echo "$SETTINGS"
+wait_quit() {   # after you quit Archforge: waits up to 30 s for its process to end
+  for i in $(seq 1 30); do pgrep -x archforge > /dev/null || { echo "Archforge has quit"; return 0; }; sleep 1; done
+  echo "STILL RUNNING after 30 s: wait, then run wait_quit again"; return 1
+}
 ```
+
+Quitting is not instant: Archforge first ends the agent programs and the project's database
+server. Wherever a step quits Archforge, run `wait_quit` and go on only after *Archforge has
+quit*.
 
 Record the versions under test:
 
@@ -109,6 +118,7 @@ One full round trip per route. Each uses the project of P1.
 4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there:
 
    ```sh
+   wait_quit
    H="$SETTINGS/agents/codex-home"
    if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
    elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
@@ -186,7 +196,8 @@ This shows Check connection needs no network; it does not by itself prove that n
    **Open Settings**.
 3. Choose **Open Settings**. **Expect:** the Codex card may still say *Signed in as*: Archforge
    reads the sign-in once a run. Record what it says.
-4. Quit and start Archforge, and open **Settings ▸ AI Agents**. **Expect:** *Sign-in expired*,
+4. Quit Archforge, run `wait_quit`, start it again, and open **Settings ▸ AI Agents**.
+   **Expect:** *Sign-in expired*,
    with **Sign in again…**.
 5. Sign in again, then ask again. **Expect:** a reply.
 
@@ -214,17 +225,19 @@ step 2 then. Record what the card says in either case: *Key refused* or *No answ
 
 Archforge looks for the programs in several folders, so moving one copy away may leave another.
 `ARCHFORGE_CLAUDE` (and `ARCHFORGE_CODEX`) make Archforge look in one place alone. Start Archforge
-from the terminal for this step; `APP` is its program:
+from the shell of [Before you start](#before-you-start) for this step, in the background, so the
+same shell can move the program; `APP` is its program:
 
 ```sh
 APP=/Applications/Archforge.app/Contents/MacOS/archforge     # or target/debug/archforge
 CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 ```
 
-1. Quit Archforge, then start it with a program that is not there:
+1. Quit Archforge, then start it with a program that is not there (a path inside `$WORK`,
+   which holds no such file):
 
    ```sh
-   ARCHFORGE_CLAUDE="$CLAUDE_AT.away" "$APP"
+   wait_quit && ARCHFORGE_CLAUDE="$WORK/no-claude-here" "$APP" > "$WORK/app-f4.log" 2>&1 &
    ```
 
 2. Open **Settings ▸ AI Agents**. **Expect:** Claude's badge says *Not found*; the card shows the
@@ -234,29 +247,29 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 4. Quit, and start Archforge with the real program as the only place to look:
 
    ```sh
-   ARCHFORGE_CLAUDE="$CLAUDE_AT" "$APP"
+   wait_quit && ARCHFORGE_CLAUDE="$CLAUDE_AT" "$APP" > "$WORK/app-f4.log" 2>&1 &
    ```
 
-   Ask in a Claude conversation. **Expect:** a reply. Then, in another terminal, move the program
-   away (`sudo` where its folder needs it), and ask once more in a new conversation (**New
+   Ask in a Claude conversation. **Expect:** a reply. Then, in the same shell, move the program
+   away (`sudo mv` where its folder needs it), and ask once more in a new conversation (**New
    conversation**, +):
 
    ```sh
-   mv "$CLAUDE_AT" "$CLAUDE_AT.away"
+   if [ -e "$CLAUDE_AT.away" ]; then echo "STOP: $CLAUDE_AT.away exists already"; else mv -n "$CLAUDE_AT" "$CLAUDE_AT.away"; fi
    ```
 
    **Expect:** the card *Program not found* with **Open Settings**. Record what shows if not.
 5. Put it back and choose **Look again** in Settings:
 
    ```sh
-   mv "$CLAUDE_AT.away" "$CLAUDE_AT"
+   if [ -e "$CLAUDE_AT" ]; then echo "STOP: $CLAUDE_AT exists"; else mv -n "$CLAUDE_AT.away" "$CLAUDE_AT"; fi
    ```
 
    **Expect:** *Found* or *Not yet tested with this version*, with its version; a question gets a
    reply.
-6. Repeat 1 to 5 for Codex, with `CODEX_AT="$(command -v codex)"` and `ARCHFORGE_CODEX`. Then
-   quit Archforge and start it as usual, without the override, so the shell of
-   [Before you start](#before-you-start) is free for the key search.
+6. Repeat 1 to 5 for Codex, with `CODEX_AT="$(command -v codex)"`, `ARCHFORGE_CODEX` and
+   `$WORK/no-codex-here`. Then quit Archforge, run `wait_quit`, and start it as usual, without
+   the override.
 
 ### F5. Linux without a secure store (Linux only)
 
@@ -377,13 +390,17 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 
    **Expect:** one folder path, then *found, and it is there*. Then open **Conversations** and
    delete that conversation, the one titled with `$MARKER_DELETED`'s question, and no other. Let
-   its note go (about eight seconds). Check the folder itself:
+   its note go (about eight seconds). The folder is removed after that, while the program ends,
+   so check the folder itself, waiting up to 30 seconds:
 
    ```sh
-   [ -n "$DELETED_DIR" ] && { [ -e "$DELETED_DIR" ] && echo "STILL THERE: $DELETED_DIR" || echo "gone: $DELETED_DIR"; }
+   if [ -n "$DELETED_DIR" ]; then
+     for i in $(seq 1 30); do [ -e "$DELETED_DIR" ] || break; sleep 1; done
+     if [ -e "$DELETED_DIR" ]; then echo "STILL THERE after 30 s: $DELETED_DIR"; else echo "gone: $DELETED_DIR"; fi
+   fi
    ```
 
-   **Expect:** *gone:* and the path. The conversations of K2 steps 1 and 4 stay, for K4.
+   **Expect:** *gone:* and the path. Only *STILL THERE after 30 s* is a fail. The conversations of K2 steps 1 and 4 stay, for K4.
 6. Select the diagram, open **Generate…** (⇧⌘G) and choose **Copy request**. Keep what it
    copied (it holds no key, only the request), before Archforge quits and the clipboard may go
    with it:
@@ -392,7 +409,8 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    if [ "$(uname -s)" = Darwin ]; then pbpaste; else wl-paste 2>/dev/null || xclip -o -selection clipboard; fi > "$WORK/request.txt"
    ```
 
-7. Quit Archforge, so its log, its preferences and its folders are settled.
+7. Quit Archforge, so its log, its preferences and its folders are settled, and run `wait_quit`.
+   Go on to K4 only after *Archforge has quit*.
 
 ### K4. Search every place Archforge writes
 
@@ -505,8 +523,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
 7. **The system's temporary folder** (the programs get their own; nothing should be here):
 
    ```sh
-   printf 'AFTMPPROBE\n' > "${TMPDIR:-/tmp}/af-probe.txt"
-   probe AFTMPPROBE "${TMPDIR:-/tmp}"; rm -f "${TMPDIR:-/tmp}/af-probe.txt"
+   PROBE_FILE="$(mktemp "${TMPDIR:-/tmp}/af-probe.XXXXXX")" && printf 'AFTMPPROBE\n' > "$PROBE_FILE"
+   probe AFTMPPROBE "${TMPDIR:-/tmp}"; rm -f "$PROBE_FILE"
    search "$WORK/canaries" "${TMPDIR:-/tmp}"
    ```
 
@@ -556,7 +574,7 @@ key files the searches read.
    ```sh
    rm -rf "$WORK"
    unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK
+     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP
    ```
 
 ## Results
