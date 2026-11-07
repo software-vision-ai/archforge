@@ -12,11 +12,11 @@ fn folder(name: &str) -> PathBuf {
 /// panic for `boom`.
 fn echo(name: &str) -> (Server, PathBuf) {
     let dir = folder(name);
-    let handler: Handler = Arc::new(|method, params, origin| match method {
+    let handler: Handler = Arc::new(|call: Call<'_>| match call.method {
         "boom" => panic!("a handler that fails"),
         "refuse" => Err("refused on purpose".into()),
-        _ if origin.is_some() => Ok(json!({ "method": method, "params": params, "origin": origin })),
-        _ => Ok(json!({ "method": method, "params": params })),
+        method if call.origin.is_some() => Ok(json!({ "method": method, "params": call.params, "origin": call.origin })),
+        method => Ok(json!({ "method": method, "params": call.params })),
     });
     (Server::start(0, &dir, handler).unwrap(), dir)
 }
@@ -78,7 +78,7 @@ fn a_settings_folder_others_may_write_to_is_closed_to_them() {
     use std::os::unix::fs::PermissionsExt;
     let dir = folder("umask");
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o775)).unwrap();
-    let handler: Handler = Arc::new(|_, _, _| Ok(json!({})));
+    let handler: Handler = Arc::new(|_: Call<'_>| Ok(json!({})));
     let server = Server::start(0, &dir, handler).unwrap();
     assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o755);
     drop(server);
@@ -241,6 +241,127 @@ fn the_origin_travels_beside_the_params_and_a_bad_one_is_refused() {
     assert!(replies[2]["error"].as_str().unwrap().contains("at most 64"), "{}", replies[2]);
     assert!(replies[3]["error"].as_str().unwrap().contains("origin must be a string"), "{}", replies[3]);
     assert_eq!(replies[4]["result"]["origin"], "Chat 2");
+}
+
+/// A handler that answers each call with its role and whether its token is live, and holds a call
+/// to `wait` until the token is revoked (as a request queued for the window waits).
+fn roles() -> Handler {
+    Arc::new(|call: Call<'_>| {
+        if call.method == "wait" {
+            let started = Instant::now();
+            while call.live.load(Ordering::SeqCst) && started.elapsed() < Duration::from_secs(10) {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        Ok(json!({ "role": format!("{:?}", call.role), "live": call.live.load(Ordering::SeqCst) }))
+    })
+}
+
+/// Opens a connection, sends `first` and reads its reply, keeping the connection.
+fn held(port: u16, first: &str) -> (TcpStream, BufReader<TcpStream>, Value) {
+    let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    s.write_all(first.as_bytes()).unwrap();
+    let mut r = BufReader::new(s.try_clone().unwrap());
+    let reply = read_line(&mut r, MAX_REPLY).unwrap().map(|l| serde_json::from_slice(&l).unwrap()).unwrap_or(Value::Null);
+    (s, r, reply)
+}
+
+/// Whether anything listens on `port` of the loopback interface.
+fn listens(port: u16) -> bool {
+    TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)), Duration::from_millis(300)).is_ok()
+}
+
+#[cfg(unix)]
+#[test]
+fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = folder("grants");
+    let server = Server::open(&dir, roles()).unwrap();
+    let port = server.port();
+    assert_eq!(server.grants(), 0, "an opening starts with no token");
+    let read = server.grant(Role::ReadOnly).unwrap();
+    let full = server.grant(Role::Full).unwrap();
+    for g in [&read, &full] {
+        let name = g.path().file_name().unwrap().to_str().unwrap().to_string();
+        let hex = name.strip_prefix(&format!("control-{port}-")).and_then(|r| r.strip_suffix(".token")).unwrap_or_else(|| panic!("{name}"));
+        assert!(hex.len() == 16 && hex.bytes().all(|b| b.is_ascii_hexdigit()), "{name}");
+        assert_eq!(std::fs::metadata(g.path()).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(g.path().is_absolute());
+    }
+    assert_ne!(read.path(), full.path());
+    let reader = Client::from_token_file(read.path(), port).unwrap();
+    let writer = Client::from_token_file(full.path(), port).unwrap();
+    assert_eq!(reader.call("m", json!({})).unwrap(), json!({ "role": "ReadOnly", "live": true }));
+    assert_eq!(writer.call("m", json!({})).unwrap(), json!({ "role": "Full", "live": true }));
+    // A connection holding the read-only token: revoking it answers REVOKED and closes it, and a
+    // request waiting in the handler sees its liveness go false.
+    let token = read_token(read.path()).unwrap();
+    let (mut s, mut r, first) = held(port, &format!("{{\"id\":1,\"method\":\"m\",\"token\":\"{token}\"}}\n"));
+    assert_eq!(first["result"]["role"], "ReadOnly");
+    s.write_all(b"{\"id\":2,\"method\":\"wait\"}\n").unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    let path = read.path().to_path_buf();
+    drop(read);
+    let waited: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
+    assert_eq!((waited["id"].clone(), waited["result"]["live"].clone()), (json!(2), json!(false)), "{waited}");
+    let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
+    assert_eq!(last["error"], REVOKED, "{last}");
+    assert_eq!(read_line(&mut r, MAX_REPLY).unwrap(), None, "then closed");
+    assert!(!path.exists(), "its file is gone");
+    assert!(matches!(Client::with_token(port, token).call("m", json!({})), Err(CallError::Unreachable(_))), "the revoked token opens nothing");
+    // The other grant goes on.
+    assert_eq!(server.grants(), 1);
+    assert!(writer.call("m", json!({})).is_ok());
+    drop(full);
+    drop(server);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_listening() {
+    let dir = folder("close");
+    let server = Server::open(&dir, roles()).unwrap();
+    let port = server.port();
+    let grant = server.grant(Role::Full).unwrap();
+    let path = grant.path().to_path_buf();
+    let token = read_token(&path).unwrap();
+    let (_s, mut r, first) = held(port, &format!("{{\"id\":1,\"method\":\"m\",\"token\":\"{token}\"}}\n"));
+    assert_eq!(first["ok"], true);
+    // The grant outlives nothing: the close revokes it.
+    let started = Instant::now();
+    drop(server);
+    assert!(started.elapsed() < Duration::from_secs(3), "the close is bounded: {:?}", started.elapsed());
+    let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
+    assert_eq!(last["error"], REVOKED, "{last}");
+    assert!(!path.exists(), "the file went with the close");
+    assert!(!listens(port), "nothing listens after the close");
+    drop(grant);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_token_file_is_never_made_over_another_and_removed_only_while_it_is_the_same_file() {
+    let dir = folder("identity");
+    let path = dir.join("control-1-0000000000000000.token");
+    std::fs::write(&path, "someone else's").unwrap();
+    assert!(matches!(create_token_file(&path, &mint_token().unwrap()), Err(Created::Taken)));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "someone else's", "never replaced");
+    let mine = dir.join("control-1-1111111111111111.token");
+    let id = create_token_file(&mine, &mint_token().unwrap()).ok().unwrap();
+    // Replaced by another file under the same name: left alone.
+    std::fs::remove_file(&mine).unwrap();
+    std::fs::write(&mine, "another").unwrap();
+    remove_token_file(&mine, id);
+    assert!(mine.exists(), "a file that is not the one written is left");
+    // The very file: removed.
+    std::fs::remove_file(&mine).unwrap();
+    let id = create_token_file(&mine, &mint_token().unwrap()).ok().unwrap();
+    remove_token_file(&mine, id);
+    assert!(!mine.exists());
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

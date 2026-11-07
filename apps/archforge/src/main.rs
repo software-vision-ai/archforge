@@ -71,13 +71,20 @@ fn start_control(
     let (requests, receiver) = std::sync::mpsc::channel::<archforge_ui_egui::control::ControlRequest>();
     let slot: ContextSlot = std::sync::Arc::new(std::sync::Mutex::new(None));
     let window = slot.clone();
-    let handler: archforge_control::Handler = std::sync::Arc::new(move |method, params, origin| {
+    let handler: archforge_control::Handler = std::sync::Arc::new(move |call: archforge_control::Call<'_>| {
         use archforge_ui_egui::control::{ControlRequest, abandon};
         let (reply, answer) = std::sync::mpsc::channel();
         let state = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(archforge_ui_egui::control::WAITING));
-        requests
-            .send(ControlRequest { method: method.to_string(), params, origin: origin.map(str::to_string), reply, state: state.clone() })
-            .map_err(|_| "Archforge is closing".to_string())?;
+        let request = ControlRequest {
+            method: call.method.to_string(),
+            params: call.params,
+            origin: call.origin.map(str::to_string),
+            reply,
+            state: state.clone(),
+            read_only: call.role == archforge_control::Role::ReadOnly,
+            live: call.live.clone(),
+        };
+        requests.send(request).map_err(|_| "Archforge is closing".to_string())?;
         if let Some(ctx) = window.lock().ok().and_then(|g| g.clone()) {
             ctx.request_repaint();
         }
@@ -581,7 +588,8 @@ mod tests {
                 use std::sync::atomic::Ordering;
                 let ws = archforge_ui_egui::control::WAITING;
                 if req.state.compare_exchange(ws, archforge_ui_egui::control::TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                    let answer = archforge_ui_egui::control::answer_from(&mut shell, &req.method, &req.params, req.origin.as_deref());
+                    assert!(!req.read_only, "the person's own access is never read-only");
+                    let answer = archforge_ui_egui::control::answer_request(&mut shell, &req);
                     let _ = req.reply.send(answer);
                 }
             }
@@ -599,6 +607,12 @@ mod tests {
         assert_eq!(session.undo_label(), Some("Chat 1: Add tables"));
         drop(server);
         let _ = std::fs::remove_dir_all(&settings);
+    }
+
+    /// The window refuses a revoked token's request in the control channel's own words.
+    #[test]
+    fn the_window_and_the_channel_say_revoked_alike() {
+        assert_eq!(archforge_ui_egui::control::REVOKED, archforge_control::REVOKED);
     }
 
     #[test]

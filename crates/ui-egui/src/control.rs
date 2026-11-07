@@ -16,9 +16,16 @@
 //! beside the parameters by the channel and checked there: the undo step an `engine.execute` or an
 //! `engine.batch` makes carries it and is labelled `<origin>: <label>`, the result gives it back,
 //! and `document.inspect` names the origin of the steps undo and redo would take.
+//!
+//! Each request also carries its token's role and liveness. A revoked token's request is refused
+//! with [`REVOKED`] before it runs. A read-only token (a Chat conversation that does not allow
+//! changes) gets only what reads: [`ACCESS`] classifies every method once, and `engine.execute` and
+//! `engine.batch` read only when every command they run is a query by the engine's own test
+//! (neither journaled nor undoable, run by its own handler). Everything else (a change, undo, redo,
+//! save) is refused, so the read-only promise holds at the channel whatever the bridge does.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use serde_json::{Value, json};
 
@@ -34,6 +41,66 @@ pub struct ControlRequest {
     pub origin: Option<String>,
     pub reply: std::sync::mpsc::Sender<Result<Value, String>>,
     pub state: Arc<AtomicU8>,
+    /// Whether the token the request came with may only read (a Chat conversation that does not
+    /// allow changes): a request that may change anything is refused ([`only_reads`]).
+    pub read_only: bool,
+    /// The liveness of that token: false once it is revoked or its server closed, and a request
+    /// whose token is no longer live is refused with [`REVOKED`], never run.
+    pub live: Arc<AtomicBool>,
+}
+
+/// The answer to a request whose token was revoked before the window took it: the control
+/// channel's own words.
+pub const REVOKED: &str = "revoked: the access this token gave has ended";
+
+/// What a method may do: only read, change something, or run commands, which reads only when every
+/// command it runs is a query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    Reads,
+    Writes,
+    Commands,
+}
+
+/// Every method's access, the one place it is decided; a test holds that each method of
+/// [`METHODS`] is here exactly once.
+pub const ACCESS: [(&str, Access); 10] = [
+    ("engine.commands", Access::Reads),
+    ("engine.describe", Access::Reads),
+    ("engine.execute", Access::Commands),
+    ("engine.batch", Access::Commands),
+    ("engine.undo", Access::Writes),
+    ("engine.redo", Access::Writes),
+    ("document.inspect", Access::Reads),
+    ("ui.inspect", Access::Reads),
+    ("app.save", Access::Writes),
+    ("app.saved", Access::Reads),
+];
+
+/// Whether `method` with `params` only reads: a method that reads; `engine.execute` whose command
+/// is a query by the engine's own test; `engine.batch` whose every step's command is a query (a
+/// batch past [`MAX_STEPS`] is refused before its steps are looked at). An unknown method or
+/// command, or a step without one, may change something. Without an open project nothing can be
+/// changed, so a command method reads (and fails there as it would).
+pub fn only_reads(shell: &Shell, method: &str, params: &Value) -> Result<bool, String> {
+    let Some((_, access)) = ACCESS.iter().find(|(m, _)| *m == method) else { return Ok(false) };
+    let query = |id: Option<&str>| match (shell.session.as_ref(), id) {
+        (None, _) => true,
+        (Some(s), Some(id)) => s.registry().is_query(id) == Some(true),
+        (Some(_), None) => false,
+    };
+    match access {
+        Access::Reads => Ok(true),
+        Access::Writes => Ok(false),
+        Access::Commands if method == "engine.batch" => {
+            let Some(steps) = params.get("steps").and_then(Value::as_array) else { return Ok(false) };
+            if steps.len() > MAX_STEPS {
+                return Err(format!("a batch has 1 to {MAX_STEPS} steps"));
+            }
+            Ok(steps.iter().all(|step| query(step.get("command").and_then(Value::as_str))))
+        }
+        Access::Commands => Ok(query(params.get("command").and_then(Value::as_str))),
+    }
 }
 
 /// A request's state: waiting to be answered, taken by the shell, given up by the one waiting.
@@ -83,9 +150,27 @@ pub(crate) fn drain(shell: &mut Shell) {
         if req.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err() {
             continue;
         }
-        let answer = answer_from(shell, &req.method, &req.params, req.origin.as_deref());
+        let answer = answer_request(shell, &req);
         let _ = req.reply.send(answer);
     }
+}
+
+/// Answers a request from the channel as its token allows: a revoked token's request is refused
+/// with [`REVOKED`] and a read-only token's request that may change anything is refused naming
+/// what it would change; neither runs.
+pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, String> {
+    if !req.live.load(Ordering::SeqCst) {
+        return Err(REVOKED.to_string());
+    }
+    if req.read_only && !only_reads(shell, &req.method, &req.params)? {
+        let what = match req.params.get("command").and_then(Value::as_str) {
+            Some(id) if req.method == "engine.execute" => format!("the command {id:?} is not a query"),
+            _ if req.method == "engine.batch" => "a step of the batch is not a query".to_string(),
+            _ => format!("{} changes the project", req.method),
+        };
+        return Err(format!("this conversation may only read: {what}; Allow changes in the conversation lets it change the model"));
+    }
+    answer_from(shell, &req.method, &req.params, req.origin.as_deref())
 }
 
 /// Answers one request from the user's own side: its changes have no origin.
@@ -330,6 +415,98 @@ mod tests {
         let many = Value::Array(vec![json!("$0"); 1000]);
         let mut budget = MAX_REFERENCED;
         assert!(resolve(many, &big, &mut budget).unwrap_err().contains("KiB"));
+    }
+
+    /// A shell with a fresh project, its ids counted from 1.
+    fn project() -> Shell {
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        let mut shell = Shell::new(crate::Services::default());
+        shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
+        shell
+    }
+
+    /// A request with `read_only` and a token whose liveness is `live`.
+    fn request(method: &str, params: Value, read_only: bool, live: bool) -> ControlRequest {
+        let (reply, _) = std::sync::mpsc::channel();
+        ControlRequest {
+            method: method.into(),
+            params,
+            origin: Some("Chat 1".into()),
+            reply,
+            state: Arc::new(AtomicU8::new(TAKEN)),
+            read_only,
+            live: Arc::new(AtomicBool::new(live)),
+        }
+    }
+
+    #[test]
+    fn every_method_is_classified_exactly_once() {
+        for (method, _) in METHODS {
+            assert_eq!(ACCESS.iter().filter(|(m, _)| *m == method).count(), 1, "{method}");
+        }
+        assert_eq!(ACCESS.len(), METHODS.len(), "no class for a method that does not exist");
+        let reads: Vec<&str> = ACCESS.iter().filter(|(_, a)| *a == Access::Reads).map(|(m, _)| *m).collect();
+        assert_eq!(reads, READS.to_vec(), "READS lists exactly the methods that read");
+    }
+
+    #[test]
+    fn a_command_reads_exactly_when_the_engine_calls_it_a_query() {
+        let shell = project();
+        let session = shell.session.as_ref().unwrap();
+        let registry = session.registry().clone();
+        let mut queries = 0;
+        for id in registry.ids() {
+            let query = registry.is_query(id).unwrap();
+            queries += usize::from(query);
+            let execute = only_reads(&shell, "engine.execute", &json!({ "command": id, "params": {} })).unwrap();
+            let batch = only_reads(&shell, "engine.batch", &json!({ "steps": [{ "command": id }] })).unwrap();
+            assert_eq!((execute, batch), (query, query), "{id}");
+        }
+        assert!(queries > 0 && queries < registry.len(), "the table has queries and changes");
+        assert!(!only_reads(&shell, "engine.execute", &json!({ "command": "no.such" })).unwrap(), "an unknown command may change");
+        assert!(!only_reads(&shell, "engine.execute", &json!({})).unwrap());
+        let mixed = json!({ "steps": [{ "command": "er.schema.list" }, { "command": "er.schema.add", "params": { "name": "x" } }] });
+        assert!(!only_reads(&shell, "engine.batch", &mixed).unwrap(), "one change makes the batch a change");
+        // The step cap is checked before any step is looked at.
+        let long = json!({ "steps": vec![json!({ "command": "er.schema.list" }); MAX_STEPS + 1] });
+        assert!(only_reads(&shell, "engine.batch", &long).unwrap_err().contains("1 to 256"));
+    }
+
+    #[test]
+    fn a_read_only_token_reads_and_every_change_is_refused_unrun() {
+        let mut shell = project();
+        let revision = |s: &Shell| s.session.as_ref().unwrap().revision();
+        let before = revision(&shell);
+        for (method, params) in [
+            ("document.inspect", json!({})),
+            ("engine.commands", json!({ "filter": "er" })),
+            ("engine.execute", json!({ "command": "er.schema.list" })),
+            ("engine.batch", json!({ "steps": [{ "command": "er.schema.list" }, { "command": "er.schema.list" }] })),
+        ] {
+            assert!(answer_request(&mut shell, &request(method, params, true, true)).is_ok(), "{method} reads");
+        }
+        for (method, params) in [
+            ("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "x" } })),
+            ("engine.batch", json!({ "steps": [{ "command": "er.schema.add", "params": { "name": "x" } }] })),
+            ("engine.undo", json!({})),
+            ("engine.redo", json!({})),
+            ("app.save", json!({})),
+        ] {
+            let refused = answer_request(&mut shell, &request(method, params, true, true)).unwrap_err();
+            assert!(refused.contains("may only read"), "{method}: {refused}");
+        }
+        assert_eq!(revision(&shell), before, "nothing changed");
+        // A token that may change writes; a revoked one runs nothing, however it is allowed.
+        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        assert!(answer_request(&mut shell, &request("engine.execute", add.clone(), false, false)).unwrap_err() == REVOKED);
+        assert_eq!(revision(&shell), before);
+        let done = answer_request(&mut shell, &request("engine.execute", add, false, true)).unwrap();
+        assert_eq!(done["origin"], "Chat 1");
+        assert!(revision(&shell) > before);
     }
 
     #[test]

@@ -34,7 +34,8 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     let (home, settings) = home("bridge");
     let seen: Arc<Mutex<Vec<(String, Value)>>> = Arc::default();
     let log = seen.clone();
-    let handler: archforge_control::Handler = Arc::new(move |method, params, _origin| {
+    let handler: archforge_control::Handler = Arc::new(move |call: archforge_control::Call<'_>| {
+        let (method, params) = (call.method, call.params);
         log.lock().unwrap().push((method.to_string(), params.clone()));
         match method {
             "engine.execute" => Ok(json!({ "result": { "id": "e1" }, "undo": "Add entity" })),
@@ -107,7 +108,8 @@ fn the_origin_comes_from_the_command_line_alone_and_read_only_refuses_changes_in
     let (home, settings) = home("origin");
     let seen: Arc<Mutex<Vec<(String, Value, Option<String>)>>> = Arc::default();
     let log = seen.clone();
-    let handler: archforge_control::Handler = Arc::new(move |method, params, origin| {
+    let handler: archforge_control::Handler = Arc::new(move |call: archforge_control::Call<'_>| {
+        let (method, params, origin) = (call.method, call.params, call.origin);
         log.lock().unwrap().push((method.to_string(), params.clone(), origin.map(str::to_string)));
         Ok(json!({ "result": { "id": "e1" }, "undo": origin.map(|o| format!("{o}: Add entity")), "origin": origin }))
     });
@@ -163,6 +165,34 @@ fn the_origin_comes_from_the_command_line_alone_and_read_only_refuses_changes_in
         assert_eq!(out.status.code(), Some(2), "{bad:?}");
         assert!(String::from_utf8_lossy(&out.stderr).contains("--origin"), "{bad:?}");
     }
+    drop(server);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// A Chat conversation's token reaches the window through `--token-file`, with its own role; once
+/// revoked, its file is gone and the real binary exits 3. A relative path is a usage error.
+#[cfg(unix)]
+#[test]
+fn a_granted_token_file_reaches_the_window_until_it_is_revoked() {
+    let (home, settings) = home("token-file");
+    let handler: archforge_control::Handler =
+        Arc::new(|call: archforge_control::Call<'_>| Ok(json!({ "method": call.method, "role": format!("{:?}", call.role), "origin": call.origin })));
+    let server = archforge_control::Server::open(&settings, handler).unwrap();
+    let port = server.port().to_string();
+    let grant = server.grant(archforge_control::Role::ReadOnly).unwrap();
+    let file = grant.path().to_str().unwrap().to_string();
+    let out = cli(&home).args(["app", "document.inspect", "--port", &port, "--token-file", &file]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    let answer: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(answer, json!({ "method": "document.inspect", "role": "ReadOnly", "origin": null }));
+    // Without the file, the settings folder's own token is looked for, and there is none.
+    let out = cli(&home).args(["app", "document.inspect", "--port", &port]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    drop(grant);
+    let out = cli(&home).args(["app", "document.inspect", "--port", &port, "--token-file", &file]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "a revoked token's file is gone");
+    let out = cli(&home).args(["app", "document.inspect", "--port", &port, "--token-file", "control.token"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2), "a relative path is a usage error");
     drop(server);
     let _ = std::fs::remove_dir_all(&home);
 }
