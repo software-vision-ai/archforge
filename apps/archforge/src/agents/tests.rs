@@ -1089,3 +1089,35 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
     assert!(folder.is_dir());
     slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
 }
+
+/// A start that comes as a removal has decided and its folder goes (CodeRabbit, AR-218): the
+/// removal decided and moved the folder aside in one step under the lock a start takes, so that
+/// start is taken, and makes a new folder, rather than refused while the folder it would keep is
+/// removed. The start is put in that exact place by the host's test hook, on the removal's thread,
+/// with no timing involved; nothing is left moved aside.
+#[test]
+fn a_start_as_the_folder_goes_is_taken_and_never_refused_while_its_folder_is_lost() {
+    let host = Host::new("forget-between", Setup::default());
+    let chat = id(70);
+    let folder = conversation_folder(&host, &chat);
+    std::fs::write(folder.join("config").join("transcript.jsonl"), "{}").unwrap();
+    let seen: Arc<Mutex<Option<Result<(), ChatRefusal>>>> = Arc::new(Mutex::new(None));
+    {
+        let (inner, seen, chat) = (host.agents.inner.clone(), seen.clone(), chat.clone());
+        *host.agents.inner.as_folder_goes.lock().unwrap() = Some(Box::new(move || {
+            *seen.lock().unwrap() = Some(super::sessions::start(&inner, claude(&chat, "Chat 1", false)));
+        }));
+    }
+    assert_eq!(host.agents.forget(&chat).recv_timeout(WAIT).unwrap(), Ok(true), "the deleted conversation's folder went");
+    let started = seen.lock().unwrap().take().expect("a start was put as the folder goes");
+    assert_eq!(started, Ok(()), "taken, not refused while its folder is removed");
+    assert!(!folder.join("config").join("transcript.jsonl").exists(), "the old folder's contents went with it");
+    let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
+        .collect();
+    assert!(aside.is_empty(), "nothing is left moved aside: {aside:?}");
+    host.agents.end(&chat).unwrap();
+    host.until("its end", |e| matches!(e, HostEvent::Chat { chat: c, event: ChatEvent::Ended { .. }, .. } if *c == chat));
+}

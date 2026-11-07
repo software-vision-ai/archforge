@@ -262,6 +262,10 @@ fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited, 
                         return Ok(false);
                     }
                 }
+                #[cfg(test)]
+                if let Some(then) = locked(&thread.as_folder_goes).take() {
+                    then();
+                }
                 workspace.remove_conversation(&aside).map_err(|e| format!("{e} (moved aside as {aside})"))
             }
             Err(e) => Err(e.to_string()),

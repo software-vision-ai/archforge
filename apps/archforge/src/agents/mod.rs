@@ -75,6 +75,10 @@ pub(crate) struct Inner {
     /// The conversations whose private folders are being removed: none of them starts meanwhile,
     /// and a start refused keeps the folder (AR-218). Taken before `sessions` when both are held.
     forgetting: Mutex<HashMap<String, sessions::Removing>>,
+    /// For the tests: run by a removal once it decided, before the folder goes, to put a start in
+    /// that exact place.
+    #[cfg(test)]
+    as_folder_goes: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// The sign-in under way: its cancel flag.
     login: Mutex<Option<Arc<AtomicBool>>>,
     /// How long a sign-in waits for the person to finish, in milliseconds (`accounts::SIGN_IN_BUDGET`;
@@ -211,6 +215,8 @@ impl Agents {
                 access: Mutex::new(access::Access::new(settings, window)),
                 sessions: Mutex::new(HashMap::new()),
                 forgetting: Mutex::new(HashMap::new()),
+                #[cfg(test)]
+                as_folder_goes: Mutex::new(None),
                 login: Mutex::new(None),
                 sign_in_millis: AtomicU64::new(u64::try_from(accounts::SIGN_IN_BUDGET.as_millis()).unwrap_or(u64::MAX)),
             }),
