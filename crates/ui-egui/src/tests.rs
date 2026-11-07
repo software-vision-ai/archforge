@@ -7311,35 +7311,37 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
 
 /// While the agent's program retries a provider it cannot reach, the turn says so with the attempt
 /// it reports, and Stop stays (AR-224); text from the provider takes the line away, and when the
-/// retries give up for a lost network the usual Connection lost card shows.
+/// retries give up for a lost network the usual Connection lost card shows. In both appearances.
 #[test]
 fn while_the_agent_retries_the_turn_says_so_with_the_attempt_and_stop_stays() {
     use crate::chat::{ChatEvent, FailureKind};
-    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
-    ask_in_chat(&mut h, "Explain how Payment relates to Order.");
-    assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
-    chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 1, max: Some(10) });
-    assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again, attempt 1 of 10…"), "{:?}", painted(&h));
-    chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 2, max: Some(10) });
-    assert!(painted_has(&h, "Trying again, attempt 2 of 10…") && !painted_has(&h, "attempt 1 of 10…"));
-    assert!(ids(&h).iter().any(|i| i == "workspace.chat.stop"), "Stop stays");
-    // Text from the provider: it got through, the line goes.
-    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is".into() });
-    assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
-    // Retrying again, then giving up: the usual card, the line gone.
-    chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 3, max: None });
-    assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again, attempt 3…"), "no most said: none shown");
-    chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
-    assert!(painted_has(&h, "Connection lost"));
-    assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
-    // Stop while it retries stops the turn.
-    ask_in_chat(&mut h, "And Invoice?");
-    chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 0, max: Some(10) });
-    assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again…"), "no attempt reported: none said");
-    let at = rect_of(&h, "workspace.chat.stop").center();
-    click(&mut h, at);
-    assert_eq!(chat_calls(&rig).2, 1, "Stop asks the program to stop");
-    assert!(!painted(&h).iter().any(|t| t.contains("Trying again")), "once Stop is asked, it no longer says it tries again");
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+        assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
+        chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 1, max: Some(10) });
+        assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again, attempt 1 of 10…"), "{theme:?}: {:?}", painted(&h));
+        chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 2, max: Some(10) });
+        assert!(painted_has(&h, "Trying again, attempt 2 of 10…") && !painted_has(&h, "attempt 1 of 10…"));
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.stop"), "{theme:?}: Stop stays");
+        // Text from the provider: it got through, the line goes.
+        chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is".into() });
+        assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
+        // Retrying again, then giving up: the usual card, the line gone.
+        chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 3, max: None });
+        assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again, attempt 3…"), "no most said: none shown");
+        chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
+        assert!(painted_has(&h, "Connection lost"));
+        assert!(!painted(&h).iter().any(|t| t.contains("Trying again")));
+        // Stop while it retries stops the turn.
+        ask_in_chat(&mut h, "And Invoice?");
+        chat_event(&mut h, &rig, ChatEvent::Retrying { attempt: 0, max: Some(10) });
+        assert!(painted_has(&h, "No answer from Claude's provider yet. Trying again…"), "no attempt reported: none said");
+        let at = rect_of(&h, "workspace.chat.stop").center();
+        click(&mut h, at);
+        assert_eq!(chat_calls(&rig).2, 1, "Stop asks the program to stop");
+        assert!(!painted(&h).iter().any(|t| t.contains("Trying again")), "once Stop is asked, it no longer says it tries again");
+    }
 }
 
 /// Turning Let Chat use the model off ends a conversation that runs (AR-221): its program ends, the
