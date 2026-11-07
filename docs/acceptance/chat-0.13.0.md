@@ -150,15 +150,22 @@ One full round trip per route. Each uses the project of P1.
 ### R4. Codex with ChatGPT, with a device code
 
 1. On the Codex card choose **No browser on this computer? Sign in with a device code.**
-   **Expect:** a code, *It runs out in 15 minutes.*, **Open sign-in page** and **Cancel**.
-2. The card does not show the sign-in page's address yet (a known bug, to be fixed separately).
-   Choose **Open sign-in page**: it opens the page in this computer's browser. Copy the address
-   from the browser's address bar to the second device, open it there and enter the code.
-   **Expect:** the address starts with `https://auth.openai.com/`; then *Signed in as* your email
-   and plan. Record the address's path (it holds no secret) in the notes.
-3. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4.
-4. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
+   **Expect:** a code with its copy icon, *It runs out in 15 minutes.*, and under the code the
+   sign-in page's address, starting with `https://auth.openai.com/`, with its own copy icon
+   (**Copy the address** when you point at it); then **Open sign-in page** and **Cancel**.
+2. Choose the address's copy icon and paste the address somewhere you can read it, or read it off
+   the card. **Expect:** the whole address, the same as the card shows; pointing at a cut-off
+   address shows it whole. Record its path (it holds no secret) in the notes.
+3. On the second device, open that address (type it, or send it there) and enter the code.
+   **Expect:** *Signed in as* your email and plan on the card.
+4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4.
+5. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
    card goes back to *Not signed in*; no error.
+
+An address off `https://auth.openai.com/` cannot be made to come from the real codex program, so
+the pass does not cover it; the app's test
+`the_device_code_card_shows_the_sign_in_address_to_select_and_copy` does (*Not an address
+Archforge opens*, nothing to copy).
 
 Sign in again (R3 or R4) before the failures.
 
