@@ -397,7 +397,9 @@ else KEYS_OK=0; echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; fix the stor
 
    ```sh
    ours
-   if [ "$(uname -s)" = Darwin ]; then
+   if [ "${KEYS_OK:-0}" != 1 ]; then
+     echo "SKIPPED: K2 did not read both real keys; fix that and read them again first"
+   elif [ "$(uname -s)" = Darwin ]; then
      ps -A -ww -E -o pid=,comm=,command= | grep -F -f "$WORK/keys" | awk '{print $1, $2}'
    else
      for p in /proc/[0-9]*; do
@@ -405,6 +407,9 @@ else KEYS_OK=0; echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; fix the stor
      done
    fi
    ```
+
+   *SKIPPED* is neither a pass nor a fail: this step and step 3 count only after both keys were
+   read.
 
    **Expect:** `ours` lists a `claude` line and an `archforge-cli mcp` line (the bridge), else the
    turn ended too soon: ask again. Then one key line, for that same `claude` process id (its key
