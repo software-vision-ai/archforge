@@ -302,6 +302,8 @@ str		Turn {n}	第 {n} 轮
 str		This conversation cannot be read: {why}	无法读取此对话：{why}
 str		The undo history ends when the project closes, so these changes can no longer be undone here.	撤销历史在项目关闭时结束，因此这些更改无法再在这里撤销。
 str		The model changed after this turn, so its changes can no longer be undone on their own.	此轮之后模型已更改，因此无法再单独撤销它的更改。
+str		The model changed during this turn, so its changes can no longer be undone on their own.	此轮期间模型已更改，因此无法再单独撤销它的更改。
+str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	撤销历史中已不再有此轮的更改，因此无法再在这里撤销。
 str		Interrupted: Archforge closed while this turn ran.	已中断：此轮运行时 Archforge 已关闭。
 str		Stopped.	已停止。
 str		Stopped. Nothing was changed.	已停止。没有更改任何内容。
@@ -309,6 +311,7 @@ str		The reply was shortened to fit.	回复已缩短以适应。
 str		Undo this turn’s changes	撤销此轮的更改
 str		Made in this turn, as one step of the project's undo history.	在此轮中完成，作为项目撤销历史中的一步。
 str		Taken back in one step of the project's undo history.	已在项目撤销历史的一步中撤回。
+str		Taken back in the project's undo history.	已在项目撤销历史中撤回。
 str		Not kept: the changes were not saved.	未保留：这些更改未保存。
 str		Nothing was changed.	没有更改任何内容。
 str		Send again	再次发送

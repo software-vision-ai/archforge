@@ -1406,7 +1406,9 @@ fn track_undo(shell: &mut Shell) {
 
 /// Why "Undo this turn's changes" cannot run on `turn` of the conversation labelled `origin` now,
 /// or none when it can: its changes must be the step on top of the project's undo history, made in
-/// this window, in one step. Empty when the changes are not applied (the card says so itself).
+/// this window, in one step. Empty when the changes are not applied (the card says so itself). The
+/// reason names what happened: the model changed during the turn (its changes are several steps),
+/// after it (the model is no longer at the turn's end), or the history no longer holds its step.
 pub fn undo_refusal(shell: &Shell, origin: Option<&str>, turn: &Turn) -> Option<String> {
     let change = turn.change.as_ref()?;
     if change.state != ChangeState::Applied {
@@ -1415,10 +1417,19 @@ pub fn undo_refusal(shell: &Shell, origin: Option<&str>, turn: &Turn) -> Option<
     let Some(span) = change.span else {
         return Some(tr("The undo history ends when the project closes, so these changes can no longer be undone here."));
     };
-    let on_top = shell.session.as_ref().is_some_and(|s| {
-        span.steps == 1 && s.revision() == span.after && s.undo_revision() == Some(span.before) && s.undo_origin() == origin && origin.is_some()
-    });
-    if on_top { None } else { Some(tr("The model changed after this turn, so its changes can no longer be undone on their own.")) }
+    let gone = || Some(tr("The undo history no longer holds this turn's changes, so they can no longer be undone here."));
+    let Some(s) = shell.session.as_ref() else { return gone() };
+    let at_end = s.revision() == span.after;
+    if span.steps == 1 && at_end && s.undo_revision() == Some(span.before) && origin.is_some() && s.undo_origin() == origin {
+        return None;
+    }
+    if span.steps > 1 {
+        Some(tr("The model changed during this turn, so its changes can no longer be undone on their own."))
+    } else if !at_end {
+        Some(tr("The model changed after this turn, so its changes can no longer be undone on their own."))
+    } else {
+        gone()
+    }
 }
 
 /// Undoes `turn`'s changes: the one step of the undo history they are, while it is on top.

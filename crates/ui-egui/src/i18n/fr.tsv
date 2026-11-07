@@ -302,6 +302,8 @@ str		Turn {n}	Tour {n}
 str		This conversation cannot be read: {why}	Cette conversation ne peut pas être lue : {why}
 str		The undo history ends when the project closes, so these changes can no longer be undone here.	L’historique d’annulation s’arrête à la fermeture du projet ; ces modifications ne peuvent donc plus être annulées ici.
 str		The model changed after this turn, so its changes can no longer be undone on their own.	Le modèle a changé après ce tour ; ses modifications ne peuvent donc plus être annulées seules.
+str		The model changed during this turn, so its changes can no longer be undone on their own.	Le modèle a changé pendant ce tour ; ses modifications ne peuvent donc plus être annulées seules.
+str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	L’historique d’annulation ne contient plus les modifications de ce tour ; elles ne peuvent donc plus être annulées ici.
 str		Interrupted: Archforge closed while this turn ran.	Interrompu : Archforge s’est fermé pendant ce tour.
 str		Stopped.	Arrêté.
 str		Stopped. Nothing was changed.	Arrêté. Rien n’a été modifié.
@@ -309,6 +311,7 @@ str		The reply was shortened to fit.	La réponse a été raccourcie pour tenir.
 str		Undo this turn’s changes	Annuler les modifications de ce tour
 str		Made in this turn, as one step of the project's undo history.	Faites pendant ce tour, en une seule étape de l’historique d’annulation du projet.
 str		Taken back in one step of the project's undo history.	Annulées en une seule étape de l’historique d’annulation du projet.
+str		Taken back in the project's undo history.	Annulées dans l’historique d’annulation du projet.
 str		Not kept: the changes were not saved.	Non conservées : les modifications n’ont pas été enregistrées.
 str		Nothing was changed.	Rien n’a été modifié.
 str		Send again	Renvoyer

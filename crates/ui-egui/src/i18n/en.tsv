@@ -301,6 +301,8 @@ str		Turn {n}	Turn {n}
 str		This conversation cannot be read: {why}	This conversation cannot be read: {why}
 str		The undo history ends when the project closes, so these changes can no longer be undone here.	The undo history ends when the project closes, so these changes can no longer be undone here.
 str		The model changed after this turn, so its changes can no longer be undone on their own.	The model changed after this turn, so its changes can no longer be undone on their own.
+str		The model changed during this turn, so its changes can no longer be undone on their own.	The model changed during this turn, so its changes can no longer be undone on their own.
+str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	The undo history no longer holds this turn's changes, so they can no longer be undone here.
 str		Interrupted: Archforge closed while this turn ran.	Interrupted: Archforge closed while this turn ran.
 str		Stopped.	Stopped.
 str		Stopped. Nothing was changed.	Stopped. Nothing was changed.
@@ -308,6 +310,7 @@ str		The reply was shortened to fit.	The reply was shortened to fit.
 str		Undo this turn’s changes	Undo this turn’s changes
 str		Made in this turn, as one step of the project's undo history.	Made in this turn, as one step of the project's undo history.
 str		Taken back in one step of the project's undo history.	Taken back in one step of the project's undo history.
+str		Taken back in the project's undo history.	Taken back in the project's undo history.
 str		Not kept: the changes were not saved.	Not kept: the changes were not saved.
 str		Nothing was changed.	Nothing was changed.
 str		Send again	Send again

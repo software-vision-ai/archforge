@@ -386,8 +386,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   change (the person's or another conversation's) lands while the turn runs: that ends the step,
   the turn's next change starts another, and the turn is several steps. Their card follows the
   turn's last tool row. Undo this turn's changes is offered while a turn of one step is on top of
-  the history; otherwise the card says why (the model was changed during or after the turn, or the
-  project was closed since). Undone, the card says so, and redo brings it back.
+  the history; otherwise the card says which (the model was changed during the turn, or after it,
+  the undo history no longer holds it, or the project was closed since). Undone, the card says so,
+  in one step only for a turn of one, and redo brings it back.
 - Stop keeps the reply so far, marked cut off ("Stopped. Nothing was changed.", or "Stopped." over
   the changes' card); a program that has not stopped within ten seconds is ended, and the turn
   with it. Send again runs a failed turn again in place, its question kept once and its chips sent

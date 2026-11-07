@@ -7912,6 +7912,64 @@ fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change(
     assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.3.undo"), "two steps apart: no undo of the turn as one");
 }
 
+/// The changes card says what truly happened: a turn the person changed the model during is
+/// refused as changed during it, not after; taken back step by step it was not one step, while a
+/// turn of one step undone from its card was.
+#[test]
+fn the_changes_card_says_during_and_one_step_only_when_true() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    let describe = |h: &mut Harness<'static, Shell>, name: &str, text: &str| {
+        let id = fx::element(h.state(), archforge_uml::CLASS, name).unwrap();
+        fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+        )
+        .unwrap();
+        h.run();
+    };
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    // The person's change during the turn: two steps, refused as changed during the turn.
+    ask_in_chat(&mut h, "Describe two classes");
+    describe(&mut h, "Customer", "A buyer");
+    let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+        .unwrap();
+    describe(&mut h, "Product", "A thing sold");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.1.undo"));
+    assert!(painted_has(&h, "The model changed during this turn, so its changes can no longer be undone on their own."), "{:?}", painted(&h));
+    assert!(!painted_has(&h, "The model changed after this turn, so its changes can no longer be undone on their own."));
+    // Taken back step by step, the person's change between too: not one step.
+    for _ in 0..3 {
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+    }
+    assert!(painted_has(&h, "2 changes undone"), "{:?}", painted(&h));
+    assert!(painted_has(&h, "Taken back in the project's undo history."), "{:?}", painted(&h));
+    assert!(!painted_has(&h, "Taken back in one step of the project's undo history."));
+    // Brought back step by step: applied again, and still refused as changed during the turn.
+    for _ in 0..3 {
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+    }
+    assert!(painted_has(&h, "The model changed during this turn, so its changes can no longer be undone on their own."), "{:?}", painted(&h));
+    // A turn of one step, undone from its card: one step.
+    ask_in_chat(&mut h, "Describe one more");
+    describe(&mut h, "Catalog", "Products together");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let at = rect_of(&h, "workspace.chat.turn.2.undo").center();
+    click(&mut h, at);
+    assert!(painted_has(&h, "Taken back in one step of the project's undo history."), "{:?}", painted(&h));
+}
+
 /// A turn's change that cleared the whole history, merged into the turn's step, is still the
 /// turn's: counted with the change before it, with nothing left to undo.
 #[test]
@@ -7960,6 +8018,11 @@ fn a_turns_change_that_clears_the_history_still_counts() {
     assert_eq!(changes.changes, 2, "both of the turn's changes");
     assert!(painted_has(&h, "2 changes to the model"), "{:?}", painted(&h));
     assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.1.undo"), "nothing left to undo");
+    assert!(
+        painted_has(&h, "The undo history no longer holds this turn's changes, so they can no longer be undone here."),
+        "the model did not change after the turn: its history went: {:?}",
+        painted(&h)
+    );
 }
 
 /// A failed attempt's cut reply does not mark the next attempt's: Send again starts the turn's

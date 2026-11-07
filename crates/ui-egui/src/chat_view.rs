@@ -692,7 +692,7 @@ fn ended_line(paint: &egui::Painter, p: &Palette, at: egui::Pos2, width: f32, wo
 
 /// The card of a turn's changes to the model (B4): how many, made as one step of the undo
 /// history unless another change came during the turn, and Undo this turn's changes while a turn
-/// of one step is on top; else why not.
+/// of one step is on top; else why not. Undone, it says one step only for a turn of one.
 #[allow(clippy::too_many_arguments)]
 fn changes_card(
     shell: &mut Shell,
@@ -712,7 +712,15 @@ fn changes_card(
             trn("{n} change to the model", "{n} changes to the model", n),
             refusal.clone().filter(|r| !r.is_empty()).unwrap_or_else(|| tr("Made in this turn, as one step of the project's undo history.")),
         ),
-        ChangeState::Undone => (trn("{n} change undone", "{n} changes undone", n), tr("Taken back in one step of the project's undo history.")),
+        // One step only when the turn was one: a turn of several, taken back step by step, was not.
+        ChangeState::Undone => (
+            trn("{n} change undone", "{n} changes undone", n),
+            if change.span.is_some_and(|s| s.steps == 1) {
+                tr("Taken back in one step of the project's undo history.")
+            } else {
+                tr("Taken back in the project's undo history.")
+            },
+        ),
         ChangeState::Discarded => (trn("{n} change to the model", "{n} changes to the model", n), tr("Not kept: the changes were not saved.")),
     };
     let inner = (width - 20.0).max(0.0);
