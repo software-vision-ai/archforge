@@ -40,10 +40,10 @@ The page has a card for each agent, then **Let Chat use the model**, **Check con
 **Send test message**. **Default agent**, at the top, is the agent a new conversation starts with.
 
 Opening the page sends nothing over the network. Archforge looked for the programs when it
-started. Your keys are read from the secure store the first time you open the page or the Chat
-panel, never when Archforge starts, so the system asks for access only once you use AI agents. Who
-Codex is signed in as is read once, the first time the page shows or a Codex conversation starts,
-by starting the codex program on your computer; it is never started just because Archforge did.
+started, asking each only for its version. Your keys are read from the secure store the first
+time you open the page or the Chat panel, never when Archforge starts, so the system asks for
+access only once you use AI agents. Who Codex is signed in as is read once, the first time the
+page shows or a Codex conversation starts, by starting the codex program on your computer.
 
 ### What you need
 
@@ -166,7 +166,8 @@ Codex's **Model** stays **The program's default**: the codex program chooses.
 Archforge keeps API keys in the system's secure store and nowhere else: never in the project, never
 in the preferences, never in a file of its own. A key reaches the agent's program only while Chat
 runs it: Claude's through the program's environment, Codex's through its input, never on a command
-line. A ChatGPT sign-in is kept by the codex program itself; Archforge never sees it.
+line. A ChatGPT sign-in is kept by the codex program itself; Archforge reads only who is signed
+in, never the sign-in's tokens.
 
 | System | API keys (Claude, Codex) | Codex's sign-in with ChatGPT |
 |---|---|---|
@@ -220,8 +221,8 @@ Click it, or reach it with Tab and press Enter, to open **Settings ▸ AI Agents
 
 ### Checking it works
 
-- **Check connection** is free and runs on your computer. It looks again for each program and its
-  version, and reads which API keys are saved, and sends nothing. The badge on each card sums up
+- **Check connection** is free and runs on your computer. It looks again for each program, asking
+  it only for its version, and reads which API keys are saved; Archforge sends nothing. The badge on each card sums up
   its agent, with Codex's sign-in as it was last read.
 - **Send test message** sends one message to the default agent's provider: *Reply with the single
   word OK.* It uses a little of your plan or API credit. It runs without access to your model, in a
@@ -255,6 +256,12 @@ refused counts as not ready.
 
 Shift Enter starts a new line. A question is at most 64 KiB.
 
+**A project made with Archforge 0.12 or earlier** is raised to a newer project format by the first
+question asked in it, as it then holds conversations. Archforge 0.12 and earlier cannot open it
+after that: they say the project is in a format they do not read. If someone still opens the
+project with an older Archforge, copy its `.archforge` folder first, or wait with Chat until they
+have moved on. Opening the project alone changes nothing.
+
 Your question is kept in the project first, then sent. A question that holds one of your saved API
 keys is neither sent nor kept: the panel says so and leaves it in the box for you to edit. So does a
 project that cannot be written.
@@ -280,9 +287,10 @@ description, and HTML shows as text.
 
 ### Read-only, or Allow changes
 
-**Allow changes to the model**, under the box, is off for every conversation, and every time one
-is opened again. While it is off, the agent can only read: Archforge refuses every change, undo and
-save it asks for.
+**Allow changes to the model**, under the box, is off for every new conversation, and every time
+one is opened again from **Conversations**, with one exception: choosing in the list the
+conversation already shown only goes back to it, and its switch stays as it was. While it is off,
+the agent can only read: Archforge refuses every change, undo and save it asks for.
 
 Turn it on, and the agent may change the model:
 
@@ -307,7 +315,8 @@ for Claude, OpenAI for Codex):
 - **your question**, as you typed it;
 - **the chips you kept**, as one line after the question, *[Context the person chose: …]*: each
   chip's name, kind and id;
-- **the conversation so far**: this conversation's earlier questions and replies;
+- **the conversation so far**: this conversation's earlier questions and replies, as the agent's
+  program kept them in Archforge's private folder on this computer (see below);
 - **what the agent reads in the model**, exactly as Archforge answers it: the elements it looks at
   with their names, descriptions, attributes and other details, the diagrams, the skills, and what
   is open and selected, with the project's name and its folder's location on your computer;
@@ -323,11 +332,17 @@ counted in a single line.
 Chat sends nothing else:
 
 - **No files from your computer.** The programs run with their own tools switched off (no shell,
-  no file reading, no web search), in an empty folder of their own. They reach only the open
+  no file reading, no web search), in a folder of their own. They reach only the open
   project's model, through Archforge.
 - **No other project's model**, and **no other conversation**: each conversation has its own
   folder.
 - **No saved API key in a question**: a question that holds one is neither sent nor kept.
+
+The conversation so far comes from the program's own copy in Archforge's private settings folder,
+not from the project. Open the project on another computer, or after that copy is gone, and the
+panel still shows the earlier messages, but the agent does not get them: Codex answers without
+them, and Claude cannot pick the conversation up, so the question ends with *No answer*. Start a
+new conversation there, and repeat what the agent needs to know.
 - **Nothing for the programs' own use**: Archforge switches off Claude's updates, telemetry and
   error reports, and Codex's analytics.
 
@@ -365,11 +380,14 @@ ran.*
 
 **Conversations** (the clock at the top of the panel) lists the project's conversations, newest
 first, with when, the agent and how many messages. Click one to open it again, read-only until you
-allow changes. **New conversation** (+) starts another.
+allow changes (the conversation already shown keeps its switch, see
+[Read-only, or Allow changes](#read-only-or-allow-changes)). **New conversation** (+) starts
+another.
 
 <!-- picture: workspace-chat-history light | The project's conversations, newest first, saved with the project -->
 
-Conversations are kept in the project: they travel with it and never show in another project.
+Conversations are kept in the project: they travel with it and its copies, and never show in a
+different project.
 A conversation is kept as you go, without a save; the changes the agent made to the model are not:
 save them as your own (⌘S), or **Don't save** drops them and their card says *Not kept: the changes
 were not saved.* Anyone you give a copy of the project can read them. Leaving the project's tab
@@ -402,9 +420,17 @@ or brings back a conversation: it stays the model's undo.
 <!-- picture: workspace-chat-deleted light | The conversation deleted: the list without it, and the note with Undo -->
 
 When the note has gone (or the project closes, or Archforge quits), the agent program's own working
-files for that conversation are removed from your computer. If a copy of the project open beside
-it asks that conversation something in those few seconds, the answer is *No answer*; its files are
-then kept, and **Send again** a moment later goes through. When the project's conversations
+files for that conversation are removed from your computer, with these exceptions, each said in
+Archforge's log:
+
+- a copy of the project open beside it still shows that conversation;
+- that copy asks the conversation something in those few seconds: the answer is *No answer*, and
+  **Send again** a moment later goes through;
+- the program did not end in time, the project did not answer, Archforge was closing, or the
+  removal failed.
+
+Then the files stay in the `agents` folder of Archforge's private settings folder, as a
+`conversation-…` folder, until you remove it; nothing removes it later. When the project's conversations
 cannot be changed (for example because one of its tables is damaged), the bin and the menu item
 are greyed out and say why.
 

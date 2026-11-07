@@ -43,11 +43,19 @@ wait_quit() {   # after you quit Archforge: waits up to 30 s for its process to 
   for i in $(seq 1 30); do pgrep -x archforge > /dev/null || { echo "Archforge has quit"; return 0; }; sleep 1; done
   echo "STILL RUNNING after 30 s: wait, then run wait_quit again"; return 1
 }
+ours() {   # Archforge's agent programs and their bridges: their command lines name its settings folder
+  ps -A -ww -o pid=,command= | grep -F -- "$SETTINGS/" | grep -v -F -- 'grep -F' | cut -c1-160
+}
 ```
 
 Quitting is not instant: Archforge first ends the agent programs and the project's database
 server. Wherever a step quits Archforge, run `wait_quit` and go on only after *Archforge has
 quit*.
+
+`ours` lists only the programs Archforge started for Chat, never your own `claude` or `codex`
+sessions: a `claude` (or `node …claude…`) line whose `--mcp-config` lies in the settings folder, a
+`codex app-server` line, and an `archforge-cli mcp` line for each bridge. A `dolt` line, if any, is
+the project's database server. Their command lines hold no key.
 
 Record the versions under test:
 
@@ -182,8 +190,9 @@ This shows Check connection needs no network; it does not by itself prove that n
 
 ### F1. A revoked key
 
-1. Make a second Anthropic key. Save it on the Claude card (**Replace**). Choose **Send test
-   message**. **Expect:** answered.
+1. Make a second Anthropic key. Save it on the Claude card (**Replace**). Set **Default agent**
+   to Claude (R2 left Codex there): the test message goes to the default agent only. Choose
+   **Send test message**. **Expect:** *Claude answered the test message*.
 2. Revoke that key in the Anthropic account.
 3. Choose **Send test message**. **Expect:** *The test message to Claude failed: The provider
    refused the key (…)*, and the key field says *The provider refused this key when the test
@@ -192,8 +201,8 @@ This shows Check connection needs no network; it does not by itself prove that n
    the card *Key refused* with **Open Settings**. A new conversation would show *No agent set up
    yet* instead, as the refused key counts as not ready.
 5. Choose **Open Settings**, **Replace** the key with the valid one, ask again. **Expect:** a reply.
-6. Repeat 1 to 5 for Codex with an OpenAI key (Codex on **API key**). **Expect:** the same, for
-   Codex.
+6. Repeat 1 to 5 for Codex with an OpenAI key (Codex on **API key**), with **Default agent** set
+   to Codex and R2's Codex conversation. **Expect:** the same, for Codex.
 
 ### F2. An expired sign-in
 
@@ -214,7 +223,7 @@ step 2 then. Record what the card says in either case: *Key refused* or *No answ
 
 ### F3. Network off
 
-1. Turn the network off. Ask a Claude question. **Expect:** the reply waits (Claude retries for
+1. Turn the network off. Ask a question in R1's Claude conversation (from **Conversations**). **Expect:** the reply waits (Claude retries for
    about three minutes), then *Connection lost*: *The network went away before Claude answered.
    Your message is back in the box below, ready to send again.* The question is in the box.
 2. Turn the network on. Choose **Send again**. **Expect:** the question is sent once; the
@@ -224,7 +233,7 @@ step 2 then. Record what the card says in either case: *Key refused* or *No answ
 4. Ask a long question. While the reply streams, turn the network off. **Expect:** *Connection
    lost*, *The network went away while Claude was answering.*, the reply so far kept. Turn the
    network on and choose **Send again**. **Expect:** a reply; the question shows once.
-5. Repeat 1 to 4 with Codex. **Expect:** the same cards, naming Codex.
+5. Repeat 1 to 4 in R2's Codex conversation. **Expect:** the same cards, naming Codex.
 6. With the network off, choose **Send test message**. **Expect:** *The test message to … failed:*
    with a reason; nothing else changes.
 
@@ -286,6 +295,40 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 3. Sign Codex in with ChatGPT. **Expect:** signed in; the card says the codex program keeps the
    sign-in in its own files; R3 step 5 finds `auth.json`.
 
+### F6. Let Chat use the model turned off
+
+1. With Claude the default agent, open a started conversation (R1's, from **Conversations**) and
+   ask a long question. While the reply runs, run `ours`. **Expect:** a `claude` line and an
+   `archforge-cli mcp` line.
+2. Open **Settings ▸ AI Agents**, turn **Let Chat use the model** off, and close Settings.
+   **Expect:** the reply so far stays, marked as stopped; the status bar says *Agent access off*.
+   Check that the programs ended:
+
+   ```sh
+   agents() { ours | grep -v -E '(^| |/)dolt( |$)'; }
+   for i in $(seq 1 15); do [ -z "$(agents)" ] && break; sleep 1; done
+   agents || echo "no agent program runs"
+   ```
+
+   **Expect:** *no agent program runs*.
+3. Type a question and press Enter. **Expect:** the question stays in the box, and the panel says
+   *Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.* Run
+   `agents || echo "no agent program runs"` again. **Expect:** *no agent program runs*: nothing
+   was started, so nothing was sent.
+4. Open another conversation from **Conversations** and press Enter on a question there.
+   **Expect:** the same line, and still *no agent program runs*.
+5. Start a new conversation (**New conversation**, +). **Expect:** *No agent set up yet*, with
+   **Configure agent**.
+6. Turn **Let Chat use the model** on again and go back to the conversation of step 4.
+   **Expect:** the line has gone. Press Enter. **Expect:** the question is sent once and answered;
+   `ours` lists the program again.
+7. The *Not sent* card shows only when the switch goes off while a question is still being kept,
+   before it is sent: a moment too short to reach by hand, as the switch is in Settings. Record
+   *not reached*. The app's tests cover it:
+   `a_question_being_kept_when_model_use_goes_off_is_not_sent_and_goes_back_to_the_box` (the card,
+   the question back in the box, and sent once the switch is on) and
+   `a_question_not_sent_while_the_box_holds_other_text_can_be_sent_again` (**Send again**).
+
 ### W1. Windows (Windows only)
 
 Open **Settings ▸ AI Agents**. **Expect:** *Not available on this system yet* and *AI Agents work
@@ -333,8 +376,8 @@ With the real keys saved (as after R1 and R2), put them in a file without showin
     *) { secret-tool lookup service Archforge username anthropic-api-key; echo
          secret-tool lookup service Archforge username openai-api-key; echo; } ;;
   esac | grep . > "$WORK/keys" )
-wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they are
-[ -s "$WORK/keys" ] || echo "NO KEYS READ: the searches for the real keys would prove nothing"
+if [ "$(wc -l < "$WORK/keys")" -eq 2 ]; then echo "both keys read"
+else echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; the searches for the real keys would prove nothing"; fi
 ```
 
 1. Make Claude the default agent, and start a new conversation (**New conversation**, +). Turn
@@ -345,7 +388,7 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    and program only):
 
    ```sh
-   for n in claude codex archforge-cli; do pgrep -f "$n" > /dev/null && echo "$n running" || echo "$n NOT running"; done
+   ours
    if [ "$(uname -s)" = Darwin ]; then
      ps -A -ww -E -o pid=,comm=,command= | grep -F -f "$WORK/keys" | awk '{print $1, $2}'
    else
@@ -355,14 +398,14 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    fi
    ```
 
-   **Expect:** *claude running* and *archforge-cli running* (the bridge), else the turn ended
-   too soon: ask again. Then one line: the Claude program (its key is in its environment, by
-   design). An npm
-   install runs it through Node.js, so it may show as `node`; check its id with `ps -p <id> -o
-   command= | cut -c1-120` (the command line holds no key). Never `archforge-cli`, `archforge` or
-   any other.
-3. Repeat step 2 with Codex on **API key**. **Expect:** *codex running* and *archforge-cli
-   running*, then no line: the key goes over the program's input. Step 2's line for Claude shows
+   **Expect:** `ours` lists a `claude` line and an `archforge-cli mcp` line (the bridge), else the
+   turn ended too soon: ask again. Then one key line, for that same `claude` process id (its key
+   is in its environment, by design); an npm install runs it through Node.js, so its program may
+   show as `node`. Never an `archforge-cli` or `archforge` id. A key line for a process `ours` does
+   not list is a program of your own holding the same key: note it, it is outside the pass.
+3. Repeat step 2 with Codex on **API key**. **Expect:** `ours` lists a `codex app-server` line and
+   an `archforge-cli mcp` line, then no key line for either: the key goes over the program's
+   input. Step 2's line for Claude shows
    that the search finds a key where one is.
 4. With Codex the default agent and still on **API key**, start a new conversation and paste the
    first question K1 printed, the one ending in `$MARKER_CODEX_KEY`'s value, whole and unchanged.
@@ -377,6 +420,8 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 ### K3. Send the canaries everywhere they can go
 
 1. Save `$CANARY_CLAUDE` as Claude's key and `$CANARY_CODEX` as Codex's (Codex on **API key**).
+   Then quit Archforge, run `wait_quit`, and start it again, so that no program started with a
+   real key is still running: every program from here on starts with a canary.
 2. Choose **Send test message** with each as the default agent. **Expect:** each fails, the
    provider refusing the key.
 3. Ask a question with each in an existing conversation of that agent (from **Conversations**).
@@ -407,7 +452,9 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    fi
    ```
 
-   **Expect:** *gone:* and the path. Only *STILL THERE after 30 s* is a fail. The conversations of K2 steps 1 and 4 stay, for K4.
+   **Expect:** *gone:* and the path. Only *STILL THERE after 30 s* is a fail; the log then says
+   why it was kept (`grep -h 'is kept' "$SETTINGS"/logs/archforge.log*`), which goes in the
+   notes. The conversations of K2 steps 1 and 4 stay, for K4.
 6. Select the diagram, open **Generate…** (⇧⌘G) and choose **Copy request**. Keep what it
    copied (it holds no key, only the request), before Archforge quits and the clipboard may go
    with it:
@@ -475,9 +522,10 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
 
    ```sh
    cp -R "$PROJECT" "$WORK/project-copy.archforge"
-   export DOLT_ROOT_PATH="$WORK/dolt-home"; mkdir -p "$DOLT_ROOT_PATH"   # leaves your ~/.dolt alone
+   mkdir -p "$WORK/dolt-home"
    dump() {   # every table and every saved version of it; stops at the first query that fails
-     ( cd "$WORK/project-copy.archforge/project" || exit 1
+     ( export DOLT_ROOT_PATH="$WORK/dolt-home"   # in this subshell only: leaves your ~/.dolt alone
+       cd "$WORK/project-copy.archforge/project" || exit 1
        dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$WORK/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
        tail -n +2 "$WORK/tables.csv" > "$WORK/tables"
        [ -s "$WORK/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
@@ -505,7 +553,7 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    directly, in the conversation list now and in the saved versions:
 
    ```sh
-   ( cd "$WORK/project-copy.archforge/project" || exit 1
+   ( export DOLT_ROOT_PATH="$WORK/dolt-home"; cd "$WORK/project-copy.archforge/project" || exit 1
      for t in chat_message dolt_history_chat_message; do
        printf '%s: ' "$t"
        if dolt sql -r csv -q "SELECT COUNT(*) FROM \`$t\` WHERE body LIKE '%$MARKER_DELETED%'" < /dev/null > "$WORK/count"
@@ -599,6 +647,7 @@ key files the searches read.
 | F3 | Network off (Claude, Codex) | | |
 | F4 | A program removed (claude, codex) | | |
 | F5 | Linux without a secure store | | |
+| F6 | Let Chat use the model turned off | | |
 | W1 | Windows | | |
 | K2 | The real keys: command lines and environments | | |
 | K3 | The canaries sent | | |
