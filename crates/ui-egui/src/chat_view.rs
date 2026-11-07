@@ -800,8 +800,8 @@ fn changes_card(
 }
 
 /// A failed turn's card: rate limited and the time it can send again, the connection lost and the
-/// question back in the composer, no answer (amber, Send again), or what Settings must fix (danger,
-/// Open Settings). Gives its height.
+/// question back in the composer, a question not sent as Let Chat use the model went off, no answer
+/// (amber, Send again), or what Settings must fix (danger, Open Settings). Gives its height.
 #[allow(clippy::too_many_arguments)]
 fn failure_card(
     shell: &mut Shell,
@@ -891,6 +891,15 @@ fn failure_card(
         FailureKind::SignInExpired => {
             settings = true;
             (true, tr("Sign-in expired"), fmt(&tr("{agent}'s sign-in has expired. Sign in again in Settings, then send again."), &[("agent", agent)]))
+        }
+        // Let Chat use the model went off while its question was being kept (AR-221).
+        FailureKind::Other if turn.unsent => {
+            let body = if turn.returned {
+                tr("Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.")
+            } else {
+                tr("Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.")
+            };
+            (false, tr("Not sent"), body)
         }
         FailureKind::Other => (false, tr("No answer"), format!("{}{nothing}", fmt(&tr("{agent} stopped before answering."), &[("agent", agent)]))),
     };
