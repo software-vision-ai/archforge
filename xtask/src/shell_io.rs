@@ -335,6 +335,7 @@ pub fn scan(dir: &Path) -> Result<Vec<String>, String> {
 mod tests {
     use super::*;
 
+    /// Written-out paths and socket types are found, each with its line.
     #[test]
     fn written_out_paths_and_socket_types_are_found_with_their_lines() {
         let source = "fn a() {\n    let _ = std::process::Command::new(\"ls\");\n}\nfn b(s: TcpStream) {}\nuse std :: net :: SocketAddr;\nuse std::os::unix::net::UnixStream as U;\n";
@@ -350,6 +351,7 @@ mod tests {
         );
     }
 
+    /// Grouped imports are expanded to their full paths.
     #[test]
     fn grouped_imports_are_expanded() {
         assert_eq!(findings("use std::{io, net::Ipv4Addr};"), vec!["line 1: std::net::Ipv4Addr"]);
@@ -359,6 +361,7 @@ mod tests {
         assert_eq!(findings("use std::process::*;"), vec!["line 1: std::process"]);
     }
 
+    /// Strings, characters and comments never count, and lifetimes do not throw the blanking off.
     #[test]
     fn strings_characters_and_comments_are_blanked_and_lifetimes_kept() {
         let source = r##"
@@ -378,6 +381,7 @@ mod tests {
         assert_eq!(findings("let br = 1; let r = br; std::process::exit(0)"), vec!["line 1: std::process::exit"]);
     }
 
+    /// An escaped quote ends its character literal where it should, and a renamed std is a finding.
     #[test]
     fn an_escaped_quote_ends_its_character_and_a_renamed_std_is_found() {
         // Read short, the escaped quote would leave a stray quote that opens a string swallowing the
@@ -388,6 +392,7 @@ mod tests {
         assert_eq!(findings("extern crate std as x;"), vec!["line 1: std renamed, which hides its paths from this check"]);
     }
 
+    /// A damaged file never hangs the scan, and what it cannot follow is a finding.
     #[test]
     fn a_damaged_file_never_hangs_the_scan_and_fails_closed() {
         let deep = format!("use std::{}", "{a::".repeat(10_000));
@@ -398,6 +403,7 @@ mod tests {
         let _ = findings("/* never closed");
     }
 
+    /// The process and network crates are known, the shell's own are not among them.
     #[test]
     fn process_and_network_crates_are_known() {
         for name in ["tokio", "reqwest", "libc", "rustix", "socket2", "mio", "nix"] {
@@ -408,6 +414,7 @@ mod tests {
         }
     }
 
+    /// The shell as it stands holds no process or network code.
     #[test]
     fn the_shell_holds_no_process_or_network_code() {
         let shell = crate::util::root().join("crates").join(crate::layers::SHELL).join("src");

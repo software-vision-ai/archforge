@@ -13687,6 +13687,7 @@ fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
     }
 }
 
+/// Launching looks for the programs alone; opening AI Agents reads the keys and Codex's account once and sends nothing.
 #[test]
 fn opening_ai_agents_reads_the_keys_once_and_sends_nothing() {
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
@@ -14117,6 +14118,7 @@ fn chat_workspace(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 
 /// The fill colours of the filled circles drawn in the last frame.
 fn painted_dots(h: &Harness<'static, Shell>) -> Vec<egui::Color32> {
+    /// Collects the fill of every filled circle under `s`.
     fn walk(s: &egui::Shape, out: &mut Vec<egui::Color32>) {
         match s {
             egui::Shape::Circle(c) => out.push(c.fill),
@@ -14149,6 +14151,7 @@ fn chat_start(n: u64, provider: crate::ai_agents::Provider) -> crate::chat::Chat
     }
 }
 
+/// The status bar's Agent item: one state at a time, a real control that opens Settings on AI Agents by click or by Tab and Enter.
 #[test]
 fn the_status_bar_says_whether_chat_holds_agent_access_and_opens_ai_agents() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -14196,6 +14199,7 @@ fn the_status_bar_says_whether_chat_holds_agent_access_and_opens_ai_agents() {
     }
 }
 
+/// A conversation's id, duplicate and the 64 kept are checked in the shell; its events are kept in order within the cap, the end never dropped.
 #[test]
 fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in_order() {
     use crate::ai_agents::Provider;
@@ -14253,6 +14257,7 @@ fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in
     assert!(crate::chat::start(h.state_mut(), chat_start(100, Provider::Claude)).is_ok());
 }
 
+/// Waiting events are capped by their bytes in the shell and on the host's ticket.
 #[test]
 fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     use crate::ai_agents::Provider;
@@ -14280,6 +14285,7 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
+/// Let Chat use the model is told to the host when it changes, off in the frame of the click.
 #[test]
 fn the_opt_in_is_told_to_the_host_and_turning_it_off_is_told_in_the_same_frame() {
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});

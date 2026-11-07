@@ -154,6 +154,7 @@ pub struct Agents {
     inner: Arc<Inner>,
 }
 
+/// The system's secure store, opened as `archforge_secrets` opens it.
 fn open_system_store() -> Opened {
     KeyringStore::open().map(|s| Box::new(s) as Box<dyn SecretStore>)
 }
@@ -260,6 +261,7 @@ fn store_kind(store: &Opened) -> Store {
     }
 }
 
+/// The name `provider`'s API key is kept under in the secure store.
 fn secret_name(p: Provider) -> SecretName {
     match p {
         Provider::Claude => SecretName::ANTHROPIC_API_KEY,
@@ -267,6 +269,7 @@ fn secret_name(p: Provider) -> SecretName {
     }
 }
 
+/// The runtime that drives `provider`.
 fn kind(p: Provider) -> RuntimeKind {
     match p {
         Provider::Claude => RuntimeKind::Claude,

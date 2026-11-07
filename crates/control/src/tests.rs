@@ -272,6 +272,7 @@ fn listens(port: u16) -> bool {
     TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)), Duration::from_millis(300)).is_ok()
 }
 
+/// Each grant has its own private file and role; revoking one answers its held connection and its waiting request, removes its file and leaves the others.
 #[cfg(unix)]
 #[test]
 fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
@@ -318,6 +319,7 @@ fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Closing an opening revokes its grants, answers a held connection "revoked", removes the files and stops listening, within a bounded time.
 #[cfg(unix)]
 #[test]
 fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_listening() {
@@ -343,6 +345,7 @@ fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_liste
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A token file is never created over another, and removed only while its name holds the very file written.
 #[cfg(unix)]
 #[test]
 fn a_token_file_is_never_made_over_another_and_removed_only_while_it_is_the_same_file() {

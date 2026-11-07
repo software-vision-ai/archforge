@@ -172,6 +172,7 @@ pub fn write_token(path: &Path, token: &str) -> Result<FileId, String> {
     }
 }
 
+/// Refused on this platform: agent access is Unix only for now.
 #[cfg(not(unix))]
 pub fn write_token(_path: &Path, _token: &str) -> Result<FileId, String> {
     Err(NOT_HERE.to_string())
@@ -679,6 +680,7 @@ fn create_token_file(path: &Path, token: &str) -> Result<FileId, Created> {
     }
 }
 
+/// Refused on this platform: agent access is Unix only for now.
 #[cfg(not(unix))]
 fn create_token_file(_path: &Path, _token: &str) -> Result<FileId, Created> {
     Err(Created::Failed(NOT_HERE.to_string()))
@@ -701,6 +703,7 @@ pub fn remove_token_file(path: &Path, id: FileId) {
     }
 }
 
+/// Nothing to remove on this platform: no token file is made.
 #[cfg(not(unix))]
 pub fn remove_token_file(_path: &Path, _id: FileId) {}
 

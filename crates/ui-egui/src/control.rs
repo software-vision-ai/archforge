@@ -443,6 +443,7 @@ mod tests {
         }
     }
 
+    /// Every method has one class, and `READS` lists exactly those that read.
     #[test]
     fn every_method_is_classified_exactly_once() {
         for (method, _) in METHODS {
@@ -453,6 +454,7 @@ mod tests {
         assert_eq!(reads, READS.to_vec(), "READS lists exactly the methods that read");
     }
 
+    /// Through execute and batch, a command reads exactly when the engine calls it a query; the batch cap comes first.
     #[test]
     fn a_command_reads_exactly_when_the_engine_calls_it_a_query() {
         let shell = project();
@@ -476,6 +478,7 @@ mod tests {
         assert!(only_reads(&shell, "engine.batch", &long).unwrap_err().contains("1 to 256"));
     }
 
+    /// A read-only token's reads are answered and its changes refused unrun; a revoked token runs nothing; one that may change writes with its origin.
     #[test]
     fn a_read_only_token_reads_and_every_change_is_refused_unrun() {
         let mut shell = project();

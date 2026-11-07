@@ -219,6 +219,7 @@ mod tests {
         assert!(v.contains("stray is missing"), "{v}");
     }
 
+    /// A process or network crate is refused as the shell's dependency of any kind; a host service may use one.
     #[test]
     fn the_shell_may_not_depend_on_a_process_or_network_crate() {
         let packages = vec![pkg("ui-egui", Some(Class::Layer(9)), &[("egui", "normal"), ("tokio", "normal"), ("socket2", "dev")])];

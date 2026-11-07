@@ -632,6 +632,7 @@ fn look_programs(shell: &mut crate::Shell) {
     }
 }
 
+/// Starts a read of the keys from the secure store, unless one runs already.
 fn read_keys(shell: &mut crate::Shell) {
     let Some(host) = host(shell) else { return };
     if shell.agents.keys_reading.is_none() {
@@ -737,6 +738,7 @@ pub fn sign_out(shell: &mut crate::Shell) {
     shell.agents.logout = Some(accounts.codex_logout());
 }
 
+/// Starts reading Codex's account once the look found the program, unless a read runs already.
 fn read_account(shell: &mut crate::Shell) {
     if shell.agents.reading.is_some() || !shell.agents.look.codex.found() {
         return;
@@ -1093,6 +1095,7 @@ pub mod fake {
             let look = lock(&self.look);
             answered(Look { claude: look.claude.clone(), codex: look.codex.clone(), ..Look::default() })
         }
+        /// The keys as the look holds them, answered at once or held until released.
         fn read_keys(&self) -> Receiver<Keys> {
             self.calls.keys.fetch_add(1, Ordering::Relaxed);
             let look = lock(&self.look);
@@ -1125,13 +1128,16 @@ pub mod fake {
             *lock(&self.look).key_mut(provider) = Key::Absent;
             answered(Ok(Key::Absent))
         }
+        /// Keeps the shell's sink, so the fake can emit events.
         fn connect(&self, sink: crate::chat::EventSink) {
             self.calls.connect.fetch_add(1, Ordering::Relaxed);
             *lock(&self.sink) = Some(sink);
         }
+        /// Records the opt-in as told.
         fn set_model_access(&self, on: bool) {
             lock(&self.model_access).push(on);
         }
+        /// Starts a conversation as the host does: a bad id, one running, or past the cap refused.
         fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.start.fetch_add(1, Ordering::Relaxed);
             crate::chat::check_id(&request.chat)?;
@@ -1146,14 +1152,17 @@ pub mod fake {
             lock(&self.started).push(request);
             Ok(())
         }
+        /// Takes a message for a running conversation.
         fn send(&self, chat: &str, _text: String) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.send.fetch_add(1, Ordering::Relaxed);
             self.known(chat)
         }
+        /// Takes a stop for a running conversation.
         fn stop(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.stop.fetch_add(1, Ordering::Relaxed);
             self.known(chat)
         }
+        /// Ends a running conversation and says so on the sink.
         fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.end.fetch_add(1, Ordering::Relaxed);
             self.known(chat)?;
