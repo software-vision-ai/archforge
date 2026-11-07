@@ -614,9 +614,9 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     assert!(listens(port), "the writer still holds access");
 }
 
-/// A conversation asked to end gives its token back at once, before its program has shut down
-/// (AR-228): a call with it while the program still ends, here a change from a conversation that
-/// allowed changes, is refused and changes nothing.
+/// A conversation asked to end gives its token back once its thread takes the end (within TICK),
+/// before its program has shut down (AR-228): a call with it while the program still ends, here a
+/// change from a conversation that allowed changes, is refused and changes nothing.
 #[test]
 fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
     // The program says when its input closed, that is when it was asked to end, then takes most of

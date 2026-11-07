@@ -7650,7 +7650,9 @@ fn requests_in_the_name_of_a_conversation_whose_program_ends_are_refused() {
         click(&mut h, at);
         assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.session), Some(crate::chat_panel::Session::Ending), "{theme:?}");
         ask_in_chat(&mut h, "And Product?");
-        assert!(h.state().chat_panel.chat.as_ref().unwrap().busy(), "{theme:?}: the new turn waits for the end");
+        let chat = h.state().chat_panel.chat.as_ref().unwrap();
+        assert!(chat.queued.is_some(), "{theme:?}: the new question waits for the end");
+        assert_eq!(chat.turns.last().map(|t| t.state.clone()), Some(crate::chat_panel::TurnState::Running), "{theme:?}: as a running turn");
         let change = json!({ "command": "uml.class.set", "params": {} });
         let refused = crate::chat_panel::gate(h.state(), Some(&origin), "engine.execute", &change);
         assert!(refused.is_err(), "{theme:?}: refused while its program ends: {refused:?}");
