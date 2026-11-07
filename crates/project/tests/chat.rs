@@ -530,6 +530,9 @@ fn commits(p: &Project) -> Vec<(String, String, String)> {
     sql(p).query("SELECT commit_hash, message, committer FROM dolt_log ORDER BY commit_order DESC").unwrap()
 }
 
+/// A deletion is exactly one chat-only commit that leaves the model's unsaved change alone; its
+/// rows are gone and still in the commit before; Undo writes every row of every chat table back
+/// in one more chat-only commit (AR-217).
 #[test]
 fn a_deletion_is_one_chat_only_commit_the_rows_stay_in_history_and_undo_brings_every_row_back() {
     let env = Env::new("delete-restore");
@@ -575,6 +578,8 @@ fn a_deletion_is_one_chat_only_commit_the_rows_stay_in_history_and_undo_brings_e
     p.close().unwrap();
 }
 
+/// What of the conversations waits is committed first ("Conversations kept"), so the commit before
+/// a deletion holds the conversation whole, its running turn's question too (AR-217).
 #[test]
 fn what_waits_is_kept_first_so_the_commit_before_a_deletion_holds_the_conversation_whole() {
     let env = Env::new("delete-pending");
@@ -650,6 +655,9 @@ fn a_turn_deleted_while_running_comes_back_interrupted() {
     p.close().unwrap();
 }
 
+/// Bringing a conversation back is refused, with nothing written, for a text that is not a commit,
+/// a commit the project does not have, one that does not hold it, its label taken since, and once
+/// it is listed again (AR-217).
 #[test]
 fn bringing_a_conversation_back_is_refused_when_listed_forged_its_label_taken_or_the_commit_lacks_it() {
     let env = Env::new("restore-refused");
