@@ -7339,6 +7339,7 @@ fn while_the_agent_retries_the_turn_says_so_with_the_attempt_and_stop_stays() {
     let at = rect_of(&h, "workspace.chat.stop").center();
     click(&mut h, at);
     assert_eq!(chat_calls(&rig).2, 1, "Stop asks the program to stop");
+    assert!(!painted(&h).iter().any(|t| t.contains("Trying again")), "once Stop is asked, it no longer says it tries again");
 }
 
 /// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.

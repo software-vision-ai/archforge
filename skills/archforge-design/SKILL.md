@@ -397,7 +397,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   again; a turn that changed the model is not sent again. After a lost connection before any
   answer the question goes back to the composer when that is empty, its bubble hidden, and Send
   again sends what the composer holds; otherwise it stays in its bubble.
-- A running turn whose program reports it retries the provider shows, under the agent's name, an
+- A running turn whose program reports it retries the provider shows, at the end of the turn, an
   amber look-again icon and "No answer from {agent}'s provider yet. Trying again, attempt {n} of
   {max}…" (the attempt and the most only as far as the program says them), with Stop as ever; any
   text, tool call or end from the provider takes it away (AR-224, decided by UX).

@@ -636,8 +636,9 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
                 let retry_now = n == last && crate::chat_panel::retryable(turn, now);
                 y += failure_card(shell, &clip, p, pos2(left, y), width, turn, f, provider, &model_now, retry_now, n == last, now, acts);
             }
-            // The agent's program retries the provider (AR-224): said, with Stop still there.
-            TurnState::Running if turn.retrying.is_some() => {
+            // The agent's program retries the provider (AR-224): said, with Stop still there; once
+            // Stop is asked, it no longer says it tries again.
+            TurnState::Running if turn.retrying.is_some() && !turn.stopping => {
                 y += ENTRY_GAP;
                 y += retry_line(&paint, p, pos2(left, y), width, speaker, turn.retrying);
             }

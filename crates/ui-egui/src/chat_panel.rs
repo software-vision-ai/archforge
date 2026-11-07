@@ -706,6 +706,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                 t.returned = false;
                 t.stopping = false;
                 t.stopping_since = None;
+                t.retrying = None;
                 t.cut = false;
                 t.streaming = None;
                 t.laid = None;
@@ -800,7 +801,8 @@ fn deliver(shell: &mut Shell, text: String) {
 }
 
 /// Ends the running turn of `chat` as `state`: the reply so far is kept (cut off unless it
-/// completed), the turn's changes are taken from its undo group, and the turn is written.
+/// completed), the turn's changes are taken from its undo group, a retry it showed is over, and the
+/// turn is written.
 pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::Session>, out: &Out, state: TurnState) -> bool {
     let origin = chat.origin.clone().unwrap_or_default();
     let Some(turn) = chat.turns.last_mut().filter(|t| t.state == TurnState::Running) else { return false };
@@ -848,6 +850,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
     turn.state = state;
     turn.stopping = false;
     turn.stopping_since = None;
+    turn.retrying = None;
     let turn_id = turn.id;
     if let Some((text, complete, shortened)) = reply
         && let Some(id) = out.id()
