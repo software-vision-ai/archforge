@@ -7311,7 +7311,7 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
 
 /// While the agent's program retries a provider it cannot reach, the turn says so with the attempt
 /// it reports, and Stop stays (AR-224); text from the provider takes the line away, and when the
-/// retries give up the usual Connection lost card shows.
+/// retries give up for a lost network the usual Connection lost card shows.
 #[test]
 fn while_the_agent_retries_the_turn_says_so_with_the_attempt_and_stop_stays() {
     use crate::chat::{ChatEvent, FailureKind};
