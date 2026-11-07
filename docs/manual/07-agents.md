@@ -255,9 +255,11 @@ Opening the page sends nothing over the network. Archforge looked for the progra
 started; your keys are read from the secure store the first time you open the page, never when
 Archforge starts, so the system asks for access only once you use AI agents. Who Codex is signed
 in as is read then too, by starting the codex program on your computer; it is never started just
-because Archforge did. It is read again each time you open the page, when you choose **Check
-connection**, and when a Codex conversation says *Sign-in expired*, so a sign-in that expires while
-Archforge runs shows as expired, with its email and **Sign in again…**, without a restart.
+because Archforge did. Archforge reads it anew each time you open the page, when you choose
+**Check connection**, and when a Codex conversation says *Sign-in expired*. A sign-in that expires
+while Archforge runs then shows as expired, with its email and **Sign in again…**, without a
+restart: as soon as the codex program reports it expired, or a Codex conversation finds it so.
+Until one of them does, the card may still say *Signed in as*.
 
 - **Check connection** is free and runs on your computer: it looks again for each program and its
   version, reads which API keys are saved and who Codex is signed in as, and sends nothing. The

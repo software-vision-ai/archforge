@@ -335,8 +335,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   finished within 15 minutes, or cancelled by the codex program, ends with a line saying so and
   Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently.
   Who is signed in is read again each time the page opens, on Check connection and on a Codex
-  conversation's "Sign-in expired" card; an expired sign-in the codex program names no one for
-  keeps the email known before, "The ChatGPT sign-in for {email} has expired." (AR-222). On an API key
+  conversation's "Sign-in expired" card. It shows expired once the codex program reads it so or a
+  Codex conversation finds it so (that card's word stands until a sign-in or a sign-out); until
+  then it may still say signed in. An expired sign-in the codex program names no one for keeps
+  the email known before, "The ChatGPT sign-in for {email} has expired." (AR-222). On an API key
   the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
 - A missing program shows why, the maker's install command with Copy, Look again (primary) and
   Installation guide; a program newer than tested is accepted with an amber badge, "Not yet
