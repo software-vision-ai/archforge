@@ -413,7 +413,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
     /// origin and is labelled with it, and it never merges into a step of another origin.
     pub fn execute_from(&mut self, id: &str, params: &Value, origin: Option<&str>) -> Result<Outcome, EngineError> {
         let (spec, docs) = self.spec(id)?;
-        let is_query = !spec.journal && !spec.undoable && matches!(spec.handler, Handler::Run(_));
+        let is_query = spec.is_query();
         if self.interaction.is_some() && !is_query {
             return Err(EngineError::InteractionRunning);
         }
@@ -832,7 +832,8 @@ impl<D: Document, V: View<D>> Batch<'_, D, V> {
         let next0 = self.session.counter;
         let ran = self.session.run_recorded(&spec, run, &params)?;
         let doc_changed = ran.delta.is_some();
-        let is_query = !spec.journal && !spec.undoable;
+        // Undo and redo are refused above, so the handler is a run and the one test applies.
+        let is_query = spec.is_query();
         let refusal = if is_query && (doc_changed || ran.view_changed || ran.next_changed) {
             Some(QUERY_CHANGED)
         } else if doc_changed && !spec.undoable {
