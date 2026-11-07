@@ -106,13 +106,15 @@ One full round trip per route. Each uses the project of P1.
    test message just now*.
 3. In the Chat panel choose **New conversation** (+). Repeat R1 steps 6 to 11 with Codex; the badge
    reads *Codex*.
-4. Quit Archforge, then check that Codex wrote no key file:
+4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there:
 
    ```sh
-   ls -la "$SETTINGS/agents/codex-home/auth.json" 2>&1
+   H="$SETTINGS/agents/codex-home"
+   if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
+   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
    ```
 
-   **Expect:** *No such file or directory*.
+   **Expect:** *no auth.json in* the folder. *NO FOLDER* proves nothing: fix `SETTINGS` first.
 
 ### R3. Codex with ChatGPT, in the browser
 
@@ -125,12 +127,14 @@ One full round trip per route. Each uses the project of P1.
 5. Check where the sign-in is kept:
 
    ```sh
-   ls -la "$SETTINGS/agents/codex-home/" | grep -c auth.json
+   H="$SETTINGS/agents/codex-home"
+   if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
+   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
    ```
 
-   **Expect:** `0` on macOS and on Linux with a Secret Service (the sign-in is in the secure
-   store). On Linux without one, `1`, and the card says the codex program keeps the sign-in in its
-   own files.
+   **Expect:** *no auth.json* on macOS and on Linux with a Secret Service (the sign-in is in the
+   secure store). On Linux without one, *auth.json EXISTS*, and the card says the codex program
+   keeps the sign-in in its own files.
 6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**.
 
 ### R4. Codex with ChatGPT, with a device code
@@ -148,7 +152,9 @@ One full round trip per route. Each uses the project of P1.
 
 Sign in again (R3 or R4) before the failures.
 
-### R5. Settings send nothing
+### R5. Check connection works offline
+
+This shows Check connection needs no network; it does not by itself prove that nothing is sent.
 
 1. Turn the network off (Wi-Fi off, cable out).
 2. Open **Settings ▸ AI Agents** and choose **Check connection**. **Expect:** the badges sum up
@@ -283,7 +289,6 @@ MARKER_CODEX_GPT="AFQGPT$(openssl rand -hex 6)"   # one question to Codex signed
 MARKER_DELETED="AFQDEL$(openssl rand -hex 6)"     # one question in the conversation K3 deletes
 printf '%s\n%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" > "$WORK/canaries"
 printf '%s\n' "$MARKER" > "$WORK/marker"
-printf '%s\n' "$MARKER_DELETED" > "$WORK/marker-deleted"
 printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER" "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT" "$MARKER_DELETED"   # to paste
 ```
 
@@ -313,10 +318,12 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 1. Make Claude the default agent, and start a new conversation (**New conversation**, +). Turn
    **Allow changes to the model** on and ask: *Add a class named* and paste `$MARKER`'s value.
    **Expect:** the class appears. Save (⌘S).
-2. Ask a long question. While the reply runs, list the processes whose command line or
-   environment holds a key (process id and program only):
+2. Ask a long question. While the reply runs, first check that the programs the search is about
+   are running, then list the processes whose command line or environment holds a key (process id
+   and program only):
 
    ```sh
+   for n in claude codex archforge-cli; do pgrep -f "$n" > /dev/null && echo "$n running" || echo "$n NOT running"; done
    if [ "$(uname -s)" = Darwin ]; then
      ps -A -ww -E -o pid=,comm=,command= | grep -F -f "$WORK/keys" | awk '{print $1, $2}'
    else
@@ -326,12 +333,15 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    fi
    ```
 
-   **Expect:** one line: the Claude program (its key is in its environment, by design). An npm
+   **Expect:** *claude running* and *archforge-cli running* (the bridge), else the turn ended
+   too soon: ask again. Then one line: the Claude program (its key is in its environment, by
+   design). An npm
    install runs it through Node.js, so it may show as `node`; check its id with `ps -p <id> -o
    command= | cut -c1-120` (the command line holds no key). Never `archforge-cli`, `archforge` or
    any other.
-3. Repeat step 2 with Codex on **API key**. **Expect:** no line: the key goes over the program's
-   input.
+3. Repeat step 2 with Codex on **API key**. **Expect:** *codex running* and *archforge-cli
+   running*, then no line: the key goes over the program's input. Step 2's line for Claude shows
+   that the search finds a key where one is.
 4. With Codex the default agent and still on **API key**, ask in a new conversation: *Reply with
    this one word and read nothing:* and paste `$MARKER_CODEX_KEY`'s value. Then switch the card to
    **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed in*), and ask the same in
@@ -352,9 +362,26 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 4. With Claude, ask a question that holds the canary: *Is … a key?*, pasting `$CANARY_CLAUDE`'s
    value. **Expect:** *This question holds your saved Claude API key, so it was neither sent nor
    saved.*, the question left in the box. Clear the box.
-5. Open **Conversations** and delete the conversation of K2 step 5, the one titled with
-   `$MARKER_DELETED`'s question, and no other. Let its note go (about eight seconds). The
-   conversations of K2 steps 1 and 4 stay, for K4.
+5. Before deleting, find the private folder of the conversation of K2 step 5 (the only one that
+   holds `$MARKER_DELETED`) and keep its path:
+
+   ```sh
+   DELETED_DIR=""
+   for d in "$SETTINGS"/agents/conversation-*/; do
+     if grep -r -q -a -F "$MARKER_DELETED" "$d"; then DELETED_DIR="${d%/}"; echo "$DELETED_DIR"; fi
+   done
+   [ -n "$DELETED_DIR" ] && [ -d "$DELETED_DIR" ] && echo "found, and it is there" || echo "NOT FOUND: stop here"
+   ```
+
+   **Expect:** one folder path, then *found, and it is there*. Then open **Conversations** and
+   delete that conversation, the one titled with `$MARKER_DELETED`'s question, and no other. Let
+   its note go (about eight seconds). Check the folder itself:
+
+   ```sh
+   [ -n "$DELETED_DIR" ] && { [ -e "$DELETED_DIR" ] && echo "STILL THERE: $DELETED_DIR" || echo "gone: $DELETED_DIR"; }
+   ```
+
+   **Expect:** *gone:* and the path. The conversations of K2 steps 1 and 4 stay, for K4.
 6. Select the diagram, open **Generate…** (⇧⌘G) and choose **Copy request**. Keep what it
    copied (it holds no key, only the request), before Archforge quits and the clipboard may go
    with it:
@@ -379,15 +406,25 @@ search() {
 
 *SEARCH FAILED* is neither a pass nor a fail: fix the path and run it again.
 
+A *none found* proves something only where the search can find what is there. So each place
+below is probed first with a word it is known to hold; the probe must say *FOUND*, or that
+place's *none found* proves nothing:
+
+```sh
+probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
+```
+
 1. **Logs:**
 
    ```sh
+   probe "Let Chat use the model is" "$SETTINGS/logs"   # logged at every start
    search "$WORK/canaries" "$SETTINGS/logs"
    ```
 
 2. **Preferences:**
 
    ```sh
+   probe chat_uses_model "$SETTINGS/prefs.json"         # the Let Chat use the model setting
    search "$WORK/canaries" "$SETTINGS/prefs.json"
    ```
 
@@ -395,12 +432,14 @@ search() {
    transcripts, Codex's copies, and Codex's own `codex-home`):
 
    ```sh
+   probe "$MARKER" "$SETTINGS/agents"                   # Claude's transcript of K2 step 1
    search "$WORK/canaries" "$SETTINGS/agents"
    ```
 
 4. **Everything else in the settings folder** (token files, the Dolt home):
 
    ```sh
+   probe "$MARKER" "$SETTINGS"
    search "$WORK/canaries" "$SETTINGS"
    ```
 
@@ -430,17 +469,25 @@ search() {
    ```
 
    `project-rows.csv` holds the tables as they are now, `project-history.csv` every saved version.
-   Run the later searches of this step's files (with `$WORK/keys`, `$WORK/marker` and, below,
-   `$WORK/marker-deleted`) only after a dump that did not fail. *DUMP FAILED* is neither a pass
-   nor a fail.
+   Run the later searches of this step's files (with `$WORK/keys` and `$WORK/marker`) and the
+   counts below only after a dump that did not fail. *DUMP FAILED* is neither a pass nor a fail.
 
-   The deleted conversation, which the manual says stays in the saved history:
+   The probe here is `$WORK/marker`, which must be found in `project-rows.csv`.
+
+   The deleted conversation, which the manual says stays in the saved history. Count its rows
+   directly, in the conversation list now and in the saved versions:
 
    ```sh
-   search "$WORK/marker-deleted" "$WORK/project-rows.csv"      # expect: none found
-   search "$WORK/marker-deleted" "$WORK/project-history.csv"   # expect: found
-   search "$WORK/marker-deleted" "$SETTINGS/agents"            # expect: none found (its folder went)
+   ( cd "$WORK/project-copy.archforge/project" || exit 1
+     for t in chat_message dolt_history_chat_message; do
+       printf '%s: ' "$t"
+       if dolt sql -r csv -q "SELECT COUNT(*) FROM \`$t\` WHERE body LIKE '%$MARKER_DELETED%'" < /dev/null > "$WORK/count"
+       then tail -n 1 "$WORK/count"; else echo "QUERY FAILED: proves nothing"; fi
+     done )
    ```
+
+   **Expect:** `chat_message: 0` and `dolt_history_chat_message:` a number above 0. Its private
+   folder was checked directly in K3 step 5.
 
    If Dolt says a server holds the database, remove `.dolt/sql-server.lock` from the copy only.
    The last place also searches the raw files, as a quick extra look.
@@ -449,12 +496,15 @@ search() {
    someone is step 5's copy):
 
    ```sh
+   probe "Chat acceptance" "$WORK/request.txt"          # the request names the project
    search "$WORK/canaries" "$WORK/request.txt"
    ```
 
 7. **The system's temporary folder** (the programs get their own; nothing should be here):
 
    ```sh
+   printf 'AFTMPPROBE\n' > "${TMPDIR:-/tmp}/af-probe.txt"
+   probe AFTMPPROBE "${TMPDIR:-/tmp}"; rm -f "${TMPDIR:-/tmp}/af-probe.txt"
    search "$WORK/canaries" "${TMPDIR:-/tmp}"
    ```
 
@@ -473,21 +523,25 @@ search() {
    done
    ```
 
-   For each route, read its `matches-…` file to the end, every line, before recording it: each
-   line is one match, its file first, then up to 80 characters before the marker and 40 after. A context line that
-   reads *Reply with this one word and read nothing:* before the marker is the question kept by
-   Codex: record its file. A match with other text around it (the reply, a log line) is recorded
-   as what it is, with its file. No match means that route's question is not in `codex-home`. The
-   second search should also list each conversation's own copy, in its `conversation-…` folder.
+   The second search is the probe: it must find each marker in that conversation's own copy, in
+   its `conversation-…` folder; otherwise the first search proves nothing. For each route, read
+   its `matches-…` file to the end, every line, before recording it: each line is one match, its
+   file first, then up to 80 characters before the marker and 40 after. A context line that reads
+   *Reply with this one word and read nothing:* before the marker is the question kept by Codex:
+   record its file. A match with other text around it (the reply, a log line) is recorded as what
+   it is, with its file. No match, with the probe found, means the question is not in
+   `codex-home` as plain text; Codex could still keep it in a form the search cannot read, so
+   record it as *not found as text*.
    The context lines should hold only the question and the reply. If one shows anything like a
    key, record a fail without copying it.
 
-**Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere. The secure
-store itself is the only place that holds a key.
+**Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere, each place's probe
+*FOUND*. The secure store itself is the only place that holds a key.
 
 **Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `project-rows.csv`
-and `project-history.csv` (the class and the question); this proves the search reads the project. Elsewhere, record where
-it shows: Claude's own transcript in that conversation's `conversation-…` folder is expected.
+and `project-history.csv` (the class and the question); this proves the search reads the
+project. Elsewhere, record where it shows: Claude's own transcript in that conversation's
+`conversation-…` folder is expected.
 
 ### K5. Put things back
 
@@ -498,7 +552,8 @@ key files the searches read.
 2. Remove the pass's files, which hold the real keys and the project's rows:
 
    ```sh
-   rm -rf "$WORK"; unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED
+   rm -rf "$WORK"
+   unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED DELETED_DIR
    ```
 
 ## Results
@@ -510,7 +565,7 @@ key files the searches read.
 | R2 | Codex with an API key | | |
 | R3 | Codex with ChatGPT, in the browser | | |
 | R4 | Codex with ChatGPT, with a device code | | |
-| R5 | Settings send nothing | | |
+| R5 | Check connection works offline | | |
 | F1 | A revoked key (Claude, Codex) | | |
 | F2 | An expired sign-in | | |
 | F3 | Network off (Claude, Codex) | | |
