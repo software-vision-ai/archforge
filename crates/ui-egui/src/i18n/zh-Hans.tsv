@@ -341,6 +341,20 @@ str		The conversations in this project cannot be read: {why}	无法读取此项�
 str		No conversations in this project yet.	此项目中还没有对话。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	对话保存在项目中，因此会随项目一起移动，并且不会出现在其他项目中。
+str		Delete conversation	删除对话
+str		Delete conversation ({key})	删除对话 ({key})
+str		Delete this conversation?	删除此对话？
+str		{title} · {messages} with {agent}, {when}	{title} · 与 {agent} 的 {messages}，{when}
+str		today	今天
+str		yesterday	昨天
+str		It is removed from this project's conversation list.	它会从此项目的对话列表中移除。
+str		It stays in the project's saved history: anyone with a copy of the project can still find it there.	它仍保留在项目的已保存历史中：任何拥有项目副本的人仍可在那里找到它。
+str		Its reply in progress stops first.	它正在进行的回复会先停止。
+str		{title} deleted · still in the project's saved history	已删除 {title} · 仍在项目的已保存历史中
+str		The conversations in this project cannot be changed: {why}	无法更改此项目中的对话：{why}
+str		This conversation cannot be read	无法读取此对话
+str		This conversation could not be deleted: {why}	无法删除此对话：{why}
+str		This conversation could not be brought back: {why}	无法恢复此对话：{why}
 str		Today {time}	今天 {time}
 str		{day} {month}	{month}{day}日
 str		{day} {month} {year}	{year}年{month}{day}日

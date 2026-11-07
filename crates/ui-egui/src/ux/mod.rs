@@ -298,6 +298,8 @@ pub mod types {
     pub const SECTION: Type = Type::semibold(20.0, 29.0);
     pub const SUBSECTION: Type = Type::semibold(18.0, 26.0);
     pub const CARD_TITLE: Type = Type::semibold(17.0, 25.0);
+    /// A small confirmation's title.
+    pub const DIALOG_TITLE: Type = Type::semibold(15.0, 18.0);
     pub const LEAD: Type = Type::regular(16.0, 23.0);
     pub const LEAD_STRONG: Type = Type::semibold(16.0, 23.0);
     pub const BODY: Type = Type::regular(14.0, 20.0);

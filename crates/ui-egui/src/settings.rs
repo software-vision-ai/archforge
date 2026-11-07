@@ -97,6 +97,8 @@ pub(crate) enum Look {
     Primary,
     Secondary,
     Danger,
+    /// Filled in the danger colour: the button that deletes, in a confirmation.
+    DangerFill,
 }
 
 /// The design's compact button, 28 tall at `at`, hugging its label: gives its rect and response.
@@ -125,6 +127,8 @@ pub(crate) fn button(
         Look::Primary => (p.accent_fill.gamma_multiply(0.45), None, p.on_accent),
         Look::Secondary => (if live && resp.hovered() { p.page } else { p.surface }, Some(p.border), if live { p.text } else { p.text_muted }),
         Look::Danger => (if live && resp.hovered() { p.danger_tint } else { p.surface }, Some(p.border), if live { p.danger } else { p.text_muted }),
+        Look::DangerFill if live => (if resp.hovered() { p.danger.gamma_multiply(0.9) } else { p.danger }, None, p.on_accent),
+        Look::DangerFill => (p.danger.gamma_multiply(0.45), None, p.on_accent),
     };
     paint.rect_filled(r, 6.0, fill);
     if let Some(edge) = edge {
@@ -150,9 +154,34 @@ pub(crate) fn icon_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &st
     resp
 }
 
-/// The ring a control that has the keyboard shows.
+/// Where the window keeps whether the keyboard was used last.
+fn keyboard_id() -> egui::Id {
+    egui::Id::unique("archforge.keyboard-last")
+}
+
+/// Once per frame: notes whether the keyboard or the pointer was used last, so focus rings show
+/// only while the keyboard leads (AR-217). A key pressed sets it, a pointer button pressed clears it.
+pub(crate) fn note_keyboard(ctx: &egui::Context) {
+    let last = ctx.input(|i| {
+        i.events.iter().rev().find_map(|e| match e {
+            egui::Event::Key { pressed: true, .. } => Some(true),
+            egui::Event::PointerButton { pressed: true, .. } => Some(false),
+            _ => None,
+        })
+    });
+    if let Some(keyboard) = last {
+        ctx.data_mut(|d| d.insert_temp(keyboard_id(), keyboard));
+    }
+}
+
+/// Whether the keyboard was used last, since the pointer last pressed.
+pub(crate) fn keyboard_last(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(keyboard_id())).unwrap_or(false)
+}
+
+/// The ring a control that has the keyboard shows, while the keyboard was used last.
 pub(crate) fn focus_ring(paint: &egui::Painter, p: &Palette, r: Rect, radius: f32, resp: &Response) {
-    if resp.has_focus() {
+    if resp.has_focus() && keyboard_last(&resp.ctx) {
         paint.rect_stroke(r.expand(1.0), radius + 1.0, Stroke::new(2.0, p.focus), StrokeKind::Outside);
     }
 }

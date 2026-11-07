@@ -340,6 +340,20 @@ str		The conversations in this project cannot be read: {why}	The conversations i
 str		No conversations in this project yet.	No conversations in this project yet.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Conversations are kept in the project, so they travel with it and never show in another project.
+str		Delete conversation	Delete conversation
+str		Delete conversation ({key})	Delete conversation ({key})
+str		Delete this conversation?	Delete this conversation?
+str		{title} · {messages} with {agent}, {when}	{title} · {messages} with {agent}, {when}
+str		today	today
+str		yesterday	yesterday
+str		It is removed from this project's conversation list.	It is removed from this project's conversation list.
+str		It stays in the project's saved history: anyone with a copy of the project can still find it there.	It stays in the project's saved history: anyone with a copy of the project can still find it there.
+str		Its reply in progress stops first.	Its reply in progress stops first.
+str		{title} deleted · still in the project's saved history	{title} deleted · still in the project's saved history
+str		The conversations in this project cannot be changed: {why}	The conversations in this project cannot be changed: {why}
+str		This conversation cannot be read	This conversation cannot be read
+str		This conversation could not be deleted: {why}	This conversation could not be deleted: {why}
+str		This conversation could not be brought back: {why}	This conversation could not be brought back: {why}
 str		Today {time}	Today {time}
 str		{day} {month}	{day} {month}
 str		{day} {month} {year}	{day} {month} {year}

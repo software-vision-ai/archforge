@@ -523,7 +523,11 @@ Deleting a conversation:
 1. Stop its turn if one runs.
 2. Delete its rows from all seven tables in one transaction, then a chat commit
    ("Chat 7: deleted").
-3. Delete its private runtime folder.
+3. Offer Undo for a short while (owner decision, AR-217, 2026-11-07): Undo writes the rows back
+   from the commit just before the deletion, as a new chat-only commit ("Chat 7: restored"). Its
+   private runtime folder is deleted only when that offer closes without Undo, including when the
+   project closes or Archforge quits, and when an Undo fails; so a conversation brought back can
+   still resume its runtime session.
 
 The undo history is not involved: deleting a conversation changes no model element. The
 conversation **stays in the project's earlier Dolt commits**, like any deleted row (open
@@ -664,3 +668,40 @@ The Chat panel over the storage of section 11; no table or column changed.
 - **Questions sent again** go with their text and chips (`Rerun` always carries the question), so
   the project checks them against the kept keys again. Replies and tool rows are the agent's and
   Archforge's words and are not checked (AR-206 section 3 checks what a person typed).
+
+## 13. As built (AR-217)
+
+Deleting a conversation from the history, with Undo; no table or column changed.
+
+- **The deletion.** `Project::delete_chat` first commits whatever of the conversations waits
+  ("Conversations kept"), refusing when that fails or leaves a chat table uncommitted, so the
+  commit just before the deletion holds the conversation whole. Then, in one SQL transaction, it
+  deletes the conversation's rows from the seven tables and makes the chat commit
+  `Chat N: deleted` inside that transaction: Dolt commits the transaction's rows with it, and a
+  commit that fails leaves the transaction to roll back, so the rows and the commit land together
+  or not at all (checked against Dolt 2.7: a failed `DOLT_COMMIT` then `ROLLBACK` leaves every row
+  and the model's unstaged changes as they were). It gives the label and the hash of the commit
+  before. The model, its undo history and its unsaved changes are untouched; the session's change
+  ledger keeps the turns, as Don't save passes a turn without a change link.
+- **Undo.** `Project::restore_chat(chat, from)` checks that `from` has a commit hash's shape (32 of
+  Dolt's base-32 digits, so it is safe in `AS OF`) and is a commit of the project's history
+  (`dolt_log`), then, in one transaction, refuses when the conversation is listed already, when
+  that commit does not hold it, when another conversation has taken its label since, or when the
+  project holds 10,000; otherwise it copies every one of its rows of every chat table
+  `AS OF from`, by explicit column lists, and commits `Chat N: restored` inside the transaction.
+  Nothing is written when it is refused.
+- **The shell.** `Write::Delete` answers `Answer::Deleted { before }`; `Write::Restore` takes it
+  back. Both run on the project's writer in order with the conversation's other writes, so a
+  running turn that the panel ends stopped (its reply so far kept) is written before its
+  deletion. Undo pressed before the deletion's answer waits for it, then sends the restore.
+  `Write::Create` names the labels of deletions still undoable, which a new conversation skips.
+- **The private folder.** `AgentHost::forget` ends the conversation's program if it runs, waits
+  for it at most five seconds, then removes `conversation-<id>` alone; a folder whose program has
+  not ended is kept. The shell asks it when the toast closes without Undo (eight seconds after the
+  pointer and the focus last left it), when an Undo fails, when the project closes and when
+  Archforge quits; closing and quitting wait at most five seconds for a deletion or restore under
+  way. A crash, or an answer that did not come in time, leaves the folder as an orphan; sweeping
+  orphans stays for later, as section 8 says.
+- **Chat writing off.** When reading the list again fails, the rows read before stay shown and
+  nothing in them can be deleted, saying why; a row that cannot be read cannot be deleted either.
+

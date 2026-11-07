@@ -10,6 +10,7 @@ pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
 pub mod chat;
+pub mod chat_delete;
 #[cfg(any(test, feature = "snapshot"))]
 pub mod chat_fixture;
 pub mod chat_markdown;
@@ -767,6 +768,11 @@ impl Shell {
             self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| chat(&p.chat_panel))
         };
         chat_panel::closing(self, shown);
+        // Its deleted conversations are settled before the project closes: an Undo pressed before
+        // its deletion finished reaches the project ahead of the closing.
+        if let Some(path) = self.tabs.get(i).map(|t| t.path.clone()) {
+            chat_delete::settle(self, Some(&path), std::time::Instant::now() + chat_delete::SETTLE_BUDGET);
+        }
     }
 
     /// The open tab nearest `i`, after it first, that is not closing.
@@ -1293,8 +1299,10 @@ impl Shell {
     }
 
     /// At exit, before the host writes what waits: the skill text still being typed is kept and
-    /// handed over with the rest.
+    /// handed over with the rest, and Chat's deleted conversations are settled (their toasts close,
+    /// their folders go), waiting at most [`chat_delete::SETTLE_BUDGET`] for the projects' answers.
     pub fn before_exit(&mut self) {
+        chat_delete::settle(self, None, std::time::Instant::now() + chat_delete::SETTLE_BUDGET);
         skill_tab::sync(self, 0.0, true, None);
         let parked = self.tabs.iter().filter_map(|t| t.parked.as_ref()).map(|p| &p.canvas);
         for (skill, chars) in std::iter::once(&self.canvas).chain(parked).flat_map(skill_tab::unkept) {
@@ -1323,6 +1331,7 @@ impl Shell {
     /// Once per frame, before `ui`: the language, the fonts, the appearance and the exit.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.frames = self.frames.wrapping_add(1);
+        settings::note_keyboard(ctx);
         // The stored language, once registered, is the one drawn.
         if crate::i18n::language() != self.state.language && !crate::i18n::set_language(&self.state.language) {
             log::warn!("{:?} is not a registered language; {} is used", self.state.language, crate::i18n::language());
@@ -1354,6 +1363,8 @@ impl Shell {
         control::drain(self);
         // The Chat panels' conversations: the agent's events, the project's answers, undo's moves.
         chat_panel::frame(self);
+        // Deleted conversations: the project's answers, the toast's time, the folders let go.
+        chat_delete::frame(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
@@ -1373,6 +1384,7 @@ impl Shell {
             || closing
             || self.agents.busy()
             || chat_panel::waiting(self)
+            || chat_delete::waiting(self)
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }

@@ -116,6 +116,34 @@ pub fn element(shell: &Shell, class: archforge_mof::ClassId, name: &str) -> Opti
     st.uuid(o).ok()
 }
 
+/// The history of page 07's frames B7 to B7c: five conversations kept, newest first, the first
+/// opened and the history shown. Gives their ids in the list's order.
+pub fn history(shell: &mut Shell, rig: &Rig) -> Result<Vec<archforge_mof::Uuid>, String> {
+    use crate::chat_store::{Row, fake::Kept};
+    let titles = [
+        ("Descriptions for classes without one", 1_794_056_520, Provider::Claude, 6),
+        ("How Payment relates to Order", 1_794_048_000, Provider::Claude, 4),
+        ("Review the checkout package", 1_793_980_800, Provider::Codex, 12),
+        ("Naming check for the shop schema", 1_793_696_400, Provider::Codex, 8),
+        ("First look at the model", 1_793_523_600, Provider::Claude, 2),
+    ];
+    let mut ids = Vec::new();
+    for (n, (title, at, provider, messages)) in titles.into_iter().enumerate() {
+        let id = shell.services.ids.as_ref().map(|ids| ids()).ok_or("no ids")?;
+        ids.push(id);
+        let origin = format!("Chat {}", 5 - n);
+        let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages };
+        rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
+    }
+    if let Some(id) = ids.first() {
+        crate::chat_panel::open(shell, *id);
+        settle(shell);
+    }
+    crate::chat_panel::toggle_history(shell);
+    settle(shell);
+    Ok(ids)
+}
+
 /// The sample class model open with Order selected and the Chat panel over it, ready or not.
 pub fn sample(shell: &mut Shell, ready: bool) -> Result<Rig, String> {
     shell.adopt_project();

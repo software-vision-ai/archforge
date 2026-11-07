@@ -341,6 +341,20 @@ str		The conversations in this project cannot be read: {why}	Die Unterhaltungen 
 str		No conversations in this project yet.	Noch keine Unterhaltungen in diesem Projekt.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Unterhaltungen werden im Projekt aufbewahrt, wandern also mit ihm und erscheinen nie in einem anderen Projekt.
+str		Delete conversation	Unterhaltung löschen
+str		Delete conversation ({key})	Unterhaltung löschen ({key})
+str		Delete this conversation?	Diese Unterhaltung löschen?
+str		{title} · {messages} with {agent}, {when}	{title} · {messages} mit {agent}, {when}
+str		today	heute
+str		yesterday	gestern
+str		It is removed from this project's conversation list.	Sie wird aus der Liste der Unterhaltungen dieses Projekts entfernt.
+str		It stays in the project's saved history: anyone with a copy of the project can still find it there.	Sie bleibt im gespeicherten Verlauf des Projekts: Wer eine Kopie des Projekts hat, kann sie dort weiterhin finden.
+str		Its reply in progress stops first.	Ihre laufende Antwort wird zuerst angehalten.
+str		{title} deleted · still in the project's saved history	{title} gelöscht · noch im gespeicherten Verlauf des Projekts
+str		The conversations in this project cannot be changed: {why}	Die Unterhaltungen in diesem Projekt können nicht geändert werden: {why}
+str		This conversation cannot be read	Diese Unterhaltung kann nicht gelesen werden
+str		This conversation could not be deleted: {why}	Diese Unterhaltung konnte nicht gelöscht werden: {why}
+str		This conversation could not be brought back: {why}	Diese Unterhaltung konnte nicht zurückgeholt werden: {why}
 str		Today {time}	Heute {time}
 str		{day} {month}	{day}. {month}
 str		{day} {month} {year}	{day}. {month} {year}
