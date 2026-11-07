@@ -466,4 +466,9 @@ impl AgentHost for Agents {
     fn end(&self, chat: &str) -> Result<(), ChatRefusal> {
         sessions::command(&self.inner, chat, sessions::Command::End)
     }
+
+    /// Removes a deleted conversation's private folder ([`sessions::forget`]).
+    fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
+        sessions::forget(&self.inner, chat)
+    }
 }

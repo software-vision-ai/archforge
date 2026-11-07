@@ -1005,14 +1005,24 @@ mod tests {
         // A question holding the kept key is refused before anything is written, conversation and all.
         let pasted = format!("Why is {CANARY} refused?");
         let refused =
-            answer(chats.write(&path, Write::Create { chat, title: pasted.clone(), provider: Provider::Claude, model: "sonnet".into(), now }));
+            answer(chats.write(
+                &path,
+                Write::Create { chat, title: pasted.clone(), provider: Provider::Claude, model: "sonnet".into(), skip: Vec::new(), now },
+            ));
         assert_eq!(refused, Err(Refusal::HeldKey { provider: Some(Provider::Claude) }));
         let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert!(listed.is_empty(), "nothing was written");
         // Made, asked, failed on a lost connection.
         let made = answer(chats.write(
             &path,
-            Write::Create { chat, title: "Which classes have no description yet?".into(), provider: Provider::Claude, model: "sonnet".into(), now },
+            Write::Create {
+                chat,
+                title: "Which classes have no description yet?".into(),
+                provider: Provider::Claude,
+                model: "sonnet".into(),
+                skip: Vec::new(),
+                now,
+            },
         ));
         assert_eq!(made, Ok(Answer::Created { origin: "Chat 1".into() }));
         let chip = Anchor { element: id(9), role: AnchorRole::Selection, metaclass: "uml_class".into(), name: Some("Order".into()) };
@@ -1079,6 +1089,77 @@ mod tests {
         let raw = host.on_writer(&path, |p| p.load_chat(archforge_mof::Uuid::v7(1_762_400_000_000, [1; 10])).map_err(|e| e.to_string()));
         let raw = raw.recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert!(raw.messages.iter().all(|m| !m.message.body.as_deref().unwrap_or_default().contains(CANARY)), "the key is nowhere");
+        close(&host, &path).unwrap();
+        host.shutdown();
+        agents.shutdown();
+        remove_settled(&base);
+    }
+
+    /// The host's store deletes a conversation on the writer after the writes asked before it (a
+    /// running turn ended stopped, its reply so far kept), answers with the commit before the
+    /// deletion, gives a new conversation a label past the deleted one's while it can come back,
+    /// and brings it back whole from that commit, once; a forged commit is refused (AR-217).
+    #[test]
+    fn the_hosts_chat_store_deletes_after_the_writes_before_it_and_brings_a_conversation_back_from_its_commit() {
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat_store::{Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
+        let base = std::env::temp_dir().join(format!("af-chat-delete-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let agents = std::sync::Arc::new(crate::agents::Agents::with(
+            &base.join("settings"),
+            Box::new(archforge_secrets::MemoryStore::new()),
+            archforge_agents::HostEnv::default(),
+        ));
+        let chats = crate::chats::Chats::new(host.clone(), agents.clone());
+        let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
+        let answer = |rx: Receiver<Result<Answer, Refusal>>| rx.recv_timeout(Duration::from_secs(60)).expect("the store answers");
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        let now = 1_762_437_731;
+        let (chat, other) = (id(1), id(5));
+        let create = |chat, skip: Vec<String>| Write::Create {
+            chat,
+            title: "Review the checkout package".into(),
+            provider: Provider::Codex,
+            model: "default".into(),
+            skip,
+            now,
+        };
+        assert_eq!(answer(chats.write(&path, create(chat, Vec::new()))), Ok(Answer::Created { origin: "Chat 1".into() }));
+        let ask = Write::Ask {
+            chat,
+            turn: id(2),
+            question: id(3),
+            text: "Review it".into(),
+            chips: Vec::new(),
+            model: "default".into(),
+            allow_changes: false,
+            now: now + 1,
+        };
+        assert_eq!(answer(chats.write(&path, ask)), Ok(Answer::Asked { number: 1 }));
+        // The turn still running is ended stopped, its reply so far kept, and deleted: asked one
+        // after the other without waiting, they run in that order on the writer.
+        let reply =
+            chats.write(&path, Write::Reply { id: id(4), turn: id(2), text: "So far".into(), complete: false, shortened: false, now: now + 2 });
+        let end = chats.write(&path, Write::End { turn: id(2), outcome: Outcome::Stopped, error: None, changes: None, now: now + 3 });
+        let deleted = chats.write(&path, Write::Delete { chat });
+        assert_eq!((answer(reply), answer(end)), (Ok(Answer::Done), Ok(Answer::Done)));
+        let Ok(Answer::Deleted { before }) = answer(deleted) else { panic!("deleted") };
+        assert!(chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap().is_empty());
+        // A new conversation skips the label of the one that can still come back.
+        assert_eq!(answer(chats.write(&path, create(other, vec!["Chat 1".into()]))), Ok(Answer::Created { origin: "Chat 2".into() }));
+        // Brought back whole, from the commit the deletion named; a forged one and a second time refused.
+        let forged = answer(chats.write(&path, Write::Restore { chat, from: "0".repeat(32) }));
+        assert!(matches!(forged, Err(Refusal::Failed(why)) if why.contains("not a commit")), "a forged commit");
+        assert_eq!(answer(chats.write(&path, Write::Restore { chat, from: before.clone() })), Ok(Answer::Done));
+        let again = answer(chats.write(&path, Write::Restore { chat, from: before }));
+        assert!(matches!(again, Err(Refusal::Failed(why)) if why.contains("already")), "listed already");
+        let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert_eq!(listed.len(), 2);
+        let stored = chats.load(&path, chat).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert_eq!((stored.row.origin.as_str(), stored.turns[0].outcome), ("Chat 1", Outcome::Stopped));
+        assert!(matches!(&stored.messages[1].body, StoredBody::Reply { text, complete: false, .. } if text == "So far"), "the reply so far");
         close(&host, &path).unwrap();
         host.shutdown();
         agents.shutdown();

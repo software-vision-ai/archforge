@@ -583,6 +583,7 @@ fn ask(shell: &mut Shell, text: String, from_draft: bool) {
     let context = context_line(&chips);
     let store = store_of(shell);
     let now = clock(shell).now;
+    let skip: Vec<String> = Vec::new();
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
     shell.chat_panel.notice = None;
     chat.chosen = true;
@@ -592,7 +593,7 @@ fn ask(shell: &mut Shell, text: String, from_draft: bool) {
         return;
     };
     if chat.origin.is_none() {
-        let rx = s.write(&project, Write::Create { chat: chat.id, title: text, provider: chat.provider, model: chat.model.clone(), now });
+        let rx = s.write(&project, Write::Create { chat: chat.id, title: text, provider: chat.provider, model: chat.model.clone(), skip, now });
         chat.step = Step::Creating(rx, pending);
     } else {
         chat.step = Step::Asking(s.write(&project, ask_write(chat, &pending, now)), pending);

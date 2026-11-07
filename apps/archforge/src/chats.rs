@@ -254,24 +254,19 @@ fn refused(e: project::Error) -> Refusal {
 /// How many labels a new conversation tries past the highest it read.
 const ORIGIN_TRIES: u32 = 16;
 
-/// The next free `Chat N` of the project: one past the highest kept.
-fn next_origin(listed: &[project::Listed]) -> String {
-    let highest = listed
-        .iter()
-        .filter_map(|l| l.entry.as_ref().ok())
-        .filter_map(|s| s.chat.origin.strip_prefix("Chat ").and_then(|n| n.parse::<u32>().ok()))
-        .max()
-        .unwrap_or(0);
-    format!("Chat {}", highest.saturating_add(1))
+/// The next free `Chat N` of the project: one past the highest kept and the highest of `skip`, the
+/// labels of conversations deleted while their Undo is still offered.
+fn next_origin(listed: &[project::Listed], skip: &[String]) -> String {
+    archforge_ui_egui::chat_store::next_origin(listed.iter().filter_map(|l| l.entry.as_ref().ok()).map(|s| s.chat.origin.as_str()), skip)
 }
 
 /// Runs one write against the open project, on the writer.
 fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer, Refusal> {
     match write {
-        Write::Create { chat, title, provider, model, now } => {
-            // One past the highest label read; a conversation whose row cannot be read may hold
-            // that one, so the next ones are tried, a few.
-            let first = next_origin(&p.list_chats().map_err(refused)?);
+        Write::Create { chat, title, provider, model, skip, now } => {
+            // One past the highest label read and those skipped; a conversation whose row cannot
+            // be read may hold that one, so the next ones are tried, a few.
+            let first = next_origin(&p.list_chats().map_err(refused)?, &skip);
             let n: u32 = first.strip_prefix("Chat ").and_then(|n| n.parse().ok()).unwrap_or(1);
             let mut last = None;
             for k in 0..ORIGIN_TRIES {
@@ -348,6 +343,16 @@ fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer,
         }
         Write::Model { chat, model, now } => {
             p.set_chat_model(chat, &model, &stamp(now)).map_err(refused)?;
+            Ok(Answer::Done)
+        }
+        Write::Delete { chat } => {
+            let deleted = p.delete_chat(chat).map_err(refused)?;
+            log::info!("the conversation {chat} ({}) was deleted after commit {}", deleted.origin, deleted.before);
+            Ok(Answer::Deleted { before: deleted.before })
+        }
+        Write::Restore { chat, from } => {
+            let origin = p.restore_chat(chat, &from).map_err(refused)?;
+            log::info!("the conversation {chat} ({origin}) was brought back from commit {from}");
             Ok(Answer::Done)
         }
     }
@@ -502,6 +507,11 @@ mod tests {
     /// A project without conversations starts at Chat 1.
     #[test]
     fn the_next_origin_is_one_past_the_highest_kept() {
-        assert_eq!(next_origin(&[]), "Chat 1");
+        assert_eq!(next_origin(&[], &[]), "Chat 1");
+        assert_eq!(
+            next_origin(&[], &["Chat 7".into(), "Chat 3".into()]),
+            "Chat 8",
+            "a deleted conversation's label is skipped while it can come back"
+        );
     }
 }

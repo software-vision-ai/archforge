@@ -425,6 +425,11 @@ pub trait AgentHost: Send + Sync {
     /// Ends the conversation `chat`: its program stops, its token is revoked, and the control
     /// channel closes with the last conversation that held it.
     fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
+    /// Removes the private folder of the conversation `chat` for good, once it was deleted
+    /// (AR-217): a running program is ended first and waited for, a bounded time; a folder whose
+    /// program has not ended by then is kept. The answer says whether there was a folder, or why it
+    /// was not removed.
+    fn forget(&self, chat: &str) -> Receiver<Result<bool, String>>;
 }
 
 /// How Codex signs in.
@@ -1061,6 +1066,8 @@ pub mod fake {
         pub sent: Mutex<Vec<(String, String)>>,
         /// While set, an end is taken but not said, as a program slow to end would leave it.
         pub hold_ends: std::sync::atomic::AtomicBool,
+        /// The conversations whose private folders were removed, in order.
+        pub forgotten: Mutex<Vec<String>>,
     }
 
     impl Default for Fake {
@@ -1082,6 +1089,7 @@ pub mod fake {
                 running: Mutex::new(Vec::new()),
                 sent: Mutex::new(Vec::new()),
                 hold_ends: std::sync::atomic::AtomicBool::new(false),
+                forgotten: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1184,6 +1192,17 @@ pub mod fake {
             lock(&self.running).retain(|c| c != chat);
             self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
             Ok(())
+        }
+        /// Ends the conversation when it runs, then records its folder as removed.
+        fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
+            if let Err(e) = crate::chat::check_id(chat) {
+                return answered(Err(e.to_string()));
+            }
+            if lock(&self.running).iter().any(|c| c == chat) {
+                let _ = self.end(chat);
+            }
+            lock(&self.forgotten).push(chat.to_string());
+            answered(Ok(true))
         }
         fn test_message(&self, _provider: Provider, _model: &str, _sign_in: CodexSignIn) -> Receiver<Result<(), AccountError>> {
             self.calls.test.fetch_add(1, Ordering::Relaxed);
