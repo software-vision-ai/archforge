@@ -1,7 +1,6 @@
 //! Offscreen rendering of the window, behind the `snapshot` feature: a fresh shell in
 //! the headless harness, drawn once settled and rendered to RGBA.
 
-use crate::ai_agents::Provider;
 use crate::theme::ThemeKind;
 use crate::{Folder, Services, Shell};
 
@@ -120,6 +119,13 @@ pub enum Screen {
     WorkspaceChatModelUnavailable,
     /// The project's conversations, the open one marked (B7).
     WorkspaceChatHistory,
+    /// The history with the pointer on Review the checkout package: its bin, and its menu open with
+    /// Delete conversation reached (B7a).
+    WorkspaceChatDeleteMenu,
+    /// The confirmation of deleting Review the checkout package (B7b).
+    WorkspaceChatDeleteConfirm,
+    /// Review the checkout package deleted: the history without it, and the toast with Undo (B7c).
+    WorkspaceChatDeleted,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
     /// grown to show its members, and two made short by hand saying the rows they hide.
     WorkspaceClassSizing,
@@ -503,28 +509,23 @@ fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
             fx::emit(&rig, shell, failed(FailureKind::Network, None));
         }
         Screen::WorkspaceChatHistory => {
-            use crate::chat_store::{Row, fake::Kept};
-            let titles = [
-                ("Descriptions for classes without one", 1_794_056_520, Provider::Claude, 6),
-                ("How Payment relates to Order", 1_794_048_000, Provider::Claude, 4),
-                ("Review the checkout package", 1_793_980_800, Provider::Codex, 12),
-                ("Naming check for the shop schema", 1_793_696_400, Provider::Codex, 8),
-                ("First look at the model", 1_793_523_600, Provider::Claude, 2),
-            ];
-            let mut first = None;
-            for (n, (title, at, provider, messages)) in titles.into_iter().enumerate() {
-                let id = shell.services.ids.as_ref().map(|ids| ids()).ok_or("no ids")?;
-                first.get_or_insert(id);
-                let origin = format!("Chat {}", 5 - n);
-                let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages };
-                rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
+            fx::history(shell, &rig)?;
+        }
+        Screen::WorkspaceChatDeleteMenu | Screen::WorkspaceChatDeleteConfirm | Screen::WorkspaceChatDeleted => {
+            let ids = fx::history(shell, &rig)?;
+            let review = *ids.get(2).ok_or("the history has no third conversation")?;
+            if screen == Screen::WorkspaceChatDeleteMenu {
+                // Opened at the pointer near the window's right edge, so it opens to its left.
+                let at = egui::pos2(1452.0, 292.0);
+                shell.chat_panel.row_menu = Some(crate::chat_delete::RowMenu { chat: review, row: 2, at, reached: Some(1) });
+            } else {
+                crate::chat_delete::ask(shell, review, 2);
+                if screen == Screen::WorkspaceChatDeleted {
+                    crate::chat_delete::confirm(shell);
+                    fx::settle(shell);
+                    crate::chat_delete::frame(shell);
+                }
             }
-            if let Some(id) = first {
-                crate::chat_panel::open(shell, id);
-                fx::settle(shell);
-            }
-            crate::chat_panel::toggle_history(shell);
-            fx::settle(shell);
         }
         _ => {}
     }
@@ -758,6 +759,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::WorkspaceChatNetworkLost
             | Screen::WorkspaceChatModelUnavailable
             | Screen::WorkspaceChatHistory
+            | Screen::WorkspaceChatDeleteMenu
+            | Screen::WorkspaceChatDeleteConfirm
+            | Screen::WorkspaceChatDeleted
     ) {
         chat_screen(&mut shell, screen)?;
     }
@@ -854,6 +858,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         sample_leaf(&mut shell)?;
     }
     let mut hover: Option<String> = None;
+    if screen == Screen::WorkspaceChatDeleteMenu {
+        hover = Some("workspace.chat.history.2".into());
+    }
     if matches!(screen, Screen::WorkspaceNaryDrawing | Screen::WorkspaceNary | Screen::WorkspaceNaryBinary) {
         shell.adopt_project();
         crate::uml_ui::open_sample(&mut shell)?;

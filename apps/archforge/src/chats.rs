@@ -10,7 +10,7 @@
 //!
 //! The shell's times are seconds since 1970; the project stores them as RFC 3339 text in UTC.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 
@@ -28,12 +28,18 @@ use archforge_ui_egui::chat_store::{
 pub struct Chats {
     projects: Arc<crate::projects::Projects>,
     agents: Arc<crate::agents::Agents>,
+    /// The commit before each conversation's last deletion, by project, as the writer made it: an
+    /// Undo pressed before its deletion answered restores from it ([`Write::Restore`] without one).
+    deleted: Before,
 }
+
+/// The commits before deletions, read and written on the writer alone.
+type Before = Arc<std::sync::Mutex<std::collections::HashMap<(PathBuf, Uuid), String>>>;
 
 impl Chats {
     /// The store of conversations over `projects`' writer, checking questions with `agents`' keys.
     pub fn new(projects: Arc<crate::projects::Projects>, agents: Arc<crate::agents::Agents>) -> Chats {
-        Chats { projects, agents }
+        Chats { projects, agents, deleted: Before::default() }
     }
 }
 
@@ -247,6 +253,9 @@ fn kind_to(k: ChangeKind) -> project::ChangeKind {
 fn refused(e: project::Error) -> Refusal {
     match e {
         project::Error::HeldKey { name } => Refusal::HeldKey { provider: provider_of_key(&name) },
+        project::Error::ChatListed { .. } => Refusal::Listed,
+        // The panel names the conversation itself: only the reason.
+        project::Error::ChatNotDeleted { why, .. } | project::Error::ChatNotRestored { why, .. } => Refusal::Failed(why),
         e => Refusal::Failed(e.to_string()),
     }
 }
@@ -254,24 +263,19 @@ fn refused(e: project::Error) -> Refusal {
 /// How many labels a new conversation tries past the highest it read.
 const ORIGIN_TRIES: u32 = 16;
 
-/// The next free `Chat N` of the project: one past the highest kept.
-fn next_origin(listed: &[project::Listed]) -> String {
-    let highest = listed
-        .iter()
-        .filter_map(|l| l.entry.as_ref().ok())
-        .filter_map(|s| s.chat.origin.strip_prefix("Chat ").and_then(|n| n.parse::<u32>().ok()))
-        .max()
-        .unwrap_or(0);
-    format!("Chat {}", highest.saturating_add(1))
+/// The next free `Chat N` of the project: one past the highest kept and the highest of `skip`, the
+/// labels of conversations deleted while their Undo is still offered.
+fn next_origin(listed: &[project::Listed], skip: &[String]) -> String {
+    archforge_ui_egui::chat_store::next_origin(listed.iter().filter_map(|l| l.entry.as_ref().ok()).map(|s| s.chat.origin.as_str()), skip)
 }
 
 /// Runs one write against the open project, on the writer.
-fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer, Refusal> {
+fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before) -> Result<Answer, Refusal> {
     match write {
-        Write::Create { chat, title, provider, model, now } => {
-            // One past the highest label read; a conversation whose row cannot be read may hold
-            // that one, so the next ones are tried, a few.
-            let first = next_origin(&p.list_chats().map_err(refused)?);
+        Write::Create { chat, title, provider, model, skip, now } => {
+            // One past the highest label read and those skipped; a conversation whose row cannot
+            // be read may hold that one, so the next ones are tried, a few.
+            let first = next_origin(&p.list_chats().map_err(refused)?, &skip);
             let n: u32 = first.strip_prefix("Chat ").and_then(|n| n.parse().ok()).unwrap_or(1);
             let mut last = None;
             for k in 0..ORIGIN_TRIES {
@@ -348,6 +352,28 @@ fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer,
         }
         Write::Model { chat, model, now } => {
             p.set_chat_model(chat, &model, &stamp(now)).map_err(refused)?;
+            Ok(Answer::Done)
+        }
+        Write::Delete { chat } => {
+            // A commit kept from an earlier deletion of it never serves this one.
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(p.path().to_path_buf(), chat));
+            let done = p.delete_chat(chat).inspect_err(|e| log::warn!("the conversation {chat} was not deleted: {e}")).map_err(refused)?;
+            log::info!("the conversation {chat} ({}) was deleted after commit {}", done.origin, done.before);
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert((p.path().to_path_buf(), chat), done.before.clone());
+            Ok(Answer::Deleted { before: done.before })
+        }
+        Write::Restore { chat, from } => {
+            let remembered = deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&(p.path().to_path_buf(), chat)).cloned();
+            let Some(from) = from.or(remembered) else {
+                // No deletion of it to undo: listed, or its deletion failed.
+                let listed = p.list_chats().is_ok_and(|l| l.iter().any(|c| c.id == chat));
+                log::warn!("the conversation {chat} was not brought back: no deletion of it was asked here");
+                return Err(if listed { Refusal::Listed } else { Refusal::Failed("no deletion of it was asked in this project".into()) });
+            };
+            let origin =
+                p.restore_chat(chat, &from).inspect_err(|e| log::warn!("the conversation {chat} was not brought back: {e}")).map_err(refused)?;
+            log::info!("the conversation {chat} ({origin}) was brought back from commit {from}");
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(p.path().to_path_buf(), chat));
             Ok(Answer::Done)
         }
     }
@@ -441,15 +467,18 @@ impl ChatStore for Chats {
     /// first, on the agents host's thread, and reaches the writer only once it passed.
     fn write(&self, project: &Path, write: Write) -> Receiver<Result<Answer, Refusal>> {
         let Some(text) = typed(&write).map(str::to_string) else {
-            return write_now(&self.projects, project, write);
+            return write_now(&self.projects, project, write, &self.deleted);
         };
         let (tx, rx) = channel();
         let projects = self.projects.clone();
+        let deleted = self.deleted.clone();
         let path = project.to_path_buf();
         let checked = self.agents.check_keys(text);
         let started = std::thread::Builder::new().name("archforge-chat-keys".into()).spawn(move || {
             let answer = match checked.recv() {
-                Ok(Ok(None)) => write_now(&projects, &path, write).recv().unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into()))),
+                Ok(Ok(None)) => {
+                    write_now(&projects, &path, write, &deleted).recv().unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into())))
+                }
                 Ok(Ok(Some(provider))) => Err(Refusal::HeldKey { provider }),
                 Ok(Err(why)) => Err(Refusal::Failed(why)),
                 Err(_) => Err(Refusal::Failed("the keys could not be checked".into())),
@@ -466,11 +495,12 @@ impl ChatStore for Chats {
 }
 
 /// Sends `write` to the writer for the project at `project`; a project no longer open refuses it.
-fn write_now(projects: &crate::projects::Projects, project: &Path, write: Write) -> Receiver<Result<Answer, Refusal>> {
+fn write_now(projects: &crate::projects::Projects, project: &Path, write: Write, deleted: &Before) -> Receiver<Result<Answer, Refusal>> {
+    let deleted = deleted.clone();
     let created_by = projects.created_by().to_string();
     let shown = project.display().to_string();
     projects.on_writer_open(project, move |p| match p {
-        Some(p) => apply(p, write, &created_by),
+        Some(p) => apply(p, write, &created_by, &deleted),
         None => Err(Refusal::Failed(format!("{shown} is no longer open"))),
     })
 }
@@ -502,6 +532,11 @@ mod tests {
     /// A project without conversations starts at Chat 1.
     #[test]
     fn the_next_origin_is_one_past_the_highest_kept() {
-        assert_eq!(next_origin(&[]), "Chat 1");
+        assert_eq!(next_origin(&[], &[]), "Chat 1");
+        assert_eq!(
+            next_origin(&[], &["Chat 7".into(), "Chat 3".into()]),
+            "Chat 8",
+            "a deleted conversation's label is skipped while it can come back"
+        );
     }
 }

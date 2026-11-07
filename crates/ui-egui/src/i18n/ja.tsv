@@ -341,6 +341,21 @@ str		The conversations in this project cannot be read: {why}	このプロジェ�
 str		No conversations in this project yet.	このプロジェクトにはまだ会話がありません。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	会話はプロジェクト内に保存されるため、プロジェクトと一緒に移動し、別のプロジェクトには表示されません。
+str		Delete conversation	会話を削除
+str		Delete conversation ({key})	会話を削除 ({key})
+str		Delete this conversation?	この会話を削除しますか？
+str		{title} · {messages} with {agent}, {when}	{title} · {agent} との {messages}、{when}
+str		today	今日
+str		yesterday	昨日
+str		It is removed from this project's conversation list.	このプロジェクトの会話一覧から外されます。
+str		It stays in the project's saved history: anyone with a copy of the project can still find it there.	プロジェクトの保存済み履歴には残ります。プロジェクトのコピーを持つ人は、そこで引き続き見つけられます。
+str		Its reply in progress stops first.	進行中の返答は先に停止します。
+str		{title} deleted · still in the project's saved history	{title} を削除しました · プロジェクトの保存済み履歴には残っています
+str		The conversations in this project cannot be changed: {why}	このプロジェクトの会話は変更できません: {why}
+str		This conversation cannot be read	この会話は読み込めません
+str		This conversation could not be deleted: {why}	この会話を削除できませんでした: {why}
+str		This conversation could not be brought back: {why}	この会話を元に戻せませんでした: {why}
+str		it is in the conversation list already	すでに会話一覧にあります
 str		Today {time}	今日 {time}
 str		{day} {month}	{month}{day}日
 str		{day} {month} {year}	{year}年{month}{day}日

@@ -903,3 +903,70 @@ fn codex_account_is_read_on_first_use_never_at_launch() {
     assert_eq!(host.log("codex").iter().filter(|l| *l == "app-server").count(), 1);
     assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::SignedIn { email: "person@example.com".into(), plan: Some("plus".into()) })));
 }
+
+/// Removing a deleted conversation's private folder (AR-217): its running program is ended first
+/// and has ended when the answer comes, its folder goes and every other conversation's stays; one
+/// waiting for the project goes only when the answer says deleted, never when it says listed or
+/// does not come; one asked just before quitting has finished when quitting returns; an id that is
+/// not a conversation's is refused and one without a folder says so.
+#[test]
+fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alone_even_at_quit() {
+    let host = Host::new("forget", Setup::default());
+    let (gone, kept, last) = (CHAT.to_string(), id(2), id(3));
+    let folder = |chat: &str| host.settings.join("agents").join(format!("conversation-{chat}"));
+    for chat in [&gone, &kept, &last] {
+        host.agents.start(claude(chat, "Chat 1", false)).unwrap();
+    }
+    let deadline = Instant::now() + WAIT;
+    let pids = || std::fs::read_to_string(host.base.join("claude.pids")).unwrap_or_default();
+    while pids().lines().count() < 3 {
+        assert!(Instant::now() < deadline, "the three programs started");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!([&gone, &kept, &last].iter().all(|c| folder(c).is_dir()));
+    let answer = host.agents.forget(&gone).recv_timeout(WAIT).unwrap();
+    assert_eq!(answer, Ok(true));
+    assert!(!folder(&gone).exists(), "its folder is gone");
+    assert!(folder(&kept).is_dir() && folder(&last).is_dir(), "the others' stay");
+    let ended = chat_events(host.events.try_iter().collect(), &gone);
+    assert!(ended.iter().any(|e| matches!(e, ChatEvent::Ended { .. })), "its program ended first: {ended:?}");
+    assert_eq!(host.agents.send(&gone, "still there?".into()), Err(ChatRefusal::NotRunning));
+    assert!(host.agents.send(&kept, "still there?".into()).is_ok(), "another conversation runs on");
+    // Nothing to remove, and an id that is not a conversation's.
+    assert_eq!(host.agents.forget(&id(9)).recv_timeout(WAIT).unwrap(), Ok(false));
+    assert!(host.agents.forget("../settings").recv_timeout(WAIT).unwrap().is_err());
+    assert!(host.settings.is_dir());
+    // Once the project answered: a deletion lets the folder go; a restoration refused because
+    // the conversation is listed, or no answer at all, keeps it.
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let answer = |a: Option<Result<Answer, Refusal>>| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(a) = a {
+            tx.send(a).unwrap();
+        }
+        rx
+    };
+    let made = |chat: &str| {
+        let id = archforge_agents::ConversationId::new(chat).unwrap();
+        archforge_agents::Workspace::open(&host.settings.join("agents")).unwrap().conversation(&id).unwrap();
+    };
+    let (listed, unanswered, deleted) = (id(4), id(5), id(6));
+    for chat in [&listed, &unanswered, &deleted] {
+        made(chat);
+    }
+    let kept_listed = host.agents.forget_after(&listed, answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored);
+    let kept_silent = host.agents.forget_after(&unanswered, answer(None), FolderGoes::IfDeleted);
+    let removed = host.agents.forget_after(&deleted, answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted);
+    assert_eq!(
+        (kept_listed.recv_timeout(WAIT).unwrap(), kept_silent.recv_timeout(WAIT).unwrap(), removed.recv_timeout(WAIT).unwrap()),
+        (Ok(false), Ok(false), Ok(true))
+    );
+    assert!(folder(&listed).is_dir() && folder(&unanswered).is_dir() && !folder(&deleted).exists());
+    // Asked just before quitting: done when quitting returns.
+    let at_quit = host.agents.forget(&last);
+    host.agents.shutdown();
+    assert!(!folder(&last).exists(), "removed by the time quitting returned");
+    assert_eq!(at_quit.try_recv(), Ok(Ok(true)));
+    assert!(folder(&kept).is_dir(), "a conversation not deleted keeps its folder at quit");
+}

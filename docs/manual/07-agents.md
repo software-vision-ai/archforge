@@ -331,6 +331,37 @@ allow changes. **New conversation** (+) starts another. Conversations are kept i
 travel with it, never show in another project, and are not unsaved changes. Leaving the project's
 tab stops a reply that runs; closing the project ends its conversation.
 
+### Deleting a conversation
+
+Point at a conversation in the list and click its bin, or right-click it (or press the menu key,
+or Shift F10) and choose **Delete conversation**. With the keyboard on a row, ⌫ (Delete on Windows
+and Linux) does the same. Archforge asks first:
+
+<!-- picture: workspace-chat-delete-confirm light | Delete this conversation? Its title, messages, agent and age, and what deleting it does -->
+
+- **It is removed from this project's conversation list.** Nothing else changes: not the model,
+  not its undo history, not whether the project has unsaved changes.
+- **It stays in the project's saved history.** Archforge keeps every version of a project, so
+  anyone with a copy of the project can still find the conversation there. Deleting it does not
+  erase it.
+- If its reply is still running, the reply stops first; what was written so far is kept with the
+  conversation.
+
+Cancel (where the keyboard starts) or Esc keeps it. Delete takes it out of the list; if it was the
+open conversation, the next one in the list opens (or the one above, or a new one).
+
+A note at the foot of the window says it was deleted and is still in the project's saved history,
+with **Undo**. Undo brings the conversation back, whole and in its place. The note stays about
+eight seconds, longer while you point at it or the keyboard is on Undo. ⌘Z (Ctrl Z) never deletes
+or brings back a conversation: it stays the model's undo.
+
+<!-- picture: workspace-chat-deleted light | The conversation deleted: the list without it, and the note with Undo -->
+
+When the note has gone (or the project closes, or Archforge quits), the agent program's own working
+files for that conversation are removed from your computer. When the project's conversations
+cannot be changed (for example because one of its tables is damaged), the bin and the menu item
+are greyed out and say why.
+
 Links in a reply open only after you confirm them, and only web addresses; pictures show their
 description, and HTML shows as text.
 

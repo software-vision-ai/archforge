@@ -412,6 +412,34 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - A reply's links open only through the link confirmation, and only a web address with a host and
   no user part; an image shows its alt text, HTML its plain text.
 - Leaving a project's tab stops its running turn; closing the project ends its conversation.
+- Deleting a conversation (B7a to B7c, AR-217): the bin (quiet icon button, the bin icon) shows on
+  the row the pointer is on, or the keyboard is on while focus marks show, and the title shortens
+  for it; its tooltip and accessible name are "Delete conversation", the tooltip with ⌫ (Delete off
+  macOS). The row's menu (right-click at the pointer, flipped left near the window's edge; the menu
+  key or ⇧F10 under the row) holds Open ↵ (Enter off macOS), a line, Delete conversation ⌫. ⌫ or
+  Delete on the focused row asks as the bin does. The confirmation, 440 wide on the scrim: "Delete
+  this conversation?", then "{title} · {n} messages with {agent}, {age}" (age "today",
+  "yesterday" or "3 Nov"), "It is removed from this project's conversation list." and "It stays in
+  the project's saved history: anyone with a copy of the project can still find it there.", and
+  "Its reply in progress stops first." while it runs; Cancel and Delete (filled danger), the focus
+  starting on Cancel, Escape cancelling with the focus back on the row. Delete stops a running
+  turn first (its reply so far kept), opens the next row's conversation when it was open (else the
+  one above, else a new one, B2), and moves the focus to the next row, else the one above, else
+  New conversation. The toast at the centre's foot, clear of the minimap, surface-coloured text on
+  an ink fill: "{title} deleted · still in the project's saved history" with Undo (the hover accent),
+  eight seconds after the pointer and the focus last left it; Undo is in the tab order. Undo
+  brings it back in its place, with the keyboard on its row. ⌘Z never deletes or restores one.
+  The private folder of its program goes when the toast closes without Undo, when Undo fails,
+  when its project closes or when Archforge quits; a copy of the project open beside it showing
+  that conversation keeps it. While a history row's menu or the confirmation is open, the canvas
+  and ⌘Z take no keys. While the list cannot be read again (chat
+  writing off) the rows read before stay, and the bin and the item are disabled saying "The
+  conversations in this project cannot be changed: {why}"; an unreadable row's bin says "This
+  conversation cannot be read". Failures say "This conversation could not be deleted: {why}" or
+  "… could not be brought back: {why}" under the history. While a toast is up, a new
+  conversation never takes the deleted one's label.
+- Focus rings show only while the keyboard was used last: a key pressed shows them, a pointer
+  pressed hides them (AR-217).
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,

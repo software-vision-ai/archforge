@@ -101,6 +101,77 @@ pub fn command(inner: &Inner, chat: &str, command: Command) -> Result<(), ChatRe
     handle.commands.send(command).map_err(|_| ChatRefusal::NotRunning)
 }
 
+/// How long removing a deleted conversation's folder waits for its program to end: the program's
+/// own shutdown takes up to two of [`GRACE`].
+const FORGET_WAIT: Duration = Duration::from_secs(5);
+
+/// The project's answer a folder's removal waits for, and what in it lets the folder go.
+pub type After =
+    (Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>, archforge_ui_egui::ai_agents::FolderGoes);
+
+/// Removes the private folder of the deleted conversation `chat` (AR-217), on a thread the host
+/// tracks: first, with `after`, the project's answer is waited for, at most [`FORGET_WAIT`], and
+/// only one that lets the folder go goes on; then its program, when it runs, is asked to end and
+/// waited for, at most [`FORGET_WAIT`] again; a folder whose program has not ended by then is
+/// kept, as a running program may write into it again. Answers whether there was a folder (false
+/// too when the answer kept it), or why it is kept. Started at quit before the host stops, it is
+/// waited for with the host's other threads, within [`super::QUIT_BUDGET`].
+pub fn forget(inner: &Arc<Inner>, chat: &str, after: Option<After>) -> Receiver<Result<bool, String>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let id = match (ConversationId::new(chat), SessionId::new(chat)) {
+        (Ok(id), Ok(_)) => id,
+        _ => {
+            let _ = tx.send(Err(ChatRefusal::BadId { bytes: chat.len() }.to_string()));
+            return rx;
+        }
+    };
+    let thread = inner.clone();
+    let chat = chat.to_string();
+    let started = inner.spawn("agents-forget", move || {
+        if let Some((answer, goes)) = after {
+            match answer.recv_timeout(FORGET_WAIT) {
+                Ok(a) if goes.decides(&a) => {}
+                Ok(_) => {
+                    log::info!("the private folder of the conversation {chat:?} is kept: the project's answer keeps it");
+                    let _ = tx.send(Ok(false));
+                    return;
+                }
+                Err(_) => {
+                    log::warn!(
+                        "the private folder of the conversation {chat:?} is kept: the project did not answer within {} s",
+                        FORGET_WAIT.as_secs()
+                    );
+                    let _ = tx.send(Ok(false));
+                    return;
+                }
+            }
+        }
+        let running = || locked(&thread.sessions).contains_key(&chat);
+        if let Some(handle) = locked(&thread.sessions).get(&chat) {
+            handle.end();
+        }
+        let deadline = std::time::Instant::now() + FORGET_WAIT;
+        while running() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let answer = if running() {
+            Err(format!("its program did not end within {} s", FORGET_WAIT.as_secs()))
+        } else {
+            Workspace::open(&thread.workspace).and_then(|w| w.remove_conversation(&id)).map_err(|e| e.to_string())
+        };
+        match &answer {
+            Ok(true) => log::info!("the private folder of the deleted conversation {chat:?} was removed"),
+            Ok(false) => log::info!("the deleted conversation {chat:?} had no private folder"),
+            Err(why) => log::warn!("the private folder of the deleted conversation {chat:?} is kept: {why}"),
+        }
+        let _ = tx.send(answer);
+    });
+    if !started {
+        log::warn!("the private folder of a deleted conversation is kept: Archforge is closing or a thread could not start");
+    }
+    rx
+}
+
 /// What a conversation's thread holds that must be given back however it ends.
 struct Guard {
     inner: Arc<Inner>,

@@ -327,6 +327,25 @@ pub struct Panel {
     pub at_end: bool,
     /// The history's scroll position.
     pub history_scroll: f32,
+    /// Why the history's conversations cannot be changed: a re-read of the list failed, and the
+    /// rows read before stay shown (AR-217).
+    pub writing_off: Option<String>,
+    /// Why the last deletion or Undo failed, under the history.
+    pub list_notice: Option<String>,
+    /// The confirmation of a deletion, while it is open.
+    pub ask: Option<crate::chat_delete::Ask>,
+    /// A history row's menu, while it is open.
+    pub row_menu: Option<crate::chat_delete::RowMenu>,
+    /// A deletion confirmed while its conversation's question was on its way: it goes on once
+    /// the project has answered the question.
+    pub delete_after: Option<crate::chat_delete::Ask>,
+    /// Where the keyboard goes when the history is next drawn, and how many more frames it is
+    /// asked for before it is given up.
+    pub focus: Option<crate::chat_delete::FocusTo>,
+    pub focus_tries: u8,
+    /// The conversation being read back opens without leaving the history: it replaces a deleted
+    /// one.
+    pub loading_stays: bool,
 }
 
 /// The time now and the local offset, from the host, or the system's time in UTC.
@@ -541,6 +560,7 @@ pub fn refusal_text(r: &Refusal) -> String {
             fmt(&tr("This question holds your saved {agent} API key, so it was neither sent nor saved."), &[("agent", who)])
         }
         Refusal::Failed(why) => fmt(&tr("This conversation could not be saved: {why}"), &[("why", why)]),
+        Refusal::Listed => fmt(&tr("This conversation could not be saved: {why}"), &[("why", &tr("it is in the conversation list already"))]),
     }
 }
 
@@ -583,6 +603,7 @@ fn ask(shell: &mut Shell, text: String, from_draft: bool) {
     let context = context_line(&chips);
     let store = store_of(shell);
     let now = clock(shell).now;
+    let skip = crate::chat_delete::held_labels(shell, &project);
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
     shell.chat_panel.notice = None;
     chat.chosen = true;
@@ -592,7 +613,7 @@ fn ask(shell: &mut Shell, text: String, from_draft: bool) {
         return;
     };
     if chat.origin.is_none() {
-        let rx = s.write(&project, Write::Create { chat: chat.id, title: text, provider: chat.provider, model: chat.model.clone(), now });
+        let rx = s.write(&project, Write::Create { chat: chat.id, title: text, provider: chat.provider, model: chat.model.clone(), skip, now });
         chat.step = Step::Creating(rx, pending);
     } else {
         chat.step = Step::Asking(s.write(&project, ask_write(chat, &pending, now)), pending);
@@ -963,7 +984,7 @@ pub fn new_conversation(shell: &mut Shell) {
 }
 
 /// Lets the conversation shown go: its program ends, and its last events are taken and dropped.
-fn retire(shell: &mut Shell) {
+pub(crate) fn retire(shell: &mut Shell) {
     let Some(old) = shell.chat_panel.chat.take() else { return };
     let_go(shell, old.key, old.origin, old.session != Session::Off);
 }
@@ -1338,10 +1359,17 @@ fn answers(shell: &mut Shell) {
             take(c);
         }
     }
-    // The history.
+    // The history. A list that cannot be read again keeps the rows read before shown, and turns
+    // their changes off with the reason (AR-217).
     if let Some(rx) = &shell.chat_panel.listing {
         match rx.try_recv() {
+            Ok(Err(why)) if matches!(shell.chat_panel.history, Some(Ok(_))) => {
+                log::warn!("the conversations could not be listed again: {why}");
+                shell.chat_panel.writing_off = Some(why);
+                shell.chat_panel.listing = None;
+            }
             Ok(list) => {
+                shell.chat_panel.writing_off = None;
                 shell.chat_panel.history = Some(list);
                 shell.chat_panel.listing = None;
             }
@@ -1366,12 +1394,20 @@ fn answers(shell: &mut Shell) {
                     chat.session = Session::Ending;
                 }
                 shell.chat_panel.chat = Some(chat);
-                shell.chat_panel.view = View::Conversation;
+                if !std::mem::take(&mut shell.chat_panel.loading_stays) {
+                    shell.chat_panel.view = View::Conversation;
+                }
                 shell.chat_panel.follow = true;
             }
-            Ok(Err(why)) => shell.chat_panel.load_error = Some(fmt(&tr("This conversation cannot be read: {why}"), &[("why", &why)])),
+            Ok(Err(why)) => {
+                shell.chat_panel.loading_stays = false;
+                shell.chat_panel.load_error = Some(fmt(&tr("This conversation cannot be read: {why}"), &[("why", &why)]));
+            }
             Err(TryRecvError::Empty) => shell.chat_panel.loading = Some((id, rx)),
-            Err(TryRecvError::Disconnected) => shell.chat_panel.load_error = Some(tr("the project did not answer")),
+            Err(TryRecvError::Disconnected) => {
+                shell.chat_panel.loading_stays = false;
+                shell.chat_panel.load_error = Some(tr("the project did not answer"));
+            }
         }
     }
 }
@@ -1469,6 +1505,15 @@ pub(crate) fn leaving(shell: &mut Shell) {
     }
     shell.chat_panel.menu = false;
     shell.chat_panel.link = None;
+    // A deletion's confirmation and a row's menu close; its toast waits, and shows its whole time
+    // again when the tab is shown again.
+    shell.chat_panel.ask = None;
+    shell.chat_panel.row_menu = None;
+    if let Some(path) = shell.project.as_ref().map(|p| p.path.clone()) {
+        for d in shell.chats.deletions.iter_mut().filter(|d| d.project == path) {
+            d.until = None;
+        }
+    }
 }
 
 /// A project closes: its conversation's program ends, and the panel's conversation is let go of.

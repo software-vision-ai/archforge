@@ -110,6 +110,23 @@ pub enum Error {
         id: String,
         why: String,
     },
+    /// A conversation is not deleted: what waited could not be committed first, or the deletion's
+    /// own commit failed; nothing of it was deleted.
+    ChatNotDeleted {
+        id: String,
+        why: String,
+    },
+    /// A deleted conversation is not brought back: it is listed already, the commit given is not one
+    /// of the project's that holds it, its label is taken, or the rows could not be written back;
+    /// nothing was written.
+    ChatNotRestored {
+        id: String,
+        why: String,
+    },
+    /// A deleted conversation is not brought back because it is in the list already.
+    ChatListed {
+        id: String,
+    },
     /// Don't save is refused: the conversations could not be committed first, and the reset would
     /// lose them.
     ChatsNotKept {
@@ -168,6 +185,9 @@ impl fmt::Display for Error {
             Error::ChatMissing { what, id } => write!(f, "no {what} {id} is in the project"),
             Error::ChatsUnreadable { path, why } => write!(f, "the conversations in the project {} cannot be read: {why}", path.display()),
             Error::ChatUnreadable { id, why } => write!(f, "the conversation {id} cannot be read: {why}"),
+            Error::ChatNotDeleted { id, why } => write!(f, "the conversation {id} is not deleted: {why}"),
+            Error::ChatListed { id } => write!(f, "the conversation {id} cannot be brought back: it is in the conversation list already"),
+            Error::ChatNotRestored { id, why } => write!(f, "the conversation {id} cannot be brought back: {why}"),
             Error::ChatsNotKept { path, why } => {
                 write!(f, "the conversations in the project {} could not be kept, so it is not put back to its last save: {why}", path.display())
             }

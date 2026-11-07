@@ -2049,6 +2049,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         || shell.canvas.nary_menu.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
+        // A Chat history row's menu or the confirmation of a deletion takes the keys (AR-217).
+        || shell.chat_panel.row_menu.is_some()
+        || shell.chat_panel.ask.is_some()
         // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
         || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
     {
