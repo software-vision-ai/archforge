@@ -36,6 +36,10 @@ use archforge_ui_egui::chat::{ChatRefusal, ChatStart, EventSink};
 
 pub use access::{Window, start_control};
 
+/// How long quitting waits for the host's threads: a conversation's program gets twice
+/// `sessions::GRACE` to end, an account call its request time.
+const QUIT_BUDGET: std::time::Duration = std::time::Duration::from_secs(12);
+
 /// A secure store as the host keeps it: the system's, or another for the tests.
 type Opened = Result<Box<dyn SecretStore>, SecretError>;
 
@@ -79,10 +83,12 @@ impl Inner {
     /// Runs `work` on a named thread the host tracks; refused once Archforge quits, or when the
     /// system cannot start a thread (said in the log).
     fn spawn(self: &Arc<Self>, name: &str, work: impl FnOnce() + Send + 'static) -> bool {
+        let mut threads = locked(&self.threads);
+        // Checked under the lock quitting takes too, so no thread starts after the quit took the
+        // threads it joins.
         if self.quitting.load(Ordering::SeqCst) {
             return false;
         }
-        let mut threads = locked(&self.threads);
         // Finished threads are joined as new ones start, so the list holds only live ones.
         threads.retain(|t| !t.is_finished());
         match std::thread::Builder::new().name(name.into()).spawn(work) {
@@ -200,25 +206,47 @@ impl Agents {
         }
     }
 
-    /// At quit: no thread starts any more, agent access closes (every token revoked, held
-    /// connections answered and closed), the sign-in under way is cancelled, every conversation is
-    /// ended and its program shut down, and every thread the host started is joined, so the
-    /// programs have ended when it returns.
+    /// At quit: no thread starts any more, agent access closes and stays closed (every token
+    /// revoked, held connections answered and closed), the sign-in under way is cancelled, every
+    /// conversation is ended and its program shut down, and the host's threads are joined, so the
+    /// programs have ended when it returns. The wait is bounded by [`QUIT_BUDGET`]: a thread still
+    /// waiting past it (on the secure store's own prompt, or on a codex program that does not
+    /// answer within its request time) is left and named in the log.
     pub fn shutdown(&self) {
         let inner = &self.inner;
-        inner.quitting.store(true, Ordering::SeqCst);
-        locked(&inner.access).close(inner.sink().as_ref());
+        let threads = {
+            let mut threads = locked(&inner.threads);
+            inner.quitting.store(true, Ordering::SeqCst);
+            std::mem::take(&mut *threads)
+        };
+        locked(&inner.access).set(false, inner.sink().as_ref());
         if let Some(cancel) = locked(&inner.login).take() {
             cancel.store(true, Ordering::SeqCst);
         }
         for handle in locked(&inner.sessions).values() {
             handle.end();
         }
-        let threads = std::mem::take(&mut *locked(&inner.threads));
-        for t in threads {
-            let _ = t.join();
+        let deadline = std::time::Instant::now() + QUIT_BUDGET;
+        while threads.iter().any(|t| !t.is_finished()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
-        log::info!("the agents host stopped: every program ended and every thread joined");
+        let mut left = Vec::new();
+        for t in threads {
+            if t.is_finished() {
+                let _ = t.join();
+            } else {
+                left.push(t.thread().name().unwrap_or("agents").to_string());
+            }
+        }
+        if left.is_empty() {
+            log::info!("the agents host stopped: every program ended and every thread joined");
+        } else {
+            log::warn!(
+                "the agents host stopped with {} thread(s) still waiting after {} s, left to end with Archforge: {left:?}",
+                left.len(),
+                QUIT_BUDGET.as_secs()
+            );
+        }
     }
 }
 

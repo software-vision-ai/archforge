@@ -109,6 +109,23 @@ fn claude_replay(name: &str) -> String {
     body
 }
 
+/// [`claude_replay`] with the text piece `piece` of the transcript written `times` times.
+fn claude_flood(name: &str, piece: &str, times: usize) -> String {
+    let mut body = String::new();
+    for record in fixture(name) {
+        match record.dir.as_str() {
+            "out" if record.line.contains(piece) => {
+                body.push_str(&format!("i=0; while [ $i -lt {times} ]; do printf '%s\\n' {}; i=$((i+1)); done\n", quoted(&record.line)));
+            }
+            "out" => body.push_str(&format!("printf '%s\\n' {}\n", quoted(&record.line))),
+            "in" => body.push_str("input\n"),
+            _ => {}
+        }
+    }
+    body.push_str("drain\n");
+    body
+}
+
 /// A Claude script body that answers nothing and runs until its input closes.
 const CLAUDE_IDLE: &str = "drain\n";
 
@@ -597,6 +614,62 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     assert!(listens(port), "the writer still holds access");
 }
 
+/// A request of a token revoked while it waits in the window's queue is given up at once, answered
+/// "revoked", and never runs when the window comes to it.
+#[test]
+fn a_queued_request_of_a_revoked_token_never_runs() {
+    let host = Host::new("queued", Setup::default());
+    host.agents.set_model_access(true);
+    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(CHAT));
+    let client = Client::from_token_file(&file, port).unwrap();
+    let call = std::thread::spawn(move || {
+        let started = Instant::now();
+        (client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })), started.elapsed())
+    });
+    // The request waits in the window's queue, not taken.
+    let queued = host.requests.recv_timeout(WAIT).unwrap();
+    let revoked = Instant::now();
+    host.agents.set_model_access(false);
+    let (answer, _) = call.join().unwrap();
+    assert!(revoked.elapsed() < Duration::from_secs(2), "given up at once: {:?}", revoked.elapsed());
+    assert_eq!(answer, Err(CallError::Refused(archforge_control::REVOKED.into())));
+    // When the window comes to it, it is not run.
+    assert_eq!(queued.state.load(Ordering::SeqCst), archforge_ui_egui::control::ABANDONED);
+    let mut window = shell();
+    let before = window.session.as_ref().unwrap().revision();
+    assert!(queued.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err(), "the window does not take it");
+    assert_eq!(archforge_ui_egui::control::answer_request(&mut window, &queued), Err(archforge_control::REVOKED.into()), "nor would it run");
+    assert_eq!(window.session.as_ref().unwrap().revision(), before);
+}
+
+/// A conversation whose events nobody takes keeps at most `MAX_WAITING` of them waiting, the drop
+/// said once in the log, and its end still comes.
+#[test]
+fn a_conversation_whose_events_wait_is_capped_and_its_end_still_comes() {
+    use archforge_ui_egui::chat::MAX_WAITING;
+    let flood = claude_flood("claude/doc-turn-with-mcp-tool.jsonl", "Customer and Order.", MAX_WAITING + 500);
+    let host = Host::new("flood", Setup { claude: &flood, ..Setup::default() });
+    host.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
+    host.agents.send(CHAT, "Which entities are in Shop?".into()).unwrap();
+    // Everything that comes, kept (so its places stay taken), until the program falls silent.
+    let mut kept = Vec::new();
+    while let Ok(e) = host.events.recv_timeout(Duration::from_secs(2)) {
+        kept.push(e);
+    }
+    let waiting = kept.iter().filter(|e| matches!(e, HostEvent::Chat { .. })).count();
+    assert_eq!(waiting, MAX_WAITING, "the cap holds while nothing is taken");
+    let said =
+        || LOG.lock().unwrap_or_else(PoisonError::into_inner).iter().filter(|l| l.contains("too many events waiting") && l.contains(CHAT)).count();
+    assert_eq!(said(), 1, "the drop is said once");
+    host.agents.end(CHAT).unwrap();
+    let rest = host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
+    assert!(matches!(rest.last(), Some(HostEvent::Chat { event: ChatEvent::Ended { .. }, .. })), "the end is never dropped");
+    assert_eq!(said(), 1);
+    drop(kept);
+}
+
 /// The test message runs with no tool server, in a scratch folder removed afterwards; the Codex
 /// account is read, signed in with a device code and in the browser, and signed out, each through a
 /// short-lived codex program, with the ChatGPT sign-in in the keyring where the store opens.
@@ -743,6 +816,9 @@ fn codex_account_is_read_on_first_use_never_at_launch() {
     for _ in 0..20 {
         h.run();
     }
+    assert!(!h.state().agents.reading_account() && h.state().agents.codex.is_none(), "no account read was asked at launch");
+    // Time for a read, had one been asked, to start its program.
+    std::thread::sleep(Duration::from_millis(500));
     assert!(host.log("codex").iter().all(|l| l == "--version"), "a plain launch starts no app-server: {:?}", host.log("codex"));
     // A Claude conversation reads no Codex account.
     archforge_ui_egui::chat::start(h.state_mut(), claude(CHAT, "Chat 1", false)).unwrap();

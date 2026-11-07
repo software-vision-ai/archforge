@@ -21,8 +21,8 @@ token closes the connection without a word.
 | `write_token`, `read_token` | exclusive creation with mode 0600, giving the file's `FileId`; trusted only as a regular file of the effective user with no group or other bits, re-checked on the open handle (CS-8); Unix only, elsewhere `NOT_HERE` |
 | `FileId`, `remove_token_file` | a token file's device and inode; the file is removed only while its name still holds that very file, anything else there is left and logged |
 | `read_line` | `pub fn read_line(r: &mut impl BufRead, max: usize) -> io::Result<Option<Vec<u8>>>` |
-| `Server::start` | `pub fn start(port: u16, settings: &Path, handler: Handler) -> Result<Server, String>`: the person's own access (`--control`), one `Role::Full` token in `control-<port>.token`; the settings folder must be yours (others' write bits are removed); a first line has 5 s and 1 MiB, later lines 30 s each |
-| `Server::open`, `Server::grant`, `Server::grants`, `Grant` | Chat's agent access: an opening on a free loopback port with no token; `grant(Role)` mints a token into a new file `control-<port>-<16 hex>.token`, created exclusively (a taken name is never replaced; another is tried, up to 16), and gives a `Grant` (`path()`, `port()`) whose drop revokes it |
+| `Server::start` | `pub fn start(port: u16, settings: &Path, handler: Handler) -> Result<Server, String>`: the person's own access (`--control`), one `Role::Full` token in `control-<port>.token` (an earlier start's file of ours under that fixed name is replaced, as before; a granted file never is); the settings folder must be yours (others' write bits are removed); a first line has 5 s and 1 MiB, later lines 30 s each |
+| `Server::open`, `Server::grant`, `Server::grants`, `Grant` | Chat's agent access: an opening on a free loopback port with no token; `grant(Role)` mints a token into a new file `control-<port>-<16 hex>.token`, created exclusively (a taken name is never replaced; another is tried, up to 16), and gives a `Grant` (`path()`, `port()`, `live()`) whose drop revokes it |
 | `Role`, `Call`, `Handler`, `REVOKED` | `ReadOnly` or `Full`; a request as the handler gets it: method, params, origin, the role of the token the connection showed and its liveness (`live`, false once revoked or closed); `Handler` is `Arc<dyn Fn(Call<'_>) -> Result<Value, String> + Send + Sync>`; the server only carries the role, the application refuses what it does not allow |
 | `Client::new`, `Client::from_token_file`, `Client::with_origin`, `Client::call` | the client of the application on a port, its token from `control-<port>.token` or from a granted file (`archforge-cli --token-file`), sending an origin with every request when given one; `CallError::{Unreachable, Refused}` |
 | `check_origin`, `OriginError`, `MAX_ORIGIN` | an origin is 1 to 64 characters of printable text with no space at either end; refused as `Empty`, `TooLong`, `Padded` or `NotPrintable` |
@@ -36,6 +36,12 @@ gate shuts, every grant is revoked, the accepting thread is woken and joined, an
 thread is joined, a connection that has not ended within a second being shut both ways first. Each
 opening has its own gate and grants, so a connection authenticated on one is never served by
 another or after its close.
+
+**Limits.** A token file is removed by name after its device and inode are checked, so a file
+swapped in between the check and the removal would go; only this user can do that, as the
+settings folder is closed to others' writes. The close wakes the accepting thread with a loopback
+connection; if three tries fail (no file handle left), the thread is left, logged, and the port
+stays bound until the next connection or the end of the process.
 
 **Non-goals.** Answering requests: the shell does (`archforge_ui_egui::control`). Windows: its
 protected token file comes later.

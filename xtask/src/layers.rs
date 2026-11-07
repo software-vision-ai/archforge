@@ -228,6 +228,16 @@ mod tests {
         assert_eq!(violations(&host), Vec::<String>::new(), "a host service may");
     }
 
+    /// The host services that start programs or open sockets sit at the shell's layer or above, so
+    /// the shell can depend on none of them.
+    #[test]
+    fn the_shell_may_not_depend_on_a_host_service() {
+        for host in ["control", "secrets", "agents", "mcp", "dolt", "project"] {
+            let packages = vec![pkg(SHELL, class_of(SHELL), &[(host, "normal")]), pkg(host, class_of(host), &[])];
+            assert!(!violations(&packages).is_empty(), "{host}");
+        }
+    }
+
     #[test]
     fn a_clean_tree_has_no_violation() {
         let packages = vec![

@@ -152,8 +152,13 @@ fn raw_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
 fn char_end(chars: &[char], i: usize) -> Option<usize> {
     match chars.get(i + 1)? {
         '\\' => {
-            // An escape runs to the next quote, at most a unicode escape's length away.
-            (i + 2..i + 14).find(|j| chars.get(*j) == Some(&'\'')).map(|j| j + 1)
+            // A unicode escape runs to its closing brace; any other escapes one character.
+            let close = if chars.get(i + 2) == Some(&'u') && chars.get(i + 3) == Some(&'{') {
+                (i + 4..i + 12).find(|j| chars.get(*j) == Some(&'}'))?.saturating_add(1)
+            } else {
+                i + 3
+            };
+            (chars.get(close) == Some(&'\'')).then_some(close + 1)
         }
         _ => (chars.get(i + 2) == Some(&'\'')).then_some(i + 3),
     }
@@ -211,13 +216,22 @@ fn tokens(blanked: &str) -> Vec<(Token, usize)> {
 const MAX_DEPTH: usize = 32;
 
 /// The full paths of the path tree starting at `at` (a name), expanding groups; gives them and
-/// where the tree ends. `prefix` is the path so far, `depth` how many groups it is inside.
-fn tree(tokens: &[(Token, usize)], mut at: usize, prefix: Vec<String>, depth: usize, budget: &mut usize) -> (Vec<Vec<String>>, usize) {
+/// where the tree ends. `prefix` is the path so far, `depth` how many groups it is inside; `cut`
+/// is set when the budget or the nesting cap stopped the tree, so the scan fails closed.
+fn tree(
+    tokens: &[(Token, usize)],
+    mut at: usize,
+    prefix: Vec<String>,
+    depth: usize,
+    budget: &mut usize,
+    cut: &mut bool,
+) -> (Vec<Vec<String>>, usize) {
     let mut path = prefix;
     loop {
         // Every step costs, and nesting is capped: a damaged file cannot make the scan loop for
         // long or recurse deep.
         if *budget == 0 || depth > MAX_DEPTH {
+            *cut = true;
             return (vec![path], at);
         }
         *budget -= 1;
@@ -235,7 +249,7 @@ fn tree(tokens: &[(Token, usize)], mut at: usize, prefix: Vec<String>, depth: us
                         Some(Token::Comma) => at += 1,
                         None => return (all, at),
                         Some(_) => {
-                            let (paths, end) = tree(tokens, at, path.clone(), depth + 1, budget);
+                            let (paths, end) = tree(tokens, at, path.clone(), depth + 1, budget, cut);
                             all.extend(paths);
                             at = end.max(at + 1);
                         }
@@ -261,12 +275,20 @@ pub fn findings(source: &str) -> Vec<String> {
     while let Some((token, line)) = tokens.get(i) {
         match token {
             Token::Name(n) if SOCKETS.contains(&n.as_str()) => out.push(format!("line {line}: the socket type {n}")),
+            // Renaming the standard library would hide its paths from the scan.
+            Token::Name(n) if n == "std" && matches!(tokens.get(i + 1), Some((Token::Name(a), _)) if a == "as") => {
+                out.push(format!("line {line}: std renamed, which hides its paths from this check"));
+            }
             Token::Name(n) if n == "std" && tokens.get(i + 1).map(|(t, _)| t) == Some(&Token::Path) => {
-                let (paths, end) = tree(&tokens, i, Vec::new(), 0, &mut budget);
+                let mut cut = false;
+                let (paths, end) = tree(&tokens, i, Vec::new(), 0, &mut budget, &mut cut);
                 for p in paths {
                     if PATHS.iter().any(|f| p.len() >= f.len() && p.iter().zip(f.iter()).all(|(a, b)| a == b)) {
                         out.push(format!("line {line}: {}", p.join("::")));
                     }
+                }
+                if cut {
+                    out.push(format!("line {line}: a path too long or too deeply nested to follow"));
                 }
                 i = end.max(i + 1);
                 continue;
@@ -357,9 +379,19 @@ mod tests {
     }
 
     #[test]
-    fn a_damaged_file_never_hangs_the_scan() {
+    fn an_escaped_quote_ends_its_character_and_a_renamed_std_is_found() {
+        // Read short, the escaped quote would leave a stray quote that opens a string swallowing the
+        // code after it.
+        assert_eq!(findings("let q = ['\\'','\"']; std::process::exit(0); let s = \"x\";"), vec!["line 1: std::process::exit"]);
+        assert_eq!(findings("let c = '\\u{1F600}'; let s = \"std::net\"; std::net::X"), vec!["line 1: std::net::X"]);
+        assert_eq!(findings("use std as s; s::process::exit(0);"), vec!["line 1: std renamed, which hides its paths from this check"]);
+        assert_eq!(findings("extern crate std as x;"), vec!["line 1: std renamed, which hides its paths from this check"]);
+    }
+
+    #[test]
+    fn a_damaged_file_never_hangs_the_scan_and_fails_closed() {
         let deep = format!("use std::{}", "{a::".repeat(10_000));
-        let _ = findings(&deep);
+        assert!(findings(&deep).iter().any(|f| f.contains("too deeply nested")), "a path the scan cannot follow is a finding");
         let _ = findings("use std::{{{{{{{{{{");
         let _ = findings("'");
         let _ = findings("r#\"never closed");

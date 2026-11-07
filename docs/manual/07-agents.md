@@ -229,8 +229,8 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
 - **Let Chat use the model** is off until you turn it on. While it is on, each Chat conversation
   gets agent access of its own while it runs: Chat reads the project's model through it, and a
   conversation changes the model only when **Allow changes** is on in it. Archforge enforces
-  that itself: a conversation without Allow changes is refused every change, undo and save,
-  whatever the agent asks. The access opens on your computer alone when a conversation needs it
+  that itself: through its agent access, a conversation without Allow changes is refused every
+  change, undo and save it asks for. The access opens on your computer alone when a conversation needs it
   and closes when the last conversation ends, at once when you turn the switch off, and when you
   quit.
 

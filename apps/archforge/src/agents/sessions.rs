@@ -15,7 +15,6 @@
 //! with the last conversation that held it, and the window is told the conversation ended.
 
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
@@ -23,7 +22,7 @@ use archforge_agents::claude::{ClaudeConfig, ClaudeSession, Model, SessionId, St
 use archforge_agents::codex::{Auth, Bridge, CodexConfig, CodexHome, CodexSession};
 use archforge_agents::{AgentError, AgentSession, ConversationId, ErrorKind, Limits, SessionEvent, TurnOutcome, Workspace};
 use archforge_ui_egui::ai_agents::{CodexSignIn, Provider};
-use archforge_ui_egui::chat::{ChatEvent, ChatFailure, ChatRefusal, ChatStart, FailureKind, HostEvent, MAX_RUNNING, Ticket, TurnEnd};
+use archforge_ui_egui::chat::{ChatEvent, ChatFailure, ChatRefusal, ChatStart, FailureKind, HostEvent, MAX_RUNNING, Ticket, TurnEnd, Waiting};
 
 use super::{Inner, locked};
 
@@ -110,7 +109,7 @@ struct Guard {
     /// Why the conversation ended, when nobody asked; sent with its end.
     failure: Option<ChatFailure>,
     /// The events waiting in the window, counted against the cap.
-    waiting: Arc<AtomicUsize>,
+    waiting: Arc<Waiting>,
     /// Whether a drop past the cap was said in the log yet.
     dropped: bool,
 }
@@ -120,7 +119,7 @@ impl Guard {
     /// dropped, the first drop said in the log.
     fn emit(&mut self, event: ChatEvent) {
         let Some(sink) = self.inner.sink() else { return };
-        let Some(ticket) = Ticket::take(&self.waiting) else {
+        let Some(ticket) = Ticket::take(&self.waiting, event.bytes()) else {
             if !self.dropped {
                 log::warn!("the conversation {:?} has too many events waiting in the window; later ones are dropped until they are taken", self.chat);
                 self.dropped = true;
@@ -137,14 +136,23 @@ impl Drop for Guard {
     fn drop(&mut self) {
         locked(&self.inner.sessions).remove(&self.chat);
         let sink = self.inner.sink();
-        if self.grant.take().is_some() {
-            locked(&self.inner.access).released(sink.as_ref());
-        }
-        if let Some(sink) = sink {
-            let event =
-                HostEvent::Chat { chat: self.chat.clone(), event: ChatEvent::Ended { failure: self.failure.take() }, ticket: Ticket::uncounted() };
-            // A drop during a panic must not panic again: the window's wake is guarded.
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sink.send(event)));
+        // The token is revoked as the grant drops, whatever follows.
+        let held = self.grant.take().is_some();
+        let failure = self.failure.take();
+        let chat = self.chat.clone();
+        let inner = self.inner.clone();
+        // A drop during a panic must not panic again: closing the opening and telling the window
+        // (whose wake runs here) are guarded.
+        let told = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            if held {
+                locked(&inner.access).released(sink.as_ref());
+            }
+            if let Some(sink) = sink {
+                sink.send(HostEvent::Chat { chat, event: ChatEvent::Ended { failure }, ticket: Ticket::uncounted() });
+            }
+        }));
+        if told.is_err() {
+            log::error!("the end of the conversation {:?} could not be told to the window", self.chat);
         }
         if std::thread::panicking() {
             log::error!("the conversation {:?} stopped on a failure inside Archforge; its access was given back", self.chat);
@@ -184,14 +192,8 @@ fn model(name: &str) -> Result<Model, ChatFailure> {
 
 /// A conversation's thread: everything but the checks [`start`] made.
 fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: SessionId, commands: &Receiver<Command>) {
-    let mut guard = Guard {
-        inner: inner.clone(),
-        chat: request.chat.clone(),
-        grant: None,
-        failure: None,
-        waiting: Arc::new(AtomicUsize::new(0)),
-        dropped: false,
-    };
+    let mut guard =
+        Guard { inner: inner.clone(), chat: request.chat.clone(), grant: None, failure: None, waiting: Arc::new(Waiting::default()), dropped: false };
     let mut program = match begin(inner, &request, &id, session, &mut guard) {
         Ok(p) => p,
         Err(f) => {
@@ -200,7 +202,6 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             return;
         }
     };
-    let access = guard.grant.is_some();
     loop {
         if inner.quitting() {
             break;
@@ -234,6 +235,8 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             guard.failure = error.as_ref().map(failure);
             break;
         }
+        // Whether the conversation holds access now: the opt-in may have closed it since the start.
+        let access = guard.grant.as_ref().is_some_and(archforge_control::Grant::live);
         if let Some(event) = chat_event(event, access) {
             guard.emit(event);
         }

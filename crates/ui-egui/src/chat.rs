@@ -8,8 +8,8 @@
 //! the status bar shows it.
 //!
 //! Everything here is bounded: at most [`MAX_SESSIONS`] conversations are kept, each with at most
-//! [`MAX_WAITING`] events waiting to be taken; past that an event is dropped and the drop said once
-//! in the log for that conversation. A conversation's end is never dropped. A conversation id is the
+//! [`MAX_WAITING`] events and [`MAX_WAITING_BYTES`] of their text waiting to be taken; past either
+//! an event is dropped and the drop said once in the log for that conversation. A conversation's end is never dropped. A conversation id is the
 //! conversation's UUID in its lowercase text form, checked before anything is asked of the host, and
 //! quoted in the log.
 
@@ -24,6 +24,8 @@ use crate::ai_agents::Provider;
 pub const MAX_SESSIONS: usize = 64;
 /// The most events one conversation keeps waiting to be taken.
 pub const MAX_WAITING: usize = 4096;
+/// The most bytes of text one conversation's waiting events hold.
+pub const MAX_WAITING_BYTES: usize = 16 * 1024 * 1024;
 /// The most conversations the host runs at once.
 pub const MAX_RUNNING: usize = 8;
 /// The most events taken from the host's channel in one frame; the rest wait for the next.
@@ -151,16 +153,48 @@ pub enum ChatEvent {
     Ended { failure: Option<ChatFailure> },
 }
 
+impl ChatEvent {
+    /// The bytes of text the event holds, which count against [`MAX_WAITING_BYTES`].
+    pub fn bytes(&self) -> usize {
+        let failure = |f: &ChatFailure| f.detail.len();
+        match self {
+            ChatEvent::Started { model, .. } => model.len(),
+            ChatEvent::Text { delta } => delta.len(),
+            ChatEvent::Message { text } => text.len(),
+            ChatEvent::ToolStarted { id, tool, input } => id.len().saturating_add(tool.len()).saturating_add(input.len()),
+            ChatEvent::ToolFinished { id, summary, .. } => id.len().saturating_add(summary.len()),
+            ChatEvent::Retrying { .. } | ChatEvent::TurnEnded(TurnEnd::Completed | TurnEnd::Stopped) => 0,
+            ChatEvent::TurnEnded(TurnEnd::Failed(f)) => failure(f),
+            ChatEvent::Ended { failure: f } => f.as_ref().map_or(0, failure),
+        }
+    }
+}
+
+/// What a conversation has waiting in the window, as the host counts it: events and their bytes.
+#[derive(Debug, Default)]
+pub struct Waiting {
+    events: AtomicUsize,
+    bytes: AtomicUsize,
+}
+
 /// A place among a conversation's waiting events, held from the host until the event is taken
 /// (or dropped), so the host can count what waits and keep each conversation within
-/// [`MAX_WAITING`] too.
-pub struct Ticket(Option<Arc<AtomicUsize>>);
+/// [`MAX_WAITING`] and [`MAX_WAITING_BYTES`] too.
+pub struct Ticket(Option<(Arc<Waiting>, usize)>);
 
 impl Ticket {
-    /// A place counted in `waiting`, or none when [`MAX_WAITING`] already wait.
-    pub fn take(waiting: &Arc<AtomicUsize>) -> Option<Ticket> {
-        let taken = waiting.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| (n < MAX_WAITING).then(|| n.saturating_add(1)));
-        taken.ok().map(|_| Ticket(Some(waiting.clone())))
+    /// A place for an event of `bytes` counted in `waiting`, or none when [`MAX_WAITING`] events or
+    /// [`MAX_WAITING_BYTES`] already wait.
+    pub fn take(waiting: &Arc<Waiting>, bytes: usize) -> Option<Ticket> {
+        let counted = waiting.events.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| (n < MAX_WAITING).then(|| n.saturating_add(1)));
+        counted.ok()?;
+        let room =
+            waiting.bytes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_add(bytes).filter(|total| *total <= MAX_WAITING_BYTES));
+        if room.is_err() {
+            let _ = waiting.events.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)));
+            return None;
+        }
+        Some(Ticket(Some((waiting.clone(), bytes))))
     }
 
     /// A ticket that counts nothing: for an event the host must never drop (a conversation's end).
@@ -170,10 +204,11 @@ impl Ticket {
 }
 
 impl Drop for Ticket {
-    /// Gives the place back.
+    /// Gives the place and its bytes back.
     fn drop(&mut self) {
-        if let Some(n) = &self.0 {
-            let _ = n.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)));
+        if let Some((w, bytes)) = &self.0 {
+            let _ = w.events.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(1)));
+            let _ = w.bytes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| Some(n.saturating_sub(*bytes)));
         }
     }
 }
@@ -227,6 +262,8 @@ impl std::fmt::Debug for EventSink {
 struct Kept {
     chat: String,
     events: VecDeque<(ChatEvent, Ticket)>,
+    /// The bytes of text the waiting events hold.
+    bytes: usize,
     running: bool,
     dropped: u64,
 }
@@ -316,25 +353,29 @@ fn poll(shell: &mut crate::Shell) {
     }
 }
 
-/// Keeps `event` for `chat`. Past [`MAX_WAITING`] it is dropped, said once in the log; an end makes
-/// room by dropping the oldest event, so it is never lost.
+/// Keeps `event` for `chat`. Past [`MAX_WAITING`] events or [`MAX_WAITING_BYTES`] it is dropped,
+/// said once in the log; an end makes room by dropping the oldest events, so it is never lost.
 fn keep(state: &mut State, chat: String, event: ChatEvent, ticket: Ticket) {
     let Some(kept) = state.kept.iter_mut().find(|k| k.chat == chat) else {
         log::warn!("an event came for the conversation {chat:?}, which this window does not know; it is dropped");
         return;
     };
     let ended = matches!(event, ChatEvent::Ended { .. });
-    if kept.events.len() >= MAX_WAITING {
-        if !ended {
-            drop_one(kept);
-            return;
-        }
-        kept.events.pop_front();
+    let size = event.bytes().min(MAX_WAITING_BYTES);
+    let full = |k: &Kept| k.events.len() >= MAX_WAITING || k.bytes.saturating_add(size) > MAX_WAITING_BYTES;
+    if full(kept) && !ended {
+        drop_one(kept);
+        return;
+    }
+    while full(kept) {
+        let Some((oldest, _)) = kept.events.pop_front() else { break };
+        kept.bytes = kept.bytes.saturating_sub(oldest.bytes().min(MAX_WAITING_BYTES));
         drop_one(kept);
     }
     if ended {
         kept.running = false;
     }
+    kept.bytes = kept.bytes.saturating_add(size);
     kept.events.push_back((event, ticket));
 }
 
@@ -365,7 +406,7 @@ pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRef
     host.start(request)?;
     match shell.chats.kept.iter_mut().find(|k| k.chat == chat) {
         Some(k) => k.running = true,
-        None => shell.chats.kept.push(Kept { chat, events: VecDeque::new(), running: true, dropped: 0 }),
+        None => shell.chats.kept.push(Kept { chat, events: VecDeque::new(), bytes: 0, running: true, dropped: 0 }),
     }
     if provider == Provider::Codex {
         crate::ai_agents::need_account(shell);
@@ -396,6 +437,7 @@ pub fn end(shell: &crate::Shell, chat: &str) -> Result<(), ChatRefusal> {
 pub fn take_events(shell: &mut crate::Shell, chat: &str) -> Vec<ChatEvent> {
     let Some(kept) = shell.chats.kept.iter_mut().find(|k| k.chat == chat) else { return Vec::new() };
     let events = kept.events.drain(..).map(|(e, _)| e).collect();
+    kept.bytes = 0;
     shell.chats.kept.retain(|k| k.running || !k.events.is_empty());
     events
 }

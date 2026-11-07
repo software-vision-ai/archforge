@@ -123,8 +123,9 @@ impl eframe::App for DesktopApp {
         if let Err(e) = prefs::save(&self.settings, &prefs::capture(&self.shell)) {
             log::error!("the preferences could not be saved: {e}");
         }
-        self.projects.shutdown();
+        // Chat's programs and agent access first, then the projects' servers.
         self.agents.shutdown();
+        self.projects.shutdown();
         // The person's own access closes with the window: its token is revoked and its file removed.
         self._control = None;
     }

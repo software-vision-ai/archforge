@@ -14164,8 +14164,15 @@ fn the_status_bar_says_whether_chat_holds_agent_access_and_opens_ai_agents() {
         assert!(h.state().chats.holds_access());
         assert!(painted_has(&h, "Chat is using the model") && !painted_has(&h, "Agent access off"), "{theme:?}");
         assert!(painted_dots(&h).contains(&p.accent) && !painted_dots(&h).contains(&p.purple), "{theme:?}: the accent dot alone");
-        // A click opens Settings on AI Agents.
+        // A control: the pointer over it shows the hand and says where it leads.
         let at = rect_of(&h, "workspace.status.agent").center();
+        h.event(egui::Event::PointerMoved(at));
+        for _ in 0..90 {
+            h.step();
+        }
+        assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::PointingHand, "{theme:?}");
+        assert!(painted_has(&h, "AI Agents"), "{theme:?}: its tooltip");
+        // A click opens Settings on AI Agents.
         click(&mut h, at);
         assert_eq!(h.state().settings.as_ref().map(|d| d.section), Some(crate::settings::Section::Agents), "{theme:?}");
         h.state_mut().settings = None;
@@ -14244,6 +14251,33 @@ fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in
     // Taking one conversation's events makes room again.
     crate::chat::take_events(h.state_mut(), &chat_id(3));
     assert!(crate::chat::start(h.state_mut(), chat_start(100, Provider::Claude)).is_ok());
+}
+
+#[test]
+fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
+    use crate::ai_agents::Provider;
+    use crate::chat::{ChatEvent, MAX_WAITING_BYTES};
+    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
+    crate::chat::start(h.state_mut(), chat_start(1, Provider::Claude)).unwrap();
+    let one = chat_id(1);
+    let big = || ChatEvent::Message { text: "x".repeat(MAX_WAITING_BYTES / 3 + 1) };
+    for _ in 0..3 {
+        f.emit(&one, big());
+    }
+    h.run();
+    assert_eq!(h.state().chats.dropped(&one), 1, "the third would pass the bytes' cap");
+    // The end still comes, making room by dropping the oldest.
+    f.emit(&one, ChatEvent::Ended { failure: None });
+    h.run();
+    let events = crate::chat::take_events(h.state_mut(), &one);
+    assert_eq!(events.len(), 3);
+    assert_eq!(events.last(), Some(&ChatEvent::Ended { failure: None }));
+    // The host's own count: places are taken by events and bytes, and given back as tickets drop.
+    let waiting = std::sync::Arc::new(crate::chat::Waiting::default());
+    let first = crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2 + 1).unwrap();
+    assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_none(), "past the bytes' cap");
+    drop(first);
+    assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
 #[test]

@@ -330,8 +330,10 @@ fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_liste
     let (_s, mut r, first) = held(port, &format!("{{\"id\":1,\"method\":\"m\",\"token\":\"{token}\"}}\n"));
     assert_eq!(first["ok"], true);
     // The grant outlives nothing: the close revokes it.
+    assert!(grant.live());
     let started = Instant::now();
     drop(server);
+    assert!(!grant.live(), "a grant of a closed opening opens nothing");
     assert!(started.elapsed() < Duration::from_secs(3), "the close is bounded: {:?}", started.elapsed());
     let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], REVOKED, "{last}");

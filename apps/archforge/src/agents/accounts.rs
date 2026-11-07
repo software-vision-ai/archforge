@@ -24,7 +24,7 @@ use super::Inner;
 const TEST_MESSAGE: &str = "Reply with the single word OK.";
 /// How long the test message may take, and each account request.
 const TEST_BUDGET: Duration = Duration::from_secs(120);
-const REQUEST: Duration = Duration::from_secs(15);
+const REQUEST: Duration = Duration::from_secs(10);
 /// How long a sign-in waits for the person to finish in the browser.
 const SIGN_IN_BUDGET: Duration = Duration::from_secs(15 * 60);
 /// How long one wait for an event lasts, between looks at the quitting and cancel flags.
@@ -94,7 +94,14 @@ pub fn test_message(inner: &Arc<Inner>, provider: Provider, model: &str, sign_in
     let failed = |e: AgentError| account_error(&e);
     let runtime = inner.runtime(super::kind(provider)).map_err(failed)?;
     let (scratch, folder) = Scratch::new(inner)?;
-    let key = |p: Provider| inner.key(p).map_err(|_| AccountError::NoCredential);
+    // No key, or no store to hold one: there is nothing to test with. A store that refused (locked,
+    // a prompt declined) says so.
+    let key = |p: Provider| {
+        inner.key(p).map_err(|e| match e {
+            archforge_secrets::SecretError::NotFound { .. } | archforge_secrets::SecretError::NoSecureStore { .. } => AccountError::NoCredential,
+            e => AccountError::Failed { detail: format!("the {} API key could not be read: {e}", p.name()) },
+        })
+    };
     let mut program: Box<dyn AgentSession> = match provider {
         Provider::Claude => {
             let model = Model::new(model).map_err(failed)?;
@@ -153,8 +160,12 @@ fn turn(inner: &Inner, program: &mut dyn AgentSession) -> Result<(), AccountErro
     Err(AccountError::Failed { detail: format!("no answer within {} seconds", TEST_BUDGET.as_secs()) })
 }
 
-/// A short-lived codex program for the account, with the ChatGPT sign-in's store.
+/// A short-lived codex program for the account, with the ChatGPT sign-in's store; none once
+/// Archforge quits.
 fn account_program(inner: &Inner) -> Result<Program, AccountError> {
+    if inner.quitting() {
+        return Err(AccountError::Failed { detail: "Archforge is closing".into() });
+    }
     let failed = |e: AgentError| AccountError::Failed { detail: e.to_string() };
     let runtime = inner.runtime(RuntimeKind::Codex).map_err(failed)?;
     let workspace = Workspace::open(&inner.workspace).map_err(failed)?;

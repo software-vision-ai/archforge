@@ -466,8 +466,8 @@ impl Server {
             let path = self.settings.join(format!("control-{}-{}.token", self.port, name_suffix()?));
             match create_token_file(&path, &token) {
                 Ok(file) => {
-                    let id = self.add(token, role, Some((path.clone(), file)));
-                    return Ok(Grant { id, path, port: self.port, shared: self.shared.clone() });
+                    let (id, live) = self.add(token, role, Some((path.clone(), file)));
+                    return Ok(Grant { id, path, port: self.port, live, shared: self.shared.clone() });
                 }
                 Err(Created::Taken) => last = format!("{} is taken", path.display()),
                 Err(Created::Failed(e)) => return Err(e),
@@ -486,11 +486,12 @@ impl Server {
         self.port
     }
 
-    /// Records a token and gives its grant's id.
-    fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>) -> u64 {
+    /// Records a token and gives its grant's id and liveness.
+    fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>) -> (u64, Arc<AtomicBool>) {
         let id = self.shared.next_grant.fetch_add(1, Ordering::SeqCst).saturating_add(1);
-        locked(&self.shared.grants).push(Granted { id, token, role, live: Arc::new(AtomicBool::new(true)), file });
-        id
+        let live = Arc::new(AtomicBool::new(true));
+        locked(&self.shared.grants).push(Granted { id, token, role, live: live.clone(), file });
+        (id, live)
     }
 
     /// Binds the loopback port and starts the accepting thread.
@@ -563,6 +564,7 @@ pub struct Grant {
     id: u64,
     path: PathBuf,
     port: u16,
+    live: Arc<AtomicBool>,
     shared: Arc<Shared>,
 }
 
@@ -582,6 +584,11 @@ impl Grant {
     /// The port of the server that granted it.
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Whether the token still opens anything: false once its server closed.
+    pub fn live(&self) -> bool {
+        self.live.load(Ordering::SeqCst) && self.shared.open.load(Ordering::SeqCst)
     }
 }
 
