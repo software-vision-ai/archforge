@@ -110,6 +110,34 @@ impl Projects {
         }
     }
 
+    /// Who creates projects and conversations: the version line.
+    pub fn created_by(&self) -> &str {
+        &self.inner.created_by
+    }
+
+    /// Runs `job` on the writer against the open project at `path`, after every job sent before
+    /// it, and answers with what it gives; a project no longer open is an error.
+    pub fn on_writer<T: Send + 'static>(
+        &self,
+        path: &Path,
+        job: impl FnOnce(&Project) -> Result<T, String> + Send + 'static,
+    ) -> Receiver<Result<T, String>> {
+        on_writer(&self.inner, path, job)
+    }
+
+    /// Runs `job` on the writer with the open project at `path`, or none when it is not open, after
+    /// every job sent before it, and answers with what it gives; nothing when the writer stopped.
+    pub fn on_writer_open<T: Send + 'static>(&self, path: &Path, job: impl FnOnce(Option<&Project>) -> T + Send + 'static) -> Receiver<T> {
+        let (tx, rx) = channel();
+        let run: ChatJob = Box::new(move |project| {
+            let _ = tx.send(job(project));
+        });
+        if let Err(e) = writer(&self.inner).send(Job::Chat(path.to_path_buf(), run)) {
+            log::warn!("a job on the conversations could not reach the writer: {e}");
+        }
+        rx
+    }
+
     /// Cancels a running creation and waits for it within the stop budget (std's join has no
     /// timeout, so it polls), then stops every open project's server. Runs on exit, on the interface
     /// thread: it may hold it for up to about twice the stop budget.
@@ -945,6 +973,115 @@ mod tests {
         assert_eq!((listed.len(), summary.chat.provider, summary.messages), (1, Provider::Codex, 1), "the conversation stayed");
         close(&host, &path).unwrap();
         host.shutdown();
+        remove_settled(&base);
+    }
+
+    /// The host's store of conversations (`crate::chats`), over a real project and a secure store
+    /// in memory holding a canary key: a question asked, failed, sent again in place, edited and
+    /// sent again, its turn kept once; the conversation kept, the project closed and opened again,
+    /// and read back whole; a question holding the key refused with nothing written.
+    #[test]
+    fn the_hosts_chat_store_runs_a_failed_turn_again_in_place_keeps_conversations_and_refuses_a_key() {
+        use archforge_secrets::{MemoryStore, Secret, SecretName, SecretStore};
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat::FailureKind;
+        use archforge_ui_egui::chat_store::{Anchor, AnchorRole, Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
+        const CANARY: &str = "sk-ant-api03-canary-chat-store-0000-4F2a";
+        let base = std::env::temp_dir().join(format!("af-chat-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let keys = MemoryStore::new();
+        keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(CANARY.to_string()).unwrap()).unwrap();
+        let agents = std::sync::Arc::new(crate::agents::Agents::with(&base.join("settings"), Box::new(keys), archforge_agents::HostEnv::default()));
+        let chats = crate::chats::Chats::new(host.clone(), agents.clone());
+        let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
+        host.write(&path, model("shop"));
+        assert_eq!(saved(&host, &path), Ok(true));
+        let answer = |rx: Receiver<Result<Answer, Refusal>>| rx.recv_timeout(Duration::from_secs(60)).expect("the store answers");
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        let now = 1_762_437_731;
+        let chat = id(1);
+        // A question holding the kept key is refused before anything is written, conversation and all.
+        let pasted = format!("Why is {CANARY} refused?");
+        let refused =
+            answer(chats.write(&path, Write::Create { chat, title: pasted.clone(), provider: Provider::Claude, model: "sonnet".into(), now }));
+        assert_eq!(refused, Err(Refusal::HeldKey { provider: Some(Provider::Claude) }));
+        let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert!(listed.is_empty(), "nothing was written");
+        // Made, asked, failed on a lost connection.
+        let made = answer(chats.write(
+            &path,
+            Write::Create { chat, title: "Which classes have no description yet?".into(), provider: Provider::Claude, model: "sonnet".into(), now },
+        ));
+        assert_eq!(made, Ok(Answer::Created { origin: "Chat 1".into() }));
+        let chip = Anchor { element: id(9), role: AnchorRole::Selection, metaclass: "uml_class".into(), name: Some("Order".into()) };
+        let ask = |turn, question, text: &str, now| Write::Ask {
+            chat,
+            turn,
+            question,
+            text: text.into(),
+            chips: vec![chip.clone()],
+            model: "sonnet".into(),
+            allow_changes: false,
+            now,
+        };
+        assert_eq!(answer(chats.write(&path, ask(id(2), id(3), "Which classes have no description yet?", now + 1))), Ok(Answer::Asked { number: 1 }));
+        let key_again = answer(chats.write(
+            &path,
+            Write::Rerun { turn: id(2), model: "sonnet".into(), allow_changes: false, question: Some((pasted.clone(), Vec::new())), now: now + 2 },
+        ));
+        assert_eq!(key_again, Err(Refusal::HeldKey { provider: Some(Provider::Claude) }), "an edited question is checked too");
+        let failed = |now| Write::End { turn: id(2), outcome: Outcome::Failed, error: Some(FailureKind::Network), changes: None, now };
+        assert_eq!(answer(chats.write(&path, failed(now + 3))), Ok(Answer::Done));
+        // Sent again as it was, and failed again; then edited and sent again, and answered.
+        let rerun =
+            |question: Option<(String, Vec<Anchor>)>, now| Write::Rerun { turn: id(2), model: "opus".into(), allow_changes: false, question, now };
+        assert_eq!(answer(chats.write(&path, rerun(None, now + 4))), Ok(Answer::Done));
+        assert_eq!(answer(chats.write(&path, failed(now + 5))), Ok(Answer::Done));
+        assert_eq!(
+            answer(chats.write(&path, rerun(Some(("Which classes lack a description?".into(), vec![chip.clone()])), now + 6))),
+            Ok(Answer::Done)
+        );
+        assert_eq!(
+            answer(
+                chats.write(
+                    &path,
+                    Write::Reply { id: id(4), turn: id(2), text: "Five of them.".into(), complete: true, shortened: false, now: now + 7 }
+                )
+            ),
+            Ok(Answer::Done)
+        );
+        assert_eq!(
+            answer(chats.write(&path, Write::End { turn: id(2), outcome: Outcome::Completed, error: None, changes: None, now: now + 8 })),
+            Ok(Answer::Done)
+        );
+        // Closed and opened again: the conversation is there, whole, its turn kept once.
+        close(&host, &path).unwrap();
+        let back = wait(&host.open(&path)).unwrap();
+        assert!(!back.unsaved, "conversations never make a project unsaved");
+        let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let row = listed[0].entry.as_ref().unwrap();
+        assert_eq!(
+            (listed.len(), row.origin.as_str(), row.title.as_str(), row.messages, row.updated_at),
+            (1, "Chat 1", "Which classes have no description yet?", 2, now + 8)
+        );
+        let stored = chats.load(&path, chat).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert_eq!(stored.turns.len(), 1, "one stored row per turn");
+        assert_eq!((stored.turns[0].outcome, stored.turns[0].model.as_str()), (Outcome::Completed, "opus"));
+        let questions: Vec<&StoredBody> = stored.messages.iter().map(|m| &m.body).filter(|b| matches!(b, StoredBody::Question { .. })).collect();
+        assert_eq!(
+            questions,
+            [&StoredBody::Question { text: "Which classes lack a description?".into(), chips: vec![chip.clone()] }],
+            "the edited question replaced the kept one, its chips with it"
+        );
+        assert!(matches!(&stored.messages[1].body, StoredBody::Reply { text, complete: true, .. } if text == "Five of them."));
+        let raw = host.on_writer(&path, |p| p.load_chat(archforge_mof::Uuid::v7(1_762_400_000_000, [1; 10])).map_err(|e| e.to_string()));
+        let raw = raw.recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert!(raw.messages.iter().all(|m| !m.message.body.as_deref().unwrap_or_default().contains(CANARY)), "the key is nowhere");
+        close(&host, &path).unwrap();
+        host.shutdown();
+        agents.shutdown();
         remove_settled(&base);
     }
 

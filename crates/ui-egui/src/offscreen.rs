@@ -1,6 +1,7 @@
 //! Offscreen rendering of the window, behind the `snapshot` feature: a fresh shell in
 //! the headless harness, drawn once settled and rendered to RGBA.
 
+use crate::ai_agents::Provider;
 use crate::theme::ThemeKind;
 use crate::{Folder, Services, Shell};
 
@@ -99,8 +100,26 @@ pub enum Screen {
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
-    /// The sample class model with the Chat panel open: Coming soon.
+    /// The sample class model with Chat ready (B2): the intro, the context chips, the composer
+    /// with Claude's badge, Allow changes off.
     WorkspaceChat,
+    /// The same with no agent set up (B1): Configure agent.
+    WorkspaceChatEmpty,
+    /// A reply streaming after two reads, Stop in the composer (B3).
+    WorkspaceChatStreaming,
+    /// A turn that read and changed five classes, its changes one undo step with Undo this turn's
+    /// changes (B4).
+    WorkspaceChatChanges,
+    /// A reply stopped part way, kept (B5).
+    WorkspaceChatStopped,
+    /// A turn the provider's rate limit stopped, with the time it can send again (B6a).
+    WorkspaceChatRateLimited,
+    /// A turn whose connection was lost, its question back in the composer (B6b).
+    WorkspaceChatNetworkLost,
+    /// A turn whose model is not available, Open Settings (B6c).
+    WorkspaceChatModelUnavailable,
+    /// The project's conversations, the open one marked (B7).
+    WorkspaceChatHistory,
     /// A class diagram of three cards: a new class with its first operation at the default size, one
     /// grown to show its members, and two made short by hand saying the rows they hide.
     WorkspaceClassSizing,
@@ -366,6 +385,152 @@ fn drawn(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) 
     Ok(harness)
 }
 
+/// Builds a Chat state of page 07 through the panel's own steps, over the fake host and the
+/// conversations kept in memory.
+fn chat_screen(shell: &mut Shell, screen: Screen) -> Result<(), String> {
+    use crate::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
+    use crate::chat_fixture as fx;
+    use crate::chat_store::{Anchor, AnchorRole, ToolFacts, ToolStatus};
+    let rig = fx::sample(shell, screen != Screen::WorkspaceChatEmpty)?;
+    // A tool row as the channel words it, for the states whose reads are drawn as the design has
+    // them; the changes of B4 go through the channel itself.
+    let row = |shell: &mut Shell, command: &str, target: Option<(&str, &str)>, read: &[(&str, u32)], detail: Option<&str>| {
+        let mut anchors: Vec<Anchor> = Vec::new();
+        if let Some((metaclass, name)) = target {
+            anchors.push(Anchor {
+                element: archforge_mof::Uuid([7; 16]),
+                role: AnchorRole::Target,
+                metaclass: metaclass.into(),
+                name: Some(name.into()),
+            });
+        }
+        let mut n = 0u8;
+        for (metaclass, count) in read {
+            for _ in 0..*count {
+                n = n.wrapping_add(1);
+                anchors.push(Anchor { element: archforge_mof::Uuid([n; 16]), role: AnchorRole::Read, metaclass: (*metaclass).into(), name: None });
+            }
+        }
+        let facts = ToolFacts {
+            tool: "engine.execute".into(),
+            command: Some(command.into()),
+            detail: detail.map(str::to_string),
+            status: ToolStatus::Done,
+            changed_model: false,
+            element_count: None,
+            anchors,
+        };
+        if let Some(t) = shell.chat_panel.chat.as_mut().and_then(|c| c.turns.last_mut()) {
+            t.items.push(crate::chat_panel::Item::Tool(facts));
+        }
+    };
+    let failed = |kind: FailureKind, reset: Option<u64>| ChatEvent::TurnEnded(TurnEnd::Failed(ChatFailure { kind, detail: String::new(), reset }));
+    let question = "Which classes have no description yet?";
+    match screen {
+        Screen::WorkspaceChatStreaming => {
+            fx::ask(shell, question);
+            fx::emit(&rig, shell, ChatEvent::Started { model: fx::NAMED.into(), access: true });
+            row(shell, "diagram.get", Some(("diagram_diagram", "Commerce")), &[("uml_class", 8)], None);
+            row(shell, "uml.class.list", None, &[("uml_class", 8)], Some("descriptions"));
+            fx::emit(
+                &rig,
+                shell,
+                ChatEvent::Text { delta: "Five of the eight classes have no description yet: Customer, OrderLine, Product, Catalog and ".into() },
+            );
+            rig.agents.access(true);
+            fx::settle(shell);
+        }
+        Screen::WorkspaceChatChanges => {
+            crate::chat_panel::set_allow_changes(shell, true);
+            fx::ask(shell, "Add a one-line description to each of them.");
+            fx::emit(&rig, shell, ChatEvent::Started { model: fx::NAMED.into(), access: true });
+            row(shell, "uml.class.list", None, &[("uml_class", 5)], Some("descriptions"));
+            for (name, text) in [
+                ("Customer", "A person or company that places orders."),
+                ("OrderLine", "One product and its quantity within an order."),
+                ("Product", "Something the shop sells, with its price."),
+                ("Catalog", "The products offered together."),
+                ("PricingService", "Works out what an order costs."),
+            ] {
+                let id = fx::element(shell, archforge_uml::CLASS, name).ok_or("the sample has no such class")?;
+                fx::call(
+                    shell,
+                    "engine.execute",
+                    serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+                )?;
+            }
+            fx::emit(
+                &rig,
+                shell,
+                ChatEvent::Message {
+                    text: "Done. Each of the five classes now has a one-line description. Undo takes all five back in one step.".into(),
+                },
+            );
+            fx::emit(&rig, shell, ChatEvent::TurnEnded(TurnEnd::Completed));
+            rig.agents.access(true);
+            fx::settle(shell);
+        }
+        Screen::WorkspaceChatStopped => {
+            fx::ask(shell, "Explain how Payment relates to Order.");
+            fx::emit(&rig, shell, ChatEvent::Started { model: fx::NAMED.into(), access: true });
+            row(shell, "uml.class.get", Some(("uml_class", "Payment")), &[("uml_property", 2), ("uml_association", 2)], None);
+            fx::emit(
+                &rig,
+                shell,
+                ChatEvent::Text {
+                    delta: "Payment is linked to Order by the association paid by: an order has at most one payment, and each payment belongs to"
+                        .into(),
+                },
+            );
+            crate::chat_panel::stop(shell);
+            fx::emit(&rig, shell, ChatEvent::TurnEnded(TurnEnd::Stopped));
+            rig.agents.access(true);
+            fx::settle(shell);
+        }
+        Screen::WorkspaceChatRateLimited | Screen::WorkspaceChatModelUnavailable => {
+            fx::ask(shell, question);
+            fx::emit(&rig, shell, ChatEvent::Started { model: fx::NAMED.into(), access: true });
+            row(shell, "diagram.get", Some(("diagram_diagram", "Commerce")), &[("uml_class", 8)], None);
+            let end = if screen == Screen::WorkspaceChatRateLimited {
+                failed(FailureKind::RateLimited, Some(fx::NOW + 6 * 60))
+            } else {
+                failed(FailureKind::ModelUnavailable, None)
+            };
+            fx::emit(&rig, shell, end);
+        }
+        Screen::WorkspaceChatNetworkLost => {
+            fx::ask(shell, question);
+            fx::emit(&rig, shell, failed(FailureKind::Network, None));
+        }
+        Screen::WorkspaceChatHistory => {
+            use crate::chat_store::{Row, fake::Kept};
+            let titles = [
+                ("Descriptions for classes without one", 1_794_056_520, Provider::Claude, 6),
+                ("How Payment relates to Order", 1_794_048_000, Provider::Claude, 4),
+                ("Review the checkout package", 1_793_980_800, Provider::Codex, 12),
+                ("Naming check for the shop schema", 1_793_696_400, Provider::Codex, 8),
+                ("First look at the model", 1_793_523_600, Provider::Claude, 2),
+            ];
+            let mut first = None;
+            for (n, (title, at, provider, messages)) in titles.into_iter().enumerate() {
+                let id = shell.services.ids.as_ref().map(|ids| ids()).ok_or("no ids")?;
+                first.get_or_insert(id);
+                let origin = format!("Chat {}", 5 - n);
+                let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages };
+                rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new() });
+            }
+            if let Some(id) = first {
+                crate::chat_panel::open(shell, id);
+                fx::settle(shell);
+            }
+            crate::chat_panel::toggle_history(shell);
+            fx::settle(shell);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 /// The shell of `screen` in `theme`, its project, model and view as the screen shows them, and the
 /// control the pointer rests on, if any.
 fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>), String> {
@@ -582,10 +747,19 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
         shell.adopt_project();
         sample_class_sizing(&mut shell)?;
     }
-    if screen == Screen::WorkspaceChat {
-        shell.adopt_project();
-        crate::uml_ui::open_sample(&mut shell)?;
-        shell.state.show_panel(crate::state::Panel::Agent);
+    if matches!(
+        screen,
+        Screen::WorkspaceChat
+            | Screen::WorkspaceChatEmpty
+            | Screen::WorkspaceChatStreaming
+            | Screen::WorkspaceChatChanges
+            | Screen::WorkspaceChatStopped
+            | Screen::WorkspaceChatRateLimited
+            | Screen::WorkspaceChatNetworkLost
+            | Screen::WorkspaceChatModelUnavailable
+            | Screen::WorkspaceChatHistory
+    ) {
+        chat_screen(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();

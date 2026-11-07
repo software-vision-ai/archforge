@@ -312,6 +312,27 @@ fn program_of(p: Provider, env: &HostEnv, workspace: &Result<Workspace, String>)
     }
 }
 
+impl Agents {
+    /// Whether `text` holds one of the API keys the secure store keeps, checked on one of the
+    /// host's threads (reading a key may wait for the system to ask the person): none when it holds
+    /// none, else the provider of the key it holds when the key is one of theirs. A system without a
+    /// secure store holds no key; a store that cannot be read is an error, as the text could then
+    /// not be checked. Neither the text nor a key is in the answer.
+    pub fn check_keys(&self, text: String) -> Receiver<Result<Option<Option<Provider>>, String>> {
+        self.inner.answer("agents-check-keys", move |inner| match inner.store() {
+            Err(SecretError::NoSecureStore { .. }) => Ok(None),
+            Err(e) => Err(format!("the saved keys could not be read to check the question: {e}")),
+            Ok(store) => match archforge_secrets::held_key_in(store.as_ref(), &text) {
+                Ok(None) => Ok(None),
+                Ok(Some(name)) if name == SecretName::OPENAI_API_KEY => Ok(Some(Some(Provider::Codex))),
+                Ok(Some(name)) if name == SecretName::ANTHROPIC_API_KEY => Ok(Some(Some(Provider::Claude))),
+                Ok(Some(_)) => Ok(Some(None)),
+                Err(e) => Err(format!("the saved keys could not be read to check the question: {e}")),
+            },
+        })
+    }
+}
+
 impl AgentHost for Agents {
     /// Agents run on macOS and Linux for now.
     fn system(&self) -> System {

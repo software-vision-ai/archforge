@@ -8,6 +8,7 @@ use archforge_ui_egui::{Folder, Services};
 
 /// The host's services: the system's, with `agents` the host of AI Agents and Chat.
 pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>) -> Services {
+    let chats = std::sync::Arc::new(crate::chats::Chats::new(projects.clone(), agents.clone()));
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),
@@ -20,7 +21,83 @@ pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::
         ids: Some(std::sync::Arc::new(fresh_id)),
         support: support(),
         agents: Some(agents),
+        chats: Some(chats),
+        clock: Some(std::sync::Arc::new(clock)),
     }
+}
+
+/// The time now and the local offset from UTC, for the times Chat shows.
+fn clock() -> archforge_ui_egui::chat_words::Clock {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    archforge_ui_egui::chat_words::Clock { now, offset: local_offset() }
+}
+
+/// How often the local offset is looked at again: it changes with daylight saving time.
+const OFFSET_EVERY: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+/// The local offset from UTC in seconds, as the system says it (`date +%z`), looked at on a thread
+/// of its own the first time and every quarter of an hour after, so the window never waits for it;
+/// none until it has answered, and where it cannot be told (times then say UTC).
+fn local_offset() -> Option<i32> {
+    use std::sync::Mutex;
+    static KNOWN: Mutex<(Option<std::time::Instant>, Option<i32>)> = Mutex::new((None, None));
+    let mut known = KNOWN.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let due = known.0.is_none_or(|at| at.elapsed() >= OFFSET_EVERY);
+    if due {
+        known.0 = Some(std::time::Instant::now());
+        let looked = std::thread::Builder::new().name("archforge-offset".into()).spawn(|| {
+            let offset = system_offset();
+            KNOWN.lock().unwrap_or_else(std::sync::PoisonError::into_inner).1 = offset;
+        });
+        if let Err(e) = looked {
+            log::warn!("the local time zone could not be looked at: {e}");
+        }
+    }
+    known.1
+}
+
+/// The system's local offset from UTC now, from `date +%z` (`+0100`): Unix only.
+fn system_offset() -> Option<i32> {
+    #[cfg(unix)]
+    {
+        // The system's own program by its full path, never one found on the PATH.
+        let out = match std::process::Command::new("/bin/date").arg("+%z").env("LC_ALL", "C").output() {
+            Ok(out) if out.status.success() => out,
+            Ok(out) => {
+                log::warn!("the local time zone could not be read: /bin/date ended with {}", out.status);
+                return None;
+            }
+            Err(e) => {
+                log::warn!("the local time zone could not be read: /bin/date did not run: {e}");
+                return None;
+            }
+        };
+        let offset = parse_offset(String::from_utf8_lossy(&out.stdout).trim());
+        if offset.is_none() {
+            log::warn!("the local time zone could not be read: /bin/date gave no offset");
+        }
+        offset
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
+/// An offset as `date +%z` writes it, `+0100` or `-0530`, in seconds; none for anything else.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn parse_offset(text: &str) -> Option<i32> {
+    let (sign, digits) = match text.as_bytes().first()? {
+        b'+' => (1, text.get(1..)?),
+        b'-' => (-1, text.get(1..)?),
+        _ => return None,
+    };
+    if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let hours: i32 = digits.get(..2)?.parse().ok()?;
+    let minutes: i32 = digits.get(2..)?.parse().ok()?;
+    (hours <= 14 && minutes < 60).then_some(sign * (hours * 3_600 + minutes * 60))
 }
 
 /// The owner's approved support pages: GitHub Sponsors goes to the company's

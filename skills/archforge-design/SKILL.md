@@ -59,8 +59,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   diagrams are found first); the right rail, between the canvas and
   the panel, holds Chat, Appearance, Properties and Skills, each with a shape of its own (a
   proposal for the owner to confirm): a rounded speech bubble with two lines, a palette with
-  three dots of paint, three sliders, and a page of rules with a checklist. Chat's panel says
-  only Coming soon (owner): no provider, message or history control until built-in chat is.
+  three dots of paint, three sliders, and a page of rules with a checklist. Chat's panel is the
+  project's conversations with an agent (section Chat).
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
@@ -351,6 +351,64 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   "Agent access off" otherwise, one at a time. It is a control (pointer, Tab, Enter, its id
   `workspace.status.agent`); either state opens Settings on AI Agents, as the design's agent setup
   overlay does.
+
+## Chat
+- The Chat panel (page 07, frames B1 to B7, AR-205) is built from the design's Chat components:
+  question bubbles in the accent tint, the agent's name over its turn, tool rows (an eye for a
+  read, a pencil for a change), replies at 13 on 19, the green card of a turn's changes, the amber
+  or danger notice of a failure, the context chips, the composer with the provider badge and Send
+  (Stop while a reply runs), the read-only switch, and the history. Its header holds the history
+  and New conversation (New is hidden while no agent is set up).
+- No agent set up (B1) shows until the default agent is ready and Let Chat use the model is on;
+  Configure agent opens Settings on AI Agents. While the keys are first read it draws nothing.
+- Opening the panel the first time in a project starts a new conversation (B2); it stays while
+  the project is open. One read back from the history opens read-only: Allow changes is off for
+  every conversation until turned on in it.
+- A question is kept in the project before the agent gets it; the composer empties only then. A
+  refusal (a saved key in the question, a project that cannot be written, a question over 64 KiB)
+  keeps the draft and says why in the danger colour above the chips. Enter sends, Shift+Enter
+  starts a line; the composer grows from two lines to six, then scrolls. Send is drawn ready, as
+  the design has it, and sends nothing while the composer is empty.
+- While a reply runs, typing works; Enter, the badge, the switch, New conversation and the history
+  wait and say "Stop the reply first".
+- The context chips (the project, the open diagram, the selection; several selected elements are
+  one chip, "{n} elements") go with a question as a line after it, by name and id; a removed chip
+  stays removed for that conversation.
+- A tool row is worded from what Archforge's control channel answered for the conversation's
+  origin: Read, Changed, Added or Removed and what it was about, with what was read or the aspect
+  changed as its detail; a refused or failed call keeps its words with "refused" or "failed" and an
+  amber mark. Looking up commands and the window's controls makes no row. A request from a
+  conversation's origin runs only while that conversation's turn runs in the project shown, never
+  while a conversation of the same label still runs or ends elsewhere, and it undoes or redoes
+  only a step of its own, never the person's; while its turn runs, its own undo takes back the
+  turn's one step so far.
+- A turn's changes are one step of the project's undo history, `Chat N: Turn n`; their card follows
+  the turn's last tool row. Undo this turn's changes is offered while that step is on top of the
+  history; otherwise the card says why (another change came after it, or the project was closed
+  since). Undone, the card says so, and redo brings it back.
+- Stop keeps the reply so far, marked cut off ("Stopped. Nothing was changed.", or "Stopped." over
+  the changes' card); a program that has not stopped within ten seconds is ended, and the turn
+  with it. Send again runs a failed turn again in place, its question kept once and its chips sent
+  again; a turn that changed the model is not sent again. After a lost connection before any
+  answer the question goes back to the composer when that is empty, its bubble hidden, and Send
+  again sends what the composer holds; otherwise it stays in its bubble.
+- Failures the design does not draw: a missing program, a refused key, no key and an expired
+  sign-in are danger cards with Open Settings; anything else is an amber "No answer" with Send
+  again. A rate limit without a reset time names none. Model not available offers Send again once
+  another model is chosen in the badge.
+- The provider badge names the agent and the model asked for ("Claude · Sonnet"), the version once
+  the program names it ("Claude · Sonnet 4.5"); the program's default shows the agent alone until
+  then. Its menu lists the conversation's agent's models, both agents' before the first question.
+  A conversation that has not started follows Settings' default; once started its agent and model
+  change only in its badge, never because Settings changed. A changed model or switch ends the
+  idle program, and the next question starts it again where it was.
+- The history lists the project's conversations newest first under "Saved with {project}": the
+  title, then when, the agent and how many messages; the open one is marked. Times use the local
+  offset the host gives ("Today 14:02", "Yesterday", "3 Nov"), months short and translated; without
+  an offset a time says UTC.
+- A reply's links open only through the link confirmation, and only a web address with a host and
+  no user part; an image shows its alt text, HTML its plain text.
+- Leaving a project's tab stops its running turn; closing the project ends its conversation.
 
 ## Messages
 - Problems show as an orange badge on the box or line and in a Problems section of Properties,

@@ -616,3 +616,39 @@ The storage layer and its API, in `crates/project/src/chat.rs`; no interface yet
 - **Left for later**: grouping a turn's steps into one undo step (AR-203); the host-side list of the
   elements a turn touched, from its composed delta; the chat panel, its wording and the private
   runtime folders.
+
+## 12. As built (AR-205)
+
+The Chat panel over the storage of section 11; no table or column changed.
+
+- **The shell's service.** The panel reaches the conversations through `chat_store::ChatStore`
+  (`Services::chats`), never the database: `list`, `load` and `write`, each answered on a channel.
+  The application's `apps/archforge/src/chats.rs` runs every write on the project's writer thread,
+  in order with the model's rows, Save and Don't save. `chat_store::fake::Memory` keeps them in
+  memory by the same rules for the tests and the offscreen screens.
+- **Kept keys.** A question, and the title a new conversation takes from it, is checked against the
+  API keys in the system's secure store on one of the agents host's threads before the write is
+  handed to the writer, so the writer never waits for the system's store; a question holding a key
+  is refused and nothing is written. A store that cannot be read refuses the question too.
+- **Origins.** The host gives a new conversation the next free `Chat N` of the project (one past the
+  highest kept), on the writer, so two never race.
+- **Send again in place** (owner decision, 2026-11-07): `Project::rerun_turn` puts a failed turn
+  back to running, the same row, with the model and switch of this attempt and a new start time; an
+  edited question replaces the kept one and its chips. It refuses a turn that did not fail, one that
+  is not its conversation's last, and one that changed the model (it could make those changes
+  twice). What the failed attempt left in the timeline stays. No schema change.
+- **What a tool row keeps.** `tool` is the control channel's method (`engine.execute`), `command`
+  the command it ran, `detail` the aspect from its parameters (`description`); `target` anchors are
+  the elements the call was about, read calls included, and `read` anchors those its answer named.
+  The row's words are made when it is drawn.
+- **No key saved** is kept as `invalid_credential`: both send the person to Settings.
+- **Undo.** The engine groups a turn's changes into one undo step (`Session::begin_group` and
+  `end_group`, `Chat N: Turn n`); the end gives the span (`TurnSpan`'s before and after) and the
+  composed delta the changed elements come from (none when the turn's changes cancelled out). The
+  panel moves `chat_change.state` of the conversation shown as undo and redo bring the model to
+  either end of a turn's span; a conversation not shown records such a move when it is shown again,
+  if the model is then at either end. Each span is kept while the project is open, so a
+  conversation opened again from the history still offers its undo.
+- **Questions sent again** go with their text and chips (`Rerun` always carries the question), so
+  the project checks them against the kept keys again. Replies and tool rows are the agent's and
+  Archforge's words and are not checked (AR-206 section 3 checks what a person typed).

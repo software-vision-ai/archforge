@@ -274,6 +274,117 @@ str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
+# Chat panel
+str		Conversations	Conversations
+str		New conversation	New conversation
+str		Stop the reply first	Stop the reply first
+str		No agent set up yet	No agent set up yet
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.
+str		Configure agent	Configure agent
+str		Ask about {project}	Ask about {project}
+str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.
+str		These and everything the agent reads are sent to the provider.	These and everything the agent reads are sent to the provider.
+str		Ask about this model…	Ask about this model…
+str		{agent} is replying… you can type the next message	{agent} is replying… you can type the next message
+str		Send	Send
+str		Stop	Stop
+str		Agent and model	Agent and model
+str		{agent} · {model}	{agent} · {model}
+str		Allow changes to the model	Allow changes to the model
+str		A question is at most 64 KiB; this one is {n} KiB.	A question is at most 64 KiB; this one is {n} KiB.
+str		This project keeps no conversations	This project keeps no conversations
+str		This question holds your saved {agent} API key, so it was neither sent nor saved.	This question holds your saved {agent} API key, so it was neither sent nor saved.
+str		This conversation could not be saved: {why}	This conversation could not be saved: {why}
+str		the project did not answer	the project did not answer
+str		the project gave no label for the conversation	the project gave no label for the conversation
+str		Turn {n}	Turn {n}
+str		This conversation cannot be read: {why}	This conversation cannot be read: {why}
+str		The undo history ends when the project closes, so these changes can no longer be undone here.	The undo history ends when the project closes, so these changes can no longer be undone here.
+str		The model changed after this turn, so its changes can no longer be undone on their own.	The model changed after this turn, so its changes can no longer be undone on their own.
+str		Interrupted: Archforge closed while this turn ran.	Interrupted: Archforge closed while this turn ran.
+str		Stopped.	Stopped.
+str		Stopped. Nothing was changed.	Stopped. Nothing was changed.
+str		The reply was shortened to fit.	The reply was shortened to fit.
+str		Undo this turn’s changes	Undo this turn’s changes
+str		Made in this turn, as one step of the project's undo history.	Made in this turn, as one step of the project's undo history.
+str		Taken back in one step of the project's undo history.	Taken back in one step of the project's undo history.
+str		Not kept: the changes were not saved.	Not kept: the changes were not saved.
+str		Nothing was changed.	Nothing was changed.
+str		Send again	Send again
+str		Send again at {time}	Send again at {time}
+str		{agent}'s provider asks Chat to wait. You can send again at {time}, {wait}.	{agent}'s provider asks Chat to wait. You can send again at {time}, {wait}.
+str		{agent}'s provider asks Chat to wait.	{agent}'s provider asks Chat to wait.
+str		Rate limited	Rate limited
+str		Connection lost	Connection lost
+str		The network went away before {agent} answered. Your message is back in the box below, ready to send again.	The network went away before {agent} answered. Your message is back in the box below, ready to send again.
+str		The network went away before {agent} answered.	The network went away before {agent} answered.
+str		The network went away while {agent} was answering.	The network went away while {agent} was answering.
+str		Model not available	Model not available
+str		{model} isn't offered to this key. Choose another model in the badge below and send again, or check the key in Settings.	{model} isn't offered to this key. Choose another model in the badge below and send again, or check the key in Settings.
+str		Program not found	Program not found
+str		{agent} runs through a program that is not on this computer. Settings shows how to install it.	{agent} runs through a program that is not on this computer. Settings shows how to install it.
+str		Key refused	Key refused
+str		{agent}'s provider refused the saved key. Replace it in Settings, then send again.	{agent}'s provider refused the saved key. Replace it in Settings, then send again.
+str		No key saved	No key saved
+str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} needs an API key or a sign-in. Add one in Settings, then send again.
+str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent}'s sign-in has expired. Sign in again in Settings, then send again.
+str		No answer	No answer
+str		{agent} stopped before answering.	{agent} stopped before answering.
+str		This turn changed the model, so it is not sent again; ask again to go on.	This turn changed the model, so it is not sent again; ask again to go on.
+str		Open Settings	Open Settings
+str		Saved with {project}	Saved with {project}
+str		The conversations in this project cannot be read: {why}	The conversations in this project cannot be read: {why}
+str		No conversations in this project yet.	No conversations in this project yet.
+str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
+str		Conversations are kept in the project, so they travel with it and never show in another project.	Conversations are kept in the project, so they travel with it and never show in another project.
+str		Today {time}	Today {time}
+str		{day} {month}	{day} {month}
+str		{day} {month} {year}	{day} {month} {year}
+str		{time} UTC	{time} UTC
+str		{first}, {second}	{first}, {second}
+str		Read {what}	Read {what}
+str		Read diagram {name}	Read diagram {name}
+str		Read the model	Read the model
+str		Read the project	Read the project
+str		Changed {what}	Changed {what}
+str		Changed the model	Changed the model
+str		Added {what}	Added {what}
+str		Removed {what}	Removed {what}
+str		Undid a step	Undid a step
+str		Redid a step	Redid a step
+str		Saved the project	Saved the project
+str		refused	refused
+str		failed	failed
+str	month	Jan	Jan
+str	month	Feb	Feb
+str	month	Mar	Mar
+str	month	Apr	Apr
+str	month	May	May
+str	month	Jun	Jun
+str	month	Jul	Jul
+str	month	Aug	Aug
+str	month	Sep	Sep
+str	month	Oct	Oct
+str	month	Nov	Nov
+str	month	Dec	Dec
+plural		{n} change to the model	{n} change to the model|{n} changes to the model
+plural		{n} change undone	{n} change undone|{n} changes undone
+plural		in about {n} minute	in about {n} minute|in about {n} minutes
+plural		{n} message	{n} message|{n} messages
+plural		{n} more call is not shown	{n} more call is not shown|{n} more calls are not shown
+plural		{n} class	{n} class|{n} classes
+plural		{n} interface	{n} interface|{n} interfaces
+plural		{n} enumeration	{n} enumeration|{n} enumerations
+plural		{n} data type	{n} data type|{n} data types
+plural		{n} package	{n} package|{n} packages
+plural		{n} attribute	{n} attribute|{n} attributes
+plural		{n} operation	{n} operation|{n} operations
+plural		{n} line	{n} line|{n} lines
+plural		{n} table	{n} table|{n} tables
+plural		{n} column	{n} column|{n} columns
+plural		{n} schema	{n} schema|{n} schemas
+plural		{n} diagram	{n} diagram|{n} diagrams
+plural		{n} skill	{n} skill|{n} skills
 str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer
@@ -508,7 +619,6 @@ str		Select a table or a line on the diagram	Select a table or a line on the dia
 str		Selection · this diagram	Selection · this diagram
 str		{kind} · this diagram	{kind} · this diagram
 plural		{n} item	{n} item|{n} items
-str		Coming soon	Coming soon
 str		The model could not be opened	The model could not be opened
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel

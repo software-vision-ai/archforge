@@ -275,6 +275,117 @@ str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
+# チャットパネル
+str		Conversations	会話
+str		New conversation	新しい会話
+str		Stop the reply first	先に返答を停止してください
+str		No agent set up yet	エージェントはまだ設定されていません
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	チャットは、このコンピュータにインストールされたプログラムで動く Claude または Codex で回答します。設定でどちらかを選び、チャットにモデルの使用を許可してください。
+str		Configure agent	エージェントを設定
+str		Ask about {project}	{project} について質問
+str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	チャットはモデルを読んで回答し、読んだ内容を下に表示します。この会話で変更を許可するまで、何も変更しません。
+str		These and everything the agent reads are sent to the provider.	これらと、エージェントが読むすべての内容はプロバイダーに送信されます。
+str		Ask about this model…	このモデルについて質問…
+str		{agent} is replying… you can type the next message	{agent} が返答中… 次のメッセージを入力できます
+str		Send	送信
+str		Stop	停止
+str		Agent and model	エージェントとモデル
+str		{agent} · {model}	{agent} · {model}
+str		Allow changes to the model	モデルの変更を許可
+str		A question is at most 64 KiB; this one is {n} KiB.	質問は最大 64 KiB です。この質問は {n} KiB です。
+str		This project keeps no conversations	このプロジェクトは会話を保存しません
+str		This question holds your saved {agent} API key, so it was neither sent nor saved.	この質問には保存済みの {agent} API キーが含まれているため、送信も保存もされませんでした。
+str		This conversation could not be saved: {why}	この会話を保存できませんでした: {why}
+str		the project did not answer	プロジェクトが応答しませんでした
+str		the project gave no label for the conversation	プロジェクトが会話のラベルを返しませんでした
+str		Turn {n}	ターン {n}
+str		This conversation cannot be read: {why}	この会話を読み込めません: {why}
+str		The undo history ends when the project closes, so these changes can no longer be undone here.	取り消し履歴はプロジェクトを閉じると終わるため、これらの変更はここではもう取り消せません。
+str		The model changed after this turn, so its changes can no longer be undone on their own.	このターンの後にモデルが変更されたため、その変更だけを取り消すことはできなくなりました。
+str		Interrupted: Archforge closed while this turn ran.	中断: このターンの実行中に Archforge が終了しました。
+str		Stopped.	停止しました。
+str		Stopped. Nothing was changed.	停止しました。何も変更されていません。
+str		The reply was shortened to fit.	返答は収まるように短縮されました。
+str		Undo this turn’s changes	このターンの変更を取り消す
+str		Made in this turn, as one step of the project's undo history.	このターンで、プロジェクトの取り消し履歴の 1 ステップとして行われました。
+str		Taken back in one step of the project's undo history.	プロジェクトの取り消し履歴の 1 ステップで元に戻しました。
+str		Not kept: the changes were not saved.	保持されていません: 変更は保存されませんでした。
+str		Nothing was changed.	何も変更されていません。
+str		Send again	もう一度送信
+str		Send again at {time}	{time} にもう一度送信
+str		{agent}'s provider asks Chat to wait. You can send again at {time}, {wait}.	{agent} のプロバイダーがチャットに待つよう求めています。{time} に、{wait}、もう一度送信できます。
+str		{agent}'s provider asks Chat to wait.	{agent} のプロバイダーがチャットに待つよう求めています。
+str		Rate limited	レート制限中
+str		Connection lost	接続が切れました
+str		The network went away before {agent} answered. Your message is back in the box below, ready to send again.	{agent} が回答する前にネットワークが切断されました。メッセージは下の入力欄に戻っており、もう一度送信できます。
+str		The network went away before {agent} answered.	{agent} が回答する前にネットワークが切断されました。
+str		The network went away while {agent} was answering.	{agent} の回答中にネットワークが切断されました。
+str		Model not available	モデルを利用できません
+str		{model} isn't offered to this key. Choose another model in the badge below and send again, or check the key in Settings.	{model} はこのキーでは提供されていません。下のバッジで別のモデルを選んでもう一度送信するか、設定でキーを確認してください。
+str		Program not found	プログラムが見つかりません
+str		{agent} runs through a program that is not on this computer. Settings shows how to install it.	{agent} はこのコンピュータにないプログラムで動作します。インストール方法は設定に表示されます。
+str		Key refused	キーが拒否されました
+str		{agent}'s provider refused the saved key. Replace it in Settings, then send again.	{agent} のプロバイダーが保存済みのキーを拒否しました。設定でキーを置き換えてから、もう一度送信してください。
+str		No key saved	キーが保存されていません
+str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} には API キーまたはサインインが必要です。設定で追加してから、もう一度送信してください。
+str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent} のサインインの有効期限が切れました。設定でもう一度サインインしてから、送信し直してください。
+str		No answer	回答がありません
+str		{agent} stopped before answering.	{agent} は回答する前に停止しました。
+str		This turn changed the model, so it is not sent again; ask again to go on.	このターンはモデルを変更したため、再送信されません。続けるにはもう一度質問してください。
+str		Open Settings	設定を開く
+str		Saved with {project}	{project} と一緒に保存
+str		The conversations in this project cannot be read: {why}	このプロジェクトの会話を読み込めません: {why}
+str		No conversations in this project yet.	このプロジェクトにはまだ会話がありません。
+str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
+str		Conversations are kept in the project, so they travel with it and never show in another project.	会話はプロジェクト内に保存されるため、プロジェクトと一緒に移動し、別のプロジェクトには表示されません。
+str		Today {time}	今日 {time}
+str		{day} {month}	{month}{day}日
+str		{day} {month} {year}	{year}年{month}{day}日
+str		{time} UTC	{time} UTC
+str		{first}, {second}	{first}、{second}
+str		Read {what}	{what} を読み取り
+str		Read diagram {name}	図 {name} を読み取り
+str		Read the model	モデルを読み取り
+str		Read the project	プロジェクトを読み取り
+str		Changed {what}	{what} を変更
+str		Changed the model	モデルを変更
+str		Added {what}	{what} を追加
+str		Removed {what}	{what} を削除
+str		Undid a step	1 ステップを取り消し
+str		Redid a step	1 ステップをやり直し
+str		Saved the project	プロジェクトを保存
+str		refused	拒否
+str		failed	失敗
+str	month	Jan	1月
+str	month	Feb	2月
+str	month	Mar	3月
+str	month	Apr	4月
+str	month	May	5月
+str	month	Jun	6月
+str	month	Jul	7月
+str	month	Aug	8月
+str	month	Sep	9月
+str	month	Oct	10月
+str	month	Nov	11月
+str	month	Dec	12月
+plural		{n} change to the model	モデルへの変更 {n} 件
+plural		{n} change undone	{n} 件の変更を取り消しました
+plural		in about {n} minute	約 {n} 分後
+plural		{n} message	{n} 件のメッセージ
+plural		{n} more call is not shown	さらに {n} 件の呼び出しは表示されていません
+plural		{n} class	{n} 個のクラス
+plural		{n} interface	{n} 個のインターフェース
+plural		{n} enumeration	{n} 個の列挙
+plural		{n} data type	{n} 個のデータ型
+plural		{n} package	{n} 個のパッケージ
+plural		{n} attribute	{n} 個の属性
+plural		{n} operation	{n} 個の操作
+plural		{n} line	{n} 本の線
+plural		{n} table	{n} 個のテーブル
+plural		{n} column	{n} 個の列
+plural		{n} schema	{n} 個のスキーマ
+plural		{n} diagram	{n} 個の図
+plural		{n} skill	{n} 個のスキル
 str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました
@@ -509,7 +620,6 @@ str		Select a table or a line on the diagram	図のテーブルか線を選択�
 str		Selection · this diagram	選択 · この図
 str		{kind} · this diagram	{kind} · この図
 plural		{n} item	{n} 個の項目
-str		Coming soon	近日公開
 str		The model could not be opened	モデルを開けませんでした
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		Collapse panel	パネルを折りたたむ

@@ -12,6 +12,7 @@ mod agents;
 mod app_dirs;
 mod app_icon;
 mod build_info;
+mod chats;
 mod fonts;
 mod graphics;
 mod logging;

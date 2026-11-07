@@ -1057,6 +1057,10 @@ pub mod fake {
         /// The conversations started, in order, and the ones running.
         pub started: Mutex<Vec<crate::chat::ChatStart>>,
         pub running: Mutex<Vec<String>>,
+        /// The messages sent, by conversation, in order.
+        pub sent: Mutex<Vec<(String, String)>>,
+        /// While set, an end is taken but not said, as a program slow to end would leave it.
+        pub hold_ends: std::sync::atomic::AtomicBool,
     }
 
     impl Default for Fake {
@@ -1076,6 +1080,8 @@ pub mod fake {
                 model_access: Mutex::new(Vec::new()),
                 started: Mutex::new(Vec::new()),
                 running: Mutex::new(Vec::new()),
+                sent: Mutex::new(Vec::new()),
+                hold_ends: std::sync::atomic::AtomicBool::new(false),
             }
         }
     }
@@ -1156,10 +1162,12 @@ pub mod fake {
             lock(&self.started).push(request);
             Ok(())
         }
-        /// Takes a message for a running conversation.
-        fn send(&self, chat: &str, _text: String) -> Result<(), crate::chat::ChatRefusal> {
+        /// Takes a message for a running conversation, and keeps it.
+        fn send(&self, chat: &str, text: String) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.send.fetch_add(1, Ordering::Relaxed);
-            self.known(chat)
+            self.known(chat)?;
+            lock(&self.sent).push((chat.to_string(), text));
+            Ok(())
         }
         /// Takes a stop for a running conversation.
         fn stop(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
@@ -1170,6 +1178,9 @@ pub mod fake {
         fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal> {
             self.calls.end.fetch_add(1, Ordering::Relaxed);
             self.known(chat)?;
+            if self.hold_ends.load(Ordering::Relaxed) {
+                return Ok(());
+            }
             lock(&self.running).retain(|c| c != chat);
             self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
             Ok(())

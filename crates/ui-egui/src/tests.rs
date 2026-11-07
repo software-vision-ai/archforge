@@ -7141,32 +7141,734 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
     assert!(texts.iter().any(|t| t == "+ 2 more columns"), "{texts:?}");
 }
 
+/// The sample class model with the Chat panel shown, over the fake agents host and conversations
+/// kept in memory (`crate::chat_fixture`), Claude set up and Let Chat use the model on when
+/// `ready`.
+fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+    crate::i18n::set_language("en");
+    let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
+    shell.state.theme = theme;
+    shell.open_project(crate::Opened { name: "Commerce platform".into(), path: "/tmp/Commerce platform.archforge".into(), ..Default::default() });
+    let rig = crate::chat_fixture::sample(&mut shell, ready).unwrap();
+    let h = harness_over(shell);
+    (h, rig)
+}
+
+/// Types `text` into the composer and presses Enter, as the person does.
+fn ask_in_chat(h: &mut Harness<'static, Shell>, text: &str) {
+    let at = rect_of(h, "workspace.chat.composer").center();
+    click(h, at);
+    h.event(egui::Event::Text(text.into()));
+    h.run();
+    key(h, egui::Key::Enter, egui::Modifiers::NONE);
+    // The composer's caret blinks while it has the keyboard: let it go, so the window settles.
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.composer")));
+    h.run();
+}
+
+/// The host says `event` of the conversation shown.
+fn chat_event(h: &mut Harness<'static, Shell>, rig: &crate::chat_fixture::Rig, event: crate::chat::ChatEvent) {
+    let key = crate::chat_fixture::key(h.state());
+    assert!(rig.agents.emit(&key, event), "the shell takes the conversation's events");
+    h.run();
+}
+
+/// How many times `text` is painted whole.
+fn painted_times(h: &Harness<'static, Shell>, text: &str) -> usize {
+    painted(h).iter().filter(|t| t.as_str() == text).count()
+}
+
+/// The conversation shown, as the store keeps it.
+fn kept_chat(h: &Harness<'static, Shell>, rig: &crate::chat_fixture::Rig) -> crate::chat_store::fake::Kept {
+    let id = h.state().chat_panel.chat.as_ref().map(|c| c.id).unwrap();
+    rig.store.kept(id).unwrap()
+}
+
+/// The fake host's conversation calls: starts, sends, stops, ends.
+fn chat_calls(rig: &crate::chat_fixture::Rig) -> (usize, usize, usize, usize) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let c = &rig.agents.calls;
+    (c.start.load(Relaxed), c.send.load(Relaxed), c.stop.load(Relaxed), c.end.load(Relaxed))
+}
+
+/// A turn's end failed with `kind`.
+fn failed_turn(kind: crate::chat::FailureKind) -> crate::chat::ChatEvent {
+    crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Failed(crate::chat::ChatFailure { kind, detail: "x".into(), reset: None }))
+}
+
+/// B1 without an agent (AR-63 rewritten): Configure agent opens Settings; B2 with one: intro, chips, composer, badge, switch.
 #[test]
-fn the_chat_icon_opens_a_panel_that_says_chat_is_coming_and_nothing_else() {
+fn the_chat_icon_opens_configure_agent_without_an_agent_and_a_ready_conversation_with_one() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, order) = class_properties("Order");
-        h.state_mut().state.theme = theme;
-        h.run();
-        let at = rect_of(&h, "workspace.panels.agent").center();
-        click(&mut h, at);
+        // B1: no agent set up. Configure agent opens Settings on AI Agents; no composer.
+        let (mut h, _rig) = chat_harness(theme, false);
         assert_eq!(h.state().state.panel, crate::state::Panel::Agent);
-        let texts = painted(&h);
-        assert!(texts.iter().any(|t| t == "Chat") && texts.iter().any(|t| t == "Coming soon"), "{theme:?}: {texts:?}");
-        // No control that looks as if it worked: no provider, message or history.
-        let panel_ids: Vec<String> =
-            ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.") || i.starts_with("workspace.skills.")).collect();
-        assert!(panel_ids.is_empty(), "{panel_ids:?}");
-        // Back to Properties, the selection is as it was.
+        assert!(painted_has(&h, "No agent set up yet") && painted_has(&h, "Configure agent"), "{theme:?}: {:?}", painted(&h));
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.chat.history"), "{theme:?}");
+        for absent in ["workspace.chat.new", "workspace.chat.composer", "workspace.chat.send", "workspace.chat.badge"] {
+            assert!(!found.iter().any(|i| i == absent), "{theme:?}: {absent} in B1");
+        }
+        let at = rect_of(&h, "workspace.chat.configure").center();
+        click(&mut h, at);
+        assert_eq!(h.state().settings.as_ref().map(|d| d.section), Some(crate::settings::Section::Agents), "{theme:?}");
+
+        // B2: ready. The intro, the three chips, the notice, the composer with Claude's badge and
+        // Send, Allow changes off.
+        let (mut h, _rig) = chat_harness(theme, true);
+        for text in ["Ask about Commerce platform", "These and everything the agent reads are sent to the provider.", "Allow changes to the model"] {
+            assert!(painted_has(&h, text), "{theme:?}: {text} in {:?}", painted(&h));
+        }
+        assert!(painted_has(&h, "Claude · Sonnet"), "{theme:?}: the badge names the model asked for");
+        let found = ids(&h);
+        for id in [
+            "workspace.chat.history",
+            "workspace.chat.new",
+            "workspace.chat.composer",
+            "workspace.chat.send",
+            "workspace.chat.badge",
+            "workspace.chat.allow-changes",
+            "workspace.chat.chip.project.remove",
+            "workspace.chat.chip.diagram.remove",
+            "workspace.chat.chip.selection.remove",
+        ] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        assert!(!h.state().chat_panel.chat.as_ref().unwrap().allow_changes, "a conversation starts read-only");
+        // Nothing of Properties is drawn under it; back to Properties, the selection is as it was.
+        assert!(!found.iter().any(|i| i.starts_with("workspace.properties.") || i.starts_with("workspace.skills.")), "{theme:?}");
         let at = rect_of(&h, "workspace.panels.properties").center();
         click(&mut h, at);
-        assert_eq!(crate::panels::selected_id(h.state()), Some(order));
         assert!(painted(&h).iter().any(|t| t == "Order"));
-        // A second click on the open panel's icon folds the dock.
+        // Its icon again shows the same conversation; a second click on the open panel folds the dock.
+        let chat = h.state().chat_panel.chat.as_ref().map(|c| c.id);
         let at = rect_of(&h, "workspace.panels.agent").center();
         click(&mut h, at);
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), chat);
         click(&mut h, at);
         assert!(h.state().state.panel_collapsed);
     }
+}
+
+/// A question is kept before the agent gets it, with its chips as a context line; Enter sends, Shift+Enter starts a line.
+#[test]
+fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_streams_back() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    // A removed chip stays removed for the conversation and is not sent.
+    let at = rect_of(&h, "workspace.chat.chip.project.remove").center();
+    click(&mut h, at);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.chip.project.remove"));
+    ask_in_chat(&mut h, "Which classes have no description yet?");
+    assert_eq!(*rig.store.log.lock().unwrap(), ["create", "ask"], "made and asked before the agent gets it");
+    assert_eq!(h.state().chat_panel.draft, "", "the composer empties once the question is kept");
+    let started = rig.agents.started.lock().unwrap().clone();
+    assert_eq!(started.len(), 1);
+    let start = &started[0];
+    assert_eq!(
+        (start.provider, start.model.as_str(), start.origin.as_str(), start.allow_changes, start.resume),
+        (crate::ai_agents::Provider::Claude, "sonnet", "Chat 1", false, false)
+    );
+    assert_eq!(chat_calls(&rig).1, 1, "sent once");
+    let chat = kept_chat(&h, &rig);
+    assert_eq!((chat.row.origin.as_str(), chat.row.title.as_str()), ("Chat 1", "Which classes have no description yet?"));
+    // The chips go as a line after the question, by name and id; the removed one does not.
+    let order = crate::chat_fixture::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+    let line = crate::chat_panel::context_line(
+        &crate::chat_panel::chips(h.state())
+            .into_iter()
+            .filter(|c| c.chip != crate::chat_panel::Chip::Project)
+            .flat_map(|c| c.anchors)
+            .collect::<Vec<_>>(),
+    );
+    assert!(line.contains("selected \"Order\"") && line.contains(&order.to_string()) && line.contains("open diagram \"Commerce\""), "{line}");
+    assert!(!line.contains("project"), "{line}");
+    // The reply streams, then completes; Started names the model on the badge.
+    chat_event(&mut h, &rig, ChatEvent::Started { model: crate::chat_fixture::NAMED.into(), access: true });
+    assert!(painted_has(&h, "Claude · Sonnet 4.5"));
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "Five of the eight ".into() });
+    assert!(painted_has(&h, "Five of the eight ▍") || painted_has(&h, "Five of the eight"), "{:?}", painted(&h));
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.stop") && !ids(&h).iter().any(|i| i == "workspace.chat.send"));
+    assert!(painted_has(&h, "Claude is replying… you can type the next message"));
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "Five of the **eight** classes.".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    assert!(painted_has(&h, "Five of the eight classes."), "rendered as Markdown: {:?}", painted(&h));
+    let chat = kept_chat(&h, &rig);
+    assert_eq!(chat.turns[0].outcome, crate::chat_store::Outcome::Completed);
+    assert!(
+        matches!(&chat.messages[1].body, crate::chat_store::StoredBody::Reply { text, complete: true, .. } if text == "Five of the **eight** classes.")
+    );
+    // Enter sends, Shift+Enter makes a new line.
+    let at = rect_of(&h, "workspace.chat.composer").center();
+    click(&mut h, at);
+    h.event(egui::Event::Text("Line one".into()));
+    key(&mut h, egui::Key::Enter, egui::Modifiers::SHIFT);
+    h.event(egui::Event::Text("line two".into()));
+    h.run();
+    assert_eq!(h.state().chat_panel.draft, "Line one\nline two");
+    assert_eq!(chat_calls(&rig).1, 1, "Shift+Enter sent nothing");
+}
+
+/// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.
+#[test]
+fn stop_keeps_the_reply_so_far_marked_cut_off_and_keeps_it_in_the_project() {
+    use crate::chat::ChatEvent;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+        chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is linked to Order by".into() });
+        let at = rect_of(&h, "workspace.chat.stop").center();
+        click(&mut h, at);
+        assert_eq!(chat_calls(&rig).2, 1, "{theme:?}: the program is asked to stop the turn");
+        click(&mut h, at);
+        assert_eq!(chat_calls(&rig).2, 1, "{theme:?}: once");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Stopped));
+        assert!(painted_has(&h, "Payment is linked to Order by") && !painted_has(&h, "▍"), "{theme:?}: the reply so far stays");
+        assert!(painted_has(&h, "Stopped. Nothing was changed."), "{theme:?}");
+        let chat = kept_chat(&h, &rig);
+        assert_eq!(chat.turns[0].outcome, crate::chat_store::Outcome::Stopped);
+        assert!(
+            matches!(&chat.messages[1].body, crate::chat_store::StoredBody::Reply { text, complete: false, .. } if text == "Payment is linked to Order by"),
+            "{theme:?}: kept, marked cut off: {:?}",
+            chat.messages
+        );
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"), "{theme:?}: Send is back");
+        // A program that cannot be reached any more: the turn ends here as stopped.
+        ask_in_chat(&mut h, "And Customer?");
+        rig.agents.running.lock().unwrap().clear();
+        let at = rect_of(&h, "workspace.chat.stop").center();
+        click(&mut h, at);
+        assert_eq!(kept_chat(&h, &rig).turns[1].outcome, crate::chat_store::Outcome::Stopped, "{theme:?}");
+    }
+}
+
+/// Send again runs the failed turn in place: no new turn, the question shown and kept once.
+#[test]
+fn send_again_runs_the_failed_turn_in_place_and_its_question_shows_and_is_kept_once() {
+    use crate::chat::{ChatEvent, FailureKind};
+    use crate::chat_store::{Outcome, StoredBody};
+    let question = "Which classes have no description yet?";
+    let questions = |chat: &crate::chat_store::fake::Kept| -> Vec<String> {
+        chat.messages.iter().filter_map(|m| if let StoredBody::Question { text, .. } = &m.body { Some(text.clone()) } else { None }).collect()
+    };
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, question);
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Other));
+    assert!(painted_has(&h, "No answer") && painted_has(&h, "Claude stopped before answering. Nothing was changed."), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.chat.turn.1.retry").center();
+    click(&mut h, at);
+    let chat = kept_chat(&h, &rig);
+    assert_eq!((chat.turns.len(), chat.turns[0].outcome), (1, Outcome::Running), "the same turn runs again");
+    assert_eq!(questions(&chat), [question], "the question is kept once");
+    assert_eq!(painted_times(&h, question), 1, "and shown once");
+    assert_eq!(chat_calls(&rig).1, 2, "the agent gets it again");
+    assert!(rig.store.log.lock().unwrap().contains(&"rerun"));
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "Five of them.".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    assert_eq!(kept_chat(&h, &rig).turns.len(), 1);
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.1.retry"), "a completed turn is not sent again");
+
+    // A lost connection puts the question back in the empty composer, its bubble gone; edited and
+    // sent, it replaces the kept one in place.
+    let second = "List the classes without one.";
+    ask_in_chat(&mut h, second);
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
+    assert_eq!(h.state().chat_panel.draft, second, "back in the composer");
+    assert!(painted_has(&h, "Connection lost") && painted_has(&h, "Your message is back in the box below"), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.chat.composer").center();
+    click(&mut h, at);
+    key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+    h.event(egui::Event::Text("List every class without one.".into()));
+    h.run();
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    let chat = kept_chat(&h, &rig);
+    assert_eq!(chat.turns.len(), 2, "no new turn");
+    assert_eq!(questions(&chat), [question, "List every class without one."], "the edited question replaced the kept one");
+    assert_eq!((painted_times(&h, second), painted_times(&h, "List every class without one.")), (0, 1));
+    assert_eq!(h.state().chat_panel.draft, "");
+}
+
+/// The draft survives a project's refusal, a kept key in the question and a lost connection.
+#[test]
+fn the_draft_survives_a_lost_connection_and_a_project_that_refuses_the_question() {
+    use crate::chat::FailureKind;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        // The project refuses: nothing is sent, the draft stays and the panel says why.
+        *rig.store.refuse.lock().unwrap() = Some("the disk is full".into());
+        ask_in_chat(&mut h, "Which classes have no description yet?");
+        assert_eq!(h.state().chat_panel.draft, "Which classes have no description yet?", "{theme:?}");
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(chat_calls(&rig), (0, 0, 0, 0), "{theme:?}: nothing reached the agent");
+        // A question holding a kept key is refused before anything is written.
+        *rig.store.refuse.lock().unwrap() = None;
+        h.state_mut().chat_panel.draft.clear();
+        ask_in_chat(&mut h, &format!("Why does {} fail?", crate::chat_fixture::KEY));
+        assert!(painted_has(&h, "This question holds your saved Claude API key, so it was neither sent nor saved."), "{theme:?}");
+        assert!(h.state().chat_panel.draft.contains(crate::chat_fixture::KEY), "{theme:?}: kept for the person to edit");
+        assert!(rig.store.chats.lock().unwrap().iter().all(|c| !c.row.title.contains(crate::chat_fixture::KEY)));
+        assert_eq!(chat_calls(&rig), (0, 0, 0, 0), "{theme:?}");
+        // Sent once it can be: the draft empties. A lost connection with a new draft typed meanwhile
+        // keeps that draft; the question stays in its bubble.
+        h.state_mut().chat_panel.draft.clear();
+        ask_in_chat(&mut h, "Which classes have no description yet?");
+        assert_eq!(h.state().chat_panel.draft, "");
+        let at = rect_of(&h, "workspace.chat.composer").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("And the next one".into()));
+        h.run();
+        // While the reply runs, typing works and Enter waits.
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(chat_calls(&rig).1, 1, "{theme:?}: Enter waits for the reply");
+        assert!(painted_has(&h, "Stop the reply first"), "{theme:?}");
+        chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
+        assert_eq!(h.state().chat_panel.draft, "And the next one", "{theme:?}: the draft typed meanwhile is kept");
+        assert_eq!(painted_times(&h, "Which classes have no description yet?"), 1, "{theme:?}: the question stays in its bubble");
+        assert!(painted_has(&h, "The network went away before Claude answered."), "{theme:?}");
+    }
+}
+
+/// The badge names the model; Settings never switch a started conversation; the badge does, between turns.
+#[test]
+fn the_badge_names_the_model_and_a_changed_setting_never_switches_a_running_conversation() {
+    use crate::ai_agents::Provider;
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    // A conversation that has not started follows Settings.
+    h.state_mut().state.agents.claude_model = "opus".into();
+    h.run();
+    assert!(painted_has(&h, "Claude · Opus"));
+    h.state_mut().state.agents.claude_model = "sonnet".into();
+    h.run();
+    ask_in_chat(&mut h, "Hello");
+    chat_event(&mut h, &rig, ChatEvent::Started { model: crate::chat_fixture::NAMED.into(), access: true });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // Settings change: the conversation keeps its agent and model, and its program.
+    h.state_mut().state.agents.default_agent = Provider::Codex;
+    h.state_mut().state.agents.claude_model = "opus".into();
+    h.run();
+    assert!(painted_has(&h, "Claude · Sonnet 4.5"), "{:?}", painted(&h));
+    ask_in_chat(&mut h, "And again");
+    assert_eq!(chat_calls(&rig), (1, 2, 0, 0), "the same program, no new start");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // While a reply runs, the badge, the switch, New conversation and the history wait.
+    ask_in_chat(&mut h, "Third");
+    for id in ["workspace.chat.badge", "workspace.chat.allow-changes", "workspace.chat.new", "workspace.chat.history"] {
+        let at = rect_of(&h, id).center();
+        click(&mut h, at);
+    }
+    let shown = h.state().chat_panel.chat.as_ref().unwrap();
+    assert!(!h.state().chat_panel.menu && !shown.allow_changes && shown.turns.len() == 3, "nothing changed while it ran");
+    assert_eq!(h.state().chat_panel.view, crate::chat_panel::View::Conversation);
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // The badge's menu: once started, the conversation's own agent only; Opus picked ends the idle
+    // program, and the next question starts it again where it was, on Opus.
+    let at = rect_of(&h, "workspace.chat.badge").center();
+    click(&mut h, at);
+    assert!(h.state().chat_panel.menu);
+    let items: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.chat.badge.")).collect();
+    assert_eq!(items.len(), Provider::Claude.models().len(), "{items:?}");
+    let opus = Provider::Claude.models().iter().position(|(m, _)| *m == "opus").unwrap();
+    let at = rect_of(&h, &format!("workspace.chat.badge.{opus}")).center();
+    click(&mut h, at);
+    assert_eq!(chat_calls(&rig).3, 1, "the idle program ended");
+    assert!(painted_has(&h, "Claude · Opus"));
+    assert!(rig.store.log.lock().unwrap().contains(&"model"));
+    assert_eq!(h.state().chat_panel.chat.as_ref().unwrap().session, crate::chat_panel::Session::Off, "its end came");
+    ask_in_chat(&mut h, "Fourth");
+    let started = rig.agents.started.lock().unwrap().clone();
+    assert_eq!(started.len(), 2);
+    assert_eq!((started[1].provider, started[1].model.as_str(), started[1].resume), (Provider::Claude, "opus", true));
+}
+
+/// Only a web link in a reply is a control, and it opens only after its confirmation.
+#[test]
+fn only_a_web_link_in_a_reply_opens_and_only_after_its_confirmation() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Where are the docs?");
+    let reply =
+        "See [the docs](https://example.org/docs), [this](javascript:alert(1)), [mail](mailto:a@example.org) and [that](https://user@example.org/).";
+    chat_event(&mut h, &rig, ChatEvent::Message { text: reply.into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let links: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.chat.link.")).collect();
+    assert_eq!(links, ["workspace.chat.link.0"], "only the web address is a link");
+    let press = |h: &mut Harness<'static, Shell>, id: &str| {
+        let at = rect_of(h, id).center();
+        h.event(egui::Event::PointerMoved(at));
+        h.run_steps(8);
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+    };
+    press(&mut h, "workspace.chat.link.0");
+    assert!(!h.output().platform_output.commands.iter().any(|c| matches!(c, egui::OutputCommand::OpenUrl(_))), "nothing opens yet");
+    h.run_steps(8);
+    assert_eq!(h.state().chat_panel.link.as_deref(), Some("https://example.org/docs"));
+    press(&mut h, "workspace.chat.link.open");
+    let opened: Vec<String> = h
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| if let egui::OutputCommand::OpenUrl(u) = c { Some(u.url.clone()) } else { None })
+        .collect();
+    assert_eq!(opened, ["https://example.org/docs"]);
+    h.run_steps(8);
+    assert_eq!(h.state().chat_panel.link, None);
+}
+
+/// Undo this turn's changes takes back exactly the turn's changes, keeps the person's, and says when it cannot.
+#[test]
+fn undo_this_turns_changes_takes_back_exactly_the_turns_changes_and_keeps_the_persons() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    let describe = |h: &mut Harness<'static, Shell>, name: &str, text: &str| {
+        let id = fx::element(h.state(), archforge_uml::CLASS, name).unwrap();
+        let answer = fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+        );
+        h.run();
+        answer
+    };
+    let description = |h: &Harness<'static, Shell>, name: &str| {
+        let s = h.state();
+        let st = s.session.as_ref().unwrap().doc();
+        let id = fx::element(s, archforge_uml::CLASS, name).unwrap();
+        crate::panels::description_now(s, st.by_uuid(id).unwrap())
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        // The person's own edit first.
+        let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+            .unwrap();
+        // Read-only, a change is refused and its row says so.
+        ask_in_chat(&mut h, "Describe Customer.");
+        assert!(describe(&mut h, "Customer", "A buyer").is_err());
+        assert!(painted_has(&h, "Changed Customer") && painted_has(&h, "refused"), "{theme:?}: {:?}", painted(&h));
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        // Changes allowed: two changes, one step of the undo history.
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        assert!(h.state().chat_panel.chat.as_ref().unwrap().allow_changes);
+        ask_in_chat(&mut h, "Describe Customer and Product.");
+        describe(&mut h, "Customer", "A buyer").unwrap();
+        describe(&mut h, "Product", "A thing sold").unwrap();
+        chat_event(&mut h, &rig, ChatEvent::Message { text: "Done.".into() });
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        assert!(
+            painted_has(&h, "2 changes to the model") && painted_has(&h, "Made in this turn, as one step of the project's undo history."),
+            "{theme:?}"
+        );
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Chat 1: Turn 2"));
+        let kept = kept_chat(&h, &rig);
+        let change = kept.turns[1].change.clone().unwrap();
+        assert_eq!((change.changes, change.state), (2, crate::chat_store::ChangeState::Applied));
+        let at = rect_of(&h, "workspace.chat.turn.2.undo").center();
+        click(&mut h, at);
+        assert_eq!(
+            (description(&h, "Customer"), description(&h, "Product")),
+            (String::new(), String::new()),
+            "{theme:?}: the turn's changes are gone"
+        );
+        assert_eq!(description(&h, "Order"), "Mine", "{theme:?}: the person's own edit stays");
+        assert!(painted_has(&h, "2 changes undone"), "{theme:?}");
+        assert_eq!(kept_chat(&h, &rig).turns[1].change.as_ref().map(|c| c.state), Some(crate::chat_store::ChangeState::Undone));
+        // Redo brings them back, and the record follows.
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        h.run();
+        assert_eq!(description(&h, "Customer"), "A buyer");
+        assert_eq!(kept_chat(&h, &rig).turns[1].change.as_ref().map(|c| c.state), Some(crate::chat_store::ChangeState::Applied));
+        // Another change since: the turn's changes can no longer be undone on their own.
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine again" }))
+            .unwrap();
+        h.run();
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.2.undo"), "{theme:?}");
+        assert!(painted_has(&h, "The model changed after this turn, so its changes can no longer be undone on their own."), "{theme:?}");
+    }
+}
+
+/// The history lists the project's conversations and opens one whole, read-only, resuming its program.
+#[test]
+fn the_history_lists_the_projects_conversations_and_opens_one_whole_and_read_only() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "First question");
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "First answer".into() });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+    let at = rect_of(&h, "workspace.chat.new").center();
+    click(&mut h, at);
+    assert!(painted_has(&h, "Ask about Commerce platform"), "a new conversation");
+    ask_in_chat(&mut h, "Second question");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    assert!(painted_has(&h, "SAVED WITH COMMERCE PLATFORM"), "{:?}", painted(&h));
+    assert!(painted_has(&h, "Conversations are kept in the project, so they travel with it and never show in another project."));
+    let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.chat.history.")).collect();
+    assert_eq!(rows.len(), 2);
+    assert!(painted_has(&h, "Today 14:26 · Claude · 2 messages") && painted_has(&h, "Today 14:26 · Claude · 1 message"), "{:?}", painted(&h));
+    // The older one, opened again: whole, read-only, its program not started until asked.
+    let at = rect_of(&h, "workspace.chat.history.1").center();
+    click(&mut h, at);
+    let shown = h.state().chat_panel.chat.as_ref().unwrap();
+    assert_eq!((shown.id, shown.turns.len(), shown.allow_changes), (first, 1, false));
+    assert!(painted_has(&h, "First question") && painted_has(&h, "First answer"), "{:?}", painted(&h));
+    let starts = chat_calls(&rig).0;
+    ask_in_chat(&mut h, "Go on");
+    let started = rig.agents.started.lock().unwrap().clone();
+    assert_eq!(started.len(), starts + 1);
+    let last = started.last().unwrap();
+    assert_eq!((last.origin.as_str(), last.resume, last.allow_changes), ("Chat 1", true, false));
+    assert_eq!(kept_chat(&h, &rig).turns.len(), 2, "its turns go on from where they were");
+}
+
+/// A tool row comes from the channel's answer; an origin acts only while its turn runs.
+#[test]
+fn a_tool_row_is_worded_from_the_channels_answer_and_only_a_running_turn_of_the_project_shown_may_act() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "What is on the diagram?");
+    let diagram = h.state().canvas.active.unwrap();
+    fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "diagram.get", "params": { "diagram": diagram.to_string() } })).unwrap();
+    h.run();
+    assert!(painted_has(&h, "Read diagram Commerce"), "{:?}", painted(&h));
+    let kept = kept_chat(&h, &rig);
+    let facts = kept.messages.iter().find_map(|m| if let crate::chat_store::StoredBody::Tool(f) = &m.body { Some(f.clone()) } else { None }).unwrap();
+    assert_eq!(
+        (facts.tool.as_str(), facts.command.as_deref(), facts.status),
+        ("engine.execute", Some("diagram.get"), crate::chat_store::ToolStatus::Done)
+    );
+    assert!(facts.anchors.iter().any(|a| a.role == crate::chat_store::AnchorRole::Read && a.metaclass == "uml_class"), "{facts:?}");
+    // The window's own controls and the command list make no row.
+    fx::call(h.state_mut(), "engine.commands", serde_json::json!({})).unwrap();
+    assert_eq!(kept_chat(&h, &rig).messages.len(), kept.messages.len());
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // Its turn over, the conversation's origin may not act.
+    let refused =
+        fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "diagram.get", "params": { "diagram": diagram.to_string() } }));
+    assert!(refused.unwrap_err().contains("has no turn running"));
+}
+
+/// The messages the fake agent was sent, in order.
+fn sent_texts(rig: &crate::chat_fixture::Rig) -> Vec<String> {
+    rig.agents.sent.lock().unwrap().iter().map(|(_, t)| t.clone()).collect()
+}
+
+/// A failed turn sent again from its card goes with its chips' context line again; a question back
+/// in the composer is the one sent and shows once; a lost connection in a turn that changed the
+/// model leaves its question where it is, and the composer asks anew.
+#[test]
+fn send_again_keeps_the_context_and_the_composer_never_sticks() {
+    use crate::chat::{ChatEvent, FailureKind};
+    use crate::chat_fixture as fx;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "First");
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Other));
+    let at = rect_of(&h, "workspace.chat.turn.1.retry").center();
+    click(&mut h, at);
+    let sent = sent_texts(&rig);
+    assert_eq!(sent.len(), 2);
+    assert!(sent.iter().all(|t| t.starts_with("First") && t.contains("[Context the person chose:")), "{sent:?}");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // Back in the composer: the card's Send again sends what the composer holds, once.
+    ask_in_chat(&mut h, "Second");
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
+    assert_eq!(h.state().chat_panel.draft, "Second");
+    let at = rect_of(&h, "workspace.chat.turn.2.retry").center();
+    click(&mut h, at);
+    assert_eq!(h.state().chat_panel.draft, "", "the composer emptied");
+    assert_eq!(painted_times(&h, "Second"), 1, "shown once");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    assert_eq!(kept_chat(&h, &rig).turns.len(), 2);
+    // A turn that changed the model and then lost its connection: its question stays in its bubble
+    // and the composer asks a new question.
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Third");
+    let customer = fx::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+    fx::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "element.describe", "params": { "element": customer.to_string(), "text": "A buyer" } }),
+    )
+    .unwrap();
+    chat_event(&mut h, &rig, failed_turn(FailureKind::Network));
+    assert_eq!(h.state().chat_panel.draft, "", "not back in the composer");
+    assert_eq!(painted_times(&h, "Third"), 1);
+    ask_in_chat(&mut h, "Fourth");
+    assert_eq!(kept_chat(&h, &rig).turns.len(), 4, "a new turn");
+}
+
+/// A request on behalf of a conversation acts only while that conversation's turn runs in the
+/// project shown: never for one let go of, nor for the same label still running in another
+/// project; and it never undoes the person's own step.
+#[test]
+fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_step() {
+    use crate::chat_fixture as fx;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Describe Order");
+    let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+    // The person's own edit on top: the conversation may not undo it.
+    h.state_mut()
+        .session
+        .as_mut()
+        .unwrap()
+        .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+        .unwrap();
+    let undo = fx::call(h.state_mut(), "engine.undo", serde_json::json!({}));
+    assert!(undo.unwrap_err().contains("may undo only its own changes"));
+    let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
+    assert!(undo.is_err());
+    assert_eq!(crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(order).unwrap()), "Mine");
+    // Its own change it may undo.
+    fx::call(
+        h.state_mut(),
+        "engine.execute",
+        serde_json::json!({ "command": "element.describe", "params": { "element": order.to_string(), "text": "Its" } }),
+    )
+    .unwrap();
+    assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_ok());
+    // Another project open with its own Chat 1 running, while this one's is still running parked:
+    // the label is refused there.
+    let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
+    let _ = &rig;
+    h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+    h.run();
+    crate::uml_ui::open_sample(h.state_mut()).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Agent);
+    h.run();
+    ask_in_chat(&mut h, "Here");
+    // Labels are numbered per project: the fake keeps one list for both, so the label is set as
+    // the other project would have given it.
+    h.state_mut().chat_panel.chat.as_mut().unwrap().origin = origin.clone();
+    let refused = fx::call(h.state_mut(), "document.inspect", serde_json::json!({}));
+    assert!(refused.unwrap_err().contains("has no turn running"), "the parked one still runs under the label");
+    // A conversation let go of: its label is refused until its program has ended.
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "One");
+    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let key = fx::key(h.state());
+    let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
+    let at = rect_of(&h, "workspace.chat.new").center();
+    click(&mut h, at);
+    // The fake's program ends at once; one still ending is held as a slow program's would be.
+    h.state_mut().chats.letting_go.push((key.clone(), origin.clone()));
+    let inspect = serde_json::json!({});
+    assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), "document.inspect", &inspect).is_err(), "refused while it ends");
+    h.run();
+    assert!(h.state().chats.letting_go.is_empty(), "its end taken, it is forgotten");
+    assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), "document.inspect", &inspect).is_ok(), "known no more once ended");
+}
+
+/// A Stop the program never answers ends the program and the turn after the grace, so the panel
+/// never sticks; closing a project lets its conversation go until its program has ended.
+#[test]
+fn a_stop_the_program_never_answers_ends_the_turn_after_the_grace() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Long");
+    let at = rect_of(&h, "workspace.chat.stop").center();
+    click(&mut h, at);
+    assert!(h.state().chat_panel.chat.as_ref().unwrap().busy(), "waits for the program");
+    rig.now.fetch_add(crate::chat_panel::STOP_GRACE, Relaxed);
+    h.run();
+    let chat = h.state().chat_panel.chat.as_ref().unwrap();
+    assert!(!chat.busy(), "ended here");
+    assert_eq!(chat_calls(&rig).3, 1, "its program was ended");
+    assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"));
+}
+
+/// A reply cut to its limit is kept marked shortened, and says so read back; a conversation opened
+/// again while its program still ends waits for that end before its next question starts it again.
+#[test]
+fn a_cut_reply_is_kept_shortened_and_a_conversation_reopened_while_ending_waits_for_its_end() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "Write a lot");
+    chat_event(&mut h, &rig, ChatEvent::Message { text: "x".repeat(crate::chat_panel::REPLY_BYTES + 10) });
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    let kept = kept_chat(&h, &rig);
+    assert!(
+        matches!(&kept.messages[1].body, crate::chat_store::StoredBody::Reply { text, shortened: true, .. } if text.len() == crate::chat_panel::REPLY_BYTES),
+        "kept cut and marked"
+    );
+    assert!(painted_has(&h, "The reply was shortened to fit."));
+    // Let go of, then opened again while its program still ends (held as a slow program's end).
+    let id = h.state().chat_panel.chat.as_ref().unwrap().id;
+    let key = crate::chat_fixture::key(h.state());
+    rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
+    let at = rect_of(&h, "workspace.chat.new").center();
+    click(&mut h, at);
+    assert!(h.state().chats.letting_go.iter().any(|(k, _)| *k == key), "let go of, still ending");
+    crate::chat_panel::open(h.state_mut(), id);
+    h.run();
+    let shown = h.state().chat_panel.chat.as_ref().unwrap();
+    assert_eq!((shown.id, shown.session), (id, crate::chat_panel::Session::Ending), "taken back, its program still ending");
+    assert!(h.state().chats.letting_go.is_empty());
+    let starts = chat_calls(&rig).0;
+    ask_in_chat(&mut h, "Go on");
+    assert_eq!(chat_calls(&rig).0, starts, "the question waits for the end");
+    rig.agents.hold_ends.store(false, std::sync::atomic::Ordering::Relaxed);
+    rig.agents.running.lock().unwrap().retain(|k| *k != key);
+    chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
+    assert_eq!(chat_calls(&rig).0, starts + 1, "then starts the program again");
+    assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("Go on")));
+}
+
+/// Leaving the tab stops the running turn, written to its own project; closing ends the conversation.
+#[test]
+fn leaving_the_projects_tab_stops_its_running_turn_and_closing_it_ends_its_conversation() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "A long question");
+    let key = crate::chat_fixture::key(h.state());
+    let first = h.state().active.unwrap();
+    h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+    h.run();
+    assert_eq!(chat_calls(&rig).2, 1, "leaving the tab stopped the turn");
+    // Its end arrives while it is parked, and is written to its own project.
+    assert!(rig.agents.emit(&key, ChatEvent::TurnEnded(crate::chat::TurnEnd::Stopped)));
+    h.run();
+    let parked = h.state().tabs[first].parked.as_ref().unwrap();
+    let id = parked.chat_panel.chat.as_ref().unwrap().id;
+    assert_eq!(rig.store.kept(id).unwrap().turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert!(rig.store.projects.lock().unwrap().iter().all(|p| p.ends_with("Commerce platform.archforge")));
+    // A parked turn whose stop is never answered ends after the grace, against its own project.
+    let (mut h2, rig2) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h2, "Another long question");
+    let first2 = h2.state().active.unwrap();
+    h2.state_mut().open_project(crate::Opened { name: "Third".into(), path: "/tmp/Third.archforge".into(), ..Default::default() });
+    h2.run();
+    rig2.now.fetch_add(crate::chat_panel::STOP_GRACE, std::sync::atomic::Ordering::Relaxed);
+    h2.run();
+    let parked = h2.state().tabs[first2].parked.as_ref().unwrap();
+    let id2 = parked.chat_panel.chat.as_ref().unwrap().id;
+    assert_eq!(rig2.store.kept(id2).unwrap().turns[0].outcome, crate::chat_store::Outcome::Stopped);
+    assert_eq!(chat_calls(&rig2).3, 1, "its program was ended");
+    // Closing it ends its program.
+    h.state_mut().close_tab(first);
+    h.run();
+    assert_eq!(chat_calls(&rig).3, 1, "closing the project ended its conversation");
 }
 
 #[test]
@@ -14299,7 +15001,7 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     h.run();
     assert_eq!(h.state().chats.dropped(&one), 1, "the third would pass the bytes' cap");
     // The end still comes, making room by dropping the oldest: here a failure as long as a message.
-    let failure = crate::chat::ChatFailure { kind: crate::chat::FailureKind::Other, detail: "y".repeat(MAX_WAITING_BYTES / 3) };
+    let failure = crate::chat::ChatFailure { kind: crate::chat::FailureKind::Other, detail: "y".repeat(MAX_WAITING_BYTES / 3), reset: None };
     let end = ChatEvent::Ended { failure: Some(failure) };
     f.emit(&one, end.clone());
     h.run();

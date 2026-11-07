@@ -162,15 +162,27 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
     if !req.live.load(Ordering::SeqCst) {
         return Err(REVOKED.to_string());
     }
+    // A Chat conversation's request runs only while its turn runs in the project shown, and makes
+    // the turn's tool rows from what it is answered.
+    crate::chat_panel::gate(shell, req.origin.as_deref(), &req.method, &req.params)?;
+    let before = crate::chat_panel::before(shell, &req.method, &req.params, req.origin.as_deref());
     if req.read_only && !only_reads(shell, &req.method, &req.params)? {
         let what = match req.params.get("command").and_then(Value::as_str) {
             Some(id) if req.method == "engine.execute" => format!("the command {id:?} is not a query"),
             _ if req.method == "engine.batch" => "a step of the batch is not a query".to_string(),
             _ => format!("{} changes the project", req.method),
         };
-        return Err(format!("this conversation may only read: {what}; Allow changes in the conversation lets it change the model"));
+        let refused = Err(format!("this conversation may only read: {what}; Allow changes in the conversation lets it change the model"));
+        if let Some(b) = before {
+            crate::chat_panel::after(shell, &req.method, b, &refused, true);
+        }
+        return refused;
     }
-    answer_from(shell, &req.method, &req.params, req.origin.as_deref())
+    let answer = answer_from(shell, &req.method, &req.params, req.origin.as_deref());
+    if let Some(b) = before {
+        crate::chat_panel::after(shell, &req.method, b, &answer, false);
+    }
+    answer
 }
 
 /// Answers one request from the user's own side: its changes have no origin.
