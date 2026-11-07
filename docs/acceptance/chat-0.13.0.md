@@ -287,9 +287,11 @@ MARKER="AFMARKER$(openssl rand -hex 6)"           # a class name, added through 
 MARKER_CODEX_KEY="AFQKEY$(openssl rand -hex 6)"   # one question to Codex on an API key
 MARKER_CODEX_GPT="AFQGPT$(openssl rand -hex 6)"   # one question to Codex signed in with ChatGPT
 MARKER_DELETED="AFQDEL$(openssl rand -hex 6)"     # one question in the conversation K3 deletes
+ASK="Reply with this one word and read nothing:"   # the questions of K2 steps 4 and 5
 printf '%s\n%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" > "$WORK/canaries"
 printf '%s\n' "$MARKER" > "$WORK/marker"
-printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER" "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT" "$MARKER_DELETED"   # to paste
+printf '%s\n' "$CANARY_CLAUDE" "$CANARY_CODEX" "$MARKER"   # to paste in K2 step 1 and K3
+printf '%s %s\n' "$ASK" "$MARKER_CODEX_KEY" "$ASK" "$MARKER_CODEX_GPT" "$ASK" "$MARKER_DELETED"   # the three questions, to paste whole
 ```
 
 The markers are words that must be found. `$MARKER` is a class name: it proves the project search
@@ -342,14 +344,14 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
 3. Repeat step 2 with Codex on **API key**. **Expect:** *codex running* and *archforge-cli
    running*, then no line: the key goes over the program's input. Step 2's line for Claude shows
    that the search finds a key where one is.
-4. With Codex the default agent and still on **API key**, ask in a new conversation: *Reply with
-   this one word and read nothing:* and paste `$MARKER_CODEX_KEY`'s value. Then switch the card to
-   **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed in*), and ask the same in
-   another new conversation with `$MARKER_CODEX_GPT`'s value. **Expect:** a reply each time,
-   repeating the word. Each Codex route has now sent one question with a marker of its own, for
+4. With Codex the default agent and still on **API key**, start a new conversation and paste the
+   first question K1 printed, the one ending in `$MARKER_CODEX_KEY`'s value, whole and unchanged.
+   Then switch the card to **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed
+   in*), start another new conversation and paste the second, ending in `$MARKER_CODEX_GPT`'s
+   value. **Expect:** a reply each time, repeating the word. Each Codex route has now sent one question with a marker of its own, for
    K4 step 8.
-5. Make Claude the default agent again, start a new conversation and ask: *Reply with this one
-   word and read nothing:* and paste `$MARKER_DELETED`'s value. **Expect:** a reply. This is the
+5. Make Claude the default agent again, start a new conversation and paste the third question K1
+   printed, ending in `$MARKER_DELETED`'s value. **Expect:** a reply. This is the
    conversation K3 step 5 deletes; its title starts with the question.
 
 ### K3. Send the canaries everywhere they can go
@@ -513,27 +515,27 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
 
    ```sh
    for m in "$MARKER_CODEX_KEY" "$MARKER_CODEX_GPT"; do
+     printf '%s %s\n' "$ASK" "$m" > "$WORK/one-question"
+     echo "== the whole question with $m, in the conversations' own folders (the probe)"
+     search "$WORK/one-question" "$SETTINGS/agents"
+     echo "== the whole question with $m, in codex-home"
+     search "$WORK/one-question" "$SETTINGS/agents/codex-home"
      printf '%s\n' "$m" > "$WORK/one-marker"
-     echo "== $m in codex-home"
-     search "$WORK/one-marker" "$SETTINGS/agents/codex-home"
-     grep -r -a -o -E ".{0,80}$m.{0,40}" "$SETTINGS/agents/codex-home" > "$WORK/matches-$m.txt"
-     echo "$(wc -l < "$WORK/matches-$m.txt") matches, every one in $WORK/matches-$m.txt"
-     echo "== $m in the conversations' own folders"
-     search "$WORK/one-marker" "$SETTINGS/agents"
+     grep -r -a -l -F -f "$WORK/one-marker" "$SETTINGS/agents/codex-home" > "$WORK/marker-files-$m.txt"
+     echo "$(wc -l < "$WORK/marker-files-$m.txt") codex-home files hold $m anywhere, listed in $WORK/marker-files-$m.txt"
    done
    ```
 
-   The second search is the probe: it must find each marker in that conversation's own copy, in
-   its `conversation-…` folder; otherwise the first search proves nothing. For each route, read
-   its `matches-…` file to the end, every line, before recording it: each line is one match, its
-   file first, then up to 80 characters before the marker and 40 after. A context line that reads
-   *Reply with this one word and read nothing:* before the marker is the question kept by Codex:
-   record its file. A match with other text around it (the reply, a log line) is recorded as what
-   it is, with its file. No match, with the probe found, means the question is not in
-   `codex-home` as plain text; Codex could still keep it in a form the search cannot read, so
-   record it as *not found as text*.
-   The context lines should hold only the question and the reply. If one shows anything like a
-   key, record a fail without copying it.
+   The question is searched whole, exactly as pasted, so no match can be cut off by another. The
+   first search is the probe: it must find the whole question in that conversation's own copy, in
+   its `conversation-…` folder; otherwise the second search proves nothing. For each route:
+   - **FOUND** in `codex-home`: Codex keeps the question as text there. Record the files.
+   - **none found** in `codex-home`, with the probe found: the question is not in `codex-home` as
+     plain text. Codex could still keep it in a form the search cannot read, so record it as
+     *not found as text*.
+   - The `marker-files-…` list names every `codex-home` file that holds the marker in any form
+     (the reply, a log line). Record them as what they are, with their files; they do not count
+     as the question.
 
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere, each place's probe
 *FOUND*. The secure store itself is the only place that holds a key.
@@ -553,7 +555,8 @@ key files the searches read.
 
    ```sh
    rm -rf "$WORK"
-   unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED DELETED_DIR
+   unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
+     DELETED_DIR ASK
    ```
 
 ## Results
