@@ -278,6 +278,7 @@ str		Agent access off	Agent access off
 str		Conversations	Conversations
 str		New conversation	New conversation
 str		Stop the reply first	Stop the reply first
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.
 str		No agent set up yet	No agent set up yet
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.
 str		Configure agent	Configure agent
@@ -335,6 +336,9 @@ str		No key saved	No key saved
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} needs an API key or a sign-in. Add one in Settings, then send again.
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent}'s sign-in has expired. Sign in again in Settings, then send again.
 str		No answer	No answer
+str		Not sent	Not sent
+str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.
+str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.
 str		{agent} stopped before answering.	{agent} stopped before answering.
 str		This turn changed the model, so it is not sent again; ask again to go on.	This turn changed the model, so it is not sent again; ask again to go on.
 str		Open Settings	Open Settings

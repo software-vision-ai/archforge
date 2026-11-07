@@ -279,6 +279,7 @@ str		Agent access off	Acceso de agentes desactivado
 str		Conversations	Conversaciones
 str		New conversation	Nueva conversación
 str		Stop the reply first	Detén primero la respuesta
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	«Dejar que Chat use el modelo» está desactivado, así que no se envía nada. Actívalo en Ajustes ▸ Agentes de IA.
 str		No agent set up yet	Aún no hay ningún agente configurado
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat responde con Claude o Codex, ejecutados por el programa instalado en este ordenador. Elige uno en Ajustes y deja que Chat use el modelo.
 str		Configure agent	Configurar agente
@@ -336,6 +337,9 @@ str		No key saved	No hay ninguna clave guardada
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} necesita una clave de API o un inicio de sesión. Añade uno en Ajustes y envía de nuevo.
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	El inicio de sesión de {agent} ha caducado. Inicia sesión de nuevo en Ajustes y envía de nuevo.
 str		No answer	Sin respuesta
+str		Not sent	No enviada
+str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	«Dejar que Chat use el modelo» se desactivó, así que esta pregunta no se envió. Vuelve a estar en el cuadro, lista cuando el interruptor esté activado.
+str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	«Dejar que Chat use el modelo» se desactivó, así que esta pregunta no se envió. Envíala de nuevo cuando el interruptor esté activado.
 str		{agent} stopped before answering.	{agent} se detuvo antes de responder.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Este turno cambió el modelo, así que no se envía de nuevo; pregunta otra vez para continuar.
 str		Open Settings	Abrir Ajustes
