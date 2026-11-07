@@ -15704,6 +15704,65 @@ fn a_sign_in_that_times_out_or_is_cancelled_by_codex_says_so() {
     }
 }
 
+/// The device-code card shows the sign-in page's address the codex program sent, beside the code,
+/// as text a person can select, with an icon that copies it, so the code can be entered on another
+/// device (AR-223). An address Archforge would not open is not shown, and nothing copies it.
+#[test]
+fn the_device_code_card_shows_the_sign_in_address_to_select_and_copy() {
+    use crate::ai_agents::LoginEvent;
+    let url = "https://auth.openai.com/codex/device";
+    let (mut h, _) = agents_harness(ThemeKind::Light, |f| {
+        *f.login.lock().unwrap() = vec![LoginEvent::DeviceCode { code: "WXYZ-4821".into(), url: url.into(), minutes: 15 }];
+    });
+    open_agents(&mut h);
+    let at = rect_of(&h, "settings.agents.codex.device-code").center();
+    click(&mut h, at);
+    h.run();
+    assert!(painted_has(&h, "WXYZ-4821"));
+    assert!(painted_has(&h, url), "the card shows the address");
+    for id in ["settings.agents.codex.address", "settings.agents.codex.copy-address", "settings.agents.codex.open-page"] {
+        assert!(ids(&h).iter().any(|i| i == id), "{id}");
+    }
+    assert!(rect_of(&h, "settings.agents.codex.address").top() > rect_of(&h, "settings.agents.codex.code").bottom(), "under the code");
+    // The address is text to select: clicking it gives it a text cursor, and it stays as sent.
+    let at = rect_of(&h, "settings.agents.codex.address").center();
+    click(&mut h, at);
+    let field = crate::widgets::egui_id("settings.agents.codex.address");
+    assert!(egui::text_edit::TextEditState::load(&h.ctx, field).and_then(|s| s.cursor.char_range()).is_some(), "the address is selectable");
+    assert!(painted_has(&h, url), "selecting it changes nothing");
+    // Copy puts exactly the address on the clipboard.
+    let at = rect_of(&h, "settings.agents.codex.copy-address").center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    let copied: Vec<String> = h
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::CopyText(t) => Some(t.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(copied, vec![url.to_string()]);
+    // An address off the sign-in host is neither shown nor copied.
+    let (mut h, _) = agents_harness(ThemeKind::Light, |f| {
+        *f.login.lock().unwrap() =
+            vec![LoginEvent::DeviceCode { code: "WXYZ-4821".into(), url: "https://example.com/codex/device".into(), minutes: 15 }];
+    });
+    open_agents(&mut h);
+    let at = rect_of(&h, "settings.agents.codex.device-code").center();
+    click(&mut h, at);
+    h.run();
+    assert!(painted_has(&h, "WXYZ-4821"));
+    assert!(!painted_has(&h, "example.com"));
+    assert!(painted_has(&h, "Not an address Archforge opens"));
+    assert!(!ids(&h).iter().any(|i| i == "settings.agents.codex.copy-address"));
+}
+
 #[test]
 fn a_device_code_that_is_not_letters_digits_and_hyphens_is_not_shown() {
     use crate::ai_agents::LoginEvent;

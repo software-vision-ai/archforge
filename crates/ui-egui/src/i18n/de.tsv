@@ -567,6 +567,8 @@ str		Sign in with a device code	Mit einem Gerätecode anmelden
 str		On any device with a browser, open the sign-in page and enter this code.	Öffnen Sie auf einem Gerät mit Browser die Anmeldeseite und geben Sie diesen Code ein.
 plural		It runs out in {n} minute.	Er läuft in {n} Minute ab.|Er läuft in {n} Minuten ab.
 str		Copy the code	Code kopieren
+str		Copy the address	Adresse kopieren
+str		Sign-in page address	Adresse der Anmeldeseite
 str		Open sign-in page	Anmeldeseite öffnen
 str		Not an address Archforge opens	Keine Adresse, die Archforge öffnet
 str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	Der Code kommt vom Programm codex, das die Anmeldung selbst verwaltet. Archforge zeigt ihn nur an.

@@ -567,6 +567,8 @@ str		Sign in with a device code	デバイスコードでサインイン
 str		On any device with a browser, open the sign-in page and enter this code.	ブラウザーのある端末でサインインページを開き、このコードを入力してください。
 plural		It runs out in {n} minute.	{n} 分で期限が切れます。
 str		Copy the code	コードをコピー
+str		Copy the address	アドレスをコピー
+str		Sign-in page address	サインインページのアドレス
 str		Open sign-in page	サインインページを開く
 str		Not an address Archforge opens	Archforge が開くアドレスではありません
 str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	コードは codex プログラムから届き、サインインはそのプログラム自身が保持します。 Archforge は表示するだけです。

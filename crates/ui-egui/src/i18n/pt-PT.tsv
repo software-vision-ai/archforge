@@ -567,6 +567,8 @@ str		Sign in with a device code	Iniciar sessão com um código de dispositivo
 str		On any device with a browser, open the sign-in page and enter this code.	Em qualquer dispositivo com navegador, abra a página de início de sessão e introduza este código.
 plural		It runs out in {n} minute.	Expira dentro de {n} minuto.|Expira dentro de {n} minutos.
 str		Copy the code	Copiar o código
+str		Copy the address	Copiar o endereço
+str		Sign-in page address	Endereço da página de início de sessão
 str		Open sign-in page	Abrir a página de início de sessão
 str		Not an address Archforge opens	Não é um endereço que o Archforge abra
 str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	O código vem do programa codex, que guarda o início de sessão por si. O Archforge apenas o mostra.

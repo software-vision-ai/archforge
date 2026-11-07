@@ -567,6 +567,8 @@ str		Sign in with a device code	使用设备代码登录
 str		On any device with a browser, open the sign-in page and enter this code.	在任意带浏览器的设备上打开登录页面并输入此代码。
 plural		It runs out in {n} minute.	它将在 {n} 分钟后失效。
 str		Copy the code	复制代码
+str		Copy the address	复制地址
+str		Sign-in page address	登录页面地址
 str		Open sign-in page	打开登录页面
 str		Not an address Archforge opens	Archforge 不会打开此地址
 str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	代码来自 codex 程序，登录由该程序自行保存。 Archforge 只负责显示。
