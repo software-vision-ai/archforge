@@ -428,9 +428,9 @@ pub trait AgentHost: Send + Sync {
     fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
     /// Removes the private folder of the conversation `chat` for good, once it was deleted
     /// (AR-217): a running program is ended first and waited for, a bounded time; a folder whose
-    /// program has not ended by then is kept. From the call until the removal is done, a start of
-    /// `chat` is refused ([`crate::chat::ChatRefusal::Forgetting`]), so no new program of it is
-    /// ended or loses its folder (AR-218). The answer says whether there was a folder, or why it
+    /// program has not ended by then is kept. From the call until the folder is set aside for
+    /// removal or kept, a start of `chat` is refused ([`crate::chat::ChatRefusal::Forgetting`]), so
+    /// no new program of it is ended, and a start refused meanwhile keeps the folder (AR-218). The answer says whether there was a folder, or why it
     /// was not removed.
     fn forget(&self, chat: &str) -> Receiver<Result<bool, String>>;
     /// [`AgentHost::forget`] once the project answered every one of `answers`, a deletion or a

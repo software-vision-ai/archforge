@@ -1051,6 +1051,12 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
         tx.send(answer).unwrap();
         assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(goes), "{case}");
         assert_eq!(!folder.exists(), goes, "{case}");
+        let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
+            .collect();
+        assert!(aside.is_empty(), "{case}: nothing is left moved aside: {aside:?}");
         host.agents.start(claude(&chat, "Chat 1", false)).unwrap();
         for c in [&chat, &other] {
             host.agents.end(c).unwrap();

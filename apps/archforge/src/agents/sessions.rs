@@ -15,7 +15,9 @@
 //! included: the conversation leaves the running list, its token is revoked, agent access closes
 //! with the last conversation that held it, and the window is told the conversation ended.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::time::Duration;
 
@@ -125,11 +127,13 @@ pub struct Removing {
 }
 
 /// A conversation whose private folder is being removed, counted in [`Inner::forgetting`] from
-/// the moment the removal is asked until it is done, however it ends: [`start`] refuses the
-/// conversation meanwhile (AR-218).
+/// the moment the removal is asked until its folder is moved aside or the removal ends, however
+/// it ends: [`start`] refuses the conversation meanwhile (AR-218).
 struct Forgetting {
     inner: Arc<Inner>,
     chat: String,
+    /// Counted done already ([`Forgetting::done`]), when its folder was moved aside.
+    done: bool,
 }
 
 impl Forgetting {
@@ -138,14 +142,15 @@ impl Forgetting {
         let mut forgetting = locked(&inner.forgetting);
         let removing = forgetting.entry(chat.to_string()).or_default();
         removing.under_way = removing.under_way.saturating_add(1);
-        Forgetting { inner: inner.clone(), chat: chat.to_string() }
+        Forgetting { inner: inner.clone(), chat: chat.to_string(), done: false }
     }
-}
 
-impl Drop for Forgetting {
-    /// Counts the removal done; with none left the conversation may start again.
-    fn drop(&mut self) {
-        let mut forgetting = locked(&self.inner.forgetting);
+    /// Counts the removal done in `forgetting`, the map behind [`Inner::forgetting`] its caller
+    /// holds locked; with none left the conversation may start again. Once only.
+    fn done(&mut self, forgetting: &mut HashMap<String, Removing>) {
+        if std::mem::replace(&mut self.done, true) {
+            return;
+        }
         if let Some(removing) = forgetting.get_mut(&self.chat) {
             removing.under_way = removing.under_way.saturating_sub(1);
             if removing.under_way == 0 {
@@ -155,14 +160,26 @@ impl Drop for Forgetting {
     }
 }
 
+impl Drop for Forgetting {
+    /// Counts the removal done, unless it was already.
+    fn drop(&mut self) {
+        let inner = self.inner.clone();
+        self.done(&mut locked(&inner.forgetting));
+    }
+}
+
+/// Names a folder moved aside for removal takes, unique in this process.
+static ASIDE: AtomicU64 = AtomicU64::new(0);
+
 /// Removes the private folder of the deleted conversation `chat` (AR-217), on a thread the host
 /// tracks: first the project's answers in `after` are waited for, in order, at most
 /// [`FORGET_WAIT`] in all, and only when every one lets the folder go does it go on (an Undo
 /// pressed before its deletion answered passes the deletion's and the restoration's, so a deletion
 /// that failed keeps the folder whatever the restoration says, AR-218); then its program, when it
 /// runs, is asked to end and waited for, at most [`FORGET_WAIT`] again; a folder whose program has
-/// not ended by then is kept, as a running program may write into it again. From this call until
-/// the removal is done, [`start`] refuses `chat`, so no new program of it is ended, and a start
+/// not ended by then is kept, as a running program may write into it again; the folder is then
+/// moved aside in one rename and removed under its new name. From this call until the folder is
+/// moved aside or kept, [`start`] refuses `chat`, so no new program of it is ended, and a start
 /// refused meanwhile keeps the folder for the panel that asked, which starts it with Send again
 /// (AR-218). Answers whether there was a folder (false too when an answer kept it), or why
 /// it is kept, once `chat` may start again. Started at quit before the host stops, it is waited for
@@ -182,7 +199,8 @@ pub fn forget(inner: &Arc<Inner>, chat: &str, after: Awaited) -> Receiver<Result
     let thread = inner.clone();
     let chat = chat.to_string();
     let started = inner.spawn("agents-forget", move || {
-        let answer = remove(&thread, &chat, &id, after);
+        let mut registered = registered;
+        let answer = remove(&thread, &chat, &id, after, &mut registered);
         // Done before the answer goes, so whoever reads it may start the conversation again.
         drop(registered);
         let _ = tx.send(answer);
@@ -194,8 +212,9 @@ pub fn forget(inner: &Arc<Inner>, chat: &str, after: Awaited) -> Receiver<Result
 }
 
 /// The work of [`forget`] on its thread: the answers waited for, the program ended, the folder
-/// removed. Gives whether there was a folder, or why it is kept.
-fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited) -> Result<bool, String> {
+/// moved aside and counted done (`registered`), then removed. Gives whether there was a folder, or
+/// why it is kept.
+fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited, registered: &mut Forgetting) -> Result<bool, String> {
     let deadline = std::time::Instant::now() + FORGET_WAIT;
     for (answer, goes) in after {
         match answer.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())) {
@@ -219,22 +238,31 @@ fn remove(thread: &Arc<Inner>, chat: &str, id: &ConversationId, after: Awaited) 
         std::thread::sleep(Duration::from_millis(10));
     }
     // No start of it is taken while it is counted in `forgetting`, so once it is not running it
-    // stays so until the folder is gone.
+    // stays so until the folder is moved aside.
     let answer = if running() {
         Err(format!("its program did not end within {} s", FORGET_WAIT.as_secs()))
     } else {
         match Workspace::open(&thread.workspace) {
             Ok(workspace) => {
-                // Decided under the lock `start` marks it under: a start refused before this keeps
-                // the folder; one refused after it finds the folder gone, as one asked after the
-                // removal would. The folder goes outside the lock, so no start waits for it, and
-                // none lands while it goes, as it is still counted.
-                let wanted = locked(&thread.forgetting).get(chat).is_some_and(|r| r.wanted);
-                if wanted {
-                    log::info!("the private folder of the deleted conversation {chat:?} is kept: a project asked to start it meanwhile");
-                    return Ok(false);
+                // Under the lock `start` checks and marks it under, in one step: kept when a start
+                // was refused before; otherwise moved aside, in one rename, and counted done, so a
+                // start after it is taken and makes a new folder. No refused start loses the folder,
+                // and the folder moved aside is removed outside the lock, so no start waits for it.
+                let aside = ConversationId::new(&format!("{chat}-rm-{}-{}", std::process::id(), ASIDE.fetch_add(1, Ordering::Relaxed)))
+                    .map_err(|e| e.to_string())?;
+                {
+                    let mut forgetting = locked(&thread.forgetting);
+                    if forgetting.get(chat).is_some_and(|r| r.wanted) {
+                        log::info!("the private folder of the deleted conversation {chat:?} is kept: a project asked to start it meanwhile");
+                        return Ok(false);
+                    }
+                    let moved = workspace.move_conversation(id, &aside).map_err(|e| e.to_string())?;
+                    registered.done(&mut forgetting);
+                    if !moved {
+                        return Ok(false);
+                    }
                 }
-                workspace.remove_conversation(id).map_err(|e| e.to_string())
+                workspace.remove_conversation(&aside).map_err(|e| format!("{e} (moved aside as {aside})"))
             }
             Err(e) => Err(e.to_string()),
         }
