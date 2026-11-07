@@ -10,8 +10,14 @@ Run it on macOS, and on Linux where a step says so. Windows has no Chat yet: che
 
 ## How to record
 
-1. Copy this file to the ignored `plan/` folder under a name no earlier record has, such as
-   `plan/acceptance/chat-0.13.0-$(date +%Y%m%d-%H%M).md`.
+1. Copy this file to the ignored `plan/` folder under a name no earlier record has; the copy
+   refuses to replace one:
+
+   ```sh
+   mkdir -p plan/acceptance && REC="plan/acceptance/chat-0.13.0-$(date +%Y%m%d-%H%M%S).md"
+   if [ -e "$REC" ]; then echo "STOP: $REC exists; run this again"; else cp docs/acceptance/chat-0.13.0.md "$REC" && echo "record: $REC"; fi
+   ```
+
 2. Fill the [Results](#results) table there, one row per step: **pass**, **fail** or **skipped**,
    with a note. For a fail, note what showed instead, and the time, so the log can be found.
 3. Paste the filled table into AR-207. Open a Fireline bug for each fail.
@@ -545,36 +551,40 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    compressed, so read every table and every saved version of it through Dolt:
 
    ```sh
-   COPY="$WORK/project-copy-$(date +%Y%m%d-%H%M%S).archforge"   # a new name for every try
-   if cp -R "$PROJECT" "$COPY" && [ -d "$COPY/project/.dolt" ]; then echo "copied to $COPY"
-   else echo "COPY FAILED: stop here, fix the error above and run this step again"; COPY=""; fi
+   # Every try gets a new, empty folder of its own: the copy and every file the dump writes go there.
+   TRY="$(mktemp -d "$WORK/project-try.XXXXXX")" || TRY=""
+   COPY=""
+   if [ -n "$TRY" ] && [ -d "$TRY" ] && cp -R "$PROJECT" "$TRY/copy.archforge" && [ -d "$TRY/copy.archforge/project/.dolt" ]
+   then COPY="$TRY/copy.archforge"; echo "copied to $COPY"
+   else echo "COPY FAILED: stop here, fix the error above and run this step again"; fi
    dump() {   # every table and every saved version of it; stops at the first query that fails
      ( [ -n "$COPY" ] || { echo "failed: no complete copy" >&2; exit 1; }
        mkdir -p "$WORK/dolt-home" || { echo "failed: no Dolt home" >&2; exit 1; }
        export DOLT_ROOT_PATH="$WORK/dolt-home"   # in this subshell only: leaves your ~/.dolt alone
        cd "$COPY/project" || exit 1
-       dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$WORK/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
-       tail -n +2 "$WORK/tables.csv" > "$WORK/tables"
-       [ -s "$WORK/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
-       : > "$WORK/project-rows.csv"; : > "$WORK/project-history.csv"
+       dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$TRY/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
+       tail -n +2 "$TRY/tables.csv" > "$TRY/tables"
+       [ -s "$TRY/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
        while read -r t; do
-         dolt sql -r csv -q "SELECT * FROM \`$t\`" < /dev/null >> "$WORK/project-rows.csv" || { echo "failed: $t" >&2; exit 1; }
-         dolt sql -r csv -q "SELECT * FROM \`dolt_history_$t\`" < /dev/null >> "$WORK/project-history.csv" || { echo "failed: dolt_history_$t" >&2; exit 1; }
-       done < "$WORK/tables"
-       dolt log < /dev/null > "$WORK/project-log.txt" || { echo "failed: dolt log" >&2; exit 1; } )
+         dolt sql -r csv -q "SELECT * FROM \`$t\`" < /dev/null >> "$TRY/project-rows.csv" || { echo "failed: $t" >&2; exit 1; }
+         dolt sql -r csv -q "SELECT * FROM \`dolt_history_$t\`" < /dev/null >> "$TRY/project-history.csv" || { echo "failed: dolt_history_$t" >&2; exit 1; }
+       done < "$TRY/tables"
+       dolt log < /dev/null > "$TRY/project-log.txt" || { echo "failed: dolt log" >&2; exit 1; } )
    }
    if dump; then
-     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-history.csv" "$WORK/project-log.txt" "$COPY"
+     search "$WORK/canaries" "$TRY/project-rows.csv" "$TRY/project-history.csv" "$TRY/project-log.txt" "$COPY"
    else
      echo "DUMP FAILED: the project was not searched; fix the error above and run this step again"
    fi
    ```
 
-   `project-rows.csv` holds the tables as they are now, `project-history.csv` every saved version.
-   Run the later searches of this step's files (with `$WORK/keys` and `$WORK/marker`) and the
-   counts below only after a dump that did not fail. *DUMP FAILED* is neither a pass nor a fail.
+   `$TRY/project-rows.csv` holds the tables as they are now, `$TRY/project-history.csv` every
+   saved version; a try that failed leaves its folder behind and is never read again. Run the later
+   searches of this step's files (with `$WORK/keys` and `$WORK/marker`, the same files in `$TRY`)
+   and the counts below only after a dump that did not fail. *DUMP FAILED* is neither a pass nor a
+   fail.
 
-   The probe here is `$WORK/marker`, which must be found in `project-rows.csv`.
+   The probe here is `$WORK/marker`, which must be found in `$TRY/project-rows.csv`.
 
    The deleted conversation, which the manual says stays in the saved history. Count its rows
    directly, in the conversation list now and in the saved versions:
@@ -583,8 +593,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    ( export DOLT_ROOT_PATH="$WORK/dolt-home"; cd "$COPY/project" || { echo "no copy: run the dump first"; exit 1; }
      for t in chat_message dolt_history_chat_message; do
        printf '%s: ' "$t"
-       if dolt sql -r csv -q "SELECT COUNT(*) FROM \`$t\` WHERE body LIKE '%$MARKER_DELETED%'" < /dev/null > "$WORK/count"
-       then tail -n 1 "$WORK/count"; else echo "QUERY FAILED: proves nothing"; fi
+       if dolt sql -r csv -q "SELECT COUNT(*) FROM \`$t\` WHERE body LIKE '%$MARKER_DELETED%'" < /dev/null > "$TRY/count"
+       then tail -n 1 "$TRY/count"; else echo "QUERY FAILED: proves nothing"; fi
      done )
    ```
 
@@ -640,8 +650,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere, each place's probe
 *FOUND*. The secure store itself is the only place that holds a key.
 
-**Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `project-rows.csv`
-and `project-history.csv` (the class and the question); this proves the search reads the
+**Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `$TRY/project-rows.csv`
+and `$TRY/project-history.csv` (the class and the question); this proves the search reads the
 project. Elsewhere, record where it shows: Claude's own transcript in that conversation's
 `conversation-…` folder is expected.
 
@@ -656,7 +666,7 @@ key files the searches read.
    ```sh
    rm -rf "$WORK"
    unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK
+     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY
    ```
 
 ## Results
