@@ -7638,6 +7638,433 @@ fn the_history_lists_the_projects_conversations_and_opens_one_whole_and_read_onl
     assert_eq!(kept_chat(&h, &rig).turns.len(), 2, "its turns go on from where they were");
 }
 
+/// The Chat panel's history of page 07 (B7): five conversations kept, the first open, the history
+/// shown; their ids in the list's order.
+fn chat_history(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig, Vec<archforge_mof::Uuid>) {
+    let (mut h, rig) = chat_harness(theme, true);
+    let chats = crate::chat_fixture::history(h.state_mut(), &rig).unwrap();
+    h.run();
+    (h, rig, chats)
+}
+
+/// The pointer moved to `at`, nothing pressed.
+fn point_at(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(at));
+    h.run();
+}
+
+/// The widget the keyboard is on, by automation id.
+fn focused(h: &Harness<'static, Shell>) -> Option<String> {
+    let id = h.ctx.memory(|m| m.focused())?;
+    h.state().widgets().iter().find(|w| crate::widgets::egui_id(&w.id) == id).map(|w| w.id.clone())
+}
+
+/// The keyboard put on the control `id`, as Tab would bring it there.
+fn focus_on(h: &mut Harness<'static, Shell>, id: &str) {
+    h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(id)));
+    h.run();
+}
+
+/// Moves the fixed clock on by `secs` and draws a frame.
+fn later(h: &mut Harness<'static, Shell>, rig: &crate::chat_fixture::Rig, secs: u64) {
+    rig.now.fetch_add(secs, std::sync::atomic::Ordering::Relaxed);
+    h.run();
+}
+
+/// The folders the fake host removed.
+fn forgotten(rig: &crate::chat_fixture::Rig) -> Vec<String> {
+    rig.agents.forgotten.lock().unwrap().clone()
+}
+
+/// B7a to B7c through the bin (AR-217): the bin shows on the row the pointer is on, the
+/// confirmation names the conversation and what deleting does, starts on Cancel and Escape gives
+/// the row its focus back; Delete takes the row away, writes one deletion, leaves the model and its
+/// undo history alone, and the toast offers Undo, which brings the conversation back whole without
+/// its folder ever being removed, and the row returns in its place with the keyboard on it.
+#[test]
+fn the_bin_asks_first_and_undo_on_the_toast_brings_the_conversation_back_whole() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig, chats) = chat_history(theme);
+        let review = chats[2];
+        let whole = rig.store.kept(review).unwrap();
+        let undo_label = h.state().session.as_ref().and_then(|s| s.undo_label().map(str::to_string));
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.history.2.delete"), "no bin before the pointer comes");
+        let row = rect_of(&h, "workspace.chat.history.2");
+        point_at(&mut h, row.center());
+        let bin = rect_of(&h, "workspace.chat.history.2.delete");
+        assert!(row.contains(bin.center()) && bin.center().x > row.center().x, "{theme:?}: the bin at the row's right");
+        click(&mut h, bin.center());
+        for line in [
+            "Delete this conversation?",
+            "Review the checkout package · 12 messages with Codex, yesterday",
+            "It is removed from this project's conversation list.",
+            "Cancel",
+            "Delete",
+        ] {
+            assert!(painted_has(&h, line), "{theme:?}: {line:?} in {:?}", painted(&h));
+        }
+        assert!(painted(&h).iter().any(|t| t.starts_with("It stays in the project's saved history: anyone with a copy")), "{theme:?}");
+        assert!(!painted_has(&h, "Its reply in progress stops first."), "no reply runs");
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.delete.cancel"), "{theme:?}: the focus starts on Cancel");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.run();
+        assert!(h.state().chat_panel.ask.is_none() && rig.store.kept(review).is_some(), "Escape cancels");
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.2"), "{theme:?}: the focus is back on the row");
+        point_at(&mut h, row.center());
+        let bin = rect_of(&h, "workspace.chat.history.2.delete");
+        click(&mut h, bin.center());
+        let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+        click(&mut h, at);
+        h.run();
+        assert!(rig.store.kept(review).is_none(), "{theme:?}: deleted");
+        assert_eq!(rig.store.log.lock().unwrap().iter().filter(|k| **k == "delete").count(), 1);
+        assert!(!painted(&h).iter().any(|t| t == "Review the checkout package"), "{theme:?}: gone from the list");
+        assert!(painted_has(&h, "Review the checkout package deleted · still in the project's saved history"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "Undo"));
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.2"), "{theme:?}: the next row takes the keyboard");
+        assert_eq!(h.state().session.as_ref().and_then(|s| s.undo_label().map(str::to_string)), undo_label, "the model's undo is untouched");
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), Some(chats[0]), "the open conversation stays open");
+        assert!(forgotten(&rig).is_empty(), "the folder waits while Undo is offered");
+        let at = rect_of(&h, "workspace.chat.toast.undo").center();
+        click(&mut h, at);
+        h.run();
+        let back = rig.store.kept(review).unwrap();
+        assert_eq!((back.row, back.turns, back.messages), (whole.row.clone(), whole.turns.clone(), whole.messages.clone()), "{theme:?}: whole");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.toast"), "the toast is gone");
+        h.run();
+        assert!(painted(&h).iter().any(|t| t == "Review the checkout package"), "{theme:?}: back in the list");
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.2"), "{theme:?}: in its place, with the keyboard on it");
+        later(&mut h, &rig, 60);
+        assert!(forgotten(&rig).is_empty(), "{theme:?}: a conversation brought back keeps its folder");
+        // The pointer was used last: no ring shows on the row the keyboard is on.
+        assert!(!crate::settings::keyboard_last(&h.ctx));
+    }
+}
+
+/// The row's menu (right-click, the menu key, ⇧F10) and ⌫ or Delete on the focused row open the
+/// same confirmation; the toast stays while the pointer is on it and closes eight seconds after,
+/// only then letting the folder go; ⌘Z meanwhile is the model's undo and never brings the
+/// conversation back; and while the toast is up, a new conversation skips the deleted one's label.
+#[test]
+fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_closes() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    let row = rect_of(&h, "workspace.chat.history.0");
+    // With the canvas holding the keys, the menu's keys never reach it.
+    h.state_mut().canvas.focused = true;
+    let selected = h.state().session.as_ref().unwrap().view().selection.clone();
+    let revision = h.state().session.as_ref().unwrap().revision();
+    right_click(&mut h, row.center());
+    for k in [egui::Key::ArrowDown, egui::Key::ArrowUp, egui::Key::Backspace] {
+        key(&mut h, k, egui::Modifiers::NONE);
+    }
+    let session = h.state().session.as_ref().unwrap();
+    assert_eq!((session.revision(), &session.view().selection), (revision, &selected), "the canvas took none of the menu's keys");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    right_click(&mut h, row.center());
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.history.menu.open") && painted_has(&h, "Delete conversation"), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.chat.history.menu.delete").center();
+    click(&mut h, at);
+    assert!(h.state().chat_panel.ask.as_ref().is_some_and(|a| a.chat == chats[0]), "the menu's item asks");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // The keys on the focused row: ⌫, Delete, the menu key and ⇧F10.
+    for (k, m, menu) in [
+        (egui::Key::Backspace, egui::Modifiers::NONE, false),
+        (egui::Key::Delete, egui::Modifiers::NONE, false),
+        (egui::Key::Menu, egui::Modifiers::NONE, true),
+        (egui::Key::F10, egui::Modifiers::SHIFT, true),
+    ] {
+        focus_on(&mut h, "workspace.chat.history.0");
+        point_at(&mut h, egui::pos2(10.0, 600.0));
+        key(&mut h, egui::Key::Tab, egui::Modifiers::SHIFT);
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.0"));
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.history.0.delete"), "the bin shows on the row the keyboard is on");
+        key(&mut h, k, m);
+        h.run();
+        if menu {
+            assert!(
+                h.state().chat_panel.row_menu.as_ref().is_some_and(|r| r.chat == chats[0] && r.reached == Some(0)),
+                "{k:?} opens the menu, Open reached"
+            );
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        }
+        assert!(h.state().chat_panel.ask.as_ref().is_some_and(|a| a.chat == chats[0]), "{k:?} asks");
+        assert!(crate::settings::keyboard_last(&h.ctx), "the keyboard was used last: focus rings show");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().chat_panel.ask.is_none());
+    }
+    // Deleted with Enter on the focused Delete button.
+    focus_on(&mut h, "workspace.chat.history.0");
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    assert_eq!(focused(&h).as_deref(), Some("workspace.chat.delete.confirm"), "Tab reaches Delete");
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    let key_of = chats[0].to_string();
+    assert!(rig.store.kept(chats[0]).is_none());
+    // ⌘Z with nothing focused is the model's: the conversation stays deleted.
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.history.0")));
+    key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+    h.run();
+    assert!(rig.store.kept(chats[0]).is_none() && !rig.store.log.lock().unwrap().contains(&"restore"), "⌘Z never restores");
+    // A new conversation while Undo is offered: past Chat 5, the deleted one's label, the highest.
+    let at = rect_of(&h, "workspace.chat.new").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "A new question");
+    assert_eq!(h.state().chat_panel.chat.as_ref().and_then(|c| c.origin.clone()).as_deref(), Some("Chat 6"));
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    // The pointer on the toast holds it past its time.
+    let toast = rect_of(&h, "workspace.chat.toast");
+    point_at(&mut h, toast.center());
+    for _ in 0..6 {
+        later(&mut h, &rig, 5);
+    }
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast"), "held while the pointer is on it");
+    point_at(&mut h, egui::pos2(10.0, 600.0));
+    // So does the keyboard on Undo.
+    focus_on(&mut h, "workspace.chat.toast.undo");
+    for _ in 0..6 {
+        later(&mut h, &rig, 5);
+    }
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast"), "held while the keyboard is on Undo");
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.toast.undo")));
+    later(&mut h, &rig, 7);
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast") && forgotten(&rig).is_empty(), "still within its eight seconds");
+    later(&mut h, &rig, 2);
+    h.run();
+    assert!(!ids(&h).iter().any(|i| i == "workspace.chat.toast"), "closed");
+    assert_eq!(forgotten(&rig), [key_of], "its folder goes once the toast closed, and only its");
+}
+
+/// Deleting the open conversation while its reply runs (AR-217): the confirmation says the reply
+/// stops first; its reply so far is kept and its turn ends stopped, both written before the
+/// deletion; the next row opens and takes the keyboard, then the one above; the last one deleted
+/// leaves a new empty conversation (B2) and the keyboard on New conversation.
+#[test]
+fn the_open_conversation_stops_first_and_gives_way_to_the_next_one() {
+    use crate::chat::ChatEvent;
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    // The first conversation, open, asked again and answering. The panel itself keeps the history
+    // shut while a reply runs; it is shown here as when one starts while it is open.
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "And the rest?");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "So far".into() });
+    h.state_mut().chat_panel.view = crate::chat_panel::View::History;
+    h.run();
+    let row = rect_of(&h, "workspace.chat.history.0");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.0.delete");
+    click(&mut h, bin.center());
+    assert!(painted_has(&h, "Its reply in progress stops first."), "{:?}", painted(&h));
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    h.run();
+    let log = rig.store.log.lock().unwrap().clone();
+    let at = log.iter().position(|k| *k == "delete").unwrap();
+    assert_eq!(&log[at - 2..=at], ["reply", "end", "delete"], "stopped and written first: {log:?}");
+    let deleted = rig.store.deleted.lock().unwrap().last().unwrap().1.clone();
+    assert_eq!(deleted.turns.last().unwrap().outcome, crate::chat_store::Outcome::Stopped);
+    assert!(
+        deleted.messages.iter().any(|m| matches!(&m.body, crate::chat_store::StoredBody::Reply { text, complete: false, .. } if text == "So far"))
+    );
+    assert!(rig.agents.running.lock().unwrap().is_empty(), "its program was let go of");
+    h.run();
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), Some(chats[1]), "the next one opens");
+    assert_eq!(h.state().chat_panel.view, crate::chat_panel::View::History, "the history stays");
+    assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.0"));
+    // The last row of the list, open: the one above opens.
+    let last = rect_of(&h, "workspace.chat.history.3").center();
+    click(&mut h, last);
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    focus_on(&mut h, "workspace.chat.history.3");
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    h.run();
+    assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), Some(chats[3]), "the one above opens");
+    assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.2"), "the row above takes the keyboard");
+    // Then every other one: the last leaves a new, empty conversation and New conversation.
+    for _ in 0..3 {
+        focus_on(&mut h, "workspace.chat.history.0");
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+    }
+    assert!(rig.store.chats.lock().unwrap().is_empty());
+    let shown = h.state().chat_panel.chat.as_ref().unwrap();
+    assert!(shown.turns.is_empty() && shown.origin.is_none(), "a new, empty conversation");
+    assert_eq!(focused(&h).as_deref(), Some("workspace.chat.new"));
+}
+
+/// A deletion confirmed while its conversation's question is still on its way to the project waits
+/// for it: the question lands first, its turn ends stopped, then the deletion; Undo then brings
+/// back a conversation with no turn left running (AR-217).
+#[test]
+fn a_deletion_waits_for_a_question_on_its_way() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "A question on its way");
+    assert!(h.state().chat_panel.chat.as_ref().unwrap().step.busy(), "the question waits for the writer");
+    h.state_mut().chat_panel.view = crate::chat_panel::View::History;
+    h.run();
+    let row = rect_of(&h, "workspace.chat.history.0");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.0.delete");
+    click(&mut h, bin.center());
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    assert!(!rig.store.log.lock().unwrap().contains(&"delete"), "the deletion waits for the question");
+    rig.store.release();
+    h.run();
+    h.run();
+    let log = rig.store.log.lock().unwrap().clone();
+    let at = log.iter().position(|k| *k == "delete").expect("deleted once the question landed");
+    assert_eq!(&log[at - 2..=at], ["ask", "end", "delete"], "{log:?}");
+    let at = rect_of(&h, "workspace.chat.toast.undo").center();
+    click(&mut h, at);
+    h.run();
+    let back = rig.store.kept(chats[0]).unwrap();
+    assert!(back.turns.iter().all(|t| t.outcome != crate::chat_store::Outcome::Running), "no turn left running");
+}
+
+/// Undo pressed before the deletion finished runs once it has, and keeps the folder; a deletion
+/// whose toast is still up when its project closes, or when Archforge quits, lets its folder go
+/// then; one still waiting for the project then hands its answer to the host, which lets the
+/// folder go only once deleted, and an Undo still waiting keeps it once the conversation is back
+/// (AR-217).
+#[test]
+fn undo_before_the_deletion_finished_runs_after_it_and_closing_or_quitting_settles_the_folders() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    let row = rect_of(&h, "workspace.chat.history.2");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.2.delete");
+    click(&mut h, bin.center());
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    assert!(rig.store.kept(chats[2]).is_some(), "the writer has not taken the deletion yet");
+    let at = rect_of(&h, "workspace.chat.toast.undo").center();
+    click(&mut h, at);
+    assert!(rig.store.kept(chats[2]).is_some(), "the writer has taken neither yet");
+    rig.store.release();
+    h.run();
+    h.run();
+    let log = rig.store.log.lock().unwrap().clone();
+    assert_eq!(log.iter().rev().take(2).rev().copied().collect::<Vec<_>>(), ["delete", "restore"], "{log:?}");
+    assert!(rig.store.kept(chats[2]).is_some(), "brought back");
+    assert!(forgotten(&rig).is_empty());
+    // A toast still up when the project closes: its folder goes.
+    let row = rect_of(&h, "workspace.chat.history.3");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.3.delete");
+    click(&mut h, bin.center());
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    assert!(forgotten(&rig).is_empty());
+    h.state_mut().close_project();
+    h.run();
+    assert_eq!(forgotten(&rig), [chats[3].to_string()], "closing the project settles it");
+    // And at quit: a toast still up in the project shown lets its folder go.
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    let row = rect_of(&h, "workspace.chat.history.4");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.4.delete");
+    click(&mut h, bin.center());
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    h.state_mut().before_exit();
+    assert_eq!(forgotten(&rig), [chats[4].to_string()], "quitting settles it");
+    // Quitting while a deletion, and another one's Undo, wait for the writer: the host takes
+    // their answers; the deleted one's folder goes, the one brought back keeps its own.
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    for (row, undo) in [(4, false), (3, true)] {
+        let r = rect_of(&h, &format!("workspace.chat.history.{row}"));
+        point_at(&mut h, r.center());
+        let bin = rect_of(&h, &format!("workspace.chat.history.{row}.delete"));
+        click(&mut h, bin.center());
+        let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+        click(&mut h, at);
+        if undo {
+            let at = rect_of(&h, "workspace.chat.toast.undo").center();
+            click(&mut h, at);
+        }
+    }
+    h.state_mut().before_exit();
+    assert!(forgotten(&rig).is_empty(), "nothing is removed before the project answers");
+    rig.store.release();
+    rig.agents.settle_after();
+    assert_eq!(forgotten(&rig), [chats[4].to_string()], "the deleted one's folder alone");
+    assert!(rig.store.kept(chats[3]).is_some() && rig.store.kept(chats[4]).is_none());
+}
+
+/// When a re-read of the list fails, the rows read before stay and their changes are off, saying
+/// why: the bin and the menu's item are disabled and ⌫ asks nothing (AR-217).
+#[test]
+fn with_chat_writing_off_the_bin_and_the_item_are_disabled_and_say_why() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Dark);
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    *rig.store.unreadable.lock().unwrap() = Some("the table chat_turn does not have the shape Archforge writes".into());
+    click(&mut h, at);
+    h.run();
+    assert!(painted_has(&h, "Review the checkout package"), "the rows read before stay");
+    let why = "The conversations in this project cannot be changed: the table chat_turn does not have the shape Archforge writes";
+    let refused = crate::chat_delete::refusal(&h.state().chat_panel, &Ok(rig.store.kept(chats[2]).unwrap().row));
+    assert_eq!(refused.as_deref(), Some(why));
+    let row = rect_of(&h, "workspace.chat.history.2");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.2.delete");
+    click(&mut h, bin.center());
+    assert!(h.state().chat_panel.ask.is_none(), "the disabled bin asks nothing");
+    right_click(&mut h, row.center());
+    let item = rect_of(&h, "workspace.chat.history.menu.delete").center();
+    click(&mut h, item);
+    assert!(h.state().chat_panel.ask.is_none(), "nor the item");
+    focus_on(&mut h, "workspace.chat.history.2");
+    key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+    assert!(h.state().chat_panel.ask.is_none() && rig.store.kept(chats[2]).is_some(), "nor ⌫");
+    // A row that cannot be read gets a disabled bin of its own.
+    let unreadable = crate::chat_store::Listed { id: chats[0], entry: Err("its provider is not one Archforge knows".into()) };
+    let panel = crate::chat_panel::Panel::default();
+    assert_eq!(crate::chat_delete::refusal(&panel, &unreadable.entry).as_deref(), Some("This conversation cannot be read"));
+}
+
+/// A title holding the confirmation's own placeholders is shown as it was typed (AR-217).
+#[test]
+fn a_title_holding_placeholders_is_named_as_typed_in_the_confirmation() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    if let Some(k) = rig.store.chats.lock().unwrap().iter_mut().find(|k| k.row.id == chats[2]) {
+        k.row.title = "Why {agent} said {when} and {messages}".into();
+    }
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    click(&mut h, at);
+    crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+    let summary = h.state().chat_panel.ask.as_ref().map(|a| a.summary.clone());
+    assert_eq!(summary.as_deref(), Some("Why {agent} said {when} and {messages} · 12 messages with Codex, yesterday"));
+}
+
+/// A conversation's age in its confirmation: today, yesterday, a day and month this year, with the
+/// year before.
+#[test]
+fn a_conversations_age_says_today_yesterday_or_its_date() {
+    crate::i18n::set_language("en");
+    let clock = crate::chat_words::Clock { now: crate::chat_fixture::NOW, offset: Some(3_600) };
+    let day = 86_400;
+    assert_eq!(crate::chat_delete::age(clock.now - 60, clock), "today");
+    assert_eq!(crate::chat_delete::age(clock.now - day, clock), "yesterday");
+    assert_eq!(crate::chat_delete::age(clock.now - 4 * day, clock), "3 Nov");
+    assert_eq!(crate::chat_delete::age(clock.now - 400 * day, clock), "3 Oct 2025");
+}
+
 /// A tool row comes from the channel's answer; an origin acts only while its turn runs.
 #[test]
 fn a_tool_row_is_worded_from_the_channels_answer_and_only_a_running_turn_of_the_project_shown_may_act() {

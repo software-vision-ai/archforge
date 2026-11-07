@@ -425,6 +425,41 @@ pub trait AgentHost: Send + Sync {
     /// Ends the conversation `chat`: its program stops, its token is revoked, and the control
     /// channel closes with the last conversation that held it.
     fn end(&self, chat: &str) -> Result<(), crate::chat::ChatRefusal>;
+    /// Removes the private folder of the conversation `chat` for good, once it was deleted
+    /// (AR-217): a running program is ended first and waited for, a bounded time; a folder whose
+    /// program has not ended by then is kept. The answer says whether there was a folder, or why it
+    /// was not removed.
+    fn forget(&self, chat: &str) -> Receiver<Result<bool, String>>;
+    /// [`AgentHost::forget`] once the project answered `answer`, a deletion or a restoration still
+    /// under way when its project closed or Archforge quit, when `goes` says the answer lets the
+    /// folder go; waited for a bounded time, and an answer that does not come keeps the folder.
+    fn forget_after(
+        &self,
+        chat: &str,
+        answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+        goes: FolderGoes,
+    ) -> Receiver<Result<bool, String>>;
+}
+
+/// When a deleted conversation's private folder goes, once the project answers (AR-217).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderGoes {
+    /// Once its deletion succeeded.
+    IfDeleted,
+    /// Once its restoration was refused for a reason other than its being listed: it stays
+    /// deleted.
+    IfNotRestored,
+}
+
+impl FolderGoes {
+    /// Whether `answer` lets the folder go.
+    pub fn decides(self, answer: &Result<crate::chat_store::Answer, crate::chat_store::Refusal>) -> bool {
+        use crate::chat_store::{Answer, Refusal};
+        match self {
+            FolderGoes::IfDeleted => matches!(answer, Ok(Answer::Deleted { .. })),
+            FolderGoes::IfNotRestored => matches!(answer, Err(Refusal::Failed(_) | Refusal::HeldKey { .. })),
+        }
+    }
 }
 
 /// How Codex signs in.
@@ -1061,6 +1096,18 @@ pub mod fake {
         pub sent: Mutex<Vec<(String, String)>>,
         /// While set, an end is taken but not said, as a program slow to end would leave it.
         pub hold_ends: std::sync::atomic::AtomicBool,
+        /// The conversations whose private folders were removed, in order.
+        pub forgotten: Mutex<Vec<String>>,
+        /// The removals waiting for the project's answer, as the host's threads wait.
+        #[allow(clippy::type_complexity, reason = "a removal waits for the answer, its rule and its own answer")]
+        pub after: Mutex<
+            Vec<(
+                String,
+                Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+                super::FolderGoes,
+                std::sync::mpsc::Sender<Result<bool, String>>,
+            )>,
+        >,
     }
 
     impl Default for Fake {
@@ -1082,6 +1129,8 @@ pub mod fake {
                 running: Mutex::new(Vec::new()),
                 sent: Mutex::new(Vec::new()),
                 hold_ends: std::sync::atomic::AtomicBool::new(false),
+                forgotten: Mutex::new(Vec::new()),
+                after: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1185,6 +1234,28 @@ pub mod fake {
             self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
             Ok(())
         }
+        /// Keeps `answer` for [`Fake::settle_after`], as the host's thread waits for it.
+        fn forget_after(
+            &self,
+            chat: &str,
+            answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+            goes: super::FolderGoes,
+        ) -> Receiver<Result<bool, String>> {
+            let (tx, rx) = std::sync::mpsc::channel();
+            lock(&self.after).push((chat.to_string(), answer, goes, tx));
+            rx
+        }
+        /// Ends the conversation when it runs, then records its folder as removed.
+        fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
+            if let Err(e) = crate::chat::check_id(chat) {
+                return answered(Err(e.to_string()));
+            }
+            if lock(&self.running).iter().any(|c| c == chat) {
+                let _ = self.end(chat);
+            }
+            lock(&self.forgotten).push(chat.to_string());
+            answered(Ok(true))
+        }
         fn test_message(&self, _provider: Provider, _model: &str, _sign_in: CodexSignIn) -> Receiver<Result<(), AccountError>> {
             self.calls.test.fetch_add(1, Ordering::Relaxed);
             answered(lock(&self.test).clone())
@@ -1209,6 +1280,21 @@ pub mod fake {
             self.calls.logout.fetch_add(1, Ordering::Relaxed);
             *lock(&self.account) = Ok(CodexAccount::NotSignedIn);
             answered(Ok(()))
+        }
+    }
+
+    impl Fake {
+        /// Takes the project's answers the removals wait for, at most a few seconds each, and
+        /// forgets the folders they let go, as the host's threads do.
+        pub fn settle_after(&self) {
+            let waiting = std::mem::take(&mut *lock(&self.after));
+            for (chat, answer, goes, tx) in waiting {
+                let gone = answer.recv_timeout(std::time::Duration::from_secs(5)).is_ok_and(|a| goes.decides(&a));
+                if gone {
+                    lock(&self.forgotten).push(chat);
+                }
+                let _ = tx.send(Ok(gone));
+            }
         }
     }
 

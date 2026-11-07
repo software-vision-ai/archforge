@@ -42,6 +42,10 @@ pub(crate) enum Act {
     History,
     New,
     Open(archforge_mof::Uuid),
+    /// The bin, ⌫ or Delete on a history row, or its menu's item: the confirmation opens.
+    Delete(archforge_mof::Uuid, usize),
+    /// A history row's menu opens at the place given.
+    Menu(archforge_mof::Uuid, usize, egui::Pos2),
     Link(String),
     /// Enter while a reply runs: it waits.
     Waiting,
@@ -66,6 +70,18 @@ pub(crate) fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
     let provider = shell.chat_panel.chat.as_ref().map_or(shell.state.agents.default_agent, |c| c.provider);
     let shown = crate::chat_panel::set_up(shell, provider) == Some(true) || shell.chat_panel.chat.as_ref().is_some_and(|c| !c.turns.is_empty());
+    // The last row deleted: the keyboard goes to New conversation, or the history when it is hidden.
+    // Asked until it holds: a dialog closing this frame still keeps the keyboard from what is
+    // behind it.
+    if shell.chat_panel.focus == Some(crate::chat_delete::FocusTo::New) {
+        let to = crate::widgets::egui_id(if shown { "workspace.chat.new" } else { "workspace.chat.history" });
+        if ui.memory(|m| m.has_focus(to)) || shell.chat_panel.focus_tries == 0 {
+            shell.chat_panel.focus = None;
+        } else {
+            shell.chat_panel.focus_tries -= 1;
+            ui.memory_mut(|m| m.request_focus(to));
+        }
+    }
     if shown {
         let new = Rect::from_min_size(pos2(r.right() - 64.0, r.top() + 8.0), Vec2::splat(28.0));
         if quiet_button(shell, ui, p, &paint, "workspace.chat.new", new, &icons::PLUS, "New conversation", false, busy) {
@@ -130,7 +146,23 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y
         panel.link = None;
     }
     shell.chat_panel = panel;
+    if let Some((id, pick)) = crate::chat_delete::row_menu(shell, ui, p) {
+        let row = shell.chat_panel.row_menu.as_ref().map_or(0, |m| m.row);
+        let row = rows_index(shell, id).unwrap_or(row);
+        acts.push(match pick {
+            crate::chat_delete::MenuPick::Open => Act::Open(id),
+            crate::chat_delete::MenuPick::Delete => Act::Delete(id, row),
+        });
+    }
     run(shell, ui.ctx(), acts);
+}
+
+/// The place of the conversation `id` in the history as last read.
+fn rows_index(shell: &Shell, id: archforge_mof::Uuid) -> Option<usize> {
+    match &shell.chat_panel.history {
+        Some(Ok(rows)) => rows.iter().position(|l| l.id == id),
+        _ => None,
+    }
 }
 
 /// Does what was asked, the panel back in the shell.
@@ -154,7 +186,22 @@ fn run(shell: &mut Shell, ctx: &egui::Context, acts: Vec<Act>) {
             }
             Act::History => crate::chat_panel::toggle_history(shell),
             Act::New => crate::chat_panel::new_conversation(shell),
-            Act::Open(id) => crate::chat_panel::open(shell, id),
+            Act::Open(id) => {
+                shell.chat_panel.loading_stays = false;
+                crate::chat_panel::open(shell, id);
+            }
+            Act::Delete(id, row) => crate::chat_delete::ask(shell, id, row),
+            Act::Menu(id, row, at) => {
+                // The menu takes the keys while it is open: the row gives the keyboard up, and has
+                // it back when the menu closes with Escape.
+                ctx.memory_mut(|m| {
+                    if let Some(f) = m.focused() {
+                        m.surrender_focus(f);
+                    }
+                });
+                let keyboard = crate::settings::keyboard_last(ctx);
+                shell.chat_panel.row_menu = Some(crate::chat_delete::RowMenu { chat: id, row, at, reached: keyboard.then_some(0) });
+            }
             Act::Link(url) => shell.chat_panel.link = Some(url),
             Act::Waiting => shell.chat_panel.notice = Some(tr(WAIT)),
         }
@@ -939,30 +986,51 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
             let paint = clip.painter().clone();
             let top = y;
             y -= panel.history_scroll;
+            let mut focus_found = false;
             for (i, listed) in rows.iter().enumerate() {
                 let r = Rect::from_min_size(pos2(left, y), vec2(width, 48.0));
                 y += 50.0;
-                if !clip.clip_rect().intersects(r) {
+                let wanted = match panel.focus {
+                    Some(crate::chat_delete::FocusTo::Row(at)) => at == i,
+                    Some(crate::chat_delete::FocusTo::Chat(id)) => id == listed.id,
+                    _ => false,
+                };
+                if !clip.clip_rect().intersects(r) && !wanted {
                     continue;
                 }
+                let row_id = format!("workspace.chat.history.{i}");
+                let bin_id = format!("{row_id}.delete");
+                let bin = Rect::from_min_size(pos2(r.right() - 34.0, r.center().y - 14.0), Vec2::splat(28.0));
+                let refused = crate::chat_delete::refusal(panel, &listed.entry);
+                let pointed = clip.rect_contains_pointer(r);
                 match &listed.entry {
                     Ok(row) => {
-                        let resp = control(shell, &clip, &format!("workspace.chat.history.{i}"), "row", r, true);
+                        let resp = control(shell, &clip, &row_id, "row", r, true);
                         let _ = resp.clone().accessible_name(&row.title);
+                        // Asked until it holds: a dialog closing this frame still keeps the
+                        // keyboard from the rows.
+                        if wanted {
+                            if resp.has_focus() || panel.focus_tries == 0 {
+                                focus_found = true;
+                            } else {
+                                panel.focus_tries -= 1;
+                                resp.request_focus();
+                            }
+                        }
+                        // The keyboard is on the row or its bin while its marks show: the pointer last
+                        // used leaves a focus moved for it unmarked, as the row then looks.
+                        let keyboard = crate::settings::keyboard_last(clip.ctx());
+                        let bin_focused = clip.memory(|m| m.has_focus(crate::widgets::egui_id(&bin_id)));
+                        let with_bin = pointed || (keyboard && (resp.has_focus() || bin_focused));
                         let selected = open == Some(row.id);
                         if selected {
                             paint.rect_filled(r, 6.0, p.accent_tint);
-                        } else if resp.hovered() {
+                        } else if pointed {
                             paint.rect_filled(r, 6.0, p.page);
                         }
-                        ux::text(
-                            &paint,
-                            r.min + vec2(10.0, 8.0),
-                            &row.title,
-                            types::UI,
-                            if selected { p.accent } else { p.text },
-                            Some(width - 20.0),
-                        );
+                        // The title shortens to make room for the bin.
+                        let text_w = if with_bin { width - 20.0 - 34.0 } else { width - 20.0 };
+                        ux::text(&paint, r.min + vec2(10.0, 8.0), &row.title, types::UI, if selected { p.accent } else { p.text }, Some(text_w));
                         let meta = fmt(
                             &tr("{when} · {agent} · {messages}"),
                             &[
@@ -971,17 +1039,57 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                                 ("messages", &trn("{n} message", "{n} messages", u64::from(row.messages))),
                             ],
                         );
-                        ux::text(&paint, r.min + vec2(10.0, 25.0), &meta, types::CAPTION, p.text_muted, Some(width - 20.0));
+                        ux::text(&paint, r.min + vec2(10.0, 25.0), &meta, types::CAPTION, p.text_muted, Some(text_w));
                         crate::settings::focus_ring(&paint, p, r, 6.0, &resp);
-                        if resp.clicked() {
+                        if with_bin && crate::chat_delete::bin(shell, &clip, p, &paint, &bin_id, bin, refused.as_deref()) {
+                            acts.push(Act::Delete(row.id, i));
+                        }
+                        // On the focused row: ⌫ or Delete asks, the menu key or ⇧F10 opens its menu.
+                        if resp.has_focus() && panel.ask.is_none() && panel.row_menu.is_none() {
+                            let (delete, menu) = clip.input_mut(|k| {
+                                let delete = k.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)
+                                    || k.consume_key(egui::Modifiers::NONE, egui::Key::Delete);
+                                let menu =
+                                    k.consume_key(egui::Modifiers::NONE, egui::Key::Menu) || k.consume_key(egui::Modifiers::SHIFT, egui::Key::F10);
+                                (delete, menu)
+                            });
+                            if delete && refused.is_none() {
+                                acts.push(Act::Delete(row.id, i));
+                            }
+                            if menu {
+                                acts.push(Act::Menu(row.id, i, pos2(r.right() - 8.0, r.bottom() - 6.0)));
+                            }
+                        }
+                        if resp.secondary_clicked() {
+                            let at = clip.input(|k| k.pointer.interact_pos()).unwrap_or(r.center());
+                            acts.push(Act::Menu(row.id, i, at));
+                        }
+                        // A click on a disabled bin opens nothing.
+                        let on_bin = with_bin && clip.input(|k| k.pointer.interact_pos()).is_some_and(|at| bin.contains(at));
+                        if resp.clicked() && !on_bin {
                             acts.push(Act::Open(row.id));
                         }
                     }
                     Err(why) => {
+                        // A row that cannot be read takes no keyboard: the request is given up.
+                        focus_found |= wanted;
                         let words = fmt(&tr("This conversation cannot be read: {why}"), &[("why", why)]);
-                        crate::settings::wrapped(&paint, r.min + vec2(10.0, 8.0), width - 20.0, &words, types::CAPTION, p.text_muted, 2);
+                        let text_w = if pointed { width - 20.0 - 34.0 } else { width - 20.0 };
+                        crate::settings::wrapped(&paint, r.min + vec2(10.0, 8.0), text_w, &words, types::CAPTION, p.text_muted, 2);
+                        if pointed {
+                            crate::chat_delete::bin(shell, &clip, p, &paint, &bin_id, bin, refused.as_deref());
+                        }
                     }
                 }
+            }
+            // A row the keyboard was to go to that the list no longer holds: it goes nowhere.
+            let target = panel.focus.is_some_and(|f| match f {
+                crate::chat_delete::FocusTo::Row(at) => at < rows.len(),
+                crate::chat_delete::FocusTo::Chat(id) => rows.iter().any(|l| l.id == id),
+                crate::chat_delete::FocusTo::New => true,
+            });
+            if panel.focus.is_some_and(|f| f != crate::chat_delete::FocusTo::New) && (focus_found || (!target && panel.listing.is_none())) {
+                panel.focus = None;
             }
             let foot = tr("Conversations are kept in the project, so they travel with it and never show in another project.");
             y += crate::settings::wrapped(&paint, pos2(left + 10.0, y + 10.0), width - 20.0, &foot, types::CAPTION, p.text_muted, 4) + 20.0;
@@ -997,7 +1105,7 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
     if let Some(room) = scroll_room {
         panel.history_scroll = (panel.history_scroll - scroll_by).clamp(0.0, room);
     }
-    if let Some(why) = &panel.load_error {
+    if let Some(why) = panel.list_notice.as_ref().or(panel.load_error.as_ref()) {
         let at = if return_early { body.bottom() - 60.0 } else { y };
         crate::settings::wrapped(&paint, pos2(left + 10.0, at), width - 20.0, why, types::SMALL, p.danger, 4);
     }

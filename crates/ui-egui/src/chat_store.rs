@@ -190,8 +190,9 @@ pub struct Stored {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Write {
     /// Makes a conversation; its title comes from the first question, and the host gives it its
-    /// origin, the next free `Chat N` of the project.
-    Create { chat: Uuid, title: String, provider: Provider, model: String, now: u64 },
+    /// origin, the next free `Chat N` of the project that is not in `skip` (the labels of
+    /// conversations deleted while their Undo is still offered).
+    Create { chat: Uuid, title: String, provider: Provider, model: String, skip: Vec<String>, now: u64 },
     /// Starts a turn with its question and the context chips sent with it, before the agent gets
     /// the text.
     Ask { chat: Uuid, turn: Uuid, question: Uuid, text: String, chips: Vec<Anchor>, model: String, allow_changes: bool, now: u64 },
@@ -210,6 +211,15 @@ pub enum Write {
     States { moves: Vec<(Uuid, ChangeState)>, now: u64 },
     /// The model the conversation's next turn asks for.
     Model { chat: Uuid, model: String, now: u64 },
+    /// Deletes the conversation: its rows in one chat-only commit, what waited committed first.
+    /// The answer names the commit just before, which still holds it (AR-217).
+    Delete { chat: Uuid },
+    /// Brings a deleted conversation back, every row as the commit `from` (a [`Answer::Deleted`]'s)
+    /// held it, in a chat-only commit; none names the commit before the deletion of it asked last
+    /// on this writer, for an Undo pressed before that deletion answered. Refused when it is listed
+    /// already ([`Refusal::Listed`]), `from` is not a commit of the project that holds it, its
+    /// label was taken since, or the project is full.
+    Restore { chat: Uuid, from: Option<String> },
 }
 
 impl Write {
@@ -224,6 +234,8 @@ impl Write {
             Write::End { .. } => "end",
             Write::States { .. } => "states",
             Write::Model { .. } => "model",
+            Write::Delete { .. } => "delete",
+            Write::Restore { .. } => "restore",
         }
     }
 }
@@ -239,6 +251,10 @@ pub enum Answer {
     Asked {
         number: u32,
     },
+    /// The conversation was deleted; `before` names the commit just before, which holds it whole.
+    Deleted {
+        before: String,
+    },
     Done,
 }
 
@@ -247,8 +263,19 @@ pub enum Answer {
 pub enum Refusal {
     /// The text holds one of the API keys Archforge keeps, the provider's when the host can tell.
     HeldKey { provider: Option<Provider> },
+    /// The conversation to bring back is in the list: it was never deleted, or is back already.
+    Listed,
     /// Anything else, in the host's words.
     Failed(String),
+}
+
+/// The label a new conversation takes: `Chat N`, one past the highest of `kept` and `skip` (the
+/// labels of deleted conversations whose Undo is still offered), so a conversation brought back
+/// never finds its label taken.
+pub fn next_origin<'a>(kept: impl Iterator<Item = &'a str>, skip: &[String]) -> String {
+    let number = |o: &str| o.strip_prefix("Chat ").and_then(|n| n.parse::<u32>().ok());
+    let highest = kept.filter_map(number).chain(skip.iter().filter_map(|o| number(o))).max().unwrap_or(0);
+    format!("Chat {}", highest.saturating_add(1))
 }
 
 /// The host's part in keeping conversations: every call returns at once, with a channel the host
@@ -294,6 +321,15 @@ pub mod fake {
         pub log: Mutex<Vec<&'static str>>,
         /// The project each write named.
         pub projects: Mutex<Vec<std::path::PathBuf>>,
+        /// While set, reading the list is refused with it, as a damaged chat table would be.
+        pub unreadable: Mutex<Option<String>>,
+        /// The conversations deleted, each as it was, under the name of the commit before its
+        /// deletion: what Undo brings back.
+        pub deleted: Mutex<Vec<(String, Kept)>>,
+        /// While set, every write waits for [`Memory::release`], as a busy writer would make it.
+        pub hold: std::sync::atomic::AtomicBool,
+        /// The writes waiting while held, in order, with where their answers go.
+        pub held: Mutex<Vec<(Write, std::sync::mpsc::Sender<Result<Answer, Refusal>>)>>,
     }
 
     /// A channel already holding `value`.
@@ -319,6 +355,16 @@ pub mod fake {
             lock(&self.chats).push(kept);
         }
 
+        /// Runs the writes held so far, in order, and answers them; later ones run at once again.
+        pub fn release(&self) {
+            self.hold.store(false, std::sync::atomic::Ordering::SeqCst);
+            let held = std::mem::take(&mut *lock(&self.held));
+            for (write, tx) in held {
+                let mut chats = lock(&self.chats);
+                let _ = tx.send(self.apply(&mut chats, write));
+            }
+        }
+
         /// The provider whose key `text` holds, if any.
         fn held_key(&self, text: &str) -> Option<Provider> {
             self.keys.iter().find(|(_, k)| !k.is_empty() && text.contains(k.as_str())).map(|(p, _)| *p)
@@ -331,12 +377,11 @@ pub mod fake {
                 chats.iter().enumerate().find_map(|(c, k)| k.turns.iter().position(|t| t.id == turn).map(|t| (c, t)))
             };
             match write {
-                Write::Create { chat, title, provider, model, now } => {
+                Write::Create { chat, title, provider, model, skip, now } => {
                     if let Some(p) = self.held_key(&title) {
                         return Err(Refusal::HeldKey { provider: Some(p) });
                     }
-                    let n = chats.iter().filter_map(|c| c.row.origin.strip_prefix("Chat ").and_then(|n| n.parse::<u32>().ok())).max().unwrap_or(0);
-                    let origin = format!("Chat {}", n.saturating_add(1));
+                    let origin = crate::chat_store::next_origin(chats.iter().map(|c| c.row.origin.as_str()), &skip);
                     let title: String =
                         title.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().trim().chars().take(200).collect();
                     let row = Row { id: chat, origin: origin.clone(), title, provider, model, updated_at: now, messages: 0 };
@@ -441,13 +486,40 @@ pub mod fake {
                     kept.row.updated_at = now;
                     Ok(Answer::Done)
                 }
+                Write::Delete { chat } => {
+                    let at = chats.iter().position(|c| c.row.id == chat).ok_or_else(|| failed("no such conversation"))?;
+                    let mut deleted = lock(&self.deleted);
+                    let before = format!("{:032}", deleted.len().saturating_add(1));
+                    deleted.push((before.clone(), chats.remove(at)));
+                    Ok(Answer::Deleted { before })
+                }
+                Write::Restore { chat, from } => {
+                    if chats.iter().any(|c| c.row.id == chat) {
+                        return Err(Refusal::Listed);
+                    }
+                    let deleted = lock(&self.deleted);
+                    let kept = deleted
+                        .iter()
+                        .rev()
+                        .find(|(at, k)| from.as_ref().is_none_or(|f| f == at) && k.row.id == chat)
+                        .map(|(_, k)| k.clone())
+                        .ok_or_else(|| failed("that commit does not hold it"))?;
+                    if chats.iter().any(|c| c.row.origin == kept.row.origin) {
+                        return Err(failed("another conversation has its label now"));
+                    }
+                    chats.push(kept);
+                    Ok(Answer::Done)
+                }
             }
         }
     }
 
     impl ChatStore for Memory {
-        /// The conversations, newest activity first.
+        /// The conversations, newest activity first; refused while [`Memory::unreadable`] is set.
         fn list(&self, _project: &Path) -> Receiver<Result<Vec<Listed>, String>> {
+            if let Some(why) = lock(&self.unreadable).clone() {
+                return answered(Err(why));
+            }
             let mut rows: Vec<Row> = lock(&self.chats).iter().map(|c| c.row.clone()).collect();
             rows.sort_by_key(|r| std::cmp::Reverse(r.updated_at));
             answered(Ok(rows.into_iter().map(|r| Listed { id: r.id, entry: Ok(r) }).collect()))
@@ -468,6 +540,11 @@ pub mod fake {
             lock(&self.projects).push(project.to_path_buf());
             if let Some(why) = lock(&self.refuse).clone() {
                 return answered(Err(Refusal::Failed(why)));
+            }
+            if self.hold.load(std::sync::atomic::Ordering::SeqCst) {
+                let (tx, rx) = std::sync::mpsc::channel();
+                lock(&self.held).push((write, tx));
+                return rx;
             }
             let mut chats = lock(&self.chats);
             answered(self.apply(&mut chats, write))

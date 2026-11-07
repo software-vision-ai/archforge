@@ -283,6 +283,11 @@ pub struct State {
     /// with their labels: their events are taken and dropped until each has ended, and requests on
     /// behalf of their labels are refused meanwhile.
     pub(crate) letting_go: Vec<(String, Option<String>)>,
+    /// The conversations deleted whose deletion, toast or Undo is not settled yet, of every open
+    /// project (AR-217).
+    pub(crate) deletions: Vec<crate::chat_delete::Deletion>,
+    /// The deleted conversations' folders asked of the host to remove, with its answers.
+    pub(crate) forgetting: Vec<(String, Receiver<Result<bool, String>>)>,
 }
 
 impl State {

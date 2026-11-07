@@ -138,6 +138,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             resize(shell, ui, &p, r.right(), body, "workspace.explorer.resize", true);
         }
         centre(shell, ui, &p, cols.centre);
+        // A deleted conversation's toast with Undo, at the centre's foot (AR-217).
+        crate::chat_delete::toast(shell, ui, &p, cols.centre);
         if let Some(r) = cols.panel {
             panel(shell, ui, &p, r, &name);
             resize(shell, ui, &p, r.left(), body, "workspace.panel.resize", false);
@@ -146,6 +148,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         status_bar(shell, ui, &p, status);
         // Over everything: the explorer's dialog and the New diagram dialog, when they ask.
         crate::explorer::delete_dialog(shell, ui, &p);
+        crate::chat_delete::dialog(shell, ui, &p);
         crate::diagrams::new_dialog(shell, ui, &p);
     });
 }
@@ -302,6 +305,8 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
 /// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
 fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
     if ui.memory(|m| m.focused().is_some())
+        || shell.chat_panel.row_menu.is_some()
+        || shell.chat_panel.ask.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
         || shell.generate.is_some()

@@ -476,6 +476,228 @@ fn deleting_a_conversation_removes_its_rows_and_leaves_the_others() {
     p.close().unwrap();
 }
 
+/// A conversation's rows in each chat table, as the project holds them now or `at` a commit, in a
+/// fixed order: every column of every row.
+fn rows_of_chat(p: &Project, chat: Uuid, at: Option<&str>) -> Vec<(&'static str, Vec<Vec<mysql::Value>>)> {
+    let of = |table: &str| at.map_or_else(|| format!("`{table}`"), |h| format!("`{table}` AS OF '{h}'"));
+    CHAT_TABLES
+        .iter()
+        .map(|table| {
+            let rows = match *table {
+                "chat" => "`id` = ?".to_string(),
+                "chat_turn" | "chat_message" => "`chat` = ?".to_string(),
+                "chat_tool_call" | "chat_anchor" => format!("`message` IN (SELECT `id` FROM {} WHERE `chat` = ?)", of("chat_message")),
+                _ => format!("`turn` IN (SELECT `id` FROM {} WHERE `chat` = ?)", of("chat_turn")),
+            };
+            let found: Vec<mysql::Row> = sql(p).exec(format!("SELECT * FROM {} WHERE {rows} ORDER BY 1, 2", of(table)), (chat.0.to_vec(),)).unwrap();
+            (*table, found.into_iter().map(mysql::Row::unwrap).collect())
+        })
+        .collect()
+}
+
+/// A conversation with a row in every chat table: a question with a chip, a tool row with its
+/// anchor, a reply, and a turn's change with its element.
+fn whole_chat(p: &Project, n: u64, origin: &str, when: u64) -> Uuid {
+    let chat = id(n);
+    p.create_chat(&new_chat(n, origin, when), &no_keys()).unwrap();
+    let mut q = question(n + 2, "Rename Customer");
+    q.anchors = vec![anchor(id(900), AnchorRole::Selection, "Customer")];
+    p.start_turn(&turn(n + 1, chat, when + 1), &q, &no_keys()).unwrap();
+    let call = NewToolCall {
+        id: id(n + 3),
+        turn: id(n + 1),
+        tool: "engine.execute".into(),
+        command: Some("er.entity.rename".into()),
+        detail: Some("name".into()),
+        status: ToolStatus::Done,
+        changed_model: true,
+        element_count: Some(1),
+        arguments: Some(r#"{"name":"Client"}"#.into()),
+        result: Some(r#"{"id":"x"}"#.into()),
+        error: None,
+        anchors: vec![anchor(id(900), AnchorRole::Target, "Client")],
+        now: at(when + 2),
+    };
+    p.append_tool_call(&call).unwrap();
+    p.append_reply(&reply(n + 4, id(n + 1), "Renamed.", when + 3)).unwrap();
+    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Changed, metaclass: "er_entity".into(), name: Some("Client".into()) }];
+    p.end_turn(&ended(id(n + 1), when + 4, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
+    chat
+}
+
+/// The commits on the project's branch, newest first: hash, message and committer.
+fn commits(p: &Project) -> Vec<(String, String, String)> {
+    sql(p).query("SELECT commit_hash, message, committer FROM dolt_log ORDER BY commit_order DESC").unwrap()
+}
+
+/// A deletion is exactly one chat-only commit that leaves the model's unsaved change alone; its
+/// rows are gone and still in the commit before; Undo writes every row of every chat table back
+/// in one more chat-only commit (AR-217).
+#[test]
+fn a_deletion_is_one_chat_only_commit_the_rows_stay_in_history_and_undo_brings_every_row_back() {
+    let env = Env::new("delete-restore");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let gone = whole_chat(&p, 1, "Chat 1", 0);
+    let kept = whole_chat(&p, 20, "Chat 2", 10);
+    // The person's own model change, written and not saved.
+    let mut s = session();
+    run(&mut s, "er.schema.add", json!({ "name": "crm" }), None);
+    let model = rows_of(&s, &schema);
+    p.write_model(&schema, &model).unwrap();
+    assert!(p.has_unsaved().unwrap());
+    let whole = rows_of_chat(&p, gone, None);
+    assert!(whole.iter().all(|(_, rows)| !rows.is_empty()), "a row in every chat table: {whole:?}");
+    let before = commits(&p);
+
+    let deleted = p.delete_chat(gone).unwrap();
+    let after = commits(&p);
+    assert_eq!(after.len(), before.len() + 1, "exactly one commit");
+    assert_eq!((after[0].1.as_str(), after[0].2.as_str()), ("Chat 1: deleted", "Archforge chat"));
+    assert_eq!((deleted.origin.as_str(), deleted.before.as_str()), ("Chat 1", before[0].0.as_str()), "the commit just before");
+    let committed: Vec<String> = sql(&p).query("SELECT table_name FROM dolt_diff WHERE commit_hash = HASHOF('HEAD')").unwrap();
+    assert!(!committed.is_empty() && committed.iter().all(|t| CHAT_TABLES.contains(&t.as_str())), "chat tables only: {committed:?}");
+    assert!(p.has_unsaved().unwrap(), "the model's change stays unsaved");
+    assert_eq!(p.read_model(&schema).unwrap(), model, "and untouched");
+    assert!(uncommitted_chats(&p).is_empty());
+    assert!(rows_of_chat(&p, gone, None).iter().all(|(_, rows)| rows.is_empty()), "every row is gone");
+    assert_eq!(rows_of_chat(&p, gone, Some(&deleted.before)), whole, "and every row is in the saved history");
+    assert_eq!(p.list_chats().unwrap().iter().map(|l| l.id).collect::<Vec<_>>(), [kept]);
+
+    assert_eq!(p.restore_chat(gone, &deleted.before).unwrap(), "Chat 1");
+    let restored = commits(&p);
+    assert_eq!(restored.len(), after.len() + 1, "one more commit");
+    assert_eq!((restored[0].1.as_str(), restored[0].2.as_str()), ("Chat 1: restored", "Archforge chat"));
+    let committed: Vec<String> = sql(&p).query("SELECT table_name FROM dolt_diff WHERE commit_hash = HASHOF('HEAD')").unwrap();
+    assert!(committed.iter().all(|t| CHAT_TABLES.contains(&t.as_str())), "chat tables only: {committed:?}");
+    assert_eq!(rows_of_chat(&p, gone, None), whole, "every row of every chat table, as it was");
+    assert!(uncommitted_chats(&p).is_empty());
+    assert!(p.has_unsaved().unwrap());
+    assert_eq!(p.list_chats().unwrap().iter().map(|l| l.id).collect::<Vec<_>>(), [kept, gone], "in its place by its last activity");
+    assert_eq!(p.load_chat(gone).unwrap().messages.len(), 3);
+    p.close().unwrap();
+}
+
+/// What of the conversations waits is committed first ("Conversations kept"), so the commit before
+/// a deletion holds the conversation whole, its running turn's question too (AR-217).
+#[test]
+fn what_waits_is_kept_first_so_the_commit_before_a_deletion_holds_the_conversation_whole() {
+    let env = Env::new("delete-pending");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let gone = one_turn(&p, 1, "Chat 1", 0);
+    // A turn half-way: its question is written and waits for the turn's own chat commit.
+    p.start_turn(&turn(10, gone, 5), &question(11, "And then?"), &no_keys()).unwrap();
+    assert!(!uncommitted_chats(&p).is_empty());
+    let before = commits(&p).len();
+    let deleted = p.delete_chat(gone).unwrap();
+    let after = commits(&p);
+    assert_eq!(after.len(), before + 2);
+    assert_eq!((after[1].1.as_str(), after[0].1.as_str()), ("Conversations kept", "Chat 1: deleted"));
+    assert_eq!(deleted.before, after[1].0);
+    let held = rows_of_chat(&p, gone, Some(&deleted.before));
+    assert_eq!(held.iter().find(|(t, _)| *t == "chat_message").map(|(_, r)| r.len()), Some(2), "both questions");
+    p.restore_chat(gone, &deleted.before).unwrap();
+    assert_eq!(p.load_chat(gone).unwrap().turns.len(), 2);
+    p.close().unwrap();
+}
+
+/// A deletion or a restoration that fails part way (here a trigger refuses one table's rows)
+/// leaves every row as it was and commits nothing: the rows and the chat commit go in one
+/// transaction (AR-217).
+#[test]
+fn a_deletion_or_restoration_that_fails_part_way_changes_no_row_and_commits_nothing() {
+    let env = Env::new("delete-atomic");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let gone = whole_chat(&p, 1, "Chat 1", 0);
+    let whole = rows_of_chat(&p, gone, None);
+    let n = commits(&p).len();
+    sql(&p)
+        .query_drop(
+            "CREATE TRIGGER refuse_turns BEFORE DELETE ON chat_turn FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused'; END",
+        )
+        .unwrap();
+    assert!(p.delete_chat(gone).is_err(), "the turns' rows are refused");
+    assert_eq!(rows_of_chat(&p, gone, None), whole, "the rows deleted before them are back");
+    assert_eq!(commits(&p).len(), n, "nothing committed");
+    assert!(uncommitted_chats(&p).is_empty());
+    sql(&p).query_drop("DROP TRIGGER refuse_turns").unwrap();
+    let deleted = p.delete_chat(gone).unwrap();
+    let n = commits(&p).len();
+    sql(&p)
+        .query_drop("CREATE TRIGGER refuse_messages BEFORE INSERT ON chat_message FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused'; END")
+        .unwrap();
+    assert!(matches!(p.restore_chat(gone, &deleted.before), Err(Error::ChatNotRestored { .. })));
+    assert!(rows_of_chat(&p, gone, None).iter().all(|(_, rows)| rows.is_empty()), "no row came back");
+    assert_eq!(commits(&p).len(), n, "nothing committed");
+    assert!(uncommitted_chats(&p).is_empty());
+    sql(&p).query_drop("DROP TRIGGER refuse_messages").unwrap();
+    p.restore_chat(gone, &deleted.before).unwrap();
+    assert_eq!(rows_of_chat(&p, gone, None), whole);
+    p.close().unwrap();
+}
+
+/// A turn the conversation held still running when it was deleted (a question that reached the
+/// project as it went) comes back interrupted, so the conversation takes questions again.
+#[test]
+fn a_turn_deleted_while_running_comes_back_interrupted() {
+    let env = Env::new("restore-running");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let chat = one_turn(&p, 1, "Chat 1", 0);
+    p.start_turn(&turn(10, chat, 5), &question(11, "And then?"), &no_keys()).unwrap();
+    let deleted = p.delete_chat(chat).unwrap();
+    p.restore_chat(chat, &deleted.before).unwrap();
+    let back = p.load_chat(chat).unwrap();
+    assert_eq!(back.turns.last().map(|t| t.turn.outcome), Some(TurnOutcome::Interrupted));
+    assert_eq!(p.start_turn(&turn(20, chat, 9), &question(21, "Again"), &no_keys()).unwrap(), 3);
+    p.close().unwrap();
+}
+
+/// Bringing a conversation back is refused, with nothing written, for a text that is not a commit,
+/// a commit the project does not have, one that does not hold it, its label taken since, and once
+/// it is listed again (AR-217).
+#[test]
+fn bringing_a_conversation_back_is_refused_when_listed_forged_its_label_taken_or_the_commit_lacks_it() {
+    let env = Env::new("restore-refused");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let first = commits(&p)[0].0.clone();
+    let gone = whole_chat(&p, 1, "Chat 1", 0);
+    let deleted = p.delete_chat(gone).unwrap();
+    let nothing_written = |p: &Project, n: usize| {
+        assert_eq!(commits(p).len(), n, "no commit");
+        assert!(uncommitted_chats(p).is_empty(), "no row");
+    };
+    let n = commits(&p).len();
+    let refused = |r: Result<String, Error>| matches!(r, Err(Error::ChatNotRestored { .. }));
+    // Not a commit at all, the shape of one but not this project's, and one before it was made.
+    for forged in ["HEAD", "x' OR '1'='1", "", "0123456789abcdefghijklmnopqrstuv"] {
+        assert!(refused(p.restore_chat(gone, forged)), "{forged:?}");
+        nothing_written(&p, n);
+    }
+    assert!(refused(p.restore_chat(gone, &first)), "the first commit does not hold it");
+    nothing_written(&p, n);
+    // Its label taken since by another conversation.
+    p.create_chat(&new_chat(30, "Chat 1", 30), &no_keys()).unwrap();
+    let n = commits(&p).len();
+    let taken = p.restore_chat(gone, &deleted.before);
+    assert!(matches!(&taken, Err(Error::ChatNotRestored { why, .. }) if why.contains("Chat 1")), "{taken:?}");
+    nothing_written(&p, n);
+    assert!(rows_of_chat(&p, gone, None).iter().all(|(_, rows)| rows.is_empty()));
+    // Back once it is free; then a second time is refused, it is listed already.
+    p.delete_chat(id(30)).unwrap();
+    p.restore_chat(gone, &deleted.before).unwrap();
+    let n = commits(&p).len();
+    assert!(matches!(p.restore_chat(gone, &deleted.before), Err(Error::ChatListed { .. })), "listed already");
+    nothing_written(&p, n);
+    // A conversation not there is not deleted, and nothing is committed for it.
+    assert!(matches!(p.delete_chat(id(99)), Err(Error::ChatMissing { .. })));
+    nothing_written(&p, n);
+    p.close().unwrap();
+}
+
 #[test]
 fn change_links_follow_undo_redo_and_dont_save() {
     let env = Env::new("links");

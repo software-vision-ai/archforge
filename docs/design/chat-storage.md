@@ -523,7 +523,11 @@ Deleting a conversation:
 1. Stop its turn if one runs.
 2. Delete its rows from all seven tables in one transaction, then a chat commit
    ("Chat 7: deleted").
-3. Delete its private runtime folder.
+3. Offer Undo for a short while (owner decision, AR-217, 2026-11-07): Undo writes the rows back
+   from the commit just before the deletion, as a new chat-only commit ("Chat 7: restored"). Its
+   private runtime folder is deleted only when that offer closes without Undo, including when the
+   project closes or Archforge quits, and when an Undo fails; so a conversation brought back can
+   still resume its runtime session.
 
 The undo history is not involved: deleting a conversation changes no model element. The
 conversation **stays in the project's earlier Dolt commits**, like any deleted row (open
@@ -664,3 +668,58 @@ The Chat panel over the storage of section 11; no table or column changed.
 - **Questions sent again** go with their text and chips (`Rerun` always carries the question), so
   the project checks them against the kept keys again. Replies and tool rows are the agent's and
   Archforge's words and are not checked (AR-206 section 3 checks what a person typed).
+
+## 13. As built (AR-217)
+
+Deleting a conversation from the history, with Undo; no table or column changed.
+
+- **The deletion.** `Project::delete_chat` first commits whatever of the conversations waits
+  ("Conversations kept"), refusing when that fails or leaves a chat table uncommitted, so the
+  commit just before the deletion holds the conversation whole. Then, in one SQL transaction, it
+  deletes the conversation's rows from the seven tables and makes the chat commit
+  `Chat N: deleted` inside that transaction: Dolt commits the transaction's rows with it, and a
+  statement or a commit that fails leaves the transaction to roll back, so the rows and the commit
+  land together or not at all. A test makes the deletion and the restoration fail part way (a
+  trigger refuses one table's rows) and finds every row as it was and no commit; that a failed
+  `DOLT_COMMIT` inside the transaction rolls back too was checked by hand against Dolt 2.7.0. It
+  gives the label and the hash of the commit before. The model, its undo history and its unsaved
+  changes are untouched; the session's change ledger keeps the turns, as Don't save passes a turn
+  without a change link.
+- **Undo.** `Project::restore_chat(chat, from)` checks that `from` has a commit hash's shape (32 of
+  Dolt's base-32 digits, so it is safe in `AS OF`) and that the branch descends from it (its merge
+  base with `HEAD` is itself), refuses a conversation that is listed (`Error::ChatListed`), commits
+  what of the conversations waits ("Conversations kept"), then, in one transaction, refuses when
+  that commit does not hold it, when another conversation has taken its label since, or when the
+  project holds 10,000; otherwise it copies every one of its rows of the seven tables `AS OF from`,
+  by explicit column lists and a filter named per table, marks a turn it held still running as
+  interrupted (a question that reached the project as it was deleted), and commits
+  `Chat N: restored` inside the transaction. When it is refused, nothing of the conversation is
+  written (the "Conversations kept" commit of what waited may have been made).
+- **The shell.** `Write::Delete` answers `Answer::Deleted { before }`; `Write::Restore` takes it
+  back. Neither carries typed text, so both go straight to the project's writer, in order with the
+  writes that do not (a reply, a turn's end): a running turn that the panel ends stopped (its reply
+  so far kept) is written before its deletion. A question carries typed text and waits for its
+  key check before it reaches the writer, so a deletion confirmed while its conversation's
+  question is on its way waits in the panel until the project answered the question. Undo pressed before the deletion's answer sends `Write::Restore` without a commit at
+  once: it reaches the writer after the deletion, and the host takes the commit that deletion gave
+  there; the host forgets that commit at the conversation's next deletion and once it is back.
+  `Write::Create` names the labels of deletions still undoable, which a new conversation
+  skips. A refusal because the conversation is listed is `Refusal::Listed`.
+- **The private folder.** `AgentHost::forget` ends the conversation's program if it runs, waits
+  for it at most five seconds, then removes `conversation-<id>` alone; a folder whose program has
+  not ended is kept. The shell asks it when the toast closes without Undo (eight seconds after the
+  pointer and the focus last left it), and when an Undo is refused for any reason but the
+  conversation being listed. When the project closes or Archforge quits, its toasts close at once
+  and nothing waits on the window's thread: a finished deletion's folder goes; one still under way
+  goes to `AgentHost::forget_after`, which waits at most five seconds for the project's answer and
+  removes the folder only when it says deleted (or, for an Undo under way, when it was refused for
+  any reason but the conversation being listed). At quit the host's threads are joined within its
+  quit budget. An answer that does not come in time, an answer lost, or a crash leaves the folder
+  as an orphan; sweeping orphans stays for later, as section 8 says. The folder is named by the
+  conversation's id alone, so a copy of the project open beside it shares it: it is kept while an
+  open project's panel shows that conversation.
+- **Chat writing off.** When reading the list again fails, the rows read before stay shown and
+  nothing in them can be deleted, saying why; a row that cannot be read cannot be deleted either.
+- **Known limit.** ⌘Z while a toast is up is the model's undo: it may take back the deleted
+  conversation's last turn's changes, and Undo then brings back the change state the deletion's
+  commit held, which may say applied.
