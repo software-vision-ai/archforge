@@ -355,6 +355,7 @@ str		The conversations in this project cannot be changed: {why}	このプロジ�
 str		This conversation cannot be read	この会話は読み込めません
 str		This conversation could not be deleted: {why}	この会話を削除できませんでした: {why}
 str		This conversation could not be brought back: {why}	この会話を元に戻せませんでした: {why}
+str		it is in the conversation list already	すでに会話一覧にあります
 str		Today {time}	今日 {time}
 str		{day} {month}	{month}{day}日
 str		{day} {month} {year}	{year}年{month}{day}日

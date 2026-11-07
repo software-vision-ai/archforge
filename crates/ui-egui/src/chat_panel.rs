@@ -336,8 +336,10 @@ pub struct Panel {
     pub ask: Option<crate::chat_delete::Ask>,
     /// A history row's menu, while it is open.
     pub row_menu: Option<crate::chat_delete::RowMenu>,
-    /// Where the keyboard goes when the history is next drawn.
+    /// Where the keyboard goes when the history is next drawn, and how many more frames it is
+    /// asked for before it is given up.
     pub focus: Option<crate::chat_delete::FocusTo>,
+    pub focus_tries: u8,
     /// The conversation being read back opens without leaving the history: it replaces a deleted
     /// one.
     pub loading_stays: bool,
@@ -555,6 +557,7 @@ pub fn refusal_text(r: &Refusal) -> String {
             fmt(&tr("This question holds your saved {agent} API key, so it was neither sent nor saved."), &[("agent", who)])
         }
         Refusal::Failed(why) => fmt(&tr("This conversation could not be saved: {why}"), &[("why", why)]),
+        Refusal::Listed => fmt(&tr("This conversation could not be saved: {why}"), &[("why", &tr("it is in the conversation list already"))]),
     }
 }
 
@@ -1393,9 +1396,15 @@ fn answers(shell: &mut Shell) {
                 }
                 shell.chat_panel.follow = true;
             }
-            Ok(Err(why)) => shell.chat_panel.load_error = Some(fmt(&tr("This conversation cannot be read: {why}"), &[("why", &why)])),
+            Ok(Err(why)) => {
+                shell.chat_panel.loading_stays = false;
+                shell.chat_panel.load_error = Some(fmt(&tr("This conversation cannot be read: {why}"), &[("why", &why)]));
+            }
             Err(TryRecvError::Empty) => shell.chat_panel.loading = Some((id, rx)),
-            Err(TryRecvError::Disconnected) => shell.chat_panel.load_error = Some(tr("the project did not answer")),
+            Err(TryRecvError::Disconnected) => {
+                shell.chat_panel.loading_stays = false;
+                shell.chat_panel.load_error = Some(tr("the project did not answer"));
+            }
         }
     }
 }

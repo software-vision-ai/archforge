@@ -20,15 +20,16 @@
 //!   conversation never takes the deleted one's label.
 //! - **The private folder** of the conversation's program is removed only once its toast has
 //!   closed without Undo, when an Undo failed, when its project closes or when Archforge quits
-//!   ([`settle`]): the host ends the program first and waits a bounded time.
+//!   ([`settle`]): the host ends the program first and waits a bounded time. A folder of a
+//!   conversation a project open here still shows (a copy of the project) stays.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
-use std::time::{Duration, Instant};
 
 use archforge_mof::Uuid;
 use egui::{Pos2, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
+use crate::ai_agents::FolderGoes;
 use crate::chat_panel::{Panel, TurnState, View, clock};
 use crate::chat_store::{Answer, Listed, Refusal, Row, Write};
 use crate::i18n::{fmt, tr, trn};
@@ -38,9 +39,8 @@ use crate::{Shell, widgets};
 
 /// How long the toast stays once neither the pointer nor the focus is on it, in seconds.
 pub const TOAST_SECONDS: u64 = 8;
-/// How long closing a project or quitting waits for the project's answers about deletions and
-/// restorations under way, so their folders are settled.
-pub const SETTLE_BUDGET: Duration = Duration::from_secs(5);
+/// How many frames a focus request is made before it is given up.
+pub const FOCUS_TRIES: u8 = 4;
 /// The confirmation's width and the toast's height, as the design draws them.
 const DIALOG_WIDTH: f32 = 440.0;
 const TOAST_HEIGHT: f32 = 40.0;
@@ -50,12 +50,14 @@ const MENU_ROW: f32 = 30.0;
 
 /// Where a deletion stands with the project.
 pub enum Stage {
-    /// The deletion was asked; `undo` once Undo was pressed before it finished.
-    Deleting { rx: Receiver<Result<Answer, Refusal>>, undo: bool },
+    /// The deletion was asked.
+    Deleting { rx: Receiver<Result<Answer, Refusal>> },
     /// Deleted: `before` is the commit just before the deletion, which still holds it whole.
     Deleted { before: String },
-    /// Undo was asked.
-    Restoring { rx: Receiver<Result<Answer, Refusal>> },
+    /// Undo was asked; `deleting` is the deletion's answer while it has not come, for an Undo
+    /// pressed before it finished (the restoration, asked after it on the project's writer, takes
+    /// the commit the deletion names there).
+    Restoring { rx: Receiver<Result<Answer, Refusal>>, deleting: Option<Receiver<Result<Answer, Refusal>>> },
 }
 
 /// A conversation being deleted, deleted while its toast shows, or being brought back.
@@ -186,6 +188,7 @@ pub fn ask(shell: &mut Shell, chat: Uuid, row: usize) {
 pub fn cancel(shell: &mut Shell) {
     if let Some(a) = shell.chat_panel.ask.take() {
         shell.chat_panel.focus = Some(FocusTo::Row(a.row));
+        shell.chat_panel.focus_tries = FOCUS_TRIES;
     }
 }
 
@@ -216,40 +219,40 @@ pub fn confirm(shell: &mut Shell) {
         match next {
             Some(id) => {
                 shell.chat_panel.loading_stays = true;
+                shell.chat_panel.loading = None;
                 crate::chat_panel::open(shell, id);
             }
             None => crate::chat_panel::showing(shell),
         }
     }
     let rx = store.write(&project, Write::Delete { chat: ask.chat });
-    close_toasts(shell);
+    close_toasts(shell, &project);
     shell.chats.deletions.push(Deletion {
         project,
         chat: ask.chat,
         key: ask.chat.to_string(),
         origin: row.origin.clone(),
         title: row.title.clone(),
-        stage: Stage::Deleting { rx, undo: false },
+        stage: Stage::Deleting { rx },
         toast: true,
         until: None,
     });
     if let Some(Ok(rows)) = shell.chat_panel.history.as_mut() {
         rows.retain(|l| l.id != ask.chat);
     }
-    let left = rows(&shell.chat_panel).len();
-    shell.chat_panel.focus = Some(if at < left {
-        FocusTo::Row(at)
-    } else if at > 0 && left > 0 {
-        FocusTo::Row(at - 1)
-    } else {
-        FocusTo::New
-    });
+    // The next readable row takes the keyboard, else the one above, else New conversation.
+    let left = rows(&shell.chat_panel);
+    let next = left.iter().skip(at).position(|l| l.entry.is_ok()).map(|i| at + i);
+    let above = left.iter().take(at).rposition(|l| l.entry.is_ok());
+    shell.chat_panel.focus = Some(next.or(above).map_or(FocusTo::New, FocusTo::Row));
+    shell.chat_panel.focus_tries = FOCUS_TRIES;
     shell.chat_panel.list_notice = None;
 }
 
-/// Every toast up closes: a deletion that has finished lets its folder go.
-fn close_toasts(shell: &mut Shell) {
-    for d in shell.chats.deletions.iter_mut() {
+/// The toasts of `project` close: a deletion that has finished lets its folder go. A parked
+/// project's toast waits for its tab.
+fn close_toasts(shell: &mut Shell, project: &Path) {
+    for d in shell.chats.deletions.iter_mut().filter(|d| d.project == project) {
         d.toast = false;
     }
 }
@@ -260,27 +263,22 @@ pub fn held_labels(shell: &Shell, project: &Path) -> Vec<String> {
     shell.chats.deletions.iter().filter(|d| d.project == project).map(|d| d.origin.clone()).collect()
 }
 
-/// Undo on the toast: the conversation is written back from the commit before its deletion, now,
-/// or once the deletion has finished. The toast closes. ⌘Z never comes here.
+/// Undo on the toast: the conversation is written back from the commit before its deletion; pressed
+/// before the deletion answered, the restoration goes to the project's writer after it and takes
+/// the commit it names there. The toast closes. ⌘Z never comes here.
 pub fn undo(shell: &mut Shell) {
     let Some(project) = shell.project.as_ref().map(|p| p.path.clone()) else { return };
-    let store = shell.services.chats.clone();
+    let Some(store) = shell.services.chats.clone() else { return };
     let Some(d) = shell.chats.deletions.iter_mut().rev().find(|d| d.toast && d.project == project) else { return };
     d.toast = false;
-    match &mut d.stage {
-        Stage::Deleting { undo, .. } => *undo = true,
+    let stage = std::mem::replace(&mut d.stage, Stage::Deleted { before: String::new() });
+    d.stage = match stage {
+        Stage::Deleting { rx } => Stage::Restoring { rx: store.write(&project, Write::Restore { chat: d.chat, from: None }), deleting: Some(rx) },
         Stage::Deleted { before } => {
-            let write = Write::Restore { chat: d.chat, from: before.clone() };
-            match store {
-                Some(s) => d.stage = Stage::Restoring { rx: s.write(&project, write) },
-                None => {
-                    shell.chat_panel.list_notice =
-                        Some(fmt(&tr("This conversation could not be brought back: {why}"), &[("why", &tr("This project keeps no conversations"))]))
-                }
-            }
+            Stage::Restoring { rx: store.write(&project, Write::Restore { chat: d.chat, from: Some(before) }), deleting: None }
         }
-        Stage::Restoring { .. } => {}
-    }
+        restoring @ Stage::Restoring { .. } => restoring,
+    };
 }
 
 /// The panel of `project`: the one shown, or a parked tab's.
@@ -291,11 +289,14 @@ fn panel_of<'a>(shell: &'a mut Shell, project: &Path) -> Option<&'a mut Panel> {
     shell.tabs.iter_mut().find(|t| t.path == project).and_then(|t| t.parked.as_mut()).map(|p| &mut p.chat_panel)
 }
 
+/// Whether `project` is shown with its history open.
+fn history_shown(shell: &Shell, project: &Path) -> bool {
+    shell.project.as_ref().is_some_and(|p| p.path == project) && shell.chat_panel.view == View::History
+}
+
 /// Reads the history of `project` again when it is shown with its history open.
 fn reread(shell: &mut Shell, project: &Path) {
-    let shown = shell.project.as_ref().is_some_and(|p| p.path == project);
-    if shown
-        && shell.chat_panel.view == View::History
+    if history_shown(shell, project)
         && let Some(store) = shell.services.chats.clone()
     {
         shell.chat_panel.listing = Some(store.list(project));
@@ -310,10 +311,25 @@ fn notice(shell: &mut Shell, project: &Path, words: String) {
     }
 }
 
-/// Asks the host to remove the private folder of the conversation `key`, its program ended first.
-fn forget(shell: &mut Shell, key: &str) {
+/// Whether a panel of an open project holds the conversation `key`: a copy of the project open
+/// beside it shares its private folder, which then stays.
+fn held_elsewhere(shell: &Shell, key: &str) -> bool {
+    let holds = |p: &Panel| p.chat.as_ref().is_some_and(|c| c.key == key);
+    holds(&shell.chat_panel) || shell.tabs.iter().filter_map(|t| t.parked.as_ref()).any(|p| holds(&p.chat_panel))
+}
+
+/// Asks the host to remove the private folder of the conversation `key`, its program ended first;
+/// with `after`, once the project's answer lets it go.
+fn forget(shell: &mut Shell, key: &str, after: Option<(Receiver<Result<Answer, Refusal>>, FolderGoes)>) {
+    if held_elsewhere(shell, key) {
+        log::info!("the private folder of the conversation {key:?} is kept: a project open here shows that conversation");
+        return;
+    }
     let Some(host) = shell.services.agents.clone() else { return };
-    let rx = host.forget(key);
+    let rx = match after {
+        None => host.forget(key),
+        Some((answer, goes)) => host.forget_after(key, answer, goes),
+    };
     shell.chats.forgetting.push((key.to_string(), rx));
 }
 
@@ -332,11 +348,11 @@ pub(crate) fn frame(shell: &mut Shell) {
     let now = clock(shell).now;
     let shown = shell.project.as_ref().map(|p| p.path.clone());
     for d in std::mem::take(&mut shell.chats.deletions) {
-        let project = d.project.clone();
         let key = d.key.clone();
-        match step(shell, d, now, shown.as_deref() == Some(project.as_path())) {
+        let here = shown.as_deref() == Some(d.project.as_path());
+        match step(shell, d, now, here) {
             Next::Keep(d) => shell.chats.deletions.push(d),
-            Next::Done { forget: true } => forget(shell, &key),
+            Next::Done { forget: true } => forget(shell, &key, None),
             Next::Done { forget: false } => {}
         }
     }
@@ -351,130 +367,128 @@ pub(crate) fn frame(shell: &mut Shell) {
     });
 }
 
+/// The reason in a refusal, for the panel.
+fn refused_why(r: &Refusal) -> String {
+    match r {
+        Refusal::Failed(why) => why.clone(),
+        Refusal::Listed => tr("it is in the conversation list already"),
+        Refusal::HeldKey { .. } => tr("the project did not answer"),
+    }
+}
+
 /// One deletion's step this frame; `shown` when its project is the one shown.
 fn step(shell: &mut Shell, mut d: Deletion, now: u64, shown: bool) -> Next {
     let project = d.project.clone();
+    let not_deleted = |shell: &mut Shell, why: String| {
+        notice(shell, &project, fmt(&tr("This conversation could not be deleted: {why}"), &[("why", &why)]));
+        reread(shell, &project);
+        Next::Done { forget: false }
+    };
     match d.stage {
-        Stage::Deleting { rx, undo } => match rx.try_recv() {
+        Stage::Deleting { rx } => match rx.try_recv() {
             Err(TryRecvError::Empty) => {
-                d.stage = Stage::Deleting { rx, undo };
+                d.stage = Stage::Deleting { rx };
                 Next::Keep(d)
             }
             Ok(Ok(Answer::Deleted { before })) => {
                 reread(shell, &project);
-                if undo {
-                    d.stage = restore(shell, &project, d.chat, before);
-                    return Next::Keep(d);
-                }
                 d.stage = Stage::Deleted { before };
                 if d.toast { Next::Keep(d) } else { Next::Done { forget: true } }
             }
-            answer => {
-                let why = match answer {
-                    Ok(Err(r)) => refused_why(&r),
-                    _ => tr("the project did not answer"),
-                };
-                notice(shell, &project, fmt(&tr("This conversation could not be deleted: {why}"), &[("why", &why)]));
-                reread(shell, &project);
-                Next::Done { forget: false }
-            }
+            Ok(Err(r)) => not_deleted(shell, refused_why(&r)),
+            Ok(Ok(_)) => not_deleted(shell, tr("the project did not answer")),
+            Err(TryRecvError::Disconnected) => not_deleted(shell, tr("the project did not answer")),
         },
         Stage::Deleted { before } => {
             d.stage = Stage::Deleted { before };
             if d.toast && shown {
+                // Eight seconds of being seen: the time starts when it is first drawn in its
+                // project, and again whenever the pointer or the focus is on it.
                 let until = *d.until.get_or_insert(now.saturating_add(TOAST_SECONDS));
-                if now >= until {
+                if now > until {
                     d.toast = false;
                 }
             }
             if d.toast { Next::Keep(d) } else { Next::Done { forget: true } }
         }
-        Stage::Restoring { rx } => match rx.try_recv() {
+        Stage::Restoring { rx, deleting: Some(deleting) } => match deleting.try_recv() {
             Err(TryRecvError::Empty) => {
-                d.stage = Stage::Restoring { rx };
+                d.stage = Stage::Restoring { rx, deleting: Some(deleting) };
                 Next::Keep(d)
             }
-            Ok(Ok(_)) => {
-                reread(shell, &project);
-                if let Some(panel) = panel_of(shell, &project) {
-                    panel.focus = Some(FocusTo::Chat(d.chat));
+            Ok(Ok(Answer::Deleted { .. })) => {
+                d.stage = Stage::Restoring { rx, deleting: None };
+                Next::Keep(d)
+            }
+            // Not deleted: the restoration after it is refused, and nothing is to say of it.
+            Ok(Err(r)) => not_deleted(shell, refused_why(&r)),
+            Ok(Ok(_)) | Err(TryRecvError::Disconnected) => not_deleted(shell, tr("the project did not answer")),
+        },
+        Stage::Restoring { rx, deleting: None } => match rx.try_recv() {
+            Err(TryRecvError::Empty) => {
+                d.stage = Stage::Restoring { rx, deleting: None };
+                Next::Keep(d)
+            }
+            // Back, or in the list anyway: its folder stays.
+            Ok(Ok(_)) | Ok(Err(Refusal::Listed)) => {
+                if history_shown(shell, &project) {
+                    shell.chat_panel.focus = Some(FocusTo::Chat(d.chat));
+                    shell.chat_panel.focus_tries = FOCUS_TRIES;
                 }
+                reread(shell, &project);
                 Next::Done { forget: false }
             }
-            answer => {
-                let why = match answer {
-                    Ok(Err(r)) => refused_why(&r),
-                    _ => tr("the project did not answer"),
-                };
-                notice(shell, &project, fmt(&tr("This conversation could not be brought back: {why}"), &[("why", &why)]));
+            Ok(Err(r)) => {
+                notice(shell, &project, fmt(&tr("This conversation could not be brought back: {why}"), &[("why", &refused_why(&r))]));
                 reread(shell, &project);
                 Next::Done { forget: true }
+            }
+            // Whether it came back is not known: its folder stays.
+            Err(TryRecvError::Disconnected) => {
+                notice(
+                    shell,
+                    &project,
+                    fmt(&tr("This conversation could not be brought back: {why}"), &[("why", &tr("the project did not answer"))]),
+                );
+                reread(shell, &project);
+                Next::Done { forget: false }
             }
         },
     }
 }
 
-/// The restoration of `chat` from the commit `before`, asked of `project`.
-fn restore(shell: &mut Shell, project: &Path, chat: Uuid, before: String) -> Stage {
-    let write = Write::Restore { chat, from: before.clone() };
-    match shell.services.chats.clone() {
-        Some(s) => Stage::Restoring { rx: s.write(project, write) },
-        None => Stage::Deleted { before },
-    }
-}
-
-/// A refusal's reason, in the project's words.
-fn refused_why(r: &Refusal) -> String {
-    match r {
-        Refusal::Failed(why) => why.clone(),
-        Refusal::HeldKey { .. } => tr("the project did not answer"),
-    }
-}
-
-/// Whether deletions wait for the project, or a toast counts down: the window looks again soon.
+/// Whether deletions wait for the project, the toast of the project shown counts down, or a folder
+/// is being removed: the window looks again soon. A parked project's toast waits without it.
 pub(crate) fn waiting(shell: &Shell) -> bool {
-    !shell.chats.deletions.is_empty() || !shell.chats.forgetting.is_empty()
+    let shown = shell.project.as_ref().map(|p| p.path.as_path());
+    shell.chats.deletions.iter().any(|d| !matches!(d.stage, Stage::Deleted { .. }) || (d.toast && shown == Some(d.project.as_path())))
+        || !shell.chats.forgetting.is_empty()
 }
 
-/// The project at `project` closes, or Archforge quits (`project` none): their toasts close, and
-/// what waits for the project's answer is waited for, at most until `deadline`: a deletion that
-/// finished lets its folder go; an Undo pressed before the deletion finished is sent at once, so it
-/// reaches the project before it closes, and its folder stays if it succeeds. What has not answered
-/// by the deadline keeps its folder and is said in the log; a crash leaves the same orphan.
-pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>, deadline: Instant) {
-    let mine = |d: &Deletion| project.is_none_or(|p| d.project == p);
-    let (ours, others): (Vec<Deletion>, Vec<Deletion>) = std::mem::take(&mut shell.chats.deletions).into_iter().partition(|d| mine(d));
+/// The project at `project` closes, or Archforge quits (`project` none): their toasts close at
+/// once, and their folders are settled without waiting here. A deletion that has finished lets its
+/// folder go; one still under way hands its answer to the host, which removes the folder once it
+/// says deleted; an Undo still under way hands the restoration's, which removes the folder only
+/// when the conversation stays deleted. The host waits a bounded time for each, and at quit is
+/// waited for with its own threads; an answer that does not come in time keeps the folder, as a
+/// crash does. An Undo pressed before its deletion answered is on the writer already, ahead of the
+/// closing.
+pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>) {
+    let (ours, others): (Vec<Deletion>, Vec<Deletion>) =
+        std::mem::take(&mut shell.chats.deletions).into_iter().partition(|d| project.is_none_or(|p| d.project == p));
     shell.chats.deletions = others;
-    for mut d in ours {
-        d.toast = false;
-        // An answer, or none by the deadline (or from a writer that stopped).
-        let wait = |rx: &Receiver<Result<Answer, Refusal>>| rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).ok();
-        let forget_it = match d.stage {
-            Stage::Deleted { .. } => true,
-            Stage::Deleting { ref rx, undo } => match (wait(rx), undo) {
-                (Some(Ok(Answer::Deleted { before })), true) => match restore(shell, &d.project, d.chat, before) {
-                    Stage::Restoring { rx } => !matches!(wait(&rx), Some(Ok(_)) | None),
-                    _ => true,
-                },
-                (Some(Ok(Answer::Deleted { .. })), false) => true,
-                (Some(_), _) => false,
-                (None, _) => {
-                    log::warn!("the deletion of the conversation {:?} did not answer in time; its private folder is kept", d.key);
-                    false
-                }
+    for d in ours {
+        let key = d.key.clone();
+        match d.stage {
+            Stage::Deleted { .. } => forget(shell, &key, None),
+            Stage::Deleting { rx } => forget(shell, &key, Some((rx, FolderGoes::IfDeleted))),
+            Stage::Restoring { rx, deleting: None } => forget(shell, &key, Some((rx, FolderGoes::IfNotRestored))),
+            Stage::Restoring { rx, deleting: Some(deleting) } => match deleting.try_recv() {
+                // Not deleted: nothing to remove.
+                Ok(Err(_)) | Err(TryRecvError::Disconnected) => log::info!("the conversation {key:?} was not deleted; its folder stays"),
+                // Deleted, or not answered yet: the restoration after it decides.
+                _ => forget(shell, &key, Some((rx, FolderGoes::IfNotRestored))),
             },
-            Stage::Restoring { ref rx } => match wait(rx) {
-                Some(Ok(_)) => false,
-                Some(Err(_)) => true,
-                None => {
-                    log::warn!("bringing back the conversation {:?} did not answer in time; its private folder is kept", d.key);
-                    false
-                }
-            },
-        };
-        if forget_it {
-            let key = d.key.clone();
-            forget(shell, &key);
         }
     }
 }
@@ -552,6 +566,7 @@ pub(crate) fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) -> Option<
     if escape {
         shell.chat_panel.row_menu = None;
         shell.chat_panel.focus = Some(FocusTo::Row(menu.row));
+        shell.chat_panel.focus_tries = FOCUS_TRIES;
         return None;
     }
     let mut reached = menu.reached;

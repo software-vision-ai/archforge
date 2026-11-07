@@ -768,10 +768,9 @@ impl Shell {
             self.tabs.get(i).and_then(|t| t.parked.as_ref()).and_then(|p| chat(&p.chat_panel))
         };
         chat_panel::closing(self, shown);
-        // Its deleted conversations are settled before the project closes: an Undo pressed before
-        // its deletion finished reaches the project ahead of the closing.
+        // Its deleted conversations' toasts close and their folders are settled with the host.
         if let Some(path) = self.tabs.get(i).map(|t| t.path.clone()) {
-            chat_delete::settle(self, Some(&path), std::time::Instant::now() + chat_delete::SETTLE_BUDGET);
+            chat_delete::settle(self, Some(&path));
         }
     }
 
@@ -1299,10 +1298,10 @@ impl Shell {
     }
 
     /// At exit, before the host writes what waits: the skill text still being typed is kept and
-    /// handed over with the rest, and Chat's deleted conversations are settled (their toasts close,
-    /// their folders go), waiting at most [`chat_delete::SETTLE_BUDGET`] for the projects' answers.
+    /// handed over with the rest, and Chat's deleted conversations of every project are settled
+    /// with the agents host, which waits a bounded time for the projects' answers before it stops.
     pub fn before_exit(&mut self) {
-        chat_delete::settle(self, None, std::time::Instant::now() + chat_delete::SETTLE_BUDGET);
+        chat_delete::settle(self, None);
         skill_tab::sync(self, 0.0, true, None);
         let parked = self.tabs.iter().filter_map(|t| t.parked.as_ref()).map(|p| &p.canvas);
         for (skill, chars) in std::iter::once(&self.canvas).chain(parked).flat_map(skill_tab::unkept) {

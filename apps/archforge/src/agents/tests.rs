@@ -906,8 +906,9 @@ fn codex_account_is_read_on_first_use_never_at_launch() {
 
 /// Removing a deleted conversation's private folder (AR-217): its running program is ended first
 /// and has ended when the answer comes, its folder goes and every other conversation's stays; one
-/// asked just before quitting has finished when quitting returns; an id that is not a
-/// conversation's is refused and one without a folder says so.
+/// waiting for the project goes only when the answer says deleted, never when it says listed or
+/// does not come; one asked just before quitting has finished when quitting returns; an id that is
+/// not a conversation's is refused and one without a folder says so.
 #[test]
 fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alone_even_at_quit() {
     let host = Host::new("forget", Setup::default());
@@ -935,6 +936,33 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     assert_eq!(host.agents.forget(&id(9)).recv_timeout(WAIT).unwrap(), Ok(false));
     assert!(host.agents.forget("../settings").recv_timeout(WAIT).unwrap().is_err());
     assert!(host.settings.is_dir());
+    // Once the project answered: a deletion lets the folder go; a restoration refused because
+    // the conversation is listed, or no answer at all, keeps it.
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let answer = |a: Option<Result<Answer, Refusal>>| {
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(a) = a {
+            tx.send(a).unwrap();
+        }
+        rx
+    };
+    let made = |chat: &str| {
+        let id = archforge_agents::ConversationId::new(chat).unwrap();
+        archforge_agents::Workspace::open(&host.settings.join("agents")).unwrap().conversation(&id).unwrap();
+    };
+    let (listed, unanswered, deleted) = (id(4), id(5), id(6));
+    for chat in [&listed, &unanswered, &deleted] {
+        made(chat);
+    }
+    let kept_listed = host.agents.forget_after(&listed, answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored);
+    let kept_silent = host.agents.forget_after(&unanswered, answer(None), FolderGoes::IfDeleted);
+    let removed = host.agents.forget_after(&deleted, answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted);
+    assert_eq!(
+        (kept_listed.recv_timeout(WAIT).unwrap(), kept_silent.recv_timeout(WAIT).unwrap(), removed.recv_timeout(WAIT).unwrap()),
+        (Ok(false), Ok(false), Ok(true))
+    );
+    assert!(folder(&listed).is_dir() && folder(&unanswered).is_dir() && !folder(&deleted).exists());
     // Asked just before quitting: done when quitting returns.
     let at_quit = host.agents.forget(&last);
     host.agents.shutdown();

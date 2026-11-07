@@ -354,6 +354,7 @@ str		The conversations in this project cannot be changed: {why}	The conversation
 str		This conversation cannot be read	This conversation cannot be read
 str		This conversation could not be deleted: {why}	This conversation could not be deleted: {why}
 str		This conversation could not be brought back: {why}	This conversation could not be brought back: {why}
+str		it is in the conversation list already	it is in the conversation list already
 str		Today {time}	Today {time}
 str		{day} {month}	{day} {month}
 str		{day} {month} {year}	{day} {month} {year}

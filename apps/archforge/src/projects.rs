@@ -1150,11 +1150,21 @@ mod tests {
         // A new conversation skips the label of the one that can still come back.
         assert_eq!(answer(chats.write(&path, create(other, vec!["Chat 1".into()]))), Ok(Answer::Created { origin: "Chat 2".into() }));
         // Brought back whole, from the commit the deletion named; a forged one and a second time refused.
-        let forged = answer(chats.write(&path, Write::Restore { chat, from: "0".repeat(32) }));
+        let forged = answer(chats.write(&path, Write::Restore { chat, from: Some("0".repeat(32)) }));
         assert!(matches!(forged, Err(Refusal::Failed(why)) if why.contains("not a commit")), "a forged commit");
-        assert_eq!(answer(chats.write(&path, Write::Restore { chat, from: before.clone() })), Ok(Answer::Done));
-        let again = answer(chats.write(&path, Write::Restore { chat, from: before }));
-        assert!(matches!(again, Err(Refusal::Failed(why)) if why.contains("already")), "listed already");
+        assert_eq!(answer(chats.write(&path, Write::Restore { chat, from: Some(before.clone()) })), Ok(Answer::Done));
+        let again = answer(chats.write(&path, Write::Restore { chat, from: Some(before) }));
+        assert_eq!(again, Err(Refusal::Listed), "listed already");
+        // Undo pressed before the deletion answered: the restore names no commit, and takes the
+        // one the deletion just before it on the writer gave.
+        let other_deleted = chats.write(&path, Write::Delete { chat: other });
+        let undone = chats.write(&path, Write::Restore { chat: other, from: None });
+        assert!(matches!(answer(other_deleted), Ok(Answer::Deleted { .. })));
+        assert_eq!(answer(undone), Ok(Answer::Done));
+        assert_eq!(
+            answer(chats.write(&path, Write::Restore { chat: id(9), from: None })),
+            Err(Refusal::Failed("no deletion of it was asked in this project".into()))
+        );
         let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!(listed.len(), 2);
         let stored = chats.load(&path, chat).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();

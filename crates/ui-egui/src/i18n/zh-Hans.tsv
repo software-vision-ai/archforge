@@ -355,6 +355,7 @@ str		The conversations in this project cannot be changed: {why}	无法更改此�
 str		This conversation cannot be read	无法读取此对话
 str		This conversation could not be deleted: {why}	无法删除此对话：{why}
 str		This conversation could not be brought back: {why}	无法恢复此对话：{why}
+str		it is in the conversation list already	它已在对话列表中
 str		Today {time}	今天 {time}
 str		{day} {month}	{month}{day}日
 str		{day} {month} {year}	{year}年{month}{day}日

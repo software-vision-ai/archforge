@@ -355,6 +355,7 @@ str		The conversations in this project cannot be changed: {why}	No se pueden cam
 str		This conversation cannot be read	No se puede leer esta conversación
 str		This conversation could not be deleted: {why}	No se ha podido eliminar esta conversación: {why}
 str		This conversation could not be brought back: {why}	No se ha podido recuperar esta conversación: {why}
+str		it is in the conversation list already	ya está en la lista de conversaciones
 str		Today {time}	Hoy {time}
 str		{day} {month}	{day} {month}
 str		{day} {month} {year}	{day} {month} {year}

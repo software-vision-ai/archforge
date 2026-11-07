@@ -469,6 +469,16 @@ impl AgentHost for Agents {
 
     /// Removes a deleted conversation's private folder ([`sessions::forget`]).
     fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
-        sessions::forget(&self.inner, chat)
+        sessions::forget(&self.inner, chat, None)
+    }
+
+    /// Removes it once the project's answer lets it go ([`sessions::forget`]).
+    fn forget_after(
+        &self,
+        chat: &str,
+        answer: Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>,
+        goes: archforge_ui_egui::ai_agents::FolderGoes,
+    ) -> Receiver<Result<bool, String>> {
+        sessions::forget(&self.inner, chat, Some((answer, goes)))
     }
 }

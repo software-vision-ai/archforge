@@ -430,6 +430,36 @@ pub trait AgentHost: Send + Sync {
     /// program has not ended by then is kept. The answer says whether there was a folder, or why it
     /// was not removed.
     fn forget(&self, chat: &str) -> Receiver<Result<bool, String>>;
+    /// [`AgentHost::forget`] once the project answered `answer`, a deletion or a restoration still
+    /// under way when its project closed or Archforge quit, when `goes` says the answer lets the
+    /// folder go; waited for a bounded time, and an answer that does not come keeps the folder.
+    fn forget_after(
+        &self,
+        chat: &str,
+        answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+        goes: FolderGoes,
+    ) -> Receiver<Result<bool, String>>;
+}
+
+/// When a deleted conversation's private folder goes, once the project answers (AR-217).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderGoes {
+    /// Once its deletion succeeded.
+    IfDeleted,
+    /// Once its restoration was refused for a reason other than its being listed: it stays
+    /// deleted.
+    IfNotRestored,
+}
+
+impl FolderGoes {
+    /// Whether `answer` lets the folder go.
+    pub fn decides(self, answer: &Result<crate::chat_store::Answer, crate::chat_store::Refusal>) -> bool {
+        use crate::chat_store::{Answer, Refusal};
+        match self {
+            FolderGoes::IfDeleted => matches!(answer, Ok(Answer::Deleted { .. })),
+            FolderGoes::IfNotRestored => matches!(answer, Err(Refusal::Failed(_) | Refusal::HeldKey { .. })),
+        }
+    }
 }
 
 /// How Codex signs in.
@@ -1068,6 +1098,16 @@ pub mod fake {
         pub hold_ends: std::sync::atomic::AtomicBool,
         /// The conversations whose private folders were removed, in order.
         pub forgotten: Mutex<Vec<String>>,
+        /// The removals waiting for the project's answer, as the host's threads wait.
+        #[allow(clippy::type_complexity, reason = "a removal waits for the answer, its rule and its own answer")]
+        pub after: Mutex<
+            Vec<(
+                String,
+                Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+                super::FolderGoes,
+                std::sync::mpsc::Sender<Result<bool, String>>,
+            )>,
+        >,
     }
 
     impl Default for Fake {
@@ -1090,6 +1130,7 @@ pub mod fake {
                 sent: Mutex::new(Vec::new()),
                 hold_ends: std::sync::atomic::AtomicBool::new(false),
                 forgotten: Mutex::new(Vec::new()),
+                after: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1193,6 +1234,17 @@ pub mod fake {
             self.emit(chat, crate::chat::ChatEvent::Ended { failure: None });
             Ok(())
         }
+        /// Keeps `answer` for [`Fake::settle_after`], as the host's thread waits for it.
+        fn forget_after(
+            &self,
+            chat: &str,
+            answer: Receiver<Result<crate::chat_store::Answer, crate::chat_store::Refusal>>,
+            goes: super::FolderGoes,
+        ) -> Receiver<Result<bool, String>> {
+            let (tx, rx) = std::sync::mpsc::channel();
+            lock(&self.after).push((chat.to_string(), answer, goes, tx));
+            rx
+        }
         /// Ends the conversation when it runs, then records its folder as removed.
         fn forget(&self, chat: &str) -> Receiver<Result<bool, String>> {
             if let Err(e) = crate::chat::check_id(chat) {
@@ -1228,6 +1280,21 @@ pub mod fake {
             self.calls.logout.fetch_add(1, Ordering::Relaxed);
             *lock(&self.account) = Ok(CodexAccount::NotSignedIn);
             answered(Ok(()))
+        }
+    }
+
+    impl Fake {
+        /// Takes the project's answers the removals wait for, at most a few seconds each, and
+        /// forgets the folders they let go, as the host's threads do.
+        pub fn settle_after(&self) {
+            let waiting = std::mem::take(&mut *lock(&self.after));
+            for (chat, answer, goes, tx) in waiting {
+                let gone = answer.recv_timeout(std::time::Duration::from_secs(5)).is_ok_and(|a| goes.decides(&a));
+                if gone {
+                    lock(&self.forgotten).push(chat);
+                }
+                let _ = tx.send(Ok(gone));
+            }
         }
     }
 

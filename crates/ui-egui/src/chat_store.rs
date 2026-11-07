@@ -215,9 +215,11 @@ pub enum Write {
     /// The answer names the commit just before, which still holds it (AR-217).
     Delete { chat: Uuid },
     /// Brings a deleted conversation back, every row as the commit `from` (a [`Answer::Deleted`]'s)
-    /// held it, in a chat-only commit; refused when it is listed already, `from` is not a commit of
-    /// the project that holds it, its label was taken since, or the project is full.
-    Restore { chat: Uuid, from: String },
+    /// held it, in a chat-only commit; none names the commit before the deletion of it asked last
+    /// on this writer, for an Undo pressed before that deletion answered. Refused when it is listed
+    /// already ([`Refusal::Listed`]), `from` is not a commit of the project that holds it, its
+    /// label was taken since, or the project is full.
+    Restore { chat: Uuid, from: Option<String> },
 }
 
 impl Write {
@@ -261,6 +263,8 @@ pub enum Answer {
 pub enum Refusal {
     /// The text holds one of the API keys Archforge keeps, the provider's when the host can tell.
     HeldKey { provider: Option<Provider> },
+    /// The conversation to bring back is in the list: it was never deleted, or is back already.
+    Listed,
     /// Anything else, in the host's words.
     Failed(String),
 }
@@ -491,12 +495,13 @@ pub mod fake {
                 }
                 Write::Restore { chat, from } => {
                     if chats.iter().any(|c| c.row.id == chat) {
-                        return Err(failed("it is in the conversation list already"));
+                        return Err(Refusal::Listed);
                     }
                     let deleted = lock(&self.deleted);
                     let kept = deleted
                         .iter()
-                        .find(|(at, k)| *at == from && k.row.id == chat)
+                        .rev()
+                        .find(|(at, k)| from.as_ref().is_none_or(|f| f == at) && k.row.id == chat)
                         .map(|(_, k)| k.clone())
                         .ok_or_else(|| failed("that commit does not hold it"))?;
                     if chats.iter().any(|c| c.row.origin == kept.row.origin) {

@@ -597,6 +597,59 @@ fn what_waits_is_kept_first_so_the_commit_before_a_deletion_holds_the_conversati
     p.close().unwrap();
 }
 
+/// A deletion or a restoration that fails part way (here a trigger refuses one table's rows)
+/// leaves every row as it was and commits nothing: the rows and the chat commit go in one
+/// transaction (AR-217).
+#[test]
+fn a_deletion_or_restoration_that_fails_part_way_changes_no_row_and_commits_nothing() {
+    let env = Env::new("delete-atomic");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let gone = whole_chat(&p, 1, "Chat 1", 0);
+    let whole = rows_of_chat(&p, gone, None);
+    let n = commits(&p).len();
+    sql(&p)
+        .query_drop(
+            "CREATE TRIGGER refuse_turns BEFORE DELETE ON chat_turn FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused'; END",
+        )
+        .unwrap();
+    assert!(p.delete_chat(gone).is_err(), "the turns' rows are refused");
+    assert_eq!(rows_of_chat(&p, gone, None), whole, "the rows deleted before them are back");
+    assert_eq!(commits(&p).len(), n, "nothing committed");
+    assert!(uncommitted_chats(&p).is_empty());
+    sql(&p).query_drop("DROP TRIGGER refuse_turns").unwrap();
+    let deleted = p.delete_chat(gone).unwrap();
+    let n = commits(&p).len();
+    sql(&p)
+        .query_drop("CREATE TRIGGER refuse_messages BEFORE INSERT ON chat_message FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'refused'; END")
+        .unwrap();
+    assert!(matches!(p.restore_chat(gone, &deleted.before), Err(Error::ChatNotRestored { .. })));
+    assert!(rows_of_chat(&p, gone, None).iter().all(|(_, rows)| rows.is_empty()), "no row came back");
+    assert_eq!(commits(&p).len(), n, "nothing committed");
+    assert!(uncommitted_chats(&p).is_empty());
+    sql(&p).query_drop("DROP TRIGGER refuse_messages").unwrap();
+    p.restore_chat(gone, &deleted.before).unwrap();
+    assert_eq!(rows_of_chat(&p, gone, None), whole);
+    p.close().unwrap();
+}
+
+/// A turn the conversation held still running when it was deleted (a question that reached the
+/// project as it went) comes back interrupted, so the conversation takes questions again.
+#[test]
+fn a_turn_deleted_while_running_comes_back_interrupted() {
+    let env = Env::new("restore-running");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let chat = one_turn(&p, 1, "Chat 1", 0);
+    p.start_turn(&turn(10, chat, 5), &question(11, "And then?"), &no_keys()).unwrap();
+    let deleted = p.delete_chat(chat).unwrap();
+    p.restore_chat(chat, &deleted.before).unwrap();
+    let back = p.load_chat(chat).unwrap();
+    assert_eq!(back.turns.last().map(|t| t.turn.outcome), Some(TurnOutcome::Interrupted));
+    assert_eq!(p.start_turn(&turn(20, chat, 9), &question(21, "Again"), &no_keys()).unwrap(), 3);
+    p.close().unwrap();
+}
+
 #[test]
 fn bringing_a_conversation_back_is_refused_when_listed_forged_its_label_taken_or_the_commit_lacks_it() {
     let env = Env::new("restore-refused");
@@ -629,7 +682,7 @@ fn bringing_a_conversation_back_is_refused_when_listed_forged_its_label_taken_or
     p.delete_chat(id(30)).unwrap();
     p.restore_chat(gone, &deleted.before).unwrap();
     let n = commits(&p).len();
-    assert!(refused(p.restore_chat(gone, &deleted.before)), "listed already");
+    assert!(matches!(p.restore_chat(gone, &deleted.before), Err(Error::ChatListed { .. })), "listed already");
     nothing_written(&p, n);
     // A conversation not there is not deleted, and nothing is committed for it.
     assert!(matches!(p.delete_chat(id(99)), Err(Error::ChatMissing { .. })));

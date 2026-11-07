@@ -7749,6 +7749,17 @@ fn the_bin_asks_first_and_undo_on_the_toast_brings_the_conversation_back_whole()
 fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_closes() {
     let (mut h, rig, chats) = chat_history(ThemeKind::Light);
     let row = rect_of(&h, "workspace.chat.history.0");
+    // With the canvas holding the keys, the menu's keys never reach it.
+    h.state_mut().canvas.focused = true;
+    let selected = h.state().session.as_ref().unwrap().view().selection.clone();
+    let revision = h.state().session.as_ref().unwrap().revision();
+    right_click(&mut h, row.center());
+    for k in [egui::Key::ArrowDown, egui::Key::ArrowUp, egui::Key::Backspace] {
+        key(&mut h, k, egui::Modifiers::NONE);
+    }
+    let session = h.state().session.as_ref().unwrap();
+    assert_eq!((session.revision(), &session.view().selection), (revision, &selected), "the canvas took none of the menu's keys");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     right_click(&mut h, row.center());
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.history.menu.open") && painted_has(&h, "Delete conversation"), "{:?}", painted(&h));
     let at = rect_of(&h, "workspace.chat.history.menu.delete").center();
@@ -7763,6 +7774,11 @@ fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_cl
         (egui::Key::F10, egui::Modifiers::SHIFT, true),
     ] {
         focus_on(&mut h, "workspace.chat.history.0");
+        point_at(&mut h, egui::pos2(10.0, 600.0));
+        key(&mut h, egui::Key::Tab, egui::Modifiers::SHIFT);
+        key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        assert_eq!(focused(&h).as_deref(), Some("workspace.chat.history.0"));
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.history.0.delete"), "the bin shows on the row the keyboard is on");
         key(&mut h, k, m);
         h.run();
         if menu {
@@ -7807,6 +7823,13 @@ fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_cl
     }
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast"), "held while the pointer is on it");
     point_at(&mut h, egui::pos2(10.0, 600.0));
+    // So does the keyboard on Undo.
+    focus_on(&mut h, "workspace.chat.toast.undo");
+    for _ in 0..6 {
+        later(&mut h, &rig, 5);
+    }
+    assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast"), "held while the keyboard is on Undo");
+    h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.toast.undo")));
     later(&mut h, &rig, 7);
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.toast") && forgotten(&rig).is_empty(), "still within its eight seconds");
     later(&mut h, &rig, 2);
@@ -7880,7 +7903,9 @@ fn the_open_conversation_stops_first_and_gives_way_to_the_next_one() {
 
 /// Undo pressed before the deletion finished runs once it has, and keeps the folder; a deletion
 /// whose toast is still up when its project closes, or when Archforge quits, lets its folder go
-/// then (AR-217).
+/// then; one still waiting for the project then hands its answer to the host, which lets the
+/// folder go only once deleted, and an Undo still waiting keeps it once the conversation is back
+/// (AR-217).
 #[test]
 fn undo_before_the_deletion_finished_runs_after_it_and_closing_or_quitting_settles_the_folders() {
     let (mut h, rig, chats) = chat_history(ThemeKind::Light);
@@ -7894,7 +7919,7 @@ fn undo_before_the_deletion_finished_runs_after_it_and_closing_or_quitting_settl
     assert!(rig.store.kept(chats[2]).is_some(), "the writer has not taken the deletion yet");
     let at = rect_of(&h, "workspace.chat.toast.undo").center();
     click(&mut h, at);
-    assert!(!rig.store.log.lock().unwrap().contains(&"restore"), "Undo waits for the deletion");
+    assert!(rig.store.kept(chats[2]).is_some(), "the writer has taken neither yet");
     rig.store.release();
     h.run();
     h.run();
@@ -7923,6 +7948,28 @@ fn undo_before_the_deletion_finished_runs_after_it_and_closing_or_quitting_settl
     click(&mut h, at);
     h.state_mut().before_exit();
     assert_eq!(forgotten(&rig), [chats[4].to_string()], "quitting settles it");
+    // Quitting while a deletion, and another one's Undo, wait for the writer: the host takes
+    // their answers; the deleted one's folder goes, the one brought back keeps its own.
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    for (row, undo) in [(4, false), (3, true)] {
+        let r = rect_of(&h, &format!("workspace.chat.history.{row}"));
+        point_at(&mut h, r.center());
+        let bin = rect_of(&h, &format!("workspace.chat.history.{row}.delete"));
+        click(&mut h, bin.center());
+        let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+        click(&mut h, at);
+        if undo {
+            let at = rect_of(&h, "workspace.chat.toast.undo").center();
+            click(&mut h, at);
+        }
+    }
+    h.state_mut().before_exit();
+    assert!(forgotten(&rig).is_empty(), "nothing is removed before the project answers");
+    rig.store.release();
+    rig.agents.settle_after();
+    assert_eq!(forgotten(&rig), [chats[4].to_string()], "the deleted one's folder alone");
+    assert!(rig.store.kept(chats[3]).is_some() && rig.store.kept(chats[4]).is_none());
 }
 
 /// When a re-read of the list fails, the rows read before stay and their changes are off, saying

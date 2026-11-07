@@ -10,7 +10,7 @@
 //!
 //! The shell's times are seconds since 1970; the project stores them as RFC 3339 text in UTC.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 
@@ -28,12 +28,18 @@ use archforge_ui_egui::chat_store::{
 pub struct Chats {
     projects: Arc<crate::projects::Projects>,
     agents: Arc<crate::agents::Agents>,
+    /// The commit before each conversation's last deletion, by project, as the writer made it: an
+    /// Undo pressed before its deletion answered restores from it ([`Write::Restore`] without one).
+    deleted: Before,
 }
+
+/// The commits before deletions, read and written on the writer alone.
+type Before = Arc<std::sync::Mutex<std::collections::HashMap<(PathBuf, Uuid), String>>>;
 
 impl Chats {
     /// The store of conversations over `projects`' writer, checking questions with `agents`' keys.
     pub fn new(projects: Arc<crate::projects::Projects>, agents: Arc<crate::agents::Agents>) -> Chats {
-        Chats { projects, agents }
+        Chats { projects, agents, deleted: Before::default() }
     }
 }
 
@@ -247,6 +253,9 @@ fn kind_to(k: ChangeKind) -> project::ChangeKind {
 fn refused(e: project::Error) -> Refusal {
     match e {
         project::Error::HeldKey { name } => Refusal::HeldKey { provider: provider_of_key(&name) },
+        project::Error::ChatListed { .. } => Refusal::Listed,
+        // The panel names the conversation itself: only the reason.
+        project::Error::ChatNotDeleted { why, .. } | project::Error::ChatNotRestored { why, .. } => Refusal::Failed(why),
         e => Refusal::Failed(e.to_string()),
     }
 }
@@ -261,7 +270,7 @@ fn next_origin(listed: &[project::Listed], skip: &[String]) -> String {
 }
 
 /// Runs one write against the open project, on the writer.
-fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer, Refusal> {
+fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before) -> Result<Answer, Refusal> {
     match write {
         Write::Create { chat, title, provider, model, skip, now } => {
             // One past the highest label read and those skipped; a conversation whose row cannot
@@ -346,12 +355,21 @@ fn apply(p: &project::Project, write: Write, created_by: &str) -> Result<Answer,
             Ok(Answer::Done)
         }
         Write::Delete { chat } => {
-            let deleted = p.delete_chat(chat).map_err(refused)?;
-            log::info!("the conversation {chat} ({}) was deleted after commit {}", deleted.origin, deleted.before);
-            Ok(Answer::Deleted { before: deleted.before })
+            let done = p.delete_chat(chat).inspect_err(|e| log::warn!("the conversation {chat} was not deleted: {e}")).map_err(refused)?;
+            log::info!("the conversation {chat} ({}) was deleted after commit {}", done.origin, done.before);
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert((p.path().to_path_buf(), chat), done.before.clone());
+            Ok(Answer::Deleted { before: done.before })
         }
         Write::Restore { chat, from } => {
-            let origin = p.restore_chat(chat, &from).map_err(refused)?;
+            let remembered = deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&(p.path().to_path_buf(), chat)).cloned();
+            let Some(from) = from.or(remembered) else {
+                // No deletion of it to undo: listed, or its deletion failed.
+                let listed = p.list_chats().is_ok_and(|l| l.iter().any(|c| c.id == chat));
+                log::warn!("the conversation {chat} was not brought back: no deletion of it was asked here");
+                return Err(if listed { Refusal::Listed } else { Refusal::Failed("no deletion of it was asked in this project".into()) });
+            };
+            let origin =
+                p.restore_chat(chat, &from).inspect_err(|e| log::warn!("the conversation {chat} was not brought back: {e}")).map_err(refused)?;
             log::info!("the conversation {chat} ({origin}) was brought back from commit {from}");
             Ok(Answer::Done)
         }
@@ -446,15 +464,18 @@ impl ChatStore for Chats {
     /// first, on the agents host's thread, and reaches the writer only once it passed.
     fn write(&self, project: &Path, write: Write) -> Receiver<Result<Answer, Refusal>> {
         let Some(text) = typed(&write).map(str::to_string) else {
-            return write_now(&self.projects, project, write);
+            return write_now(&self.projects, project, write, &self.deleted);
         };
         let (tx, rx) = channel();
         let projects = self.projects.clone();
+        let deleted = self.deleted.clone();
         let path = project.to_path_buf();
         let checked = self.agents.check_keys(text);
         let started = std::thread::Builder::new().name("archforge-chat-keys".into()).spawn(move || {
             let answer = match checked.recv() {
-                Ok(Ok(None)) => write_now(&projects, &path, write).recv().unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into()))),
+                Ok(Ok(None)) => {
+                    write_now(&projects, &path, write, &deleted).recv().unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into())))
+                }
                 Ok(Ok(Some(provider))) => Err(Refusal::HeldKey { provider }),
                 Ok(Err(why)) => Err(Refusal::Failed(why)),
                 Err(_) => Err(Refusal::Failed("the keys could not be checked".into())),
@@ -471,11 +492,12 @@ impl ChatStore for Chats {
 }
 
 /// Sends `write` to the writer for the project at `project`; a project no longer open refuses it.
-fn write_now(projects: &crate::projects::Projects, project: &Path, write: Write) -> Receiver<Result<Answer, Refusal>> {
+fn write_now(projects: &crate::projects::Projects, project: &Path, write: Write, deleted: &Before) -> Receiver<Result<Answer, Refusal>> {
+    let deleted = deleted.clone();
     let created_by = projects.created_by().to_string();
     let shown = project.display().to_string();
     projects.on_writer_open(project, move |p| match p {
-        Some(p) => apply(p, write, &created_by),
+        Some(p) => apply(p, write, &created_by, &deleted),
         None => Err(Refusal::Failed(format!("{shown} is no longer open"))),
     })
 }

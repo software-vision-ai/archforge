@@ -305,6 +305,8 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
 /// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
 fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
     if ui.memory(|m| m.focused().is_some())
+        || shell.chat_panel.row_menu.is_some()
+        || shell.chat_panel.ask.is_some()
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
         || shell.generate.is_some()

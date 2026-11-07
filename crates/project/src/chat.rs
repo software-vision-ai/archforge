@@ -1389,7 +1389,11 @@ impl Project {
         if !self.chat_commit(&mut tx, &format!("{origin}: deleted")).map_err(|e| not_deleted(e.to_string()))? {
             return Err(not_deleted("the deletion changed no table".into()));
         }
-        tx.commit().map_err(sql("cannot finish deleting the conversation"))?;
+        // Dolt's commit has ended the transaction with the rows in it: it is done, and what the
+        // closing statement says only goes to the log.
+        if let Err(e) = tx.commit() {
+            log::warn!("the deletion of {origin} in {} was committed; closing its transaction said: {e}", self.path().display());
+        }
         // Its turns stay in the session's ledger: Don't save passes a turn without a change link,
         // and puts a restored one back as any other.
         Ok(Deleted { origin, before })
@@ -1397,27 +1401,40 @@ impl Project {
 
     /// Brings a deleted conversation back (AR-217, owner decision): every one of its rows in the
     /// seven tables as the commit `from` held them, written in one transaction that ends in one chat
-    /// commit (`Chat N: restored`), all or nothing. `from` must be a commit of this project's
-    /// history that holds the conversation, as [`Project::delete_chat`] gave it. Refused, with
-    /// nothing written, when the conversation is listed already, `from` is not such a commit,
-    /// another conversation has taken its label since, or the project holds as many conversations
-    /// as it may. Gives its label.
+    /// commit (`Chat N: restored`), all or nothing; a turn it held still running (a question that
+    /// reached the project as it was deleted) comes back interrupted. `from` must be a commit the
+    /// project's branch descends from that holds the conversation, as [`Project::delete_chat`]
+    /// gave it. What of the conversations waits is committed first ("Conversations kept"), so the
+    /// restoring commit holds this conversation alone. Refused, with nothing written, when the
+    /// conversation is listed already ([`Error::ChatListed`]), `from` is not such a commit, another
+    /// conversation has taken its label since, or the project holds as many conversations as it
+    /// may. Gives its label.
     pub fn restore_chat(&self, chat: Uuid, from: &str) -> Result<String, Error> {
         let refuse = |why: String| Error::ChatNotRestored { id: chat.to_string(), why };
         if !is_commit(from) {
             return Err(refuse(format!("{:?} is not a commit of the project's saved history", from.chars().take(40).collect::<String>())));
         }
         let mut c = self.chat_connection(|| refuse("the project holds no conversations".into()))?;
-        let known: Option<mysql::Row> =
-            c.exec_first("SELECT 1 FROM `dolt_log` WHERE `commit_hash` = ?", (from,)).map_err(sql("cannot read the project's history"))?;
-        if known.is_none() {
+        // One of the branch's own commits: the merge base of it and the branch is itself. A hash
+        // Dolt does not know is an error here, so a refusal.
+        let base: Option<mysql::Row> = c
+            .exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (from,))
+            .map_err(|_| refuse(format!("{from} is not a commit of the project's saved history")))?;
+        let base = base.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok);
+        if base.as_deref() != Some(from) {
             return Err(refuse(format!("{from} is not a commit of the project's saved history")));
         }
+        let listed: Option<mysql::Row> =
+            c.exec_first("SELECT 1 FROM `chat` WHERE `id` = ?", (id_value(chat),)).map_err(sql("cannot read the conversations"))?;
+        if listed.is_some() {
+            return Err(Error::ChatListed { id: chat.to_string() });
+        }
+        self.chat_commit(&mut c, "Conversations kept").map_err(|e| refuse(e.to_string()))?;
         let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
         let listed: Option<mysql::Row> =
             tx.exec_first("SELECT 1 FROM `chat` WHERE `id` = ?", (id_value(chat),)).map_err(sql("cannot read the conversations"))?;
         if listed.is_some() {
-            return Err(refuse("it is in the conversation list already".into()));
+            return Err(Error::ChatListed { id: chat.to_string() });
         }
         // `from` is checked to be 32 letters and digits of a commit hash, so it is safe in the text.
         let then: Option<mysql::Row> = tx
@@ -1444,7 +1461,8 @@ impl Project {
                 "chat" => "`id` = ?".to_string(),
                 "chat_turn" | "chat_message" => "`chat` = ?".to_string(),
                 "chat_tool_call" | "chat_anchor" => format!("`message` IN (SELECT `id` FROM `chat_message` AS OF '{from}' WHERE `chat` = ?)"),
-                _ => format!("`turn` IN (SELECT `id` FROM `chat_turn` AS OF '{from}' WHERE `chat` = ?)"),
+                "chat_change" | "chat_change_element" => format!("`turn` IN (SELECT `id` FROM `chat_turn` AS OF '{from}' WHERE `chat` = ?)"),
+                other => return Err(refuse(format!("Archforge does not know how the table {other} holds a conversation"))),
             };
             tx.exec_drop(
                 format!("INSERT INTO `{0}` ({columns}) SELECT {columns} FROM `{0}` AS OF '{from}' WHERE {rows}", def.name),
@@ -1452,11 +1470,19 @@ impl Project {
             )
             .map_err(|e| refuse(format!("its rows of {} cannot be written back: {e}", def.name)))?;
         }
+        tx.exec_drop(
+            "UPDATE `chat_turn` SET `outcome` = 'interrupted', `ended_at` = `started_at` WHERE `chat` = ? AND `outcome` = 'running'",
+            (id_value(chat),),
+        )
+        .map_err(sql("cannot mark the turns left running"))?;
         // A failed commit drops the transaction, which rolls every row back.
         if !self.chat_commit(&mut tx, &format!("{origin}: restored")).map_err(|e| refuse(e.to_string()))? {
             return Err(refuse("no row was written back".into()));
         }
-        tx.commit().map_err(sql("cannot finish bringing the conversation back"))?;
+        // Dolt's commit has ended the transaction with the rows in it: it is done.
+        if let Err(e) = tx.commit() {
+            log::warn!("{origin} was brought back in {}; closing its transaction said: {e}", self.path().display());
+        }
         Ok(origin)
     }
 

@@ -425,12 +425,14 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   starting on Cancel, Escape cancelling with the focus back on the row. Delete stops a running
   turn first (its reply so far kept), opens the next row's conversation when it was open (else the
   one above, else a new one, B2), and moves the focus to the next row, else the one above, else
-  New conversation. The toast at the centre's foot, clear of the minimap, in ink on the surface
-  colour: "{title} deleted · still in the project's saved history" with Undo (the hover accent),
+  New conversation. The toast at the centre's foot, clear of the minimap, surface-coloured text on
+  an ink fill: "{title} deleted · still in the project's saved history" with Undo (the hover accent),
   eight seconds after the pointer and the focus last left it; Undo is in the tab order. Undo
   brings it back in its place, with the keyboard on its row. ⌘Z never deletes or restores one.
   The private folder of its program goes when the toast closes without Undo, when Undo fails,
-  when its project closes or when Archforge quits. While the list cannot be read again (chat
+  when its project closes or when Archforge quits; a copy of the project open beside it showing
+  that conversation keeps it. While a history row's menu or the confirmation is open, the canvas
+  and ⌘Z take no keys. While the list cannot be read again (chat
   writing off) the rows read before stay, and the bin and the item are disabled saying "The
   conversations in this project cannot be changed: {why}"; an unreadable row's bin says "This
   conversation cannot be read". Failures say "This conversation could not be deleted: {why}" or

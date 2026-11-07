@@ -75,9 +75,10 @@ pub(crate) fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     // behind it.
     if shell.chat_panel.focus == Some(crate::chat_delete::FocusTo::New) {
         let to = crate::widgets::egui_id(if shown { "workspace.chat.new" } else { "workspace.chat.history" });
-        if ui.memory(|m| m.has_focus(to)) {
+        if ui.memory(|m| m.has_focus(to)) || shell.chat_panel.focus_tries == 0 {
             shell.chat_panel.focus = None;
         } else {
+            shell.chat_panel.focus_tries -= 1;
             ui.memory_mut(|m| m.request_focus(to));
         }
     }
@@ -1009,9 +1010,10 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                         // Asked until it holds: a dialog closing this frame still keeps the
                         // keyboard from the rows.
                         if wanted {
-                            if resp.has_focus() {
+                            if resp.has_focus() || panel.focus_tries == 0 {
                                 focus_found = true;
                             } else {
+                                panel.focus_tries -= 1;
                                 resp.request_focus();
                             }
                         }
@@ -1069,6 +1071,8 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                         }
                     }
                     Err(why) => {
+                        // A row that cannot be read takes no keyboard: the request is given up.
+                        focus_found |= wanted;
                         let words = fmt(&tr("This conversation cannot be read: {why}"), &[("why", why)]);
                         let text_w = if pointed { width - 20.0 - 34.0 } else { width - 20.0 };
                         crate::settings::wrapped(&paint, r.min + vec2(10.0, 8.0), text_w, &words, types::CAPTION, p.text_muted, 2);
