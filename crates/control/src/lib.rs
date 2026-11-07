@@ -415,7 +415,8 @@ impl Shared {
 
 /// A listening control channel and its threads. Dropping it closes it: no request runs after,
 /// every token it granted is revoked and its file removed, held connections are answered
-/// [`REVOKED`] and closed, and its threads are joined.
+/// [`REVOKED`] and closed, and its threads are joined (the accepting one when it can be woken;
+/// [`Server::listener_watch`] tells whether its listener closed).
 pub struct Server {
     port: u16,
     shared: Arc<Shared>,
@@ -423,6 +424,21 @@ pub struct Server {
     settings: PathBuf,
     /// Set by the accepting thread once its listener is closed.
     listener_closed: Arc<AtomicBool>,
+}
+
+/// The accepting thread's listener: dropped, it closes the socket first and then says it closed,
+/// on the loop's return and on an unwind alike.
+struct ListenerGuard {
+    listener: Option<TcpListener>,
+    closed: Arc<AtomicBool>,
+}
+
+impl Drop for ListenerGuard {
+    /// Closes the listening socket, then says so.
+    fn drop(&mut self) {
+        drop(self.listener.take());
+        self.closed.store(true, Ordering::SeqCst);
+    }
 }
 
 /// Whether a server's listening socket is closed, read after the server itself is gone: set by its
@@ -535,10 +551,12 @@ impl Server {
         let accept = std::thread::Builder::new()
             .name("control-accept".into())
             .spawn(move || {
-                accept_loop(&listener, &accepting, &handler);
-                // The socket closes here, and only then is it said closed.
-                drop(listener);
-                closed.store(true, Ordering::SeqCst);
+                // The socket closes as the guard drops, however the loop ends, and only then is it
+                // said closed.
+                let guard = ListenerGuard { listener: Some(listener), closed };
+                if let Some(listener) = &guard.listener {
+                    accept_loop(listener, &accepting, &handler);
+                }
             })
             .map_err(|e| format!("the control channel could not start: {e}"))?;
         Ok(Server { port, shared, accept: Some(accept), settings: settings.to_path_buf(), listener_closed })
@@ -547,7 +565,7 @@ impl Server {
 
 impl Drop for Server {
     /// Closes the opening: the gate shuts, every grant is revoked (files removed by identity), the
-    /// accepting thread is woken and joined, held connections are shut for reading so each answers
+    /// accepting thread is woken and joined (when it can be woken), held connections are shut for reading so each answers
     /// [`REVOKED`] and ends, and their threads are joined; one that has not ended within a second
     /// has its socket shut both ways first, so every wait is bounded.
     fn drop(&mut self) {

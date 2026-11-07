@@ -334,13 +334,15 @@ fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_liste
     // The grant outlives nothing: the close revokes it.
     assert!(grant.live());
     let started = Instant::now();
+    let watch = server.listener_watch();
     drop(server);
     assert!(!grant.live(), "a grant of a closed opening opens nothing");
     assert!(started.elapsed() < Duration::from_secs(3), "the close is bounded: {:?}", started.elapsed());
     let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], REVOKED, "{last}");
     assert!(!path.exists(), "the file went with the close");
-    assert!(!listens(port), "nothing listens after the close");
+    // Judged by the server's own listener, never by the freed port, which anything may bind (AR-229).
+    assert!(watch.closed(), "nothing listens after the close");
     drop(grant);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -503,10 +505,10 @@ fn a_linked_executable_finds_the_command_line_tool_beside_the_file_it_links_to()
 
 /// A server's listener watch says closed only once its listening socket is closed (AR-229): open
 /// while it serves, closed once it is dropped, whatever binds the freed port since; and never
-/// closed for a server left running, so a check by it fails on a listener really left open.
+/// closed for a server still running, so a check by it fails on a listener really left open.
 #[test]
 fn a_listener_watch_says_closed_only_once_the_socket_is_closed() {
-    let (server, _dir) = echo("listener-watch");
+    let (server, dir) = echo("listener-watch");
     let port = server.port();
     let watch = server.listener_watch();
     assert!(!watch.closed(), "open while it serves");
@@ -515,9 +517,14 @@ fn a_listener_watch_says_closed_only_once_the_socket_is_closed() {
     // Another socket on the freed port changes nothing.
     let squatter = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
     assert!(watch.closed(), "still closed with the port taken again: {:?}", squatter.as_ref().map(|_| ()));
-    // A server never closed: its watch never says closed.
-    let (left, _dir) = echo("listener-watch-left");
+    // A server still open, its port free of anything else: its watch does not say closed, so a
+    // check by it fails on a listener left open.
+    let (left, left_dir) = echo("listener-watch-left");
     let left_watch = left.listener_watch();
-    std::mem::forget(left);
-    assert!(!left_watch.closed(), "a listener left open is never said closed");
+    assert!(listens(left.port()) && !left_watch.closed(), "a listener left open is never said closed");
+    drop(left);
+    assert!(left_watch.closed());
+    drop(squatter);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&left_dir);
 }

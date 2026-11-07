@@ -110,7 +110,8 @@ pub struct Access {
     /// Let Chat use the model.
     on: bool,
     server: Option<Server>,
-    /// The listening socket of the last opening closed, watched after it is gone.
+    /// The listening socket of the last opening closed, watched after it is gone (only the last
+    /// one: a close replaces it).
     closed: Option<ListenerWatch>,
 }
 
