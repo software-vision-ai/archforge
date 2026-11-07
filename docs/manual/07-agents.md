@@ -227,8 +227,9 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
   browser. Under the code the card shows the sign-in page's address the codex program sent; select
   it, or copy it with the icon beside it, and open it on that device. Archforge shows the address,
   and **Open sign-in page** opens it in this computer's browser, only when it is on
-  `https://auth.openai.com/`; for any other the card says *Not an address Archforge opens*. The codex program keeps that sign-in itself: in the system's secure store, or, where
-  there is none, in its own files in Archforge's private settings folder. A sign-in not finished
+  `https://auth.openai.com/`; for any other the card says *Not an address Archforge opens*. The
+  codex program keeps that sign-in itself: in the system's secure store, or, where there is none,
+  in its own files in Archforge's private settings folder. A sign-in not finished
   within 15 minutes, or one the codex program cancels, says so under it; sign in again. **Sign
   out** ends it.
   With **API key**, save the key as for Claude.

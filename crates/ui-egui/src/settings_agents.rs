@@ -929,7 +929,8 @@ fn sign_in_address(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, x: f32, mi
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .desired_width(width);
-    let resp = ui.put(at, edit);
+    // A field too narrow for the whole address cuts it without a mark: the pointer shows it whole.
+    let resp = ui.put(at, edit).on_hover_text(url);
     let _ = resp.clone().accessible_name(tr("Sign-in page address"));
     widgets::record_visible(ui, &mut shell.registry, id, "text", at);
     let copy = Rect::from_center_size(pos2(at.right() + 18.0, mid), Vec2::splat(24.0));
