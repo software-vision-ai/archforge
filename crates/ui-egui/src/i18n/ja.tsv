@@ -279,6 +279,7 @@ str		Agent access off	エージェントのアクセスはオフ
 str		Conversations	会話
 str		New conversation	新しい会話
 str		Stop the reply first	先に返答を停止してください
+str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	「チャットにモデルの使用を許可」がオフのため、何も送信されません。設定 ▸ AI エージェントでオンにしてください。
 str		No agent set up yet	エージェントはまだ設定されていません
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	チャットは、このコンピュータにインストールされたプログラムで動く Claude または Codex で回答します。設定でどちらかを選び、チャットにモデルの使用を許可してください。
 str		Configure agent	エージェントを設定
@@ -333,6 +334,9 @@ str		No key saved	キーが保存されていません
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} には API キーまたはサインインが必要です。設定で追加してから、もう一度送信してください。
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent} のサインインの有効期限が切れました。設定でもう一度サインインしてから、送信し直してください。
 str		No answer	回答がありません
+str		Not sent	未送信
+str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。入力欄に戻してあり、スイッチをオンにすれば送信できます。
+str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。スイッチをオンにしてから、もう一度送信してください。
 str		{agent} stopped before answering.	{agent} は回答する前に停止しました。
 str		This turn changed the model, so it is not sent again; ask again to go on.	このターンはモデルを変更したため、再送信されません。続けるにはもう一度質問してください。
 str		Open Settings	設定を開く
