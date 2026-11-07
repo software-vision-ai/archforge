@@ -140,15 +140,17 @@ impl Workspace {
     /// dropping the guard. A process that ends without dropping it (a crash) leaves it behind; nothing
     /// sweeps such folders.
     pub(crate) fn scratch(&self, prefix: &str) -> Result<ScratchFolder, AgentError> {
-        self.scratch_with(prefix, &[HOME, CONFIG, WORK, TMP])
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        self.scratch_with(prefix, &[HOME, CONFIG, WORK, TMP], &NEXT)
     }
 
-    /// [`Workspace::scratch`] with the inner folders `inner`, so a test can make filling it fail.
-    fn scratch_with(&self, prefix: &str, inner: &[&str]) -> Result<ScratchFolder, AgentError> {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
+    /// [`Workspace::scratch`] with the inner folders `inner` and the name counter `next`, so a test
+    /// can make filling it fail and know which names come next without sharing the process's
+    /// counter with other tests.
+    fn scratch_with(&self, prefix: &str, inner: &[&str], next: &AtomicU64) -> Result<ScratchFolder, AgentError> {
         let mut last = None;
         for _ in 0..SCRATCH_TRIES {
-            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let n = next.fetch_add(1, Ordering::Relaxed);
             let name = format!("{prefix}-{}-{n}", std::process::id());
             let path = self.root.join(&name);
             match sys::make_private_folder(&path, false) {
@@ -467,34 +469,39 @@ mod tests {
     fn scratch_folders_claim_a_free_name_and_go_when_dropped() {
         let base = scratch_dir("scratch");
         let ws = Workspace::open(&base.join("ws")).unwrap();
-        // The next names the counter hands out, taken already by someone else.
-        let probe = ws.scratch("probe").unwrap();
-        let taken_from = probe.path.file_name().unwrap().to_string_lossy().rsplit('-').next().unwrap().parse::<u64>().unwrap() + 1;
-        drop(probe);
-        for n in taken_from..taken_from + 3 {
+        let all = [HOME, CONFIG, WORK, TMP];
+        // A counter of this test's own, so no other test moves the names it hands out.
+        let counter = AtomicU64::new(0);
+        // The first names the counter hands out, taken already by someone else.
+        for n in 0..3 {
             let taken = ws.root().join(format!("codex-{}-{n}", std::process::id()));
             std::fs::create_dir(&taken).unwrap();
             std::fs::write(taken.join("theirs"), b"x").unwrap();
         }
-        let folder = ws.scratch("codex").unwrap();
+        let folder = ws.scratch_with("codex", &all, &counter).unwrap();
         let path = folder.path.clone();
-        assert!(path.ends_with(format!("codex-{}-{}", std::process::id(), taken_from + 3)), "{}", path.display());
+        assert!(path.ends_with(format!("codex-{}-3", std::process::id())), "{}", path.display());
         let inner = folder.folder().unwrap();
         for dir in [inner.home(), inner.config(), inner.work(), inner.tmp()] {
             assert!(dir.is_dir() && dir.starts_with(&path));
         }
         drop(folder);
         assert!(!path.exists(), "the folder went with its guard");
-        for n in taken_from..taken_from + 3 {
+        for n in 0..3 {
             assert!(ws.root().join(format!("codex-{}-{n}", std::process::id())).join("theirs").is_file(), "a taken name was touched");
         }
-        // Every name taken: refused after the tries.
-        let next = taken_from + 4;
-        for n in next..next + u64::from(SCRATCH_TRIES) {
+        // Every name taken: refused after the tries, and the next name is never looked at.
+        let full = AtomicU64::new(0);
+        for n in 0..u64::from(SCRATCH_TRIES) {
             std::fs::create_dir(ws.root().join(format!("full-{}-{n}", std::process::id()))).unwrap();
         }
-        let error = ws.scratch("full").unwrap_err();
+        let error = ws.scratch_with("full", &all, &full).unwrap_err();
         assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("no free name")), "{error:?}");
+        assert_eq!(full.load(Ordering::Relaxed), u64::from(SCRATCH_TRIES), "exactly the tries");
+        // The process's own counter still makes folders.
+        let made = ws.scratch("codex").unwrap();
+        assert!(made.folder().is_some());
+        drop(made);
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -505,7 +512,7 @@ mod tests {
         let base = scratch_dir("scratch-fail");
         let ws = Workspace::open(&base.join("ws")).unwrap();
         std::fs::create_dir(ws.root().join("neighbour")).unwrap();
-        let error = ws.scratch_with("codex", &["home", "missing/inner"]).unwrap_err();
+        let error = ws.scratch_with("codex", &["home", "missing/inner"], &AtomicU64::new(0)).unwrap_err();
         assert!(matches!(error, AgentError::Folder { .. }), "{error:?}");
         assert_eq!(names(ws.root()), vec!["neighbour".to_owned()]);
         std::fs::remove_dir_all(&base).unwrap();
