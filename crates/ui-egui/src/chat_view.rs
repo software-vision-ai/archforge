@@ -895,9 +895,7 @@ fn failure_card(
         // Let Chat use the model went off while its question was being kept (AR-221).
         FailureKind::Other if turn.unsent => {
             let body = if turn.returned {
-                tr(
-                    "Let Chat use the model was turned off, so this question was not sent. It is back in the box below, ready to send once the switch is on.",
-                )
+                tr("Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.")
             } else {
                 tr("Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.")
             };
