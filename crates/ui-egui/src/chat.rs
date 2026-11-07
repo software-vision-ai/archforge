@@ -64,6 +64,9 @@ pub enum ChatRefusal {
     NotAvailable,
     /// Archforge is closing.
     Closing,
+    /// The conversation's private folder is being removed, after a deletion of it (AR-218): it
+    /// starts once that is done, so asking again shortly after succeeds.
+    Forgetting,
     /// Anything else, in the host's words.
     Refused { why: String },
 }
@@ -78,6 +81,7 @@ impl std::fmt::Display for ChatRefusal {
             ChatRefusal::TooMany { most } => write!(f, "at most {most} conversations run at once"),
             ChatRefusal::NotAvailable => f.write_str("conversations are not available here"),
             ChatRefusal::Closing => f.write_str("Archforge is closing"),
+            ChatRefusal::Forgetting => f.write_str("the conversation's private folder is being removed; it starts once that is done"),
             ChatRefusal::Refused { why } => f.write_str(why),
         }
     }

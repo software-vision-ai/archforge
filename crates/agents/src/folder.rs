@@ -113,6 +113,33 @@ impl Workspace {
         Ok(ConversationFolder { id: id.clone(), home: path.join(HOME), config: path.join(CONFIG), work: path.join(WORK), tmp: path.join(TMP), path })
     }
 
+    /// Moves the private folder of conversation `id` aside, to the name of conversation `to`, in one
+    /// rename inside the workspace, so it is gone from `id` at once and can be removed later with
+    /// [`Workspace::remove_conversation`] of `to` while `id` is free again. Says whether there was
+    /// one. A folder that is not a real folder of this user is refused and left in place, and so is
+    /// any folder when `to` is taken.
+    pub fn move_conversation(&self, id: &ConversationId, to: &ConversationId) -> Result<bool, AgentError> {
+        let path = self.root.join(format!("{CONVERSATION_PREFIX}{id}"));
+        let target = self.root.join(format!("{CONVERSATION_PREFIX}{to}"));
+        match std::fs::symlink_metadata(&path) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(AgentError::Folder { path, problem: format!("cannot be read: {e}") }),
+            Ok(meta) => {
+                if let Some(problem) = sys::private_folder_problem(&meta, self.uid) {
+                    return Err(AgentError::Folder { path, problem: format!("{problem}, so it is not moved") });
+                }
+            }
+        }
+        // A rename onto an empty folder would replace it silently: the name must be free.
+        match std::fs::symlink_metadata(&target) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Ok(_) => return Err(AgentError::Folder { path: target, problem: "is taken, so nothing is moved there".into() }),
+            Err(e) => return Err(AgentError::Folder { path: target, problem: format!("cannot be read: {e}") }),
+        }
+        std::fs::rename(&path, &target).map_err(|e| AgentError::Folder { path, problem: format!("cannot be moved: {e}") })?;
+        Ok(true)
+    }
+
     /// Removes the private folder of conversation `id` and everything in it, and says whether there
     /// was one. A folder that is not a real folder of this user is refused and left in place. Stop
     /// the conversation's runtime first: a runtime still running may write into it again.

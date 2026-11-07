@@ -358,7 +358,9 @@ or brings back a conversation: it stays the model's undo.
 <!-- picture: workspace-chat-deleted light | The conversation deleted: the list without it, and the note with Undo -->
 
 When the note has gone (or the project closes, or Archforge quits), the agent program's own working
-files for that conversation are removed from your computer. When the project's conversations
+files for that conversation are removed from your computer. If a copy of the project open beside
+it asks that conversation something in those few seconds, the answer is *No answer*; its files are
+then kept, and **Send again** a moment later goes through. When the project's conversations
 cannot be changed (for example because one of its tables is damaged), the bin and the menu item
 are greyed out and say why.
 

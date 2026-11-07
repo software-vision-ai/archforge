@@ -955,9 +955,9 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     for chat in [&listed, &unanswered, &deleted] {
         made(chat);
     }
-    let kept_listed = host.agents.forget_after(&listed, answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored);
-    let kept_silent = host.agents.forget_after(&unanswered, answer(None), FolderGoes::IfDeleted);
-    let removed = host.agents.forget_after(&deleted, answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted);
+    let kept_listed = host.agents.forget_after(&listed, vec![(answer(Some(Err(Refusal::Listed))), FolderGoes::IfNotRestored)]);
+    let kept_silent = host.agents.forget_after(&unanswered, vec![(answer(None), FolderGoes::IfDeleted)]);
+    let removed = host.agents.forget_after(&deleted, vec![(answer(Some(Ok(Answer::Deleted { before: "0".repeat(32) }))), FolderGoes::IfDeleted)]);
     assert_eq!(
         (kept_listed.recv_timeout(WAIT).unwrap(), kept_silent.recv_timeout(WAIT).unwrap(), removed.recv_timeout(WAIT).unwrap()),
         (Ok(false), Ok(false), Ok(true))
@@ -969,4 +969,155 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     assert!(!folder(&last).exists(), "removed by the time quitting returned");
     assert_eq!(at_quit.try_recv(), Ok(Ok(true)));
     assert!(folder(&kept).is_dir(), "a conversation not deleted keeps its folder at quit");
+}
+
+/// A channel already holding the project's answer `a`, or closed without one.
+fn project_answer(
+    a: Option<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>>,
+) -> Receiver<Result<archforge_ui_egui::chat_store::Answer, archforge_ui_egui::chat_store::Refusal>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if let Some(a) = a {
+        tx.send(a).unwrap();
+    }
+    rx
+}
+
+/// Makes the private folder of the conversation `chat` in `host`'s workspace, as its program would,
+/// and gives its path.
+fn conversation_folder(host: &Host, chat: &str) -> PathBuf {
+    let id = archforge_agents::ConversationId::new(chat).unwrap();
+    archforge_agents::Workspace::open(&host.settings.join("agents")).unwrap().conversation(&id).unwrap();
+    host.settings.join("agents").join(format!("conversation-{chat}"))
+}
+
+/// An Undo pressed before its deletion answered, its project then closed (AR-218): the host gets
+/// both answers and removes the folder only when the deletion said deleted and the restoration did
+/// not bring the conversation back. A deletion that failed, or whose answer never came, keeps the
+/// folder even when the restoration after it failed too (as when the project could not read its
+/// list), and so does a restoration that brought it back or found it listed.
+#[test]
+fn an_undo_before_its_deletion_answered_lets_the_folder_go_only_once_deleted_and_not_brought_back() {
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let host = Host::new("forget-both", Setup::default());
+    let deleted = || Some(Ok(Answer::Deleted { before: "0".repeat(32) }));
+    let failed = |why: &str| Some(Err(Refusal::Failed(why.into())));
+    let cases = [
+        ("deletion failed, restoration failed", failed("the project is busy"), failed("no deletion of it was asked in this project"), false),
+        ("deletion unanswered, restoration failed", None, failed("no deletion of it was asked in this project"), false),
+        ("deleted, brought back", deleted(), Some(Ok(Answer::Done)), false),
+        ("deleted, listed", deleted(), Some(Err(Refusal::Listed)), false),
+        ("deleted, restoration failed", deleted(), failed("another conversation has its label now"), true),
+    ];
+    for (n, (case, deletion, restoration, goes)) in cases.into_iter().enumerate() {
+        let chat = id(40 + n as u64);
+        let folder = conversation_folder(&host, &chat);
+        let answers = vec![(project_answer(deletion), FolderGoes::IfDeleted), (project_answer(restoration), FolderGoes::IfNotRestored)];
+        let answer = host.agents.forget_after(&chat, answers).recv_timeout(WAIT).unwrap();
+        assert_eq!(answer, Ok(goes), "{case}");
+        assert_eq!(!folder.exists(), goes, "{case}: the folder {}", if goes { "goes" } else { "stays" });
+    }
+}
+
+/// While a conversation's private folder is being removed (AR-218), the host refuses to start it,
+/// saying so in a refusal of its own, both while the removal waits for the project's answers and
+/// while it waits for the conversation's program to end; other conversations start meanwhile. A
+/// start refused meanwhile keeps the folder, as a panel (a copy of the project, say) shows the
+/// conversation and will start it again; without one, the folder goes when the answers let it.
+/// Once the removal is done, whatever it decided, the conversation starts again.
+#[test]
+fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_once_it_is_done() {
+    use archforge_ui_egui::ai_agents::FolderGoes;
+    use archforge_ui_egui::chat_store::{Answer, Refusal};
+    let host = Host::new("forget-start", Setup::default());
+    let deleted = || Ok(Answer::Deleted { before: "0".repeat(32) });
+    let cases = [
+        ("deleted, a start refused meanwhile", deleted(), true, false),
+        ("deleted, no start asked", deleted(), false, true),
+        ("not deleted, a start refused meanwhile", Err(Refusal::Failed("the project is busy".into())), true, false),
+    ];
+    for (n, (case, answer, ask, goes)) in cases.into_iter().enumerate() {
+        let chat = id(50 + n as u64);
+        let folder = conversation_folder(&host, &chat);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let removal = host.agents.forget_after(&chat, vec![(rx, FolderGoes::IfDeleted)]);
+        if ask {
+            assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "{case}: refused while the removal waits");
+            assert_eq!(host.agents.start(claude(&chat, "Chat 1", false)), Err(ChatRefusal::Forgetting), "{case}: and asked again");
+        }
+        assert!(folder.is_dir(), "{case}: its folder is untouched meanwhile");
+        let other = id(60 + n as u64);
+        host.agents.start(claude(&other, "Chat 2", false)).unwrap();
+        tx.send(answer).unwrap();
+        assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(goes), "{case}");
+        assert_eq!(!folder.exists(), goes, "{case}");
+        let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
+            .collect();
+        assert!(aside.is_empty(), "{case}: nothing is left moved aside: {aside:?}");
+        host.agents.start(claude(&chat, "Chat 1", false)).unwrap();
+        for c in [&chat, &other] {
+            host.agents.end(c).unwrap();
+            host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if chat.as_str() == c.as_str()));
+        }
+    }
+    // A program slow to end: the removal waits for it, and a start while it ends is refused too
+    // and keeps the folder. The program says when its input closed, that is when it was asked to
+    // end, then takes a second.
+    let slow = Host::new(
+        "forget-slow",
+        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1\n", ..Setup::default() },
+    );
+    slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
+    let folder = slow.settings.join("agents").join(format!("conversation-{CHAT}"));
+    let deadline = Instant::now() + WAIT;
+    while !folder.is_dir() {
+        assert!(Instant::now() < deadline, "its program made its folder");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let removal = slow.agents.forget(CHAT);
+    let closed = || std::fs::read_to_string(slow.base.join("claude.stdin")).unwrap_or_default().contains("closed");
+    let deadline = Instant::now() + WAIT;
+    while !closed() {
+        assert!(Instant::now() < deadline, "the removal asked its program to end");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(slow.agents.start(claude(CHAT, "Chat 1", false)), Err(ChatRefusal::Forgetting), "refused while its program ends");
+    assert_eq!(removal.recv_timeout(WAIT).unwrap(), Ok(false), "kept for the start refused");
+    assert!(folder.is_dir());
+    slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
+}
+
+/// A start that comes as a removal has decided and its folder goes (CodeRabbit, AR-218): the
+/// removal decided and moved the folder aside in one step under the lock a start takes, so that
+/// start is taken, and makes a new folder, rather than refused while the folder it would keep is
+/// removed. The start is put in that exact place by the host's test hook, on the removal's thread,
+/// with no timing involved; nothing is left moved aside.
+#[test]
+fn a_start_as_the_folder_goes_is_taken_and_never_refused_while_its_folder_is_lost() {
+    let host = Host::new("forget-between", Setup::default());
+    let chat = id(70);
+    let folder = conversation_folder(&host, &chat);
+    std::fs::write(folder.join("config").join("transcript.jsonl"), "{}").unwrap();
+    let seen: Arc<Mutex<Option<Result<(), ChatRefusal>>>> = Arc::new(Mutex::new(None));
+    {
+        let (inner, seen, chat) = (host.agents.inner.clone(), seen.clone(), chat.clone());
+        *host.agents.inner.as_folder_goes.lock().unwrap() = Some(Box::new(move || {
+            *seen.lock().unwrap() = Some(super::sessions::start(&inner, claude(&chat, "Chat 1", false)));
+        }));
+    }
+    assert_eq!(host.agents.forget(&chat).recv_timeout(WAIT).unwrap(), Ok(true), "the deleted conversation's folder went");
+    let started = seen.lock().unwrap().take().expect("a start was put as the folder goes");
+    assert_eq!(started, Ok(()), "taken, not refused while its folder is removed");
+    assert!(!folder.join("config").join("transcript.jsonl").exists(), "the old folder's contents went with it");
+    let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
+        .collect();
+    assert!(aside.is_empty(), "nothing is left moved aside: {aside:?}");
+    host.agents.end(&chat).unwrap();
+    host.until("its end", |e| matches!(e, HostEvent::Chat { chat: c, event: ChatEvent::Ended { .. }, .. } if *c == chat));
 }
