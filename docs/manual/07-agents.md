@@ -165,9 +165,9 @@ Codex's **Model** stays **The program's default**: the codex program chooses.
 
 Archforge keeps API keys in the system's secure store and nowhere else: never in the project, never
 in the preferences, never in a file of its own. A key reaches the agent's program only while Chat
-runs it: Claude's through the program's environment, Codex's through its input, never on a command
-line. A ChatGPT sign-in is kept by the codex program itself; Archforge reads only who is signed
-in, never the sign-in's tokens.
+runs it or sends the test message: Claude's through the program's environment, Codex's through its
+input, never on a command line. A ChatGPT sign-in is kept by the codex program itself; Archforge
+reads only who is signed in, never the sign-in's tokens.
 
 | System | API keys (Claude, Codex) | Codex's sign-in with ChatGPT |
 |---|---|---|
@@ -222,13 +222,13 @@ Click it, or reach it with Tab and press Enter, to open **Settings ▸ AI Agents
 ### Checking it works
 
 - **Check connection** is free and runs on your computer. It looks again for each program, asking
-  it only for its version, and reads which API keys are saved; Archforge sends nothing. The badge on each card sums up
-  its agent, with Codex's sign-in as it was last read.
+  it only for its version, and reads which API keys are saved; Archforge sends nothing. The badge
+  on each card sums up its agent, with Codex's sign-in as it was last read.
 - **Send test message** sends one message to the default agent's provider: *Reply with the single
   word OK.* It uses a little of your plan or API credit. It runs without access to your model, in a
-  folder of its own that is removed afterwards. The
-  page then says *Claude answered the test message* (or Codex), or why it failed. A key the provider
-  refuses is marked on its card: replace it, or remove it.
+  folder of its own that is removed afterwards. The page then says *Claude answered the test
+  message* (or Codex), or why it failed. A key the provider refuses is marked on its card: replace
+  it, or remove it.
 
 <!-- picture: settings-ai-agents-refused light | Settings, AI Agents: Claude's key refused by the test message, and Codex's sign-in expired -->
 
@@ -278,9 +278,10 @@ project that cannot be written.
   runs you can type the next question, but Enter, the badge, the switch, New conversation and the
   history wait: *Stop the reply first*.
 - **The badge** in the box names the agent and its model, *Claude · Sonnet*, then the exact version
-  once the agent names it, *Claude · Sonnet 4.5*. Choose another model there; before the first
-  question you can choose the other agent too. A conversation keeps its agent and model: changing
-  the default in Settings never switches a conversation already started.
+  once the agent names it, *Claude · Sonnet 4.5*. Choose another of Claude's models there (Codex has
+  only the program's default); before the first question you can choose the other agent too. A
+  conversation keeps its agent and model: changing the default in Settings never switches a
+  conversation already started.
 
 Links in a reply open only after you confirm them, and only web addresses; pictures show their
 description, and HTML shows as text.
@@ -313,10 +314,16 @@ Chat runs the agent's program on your computer, and the program sends to its pro
 for Claude, OpenAI for Codex):
 
 - **your question**, as you typed it;
-- **the chips you kept**, as one line after the question, *[Context the person chose: …]*: each
-  chip's name, kind and id;
+- **the chips you kept**, as one line after the question, *[Context the person chose: …]*: the
+  name, kind and id of the project, the open diagram and each selected element, up to 50 in all;
+  past that the line only counts the rest (*and 120 more selected*). To have the agent told every
+  element by name, select fewer at a time;
 - **the conversation so far**: this conversation's earlier questions and replies, as the agent's
-  program kept them in Archforge's private folder on this computer (see below);
+  program kept them in Archforge's private folder on this computer (see below). Claude keeps the
+  whole conversation. Codex keeps only its text messages, not what the agent read or changed, and
+  at most 4,096 messages and 4 MiB of text, the oldest going first; whenever its program starts
+  again (the conversation reopened, **Allow changes** or the model switched), Codex gets only that
+  copy, so repeat details it may have lost;
 - **what the agent reads in the model**, exactly as Archforge answers it: the elements it looks at
   with their names, descriptions, attributes and other details, the diagrams, the skills, and what
   is open and selected, with the project's name and its folder's location on your computer;
@@ -329,7 +336,7 @@ detail, such as *Read diagram Commerce* with *8 classes*. They are a summary, no
 went: looking up Archforge's commands makes no row, and past 2,000 calls in one turn the rest are
 counted in a single line.
 
-Chat sends nothing else:
+Beyond that, Chat sends nothing of yours:
 
 - **No files from your computer.** The programs run with their own tools switched off (no shell,
   no file reading, no web search), in a folder of their own. They reach only the open
@@ -337,14 +344,15 @@ Chat sends nothing else:
 - **No other project's model**, and **no other conversation**: each conversation has its own
   folder.
 - **No saved API key in a question**: a question that holds one is neither sent nor kept.
+- **The programs' own traffic** is not yours, and Archforge switches off what it can of it:
+  Claude's updates, telemetry, error reports and feature-flag fetches, and Codex's analytics, web
+  search and plugins.
 
 The conversation so far comes from the program's own copy in Archforge's private settings folder,
 not from the project. Open the project on another computer, or after that copy is gone, and the
 panel still shows the earlier messages, but the agent does not get them: Codex answers without
 them, and Claude cannot pick the conversation up, so the question ends with *No answer*. Start a
 new conversation there, and repeat what the agent needs to know.
-- **Nothing for the programs' own use**: Archforge switches off Claude's updates, telemetry and
-  error reports, and Codex's analytics.
 
 Opening Settings, **Check connection** and the history send nothing. **Send test message** sends
 only its one sentence.
@@ -359,7 +367,7 @@ A card in the conversation says what went wrong and what to do.
 |---|---|---|
 | *Rate limited* | The provider asks Chat to wait: a limit of your plan or account is reached. | Wait a while, then **Send again**. |
 | *Connection lost* | The network went away. | Check your connection, then **Send again**. If it went before the agent answered anything and the box is empty, your question is back in the box, ready to send, edited or not. |
-| *Model not available* | The model is not offered to your key. | Choose another model in the badge, then **Send again**. Or check the key in Settings. |
+| *Model not available* | The model is not offered to your key or plan, or is busy. | Claude: choose another model in the badge, then **Send again**. Codex offers only the program's default, so there is nothing to choose: **Open Settings** to check the key or sign-in, or ask again later. |
 | *Program not found* | The agent's program is not on this computer. | **Open Settings**, install it, choose **Look again**, then ask again. |
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
@@ -430,9 +438,10 @@ Archforge's log:
   removal failed.
 
 Then the files stay in the `agents` folder of Archforge's private settings folder, as a
-`conversation-…` folder, until you remove it; nothing removes it later. When the project's conversations
-cannot be changed (for example because one of its tables is damaged), the bin and the menu item
-are greyed out and say why.
+`conversation-…` folder, until you remove it; nothing removes it later.
+
+When the project's conversations cannot be changed (for example because one of its tables is
+damaged), the bin and the menu item are greyed out and say why.
 
 ## Connecting an agent
 
@@ -461,9 +470,9 @@ none of this for Chat. Agent access works on macOS and Linux for now.
    with the path of step 2 (`target/debug/archforge-cli` from the source). The repository's
    `.mcp.json` registers the source build for agents that read it.
 
-**File ▸ Generate…** says whether agent access is on. The port listens only on your own computer, and a
-token made for each start, kept in a file only you can read in Archforge's settings folder, guards
-it. Without `--control`, nothing listens.
+**File ▸ Generate…** says whether agent access is on. The port listens only on your own computer,
+and a token made for each start, kept in a file only you can read in Archforge's settings folder,
+guards it. Without `--control`, nothing listens.
 
 For an agent short of context, `archforge-cli mcp --bridge 47000 --compact` lists a few general
 tools and `search_tools` in place of one tool per command. To try agent access by hand,
@@ -514,10 +523,10 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   as one undo step, `undo`, `redo`, `inspect_document` to see what is open and selected, and
   `save_project`, which saves as ⌘S does.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
-  resources `archforge://project` (the open project, its revision, the selection), `archforge://skills`,
-  `archforge://element/{id}` (a schema with its tables, a table, a diagram, or a class, an
-  interface, an enumeration with its literals, a data type, a primitive type or an association
-  class, each with its attributes, operations and description) and
+  resources `archforge://project` (the open project, its revision, the selection),
+  `archforge://skills`, `archforge://element/{id}` (a schema with its tables, a table, a diagram, or
+  a class, an interface, an enumeration with its literals, a data type, a primitive type or an
+  association class, each with its attributes, operations and description) and
   `archforge://skills/effective/{id}` (the skills that apply to an element, optionally for one
   trigger: modelling, drawing, naming or export). Other elements are read through the tools:
   packages with `uml_package_list`, a class's relationships with `uml_relationship_list` and an
@@ -569,15 +578,15 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   association (`classes`, in order; a class given twice has two ends), each end named after its
   class and starting at `*`. On a class diagram it is a diamond: `diagram_place` with the
   association's id, then `diagram_connect` from the diamond's node to each class's node with the
-  end's id (or `diagram_connect_all`), all in one `batch` for one undo step. `uml_association_set_end`
-  sets an end by its place among the ends; its role must differ from every other end's, and an
-  n-ary end takes no aggregation. `uml_association_add_end`, `uml_association_reconnect_end` and
-  `uml_association_remove_end` add, move and remove an end; a leg is drawn or kept only on the
-  diagrams that show both the diamond and the end's class, and what the ends subset or redefine
-  that a move or removal makes invalid is dropped and listed.
-  Removing one of three ends is refused unless `binary` is true, which makes it an ordinary
-  association between the two classes left. `uml_relationship_list` gives it with the kind
-  `n-ary association` and all its ends.
+  end's id (or `diagram_connect_all`), all in one `batch` for one undo step.
+  `uml_association_set_end` sets an end by its place among the ends; its role must differ from every
+  other end's, and an n-ary end takes no aggregation. `uml_association_add_end`,
+  `uml_association_reconnect_end` and `uml_association_remove_end` add, move and remove an end; a
+  leg is drawn or kept only on the diagrams that show both the diamond and the end's class, and what
+  the ends subset or redefine that a move or removal makes invalid is dropped and listed. Removing
+  one of three ends is refused unless `binary` is true, which makes it an ordinary association
+  between the two classes left. `uml_relationship_list` gives it with the kind `n-ary association`
+  and all its ends.
 - **Generalization sets**: `uml_generalization_set_add` groups generalizations to one general
   class, complete or incomplete and disjoint or overlapping; `uml_generalization_set_set` renames
   it, changes either flag, and adds or takes out members; `uml_generalization_set_place` puts its

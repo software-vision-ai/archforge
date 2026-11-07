@@ -206,15 +206,17 @@ This shows Check connection needs no network; it does not by itself prove that n
 
 ### F2. An expired sign-in
 
-1. With Codex signed in with ChatGPT (R3), end the sign-in from the ChatGPT account: use its
-   security settings to sign out of all devices.
-2. In Archforge, ask a question in a Codex conversation. **Expect:** the card *Sign-in expired* with
-   **Open Settings**.
+1. F1 left the Codex card on **API key**. Switch it to **Sign in with ChatGPT** (sign in as in
+   R3 if it says *Not signed in*), set **Default agent** to Codex, start a new conversation
+   (**New conversation**, +) and ask one question. **Expect:** a reply: this conversation runs on
+   the ChatGPT sign-in.
+2. End the sign-in from the ChatGPT account: use its security settings to sign out of all
+   devices. Then ask again in the conversation of step 1. **Expect:** the card *Sign-in expired*
+   with **Open Settings**.
 3. Choose **Open Settings**. **Expect:** the Codex card may still say *Signed in as*: Archforge
    reads the sign-in once a run. Record what it says.
 4. Quit Archforge, run `wait_quit`, start it again, and open **Settings ▸ AI Agents**.
-   **Expect:** *Sign-in expired*,
-   with **Sign in again…**.
+   **Expect:** *Sign-in expired*, with **Sign in again…**.
 5. Sign in again, then ask again. **Expect:** a reply.
 
 If the account offers no way to end the sign-in, leave Archforge signed in for a few days and try
@@ -235,7 +237,7 @@ step 2 then. Record what the card says in either case: *Key refused* or *No answ
    network on and choose **Send again**. **Expect:** a reply; the question shows once.
 5. Repeat 1 to 4 in R2's Codex conversation. **Expect:** the same cards, naming Codex.
 6. With the network off, choose **Send test message**. **Expect:** *The test message to … failed:*
-   with a reason; nothing else changes.
+   with a reason; nothing else changes. Turn the network back on before going on.
 
 ### F4. A program removed
 
@@ -403,9 +405,10 @@ else echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; the searches for the re
    is in its environment, by design); an npm install runs it through Node.js, so its program may
    show as `node`. Never an `archforge-cli` or `archforge` id. A key line for a process `ours` does
    not list is a program of your own holding the same key: note it, it is outside the pass.
-3. Repeat step 2 with Codex on **API key**. **Expect:** `ours` lists a `codex app-server` line and
-   an `archforge-cli mcp` line, then no key line for either: the key goes over the program's
-   input. Step 2's line for Claude shows
+3. Set **Default agent** to Codex with its card on **API key**, start a new conversation
+   (**New conversation**, +; the Claude conversation of step 2 stays Claude's) and repeat step 2
+   there. **Expect:** `ours` lists a `codex app-server` line and an `archforge-cli mcp` line, then
+   no key line for either: the key goes over the program's input. Step 2's line for Claude shows
    that the search finds a key where one is.
 4. With Codex the default agent and still on **API key**, start a new conversation and paste the
    first question K1 printed, the one ending in `$MARKER_CODEX_KEY`'s value, whole and unchanged.
