@@ -1154,13 +1154,15 @@ pub(crate) fn frame(shell: &mut Shell) {
     track_undo(shell);
 }
 
-/// The events of the conversation shown.
+/// The events of the conversation shown; a Codex turn that ends with an expired sign-in reads
+/// Codex's sign-in again.
 fn events_shown(shell: &mut Shell) {
     let Some(key) = shell.chat_panel.chat.as_ref().map(|c| c.key.clone()) else { return };
     let events = crate::chat::take_events(shell, &key);
     if events.is_empty() {
         return;
     }
+    let expired = shell.chat_panel.chat.as_ref().is_some_and(|c| c.provider == Provider::Codex) && events.iter().any(sign_in_expired);
     let out = Out::shown(shell);
     let mut session = shell.session.take();
     let mut restart_with: Option<String> = None;
@@ -1181,6 +1183,18 @@ fn events_shown(shell: &mut Shell) {
     }
     if let Some(text) = restart_with {
         deliver(shell, text);
+    }
+    // The "Sign-in expired" card: Codex's sign-in is read again, so Settings shows it (AR-222).
+    if expired {
+        crate::ai_agents::reread_account(shell);
+    }
+}
+
+/// Whether `event` ends a turn or the conversation with an expired sign-in.
+fn sign_in_expired(event: &ChatEvent) -> bool {
+    match event {
+        ChatEvent::TurnEnded(TurnEnd::Failed(f)) | ChatEvent::Ended { failure: Some(f) } => f.kind == FailureKind::SignInExpired,
+        _ => false,
     }
 }
 

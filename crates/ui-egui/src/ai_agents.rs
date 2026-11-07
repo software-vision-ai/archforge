@@ -590,6 +590,9 @@ pub struct State {
     /// Codex's account is wanted (the AI Agents page shows, or a Codex conversation started): it is
     /// read once the look has found the program.
     account_wanted: bool,
+    /// Codex's account is to be read again once the look under way answers, though it was read
+    /// before (Check connection, or a read again asked while the look ran).
+    account_stale: bool,
     /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
     pub outcome: Option<Outcome>,
@@ -699,10 +702,11 @@ pub fn look(shell: &mut crate::Shell) {
     read_keys(shell);
 }
 
-/// Check connection: the local look and Codex's account read, then a badge that sums up each
-/// agent. It sends nothing.
+/// Check connection: the local look and Codex's account read again (once the look has found the
+/// program), then a badge that sums up each agent. It sends nothing.
 pub fn check_connection(shell: &mut crate::Shell) {
     look(shell);
+    reread_account(shell);
     shell.agents.checking = shell.agents.looking.is_some() || shell.agents.keys_reading.is_some();
     if !shell.agents.checking {
         // Nothing to look with: the badge says what is known.
@@ -742,6 +746,23 @@ pub fn need_account(shell: &mut crate::Shell) {
         return;
     }
     shell.agents.account_wanted = true;
+    read_account(shell);
+}
+
+/// Reads Codex's account again, though it was read before (AR-222): Check connection, the AI Agents
+/// page opening, and a Codex conversation's "Sign-in expired" card ask it, so a sign-in that
+/// expired while Archforge runs shows so without a restart. A read under way answers for it; while
+/// the look runs, the look's answer starts it. Never at launch, as reading it starts the codex
+/// program.
+pub fn reread_account(shell: &mut crate::Shell) {
+    shell.agents.account_wanted = true;
+    if shell.agents.reading.is_some() {
+        return;
+    }
+    if shell.agents.looking.is_some() {
+        shell.agents.account_stale = true;
+        return;
+    }
     read_account(shell);
 }
 
@@ -825,6 +846,21 @@ pub fn readiness(shell: &crate::Shell, p: Provider) -> Readiness {
     }
 }
 
+/// The account `read` with the email known before kept on an expired sign-in the codex program
+/// names no one for (it reads an expired sign-in without its email), when the sign-in known before,
+/// signed in or expired, had one.
+fn with_known_email(read: Result<CodexAccount, AccountError>, known: Option<&Result<CodexAccount, AccountError>>) -> Result<CodexAccount, AccountError> {
+    match (read, known) {
+        (Ok(CodexAccount::Expired { email }), Some(Ok(CodexAccount::SignedIn { email: before, .. } | CodexAccount::Expired { email: before })))
+            if email.is_empty() =>
+        {
+            Ok(CodexAccount::Expired { email: before.clone() })
+        }
+        (read, _) => read,
+    }
+}
+
+/// Ends Check connection: the badge sums up each agent as it is now.
 fn finish_check(shell: &mut crate::Shell) {
     shell.agents.checking = false;
     let agents = Provider::ALL.iter().map(|p| (*p, readiness(shell, *p))).collect();
@@ -841,8 +877,10 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                 // The programs only: the store and the keys come from their own read.
                 shell.agents.look.claude = look.claude;
                 shell.agents.look.codex = look.codex;
-                // Codex's account only once it is wanted, never at launch.
-                if shell.agents.account_wanted && shell.agents.codex.is_none() {
+                // Codex's account only once it is wanted, never at launch: the first time, or again
+                // when a read again waited for the look.
+                let stale = std::mem::take(&mut shell.agents.account_stale);
+                if shell.agents.account_wanted && (shell.agents.codex.is_none() || stale) {
                     read_account(shell);
                 }
             }
@@ -890,7 +928,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         match rx.try_recv() {
             Ok(answer) => {
                 shell.agents.reading = None;
-                shell.agents.codex = Some(answer);
+                shell.agents.codex = Some(with_known_email(answer, shell.agents.codex.as_ref()));
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
