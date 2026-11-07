@@ -313,9 +313,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Archforge never touches the system's credential store at launch, so it never asks for access
   to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
   starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
-  needs them, and kept until Look again, Check connection, a save or a removal, or a restart.
-  Codex's account is read the first time the page shows or a Codex conversation starts, never at
-  launch (owner, 2026-11-06), as reading it starts the codex program; a plain launch runs only the
+  needs them, and kept until Look again, Check connection, a save or a removal, or a restart;
+  that keeping is the keys' alone, Codex's account is not kept that way. Codex's account is read
+  when a Codex conversation first starts, and again each time the AI Agents page shows, on Check
+  connection and on a Codex conversation's "Sign-in expired" card (AR-222); never at launch
+  (owner, 2026-11-06), as reading it starts the codex program; a plain launch runs only the
   programs' version look.
   Opening the page sends nothing over the network; those first local reads are all it does. Check connection is free
   and local (the programs, their versions, the keys or sign-in); Send test message carries its

@@ -859,9 +859,9 @@ fn a_failing_conversation_thread_still_gives_its_access_back() {
     }
 }
 
-/// Codex's account is read the first time the AI Agents page shows or a Codex conversation starts,
-/// never at launch: a plain launch starts no `codex app-server` (only the version look), and a
-/// Claude conversation starts none either.
+/// Codex's account is read once the AI Agents page shows (and again on each later showing, AR-222)
+/// or a Codex conversation starts, never at launch: a plain launch starts no `codex app-server`
+/// (only the version look), and a Claude conversation starts none either.
 #[test]
 fn codex_account_is_read_on_first_use_never_at_launch() {
     let host = Host::new("first-use", Setup { codex: CODEX_ACCOUNT, ..Setup::default() });
