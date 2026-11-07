@@ -505,7 +505,7 @@ fn chat_event(event: SessionEvent, access: bool) -> Option<ChatEvent> {
         SessionEvent::MessageDone { text } => ChatEvent::Message { text },
         SessionEvent::ToolStarted { id, tool, input, .. } => ChatEvent::ToolStarted { id, tool, input },
         SessionEvent::ToolFinished { id, ok, summary, .. } => ChatEvent::ToolFinished { id, ok, summary },
-        SessionEvent::Retrying { attempt, .. } => ChatEvent::Retrying { attempt },
+        SessionEvent::Retrying { attempt, max_attempts, .. } => ChatEvent::Retrying { attempt, max: max_attempts },
         SessionEvent::TurnFinished { outcome, .. } => ChatEvent::TurnEnded(match outcome {
             TurnOutcome::Completed => TurnEnd::Completed,
             TurnOutcome::Stopped => TurnEnd::Stopped,

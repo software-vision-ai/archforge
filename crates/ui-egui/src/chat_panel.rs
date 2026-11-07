@@ -213,6 +213,9 @@ pub struct Turn {
     pub rows_dropped: u64,
     /// The rendered streaming text.
     pub laid: Option<Laid>,
+    /// While it runs, the agent's program tries the provider again (AR-224): its attempt and the
+    /// most it makes, as it said them; gone once anything comes from the provider.
+    pub retrying: Option<(u32, Option<u32>)>,
     /// Its question was kept but never sent, as Let Chat use the model went off first: its card
     /// says so and offers Send again. Not kept in the project, which keeps the turn as failed.
     pub unsent: bool,
@@ -751,6 +754,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                 t.unsent = false;
                 t.stopping = false;
                 t.stopping_since = None;
+                t.retrying = None;
                 t.cut = false;
                 t.streaming = None;
                 t.laid = None;
@@ -776,6 +780,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                     cut: false,
                     rows_dropped: 0,
                     laid: None,
+                    retrying: None,
                     unsent: false,
                 });
                 number
@@ -866,7 +871,8 @@ fn not_sent(shell: &mut Shell) {
 }
 
 /// Ends the running turn of `chat` as `state`: the reply so far is kept (cut off unless it
-/// completed), the turn's changes are taken from its undo group, and the turn is written.
+/// completed), the turn's changes are taken from its undo group, a retry it showed is over, and the
+/// turn is written.
 pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::Session>, out: &Out, state: TurnState) -> bool {
     let origin = chat.origin.clone().unwrap_or_default();
     let Some(turn) = chat.turns.last_mut().filter(|t| t.state == TurnState::Running) else { return false };
@@ -914,6 +920,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
     turn.state = state;
     turn.stopping = false;
     turn.stopping_since = None;
+    turn.retrying = None;
     let turn_id = turn.id;
     if let Some((text, complete, shortened)) = reply
         && let Some(id) = out.id()
@@ -1138,6 +1145,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
             cut: false,
             rows_dropped: 0,
             laid: None,
+            retrying: None,
             unsent: false,
         });
     }
@@ -1304,8 +1312,17 @@ fn events_parked(shell: &mut Shell, i: usize) {
     }
 }
 
-/// Takes one event of `chat`; gives the text to send when the program ended to start again.
+/// Takes one event of `chat`; gives the text to send when the program ended to start again. A
+/// retry the program reports is kept on the running turn until anything else comes of it.
 fn event(chat: &mut Chat, e: ChatEvent, session: Option<&mut archforge_notations::Session>, out: &Out) -> Option<String> {
+    if let Some(turn) = chat.turns.last_mut().filter(|t| t.state == TurnState::Running) {
+        match &e {
+            ChatEvent::Retrying { attempt, max } => turn.retrying = Some((*attempt, *max)),
+            // The program starting says nothing of the provider.
+            ChatEvent::Started { .. } => {}
+            _ => turn.retrying = None,
+        }
+    }
     match e {
         ChatEvent::Started { model, .. } => {
             if !model.trim().is_empty() && model != "default" {
