@@ -1165,8 +1165,16 @@ mod tests {
             answer(chats.write(&path, Write::Restore { chat: id(9), from: None })),
             Err(Refusal::Failed("no deletion of it was asked in this project".into()))
         );
+        // A commit kept from an earlier deletion never serves a later one: deleted for good, a
+        // second deletion of it fails, and an Undo of that brings nothing back.
+        assert!(matches!(answer(chats.write(&path, Write::Delete { chat: other })), Ok(Answer::Deleted { .. })));
+        assert!(matches!(answer(chats.write(&path, Write::Delete { chat: other })), Err(Refusal::Failed(_))));
+        assert_eq!(
+            answer(chats.write(&path, Write::Restore { chat: other, from: None })),
+            Err(Refusal::Failed("no deletion of it was asked in this project".into()))
+        );
         let listed = chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
-        assert_eq!(listed.len(), 2);
+        assert_eq!(listed.len(), 1);
         let stored = chats.load(&path, chat).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!((stored.row.origin.as_str(), stored.turns[0].outcome), ("Chat 1", Outcome::Stopped));
         assert!(matches!(&stored.messages[1].body, StoredBody::Reply { text, complete: false, .. } if text == "So far"), "the reply so far");

@@ -1408,7 +1408,8 @@ impl Project {
     /// restoring commit holds this conversation alone. Refused, with nothing written, when the
     /// conversation is listed already ([`Error::ChatListed`]), `from` is not such a commit, another
     /// conversation has taken its label since, or the project holds as many conversations as it
-    /// may. Gives its label.
+    /// may; nothing of it is written then (the commit of what waited may have been made). Gives
+    /// its label.
     pub fn restore_chat(&self, chat: Uuid, from: &str) -> Result<String, Error> {
         let refuse = |why: String| Error::ChatNotRestored { id: chat.to_string(), why };
         if !is_commit(from) {
@@ -1417,9 +1418,10 @@ impl Project {
         let mut c = self.chat_connection(|| refuse("the project holds no conversations".into()))?;
         // One of the branch's own commits: the merge base of it and the branch is itself. A hash
         // Dolt does not know is an error here, so a refusal.
-        let base: Option<mysql::Row> = c
-            .exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (from,))
-            .map_err(|_| refuse(format!("{from} is not a commit of the project's saved history")))?;
+        let base: Option<mysql::Row> = c.exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (from,)).map_err(|e| {
+            log::warn!("the commit {from} of {} could not be looked up: {e}", self.path().display());
+            refuse(format!("{from} is not a commit of the project's saved history"))
+        })?;
         let base = base.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok);
         if base.as_deref() != Some(from) {
             return Err(refuse(format!("{from} is not a commit of the project's saved history")));

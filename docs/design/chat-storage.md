@@ -693,13 +693,17 @@ Deleting a conversation from the history, with Undo; no table or column changed.
   project holds 10,000; otherwise it copies every one of its rows of the seven tables `AS OF from`,
   by explicit column lists and a filter named per table, marks a turn it held still running as
   interrupted (a question that reached the project as it was deleted), and commits
-  `Chat N: restored` inside the transaction. Nothing is written when it is refused.
+  `Chat N: restored` inside the transaction. When it is refused, nothing of the conversation is
+  written (the "Conversations kept" commit of what waited may have been made).
 - **The shell.** `Write::Delete` answers `Answer::Deleted { before }`; `Write::Restore` takes it
-  back. Both run on the project's writer in order with the conversation's other writes, so a
-  running turn that the panel ends stopped (its reply so far kept) is written before its
-  deletion. Undo pressed before the deletion's answer sends `Write::Restore` without a commit at
+  back. Neither carries typed text, so both go straight to the project's writer, in order with the
+  writes that do not (a reply, a turn's end): a running turn that the panel ends stopped (its reply
+  so far kept) is written before its deletion. A question carries typed text and waits for its
+  key check before it reaches the writer, so a deletion confirmed while its conversation's
+  question is on its way waits in the panel until the project answered the question. Undo pressed before the deletion's answer sends `Write::Restore` without a commit at
   once: it reaches the writer after the deletion, and the host takes the commit that deletion gave
-  there. `Write::Create` names the labels of deletions still undoable, which a new conversation
+  there; the host forgets that commit at the conversation's next deletion and once it is back.
+  `Write::Create` names the labels of deletions still undoable, which a new conversation
   skips. A refusal because the conversation is listed is `Refusal::Listed`.
 - **The private folder.** `AgentHost::forget` ends the conversation's program if it runs, waits
   for it at most five seconds, then removes `conversation-<id>` alone; a folder whose program has

@@ -197,6 +197,12 @@ pub fn cancel(shell: &mut Shell) {
 /// shows with Undo. The earlier toast closes.
 pub fn confirm(shell: &mut Shell) {
     let Some(ask) = shell.chat_panel.ask.take() else { return };
+    // A question of it on its way to the project (its key check may wait on the system's store)
+    // is let land first, so it never reaches the writer after the deletion, or after an Undo.
+    if shell.chat_panel.chat.as_ref().is_some_and(|c| c.id == ask.chat && c.step.busy()) {
+        shell.chat_panel.delete_after = Some(ask);
+        return;
+    }
     let Some(project) = shell.project.as_ref().map(|p| p.path.clone()) else { return };
     let listed: Vec<Listed> = rows(&shell.chat_panel).to_vec();
     let Some(Ok(row)) = listed.iter().find(|l| l.id == ask.chat).map(|l| l.entry.clone()) else { return };
@@ -210,7 +216,6 @@ pub fn confirm(shell: &mut Shell) {
         // project's writer; a question on its way is dropped, and its program is let go of.
         crate::chat_panel::end_here(shell, TurnState::Stopped);
         if let Some(c) = shell.chat_panel.chat.as_mut() {
-            c.step = crate::chat_panel::Step::Idle;
             c.queued = None;
         }
         crate::chat_panel::retire(shell);
@@ -322,7 +327,7 @@ fn held_elsewhere(shell: &Shell, key: &str) -> bool {
 /// with `after`, once the project's answer lets it go.
 fn forget(shell: &mut Shell, key: &str, after: Option<(Receiver<Result<Answer, Refusal>>, FolderGoes)>) {
     if held_elsewhere(shell, key) {
-        log::info!("the private folder of the conversation {key:?} is kept: a project open here shows that conversation");
+        log::info!("the private folder of the conversation {key:?} is kept as an orphan: a project open here shows that conversation");
         return;
     }
     let Some(host) = shell.services.agents.clone() else { return };
@@ -345,6 +350,11 @@ enum Next {
 /// Once per frame: takes the project's answers to deletions and restorations, closes a toast whose
 /// time is up, and lets the folders of those that are settled go.
 pub(crate) fn frame(shell: &mut Shell) {
+    // A deletion that waited for its conversation's question to land goes on once it has.
+    if shell.chat_panel.delete_after.is_some() && !shell.chat_panel.chat.as_ref().is_some_and(|c| c.step.busy()) {
+        shell.chat_panel.ask = shell.chat_panel.delete_after.take();
+        confirm(shell);
+    }
     let now = clock(shell).now;
     let shown = shell.project.as_ref().map(|p| p.path.clone());
     for d in std::mem::take(&mut shell.chats.deletions) {

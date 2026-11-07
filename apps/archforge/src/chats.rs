@@ -355,6 +355,8 @@ fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before)
             Ok(Answer::Done)
         }
         Write::Delete { chat } => {
+            // A commit kept from an earlier deletion of it never serves this one.
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(p.path().to_path_buf(), chat));
             let done = p.delete_chat(chat).inspect_err(|e| log::warn!("the conversation {chat} was not deleted: {e}")).map_err(refused)?;
             log::info!("the conversation {chat} ({}) was deleted after commit {}", done.origin, done.before);
             deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert((p.path().to_path_buf(), chat), done.before.clone());
@@ -371,6 +373,7 @@ fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before)
             let origin =
                 p.restore_chat(chat, &from).inspect_err(|e| log::warn!("the conversation {chat} was not brought back: {e}")).map_err(refused)?;
             log::info!("the conversation {chat} ({origin}) was brought back from commit {from}");
+            deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(p.path().to_path_buf(), chat));
             Ok(Answer::Done)
         }
     }

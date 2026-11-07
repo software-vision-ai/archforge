@@ -336,6 +336,9 @@ pub struct Panel {
     pub ask: Option<crate::chat_delete::Ask>,
     /// A history row's menu, while it is open.
     pub row_menu: Option<crate::chat_delete::RowMenu>,
+    /// A deletion confirmed while its conversation's question was on its way: it goes on once
+    /// the project has answered the question.
+    pub delete_after: Option<crate::chat_delete::Ask>,
     /// Where the keyboard goes when the history is next drawn, and how many more frames it is
     /// asked for before it is given up.
     pub focus: Option<crate::chat_delete::FocusTo>,

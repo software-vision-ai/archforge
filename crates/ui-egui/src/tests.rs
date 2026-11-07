@@ -7901,6 +7901,39 @@ fn the_open_conversation_stops_first_and_gives_way_to_the_next_one() {
     assert_eq!(focused(&h).as_deref(), Some("workspace.chat.new"));
 }
 
+/// A deletion confirmed while its conversation's question is still on its way to the project waits
+/// for it: the question lands first, its turn ends stopped, then the deletion; Undo then brings
+/// back a conversation with no turn left running (AR-217).
+#[test]
+fn a_deletion_waits_for_a_question_on_its_way() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "A question on its way");
+    assert!(h.state().chat_panel.chat.as_ref().unwrap().step.busy(), "the question waits for the writer");
+    h.state_mut().chat_panel.view = crate::chat_panel::View::History;
+    h.run();
+    let row = rect_of(&h, "workspace.chat.history.0");
+    point_at(&mut h, row.center());
+    let bin = rect_of(&h, "workspace.chat.history.0.delete");
+    click(&mut h, bin.center());
+    let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+    click(&mut h, at);
+    assert!(!rig.store.log.lock().unwrap().contains(&"delete"), "the deletion waits for the question");
+    rig.store.release();
+    h.run();
+    h.run();
+    let log = rig.store.log.lock().unwrap().clone();
+    let at = log.iter().position(|k| *k == "delete").expect("deleted once the question landed");
+    assert_eq!(&log[at - 2..=at], ["ask", "end", "delete"], "{log:?}");
+    let at = rect_of(&h, "workspace.chat.toast.undo").center();
+    click(&mut h, at);
+    h.run();
+    let back = rig.store.kept(chats[0]).unwrap();
+    assert!(back.turns.iter().all(|t| t.outcome != crate::chat_store::Outcome::Running), "no turn left running");
+}
+
 /// Undo pressed before the deletion finished runs once it has, and keeps the folder; a deletion
 /// whose toast is still up when its project closes, or when Archforge quits, lets its folder go
 /// then; one still waiting for the project then hands its answer to the host, which lets the
