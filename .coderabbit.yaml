@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 #
-# CodeRabbit's settings for Archforge. Settings not named here keep the organisation's values.
+# CodeRabbit's settings for Archforge. With inheritance on, settings not named here keep the
+# organisation's values; without it, this file would replace them.
 #
 # A pull request merges only on CodeRabbit's approval. CodeRabbit approves when its review
 # threads are resolved, the latest commit is reviewed and the pre-merge checks pass. A finding
@@ -8,10 +9,13 @@
 # approval back (#211 was approved seven seconds after two "Major" outside-diff findings). The
 # custom check below turns every unresolved finding into a failing pre-merge check, so no
 # approval comes while one is open.
+inheritance: true
 reviews:
   profile: chill
   auto_approvals:
     enabled: true
+    # The author's own @coderabbitai approve or resolve would get around the findings check.
+    allow_author_approval: false
   auto_review:
     # Review every commit; a paused review left #210's last commit unreviewed for half an hour.
     auto_pause_after_reviewed_commits: 0
