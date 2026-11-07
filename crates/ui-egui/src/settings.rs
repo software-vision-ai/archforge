@@ -301,6 +301,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             if resp.clicked() && !chosen {
                 dialog.section = section;
                 dialog.agents.menu = None;
+                crate::settings_agents::shown_again(&mut dialog.agents);
                 // A key typed and not saved does not wait behind another section.
                 crate::settings_agents::forget_drafts(ui.ctx(), &mut dialog.agents);
             }

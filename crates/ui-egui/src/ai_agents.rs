@@ -590,6 +590,16 @@ pub struct State {
     /// Codex's account is wanted (the AI Agents page shows, or a Codex conversation started): it is
     /// read once the look has found the program.
     account_wanted: bool,
+    /// Codex's account is to be read again, though it was read before (AR-222): at once when no look
+    /// and no read runs, else once they have answered.
+    account_stale: bool,
+    /// The email of the last ChatGPT sign-in known in this run: the codex program reads an expired
+    /// sign-in without one.
+    known_email: String,
+    /// A Codex turn ended with an expired sign-in (Codex's own word for it): until a sign-in or a
+    /// sign-out, a read that still says signed in shows it expired, when it names the email known or
+    /// no email was known yet.
+    expired_seen: bool,
     /// Check connection waits for the look, the keys and the account read it started.
     checking: bool,
     pub outcome: Option<Outcome>,
@@ -621,9 +631,10 @@ impl State {
         self.looking.is_some() || self.keys_reading.is_some()
     }
 
-    /// Whether Codex's account is being read, or waits for the look to read it.
+    /// Whether Codex's account is being read, or waits for the look to read it (the first time, or
+    /// again).
     pub fn reading_account(&self) -> bool {
-        self.reading.is_some() || (self.account_wanted && self.codex.is_none() && self.looking.is_some())
+        self.reading.is_some() || (self.account_wanted && (self.codex.is_none() || self.account_stale) && self.looking.is_some())
     }
 
     /// Whether the keys have been read from the store in this run.
@@ -699,10 +710,11 @@ pub fn look(shell: &mut crate::Shell) {
     read_keys(shell);
 }
 
-/// Check connection: the local look and Codex's account read, then a badge that sums up each
-/// agent. It sends nothing.
+/// Check connection: the local look and Codex's account read again (once the look has found the
+/// program), then a badge that sums up each agent. It sends nothing.
 pub fn check_connection(shell: &mut crate::Shell) {
     look(shell);
+    reread_account(shell);
     shell.agents.checking = shell.agents.looking.is_some() || shell.agents.keys_reading.is_some();
     if !shell.agents.checking {
         // Nothing to look with: the badge says what is known.
@@ -745,6 +757,72 @@ pub fn need_account(shell: &mut crate::Shell) {
     read_account(shell);
 }
 
+/// Reads Codex's account again, though it was read before (AR-222): Check connection, the AI Agents
+/// page opening, and a Codex conversation's "Sign-in expired" card ask it, so a sign-in that
+/// expired while Archforge runs shows so without a restart. A read under way answers for it; while
+/// the look runs, the look's answer starts it. Never at launch, as reading it starts the codex
+/// program.
+pub fn reread_account(shell: &mut crate::Shell) {
+    shell.agents.account_wanted = true;
+    shell.agents.account_stale = true;
+    read_when_idle(shell);
+}
+
+/// A Codex conversation's turn ended with an expired sign-in (its "Sign-in expired" card): Codex's
+/// account shows expired at once, with the email known, and is read again (AR-222). Until a
+/// sign-in or a sign-out, a read that still says signed in as that email shows it expired, as the
+/// codex program may read a sign-in it cannot refresh without trying to.
+pub fn sign_in_expired(shell: &mut crate::Shell) {
+    shell.agents.expired_seen = true;
+    if let Some(Ok(CodexAccount::SignedIn { email, .. })) = &shell.agents.codex {
+        shell.agents.codex = Some(Ok(CodexAccount::Expired { email: email.clone() }));
+    }
+    reread_account(shell);
+}
+
+/// Starts the read again that was asked, once neither the look nor a read runs: a read already
+/// under way may have started before the sign-in changed, so it is read once more after it.
+fn read_when_idle(shell: &mut crate::Shell) {
+    if !shell.agents.account_stale || shell.agents.looking.is_some() || shell.agents.reading.is_some() {
+        return;
+    }
+    shell.agents.account_stale = false;
+    read_account(shell);
+}
+
+/// Keeps `account` as Codex's, as the window shows it: an expired sign-in the codex program names
+/// no one for keeps the email known, and one still read as signed in after a turn found it expired
+/// shows expired, as that email or, when no email was known yet, as the first one read; another
+/// account read as signed in clears what the conversation found. Remembers the email; a sign-out
+/// forgets it.
+fn take_account(shell: &mut crate::Shell, account: Result<CodexAccount, AccountError>) {
+    let a = &mut shell.agents;
+    let account = match account {
+        Ok(CodexAccount::Expired { email }) if email.is_empty() && !a.known_email.is_empty() => {
+            Ok(CodexAccount::Expired { email: a.known_email.clone() })
+        }
+        Ok(CodexAccount::SignedIn { email, .. }) if a.expired_seen && !email.is_empty() && (a.known_email.is_empty() || email == a.known_email) => {
+            Ok(CodexAccount::Expired { email })
+        }
+        other => other,
+    };
+    match &account {
+        Ok(CodexAccount::SignedIn { email, .. } | CodexAccount::Expired { email }) if !email.is_empty() => {
+            // Another account read as signed in is not the one a conversation found expired.
+            if matches!(&account, Ok(CodexAccount::SignedIn { .. })) && !a.known_email.is_empty() && *email != a.known_email {
+                a.expired_seen = false;
+            }
+            a.known_email = email.clone();
+        }
+        Ok(CodexAccount::NotSignedIn) => {
+            a.known_email.clear();
+            a.expired_seen = false;
+        }
+        _ => {}
+    }
+    a.codex = Some(account);
+}
+
 /// Send test message: one short message to the default agent's provider.
 pub fn send_test(shell: &mut crate::Shell) {
     let Some(accounts) = host(shell) else { return };
@@ -780,6 +858,18 @@ pub fn sign_out(shell: &mut crate::Shell) {
     let Some(accounts) = host(shell) else { return };
     shell.agents.login_error = None;
     shell.agents.logout = Some(accounts.codex_logout());
+}
+
+/// Keeps the account a sign-in or a sign-out just made: a read of the account that began before it
+/// is dropped unanswered, so its older answer never undoes it, and a read again asked before is
+/// done with. A Check connection that waited only for that read ends now, with the new account.
+fn account_changed(shell: &mut crate::Shell, account: CodexAccount) {
+    shell.agents.reading = None;
+    shell.agents.account_stale = false;
+    take_account(shell, Ok(account));
+    if shell.agents.checking && shell.agents.looking.is_none() && shell.agents.keys_reading.is_none() {
+        finish_check(shell);
+    }
 }
 
 /// Starts reading Codex's account once the look found the program, unless a read runs already.
@@ -825,6 +915,7 @@ pub fn readiness(shell: &crate::Shell, p: Provider) -> Readiness {
     }
 }
 
+/// Ends Check connection: the badge sums up each agent as it is now.
 fn finish_check(shell: &mut crate::Shell) {
     shell.agents.checking = false;
     let agents = Provider::ALL.iter().map(|p| (*p, readiness(shell, *p))).collect();
@@ -832,7 +923,8 @@ fn finish_check(shell: &mut crate::Shell) {
 }
 
 /// Takes in what the host has answered; once per frame. A sign-in's page opens in the browser
-/// through `ctx` when it is the codex program's sign-in host.
+/// through `ctx` when it is the codex program's sign-in host; a sign-in or a sign-out done drops an
+/// account read that began before it.
 pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
     if let Some(rx) = &shell.agents.looking {
         match rx.try_recv() {
@@ -841,15 +933,18 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                 // The programs only: the store and the keys come from their own read.
                 shell.agents.look.claude = look.claude;
                 shell.agents.look.codex = look.codex;
-                // Codex's account only once it is wanted, never at launch.
+                // Codex's account only once it is wanted, never at launch: the first time, or again
+                // when a read again waited for the look.
                 if shell.agents.account_wanted && shell.agents.codex.is_none() {
-                    read_account(shell);
+                    shell.agents.account_stale = true;
                 }
+                read_when_idle(shell);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
                 shell.agents.looking = None;
                 log::warn!("the look for the agent programs stopped without an answer");
+                read_when_idle(shell);
             }
         }
     }
@@ -890,12 +985,14 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         match rx.try_recv() {
             Ok(answer) => {
                 shell.agents.reading = None;
-                shell.agents.codex = Some(answer);
+                take_account(shell, answer);
+                read_when_idle(shell);
             }
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => {
                 shell.agents.reading = None;
                 shell.agents.codex = Some(Err(AccountError::Failed { detail: tr("The look stopped without an answer") }));
+                read_when_idle(shell);
             }
         }
     }
@@ -972,7 +1069,9 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
                     break;
                 }
                 Ok(LoginEvent::Done(account)) => {
-                    shell.agents.codex = Some(Ok(account));
+                    // A sign-in made now is not the one found expired.
+                    shell.agents.expired_seen = false;
+                    account_changed(shell, account);
                     login_over = true;
                     break;
                 }
@@ -1002,7 +1101,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
         if let Some(answer) = answer {
             shell.agents.logout = None;
             match answer {
-                Ok(()) => shell.agents.codex = Some(Ok(CodexAccount::NotSignedIn)),
+                Ok(()) => account_changed(shell, CodexAccount::NotSignedIn),
                 Err(e) => shell.agents.login_error = Some(e),
             }
         }
@@ -1109,6 +1208,12 @@ pub mod fake {
         /// The conversations a start was refused for while their removal waited: their folders are
         /// kept, as the host keeps them.
         pub wanted: Mutex<Vec<String>>,
+        /// While set, a read of Codex's account is taken but answered only by
+        /// [`Fake::release_account`], with what the account was when it began, as a slow codex
+        /// program would.
+        pub hold_account: std::sync::atomic::AtomicBool,
+        /// The account reads held, each with what it read.
+        pub held_account: Mutex<Vec<(std::sync::mpsc::Sender<Result<CodexAccount, AccountError>>, Result<CodexAccount, AccountError>)>>,
     }
 
     impl Default for Fake {
@@ -1133,6 +1238,8 @@ pub mod fake {
                 forgotten: Mutex::new(Vec::new()),
                 after: Mutex::new(Vec::new()),
                 wanted: Mutex::new(Vec::new()),
+                hold_account: std::sync::atomic::AtomicBool::new(false),
+                held_account: Mutex::new(Vec::new()),
             }
         }
     }
@@ -1262,9 +1369,16 @@ pub mod fake {
             self.calls.test.fetch_add(1, Ordering::Relaxed);
             answered(lock(&self.test).clone())
         }
+        /// Reads the account as set up: at once, or held while [`Fake::hold_account`] is set.
         fn codex_account_read(&self) -> Receiver<Result<CodexAccount, AccountError>> {
             self.calls.account.fetch_add(1, Ordering::Relaxed);
-            answered(lock(&self.account).clone())
+            let account = lock(&self.account).clone();
+            if self.hold_account.load(Ordering::Relaxed) {
+                let (tx, rx) = std::sync::mpsc::channel();
+                lock(&self.held_account).push((tx, account));
+                return rx;
+            }
+            answered(account)
         }
         fn codex_login_start(&self, _way: LoginWay) -> Receiver<LoginEvent> {
             self.calls.login.fetch_add(1, Ordering::Relaxed);
@@ -1327,6 +1441,13 @@ pub mod fake {
         pub fn access(&self, held: bool) -> bool {
             let sink = lock(&self.sink).clone();
             sink.is_some_and(|s| s.send(crate::chat::HostEvent::Access { held }))
+        }
+
+        /// Answers the account reads held so far, with what the account was when each began.
+        pub fn release_account(&self) {
+            for (tx, account) in lock(&self.held_account).drain(..) {
+                let _ = tx.send(account);
+            }
         }
 
         /// Answers the reads of the keys held so far, with what the store held when each began.

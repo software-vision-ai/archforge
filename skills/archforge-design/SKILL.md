@@ -313,9 +313,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Archforge never touches the system's credential store at launch, so it never asks for access
   to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
   starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
-  needs them, and kept until Look again, Check connection, a save or a removal, or a restart.
-  Codex's account is read the first time the page shows or a Codex conversation starts, never at
-  launch (owner, 2026-11-06), as reading it starts the codex program; a plain launch runs only the
+  needs them, and kept until Look again, Check connection, a save or a removal, or a restart;
+  that keeping is the keys' alone, Codex's account is not kept that way. Codex's account is read
+  when a Codex conversation first starts, and again each time the AI Agents page shows, on Check
+  connection and on a Codex conversation's "Sign-in expired" card (AR-222); never at launch
+  (owner, 2026-11-06), as reading it starts the codex program; a plain launch runs only the
   programs' version look.
   Opening the page sends nothing over the network; those first local reads are all it does. Check connection is free
   and local (the programs, their versions, the keys or sign-in); Send test message carries its
@@ -331,7 +333,12 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   "Not an address Archforge opens" in the danger colour (AR-223, decided by UX); Open sign-in page,
   the wait and Cancel) and shows who is signed in with Sign out. A sign-in not
   finished within 15 minutes, or cancelled by the codex program, ends with a line saying so and
-  Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently. On an API key
+  Sign in again (AR-203; the design draws no such state, decided by UX); Cancel ends it silently.
+  Who is signed in is read again each time the page opens, on Check connection and on a Codex
+  conversation's "Sign-in expired" card. It shows expired once the codex program reads it so or a
+  Codex conversation finds it so (that card's word stands until a sign-in or a sign-out); until
+  then it may still say signed in. An expired sign-in the codex program names no one for keeps
+  the email known before, "The ChatGPT sign-in for {email} has expired." (AR-222). On an API key
   the saved key shows as a row (key icon, "ends in" its last four) with Replace and Remove.
 - A missing program shows why, the maker's install command with Copy, Look again (primary) and
   Installation guide; a program newer than tested is accepted with an amber badge, "Not yet

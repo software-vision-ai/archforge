@@ -7309,6 +7309,69 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
     assert_eq!(chat_calls(&rig).1, 1, "Shift+Enter sent nothing");
 }
 
+/// The "Sign-in expired" card of a Codex conversation reads Codex's sign-in again (AR-222), so
+/// Settings shows it expired, with its email, without a restart. In both appearances.
+#[test]
+fn a_codex_sign_in_expired_card_reads_the_sign_in_again() {
+    use crate::ai_agents::{CodexAccount, Provider};
+    use crate::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
+    use std::sync::atomic::Ordering::Relaxed;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        *rig.agents.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        h.state_mut().state.agents.default_agent = Provider::Codex;
+        h.run();
+        ask_in_chat(&mut h, "Hello");
+        assert_eq!(rig.agents.started.lock().unwrap().last().map(|s| s.provider), Some(Provider::Codex));
+        let reads = rig.agents.calls.account.load(Relaxed);
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })));
+        *rig.agents.account.lock().unwrap() = Ok(CodexAccount::Expired { email: String::new() });
+        let expired = ChatFailure { kind: FailureKind::SignInExpired, detail: "x".into(), reset: None };
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(TurnEnd::Failed(expired)));
+        assert!(painted_has(&h, "Sign-in expired"));
+        assert_eq!(rig.agents.calls.account.load(Relaxed), reads + 1, "{theme:?}: the card read the sign-in again");
+        h.run();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "expired, its email kept");
+        // Should the codex program still read it as signed in (it may not try to refresh it), the
+        // card's word stands until a sign-in or a sign-out.
+        *rig.agents.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        crate::ai_agents::reread_account(h.state_mut());
+        h.run();
+        assert_eq!(rig.agents.calls.account.load(Relaxed), reads + 2);
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "still expired");
+    }
+}
+
+/// A parked tab's Codex conversation whose turn ends with an expired sign-in reads Codex's sign-in
+/// again and shows it expired, with its email, as the conversation shown does (AR-222). In both
+/// appearances.
+#[test]
+fn a_parked_codex_conversations_sign_in_expired_card_reads_the_sign_in_again() {
+    use crate::ai_agents::{CodexAccount, Provider};
+    use crate::chat::{ChatEvent, ChatFailure, FailureKind, TurnEnd};
+    use std::sync::atomic::Ordering::Relaxed;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        *rig.agents.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        h.state_mut().state.agents.default_agent = Provider::Codex;
+        h.run();
+        ask_in_chat(&mut h, "Hello");
+        let key = crate::chat_fixture::key(h.state());
+        let first = h.state().active.unwrap();
+        h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+        h.run();
+        assert!(h.state().tabs[first].parked.as_ref().is_some_and(|p| p.chat_panel.chat.is_some()), "{theme:?}: parked");
+        let reads = rig.agents.calls.account.load(Relaxed);
+        *rig.agents.account.lock().unwrap() = Ok(CodexAccount::Expired { email: String::new() });
+        let expired = ChatFailure { kind: FailureKind::SignInExpired, detail: "x".into(), reset: None };
+        assert!(rig.agents.emit(&key, ChatEvent::TurnEnded(TurnEnd::Failed(expired))));
+        h.run();
+        h.run();
+        assert_eq!(rig.agents.calls.account.load(Relaxed), reads + 1, "{theme:?}: the parked card read the sign-in again");
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "{theme:?}");
+    }
+}
+
 /// While the agent's program retries a provider it cannot reach, the turn says so with the attempt
 /// it reports, and Stop stays (AR-224); text from the provider takes the line away, and when the
 /// retries give up for a lost network the usual Connection lost card shows. In both appearances.
@@ -15401,40 +15464,44 @@ fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
     }
 }
 
-/// Launching looks for the programs alone; opening AI Agents reads the keys and Codex's account once and sends nothing.
+/// Launching looks for the programs alone; opening AI Agents reads the keys once and Codex's
+/// account on each opening (AR-222), and sends nothing. In both appearances.
 #[test]
 fn opening_ai_agents_reads_the_keys_once_and_sends_nothing() {
-    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    // The look at start: the programs once; no key read, no account read (it starts the codex
-    // program) and nothing sent.
-    for _ in 0..5 {
-        h.run();
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |_| {});
+        // The look at start: the programs once; no key read, no account read (it starts the codex
+        // program) and nothing sent.
+        for _ in 0..5 {
+            h.run();
+        }
+        let at_start = calls(&f);
+        assert_eq!(at_start, [1, 0, 0, 0, 0, 0, 0, 0, 0], "the programs' look at start, and nothing else");
+        open_agents(&mut h);
+        for _ in 0..5 {
+            h.run();
+        }
+        let mut keys_read = at_start;
+        keys_read[1] = 1;
+        keys_read[5] = 1;
+        assert_eq!(calls(&f), keys_read, "opening the page read the keys and Codex's account once, and asked for nothing else");
+        assert!(painted_has(&h, "Saved in the macOS Keychain"), "the store the read found");
+        // Kept: closed and opened again, the page reads nothing more.
+        let at = rect_of(&h, "settings.done").center();
+        click(&mut h, at);
+        open_agents(&mut h);
+        keys_read[5] = 2;
+        assert_eq!(calls(&f), keys_read, "the keys are kept until Look again, a save or a removal; Codex's account is read again (AR-222)");
+        assert_eq!(f.calls.outward(), 0, "no test message and no sign-in");
+        // Opening Settings on a shell without the services draws the page and asks nothing either.
+        crate::i18n::set_language("en");
+        let mut bare = harness(ThemeKind::Dark);
+        let at = rect_of(&bare, "home.header.account").center();
+        click(&mut bare, at);
+        let at = rect_of(&bare, "settings.nav.agents").center();
+        click(&mut bare, at);
+        assert!(painted_has(&bare, "This build of Archforge has no agent programs to talk to."));
     }
-    let at_start = calls(&f);
-    assert_eq!(at_start, [1, 0, 0, 0, 0, 0, 0, 0, 0], "the programs' look at start, and nothing else");
-    open_agents(&mut h);
-    for _ in 0..5 {
-        h.run();
-    }
-    let mut keys_read = at_start;
-    keys_read[1] = 1;
-    keys_read[5] = 1;
-    assert_eq!(calls(&f), keys_read, "opening the page read the keys and Codex's account once, and asked for nothing else");
-    assert!(painted_has(&h, "Saved in the macOS Keychain"), "the store the read found");
-    // Kept: closed and opened again, the page reads nothing more.
-    let at = rect_of(&h, "settings.done").center();
-    click(&mut h, at);
-    open_agents(&mut h);
-    assert_eq!(calls(&f), keys_read, "the keys are kept until Look again, a save or a removal");
-    assert_eq!(f.calls.outward(), 0, "no test message and no sign-in");
-    // Opening Settings on a shell without the services draws the page and asks nothing either.
-    crate::i18n::set_language("en");
-    let mut bare = harness(ThemeKind::Dark);
-    let at = rect_of(&bare, "home.header.account").center();
-    click(&mut bare, at);
-    let at = rect_of(&bare, "settings.nav.agents").center();
-    click(&mut bare, at);
-    assert!(painted_has(&bare, "This build of Archforge has no agent programs to talk to."));
 }
 
 #[test]
@@ -15719,6 +15786,152 @@ fn a_key_typed_and_not_saved_is_dropped_with_the_fields_memory_of_it() {
         assert!(state.is_none_or(|s| !s.undoer().has_undo(&Default::default())), "{leave}: the field's memory is cleared");
     }
     assert_eq!(f.calls.save.load(std::sync::atomic::Ordering::Relaxed), 0, "nothing was saved");
+}
+
+/// A Codex sign-in that expires while Archforge runs shows as expired, with its email, after Check
+/// connection and after Settings opens again, without a restart (AR-222). The codex program reads
+/// an expired sign-in without an email; the one known before is kept. In both appearances.
+#[test]
+fn a_codex_sign_in_that_expires_mid_run_shows_as_expired_after_check_connection_and_reopening() {
+    use crate::ai_agents::CodexAccount;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        const EXPIRED: &str = "The ChatGPT sign-in for you@example.com has expired.";
+        for trigger in ["check connection", "reopening Settings", "another section and back"] {
+            let (mut h, f) = agents_harness(theme, |f| {
+                *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+            });
+            open_agents(&mut h);
+            assert!(painted_has(&h, "Signed in as you@example.com"), "{trigger}");
+            // The sign-in expires; the codex program now reads it so, without an email.
+            *f.account.lock().unwrap() = Ok(CodexAccount::Expired { email: String::new() });
+            if trigger == "check connection" {
+                let at = rect_of(&h, "settings.agents.check").center();
+                click(&mut h, at);
+            } else if trigger == "reopening Settings" {
+                let at = rect_of(&h, "settings.done").center();
+                click(&mut h, at);
+                open_agents(&mut h);
+            } else {
+                let at = rect_of(&h, "settings.nav.profile").center();
+                click(&mut h, at);
+                let at = rect_of(&h, "settings.nav.agents").center();
+                click(&mut h, at);
+            }
+            h.run();
+            assert_eq!(f.calls.account.load(std::sync::atomic::Ordering::Relaxed), 2, "{theme:?} {trigger}: read again");
+            assert!(painted_has(&h, EXPIRED), "{theme:?} {trigger}: {:?}", painted(&h));
+            assert!(!painted_has(&h, "Signed in as"), "{trigger}");
+        }
+    }
+}
+
+/// A Codex conversation found the sign-in expired before any read gave its email (the first read
+/// failed): a later read that still says signed in shows it expired, now with that email
+/// (AR-222, review). In both appearances.
+#[test]
+fn an_expiry_found_before_the_email_was_known_stays_once_a_read_brings_it() {
+    use crate::ai_agents::{AccountError, CodexAccount};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| *f.account.lock().unwrap() = Err(AccountError::Failed { detail: "no answer".into() }));
+        open_agents(&mut h);
+        assert!(painted_has(&h, "The sign-in could not be read: no answer"), "{theme:?}");
+        *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        crate::ai_agents::sign_in_expired(h.state_mut());
+        h.run();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "you@example.com".into() })), "{theme:?}");
+        assert!(painted_has(&h, "The ChatGPT sign-in for you@example.com has expired."), "{theme:?}: {:?}", painted(&h));
+    }
+}
+
+/// A read of Codex's account that began before a sign-out answers after it: its older answer is
+/// dropped, so the page keeps saying Not signed in (AR-222, review). In both appearances.
+#[test]
+fn an_account_read_older_than_a_sign_out_does_not_undo_it() {
+    use crate::ai_agents::CodexAccount;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| {
+            *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+        });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Signed in as you@example.com"), "{theme:?}");
+        // A read again begins, slow to answer; meanwhile the person signs out.
+        f.hold_account.store(true, std::sync::atomic::Ordering::Relaxed);
+        crate::ai_agents::reread_account(h.state_mut());
+        h.run();
+        assert_eq!(f.held_account.lock().unwrap().len(), 1, "{theme:?}: the read waits");
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        click(&mut h, at);
+        h.run();
+        assert!(painted_has(&h, "Not signed in"), "{theme:?}");
+        // The older read answers "signed in" now: dropped.
+        f.release_account();
+        h.run();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::NotSignedIn)), "{theme:?}");
+        assert!(painted_has(&h, "Not signed in") && !painted_has(&h, "Signed in as"), "{theme:?}");
+    }
+}
+
+/// A read of Codex's account that began before a sign-in answers after it: its older answer is
+/// dropped, so the page keeps the new sign-in; a Check connection that waited only for that read
+/// ends at once, saying Codex is ready (AR-222, review). In both appearances.
+#[test]
+fn an_account_read_older_than_a_sign_in_does_not_undo_it_nor_hold_check_connection() {
+    use crate::ai_agents::{CodexAccount, LoginEvent};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| {
+            *f.login.lock().unwrap() = vec![LoginEvent::Done(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })];
+        });
+        open_agents(&mut h);
+        assert!(painted_has(&h, "Not signed in"), "{theme:?}");
+        // Check connection reads the account again, slow to answer; meanwhile the person signs in.
+        f.hold_account.store(true, std::sync::atomic::Ordering::Relaxed);
+        let at = rect_of(&h, "settings.agents.check").center();
+        click(&mut h, at);
+        assert_eq!(f.held_account.lock().unwrap().len(), 1, "{theme:?}: the read waits");
+        assert!(h.state().agents.checking(), "{theme:?}: the check waits for it");
+        // Frame by frame: the click starts the sign-in, the next frame takes its end; the check
+        // ends in that same frame, as nothing else asks for one more.
+        let at = rect_of(&h, "settings.agents.codex.sign-in").center();
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+        h.step();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None })), "{theme:?}");
+        assert!(!h.state().agents.checking(), "{theme:?}: the check ended with the sign-in");
+        h.run();
+        assert!(painted_has(&h, "Signed in as you@example.com"), "{theme:?}");
+        assert!(painted_has(&h, "Codex ready"), "{theme:?}: {:?}", painted(&h));
+        // The older read answers "not signed in" now: dropped.
+        f.release_account();
+        h.run();
+        assert!(painted_has(&h, "Signed in as you@example.com") && !painted_has(&h, "Not signed in"), "{theme:?}");
+    }
+}
+
+/// A sign-in found expired, then read as another account signed in, is that other account's: its
+/// later reads show it signed in, not expired, as no conversation found it so (AR-222, review). In
+/// both appearances.
+#[test]
+fn another_account_read_after_an_expiry_is_not_taken_as_expired() {
+    use crate::ai_agents::CodexAccount;
+    let signed_in = |email: &str| Ok(CodexAccount::SignedIn { email: email.into(), plan: None });
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f) = agents_harness(theme, |f| *f.account.lock().unwrap() = signed_in("a@example.com"));
+        open_agents(&mut h);
+        crate::ai_agents::sign_in_expired(h.state_mut());
+        h.run();
+        assert_eq!(h.state().agents.codex, Some(Ok(CodexAccount::Expired { email: "a@example.com".into() })), "{theme:?}");
+        // Another account is signed in now, outside this window.
+        *f.account.lock().unwrap() = signed_in("b@example.com");
+        for read in ["first", "second"] {
+            crate::ai_agents::reread_account(h.state_mut());
+            h.run();
+            assert_eq!(h.state().agents.codex, Some(signed_in("b@example.com")), "{theme:?}: {read} read");
+        }
+        assert!(painted_has(&h, "Signed in as b@example.com"), "{theme:?}: {:?}", painted(&h));
+    }
 }
 
 /// A sign-in that runs out of time, or that the codex program cancels, says so under the sign-in
