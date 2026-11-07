@@ -8203,11 +8203,12 @@ fn an_undo_before_a_failed_deletion_keeps_the_folder_of_a_conversation_still_lis
 }
 
 /// A conversation started while the host removes its private folder (AR-218), as a copy of the
-/// project can: the host refuses the start, the turn says "No answer" with Send again and nothing
+/// project can: the host refuses the start, the turn says it is not started yet as the conversation
+/// is being removed (AR-225), with Send again, and nothing
 /// hangs; the refused start keeps the folder although the deletion went through, and once the
 /// removal is done, Send again starts it.
 #[test]
-fn a_conversation_started_while_its_folder_is_being_removed_says_no_answer_and_sends_again_once_done() {
+fn a_conversation_started_while_its_folder_is_being_removed_says_so_and_sends_again_once_done() {
     use crate::ai_agents::FolderGoes;
     use crate::chat_store::Answer;
     let (mut h, rig) = chat_harness(ThemeKind::Light, true);
@@ -8224,7 +8225,9 @@ fn a_conversation_started_while_its_folder_is_being_removed_says_no_answer_and_s
     ask_in_chat(&mut h, "Second question");
     assert_eq!(chat_calls(&rig).0, starts + 1, "a start was asked");
     assert!(rig.agents.running.lock().unwrap().is_empty(), "and refused");
-    assert!(painted_has(&h, "No answer") && painted_has(&h, "Claude stopped before answering. Nothing was changed."), "{:?}", painted(&h));
+    // Its own card says why and what to do (AR-225), not the generic No answer.
+    assert!(painted_has(&h, "Not started yet") && painted_has(&h, "This conversation is being removed. Try again in a moment."), "{:?}", painted(&h));
+    assert!(!painted_has(&h, "No answer") && !painted_has(&h, "Claude stopped before answering."));
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.turn.2.retry"), "Send again is offered");
     assert!(ids(&h).iter().any(|i| i == "workspace.chat.send"), "the composer is free: nothing hangs");
     // The copy's deletion went through, but a panel here asked for the conversation: its folder stays.

@@ -333,6 +333,8 @@ str		No key saved	No key saved
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} needs an API key or a sign-in. Add one in Settings, then send again.
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent}'s sign-in has expired. Sign in again in Settings, then send again.
 str		No answer	No answer
+str		Not started yet	Not started yet
+str		This conversation is being removed. Try again in a moment.	This conversation is being removed. Try again in a moment.
 str		Not sent	Not sent
 str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.
 str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.

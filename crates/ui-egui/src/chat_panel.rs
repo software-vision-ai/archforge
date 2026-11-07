@@ -37,7 +37,7 @@ use serde_json::Value;
 
 use crate::Shell;
 use crate::ai_agents::{Provider, Readiness};
-use crate::chat::{ChatEvent, ChatFailure, ChatStart, FailureKind, TurnEnd};
+use crate::chat::{ChatEvent, ChatFailure, ChatRefusal, ChatStart, FailureKind, TurnEnd};
 use crate::chat_store::{
     Anchor, AnchorRole, Answer, ChangeKind, ChangeState, ChangedElement, Changes, ChatStore, Listed, Outcome, Refusal, Stored, StoredBody, ToolFacts,
     ToolStatus, Write,
@@ -216,6 +216,10 @@ pub struct Turn {
     /// Its question was kept but never sent, as Let Chat use the model went off first: its card
     /// says so and offers Send again. Not kept in the project, which keeps the turn as failed.
     pub unsent: bool,
+    /// Its program was not started, as the conversation's private folder was being removed after a
+    /// deletion of it (AR-225): its card says so and offers Send again. Not kept in the project,
+    /// which keeps the turn as failed.
+    pub removing: bool,
 }
 
 impl Turn {
@@ -749,6 +753,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                 // layout. Its rows and reply stay in the timeline as what it did.
                 t.returned = false;
                 t.unsent = false;
+                t.removing = false;
                 t.stopping = false;
                 t.stopping_since = None;
                 t.cut = false;
@@ -777,6 +782,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                     rows_dropped: 0,
                     laid: None,
                     unsent: false,
+                    removing: false,
                 });
                 number
             };
@@ -800,7 +806,8 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
 
 /// Gives the agent `text`: its program starts first when it does not run, and the text waits
 /// while it ends to start again. Let Chat use the model turned off while the question was being
-/// kept: nothing is sent, and the turn ends unsent ([`not_sent`]).
+/// kept: nothing is sent, and the turn ends unsent ([`not_sent`]). A start refused ends the turn
+/// failed; refused as the conversation's folder is being removed, its card says so.
 fn deliver(shell: &mut Shell, text: String) {
     if refused_while_off(shell) {
         not_sent(shell);
@@ -832,7 +839,11 @@ fn deliver(shell: &mut Shell, text: String) {
                 }
                 Err(e) => {
                     log::warn!("the conversation could not start: {e}");
+                    let removing = e == ChatRefusal::Forgetting;
                     end_here(shell, TurnState::Failed(ChatFailure { kind: FailureKind::Other, detail: e.to_string(), reset: None }));
+                    if removing && let Some(t) = shell.chat_panel.chat.as_mut().and_then(|c| c.turns.last_mut()) {
+                        t.removing = true;
+                    }
                     return;
                 }
             }
@@ -1139,6 +1150,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
             rows_dropped: 0,
             laid: None,
             unsent: false,
+            removing: false,
         });
     }
     for m in stored.messages {

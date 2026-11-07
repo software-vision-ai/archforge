@@ -334,6 +334,8 @@ str		No key saved	Aucune clé enregistrée
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} a besoin d’une clé d’API ou d’une connexion. Ajoutez-en une dans les Réglages, puis renvoyez.
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	La connexion de {agent} a expiré. Reconnectez-vous dans les Réglages, puis renvoyez.
 str		No answer	Pas de réponse
+str		Not started yet	Pas encore démarrée
+str		This conversation is being removed. Try again in a moment.	Cette conversation est en cours de suppression. Réessayez dans un instant.
 str		Not sent	Non envoyée
 str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	« Laisser Discussion utiliser le modèle » a été désactivé, donc cette question n’a pas été envoyée. Elle est de retour dans le champ, prête une fois l’interrupteur activé.
 str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	« Laisser Discussion utiliser le modèle » a été désactivé, donc cette question n’a pas été envoyée. Renvoyez-la une fois l’interrupteur activé.

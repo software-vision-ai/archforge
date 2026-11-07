@@ -334,6 +334,8 @@ str		No key saved	キーが保存されていません
 str		{agent} needs an API key or a sign-in. Add one in Settings, then send again.	{agent} には API キーまたはサインインが必要です。設定で追加してから、もう一度送信してください。
 str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	{agent} のサインインの有効期限が切れました。設定でもう一度サインインしてから、送信し直してください。
 str		No answer	回答がありません
+str		Not started yet	まだ開始していません
+str		This conversation is being removed. Try again in a moment.	この会話は削除中です。少ししてからもう一度お試しください。
 str		Not sent	未送信
 str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。入力欄に戻してあり、スイッチをオンにすれば送信できます。
 str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。スイッチをオンにしてから、もう一度送信してください。
