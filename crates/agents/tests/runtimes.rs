@@ -446,7 +446,7 @@ fn the_environment_is_cleared_but_for_the_allowlist_and_the_given_variables() {
         args: vec!["-p".into(), "--bare".into()],
         vars: vec![("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into())],
         secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())],
-        limits: Limits::default(),
+        ..SpawnRequest::default()
     };
     let request_debug = format!("{request:?}");
     assert!(!request_debug.contains(CANARY), "{request_debug}");
@@ -489,7 +489,7 @@ fn the_key_never_appears_in_errors_debug_or_the_error_tail() {
     let base = scratch("canary");
     let (runtime, folder) = claude(&base, "echo \"auth failed for key=$ANTHROPIC_API_KEY\" >&2; exit 1");
     let refused = |args: Vec<OsString>, vars: Vec<(String, OsString)>| {
-        let request = SpawnRequest { args, vars, secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())], limits: Limits::default() };
+        let request = SpawnRequest { args, vars, secret_vars: vec![("ANTHROPIC_API_KEY".into(), canary())], ..SpawnRequest::default() };
         spawn(&runtime, &folder, request).unwrap_err()
     };
     let in_args = refused(vec![format!("--api-key={CANARY}").into()], vec![]);
@@ -513,6 +513,49 @@ fn the_key_never_appears_in_errors_debug_or_the_error_tail() {
     assert!(matches!(error, AgentError::Exited { code: Some(1), .. }) && error.kind() == ErrorKind::Other);
     assert!(!shown(&error).contains(CANARY) && shown(&error).contains("<redacted>"), "{}", shown(&error));
     assert!(!format!("{process:?}").contains(CANARY));
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// A secret given over the input is never in the environment, is refused in the command line, and
+/// is scrubbed from the error tail and from what `redact` shows; a shared settings folder must be a
+/// private folder and replaces the conversation's own.
+#[test]
+fn input_secrets_stay_out_of_the_environment_and_the_settings_folder_can_be_shared() {
+    let base = scratch("input-secret");
+    let (runtime, folder) = claude(&base, "/usr/bin/env; echo END; read line; echo \"echoed $line\" >&2; exit 2");
+    let shared = base.join("shared-home");
+    std::fs::create_dir(&shared).unwrap();
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let request = |config_dir: Option<PathBuf>, args: Vec<OsString>| SpawnRequest {
+        args,
+        input_secrets: vec![("OPENAI_API_KEY".into(), canary())],
+        config_dir,
+        ..SpawnRequest::default()
+    };
+    let exposed = spawn(&runtime, &folder, request(None, vec![format!("--key={CANARY}").into()])).unwrap_err();
+    assert!(matches!(&exposed, AgentError::SecretExposed { variable, place: "command line" } if variable == "OPENAI_API_KEY"));
+    let open = spawn(&runtime, &folder, request(Some(shared.clone()), vec![])).unwrap_err();
+    assert!(matches!(&open, AgentError::Folder { problem, .. } if problem.contains("mode")), "{open:?}");
+    let relative = spawn(&runtime, &folder, request(Some(PathBuf::from("shared-home")), vec![])).unwrap_err();
+    assert!(matches!(relative, AgentError::Folder { .. }));
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let mut process = spawn(&runtime, &folder, request(Some(shared.clone()), vec![])).unwrap();
+    let mut lines = Vec::new();
+    loop {
+        let line = next_line(&process);
+        if line == "END" {
+            break;
+        }
+        lines.push(line);
+    }
+    assert!(!lines.iter().any(|l| l.contains(CANARY)), "the input secret is not in the environment: {lines:?}");
+    assert!(lines.contains(&format!("CLAUDE_CONFIG_DIR={}", shared.display())), "{lines:?}");
+    process.send_line(&format!("key {CANARY}")).unwrap();
+    let exit = wait_exit(&mut process);
+    let tail = wait_tail(&process, "echoed");
+    assert!(tail.contains("echoed key <redacted>") && !tail.contains(CANARY), "{tail}");
+    assert!(!process.redact(format!("x {CANARY} y")).contains(CANARY));
+    assert!(!format!("{:?}", process.exit_error(exit)).contains(CANARY));
     std::fs::remove_dir_all(&base).unwrap();
 }
 
@@ -603,6 +646,44 @@ fn shutdown_closes_the_input_then_terminates_then_kills() {
     assert!(started.elapsed() >= Duration::from_millis(400) && started.elapsed() < Duration::from_secs(5));
     assert!(matches!(process.exit_error(exit), AgentError::Crashed { signal: 9, .. }));
     assert!(matches!(process.shutdown(Duration::from_secs(61)), Err(AgentError::InvalidLimit { .. })));
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// `terminate` returns at once even for a runtime that ignores SIGTERM, ends it and its group, and
+/// a later `try_reap` collects it without waiting; nothing is signalled once it is collected.
+#[test]
+fn terminate_never_waits_and_the_runtime_is_reaped_later() {
+    let base = scratch("terminate");
+    let (runtime, folder) = claude(&base, "trap '' TERM; /bin/sleep 300 & echo \"$!\"; while :; do /bin/sleep 0.05; done");
+    let mut process = spawn(&runtime, &folder, SpawnRequest::default()).unwrap();
+    let grandchild: i32 = next_line(&process).parse().unwrap();
+    let child = i32::try_from(process.pid()).unwrap();
+    assert_eq!(process.try_reap(), None, "a running runtime is not collected");
+    let started = Instant::now();
+    process.terminate();
+    assert!(started.elapsed() < Duration::from_millis(50), "terminate waited {:?}", started.elapsed());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let exit = loop {
+        let looked = Instant::now();
+        let reaped = process.try_reap();
+        assert!(looked.elapsed() < Duration::from_millis(50), "try_reap waited {:?}", looked.elapsed());
+        if let Some(exit) = reaped {
+            break exit;
+        }
+        assert!(Instant::now() < deadline, "the runtime was not collected within five seconds");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    assert_eq!(exit.signal, Some(9), "SIGTERM is ignored, SIGKILL ends it: {exit:?}");
+    assert!(!alive(child), "no zombie is left");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while alive(grandchild) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!alive(grandchild) && group_gone(child), "the group went with it");
+    // Collected: a second terminate signals nothing and answers the same exit.
+    process.terminate();
+    assert_eq!(process.try_reap(), Some(exit));
+    assert_eq!(process.status().unwrap(), Some(exit));
     std::fs::remove_dir_all(&base).unwrap();
 }
 

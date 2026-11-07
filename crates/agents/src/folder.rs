@@ -225,7 +225,7 @@ fn ensure_private(path: &Path, uid: u32) -> Result<(), AgentError> {
 }
 
 /// Refuses `path` unless it is a real folder of `uid` with mode 0700.
-fn check_private(path: &Path, uid: u32) -> Result<(), AgentError> {
+pub(crate) fn check_private(path: &Path, uid: u32) -> Result<(), AgentError> {
     let meta =
         std::fs::symlink_metadata(path).map_err(|e| AgentError::Folder { path: path.to_path_buf(), problem: format!("cannot be read: {e}") })?;
     match sys::private_folder_problem(&meta, uid) {

@@ -23,8 +23,8 @@ folders, so the shell never depends on it and it is never built for the portable
 | `Workspace` | `open(&Path) -> Result<Workspace, _>` (absolute; made with 0700, an existing one must be private and is never changed), `conversation(&ConversationId) -> Result<ConversationFolder, _>` (makes or checks), `remove_conversation(&ConversationId) -> Result<bool, _>` |
 | `ConversationId`, `ConversationFolder` | 1 to 64 of `[a-z0-9-]`; `path()`, `home()`, `config()`, `work()`, `tmp()` |
 | `spawn` | `pub fn spawn(&Runtime, &ConversationFolder, SpawnRequest) -> Result<RuntimeProcess, AgentError>` |
-| `SpawnRequest`, `Limits` | `args`, `vars`, `secret_vars: Vec<(String, Secret)>`, `limits`; `max_line_bytes` (8 MiB), `stderr_tail_bytes` (16 KiB), `queued_lines` (16), each refused at zero or past its maximum, and `max_line_bytes × (queued_lines + 1)` refused past `MAX_BUFFERED_BYTES` (256 MiB) |
-| `RuntimeProcess` | `send_line` (never waits), `close_input`, `next_event(timeout)`, `try_next_event`, `interrupt`, `status`, `shutdown(grace)` (waits up to twice `grace`, so on a worker), `stderr_tail`, `exit_error(Exit)`, `pid`; kills its group on drop |
+| `SpawnRequest`, `Limits` | `args`, `vars`, `secret_vars: Vec<(String, Secret)>`, `input_secrets` (secrets that go over standard input, never into the environment: refused in the command line and plain variables, kept only to scrub), `config_dir` (a shared private settings folder in place of the conversation's `config`), `limits`; `max_line_bytes` (8 MiB), `stderr_tail_bytes` (16 KiB), `queued_lines` (16), each refused at zero or past its maximum, and `max_line_bytes × (queued_lines + 1)` refused past `MAX_BUFFERED_BYTES` (256 MiB) |
+| `RuntimeProcess` | `send_line` (never waits), `close_input`, `next_event(timeout)`, `try_next_event`, `interrupt`, `status`, `shutdown(grace)` (waits up to twice `grace`, so on a worker), `terminate` (never waits), `try_reap` (never waits), `stderr_tail`, `stderr_closed`, `exit_error(Exit)`, `pid`; kills its group on drop |
 | `OutputEvent`, `Dropped`, `Exit` | `Line`, `Dropped(TooLong \| NotText { bytes })`, `ReadFailed`, `End`; `code`, `signal` |
 | `AgentError`, `ErrorKind` | every failure; `kind()` gives `MissingRuntime`, `InvalidCredential`, `SignInExpired`, `RateLimited`, `Network`, `ModelUnavailable` or `Other`; `AgentError::reported(kind, detail)` for the adapters |
 | `RuntimeProcess::redact` | `fn redact(&self, String) -> String`: the runtime's secrets replaced, for what an adapter shows from standard output |
@@ -69,9 +69,11 @@ absolute entries), the host's `LANG` and `LC_*` (`find` keeps only those names f
 variables. Those names, and malformed or repeated names, are refused, as is a NUL in a value. Its
 working folder is the conversation's `work` folder, empty when the conversation starts.
 
-**Keys.** A key reaches a runtime only as a `secret_vars` entry, through its environment: a request
-whose command line or plain variables hold a secret's value is refused, naming the variable and never
-the value. `SpawnRequest`'s and `RuntimeProcess`'s `Debug` never show a value (`Secret` redacts
+**Keys.** A key reaches a runtime only as a `secret_vars` entry, through its environment, or as an
+`input_secrets` entry, which never enters the environment and which the adapter writes to the
+runtime's standard input itself (Codex's API key, owner decision): a request whose command line or
+plain variables hold either kind of secret's value is refused, naming the variable and never the
+value. `SpawnRequest`'s and `RuntimeProcess`'s `Debug` never show a value (`Secret` redacts
 itself). The `Command` that held copies of the environment is dropped right after the start; std
 frees those copies without overwriting them, which this crate cannot change. The process keeps its
 secrets only to scrub the error stream's tail, where every occurrence becomes `<redacted>`, and a
@@ -91,7 +93,11 @@ not, whatever is left in its group is killed with SIGKILL before the runtime is 
 that it ended leaves it uncollected (`waitid` with `WNOWAIT`), so its process id, the group's id,
 cannot be reused by another process before the group signal. The group is signalled three times,
 5 ms apart: a process the group was forking at the first signal can appear after it (seen on macOS,
-where a test caught such a survivor) and the next pass kills it. Dropping a `RuntimeProcess` kills the
+where a test caught such a survivor) and the next pass kills it. `terminate` ends the runtime without
+waiting: its input is closed, then SIGTERM and SIGKILL go once each to its group and to the runtime
+itself, with no pause, and `try_wait` collects it if it has already ended; `try_reap` collects it
+later the same way (one SIGKILL to what is left of the group first), so no zombie stays. Neither
+signals a runtime already collected. Dropping a `RuntimeProcess` kills the
 group and the runtime and collects it, and signals nothing when the runtime can no longer be checked
 as this process's child. Out of reach: a process that leaves the group on purpose (`setsid`); if it
 keeps an output pipe open, that pipe's reader thread waits for it. A process stuck in an

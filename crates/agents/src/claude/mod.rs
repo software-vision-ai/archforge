@@ -314,6 +314,8 @@ impl ClaudeSession {
             args: command_line(&config, &mcp),
             vars: vec![("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_owned(), "1".into())],
             secret_vars: vec![(KEY_VAR.to_owned(), key)],
+            input_secrets: Vec::new(),
+            config_dir: None,
             limits: config.limits,
         };
         let process = spawn(runtime, folder, request)?;

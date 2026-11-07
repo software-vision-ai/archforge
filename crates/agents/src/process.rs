@@ -5,6 +5,7 @@
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -95,6 +96,16 @@ pub struct SpawnRequest {
     /// runtime. They are also kept to scrub the error stream's tail, and overwritten when the
     /// process is dropped.
     pub secret_vars: Vec<(String, Secret)>,
+    /// Secrets the runtime receives over its input instead of its environment, as Codex's API key
+    /// goes in a sign-in request: never placed in the environment, refused like the secret variables
+    /// when their value appears in the command line or a plain variable, and kept only to scrub the
+    /// error stream's tail and for [`RuntimeProcess::redact`]. The name labels the secret in errors.
+    pub input_secrets: Vec<(String, Secret)>,
+    /// The runtime's settings folder (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`) in place of the
+    /// conversation's own `config` folder, for a settings tree a person's conversations share, as
+    /// Codex's sign-in is. It must be an absolute path to a private folder of this user (a real
+    /// folder, not a link, mode 0700), checked before the start.
+    pub config_dir: Option<PathBuf>,
     /// The caps on the runtime's output.
     pub limits: Limits,
 }
@@ -130,18 +141,19 @@ impl fmt::Display for Exit {
 ///
 /// The environment is cleared and holds only: `PATH` (the runtime's [`Runtime::child_path`]),
 /// the host's `LANG` and `LC_*`, `HOME` and `TMPDIR` in the conversation's folder, the runtime's
-/// settings variable (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`) at its private configuration folder,
-/// and the request's variables. The working folder is the conversation's work folder; standard
-/// input, output and error are pipes; the runtime leads a new process group.
+/// settings variable (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`) at its private configuration folder (or
+/// the request's `config_dir`), and the request's variables. The working folder is the
+/// conversation's work folder; standard input, output and error are pipes; the runtime leads a new
+/// process group.
 ///
 /// Refused before anything starts: a limit out of range, a malformed or duplicated variable name,
-/// a name this crate sets itself, a NUL in a value, and a secret's value in the command line or in
-/// a plain variable.
+/// a name this crate sets itself, a NUL in a value, a secret's value (an input secret's too) in the
+/// command line or in a plain variable, and a `config_dir` that is not a private folder of this user.
 pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnRequest) -> Result<RuntimeProcess, AgentError> {
     if !sys::AVAILABLE {
         return Err(AgentError::NotAvailable);
     }
-    let SpawnRequest { args, vars, secret_vars, limits } = request;
+    let SpawnRequest { args, vars, secret_vars, input_secrets, config_dir, limits } = request;
     limits.check()?;
     let mut names: Vec<&str> = Vec::new();
     for name in vars.iter().map(|(n, _)| n.as_str()).chain(secret_vars.iter().map(|(n, _)| n.as_str())) {
@@ -157,10 +169,12 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         }
     }
     for (name, secret) in &secret_vars {
-        let value = secret.expose();
-        if value.contains('\0') {
+        if secret.expose().contains('\0') {
             return Err(AgentError::InvalidVariable { name: Some(name.clone()), bytes: name.len(), reason: "its value holds a NUL byte".to_owned() });
         }
+    }
+    for (name, secret) in secret_vars.iter().chain(&input_secrets) {
+        let value = secret.expose();
         let appears_in = |text: &OsString| contains_bytes(text.as_encoded_bytes(), value.as_bytes());
         if args.iter().any(appears_in) {
             return Err(AgentError::SecretExposed { variable: name.clone(), place: "command line" });
@@ -168,6 +182,12 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         if vars.iter().any(|(_, v)| appears_in(v)) {
             return Err(AgentError::SecretExposed { variable: name.clone(), place: "plain variables" });
         }
+    }
+    if let Some(dir) = &config_dir {
+        if !dir.is_absolute() {
+            return Err(AgentError::Folder { path: dir.clone(), problem: "is not an absolute path".to_owned() });
+        }
+        crate::folder::check_private(dir, sys::current_uid())?;
     }
     let kind = runtime.kind();
     let path = runtime.path();
@@ -191,7 +211,7 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         .envs(runtime.locale().iter().map(|(k, v)| (k, v)))
         .env("HOME", folder.home())
         .env("TMPDIR", folder.tmp())
-        .env(kind.config_var(), folder.config())
+        .env(kind.config_var(), config_dir.as_deref().unwrap_or(folder.config()))
         .envs(vars.iter().map(|(k, v)| (k, v)))
         .envs(secret_vars.iter().map(|(k, s)| (k, s.expose())))
         .current_dir(folder.work())
@@ -237,7 +257,7 @@ pub fn spawn(runtime: &Runtime, folder: &ConversationFolder, request: SpawnReque
         start_thread(format!("{kind}-stdin"), move || write_lines(stdin, queue, failed)).map_err(|e| thread_failed(&mut child, e))?;
         input = Some(lines);
     }
-    let scrub = secret_vars.into_iter().map(|(_, s)| s).collect();
+    let scrub = secret_vars.into_iter().chain(input_secrets).map(|(_, s)| s).collect();
     Ok(RuntimeProcess { kind, input, input_failed, max_line_bytes: limits.max_line_bytes, events, tail, exit: None, scrub, child })
 }
 
@@ -445,6 +465,64 @@ impl RuntimeProcess {
             self.wait_for_end(grace)?;
         }
         self.collect()
+    }
+
+    /// Ends the runtime at once and never waits: SIGTERM, then SIGKILL, each sent once to the
+    /// runtime's process group and once to the runtime itself, with no pause between, after its
+    /// input is closed; then a look with `try_wait` collects it if it has already ended. Nothing is
+    /// signalled once the runtime is collected, as its process id may belong to another process by
+    /// then. A runtime the system has not finished tearing down is collected later, by
+    /// [`try_reap`](Self::try_reap), [`status`](Self::status), [`shutdown`](Self::shutdown) or the
+    /// drop, so it is never left a zombie.
+    pub fn terminate(&mut self) {
+        self.close_input();
+        if self.exit.is_some() {
+            return;
+        }
+        let pid = self.child.id();
+        for sig in [sys::Sig::Terminate, sys::Sig::Kill] {
+            // A failure means the group or the runtime is already gone, which is the goal.
+            let _ = sys::signal_group(pid, sig);
+            let _ = sys::signal_process(pid, sig);
+        }
+        self.try_reap();
+    }
+
+    /// How the runtime ended, collecting it if it has ended, without ever waiting or pausing: what
+    /// is left of its group gets one SIGKILL first (the runtime is not collected yet, so its id still
+    /// names its own group), then it is collected with `try_wait`. `None` while it runs, and when it
+    /// cannot be checked (logged).
+    pub fn try_reap(&mut self) -> Option<Exit> {
+        if self.exit.is_some() {
+            return self.exit;
+        }
+        match sys::has_ended(&self.child) {
+            Ok(true) => {}
+            Ok(false) => return None,
+            Err(e) => {
+                log::warn!("{} could not be checked: {e}", self.kind);
+                return None;
+            }
+        }
+        let _ = sys::signal_group(self.child.id(), sys::Sig::Kill);
+        match self.child.try_wait() {
+            Ok(Some(status)) => {
+                let exit = sys::exit_of(status);
+                self.exit = Some(exit);
+                Some(exit)
+            }
+            Ok(None) => None,
+            Err(e) => {
+                log::warn!("{} could not be collected: {e}", self.kind);
+                None
+            }
+        }
+    }
+
+    /// Whether the runtime's error stream has been read to its end, so its tail holds everything it
+    /// wrote there.
+    pub fn stderr_closed(&self) -> bool {
+        self.tail.lock().unwrap_or_else(PoisonError::into_inner).closed()
     }
 
     /// The last bytes of the runtime's error stream, with every secret it was given replaced.
