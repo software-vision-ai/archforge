@@ -35,6 +35,15 @@ the first time to a small model you can build on, and shows how an agent joins i
 6. [Skills](06-skills.md): guidance written on the model for people and agents.
 7. [Working with an agent](07-agents.md): letting an agent read and change the model, and the
    Generate handoff.
+   - [Setting up AI agents for Chat](07-agents.md#setting-up-ai-agents-for-chat): installing
+     Claude or Codex, [how you pay](07-agents.md#how-you-pay),
+     [where your keys are kept](07-agents.md#where-your-keys-are-kept) and the test message;
+   - [Chat](07-agents.md#chat): asking, [Allow changes](07-agents.md#read-only-or-allow-changes),
+     [what is sent to the provider](07-agents.md#what-is-sent-to-the-provider),
+     [when something goes wrong](07-agents.md#when-something-goes-wrong) and
+     [deleting a conversation](07-agents.md#deleting-a-conversation);
+   - [connecting an agent of your own](07-agents.md#connecting-an-agent) through the
+     command-line tool.
 8. [Help and support](08-help-and-support.md): About Archforge, supporting the project, and
    reporting a problem.
 
