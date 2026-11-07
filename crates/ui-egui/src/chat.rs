@@ -153,8 +153,10 @@ pub enum ChatEvent {
     ToolStarted { id: String, tool: String, input: String },
     /// A tool call ended.
     ToolFinished { id: String, ok: bool, summary: String },
-    /// The provider could not be reached for now, and the program tries again.
-    Retrying { attempt: u32 },
+    /// The provider did not answer for now (unreachable, overloaded or limiting the rate), and the
+    /// program tries again: its attempt (0 when the program named none) and, when it said, how many
+    /// it makes at most.
+    Retrying { attempt: u32, max: Option<u32> },
     /// The turn ended.
     TurnEnded(TurnEnd),
     /// The conversation ended: its program stopped and its agent access was given back; `failure`

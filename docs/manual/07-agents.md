@@ -320,7 +320,8 @@ for Claude, OpenAI for Codex):
   element by name, select fewer at a time;
 - **the conversation so far**: this conversation's earlier questions and replies, as the agent's
   program kept them in Archforge's private folder on this computer (see below). Claude keeps the
-  whole conversation. Codex keeps only its text messages, not what the agent read or changed, and
+  whole conversation in its transcript, but may sum up earlier parts when its context fills, so a
+  long conversation's later questions may not carry every earlier word. Codex keeps only its text messages, not what the agent read or changed, and
   at most 4,096 messages and 4 MiB of text, the oldest going first; whenever its program starts
   again (the conversation reopened, **Allow changes** or the model switched), Codex gets only that
   copy, so repeat details it may have lost;
@@ -378,8 +379,12 @@ A card in the conversation says what went wrong and what to do.
 **Send again** asks the same question again in the same place: the conversation keeps it once. A
 question whose turn already changed the model is not sent again; ask again in your own words.
 
-While the provider retries on its own, the reply keeps waiting; Claude can take about three minutes
-before it gives up. **Stop** ends the wait at once.
+While the provider does not answer (no network, or the provider is busy), the agent's program
+keeps trying again for a while: Claude for about three minutes without a network. The reply says
+so in an amber line, *No answer from Claude's provider yet. Trying again, attempt 3 of 10…*, with
+the attempt and of how many as far as the program says them, and **Stop** ends the wait at once.
+When the program gives up, the card for what went wrong shows: *Connection lost* when the network
+stayed away, *Rate limited* when the provider kept asking Chat to wait.
 
 A turn that was running when Archforge closed says *Interrupted: Archforge closed while this turn
 ran.*
@@ -438,7 +443,10 @@ Archforge's log:
   removal failed.
 
 Then the files stay in the `agents` folder of Archforge's private settings folder, as a
-`conversation-…` folder, until you remove it; nothing removes it later.
+`conversation-…` folder, until you remove it; nothing removes it later. While a copy of the project
+open beside it still shows the conversation, leave the folder: that copy's conversation uses it,
+and without it Claude cannot pick the conversation up and Codex loses its saved copy. Remove it
+only once no open project shows the conversation.
 
 When the project's conversations cannot be changed (for example because one of its tables is
 damaged), the bin and the menu item are greyed out and say why.

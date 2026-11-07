@@ -212,26 +212,32 @@ This shows Check connection needs no network; it does not by itself prove that n
    the ChatGPT sign-in.
 2. End the sign-in from the ChatGPT account: use its security settings to sign out of all
    devices. Then ask again in the conversation of step 1. **Expect:** the card *Sign-in expired*
-   with **Open Settings**.
+   with **Open Settings**. Signing out of all devices may not end a Codex sign-in: if the
+   question gets a reply, the sign-in is still valid and expiry was not established.
+   Record F2 as *skipped: expiry not established*, with the way you tried, and stop F2 here.
 3. Choose **Open Settings**. **Expect:** the Codex card may still say *Signed in as*: Archforge
    reads the sign-in once a run. Record what it says.
 4. Quit Archforge, run `wait_quit`, start it again, and open **Settings ▸ AI Agents**.
    **Expect:** *Sign-in expired*, with **Sign in again…**.
 5. Sign in again, then ask again. **Expect:** a reply.
 
-If the account offers no way to end the sign-in, leave Archforge signed in for a few days and try
-step 2 then. Record what the card says in either case: *Key refused* or *No answer* in place of
-*Sign-in expired* is a fail to note.
+No other way to end a Codex 0.166.0 sign-in from outside is known here. If the account offers
+none, leave Archforge signed in for a few days and try step 2 then; if the sign-in still answers,
+record F2 as skipped. Once a question does fail, record what the card says: *Key refused* or *No
+answer* in place of *Sign-in expired* is a fail to note.
 
 ### F3. Network off
 
-1. Turn the network off. Ask a question in R1's Claude conversation (from **Conversations**). **Expect:** the reply waits (Claude retries for
-   about three minutes), then *Connection lost*: *The network went away before Claude answered.
-   Your message is back in the box below, ready to send again.* The question is in the box.
+1. Turn the network off. Ask a question in R1's Claude conversation (from **Conversations**).
+   **Expect:** while Claude retries (about three minutes), an amber line *No answer from Claude's
+   provider yet. Trying again, attempt n of 10…* (or without *of 10*, or without the attempt, as
+   far as the program says them), with **Stop** still there. Then *Connection lost*: *The network
+   went away before Claude answered. Your message is back in the box below, ready to send again.*
+   The question is in the box.
 2. Turn the network on. Choose **Send again**. **Expect:** the question is sent once; the
    conversation shows it once.
-3. Turn the network off, ask another question, and choose **Stop** before a card comes.
-   **Expect:** the reply ends at once, marked as stopped. Turn the network on.
+3. Turn the network off, ask another question, and choose **Stop** while the retry line shows.
+   **Expect:** the line goes and the reply ends at once, marked as stopped. Turn the network on.
 4. Ask a long question. While the reply streams, turn the network off. **Expect:** *Connection
    lost*, *The network went away while Claude was answering.*, the reply so far kept. Turn the
    network on and choose **Send again**. **Expect:** a reply; the question shows once.
