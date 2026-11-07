@@ -138,8 +138,11 @@ One full round trip per route. Each uses the project of P1.
 
 1. On the Codex card choose **No browser on this computer? Sign in with a device code.**
    **Expect:** a code, *It runs out in 15 minutes.*, **Open sign-in page** and **Cancel**.
-2. On the second device, open the sign-in page and enter the code. **Expect:** *Signed in as* your
-   email and plan.
+2. The card does not show the sign-in page's address yet (a known bug, to be fixed separately).
+   Choose **Open sign-in page**: it opens the page in this computer's browser. Copy the address
+   from the browser's address bar to the second device, open it there and enter the code.
+   **Expect:** the address starts with `https://auth.openai.com/`; then *Signed in as* your email
+   and plan. Record the address's path (it holds no secret) in the notes.
 3. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4.
 4. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
    card goes back to *Not signed in*; no error.
@@ -319,6 +322,10 @@ wc -l < "$WORK/keys"    # how many keys were read (2 expected), never what they 
    any other.
 3. Repeat step 2 with Codex on **API key**. **Expect:** no line: the key goes over the program's
    input.
+4. With Codex the default agent and still on **API key**, ask in a new conversation: *Is there a class named* and paste
+   the marker. Then sign Codex in with ChatGPT (R3), switch the card to **Sign in with ChatGPT**,
+   and ask the same in another new conversation. **Expect:** a reply each time. Both Codex routes
+   have now sent the marker, for the `codex-home` check in K4.
 
 ### K3. Send the canaries everywhere they can go
 
@@ -386,17 +393,28 @@ search() {
    ```sh
    cp -R "$PROJECT" "$WORK/project-copy.archforge"
    export DOLT_ROOT_PATH="$WORK/dolt-home"; mkdir -p "$DOLT_ROOT_PATH"   # leaves your ~/.dolt alone
-   cd "$WORK/project-copy.archforge/project"
-   dolt sql -r csv -q "SHOW TABLES" | tail -n +2 > "$WORK/tables"
-   while read -r t; do
-     dolt sql -r csv -q "SELECT * FROM \`$t\`"
-     dolt sql -r csv -q "SELECT * FROM \`dolt_history_$t\`"
-   done < "$WORK/tables" > "$WORK/project-rows.csv"
-   dolt log > "$WORK/project-log.txt"
-   cd "$WORK"
-   search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-log.txt" \
-     "$WORK/project-copy.archforge"
+   dump() {   # every table and every saved version of it; stops at the first query that fails
+     ( cd "$WORK/project-copy.archforge/project" || exit 1
+       dolt sql -r csv -q "SHOW TABLES" < /dev/null > "$WORK/tables.csv" || { echo "failed: SHOW TABLES" >&2; exit 1; }
+       tail -n +2 "$WORK/tables.csv" > "$WORK/tables"
+       [ -s "$WORK/tables" ] || { echo "failed: no tables read" >&2; exit 1; }
+       : > "$WORK/project-rows.csv"
+       while read -r t; do
+         for q in "\`$t\`" "\`dolt_history_$t\`"; do
+           dolt sql -r csv -q "SELECT * FROM $q" < /dev/null >> "$WORK/project-rows.csv" || { echo "failed: $q" >&2; exit 1; }
+         done
+       done < "$WORK/tables"
+       dolt log < /dev/null > "$WORK/project-log.txt" || { echo "failed: dolt log" >&2; exit 1; } )
+   }
+   if dump; then
+     search "$WORK/canaries" "$WORK/project-rows.csv" "$WORK/project-log.txt" "$WORK/project-copy.archforge"
+   else
+     echo "DUMP FAILED: the project was not searched; fix the error above and run this step again"
+   fi
    ```
+
+   Run the later searches of this step's files (with `$WORK/keys` and `$WORK/marker`) only after
+   a dump that did not fail. *DUMP FAILED* is neither a pass nor a fail.
 
    If Dolt says a server holds the database, remove `.dolt/sql-server.lock` from the copy only.
    The last place also searches the raw files, as a quick extra look.
@@ -468,5 +486,7 @@ Note what the pass shows for these:
 - R1 step 11: Claude resumes a conversation after **Allow changes** was switched.
 - K2: the bridge (`archforge-cli`) never holds Claude's key in its environment.
 - R2 step 4: Codex with an API key writes no `auth.json`.
-- R2 and R3: Codex's own databases in `codex-home` hold no question text. Check with the marker:
-  `search "$WORK/marker" "$SETTINGS/agents/codex-home"`.
+- K2 step 4: Codex's own databases in `codex-home` hold no question text, with an API key or with
+  ChatGPT. Check with the marker both routes sent: `search "$WORK/marker"
+  "$SETTINGS/agents/codex-home"`. A conversation's own copy is in its `conversation-…` folder,
+  where the marker is expected.

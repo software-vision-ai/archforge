@@ -129,9 +129,16 @@ For **Codex** with your ChatGPT account:
 
 When the browser sign-in cannot finish on this computer, choose **No browser on this computer?
 Sign in with a device code.** instead of step 2. The card shows a code, which runs out in 15
-minutes; the icon beside it copies it. Open the sign-in page and enter the code there:
-**Open sign-in page** opens it in this computer's browser. The card does not show the page's
-address yet. **Cancel** stops the sign-in.
+minutes; the icon beside it copies it. **Cancel** stops the sign-in.
+
+Then open the sign-in page and enter the code there. The codex program names that page each time;
+it is always on `https://auth.openai.com/`, as Archforge opens no other. The card does not show
+the page's address yet:
+
+- **Open sign-in page** opens it in this computer's browser. To sign in on another device, copy
+  the address from that browser's address bar and open it there.
+- On a computer with no browser at all, Archforge cannot show you the address yet. Sign in with
+  ChatGPT on a computer with a browser, or use an API key.
 
 <!-- picture: settings-ai-agents-device-code light | Settings, AI Agents: Codex's device code, with Copy the code and Open sign-in page -->
 
@@ -295,7 +302,10 @@ for Claude, OpenAI for Codex):
 - **the list of Archforge's tools** it may use (only the reading ones while Allow changes is off),
   and the program's own instructions.
 
-The rows under the agent's name show each read and change, so you can see what went.
+The rows under the agent's name sum up what the agent read and changed, each by a label and a
+detail, such as *Read diagram Commerce* with *8 classes*. They are a summary, not the data that
+went: looking up Archforge's commands makes no row, and past 2,000 calls in one turn the rest are
+counted in a single line.
 
 Chat sends nothing else:
 

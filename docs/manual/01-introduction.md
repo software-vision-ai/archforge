@@ -26,7 +26,8 @@ are the two kinds of diagram Archforge has today; what is planned is listed belo
 - **Undo and saving**: every change is one step you can undo; edits are written to the project as
   you go, and Save makes a version.
 - **Chat**: ask Claude or Codex about the model in the Chat panel; with your permission it changes
-  the model, and one step undoes what a question changed. It runs the agent's program installed on
+  the model, and one step undoes what a question changed, as long as nothing else changed the
+  model while it answered. It runs the agent's program installed on
   your computer, with your own API key or ChatGPT sign-in (see
   [Setting up AI agents for Chat](07-agents.md#setting-up-ai-agents-for-chat)).
 - Light and dark appearances, and an interface in English, German, Spanish, French, Portuguese,
