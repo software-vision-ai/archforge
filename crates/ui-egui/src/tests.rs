@@ -7502,6 +7502,41 @@ fn a_conversation_reopened_while_model_use_is_off_sends_nothing() {
     assert!(painted_has(&h, "Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents."));
 }
 
+/// Choosing in Conversations the conversation already shown brings it back read-only, as any
+/// conversation opened again (AR-226): Allow changes goes off, its program, started with changes
+/// allowed, ends, and the next question starts it again read-only. In both appearances.
+#[test]
+fn choosing_the_conversation_shown_from_conversations_brings_it_back_read_only() {
+    use crate::chat::ChatEvent;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        assert!(h.state().chat_panel.chat.as_ref().unwrap().allow_changes, "{theme:?}");
+        ask_in_chat(&mut h, "Describe Customer.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        assert_eq!(rig.agents.started.lock().unwrap().last().map(|s| s.allow_changes), Some(true), "{theme:?}");
+        let shown = h.state().chat_panel.chat.as_ref().unwrap().id;
+        // Conversations, then the conversation shown, the only one listed.
+        let at = rect_of(&h, "workspace.chat.history").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.chat.history.0").center();
+        click(&mut h, at);
+        h.run();
+        let chat = h.state().chat_panel.chat.as_ref().unwrap();
+        assert_eq!(chat.id, shown, "{theme:?}: the same conversation");
+        assert!(!chat.allow_changes, "{theme:?}: back read-only");
+        assert_eq!(h.state().chat_panel.view, crate::chat_panel::View::Conversation, "{theme:?}");
+        assert!(painted_has(&h, "Allow changes to the model"), "{theme:?}");
+        assert_eq!(chat_calls(&rig).3, 1, "{theme:?}: its program, started with changes allowed, ended");
+        // The next question starts the program again, read-only, where it was.
+        ask_in_chat(&mut h, "And Product?");
+        let started = rig.agents.started.lock().unwrap().clone();
+        assert_eq!(started.len(), 2, "{theme:?}: started again");
+        assert_eq!(started.last().map(|s| (s.allow_changes, s.resume)), Some((false, true)), "{theme:?}: read-only, resumed");
+    }
+}
+
 /// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.
 #[test]
 fn stop_keeps_the_reply_so_far_marked_cut_off_and_keeps_it_in_the_project() {

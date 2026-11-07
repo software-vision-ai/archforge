@@ -1105,13 +1105,17 @@ pub fn toggle_history(shell: &mut Shell) {
     }
 }
 
-/// Opens a conversation from the history, read back whole; it opens read-only.
+/// Opens a conversation from the history, read back whole; it opens read-only. The conversation
+/// already shown comes back read-only too (AR-226): Allow changes goes off as when turned off by
+/// hand, so a program started with changes allowed ends and the next question starts it again
+/// read-only.
 pub fn open(shell: &mut Shell, id: Uuid) {
     if shell.chat_panel.chat.as_ref().is_some_and(Chat::busy) {
         return;
     }
     if shell.chat_panel.chat.as_ref().is_some_and(|c| c.id == id) {
         shell.chat_panel.view = View::Conversation;
+        set_allow_changes(shell, false);
         return;
     }
     if let (Some(store), Some(project)) = (store_of(shell), shell.project.as_ref()) {
