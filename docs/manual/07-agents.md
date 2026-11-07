@@ -131,9 +131,10 @@ When the browser sign-in cannot finish on this computer, choose **No browser on 
 Sign in with a device code.** instead of step 2. The card shows a code, which runs out in 15
 minutes; the icon beside it copies it. **Cancel** stops the sign-in.
 
-Then open the sign-in page and enter the code there. The codex program names that page each time;
-it is always on `https://auth.openai.com/`, as Archforge opens no other. The card does not show
-the page's address yet:
+Then open the sign-in page and enter the code there. The codex program names that page each time.
+Archforge opens it only when it is on `https://auth.openai.com/`; for any other address **Open
+sign-in page** is greyed out and says *Not an address Archforge opens*. The card does not show the
+page's address yet:
 
 - **Open sign-in page** opens it in this computer's browser. To sign in on another device, copy
   the address from that browser's address bar and open it there.
