@@ -25,6 +25,10 @@ People will trust Archforge with their models. This outranks feature work.
   under a new name and said in the log; it is never overwritten unseen. The defaults take over.
 - Writes go through `craft_atomic::atomic_write`: a temporary file in the same folder, synchronised,
   then renamed over the target, so a crash leaves the old file or the new one.
+  A file only this user may read (a key's neighbour, a conversation's copy) goes through
+  `write_private_file` in `crates/agents/src/folder.rs` instead: the same steps, but the temporary file
+  is made exclusively with mode 0600, never through a link, and checked to be the file written before
+  the rename.
 - The graphics marker (`apps/archforge/src/graphics.rs`) records a start-up that crashed, so the
   next start skips that graphics choice.
 - A font egui cannot load is left out and said in the log (`crates/ui-egui/src/fonts.rs`,

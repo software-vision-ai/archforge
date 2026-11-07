@@ -437,7 +437,7 @@ the whole bundle (v1 and v2 definitions, non-experimental, about 750 KB). The st
 (`initialized`), 10 server requests and 85 server notifications. Every observed message and every
 doc-derived Codex fixture validated against it (checked with `jsonschema`, Draft 7, requests and
 notifications by kind, responses by method). The Codex adapter's tests use a small, credited cut
-of that schema in `crates/agents` once its pull request (#193) lands. The docs say the generated
+of that schema, `crates/agents/schema/codex-app-server-0.166.0.contract.json` (AR-202). The docs say the generated
 output is specific to the Codex version; the subcommands are marked experimental.
 
 ## Versions
@@ -446,7 +446,7 @@ output is specific to the Codex version; the subcommands are marked experimental
 |---|---|---|
 | Read the version | `claude --version` → `2.1.317 (Claude Code)`, exit 0; also `claude_code_version` in `system/init` | `codex --version` → `codex-cli 0.166.0`, exit 0; also `userAgent` in the `initialize` result |
 | Needed features and where they appeared | stream-json output 0.2.66, `--mcp-config` 0.2.75, `--disallowedTools` 0.2.82, `--replay-user-messages` 1.0.86, `--include-partial-messages` 1.0.109, `--bare` 2.1.81 with full enforcement (only CLI MCP servers) from 2.1.286, interrupt receipt 2.1.205, `--permission-prompts` 2.1.259, `api_retry.no_response` 2.1.261 (doc, changelog and reference pages) | The schema is version-specific; when `chatgptDeviceCode`, `ephemeral` threads and `model/list` first appeared was not found |
-| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the credited schema cut in `crates/agents` (#193); each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
+| Recommended range | **>= 2.1.286 and < 3.0.0**; tested 2.1.317. Below the floor: MissingRuntime ("update Claude Code"). Newer 2.x: accepted with a warning (owner, 2026-11-06) | **>= 0.166.0 and < 1.0.0**; tested 0.166.0. Contract tests run against the credited schema cut in `crates/agents/schema/` (AR-202); each tested bump regenerates it. Newer 0.x: accepted with a warning (owner, 2026-11-06), since unknown methods fail loudly (-32600) |
 | Missing | spawn fails with "not found" → MissingRuntime | the same |
 | Too old at run time | The version check stops it first; a `claude` that still refuses an option prints `error: unknown option '…'` on stderr and exits 1 before any event, which the adapter reports as an exit (Other) | `-32600 unknown variant` for a needed method → MissingRuntime |
 | stderr | Usage errors and input-parse errors, plain text | Tracing logs with ANSI colours; malformed-input reports |
@@ -454,8 +454,8 @@ output is specific to the Codex version; the subcommands are marked experimental
 ## Error mapping
 
 This is what the adapters do: Claude in `crates/agents/src/claude/parse.rs` (`ClaudeParser::result`,
-`failure`, `kind_of`) and Codex in the Codex adapter's `crates/agents/src/codex/parse.rs`
-(`turn_completed`, `kind_of`, #193). A turn ends **completed**, **stopped** or **failed**; stopped is
+`failure`, `kind_of`) and Codex in `crates/agents/src/codex/parse.rs`
+(`turn_completed`, `kind_of`, AR-202). A turn ends **completed**, **stopped** or **failed**; stopped is
 not an error, and only a failed turn gets a neutral category. Retries (`api_retry`, an `error`
 notification with `willRetry:true`) are progress: shown, never a failure by themselves.
 

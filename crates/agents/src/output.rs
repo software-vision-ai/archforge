@@ -122,12 +122,19 @@ pub(crate) struct Tail {
     bytes: Vec<u8>,
     cap: usize,
     dropped: u64,
+    /// The stream was read to its end.
+    closed: bool,
 }
 
 impl Tail {
     /// An empty tail that keeps at most `cap` bytes.
     pub(crate) fn new(cap: usize) -> Tail {
-        Tail { bytes: Vec::with_capacity(cap), cap, dropped: 0 }
+        Tail { bytes: Vec::with_capacity(cap), cap, dropped: 0, closed: false }
+    }
+
+    /// Whether the stream was read to its end (or its reading failed), so nothing more comes.
+    pub(crate) fn closed(&self) -> bool {
+        self.closed
     }
 
     /// Adds `chunk`, dropping the oldest bytes past the cap.
@@ -170,7 +177,8 @@ impl Drop for Tail {
     }
 }
 
-/// Reads `stream` to its end into `tail`, overwriting its read buffer at the end.
+/// Reads `stream` to its end into `tail`, overwriting its read buffer at the end, then marks the
+/// tail closed.
 pub(crate) fn read_tail(mut stream: impl Read, tail: Arc<Mutex<Tail>>) {
     let mut buf = vec![0u8; 8 * 1024];
     loop {
@@ -182,6 +190,7 @@ pub(crate) fn read_tail(mut stream: impl Read, tail: Arc<Mutex<Tail>>) {
         }
     }
     buf.zeroize();
+    tail.lock().unwrap_or_else(PoisonError::into_inner).closed = true;
 }
 
 /// What replaces a secret in shown text.
