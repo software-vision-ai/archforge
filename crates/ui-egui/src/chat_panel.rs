@@ -1482,7 +1482,8 @@ pub(crate) fn closing(shell: &mut Shell, chat: Option<(String, Option<String>)>)
 /// Whether a request of `method` with `params` sent on behalf of `origin` may run. An origin that
 /// is one of this window's conversations may act only while that conversation's turn runs in the
 /// project shown, never while a conversation of the same label still runs or ends elsewhere (labels
-/// are only unique within a project), and may undo or redo only its own step: never the person's.
+/// are only unique within a project), and may undo or redo only a step of the running turn: never
+/// the person's, another conversation's, or one of its own earlier turns.
 pub(crate) fn gate(shell: &Shell, origin: Option<&str>, method: &str, params: &Value) -> Result<(), String> {
     let Some(origin) = origin else { return Ok(()) };
     let mine = |p: &Panel| p.chat.as_ref().is_some_and(|c| c.origin.as_deref() == Some(origin));
@@ -1503,11 +1504,11 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, method: &str, params: &V
     let undo = method == "engine.undo" || (method == "engine.execute" && command == Some("edit.undo"));
     let redo = method == "engine.redo" || (method == "engine.execute" && command == Some("edit.redo"));
     let session = shell.session.as_ref();
-    if undo && session.is_none_or(|s| s.undo_origin() != Some(origin)) {
-        return Err(format!("the conversation {origin:?} may undo only its own changes, and the step on top is not one"));
+    if undo && session.is_none_or(|s| !s.undo_in_group(origin)) {
+        return Err(format!("the conversation {origin:?} may undo only its own changes in this turn, and the step on top is not one"));
     }
-    if redo && session.is_none_or(|s| s.redo_origin() != Some(origin)) {
-        return Err(format!("the conversation {origin:?} may redo only its own changes, and the step to redo is not one"));
+    if redo && session.is_none_or(|s| !s.redo_in_group(origin)) {
+        return Err(format!("the conversation {origin:?} may redo only its own changes in this turn, and the step to redo is not one"));
     }
     Ok(())
 }

@@ -7912,6 +7912,58 @@ fn a_turns_changes_leave_out_what_was_undone_between_and_the_persons_own_change(
     assert!(!ids(&h).iter().any(|i| i == "workspace.chat.turn.3.undo"), "two steps apart: no undo of the turn as one");
 }
 
+/// A conversation's turn undoes and redoes only its own steps: an earlier turn's step on top, or
+/// to redo, is refused through both undo entry points, and the turn's own step is undone and
+/// redone.
+#[test]
+fn a_turn_undoes_and_redoes_only_its_own_steps() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    let describe = |h: &mut Harness<'static, Shell>, name: &str, text: &str| {
+        let id = fx::element(h.state(), archforge_uml::CLASS, name).unwrap();
+        fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": text } }),
+        )
+        .unwrap();
+        h.run();
+        id
+    };
+    let text =
+        |h: &Harness<'static, Shell>, id| crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(id).unwrap());
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    let at = rect_of(&h, "workspace.chat.allow-changes").center();
+    click(&mut h, at);
+    ask_in_chat(&mut h, "Describe Customer");
+    let customer = describe(&mut h, "Customer", "A buyer");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // The next turn, before it changes anything: the earlier turn's step is on top, and refused.
+    ask_in_chat(&mut h, "Describe Product");
+    let undo = fx::call(h.state_mut(), "engine.undo", serde_json::json!({}));
+    assert!(undo.unwrap_err().contains("may undo only its own changes in this turn"));
+    let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
+    assert!(undo.unwrap_err().contains("may undo only its own changes in this turn"));
+    assert_eq!(text(&h, customer), "A buyer", "the earlier turn's change stays");
+    // Its own step it undoes and redoes; once undone, the earlier turn's step under it is refused.
+    let product = describe(&mut h, "Product", "A thing sold");
+    assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_ok());
+    assert_eq!((text(&h, product), text(&h, customer)), (String::new(), "A buyer".to_string()));
+    assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_err());
+    assert!(fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.redo", "params": {} })).is_ok());
+    assert_eq!(text(&h, product), "A thing sold");
+    chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+    // The person takes the second turn back: the third turn may not redo it, through either entry.
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.run();
+    ask_in_chat(&mut h, "Bring it back");
+    let redo = fx::call(h.state_mut(), "engine.redo", serde_json::json!({}));
+    assert!(redo.unwrap_err().contains("may redo only its own changes in this turn"));
+    let redo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.redo", "params": {} }));
+    assert!(redo.is_err());
+    assert_eq!(text(&h, product), "", "the earlier turn's step stays undone");
+}
+
 /// The changes card says what truly happened: a turn the person changed the model during is
 /// refused as changed during it, not after; taken back step by step it was not one step, while a
 /// turn of one step undone from its card was.

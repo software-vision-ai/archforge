@@ -512,6 +512,42 @@ fn a_group_makes_one_step_of_its_origins_changes_and_never_takes_anyone_elses() 
     assert!(s.begin_group("G0", "Turn 2").is_ok(), "an origin's group opened again replaces its own");
 }
 
+/// Undo and redo know a group's own steps: the step on top, or the step to redo, is the running
+/// group's only when the group made it, never when an earlier group of the same origin, another
+/// origin or the person did.
+#[test]
+fn undo_and_redo_tell_the_running_groups_steps_from_an_earlier_groups() {
+    let mut s = session();
+    s.begin_group("Chat 1", "Turn 1").unwrap();
+    s.execute_from("item.add", &json!({ "name": "A" }), Some("Chat 1")).unwrap();
+    assert!(s.undo_in_group("Chat 1") && !s.redo_in_group("Chat 1"));
+    s.end_group("Chat 1").unwrap();
+    assert!(!s.undo_in_group("Chat 1"), "no group open");
+    // The next turn: the earlier turn's step on top carries the same origin, but is not this turn's.
+    s.begin_group("Chat 1", "Turn 2").unwrap();
+    assert_eq!(s.undo_origin(), Some("Chat 1"));
+    assert!(!s.undo_in_group("Chat 1"), "an earlier turn's step");
+    s.execute_from("item.add", &json!({ "name": "B" }), Some("Chat 1")).unwrap();
+    assert!(s.undo_in_group("Chat 1"), "the turn's own step");
+    assert!(!s.undo_in_group("Chat 2"), "never another origin's");
+    s.undo().unwrap();
+    assert!(s.redo_in_group("Chat 1"), "its own step undone");
+    assert!(!s.undo_in_group("Chat 1"), "under it, the earlier turn's step again");
+    s.redo().unwrap();
+    assert!(s.undo_in_group("Chat 1") && !s.redo_in_group("Chat 1"));
+    // The person's step on top, and then undone: neither is the turn's.
+    s.execute("item.add", &json!({ "name": "Yours" })).unwrap();
+    assert!(!s.undo_in_group("Chat 1"));
+    s.undo().unwrap();
+    assert!(!s.redo_in_group("Chat 1") && s.undo_in_group("Chat 1"));
+    s.end_group("Chat 1").unwrap();
+    // An earlier turn's step undone by the person: the next turn may not redo it.
+    s.undo().unwrap();
+    s.begin_group("Chat 1", "Turn 3").unwrap();
+    assert_eq!(s.redo_origin(), Some("Chat 1"));
+    assert!(!s.redo_in_group("Chat 1"), "an earlier turn's step to redo");
+}
+
 /// A group keeps what it changed on every path the history takes: a merge or a step of its own
 /// that clears the whole history, a step undone and then cleared from redo by someone else's
 /// change, undo and redo just before the group ends, a step cancelled out after someone else's

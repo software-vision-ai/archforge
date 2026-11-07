@@ -380,8 +380,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   amber mark. Looking up commands and the window's controls makes no row. A request from a
   conversation's origin runs only while that conversation's turn runs in the project shown, never
   while a conversation of the same label still runs or ends elsewhere, and it undoes or redoes
-  only a step of its own, never the person's; while its turn runs, its own undo takes back the
-  turn's latest step so far.
+  only a step of the turn running, never the person's, another conversation's or one of its own
+  earlier turns; while its turn runs, its own undo takes back the turn's latest step so far.
 - A turn's changes are one step of the project's undo history, `Chat N: Turn n`, unless another
   change (the person's or another conversation's) lands while the turn runs: that ends the step,
   the turn's next change starts another, and the turn is several steps. Their card follows the

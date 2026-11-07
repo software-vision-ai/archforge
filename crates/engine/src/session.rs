@@ -324,6 +324,30 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.groups.iter().any(|g| g.origin == origin)
     }
 
+    /// Whether the step undo would take back now is one of `origin`'s open group's steps: a step
+    /// of the running turn, never an earlier one of the same origin.
+    pub fn undo_in_group(&self, origin: &str) -> bool {
+        let Some(top) = self.undo.last() else { return false };
+        top.origin.as_deref() == Some(origin)
+            && self
+                .groups
+                .iter()
+                .find(|g| g.origin == origin)
+                .is_some_and(|g| g.segments.iter().any(|s| s.applied && s.before == top.id && s.after == self.id))
+    }
+
+    /// Whether the step redo would apply again is one of `origin`'s open group's steps, undone
+    /// since: a step of the running turn, never an earlier one of the same origin.
+    pub fn redo_in_group(&self, origin: &str) -> bool {
+        let Some(next) = self.redo.last() else { return false };
+        next.origin.as_deref() == Some(origin)
+            && self
+                .groups
+                .iter()
+                .find(|g| g.origin == origin)
+                .is_some_and(|g| g.segments.iter().any(|s| !s.applied && s.before == self.id && s.after == next.id))
+    }
+
     /// Adds a change of `origin`'s open group `at` to the history: into the group's step while it
     /// is on top, else as a new step labelled with the group's label. `changes` is how many
     /// commands made it. Gives whether the history was cleared.
