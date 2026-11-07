@@ -438,7 +438,7 @@ impl CodexAccount {
     /// an event behind lines that mean nothing still comes. `None` when nothing came in time, and for
     /// every call after [`AccountEvent::Ended`].
     pub fn next_event(&mut self, timeout: Duration) -> Option<AccountEvent> {
-        let deadline = Instant::now().checked_add(timeout).unwrap_or_else(Instant::now);
+        let deadline = deadline_in(timeout);
         let mut budget = LINES_PER_CALL;
         loop {
             if let Some(event) = self.events.pop_front() {

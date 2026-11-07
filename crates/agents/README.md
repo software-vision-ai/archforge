@@ -260,7 +260,8 @@ request gets an empty grant, any other request of Codex's a JSON-RPC error.
 *Ending.* When a call's Codex ends first, the call fails with the end's reason (the exit code or
 signal and the error tail) and `Ended` stays queued; every later call of an account process fails
 with that reason too. When Codex closes its output, its exit status and whole error tail are awaited
-for up to 500 ms, so `Ended` carries them (also after a `shutdown` that came later); only when the exit
+for up to 500 ms, so `Ended` carries them (also when a `shutdown` came after Codex had ended or closed
+its output on its own); only when the exit
 is not seen in that time is the reason generic, and Codex, its output closed but running, is then
 terminated (a session or an account process alike). When Archforge must end a session (an
 unreadable, refused or timed-out handshake, a refused key, a refused stop's grace spent), its input is

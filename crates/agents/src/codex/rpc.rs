@@ -245,10 +245,10 @@ impl Conn {
     }
 
     /// Ends Codex as [`RuntimeProcess::shutdown`] does (waiting up to twice `grace`); the end it
-    /// then reports carries no error, unless Archforge was already ending it for one or Codex had
-    /// already closed its output on its own (a crash keeps its reason).
+    /// then reports carries no error, unless Archforge was already ending it for one, or Codex had
+    /// already closed its output or ended on its own before the shutdown (a crash keeps its reason).
     pub(crate) fn shutdown(&mut self, grace: Duration) -> Result<Exit, AgentError> {
-        if matches!(self.phase, Phase::Open) {
+        if matches!(self.phase, Phase::Open) && self.process.try_reap().is_none() {
             self.shutting_down = true;
         }
         self.process.shutdown(grace)
@@ -505,6 +505,14 @@ mod tests {
             error(INVALID_REQUEST, "bad key").into_error("account/login/start", Some(ErrorKind::InvalidCredential)).kind(),
             ErrorKind::InvalidCredential
         );
+    }
+
+    /// A timeout too long for the clock still gives a deadline in the future, never now.
+    #[test]
+    fn a_huge_timeout_is_never_a_zero_wait() {
+        let before = Instant::now();
+        assert!(deadline_in(Duration::MAX) > before + Duration::from_secs(3600));
+        assert!(deadline_in(Duration::from_millis(5)) >= before + Duration::from_millis(5));
     }
 
     /// Lines sort into answers, requests, notifications and skipped lines.

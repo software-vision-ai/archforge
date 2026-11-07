@@ -1670,6 +1670,33 @@ fn a_refused_key_ends_the_session() {
     world.remove();
 }
 
+/// A copy that cannot be written is said by `copy_error`, which names no message, and clears once a
+/// later write succeeds.
+#[test]
+fn a_failed_copy_write_is_said_until_one_succeeds() {
+    let turn = |id: &str| {
+        format!(
+            "req\nok \"$id\" '{{\"turn\":{{\"id\":\"{id}\",\"items\":[],\"status\":\"inProgress\"}}}}'\n/bin/sleep 0.2\n\
+             say '{{\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"{id}\",\"items\":[],\"status\":\"completed\"}}}}}}'\n"
+        )
+    };
+    let body = format!("{}\n{}{}drain", thread_prelude(), turn("A"), turn("B"));
+    let world = World::new("copy-error", &body);
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
+    std::fs::set_permissions(world.folder.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
+    session.send("secret words").unwrap();
+    events_until(&mut session, 5, turn_end);
+    let error = session.copy_error().expect("the write into a read-only folder failed").clone();
+    assert!(!format!("{error:?}{error}").contains("secret words"), "{error}");
+    std::fs::set_permissions(world.folder.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    session.send("next").unwrap();
+    events_until(&mut session, 5, turn_end);
+    assert!(session.copy_error().is_none(), "a later write succeeded");
+    assert!(world.folder.path().join(COPY_FILE).is_file());
+    drop(session);
+    world.remove();
+}
+
 /// A damaged copy is set aside at a resume, and the conversation goes on without it.
 #[test]
 fn a_damaged_copy_is_set_aside_at_a_resume() {
