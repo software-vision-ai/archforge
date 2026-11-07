@@ -18,7 +18,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use archforge_control::{Call, Grant, Handler, Role, Server};
+use archforge_control::{Call, Grant, Handler, ListenerWatch, Role, Server};
 use archforge_ui_egui::chat::{EventSink, HostEvent};
 use archforge_ui_egui::control::{ControlRequest, WAITING, abandon};
 
@@ -110,12 +110,14 @@ pub struct Access {
     /// Let Chat use the model.
     on: bool,
     server: Option<Server>,
+    /// The listening socket of the last opening closed, watched after it is gone.
+    closed: Option<ListenerWatch>,
 }
 
 impl Access {
     /// Access off, with no opening, its token files to go in `settings`.
     pub fn new(settings: &Path, window: Window) -> Access {
-        Access { settings: settings.to_path_buf(), window, on: false, server: None }
+        Access { settings: settings.to_path_buf(), window, on: false, server: None, closed: None }
     }
 
     /// A token for one conversation, read-only unless `allow_changes`, the opening made when none
@@ -150,6 +152,14 @@ impl Access {
         }
     }
 
+    /// Whether an opening of Chat's still listens: the one open, or the last one closed while its
+    /// listening socket is not closed yet. The tests judge by it, never by the port, which anything
+    /// may bind once it is free (AR-229).
+    #[cfg(test)]
+    pub fn listening(&self) -> bool {
+        self.server.is_some() || self.closed.as_ref().is_some_and(|w| !w.closed())
+    }
+
     /// Turns the opt-in on or off; off closes the opening at once.
     pub fn set(&mut self, on: bool, sink: Option<&EventSink>) {
         self.on = on;
@@ -159,10 +169,19 @@ impl Access {
     }
 
     /// Closes the opening, when one is open: every token is revoked, held connections are
-    /// answered "revoked" and closed, its threads are joined, and the window is told.
+    /// answered "revoked" and closed, its threads are joined, and the window is told. Its listening
+    /// socket is watched after (a listener left open is said in the log).
     pub fn close(&mut self, sink: Option<&EventSink>) {
         if let Some(server) = self.server.take() {
+            let port = server.port();
+            let watch = server.listener_watch();
             drop(server);
+            // Its accepting thread is joined in the drop when it could be woken; one that could not
+            // still listens, and is said so.
+            if !watch.closed() {
+                log::warn!("agent access closed, but its listener on 127.0.0.1:{port} is still open");
+            }
+            self.closed = Some(watch);
             if let Some(sink) = sink {
                 sink.send(HostEvent::Access { held: false });
             }

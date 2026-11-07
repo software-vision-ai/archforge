@@ -500,3 +500,24 @@ fn a_linked_executable_finds_the_command_line_tool_beside_the_file_it_links_to()
     let found = find_cli(&link, &[]).unwrap();
     assert_eq!(found, std::fs::canonicalize(&dir).unwrap().join(CLI_FILE));
 }
+
+/// A server's listener watch says closed only once its listening socket is closed (AR-229): open
+/// while it serves, closed once it is dropped, whatever binds the freed port since; and never
+/// closed for a server left running, so a check by it fails on a listener really left open.
+#[test]
+fn a_listener_watch_says_closed_only_once_the_socket_is_closed() {
+    let (server, _dir) = echo("listener-watch");
+    let port = server.port();
+    let watch = server.listener_watch();
+    assert!(!watch.closed(), "open while it serves");
+    drop(server);
+    assert!(watch.closed(), "closed once dropped");
+    // Another socket on the freed port changes nothing.
+    let squatter = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
+    assert!(watch.closed(), "still closed with the port taken again: {:?}", squatter.as_ref().map(|_| ()));
+    // A server never closed: its watch never says closed.
+    let (left, _dir) = echo("listener-watch-left");
+    let left_watch = left.listener_watch();
+    std::mem::forget(left);
+    assert!(!left_watch.closed(), "a listener left open is never said closed");
+}

@@ -421,6 +421,21 @@ pub struct Server {
     shared: Arc<Shared>,
     accept: Option<std::thread::JoinHandle<()>>,
     settings: PathBuf,
+    /// Set by the accepting thread once its listener is closed.
+    listener_closed: Arc<AtomicBool>,
+}
+
+/// Whether a server's listening socket is closed, read after the server itself is gone: set by its
+/// accepting thread once the listener is dropped, so it never depends on what else may bind the
+/// freed port since.
+#[derive(Debug, Clone)]
+pub struct ListenerWatch(Arc<AtomicBool>);
+
+impl ListenerWatch {
+    /// Whether the listening socket is closed.
+    pub fn closed(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
 }
 
 impl std::fmt::Debug for Server {
@@ -487,6 +502,12 @@ impl Server {
         self.port
     }
 
+    /// A watch on its listening socket, which tells once it is closed, after this server is
+    /// dropped too.
+    pub fn listener_watch(&self) -> ListenerWatch {
+        ListenerWatch(self.listener_closed.clone())
+    }
+
     /// Records a token and gives its grant's id and liveness.
     fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>) -> (u64, Arc<AtomicBool>) {
         let id = self.shared.next_grant.fetch_add(1, Ordering::SeqCst).saturating_add(1);
@@ -495,7 +516,8 @@ impl Server {
         (id, live)
     }
 
-    /// Binds the loopback port and starts the accepting thread.
+    /// Binds the loopback port and starts the accepting thread, which says when its listener is
+    /// closed ([`Server::listener_watch`]).
     fn listen(port: u16, settings: &Path, handler: Handler) -> Result<Server, String> {
         trusted_folder(settings)?;
         let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)))
@@ -508,11 +530,18 @@ impl Server {
             next_grant: AtomicU64::new(0),
         });
         let accepting = shared.clone();
+        let listener_closed = Arc::new(AtomicBool::new(false));
+        let closed = listener_closed.clone();
         let accept = std::thread::Builder::new()
             .name("control-accept".into())
-            .spawn(move || accept_loop(&listener, &accepting, &handler))
+            .spawn(move || {
+                accept_loop(&listener, &accepting, &handler);
+                // The socket closes here, and only then is it said closed.
+                drop(listener);
+                closed.store(true, Ordering::SeqCst);
+            })
             .map_err(|e| format!("the control channel could not start: {e}"))?;
-        Ok(Server { port, shared, accept: Some(accept), settings: settings.to_path_buf() })
+        Ok(Server { port, shared, accept: Some(accept), settings: settings.to_path_buf(), listener_closed })
     }
 }
 
