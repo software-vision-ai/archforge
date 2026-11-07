@@ -294,9 +294,8 @@ description, and HTML shows as text.
 ### Read-only, or Allow changes
 
 **Allow changes to the model**, under the box, is off for every new conversation, and every time
-one is opened again from **Conversations**, with one exception: choosing in the list the
-conversation already shown only goes back to it, and its switch stays as it was. While it is off,
-the agent can only read: Archforge refuses every change, undo and save it asks for.
+one is opened again from **Conversations**, the one already shown included. While it is off, the
+agent can only read: Archforge refuses every change, undo and save it asks for.
 
 Turn it on, and the agent may change the model:
 
@@ -399,8 +398,7 @@ ran.*
 
 **Conversations** (the clock at the top of the panel) lists the project's conversations, newest
 first, with when, the agent and how many messages. Click one to open it again, read-only until you
-allow changes (the conversation already shown keeps its switch, see
-[Read-only, or Allow changes](#read-only-or-allow-changes)). **New conversation** (+) starts
+allow changes; this holds for the conversation already shown too. **New conversation** (+) starts
 another.
 
 <!-- picture: workspace-chat-history light | The project's conversations, newest first, saved with the project -->

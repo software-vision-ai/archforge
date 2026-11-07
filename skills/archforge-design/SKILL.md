@@ -379,7 +379,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   in the box (bubble hidden) when the box is empty, else in its bubble with the box's text kept.
 - Opening the panel the first time in a project starts a new conversation (B2); it stays while
   the project is open. One read back from the history opens read-only: Allow changes is off for
-  every conversation until turned on in it.
+  every conversation until turned on in it. Choosing in the history the conversation already
+  shown does the same: Allow changes goes off as when turned off by hand, its program ends, and
+  the next question starts it again read-only (AR-226, decided by UX).
 - A question is kept in the project before the agent gets it; the composer empties only then. A
   refusal (a saved key in the question, a project that cannot be written, a question over 64 KiB)
   keeps the draft and says why in the danger colour above the chips. Enter sends, Shift+Enter
