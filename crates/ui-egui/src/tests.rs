@@ -8037,6 +8037,21 @@ fn with_chat_writing_off_the_bin_and_the_item_are_disabled_and_say_why() {
     assert_eq!(crate::chat_delete::refusal(&panel, &unreadable.entry).as_deref(), Some("This conversation cannot be read"));
 }
 
+/// A title holding the confirmation's own placeholders is shown as it was typed (AR-217).
+#[test]
+fn a_title_holding_placeholders_is_named_as_typed_in_the_confirmation() {
+    let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+    if let Some(k) = rig.store.chats.lock().unwrap().iter_mut().find(|k| k.row.id == chats[2]) {
+        k.row.title = "Why {agent} said {when} and {messages}".into();
+    }
+    let at = rect_of(&h, "workspace.chat.history").center();
+    click(&mut h, at);
+    click(&mut h, at);
+    crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+    let summary = h.state().chat_panel.ask.as_ref().map(|a| a.summary.clone());
+    assert_eq!(summary.as_deref(), Some("Why {agent} said {when} and {messages} · 12 messages with Codex, yesterday"));
+}
+
 /// A conversation's age in its confirmation: today, yesterday, a day and month this year, with the
 /// year before.
 #[test]

@@ -928,8 +928,8 @@ fn forgetting_a_deleted_conversation_ends_its_program_and_removes_its_folder_alo
     assert_eq!(answer, Ok(true));
     assert!(!folder(&gone).exists(), "its folder is gone");
     assert!(folder(&kept).is_dir() && folder(&last).is_dir(), "the others' stay");
-    let ended = chat_events(host.events.try_iter().collect(), &gone);
-    assert!(ended.iter().any(|e| matches!(e, ChatEvent::Ended { .. })), "its program ended first: {ended:?}");
+    // It left the running list as its program ended; the window is told so too.
+    host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if *chat == gone));
     assert_eq!(host.agents.send(&gone, "still there?".into()), Err(ChatRefusal::NotRunning));
     assert!(host.agents.send(&kept, "still there?".into()).is_ok(), "another conversation runs on");
     // Nothing to remove, and an id that is not a conversation's.

@@ -173,11 +173,12 @@ pub fn ask(shell: &mut Shell, chat: Uuid, row: usize) {
     let clock = clock(shell);
     let summary = fmt(
         &tr("{title} · {messages} with {agent}, {when}"),
+        // The title, a person's words, goes in last, so no placeholder it holds is filled.
         &[
-            ("title", &entry.title),
             ("messages", &trn("{n} message", "{n} messages", u64::from(entry.messages))),
             ("agent", entry.provider.name()),
             ("when", &age(entry.updated_at, clock)),
+            ("title", &entry.title),
         ],
     );
     let running = shell.chat_panel.chat.as_ref().is_some_and(|c| c.id == chat && c.busy());
