@@ -152,11 +152,13 @@ fn raw_start(chars: &[char], i: usize) -> Option<(usize, usize)> {
 fn char_end(chars: &[char], i: usize) -> Option<usize> {
     match chars.get(i + 1)? {
         '\\' => {
-            // A unicode escape runs to its closing brace; any other escapes one character.
-            let close = if chars.get(i + 2) == Some(&'u') && chars.get(i + 3) == Some(&'{') {
-                (i + 4..i + 12).find(|j| chars.get(*j) == Some(&'}'))?.saturating_add(1)
-            } else {
-                i + 3
+            // A unicode escape runs to its closing brace, a byte escape (`\x7f`) takes two digits,
+            // and the others one character; anything else is no character literal.
+            let close = match chars.get(i + 2)? {
+                'u' if chars.get(i + 3) == Some(&'{') => (i + 4..i + 12).find(|j| chars.get(*j) == Some(&'}'))?.saturating_add(1),
+                'x' => i + 5,
+                'n' | 'r' | 't' | '\\' | '0' | '\'' | '"' => i + 3,
+                _ => return None,
             };
             (chars.get(close) == Some(&'\'')).then_some(close + 1)
         }
@@ -290,6 +292,15 @@ pub fn findings(source: &str) -> Vec<String> {
                 if cut {
                     out.push(format!("line {line}: a path too long or too deeply nested to follow"));
                 }
+                // `use std::{self as s}` renames it too.
+                let renamed = tokens
+                    .get(i..end)
+                    .unwrap_or_default()
+                    .windows(2)
+                    .any(|w| matches!((&w[0].0, &w[1].0), (Token::Name(a), Token::Name(b)) if a == "self" && b == "as"));
+                if renamed {
+                    out.push(format!("line {line}: std renamed, which hides its paths from this check"));
+                }
                 i = end.max(i + 1);
                 continue;
             }
@@ -390,6 +401,10 @@ mod tests {
         assert_eq!(findings("let c = '\\u{1F600}'; let s = \"std::net\"; std::net::X"), vec!["line 1: std::net::X"]);
         assert_eq!(findings("use std as s; s::process::exit(0);"), vec!["line 1: std renamed, which hides its paths from this check"]);
         assert_eq!(findings("extern crate std as x;"), vec!["line 1: std renamed, which hides its paths from this check"]);
+        assert_eq!(findings("use std::{self as s, io}; s::process::exit(0);"), vec!["line 1: std renamed, which hides its paths from this check"]);
+        // A byte escape is four characters long, and the scan reads past it as the compiler does.
+        assert_eq!(findings("let q = ['\\x41','\"']; std::process::exit(0); let s = \"x\";"), vec!["line 1: std::process::exit"]);
+        assert_eq!(findings("let b = b'\\x7f'; let s = \"std::net\"; std::net::X"), vec!["line 1: std::net::X"]);
     }
 
     /// A damaged file never hangs the scan, and what it cannot follow is a finding.

@@ -14271,12 +14271,15 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     }
     h.run();
     assert_eq!(h.state().chats.dropped(&one), 1, "the third would pass the bytes' cap");
-    // The end still comes, making room by dropping the oldest.
-    f.emit(&one, ChatEvent::Ended { failure: None });
+    // The end still comes, making room by dropping the oldest: here a failure as long as a message.
+    let failure = crate::chat::ChatFailure { kind: crate::chat::FailureKind::Other, detail: "y".repeat(MAX_WAITING_BYTES / 3) };
+    let end = ChatEvent::Ended { failure: Some(failure) };
+    f.emit(&one, end.clone());
     h.run();
+    assert_eq!(h.state().chats.dropped(&one), 2, "the oldest message gave its place to the end");
     let events = crate::chat::take_events(h.state_mut(), &one);
-    assert_eq!(events.len(), 3);
-    assert_eq!(events.last(), Some(&ChatEvent::Ended { failure: None }));
+    assert_eq!(events.len(), 2, "one message and the end");
+    assert_eq!(events.last(), Some(&end));
     // The host's own count: places are taken by events and bytes, and given back as tickets drop.
     let waiting = std::sync::Arc::new(crate::chat::Waiting::default());
     let first = crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2 + 1).unwrap();

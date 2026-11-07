@@ -2,7 +2,9 @@
 //! agent programs, keeping their API keys in the system's secure store, the test message, Codex's
 //! account and sign-in, and Chat's conversations with their agent access. Every call returns at
 //! once; the work runs on threads of the host's own, each tracked, which stop when Archforge quits
-//! and are joined then ([`Agents::shutdown`]).
+//! and are joined then, within a budget ([`Agents::shutdown`]): a thread still waiting past it (on
+//! the secure store's prompt, or a codex program that does not answer) is named in the log and its
+//! program ends with Archforge's process, as its input closes.
 //!
 //! - The look for the programs runs at start; the store is opened only when the keys are first
 //!   needed, never at launch. Codex's account is read only when the shell first asks (the AI

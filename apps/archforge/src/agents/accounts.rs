@@ -94,6 +94,8 @@ pub fn test_message(inner: &Arc<Inner>, provider: Provider, model: &str, sign_in
     let failed = |e: AgentError| account_error(&e);
     let runtime = inner.runtime(super::kind(provider)).map_err(failed)?;
     let (scratch, folder) = Scratch::new(inner)?;
+    // The key's read may have waited on the store's prompt past a quit: nothing starts then.
+    let closing = || if inner.quitting() { Err(AccountError::Failed { detail: "Archforge is closing".into() }) } else { Ok(()) };
     // No key, or no store to hold one: there is nothing to test with. A store that refused (locked,
     // a prompt declined) says so.
     let key = |p: Provider| {
@@ -106,7 +108,9 @@ pub fn test_message(inner: &Arc<Inner>, provider: Provider, model: &str, sign_in
         Provider::Claude => {
             let model = Model::new(model).map_err(failed)?;
             let config = ClaudeConfig { session: uuid()?, start: Start::New, model, bridge: None, limits: Limits::default() };
-            Box::new(ClaudeSession::start(&runtime, &folder, config, key(provider)?).map_err(failed)?)
+            let key = key(provider)?;
+            closing()?;
+            Box::new(ClaudeSession::start(&runtime, &folder, config, key).map_err(failed)?)
         }
         Provider::Codex => {
             let home = CodexHome::open(&scratch.workspace).map_err(failed)?;
@@ -122,6 +126,7 @@ pub fn test_message(inner: &Arc<Inner>, provider: Provider, model: &str, sign_in
                 limits: Limits::default(),
                 request_timeout: archforge_agents::codex::DEFAULT_REQUEST_TIMEOUT,
             };
+            closing()?;
             Box::new(CodexSession::start(&runtime, &folder, &home, config, auth).map_err(failed)?)
         }
     };
