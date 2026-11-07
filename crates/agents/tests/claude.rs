@@ -18,7 +18,7 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use archforge_agents::claude::{
-    Bridge, BridgeHome, ClaudeConfig, ClaudeParser, ClaudeSession, KEY_VAR, MCP_CONFIG_FILE, Model, SessionId, Start, command_line, mcp_config,
+    Bridge, ClaudeConfig, ClaudeParser, ClaudeSession, KEY_VAR, MCP_CONFIG_FILE, Model, SessionId, Start, command_line, mcp_config,
 };
 use archforge_agents::{
     AgentError, AgentSession, ConversationFolder, ConversationId, Dropped, ErrorKind, HostEnv, Limits, Runtime, RuntimeKind, SessionEvent, Skipped,
@@ -186,14 +186,17 @@ fn replay(name: &str) -> String {
     body
 }
 
-/// The bridge of the tests: an `archforge-cli` that need not exist, read-only unless `allow`.
+/// The token file the tests' bridge is given; it need not exist.
+const TOKEN_FILE: &str = "/Users/person/Library/Application Support/Archforge/control-47000-0123456789abcdef.token";
+
+// The bridge of the tests: an `archforge-cli` that need not exist, read-only unless `allow`.
 fn bridge(allow: bool) -> Bridge {
     Bridge {
         cli: PathBuf::from("/opt/archforge/bin/archforge-cli"),
         port: 47000,
         origin: "Chat 1".to_owned(),
         allow_changes: allow,
-        home: BridgeHome { home: Some(PathBuf::from("/Users/person")), xdg_config_home: None },
+        token_file: PathBuf::from(TOKEN_FILE),
     }
 }
 
@@ -203,7 +206,7 @@ fn config(allow: bool) -> ClaudeConfig {
         session: SessionId::new(SESSION).unwrap(),
         start: Start::New,
         model: Model::new("sonnet").unwrap(),
-        bridge: bridge(allow),
+        bridge: Some(bridge(allow)),
         limits: Limits::default(),
     }
 }
@@ -468,24 +471,26 @@ fn the_command_line_names_the_model_and_the_session() {
     assert_eq!(text(command_line(&resume, mcp)), expected(["--resume", SESSION]), "a resume names the model again");
 }
 
-/// The configuration starts the bridge read-only unless changes are allowed, blanks the key for it,
-/// gives it the person's home back for the token, and refuses what `archforge-cli` would refuse.
+/// The configuration starts the bridge with the conversation's token file, read-only unless changes
+/// are allowed, blanks the key for it, names no server at all without a bridge, and refuses what
+/// `archforge-cli` would refuse.
 #[test]
 fn the_tool_server_configuration_is_read_only_unless_allowed() {
-    let read_only: Value = serde_json::from_str(&mcp_config(&bridge(false)).unwrap()).unwrap();
+    let read_only: Value = serde_json::from_str(&mcp_config(Some(&bridge(false))).unwrap()).unwrap();
     let server = &read_only["mcpServers"]["archforge"];
     assert_eq!(server["command"], "/opt/archforge/bin/archforge-cli");
-    assert_eq!(server["args"], serde_json::json!(["mcp", "--bridge", "47000", "--read-only", "--origin", "Chat 1"]));
-    assert_eq!(server["env"], serde_json::json!({ "ANTHROPIC_API_KEY": "", "HOME": "/Users/person" }));
+    assert_eq!(server["args"], serde_json::json!(["mcp", "--bridge", "47000", "--token-file", TOKEN_FILE, "--read-only", "--origin", "Chat 1"]));
+    assert_eq!(server["env"], serde_json::json!({ "ANTHROPIC_API_KEY": "" }), "the key blanked, no home needed");
     assert_eq!(read_only["mcpServers"].as_object().unwrap().len(), 1, "the bridge is the only server");
 
-    let allowed: Value = serde_json::from_str(&mcp_config(&bridge(true)).unwrap()).unwrap();
-    assert_eq!(allowed["mcpServers"]["archforge"]["args"], serde_json::json!(["mcp", "--bridge", "47000", "--origin", "Chat 1"]));
+    let allowed: Value = serde_json::from_str(&mcp_config(Some(&bridge(true))).unwrap()).unwrap();
+    assert_eq!(
+        allowed["mcpServers"]["archforge"]["args"],
+        serde_json::json!(["mcp", "--bridge", "47000", "--token-file", TOKEN_FILE, "--origin", "Chat 1"])
+    );
     assert_eq!(allowed["mcpServers"]["archforge"]["env"]["ANTHROPIC_API_KEY"], "");
 
-    let linux = Bridge { home: BridgeHome { home: Some("/home/p".into()), xdg_config_home: Some("/home/p/.cfg".into()) }, ..bridge(false) };
-    let linux: Value = serde_json::from_str(&mcp_config(&linux).unwrap()).unwrap();
-    assert_eq!(linux["mcpServers"]["archforge"]["env"]["XDG_CONFIG_HOME"], "/home/p/.cfg");
+    assert_eq!(mcp_config(None).unwrap(), r#"{"mcpServers":{}}"#, "without a bridge, no tool server");
 
     for bad in [
         Bridge { cli: "archforge-cli".into(), ..bridge(false) },
@@ -494,10 +499,9 @@ fn the_tool_server_configuration_is_read_only_unless_allowed() {
         Bridge { origin: "--read-only".into(), ..bridge(false) },
         Bridge { origin: "Chat\u{202E}1".into(), ..bridge(false) },
         Bridge { origin: "x".repeat(65), ..bridge(false) },
-        Bridge { home: BridgeHome { home: Some("relative".into()), xdg_config_home: None }, ..bridge(false) },
-        Bridge { home: BridgeHome::default(), ..bridge(false) },
+        Bridge { token_file: "control.token".into(), ..bridge(false) },
     ] {
-        assert!(matches!(mcp_config(&bad), Err(AgentError::InvalidSetting { .. })), "{bad:?}");
+        assert!(matches!(mcp_config(Some(&bad)), Err(AgentError::InvalidSetting { .. })), "{bad:?}");
     }
 }
 
@@ -675,7 +679,7 @@ fn an_end_during_a_turn_fails_it() {
 fn settings_are_refused_before_anything_starts() {
     let base = scratch("refuse");
     let (runtime, folder) = fake_claude(&base, "exit 0");
-    let bad = ClaudeConfig { bridge: Bridge { origin: " padded".into(), ..bridge(false) }, ..config(false) };
+    let bad = ClaudeConfig { bridge: Some(Bridge { origin: " padded".into(), ..bridge(false) }), ..config(false) };
     assert!(matches!(ClaudeSession::start(&runtime, &folder, bad, canary()), Err(AgentError::InvalidSetting { .. })));
     assert!(!base.join("args").exists(), "nothing was started");
     assert!(!folder.path().join(MCP_CONFIG_FILE).exists());
@@ -689,7 +693,7 @@ fn a_key_in_the_tool_server_configuration_is_refused() {
     let base = scratch("origin-key");
     let (runtime, folder) = fake_claude(&base, "exit 0");
     let short = || Secret::new("sk-short-key-1".to_owned()).unwrap();
-    let cfg = ClaudeConfig { bridge: Bridge { origin: "sk-short-key-1".into(), ..bridge(false) }, ..config(false) };
+    let cfg = ClaudeConfig { bridge: Some(Bridge { origin: "sk-short-key-1".into(), ..bridge(false) }), ..config(false) };
     let error = ClaudeSession::start(&runtime, &folder, cfg, short()).unwrap_err();
     assert!(matches!(&error, AgentError::SecretExposed { variable, place: "tool server configuration" } if variable == KEY_VAR), "{error:?}");
     assert!(!error.to_string().contains("sk-short-key-1"));
@@ -743,6 +747,7 @@ fn lines_that_mean_nothing_cannot_hold_next_event() {
 /// build `archforge-cli`, and run
 /// `read -rs ARCHFORGE_LIVE_KEY && export ARCHFORGE_LIVE_KEY` (so the key stays out of the shell's
 /// history), then `ARCHFORGE_LIVE_PORT=<port> ARCHFORGE_LIVE_CLI=<abs path to archforge-cli>
+/// ARCHFORGE_LIVE_TOKEN_FILE=<abs path to control-<port>.token in the settings folder>
 /// cargo test -p archforge-agents --test claude -- --ignored --nocapture`.
 /// It checks the spike's open round-trip items 1, 2, 4 and 5: the event order with a real tool
 /// call, whether `init` comes once per process or per turn, that the bridge does not see the key
@@ -760,9 +765,9 @@ fn a_real_round_trip() {
         port: var("ARCHFORGE_LIVE_PORT").parse().unwrap(),
         origin: "Live test".into(),
         allow_changes: allow,
-        home: BridgeHome::from_process(),
+        token_file: PathBuf::from(var("ARCHFORGE_LIVE_TOKEN_FILE")),
     };
-    let start = |start, allow| ClaudeConfig { start, bridge: live_bridge(allow), ..config(allow) };
+    let start = |start, allow| ClaudeConfig { start, bridge: Some(live_bridge(allow)), ..config(allow) };
     let key = || Secret::new(var("ARCHFORGE_LIVE_KEY")).unwrap();
     let mut session = ClaudeSession::start(&runtime, &folder, start(Start::New, false), key()).unwrap();
     for message in ["Which schemas are in the open model? Use the tools.", "And how many entities in all?"] {

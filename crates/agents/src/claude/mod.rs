@@ -2,7 +2,8 @@
 //!
 //! [`ClaudeSession::start`] writes the conversation's tool server configuration, starts
 //! `claude -p --bare` with the stream-json input and output, Archforge's bridge as the only tool
-//! server, every built-in tool removed and anything that would ask denied; the model is named on
+//! server (or none, without a bridge), every built-in tool removed and anything that would ask
+//! denied; the model is named on
 //! every start because a resume does not keep it. Claude's session id is the conversation's UUID,
 //! and its transcripts stay in the conversation's private settings folder (`CLAUDE_CONFIG_DIR`).
 //!
@@ -10,8 +11,10 @@
 //! environment to the tool servers it starts, so the generated configuration blanks every secret
 //! variable for the bridge.
 //!
-//! A conversation is read-only unless "Allow changes" is on: the bridge then runs without
-//! `--read-only`. Switching it means shutting the runtime down and starting it again with
+//! The bridge reads the conversation's own token from the file the application granted it
+//! (`--token-file`). A conversation is read-only unless "Allow changes" is on: its token's role is
+//! read-only, which the control channel enforces, and the bridge runs with `--read-only` as a
+//! second layer. Switching it means shutting the runtime down and starting it again with
 //! [`Start::Resume`] and the other setting, which rewrites the configuration. That a resume picks up
 //! a changed configuration is not yet verified with a real round trip (spike item 5).
 
@@ -114,57 +117,67 @@ pub enum Start {
     Resume,
 }
 
-/// Where the bridge finds the running application's control token. `archforge-cli` looks for the
-/// token in the settings folder it derives from `HOME` (and `XDG_CONFIG_HOME` on Linux), and takes
-/// no token path of its own yet, but `claude` runs with a private `HOME`; so the configuration gives
-/// the bridge the person's own folders back. (AR-203: once the bridge takes the token file or the
-/// settings folder as an argument, this goes.)
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct BridgeHome {
-    /// The person's home folder, absolute.
-    pub home: Option<PathBuf>,
-    /// The person's `XDG_CONFIG_HOME`, absolute, where set.
-    pub xdg_config_home: Option<PathBuf>,
-}
-
-impl BridgeHome {
-    /// The application's own `HOME` and `XDG_CONFIG_HOME`, each kept only when set and absolute.
-    pub fn from_process() -> BridgeHome {
-        let var = |k: &str| {
-            let path = std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from)?;
-            if path.is_absolute() {
-                Some(path)
-            } else {
-                log::warn!("{k} is not an absolute path, so the tool server is not given it");
-                None
-            }
-        };
-        BridgeHome { home: var("HOME"), xdg_config_home: var("XDG_CONFIG_HOME") }
-    }
-}
-
-/// Archforge's tool server as `claude` is to start it: `archforge-cli mcp --bridge <port>`.
+/// Archforge's tool server as a runtime is to start it:
+/// `archforge-cli mcp --bridge <port> --token-file <file> [--read-only] --origin <label>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bridge {
     /// The absolute path of `archforge-cli` (`archforge_control::cli_path`).
     pub cli: PathBuf,
     /// The port the application's control channel listens on.
     pub port: u16,
+    /// The absolute path of the file that holds this conversation's own token
+    /// (`archforge_control::Grant::path`); the bridge reads it for every call.
+    pub token_file: PathBuf,
     /// The label on every change this conversation makes (`--origin`).
     pub origin: String,
-    /// "Allow changes": without it the bridge runs with `--read-only`.
+    /// "Allow changes": without it the bridge runs with `--read-only`, a second layer over the
+    /// read-only role of the conversation's token.
     pub allow_changes: bool,
-    /// Where the bridge finds the control token.
-    pub home: BridgeHome,
 }
 
-/// Everything a Claude session is started with, but the key.
+/// The bridge's arguments after `archforge-cli`, every path and label checked: absolute UTF-8
+/// paths, a port of 1 to 65535, an origin label `archforge-cli` takes that does not start with `-`.
+/// Gives the command and its arguments.
+pub(crate) fn bridge_command(bridge: &Bridge) -> Result<(String, Vec<String>), AgentError> {
+    let cli = absolute_text("archforge-cli path", &bridge.cli)?;
+    let token_file = absolute_text("token file", &bridge.token_file)?;
+    if bridge.port == 0 {
+        return Err(AgentError::InvalidSetting { setting: "bridge port", bytes: 1, reason: "the port is 1 to 65535".to_owned() });
+    }
+    if bridge.origin.starts_with('-') {
+        return Err(setting("origin label", &bridge.origin, "a label may not start with -"));
+    }
+    archforge_control::check_origin(&bridge.origin).map_err(|e| setting("origin label", &bridge.origin, &e.to_string()))?;
+    let mut args = vec!["mcp".to_owned(), "--bridge".to_owned(), bridge.port.to_string(), "--token-file".to_owned(), token_file];
+    if !bridge.allow_changes {
+        args.push("--read-only".to_owned());
+    }
+    args.push("--origin".to_owned());
+    args.push(bridge.origin.clone());
+    Ok((cli, args))
+}
+
+/// `path` as text: refused when it is relative or not UTF-8.
+fn absolute_text(what: &'static str, path: &Path) -> Result<String, AgentError> {
+    if !path.is_absolute() {
+        return Err(AgentError::InvalidSetting { setting: what, bytes: path.as_os_str().len(), reason: "it is not an absolute path".to_owned() });
+    }
+    path.to_str().map(str::to_owned).ok_or_else(|| AgentError::InvalidSetting {
+        setting: what,
+        bytes: path.as_os_str().len(),
+        reason: "it is not UTF-8 text".to_owned(),
+    })
+}
+
+/// Everything a Claude session is started with, but the key. Without a bridge the session has no
+/// tool server at all (the configuration names none), as a test message or a conversation without
+/// agent access runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaudeConfig {
     pub session: SessionId,
     pub start: Start,
     pub model: Model,
-    pub bridge: Bridge,
+    pub bridge: Option<Bridge>,
     pub limits: Limits,
 }
 
@@ -198,48 +211,15 @@ pub fn command_line(config: &ClaudeConfig, mcp_config: &Path) -> Vec<OsString> {
 }
 
 /// The tool server configuration `claude` reads (`--mcp-config`), as JSON text: Archforge's bridge
-/// alone, read-only unless changes are allowed, with every secret variable blanked and the person's
-/// home given back for the token. Refused: a relative or non-UTF-8 path, and an origin label
-/// `archforge-cli` would refuse.
-pub fn mcp_config(bridge: &Bridge) -> Result<String, AgentError> {
-    let path_text = |what: &'static str, path: &Path| -> Result<String, AgentError> {
-        if !path.is_absolute() {
-            return Err(AgentError::InvalidSetting { setting: what, bytes: path.as_os_str().len(), reason: "it is not an absolute path".to_owned() });
-        }
-        path.to_str().map(str::to_owned).ok_or_else(|| AgentError::InvalidSetting {
-            setting: what,
-            bytes: path.as_os_str().len(),
-            reason: "it is not UTF-8 text".to_owned(),
-        })
-    };
-    let cli = path_text("archforge-cli path", &bridge.cli)?;
-    if bridge.port == 0 {
-        return Err(AgentError::InvalidSetting { setting: "bridge port", bytes: 1, reason: "the port is 1 to 65535".to_owned() });
-    }
-    if bridge.origin.starts_with('-') {
-        return Err(setting("origin label", &bridge.origin, "a label may not start with -"));
-    }
-    archforge_control::check_origin(&bridge.origin).map_err(|e| setting("origin label", &bridge.origin, &e.to_string()))?;
-    let mut args = vec!["mcp".to_owned(), "--bridge".to_owned(), bridge.port.to_string()];
-    if !bridge.allow_changes {
-        args.push("--read-only".to_owned());
-    }
-    args.push("--origin".to_owned());
-    args.push(bridge.origin.clone());
+/// alone, read-only unless changes are allowed, with every secret variable blanked, as Claude hands
+/// its whole environment to the servers it starts; `{"mcpServers":{}}` without a bridge. Refused: a
+/// relative or non-UTF-8 path, and an origin label `archforge-cli` would refuse.
+pub fn mcp_config(bridge: Option<&Bridge>) -> Result<String, AgentError> {
+    let Some(bridge) = bridge else { return Ok(json!({ "mcpServers": {} }).to_string()) };
+    let (cli, args) = bridge_command(bridge)?;
     let mut env = Map::new();
     for name in SECRET_VARS {
         env.insert(name.to_owned(), Value::String(String::new()));
-    }
-    // Until the bridge takes the token's place itself (AR-203), without the person's home it could
-    // not find the token and would fail on every call: refused here instead.
-    let home = bridge.home.home.as_ref().ok_or_else(|| AgentError::InvalidSetting {
-        setting: "home folder",
-        bytes: 0,
-        reason: "the person's home folder is unknown, so the tool server could not find the control token".to_owned(),
-    })?;
-    env.insert("HOME".to_owned(), Value::String(path_text("home folder", home)?));
-    if let Some(xdg) = &bridge.home.xdg_config_home {
-        env.insert("XDG_CONFIG_HOME".to_owned(), Value::String(path_text("XDG_CONFIG_HOME", xdg)?));
     }
     let config = json!({ "mcpServers": { SERVER_NAME: { "command": cli, "args": args, "env": env } } });
     Ok(config.to_string())
@@ -250,7 +230,7 @@ pub fn mcp_config(bridge: &Bridge) -> Result<String, AgentError> {
 /// that holds the key (pasted into the origin label, say), which would put it on the bridge's
 /// command line. Whatever stands at the file's place from an earlier start, a link among them, is
 /// removed first, so the write never follows a link out of the private folder.
-pub fn write_mcp_config(folder: &ConversationFolder, bridge: &Bridge, key: &Secret) -> Result<PathBuf, AgentError> {
+pub fn write_mcp_config(folder: &ConversationFolder, bridge: Option<&Bridge>, key: &Secret) -> Result<PathBuf, AgentError> {
     let text = mcp_config(bridge)?;
     if !key.expose().is_empty() && text.contains(key.expose()) {
         return Err(AgentError::SecretExposed { variable: KEY_VAR.to_owned(), place: "tool server configuration" });
@@ -309,7 +289,7 @@ impl ClaudeSession {
             return Err(AgentError::NotAvailable);
         }
         config.limits.check()?;
-        let mcp = write_mcp_config(folder, &config.bridge, &key)?;
+        let mcp = write_mcp_config(folder, config.bridge.as_ref(), &key)?;
         let request = SpawnRequest {
             args: command_line(&config, &mcp),
             vars: vec![("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_owned(), "1".into())],
