@@ -311,14 +311,14 @@ Chat answers once the default agent is ready and **Let Chat use the model** is o
   program gives up, the card below for what went wrong shows: for example *Connection lost* when
   the network stayed away, or *Rate limited* when the provider kept asking Chat to wait.
 - **Allow changes to the model** is off for every conversation, and every time one is opened again
-  from **Conversations**, the one already shown included: the agent can then only read. Turn it on and the agent may change the model; everything one
-  question changes is **one step** of the project's undo history, named *Chat 1: Turn 2*, as long
-  as nothing else changes the model while the reply runs. The green card under the changes offers
-  **Undo this turn's changes**, which takes back exactly those changes and keeps your own. If you
-  or another conversation change the model while the reply runs, the question's changes become
-  separate steps around yours. Then, or once the model was changed since, or the project was
-  closed in between, the card says the changes can no longer be undone on their own; ⌘Z (Ctrl Z)
-  still works step by step.
+  from **Conversations**, the one already shown included: the agent can then only read. Turn it on
+  and the agent may change the model; everything one question changes is **one step** of the
+  project's undo history, named *Chat 1: Turn 2*, as long as nothing else changes the model while
+  the reply runs. The green card under the changes offers **Undo this turn's changes**, which
+  takes back exactly those changes and keeps your own. If you or another conversation change the
+  model while the reply runs, the question's changes become separate steps around yours. Then, or
+  once the model was changed since, or the project was closed in between, the card says the
+  changes can no longer be undone on their own; ⌘Z (Ctrl Z) still works step by step.
 - **The badge** in the box names the agent and its model, *Claude · Sonnet*, then the exact version
   once the agent names it, *Claude · Sonnet 4.5*. Choose another model there; before the first
   question you can choose the other agent too. A conversation keeps its agent and model: changing

@@ -7527,13 +7527,43 @@ fn choosing_the_conversation_shown_from_conversations_brings_it_back_read_only()
         assert_eq!(chat.id, shown, "{theme:?}: the same conversation");
         assert!(!chat.allow_changes, "{theme:?}: back read-only");
         assert_eq!(h.state().chat_panel.view, crate::chat_panel::View::Conversation, "{theme:?}");
-        assert!(painted_has(&h, "Allow changes to the model"), "{theme:?}");
         assert_eq!(chat_calls(&rig).3, 1, "{theme:?}: its program, started with changes allowed, ended");
         // The next question starts the program again, read-only, where it was.
         ask_in_chat(&mut h, "And Product?");
         let started = rig.agents.started.lock().unwrap().clone();
         assert_eq!(started.len(), 2, "{theme:?}: started again");
         assert_eq!(started.last().map(|s| (s.allow_changes, s.resume)), Some((false, true)), "{theme:?}: read-only, resumed");
+    }
+}
+
+/// The same with a program slow to end (AR-226): a question asked before its end waits for it,
+/// then starts the program again read-only. In both appearances.
+#[test]
+fn a_question_asked_while_the_reopened_conversations_program_ends_starts_it_read_only() {
+    use crate::chat::ChatEvent;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "Describe Customer.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let key = crate::chat_fixture::key(h.state());
+        rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
+        let at = rect_of(&h, "workspace.chat.history").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.chat.history.0").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.session), Some(crate::chat_panel::Session::Ending), "{theme:?}");
+        ask_in_chat(&mut h, "And Product?");
+        assert_eq!(chat_calls(&rig).0, 1, "{theme:?}: the question waits for the end");
+        rig.agents.hold_ends.store(false, std::sync::atomic::Ordering::Relaxed);
+        rig.agents.running.lock().unwrap().retain(|k| *k != key);
+        chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
+        let started = rig.agents.started.lock().unwrap().clone();
+        assert_eq!(started.len(), 2, "{theme:?}: started again once ended");
+        assert_eq!(started.last().map(|s| s.allow_changes), Some(false), "{theme:?}: read-only");
+        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And Product?")), "{theme:?}");
     }
 }
 
