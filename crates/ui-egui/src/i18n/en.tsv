@@ -562,6 +562,8 @@ str		Sign in with a device code	Sign in with a device code
 str		On any device with a browser, open the sign-in page and enter this code.	On any device with a browser, open the sign-in page and enter this code.
 plural		It runs out in {n} minute.	It runs out in {n} minute.|It runs out in {n} minutes.
 str		Copy the code	Copy the code
+str		Copy the address	Copy the address
+str		Sign-in page address	Sign-in page address
 str		Open sign-in page	Open sign-in page
 str		Not an address Archforge opens	Not an address Archforge opens
 str		The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.	The code comes from the codex program, which keeps the sign-in itself. Archforge only shows it.
