@@ -167,9 +167,14 @@ fn tail(text: &str) -> String {
 }
 
 /// `text` cut to [`MAX_DETAIL_BYTES`] at a character boundary, with an ellipsis when cut.
-pub(crate) fn capped(mut text: String) -> String {
-    if text.len() > MAX_DETAIL_BYTES {
-        let mut end = MAX_DETAIL_BYTES;
+pub(crate) fn capped(text: String) -> String {
+    capped_to(text, MAX_DETAIL_BYTES)
+}
+
+/// `text` cut to at most `max` bytes at a character boundary, with an ellipsis after the cut.
+pub(crate) fn capped_to(mut text: String, max: usize) -> String {
+    if text.len() > max {
+        let mut end = max;
         while !text.is_char_boundary(end) {
             end = end.saturating_sub(1);
         }

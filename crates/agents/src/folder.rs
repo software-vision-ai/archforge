@@ -3,7 +3,7 @@
 //! this crate names and checks is ever removed.
 
 use std::fmt;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -16,6 +16,8 @@ pub const MAX_CONVERSATION_ID_BYTES: usize = 64;
 const CONVERSATION_PREFIX: &str = "conversation-";
 /// The prefix of a version probe's folder name.
 const PROBE_PREFIX: &str = "probe-";
+/// How many names a private file's temporary file tries before giving up.
+const TEMP_TRIES: u32 = 16;
 /// The folders inside a conversation's folder.
 const HOME: &str = "home";
 const CONFIG: &str = "config";
@@ -214,8 +216,69 @@ impl Drop for ProbeFolder {
     }
 }
 
+/// Writes `bytes` to the file `path` so that it holds either its old content or all of the new,
+/// readable by this user alone. `purpose` names the content in errors and the log, which never hold
+/// the content itself.
+///
+/// The steps: a new temporary file is made beside the target (exclusively, mode 0600, never
+/// following a link), written and synchronised; before the rename it is checked to be the very file
+/// written (the same device and inode as the open handle), a regular file of this user with mode
+/// 0600; then it is renamed over the target, which replaces whatever stood there, a link among
+/// them, without touching what a link pointed at. A failure before the rename removes the temporary
+/// file alone; after the rename the target is never deleted. The folder is synchronised last, and a
+/// failure there is logged as a warning, not an error: the file is already in place.
+pub(crate) fn write_private_file(path: &Path, bytes: &[u8], purpose: &str) -> Result<(), AgentError> {
+    let failed = |problem: String| AgentError::Folder { path: path.to_path_buf(), problem };
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(failed(format!("cannot hold {purpose}: it names no file in a folder")));
+    };
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let mut created = None;
+    for _ in 0..TEMP_TRIES {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let mut temp_name = std::ffi::OsString::from(".");
+        temp_name.push(name);
+        temp_name.push(format!(".tmp-{}-{n}", std::process::id()));
+        let temp = parent.join(temp_name);
+        match sys::create_private_file(&temp) {
+            Ok(file) => {
+                created = Some((temp, file));
+                break;
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(failed(format!("could not hold {purpose}: its temporary file could not be made: {e}"))),
+        }
+    }
+    let Some((temp, mut file)) = created else {
+        return Err(failed(format!("could not hold {purpose}: no free name for its temporary file after {TEMP_TRIES} tries")));
+    };
+    let uid = sys::current_uid();
+    let prepared = file
+        .write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|e| format!("could not be written: {e}"))
+        .and_then(|()| file.metadata().map_err(|e| format!("could not be checked: {e}")))
+        .and_then(|handle| match sys::same_private_file(&handle, &temp, uid) {
+            Some(problem) => Err(format!("its temporary file {problem}")),
+            None => Ok(()),
+        })
+        .and_then(|()| std::fs::rename(&temp, path).map_err(|e| format!("could not be put in place: {e}")));
+    drop(file);
+    if let Err(problem) = prepared {
+        // Only the temporary file goes; whatever stands at its name now is removed, never followed.
+        if let Err(e) = std::fs::remove_file(&temp) {
+            log::warn!("the temporary file for {purpose} in {} stays: {e}", parent.display());
+        }
+        return Err(failed(format!("could not hold {purpose}: {problem}")));
+    }
+    if let Err(e) = std::fs::File::open(parent).and_then(|dir| dir.sync_all()) {
+        log::warn!("the folder {} could not be synchronised after writing {purpose}: {e}", parent.display());
+    }
+    Ok(())
+}
+
 /// Makes `path` as a private folder, or checks the one there.
-fn ensure_private(path: &Path, uid: u32) -> Result<(), AgentError> {
+pub(crate) fn ensure_private(path: &Path, uid: u32) -> Result<(), AgentError> {
     match sys::make_private_folder(path, false) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
@@ -237,6 +300,74 @@ pub(crate) fn check_private(path: &Path, uid: u32) -> Result<(), AgentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh folder in the temporary directory for one test, named with the process id.
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("archforge-folder-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.canonicalize().unwrap()
+    }
+
+    /// The names of the entries in `dir`, sorted.
+    fn names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        names.sort();
+        names
+    }
+
+    /// A private file is written whole with mode 0600, replaces an earlier one, and leaves no
+    /// temporary file behind.
+    #[cfg(unix)]
+    #[test]
+    fn a_private_file_is_written_whole_and_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("private-file");
+        let target = dir.join("copy.json");
+        write_private_file(&target, b"first", "a test copy").unwrap();
+        write_private_file(&target, b"second", "a test copy").unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"second");
+        assert_eq!(std::fs::symlink_metadata(&target).unwrap().permissions().mode() & 0o7777, 0o600);
+        assert_eq!(names(&dir), vec!["copy.json".to_owned()], "no temporary file stays");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A link at the target's place is replaced by the file; the file it pointed at, outside the
+    /// folder, keeps its content.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_at_the_target_never_lets_the_write_reach_its_target() {
+        let dir = scratch_dir("private-link");
+        let outside = dir.join("outside.txt");
+        std::fs::write(&outside, b"keep me").unwrap();
+        let inner = dir.join("inner");
+        std::fs::create_dir(&inner).unwrap();
+        let target = inner.join("copy.json");
+        std::os::unix::fs::symlink(&outside, &target).unwrap();
+        write_private_file(&target, b"new content", "a test copy").unwrap();
+        assert_eq!(std::fs::read(&outside).unwrap(), b"keep me", "the linked file is untouched");
+        let meta = std::fs::symlink_metadata(&target).unwrap();
+        assert!(meta.file_type().is_file(), "the link was replaced by a regular file");
+        assert_eq!(std::fs::read(&target).unwrap(), b"new content");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A write that fails before the rename removes its temporary file alone and keeps the target.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_write_removes_only_its_temporary_file() {
+        let dir = scratch_dir("private-fail");
+        // A folder at the target's place: the rename of a file over it fails.
+        let target = dir.join("copy.json");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::write(target.join("inside"), b"x").unwrap();
+        let error = write_private_file(&target, b"data", "a test copy").unwrap_err();
+        assert!(matches!(&error, AgentError::Folder { problem, .. } if problem.contains("a test copy")), "{error:?}");
+        assert!(!error.to_string().contains("data"));
+        assert_eq!(names(&dir), vec!["copy.json".to_owned()], "only the temporary file went");
+        assert!(target.join("inside").is_file(), "the target is kept");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     /// Ids are lowercase letters, digits and hyphens, and a refused id is never repeated.
     #[test]

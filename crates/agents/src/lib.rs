@@ -27,6 +27,7 @@
 use std::fmt;
 
 pub mod claude;
+pub mod codex;
 mod discover;
 mod error;
 mod folder;

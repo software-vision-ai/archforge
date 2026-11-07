@@ -2,7 +2,7 @@
 //! waitable, file modes and owners. Unix only; elsewhere every call says it is not available, and
 //! the public entry points answer [`crate::AgentError::NotAvailable`] before reaching here.
 
-use std::fs::Metadata;
+use std::fs::{File, Metadata};
 use std::io;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus};
@@ -151,6 +151,37 @@ mod imp {
         }
         None
     }
+
+    /// Creates a new file at `path` for writing: exclusively (whatever stands there, a link among
+    /// them, is refused rather than opened), with mode 0600, never following a link, closed on exec.
+    pub(crate) fn create_private_file(path: &Path) -> io::Result<File> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let no_follow = i32::try_from(rustix::fs::OFlags::NOFOLLOW.bits()).map_err(|_| io::Error::other("O_NOFOLLOW does not fit an int"))?;
+        std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).custom_flags(no_follow).open(path)
+    }
+
+    /// Why the file at `path` is not the file `handle` describes, a regular file of `uid` with mode
+    /// 0600 (the same device and inode), or `None` when it is. `path` is looked at without following
+    /// a link.
+    pub(crate) fn same_private_file(handle: &Metadata, path: &Path, uid: u32) -> Option<String> {
+        let on_disk = match std::fs::symlink_metadata(path) {
+            Ok(meta) => meta,
+            Err(e) => return Some(format!("cannot be read back: {e}")),
+        };
+        if !on_disk.file_type().is_file() {
+            return Some("is no longer a regular file".to_owned());
+        }
+        if on_disk.dev() != handle.dev() || on_disk.ino() != handle.ino() {
+            return Some("was replaced by another file".to_owned());
+        }
+        if on_disk.uid() != uid {
+            return Some(format!("belongs to user {}, not to this user ({uid})", on_disk.uid()));
+        }
+        if on_disk.mode() & 0o7777 != 0o600 {
+            return Some(format!("has mode {:o}, not 600", on_disk.mode() & 0o7777));
+        }
+        None
+    }
 }
 
 #[cfg(not(unix))]
@@ -210,6 +241,16 @@ mod imp {
 
     /// Not available on this system.
     pub(crate) fn shared_write_problem(_meta: &Metadata, _uid: u32) -> Option<String> {
+        Some("cannot be checked on this system".to_owned())
+    }
+
+    /// Not available on this system.
+    pub(crate) fn create_private_file(_path: &Path) -> io::Result<File> {
+        Err(unavailable())
+    }
+
+    /// Not available on this system.
+    pub(crate) fn same_private_file(_handle: &Metadata, _path: &Path, _uid: u32) -> Option<String> {
         Some("cannot be checked on this system".to_owned())
     }
 }
