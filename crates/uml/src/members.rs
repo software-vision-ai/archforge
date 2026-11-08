@@ -558,7 +558,8 @@ fn typed_bounds(p: &Params) -> Result<Option<(u64, Option<u64>)>, CommandError> 
 }
 
 /// `uml.attribute.add`: an attribute of a class, an interface, a data type or an association class,
-/// its name free among its attributes, with its modifiers (AR-126).
+/// its name free among its attributes, with its modifiers (AR-126). Its classifier's cards grow to
+/// show it ([`crate::figures::grow_cards`]).
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = attribute_owner(ctx.doc, p, "class")?;
     let Some((owned, _)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "attributes"))) };
@@ -579,6 +580,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let at = place(p, list(ctx.doc, c, owned).len());
     ctx.doc.insert(c, owned, at, Value::Ref(a)).map_err(fail)?;
     crate::modifiers::apply(ctx.doc, a, &modifiers)?;
+    crate::figures::grow_cards(ctx.doc, c).map_err(fail)?;
     select(ctx, a);
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
@@ -587,7 +589,8 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
 /// changed, everything checked before anything changes. A field the call leaves out keeps what the
 /// attribute has, so a rename alone keeps its type, multiplicity and modifiers; clearing is said
 /// explicitly (an empty type, multiplicity or default, an empty list). A type its default does not
-/// fit is refused, naming the default, which is never cleared for it.
+/// fit is refused, naming the default, which is never cleared for it. A card of its classifier made
+/// shorter than its rows grows to show them ([`crate::figures::grow_cards`]).
 fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx.doc, p, "attribute", PROPERTY, "an attribute")?;
     let Some(c) = owner_of(ctx.doc, a).filter(|_| one(ctx.doc, a, property::ASSOCIATION).is_none()) else {
@@ -629,6 +632,7 @@ fn attribute_set(ctx: &mut C<'_>, p: &Params) -> R {
         set_multiplicity(ctx.doc, a, text(p, "multiplicity"), "multiplicity")?;
     }
     crate::modifiers::apply(ctx.doc, a, &modifiers)?;
+    crate::figures::grow_cards(ctx.doc, c).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -727,7 +731,7 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
 }
 
 /// `uml.operation.add`: an operation of a class, an interface, a data type or an association class,
-/// at the place asked for.
+/// at the place asked for. Its classifier's cards grow to show it ([`crate::figures::grow_cards`]).
 fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     let c = classifier_of(ctx.doc, p, "class")?;
     let Some((_, owned)) = member_lists(ctx.doc, c) else { return Err(refuse("class", no_members(ctx.doc, c, "operations"))) };
@@ -735,16 +739,19 @@ fn operation_add(ctx: &mut C<'_>, p: &Params) -> R {
     set_operation(ctx.doc, c, op, p)?;
     let at = place(p, list(ctx.doc, c, owned).len());
     ctx.doc.insert(c, owned, at, Value::Ref(op)).map_err(fail)?;
+    crate::figures::grow_cards(ctx.doc, c).map_err(fail)?;
     select(ctx, op);
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
 /// `uml.operation.set`: an operation's name, visibility, flags (leaf among them, AR-138) and
-/// signature changed.
+/// signature changed. A card of its classifier made shorter than its rows grows to show them
+/// ([`crate::figures::grow_cards`]).
 fn operation_set(ctx: &mut C<'_>, p: &Params) -> R {
     let op = id_of(ctx.doc, p, "operation", OPERATION, "an operation")?;
     let owner = owner_of(ctx.doc, op).unwrap_or(op);
     set_operation(ctx.doc, owner, op, p)?;
+    crate::figures::grow_cards(ctx.doc, owner).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, op)? }))
 }
 
@@ -791,7 +798,7 @@ fn literal_of(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), Comman
 /// `uml.literal.add`: a literal of an enumeration, its name free among its literals whatever the
 /// case, at the place `at` asks for (from 0 to the count of literals) or, at -1, at the end. A place
 /// past the end is refused, not taken as the end; an enumeration that holds [`MAX_LITERALS`]
-/// already takes no more.
+/// already takes no more. Its enumeration's cards grow to show it ([`crate::figures::grow_cards`]).
 fn literal_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx.doc, p, "enumeration", ENUMERATION, "an enumeration")?;
     let count = list(ctx.doc, e, enumeration::OWNED_LITERAL).len();
@@ -817,17 +824,20 @@ fn literal_add(ctx: &mut C<'_>, p: &Params) -> R {
     let l = ctx.doc.create(ENUMERATION_LITERAL).map_err(fail)?;
     set_name(ctx.doc, l, name)?;
     ctx.doc.insert(e, enumeration::OWNED_LITERAL, at, Value::Ref(l)).map_err(fail)?;
+    crate::figures::grow_cards(ctx.doc, e).map_err(fail)?;
     select(ctx, l);
     Ok(json!({ "id": uuid_of(ctx.doc, l)? }))
 }
 
 /// `uml.literal.rename`: a literal renamed, its new name free among its enumeration's other
-/// literals whatever the case; it keeps its place and its identity.
+/// literals whatever the case; it keeps its place and its identity. A card of its enumeration made
+/// shorter than its rows grows to show them ([`crate::figures::grow_cards`]).
 fn literal_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let (l, e) = literal_of(ctx.doc, p, "literal")?;
     let name = text(p, "name");
     check_literal_name(ctx.doc, e, name, Some(l))?;
     set_name(ctx.doc, l, name)?;
+    crate::figures::grow_cards(ctx.doc, e).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, l)? }))
 }
 

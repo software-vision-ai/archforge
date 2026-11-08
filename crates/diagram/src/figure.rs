@@ -45,6 +45,45 @@ pub struct Card {
     pub template: Vec<String>,
 }
 
+/// A card's header's height in diagram units: the canvas draws a card by these five measures, and
+/// a command grows a node by them ([`Card::height`]).
+pub const CARD_HEADER: f32 = 66.0;
+/// The top of a card's first row, under the card's top.
+pub const CARD_FIRST_ROW: f32 = 77.0;
+/// The pitch between two rows.
+pub const CARD_ROW: f32 = 20.0;
+/// The pitches between the last row of a compartment and the first of the next.
+pub const COMPARTMENT_GAP: f32 = 1.0;
+/// How far a card's foot is under its last row's end.
+pub const CARD_FOOT: f32 = 9.0;
+
+impl Card {
+    /// How tall the card is to show every place in its compartments, in diagram units: a row a
+    /// pitch, an empty compartment of several still a row, [`COMPARTMENT_GAP`] between two, and
+    /// [`CARD_FOOT`] under the last; the header alone when it has no place. Rows the notation left
+    /// out ([`Card::hidden`]) take none: the card counts them however tall it is.
+    pub fn height(&self) -> f32 {
+        let several = self.compartments.len() > 1;
+        // Where the next place would sit, in pitches below the first, counted as the canvas lays them.
+        let mut at = 0.0_f32;
+        let mut any = false;
+        for (c, rows) in self.compartments.iter().enumerate() {
+            if c > 0 {
+                at += COMPARTMENT_GAP;
+            }
+            if rows.is_empty() && several {
+                at += 1.0;
+                any = true;
+            }
+            for _ in rows {
+                at += 1.0;
+                any = true;
+            }
+        }
+        if any { CARD_FIRST_ROW + at * CARD_ROW + CARD_FOOT } else { CARD_HEADER }
+    }
+}
+
 /// The colours a card is drawn in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tone {

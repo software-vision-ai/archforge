@@ -550,9 +550,9 @@ fn value_refusal(store: &Store, property: Obj, problem: &ValueProblem) -> String
     }
 }
 
-/// Writes `values` of property `p_id` on the element's stereotype `s_id`, growing the cards that
-/// show them on diagrams that show values, as one undo step; refused, the text typed stays in its
-/// field with the reason, the model untouched.
+/// Writes `values` of property `p_id` on the element's stereotype `s_id` in one undo step, whose
+/// command grows the cards that show them on diagrams that show values (AR-241); refused, the text
+/// typed stays in its field with the reason, the model untouched.
 fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values: Vec<String>, typed: Option<String>) {
     let problem = shell.session.as_ref().and_then(|s| {
         let store = s.doc();
@@ -566,10 +566,7 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
     }
     let params = json!({ "element": element.to_string(), "stereotype": s_id.to_string(), "property": p_id.to_string(), "values": values });
     let Some(session) = shell.session.as_mut() else { return };
-    let out = session.batch(&tr("Set stereotype value"), |b| {
-        b.execute("uml.stereotype.set-value", &params)?;
-        grow_cards(b, element, None)
-    });
+    let out = session.execute("uml.stereotype.set-value", &params);
     match out {
         Ok(_) => {
             shell.panels.stereotypes.value = None;
@@ -585,45 +582,6 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
             });
         }
     }
-}
-
-/// Grows, inside batch `b`, every card of `element` (or every card of diagram `only`) on a diagram
-/// that shows stereotype values whose height would hide a row: a card is only ever grown.
-fn grow_cards(
-    b: &mut archforge_engine::Batch<'_, Store, archforge_diagram::ProjectView>,
-    element: Uuid,
-    only: Option<Uuid>,
-) -> Result<(), archforge_engine::EngineError> {
-    let mut grow: Vec<(String, f64, f64)> = Vec::new();
-    {
-        let store = b.doc();
-        let nodes: Vec<Obj> = match only.and_then(|d| store.by_uuid(d)) {
-            Some(d) => store
-                .alive()
-                .filter(|n| archforge_diagram::diagram_of(store, *n) == Some(d) && store.class_of(*n).ok() == Some(archforge_diagram::NODE))
-                .collect(),
-            None => store.by_uuid(element).map(|e| archforge_diagram::views_of(store, e).2).unwrap_or_default(),
-        };
-        for n in nodes {
-            let Some(d) = archforge_diagram::diagram_of(store, n) else { continue };
-            let Some(e) = store.get(n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()) else { continue };
-            if !applications::values_shown(store, d) || applications::value_rows(store, e).is_empty() {
-                continue;
-            }
-            let Some(card) = archforge_uml::figures::card(store, e, d) else { continue };
-            let needed = f64::from(crate::canvas::card_height(&card)).min(archforge_diagram::rules::MAX_SIZE);
-            let bounds = archforge_diagram::grid::bounds_of(store, n);
-            if bounds.height < needed
-                && let Ok(id) = store.uuid(n)
-            {
-                grow.push((id.to_string(), bounds.width, needed));
-            }
-        }
-    }
-    for (node, width, height) in grow {
-        b.execute("diagram.resize", &json!({ "node": node, "width": width, "height": height }))?;
-    }
-    Ok(())
 }
 
 /// The open class diagram, when one is open.
@@ -651,15 +609,12 @@ fn show_values_check(shell: &mut Shell, ui: &egui::Ui, p: &Palette, left: f32, y
     y + 28.0
 }
 
-/// Shows or hides the stereotype values on diagram `d`, growing its cards that would hide a value,
-/// as one undo step.
+/// Shows or hides the stereotype values on diagram `d` in one undo step, whose command grows the
+/// cards that would hide a value (AR-241).
 pub(crate) fn show_values(shell: &mut Shell, d: Uuid, on: bool) -> Result<(), String> {
     let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     session
-        .batch(&tr("Show stereotype values"), |b| {
-            b.execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))?;
-            if on { grow_cards(b, d, Some(d)) } else { Ok(()) }
-        })
+        .execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))
         .map(|_| shell.panels.notice = None)
         .map_err(|e| e.to_string())
 }

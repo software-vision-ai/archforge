@@ -945,8 +945,6 @@ str		No value	无值
 str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	您设置的值保存在 {name} 上；默认值在您更改之前会显示标签。移除会从 {name} 上取下 «{stereotype}»，并保留其定义。
 str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	尚未应用。+ 提供应用于 {package} 或其外层包的配置文件中的构造型。
 str		Show stereotype values on this diagram	在此图中显示构造型值
-str		Show stereotype values	显示构造型值
-str		Set stereotype value	设置构造型值
 str		Filter: {text}	筛选：{text}
 str		No stereotype matches.	没有匹配的构造型。
 str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	尚无构造型。请通过 模型 ▸ 新建 ▸ 构造型 在配置文件中创建。

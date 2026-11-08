@@ -944,8 +944,6 @@ str		No value	No value
 str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.
 str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.
 str		Show stereotype values on this diagram	Show stereotype values on this diagram
-str		Show stereotype values	Show stereotype values
-str		Set stereotype value	Set stereotype value
 str		Filter: {text}	Filter: {text}
 str		No stereotype matches.	No stereotype matches.
 str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.

@@ -7119,6 +7119,155 @@ fn a_new_class_shows_the_operations_added_to_it_and_a_card_made_short_says_what_
     }
 }
 
+/// The size of node `n`, width and height.
+fn node_size(h: &Harness<'static, Shell>, n: archforge_mof::Uuid) -> (f64, f64) {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(n).unwrap());
+    (b.width, b.height)
+}
+
+/// Members a tool adds over the control channel as Chat does, in one `engine.batch`, grow every
+/// card of their class to show them all, no `+ n more` row left (AR-241): the command grows the
+/// card, the window takes no part. A card sized by hand keeps its width, a taller one its height,
+/// and one undo over the channel takes the members and the growth back, redo both; light and dark.
+#[test]
+fn members_a_tool_adds_grow_the_class_card_in_the_same_undo_step() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let run = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+            let out = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap_or_else(|e| panic!("{command}: {e}"));
+            archforge_mof::Uuid::parse(out.value["id"].as_str().unwrap()).unwrap()
+        };
+        let pkg = run(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let d = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": "Sales" }));
+        crate::canvas::open(h.state_mut(), d);
+        let class = run(&mut h, "uml.class.add", serde_json::json!({ "package": pkg.to_string(), "name": "Customer" }));
+        let node = run(&mut h, "diagram.place", serde_json::json!({ "diagram": d.to_string(), "element": class.to_string(), "x": 200, "y": 200 }));
+        // The same class on two more diagrams: made wider and short by hand, and already tall.
+        let mut others = Vec::new();
+        for (name, width, tall) in [("Wide", 360, 150), ("Tall", 260, 600)] {
+            let other = run(&mut h, "diagram.add", serde_json::json!({ "kind": "uml.class", "element": pkg.to_string(), "name": name }));
+            let place =
+                serde_json::json!({ "diagram": other.to_string(), "element": class.to_string(), "x": 0, "y": 0, "width": width, "height": tall });
+            others.push(run(&mut h, "diagram.place", place));
+        }
+        let before = [node_size(&h, node), node_size(&h, others[0]), node_size(&h, others[1])];
+        assert_eq!(before, [(240.0, archforge_uml::CLASS_SIZE.1), (360.0, 150.0), (260.0, 600.0)]);
+        let c = class.to_string();
+        let steps = serde_json::json!([
+            { "command": "uml.attribute.add", "params": { "class": c, "name": "firstName", "type": "String" } },
+            { "command": "uml.attribute.add", "params": { "class": c, "name": "lastName", "type": "String" } },
+            { "command": "uml.operation.add", "params": { "class": c, "name": "setFirstName" } },
+            { "command": "uml.operation.add", "params": { "class": c, "name": "setLastName" } },
+            { "command": "uml.operation.add", "params": { "class": c, "name": "setEmail" } },
+        ]);
+        let answer = crate::control::answer(h.state_mut(), "engine.batch", &serde_json::json!({ "label": "Agent changes", "steps": steps })).unwrap();
+        assert_eq!(answer["undo"], "Agent changes", "one undo step");
+        h.run();
+        let texts = painted(&h);
+        assert!(!texts.iter().any(|t| t.contains("more member")), "{theme:?}: {texts:?}");
+        // Each row is painted twice, on the card and in Properties, so a row Properties alone shows fails.
+        for row in ["+ firstName : String", "+ lastName : String", "+ setFirstName()", "+ setLastName()", "+ setEmail()"] {
+            assert_eq!(texts.iter().filter(|t| *t == row).count(), 2, "{theme:?}: {row} on the card: {texts:?}");
+        }
+        // Two attribute rows, the line, three operation rows.
+        let grown = crate::uml_ui::members_height(2, 3);
+        assert_eq!([node_size(&h, node), node_size(&h, others[0]), node_size(&h, others[1])], [(240.0, grown), (360.0, grown), (260.0, 600.0)]);
+        crate::control::answer(h.state_mut(), "engine.undo", &serde_json::json!({})).unwrap();
+        assert_eq!(member_rows(&h, class, false).len() + member_rows(&h, class, true).len(), 0, "one undo takes every member back");
+        assert_eq!([node_size(&h, node), node_size(&h, others[0]), node_size(&h, others[1])], before, "{theme:?}: and every card's height");
+        crate::control::answer(h.state_mut(), "engine.redo", &serde_json::json!({})).unwrap();
+        assert_eq!([node_size(&h, node), node_size(&h, others[0]), node_size(&h, others[1])], [(240.0, grown), (360.0, grown), (260.0, 600.0)]);
+    }
+}
+
+/// Literals a tool adds to an enumeration or renames, and stereotype values it sets and shows, grow
+/// the cards that would hide them in the command's own step (AR-241), so no `+ n more` row is left;
+/// a value set while the diagram hides values, hiding them again, and an n-ary association's
+/// diamond with a value leave their nodes as they are; in light and dark.
+#[test]
+fn literals_and_values_a_tool_writes_grow_the_cards_that_show_them() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        let (_, _, entity) = crate::uml_profiles::put_profiles(h.state_mut(), true).unwrap();
+        let execute = |h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value| {
+            let out = crate::control::answer(h.state_mut(), "engine.execute", &serde_json::json!({ "command": command, "params": params }));
+            out.unwrap_or_else(|e| panic!("{command}: {e}"))["result"].clone()
+        };
+        let d = h.state().canvas.active.unwrap();
+        let (sample, order) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let o = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Order").unwrap();
+            (st.uuid(st.container(o).unwrap().unwrap().0).unwrap(), st.uuid(o).unwrap())
+        };
+        // An enumeration made short and wide by hand grows a row a literal, its width kept.
+        let status = execute(&mut h, "uml.enumeration.add", serde_json::json!({ "package": sample.to_string(), "name": "Stage" }));
+        let status = archforge_mof::Uuid::parse(status["id"].as_str().unwrap()).unwrap();
+        let place = serde_json::json!({ "diagram": d.to_string(), "element": status.to_string(), "x": 1200, "y": 700, "width": 300, "height": 100 });
+        let card = archforge_mof::Uuid::parse(execute(&mut h, "diagram.place", place)["id"].as_str().unwrap()).unwrap();
+        for name in ["Draft", "Placed", "Paid", "Shipped"] {
+            execute(&mut h, "uml.literal.add", serde_json::json!({ "enumeration": status.to_string(), "name": name }));
+        }
+        assert_eq!(node_size(&h, card), (300.0, crate::uml_ui::literals_height(4)), "{theme:?}");
+        h.run();
+        let texts = painted(&h);
+        assert!(!texts.iter().any(|t| t.contains("more literal")) && texts.iter().any(|t| t == "Shipped"), "{theme:?}: {texts:?}");
+        crate::control::answer(h.state_mut(), "engine.undo", &serde_json::json!({})).unwrap();
+        assert_eq!(node_size(&h, card), (300.0, crate::uml_ui::literals_height(3)), "undo takes the last literal's growth back");
+        // Made short by hand again, a literal renamed grows it back, its width kept.
+        execute(&mut h, "diagram.resize", serde_json::json!({ "node": card.to_string(), "width": 300, "height": 100 }));
+        let paid = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let e = st.by_uuid(status).unwrap();
+            st.uuid(archforge_uml::commands::literals(st, e)[2]).unwrap()
+        };
+        execute(&mut h, "uml.literal.rename", serde_json::json!({ "literal": paid.to_string(), "name": "Settled" }));
+        assert_eq!(node_size(&h, card), (300.0, crate::uml_ui::literals_height(3)), "{theme:?}: an edit grows it too");
+        // An n-ary association of three sample classes, its diamond at its own size, with «Reference».
+        let (reference, classes, counts) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let named = |kind, n: &str| st.alive().find(|o| st.class_of(*o).ok() == Some(kind) && archforge_core::name_of(st, *o) == n).unwrap();
+            let o = st.by_uuid(order).unwrap();
+            let counts = (archforge_uml::members::attributes(st, o).len(), archforge_uml::members::operations(st, o).len());
+            let classes = ["Customer", "Product", "Order"].map(|n| st.uuid(named(archforge_uml::CLASS, n)).unwrap().to_string());
+            (st.uuid(named(archforge_uml::STEREOTYPE, "Reference")).unwrap().to_string(), classes, counts)
+        };
+        let nary = execute(&mut h, "uml.association.add-nary", serde_json::json!({ "classes": classes }))["id"].as_str().unwrap().to_string();
+        let place = serde_json::json!({ "diagram": d.to_string(), "element": nary, "x": 1300, "y": 500, "width": 44, "height": 28 });
+        let diamond = archforge_mof::Uuid::parse(execute(&mut h, "diagram.place", place)["id"].as_str().unwrap()).unwrap();
+        execute(&mut h, "uml.stereotype.apply", serde_json::json!({ "element": nary, "stereotype": reference }));
+        execute(
+            &mut h,
+            "uml.stereotype.set-value",
+            serde_json::json!({ "element": nary, "stereotype": reference, "property": "lazy", "values": ["false"] }),
+        );
+        // A value set while the diagram hides values leaves Order's card; shown, the card grows.
+        let order_node = archforge_mof::Uuid::parse(&nodes["Order"]).unwrap();
+        let low = node_size(&h, order_node);
+        let value = serde_json::json!({ "element": order.to_string(), "stereotype": entity, "property": "table", "values": ["orders"] });
+        execute(&mut h, "uml.stereotype.set-value", value);
+        assert_eq!(node_size(&h, order_node), low, "{theme:?}: no value shows yet");
+        execute(&mut h, "uml.stereotype.show-values", serde_json::json!({ "diagram": d.to_string(), "show": true }));
+        // Its members, then the line, «Entity» and table = "orders".
+        let shown = crate::uml_ui::members_height(counts.0, counts.1) + 3.0 * f64::from(crate::canvas::ENTITY_ROW);
+        assert_eq!(node_size(&h, order_node), (low.0, shown), "{theme:?}");
+        assert_eq!(node_size(&h, diamond), (44.0, 28.0), "{theme:?}: a diamond keeps its size");
+        h.run();
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "table = \"orders\"") && !texts.iter().any(|t| t.contains("more member")), "{theme:?}: {texts:?}");
+        let value = serde_json::json!({ "element": order.to_string(), "stereotype": entity, "property": "cached", "values": ["true"] });
+        execute(&mut h, "uml.stereotype.set-value", value);
+        h.run();
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "table = \"orders\"") && texts.iter().any(|t| t == "cached = true"), "{theme:?}: {texts:?}");
+        assert!(!texts.iter().any(|t| t.contains("more member")), "{theme:?}: {texts:?}");
+        // Hidden again, no card is made shorter.
+        let tall = node_size(&h, order_node);
+        execute(&mut h, "uml.stereotype.show-values", serde_json::json!({ "diagram": d.to_string(), "show": false }));
+        assert_eq!((node_size(&h, order_node), node_size(&h, diamond)), (tall, (44.0, 28.0)), "{theme:?}");
+    }
+}
+
 #[test]
 fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest() {
     let (mut h, customer, diagram) = diagram_harness();
