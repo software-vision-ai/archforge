@@ -179,11 +179,7 @@ fn run(shell: &mut Shell, ctx: &egui::Context, acts: Vec<Act>) {
                 shell.chat_panel.menu = false;
                 crate::chat_panel::choose(shell, provider, &model);
             }
-            Act::RemoveChip(chip) => {
-                if let Some(c) = shell.chat_panel.chat.as_mut() {
-                    c.removed.insert(chip);
-                }
-            }
+            Act::RemoveChip(chip) => crate::chat_panel::set_chip(shell, chip, true),
             Act::History => crate::chat_panel::toggle_history(shell),
             Act::New => crate::chat_panel::new_conversation(shell),
             Act::Open(id) => {

@@ -729,6 +729,23 @@ pub fn retry(shell: &mut Shell, edited: Option<String>) {
     chat.step = Step::Rerunning(rx, pending);
 }
 
+/// Removes the context chip `chip` from the conversation shown, or puts it back (`removed` false),
+/// and keeps the chips removed in the project (AR-227), so a reopened conversation never sends a
+/// chip the person removed. A conversation not yet in the project keeps them when its first
+/// question makes it. Nothing is written when nothing changed.
+pub fn set_chip(shell: &mut Shell, chip: Chip, removed: bool) {
+    let project = shell.project.as_ref().map(|p| p.path.clone());
+    let store = store_of(shell);
+    let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
+    let changed = if removed { chat.removed.insert(chip) } else { chat.removed.remove(&chip) };
+    if !changed || chat.origin.is_none() {
+        return;
+    }
+    if let (Some(project), Some(s)) = (project, store) {
+        chat.writes.push(s.write(&project, Write::Chips { chat: chat.id, removed: chat.removed.clone() }));
+    }
+}
+
 /// Whether `turn` can be sent again now: it failed, changed nothing, and its provider's wait is over.
 pub fn retryable(turn: &Turn, now: u64) -> bool {
     match &turn.state {
@@ -1133,6 +1150,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
     chat.title = row.title;
     chat.chosen = true;
     chat.resume = true;
+    chat.removed = row.removed;
     let mut at: BTreeMap<Uuid, usize> = BTreeMap::new();
     for t in stored.turns {
         let state = match t.outcome {
@@ -1429,6 +1447,10 @@ fn answers(shell: &mut Shell) {
                 let now = clock(shell).now;
                 if let (Some(chat), Some(s)) = (shell.chat_panel.chat.as_mut(), store) {
                     chat.origin = Some(origin);
+                    // Chips removed before the first question are kept now that it is in the project.
+                    if !chat.removed.is_empty() {
+                        chat.writes.push(s.write(&project, Write::Chips { chat: chat.id, removed: chat.removed.clone() }));
+                    }
                     chat.step = Step::Asking(s.write(&project, ask_write(chat, &pending, now)), pending);
                 }
             }

@@ -132,7 +132,7 @@ pub fn history(shell: &mut Shell, rig: &Rig) -> Result<Vec<archforge_mof::Uuid>,
         let id = shell.services.ids.as_ref().map(|ids| ids()).ok_or("no ids")?;
         ids.push(id);
         let origin = format!("Chat {}", 5 - n);
-        let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages };
+        let row = Row { id, origin, title: title.into(), provider, model: "sonnet".into(), updated_at: at, messages, removed: Default::default() };
         rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
     }
     if let Some(id) = ids.first() {

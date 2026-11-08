@@ -9,6 +9,7 @@
 //! its timeline of the question, the agent's replies and tool rows, and what the turn changed in
 //! the model. Times are seconds since 1970 here; the host stores them as the project stores times.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 
@@ -16,6 +17,7 @@ use archforge_mof::Uuid;
 
 use crate::ai_agents::Provider;
 use crate::chat::FailureKind;
+use crate::chat_panel::Chip;
 
 /// How a turn ended, or that it runs; interrupted when Archforge found it running on opening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +125,9 @@ pub struct Row {
     pub updated_at: u64,
     /// Its questions and replies.
     pub messages: u32,
+    /// The context chips the person removed from it (AR-227): they stay removed when it is opened
+    /// again.
+    pub removed: BTreeSet<Chip>,
 }
 
 /// One entry of the history: a conversation, or why its row cannot be read.
@@ -211,6 +216,10 @@ pub enum Write {
     States { moves: Vec<(Uuid, ChangeState)>, now: u64 },
     /// The model the conversation's next turn asks for.
     Model { chat: Uuid, model: String, now: u64 },
+    /// The context chips the person removed from the conversation, all of them (AR-227): sent when
+    /// a chip is removed or put back, and after Create when chips were removed before the first
+    /// question. Its last activity stays.
+    Chips { chat: Uuid, removed: BTreeSet<Chip> },
     /// Deletes the conversation: its rows in one chat-only commit, what waited committed first.
     /// The answer names the commit just before, which still holds it (AR-217).
     Delete { chat: Uuid },
@@ -234,6 +243,7 @@ impl Write {
             Write::End { .. } => "end",
             Write::States { .. } => "states",
             Write::Model { .. } => "model",
+            Write::Chips { .. } => "chips",
             Write::Delete { .. } => "delete",
             Write::Restore { .. } => "restore",
         }
@@ -384,7 +394,8 @@ pub mod fake {
                     let origin = crate::chat_store::next_origin(chats.iter().map(|c| c.row.origin.as_str()), &skip);
                     let title: String =
                         title.chars().map(|c| if c.is_control() { ' ' } else { c }).collect::<String>().trim().chars().take(200).collect();
-                    let row = Row { id: chat, origin: origin.clone(), title, provider, model, updated_at: now, messages: 0 };
+                    let row =
+                        Row { id: chat, origin: origin.clone(), title, provider, model, updated_at: now, messages: 0, removed: BTreeSet::new() };
                     chats.insert(0, Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
                     Ok(Answer::Created { origin })
                 }
@@ -484,6 +495,11 @@ pub mod fake {
                     let kept = chats.iter_mut().find(|c| c.row.id == chat).ok_or_else(|| failed("no such conversation"))?;
                     kept.row.model = model;
                     kept.row.updated_at = now;
+                    Ok(Answer::Done)
+                }
+                Write::Chips { chat, removed } => {
+                    let kept = chats.iter_mut().find(|c| c.row.id == chat).ok_or_else(|| failed("no such conversation"))?;
+                    kept.row.removed = removed;
                     Ok(Answer::Done)
                 }
                 Write::Delete { chat } => {

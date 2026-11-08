@@ -270,10 +270,8 @@ keys is neither sent nor kept: the panel says so and leaves it in the box for yo
 project that cannot be written.
 
 - **The chips** above the box are sent with your question: the project, the open diagram and what
-  is selected, by name. Remove one with its ×; it stays removed while this conversation stays
-  shown. Open another conversation and then this one again from **Conversations**, and the chip is
-  back and goes with the next question: check the chips before you ask. Which chips **Send again**
-  sends is in [What Send again and Enter send](#what-send-again-and-enter-send). The line under
+  is selected, by name. Remove one with its ×; it stays removed for this conversation, also when
+  you open it again from **Conversations**. Which chips **Send again** sends is in [What Send again and Enter send](#what-send-again-and-enter-send). The line under
   them is a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
@@ -406,7 +404,7 @@ the box empty, comes back into the box. What the card's **Send again** and Enter
 - **Opened again from Conversations** (after another conversation was shown), a question that was
   back in the box counts as in the conversation: the first two rows. The box keeps its text when
   you switch conversations, so an edited question still in it goes with Enter as a new question,
-  with the chips shown now, including any you had removed (the chips come back on reopening).
+  with the chips shown now.
 - The card offers **Send again** only on the conversation's last turn, and only as the
   [table above](#when-something-goes-wrong) says: not on a card that sends you to Settings, and on
   *Model not available* only after another model was chosen. Once you ask another question, the
