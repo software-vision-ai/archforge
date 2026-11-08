@@ -7,7 +7,7 @@ use mysql::prelude::Queryable;
 
 use crate::model::sql;
 use crate::saving::{is_agent, is_version, shown_author};
-use crate::{Error, Project};
+use crate::{DATABASE, Error, Project};
 
 /// How many commits at the old end of a line are not versions: Dolt's root and the creation.
 const NOT_VERSIONS: usize = 2;
@@ -41,6 +41,14 @@ pub struct Versions {
     pub versions: Vec<Version>,
     /// Whether older versions follow this page.
     pub more: bool,
+}
+
+/// Reads a project's versions over a connection of its own, holding nothing of the open project,
+/// so a long read never stands in the way of a write. It fails once the project has closed.
+#[derive(Debug, Clone)]
+pub struct VersionReader {
+    connector: archforge_dolt::Connector,
+    path: std::path::PathBuf,
 }
 
 /// One commit as the log gives it.
@@ -92,6 +100,18 @@ impl Gathering<'_> {
 }
 
 impl Project {
+    /// A reader of this project's versions, for a thread of its own.
+    pub fn version_reader(&self) -> VersionReader {
+        VersionReader { connector: self.server().connector(), path: self.path().to_path_buf() }
+    }
+
+    /// [`VersionReader::versions`], on this project.
+    pub fn versions(&self, after: Option<&str>, limit: usize) -> Result<Versions, Error> {
+        self.version_reader().versions(after, limit)
+    }
+}
+
+impl VersionReader {
     /// The current branch's versions, newest first: at most `limit`, starting after the version
     /// `after`, so a save made meanwhile does not shift a later page. Refused when the page asked
     /// for is too large, when `after` is not a version of this line, or when the line is too long
@@ -100,7 +120,8 @@ impl Project {
         if limit > MOST_IN_A_PAGE {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
-        let mut c = self.model_connection()?;
+        let mut c = self.connector.connect().map_err(Error::Server)?;
+        c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \
              FROM dolt_log LIMIT {}",
@@ -140,7 +161,7 @@ impl Project {
 
     /// The error for a log that cannot be read as commits.
     fn damaged_log(&self) -> Error {
-        Error::Damaged { path: self.path().to_path_buf(), why: "a commit in its history cannot be read".into() }
+        Error::Damaged { path: self.path.clone(), why: "a commit in its history cannot be read".into() }
     }
 }
 

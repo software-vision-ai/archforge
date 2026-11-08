@@ -172,6 +172,15 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
+    /// Reads a page of the versions of the project at `project`, at most `limit`, starting after
+    /// the version `after`, and returns at once. The read holds up neither the writing of any
+    /// project nor the interface. A project that is not open fails.
+    fn versions(&self, _project: &std::path::Path, _after: Option<String>, _limit: usize) -> std::sync::mpsc::Receiver<Result<VersionsPage, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err("this host keeps no versions".into()));
+        rx
+    }
+
     /// How writing the project at `project` stands now.
     fn writing(&self, _project: &std::path::Path) -> Writing {
         Writing::default()
@@ -234,6 +243,29 @@ impl Tab {
     pub fn closing(&self) -> bool {
         self.closing.is_some()
     }
+}
+
+/// One version of a project, as History lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VersionEntry {
+    pub hash: String,
+    /// What the person typed; none for an automatic save.
+    pub description: Option<String>,
+    /// Who to show; none when nobody is recorded.
+    pub author: Option<String>,
+    pub by_agent: bool,
+    /// When it was saved: RFC 3339 in UTC.
+    pub date: String,
+    /// The nearest earlier version; none for the first.
+    pub previous: Option<String>,
+}
+
+/// A page of a project's versions, newest first.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VersionsPage {
+    pub versions: Vec<VersionEntry>,
+    /// Whether older versions follow this page.
+    pub more: bool,
 }
 
 /// Who asked for a save, recorded with its version.

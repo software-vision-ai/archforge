@@ -25,7 +25,7 @@ pub use config::MAX_PACKET;
 pub use error::Error;
 pub use home::Home;
 pub use secret::Secret;
-pub use server::{Server, ServerOptions, recover_only as recover};
+pub use server::{Connector, Server, ServerOptions, recover_only as recover};
 
 /// This user's id, read from a folder made for the purpose in the temporary folder and removed
 /// again: for checking who owns a project folder without unsafe code.

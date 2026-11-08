@@ -39,6 +39,23 @@ impl ServerOptions {
     }
 }
 
+/// How to reach a running server, apart from the server itself: a read on its own thread takes
+/// one, so it needs no hold on whoever owns the server. Connecting fails once the server stopped.
+#[derive(Debug, Clone)]
+pub struct Connector {
+    port: u16,
+    socket: Option<PathBuf>,
+    password: Secret,
+}
+
+impl Connector {
+    /// A connection to the server, over its socket on unix and over loopback on Windows.
+    pub fn connect(&self) -> Result<mysql::Conn, Error> {
+        mysql::Conn::new(options(self.socket.as_deref(), self.port, &self.password, CONNECT_TIMEOUT, QUERY_TIMEOUT))
+            .map_err(|e| Error::Sql { what: "cannot connect to the project's database server", source: e })
+    }
+}
+
 /// A running server for one project folder. Dropping it stops the server too.
 #[derive(Debug)]
 pub struct Server {
@@ -76,8 +93,12 @@ impl Server {
 
     /// A connection to the server, over its socket on unix and over loopback on Windows.
     pub fn connect(&self) -> Result<mysql::Conn, Error> {
-        mysql::Conn::new(options(self.socket.as_deref(), self.port, &self.password, CONNECT_TIMEOUT, QUERY_TIMEOUT))
-            .map_err(|e| Error::Sql { what: "cannot connect to the project's database server", source: e })
+        self.connector().connect()
+    }
+
+    /// How to reach this server from a thread that holds nothing of it.
+    pub fn connector(&self) -> Connector {
+        Connector { port: self.port, socket: self.socket.clone(), password: self.password.clone() }
     }
 
     pub fn port(&self) -> u16 {

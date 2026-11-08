@@ -38,7 +38,7 @@ pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};
 pub use saving::{AfterFailure, Author, SaveFailure, Saved, is_version, shown_author};
 pub use time::timestamp;
-pub use versions::{Version, Versions};
+pub use versions::{Version, VersionReader, Versions};
 
 /// The project format this Archforge writes and the newest it reads. Format 3 may hold
 /// conversations (the chat tables, AR-206); a project of format 1 or 2 is raised to 3 only when it
