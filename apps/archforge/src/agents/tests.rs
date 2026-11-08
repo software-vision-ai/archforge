@@ -427,29 +427,12 @@ fn alive(pid: &str) -> bool {
 
 // --- the tests -------------------------------------------------------------------------------------
 
-/// Without Let Chat use the model, a conversation runs with no tool server at all: nothing listens,
-/// no token is minted, and the window is never told access is held.
-#[test]
-fn agent_access_never_opens_without_the_opt_in() {
-    let host = Host::new("no-opt-in", Setup { claude: &claude_replay("claude/doc-turn-with-mcp-tool.jsonl"), ..Setup::default() });
-    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
-    assert_eq!(host.mcp(CHAT), json!({ "mcpServers": {} }), "no tool server without the opt-in");
-    host.agents.send(CHAT, "Which entities are in Shop?".into()).unwrap();
-    let events = host.turn(CHAT);
-    assert!(events.iter().any(|e| matches!(e, ChatEvent::Started { access: false, .. })), "{events:?}");
-    assert!(host.token_files().is_empty(), "no token was minted");
-    host.agents.end(CHAT).unwrap();
-    let rest = host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
-    assert!(!access(&rest, true), "access was never held");
-}
-
 /// A whole conversation with agent access: its own read-only token in a private file, the bridge
 /// configured with it, a real client answered with its origin, a turn with a tool call over the
 /// channel with the window woken, stop, a refused duplicate, and the end giving everything back.
 #[test]
 fn a_conversation_holds_its_own_read_only_token_until_it_ends() {
     let host = Host::new("session", Setup { claude: &claude_replay("claude/doc-turn-with-mcp-tool.jsonl"), ..Setup::default() });
-    host.agents.set_model_access(true);
     host.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     let opened = host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
     assert!(access(&opened, true));
@@ -512,13 +495,11 @@ fn a_conversation_holds_its_own_read_only_token_until_it_ends() {
     assert!(!logged(CLAUDE_CANARY) && !logged(CODEX_CANARY), "no key reached the log");
 }
 
-/// Turning the opt-in off closes agent access at once, a held connection answered "revoked"; the
-/// conversation goes on without it. Quitting closes it too, ends every conversation and waits for
-/// its program.
+/// Quitting closes agent access, a held connection answered "revoked", ends every conversation and
+/// waits for its program.
 #[test]
-fn turning_the_opt_in_off_or_quitting_closes_access_at_once() {
+fn quitting_closes_access_and_ends_every_conversation() {
     let host = Host::new("close", Setup::default());
-    host.agents.set_model_access(true);
     host.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
     let (port, token_file) = bridge_of(&host.mcp(CHAT));
@@ -539,27 +520,22 @@ fn turning_the_opt_in_off_or_quitting_closes_access_at_once() {
         assert!(first.is_some_and(|l| serde_json::from_slice::<Value>(&l).unwrap()["ok"] == true));
         r
     };
-    let mut r = held(&token, port, &host);
-    let started = Instant::now();
-    host.agents.set_model_access(false);
-    assert!(started.elapsed() < Duration::from_secs(3), "closed at once: {:?}", started.elapsed());
-    let last: Value = serde_json::from_slice(&archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap().unwrap()).unwrap();
-    assert_eq!(last["error"], archforge_control::REVOKED);
-    assert_eq!(archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap(), None, "then closed");
-    assert!(!host_listens(&host) && !token_file.exists());
-    host.until("access closed", |e| matches!(e, HostEvent::Access { held: false }));
-    assert!(host.agents.send(CHAT, "still here?".into()).is_ok(), "the conversation goes on without access");
-    // On again, a second conversation holds it; quitting closes it and ends both.
-    host.agents.set_model_access(true);
+    // A second conversation shares the opening; quitting closes it and ends both.
     let second = id(2);
     host.agents.start(claude(&second, "Chat 2", true)).unwrap();
-    host.until("access held again", |e| matches!(e, HostEvent::Access { held: true }));
-    let (port, token_file) = bridge_of(&host.mcp(&second));
-    let mut r = held(&archforge_control::read_token(&token_file).unwrap(), port, &host);
+    let (same_port, second_file) = bridge_of(&host.mcp(&second));
+    assert_eq!(same_port, port, "one opening serves both");
+    let mut r = held(&token, port, &host);
     host.agents.shutdown();
     let last: Value = serde_json::from_slice(&archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], archforge_control::REVOKED);
-    assert!(!host_listens(&host) && !token_file.exists());
+    assert_eq!(archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap(), None, "then closed");
+    assert!(!host_listens(&host) && !token_file.exists() && !second_file.exists());
+    // And it stays closed: no conversation is granted access after quitting.
+    let bound = archforge_control::Bound { key: id(4), origin: "Chat 4".into() };
+    let refused = super::locked(&host.agents.inner.access).grant(false, bound, None).err();
+    assert_eq!(refused.as_deref(), Some("Archforge is closing"));
+    assert!(!host_listens(&host), "nothing opened again");
     let pids = std::fs::read_to_string(host.base.join("claude.pids")).unwrap();
     assert_eq!(pids.lines().count(), 2);
     for pid in pids.lines() {
@@ -576,7 +552,6 @@ fn turning_the_opt_in_off_or_quitting_closes_access_at_once() {
 #[test]
 fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     let host = Host::new("roles", Setup::default());
-    host.agents.set_model_access(true);
     let (reader, writer) = (id(1), id(2));
     host.agents.start(claude(&reader, "Chat 1", false)).unwrap();
     host.agents.start(claude(&writer, "Chat 2", true)).unwrap();
@@ -636,7 +611,6 @@ fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
         "revoke-on-end",
         Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1.5\n", ..Setup::default() },
     );
-    host.agents.set_model_access(true);
     host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
     host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
     let (port, file) = bridge_of(&host.mcp(CHAT));
@@ -670,7 +644,6 @@ fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
 #[test]
 fn a_conversation_asked_to_end_has_its_token_revoked_before_the_call_returns() {
     let host = Host::new("revoke-at-ask", Setup::default());
-    host.agents.set_model_access(true);
     let (ending, other) = (id(1), id(2));
     host.agents.start(claude(&ending, "Chat 1", true)).unwrap();
     host.agents.start(claude(&other, "Chat 2", false)).unwrap();
@@ -714,7 +687,6 @@ fn a_conversation_asked_to_end_has_its_token_revoked_before_the_call_returns() {
 #[test]
 fn a_conversations_token_speaks_only_for_its_conversation() {
     let host = Host::new("bound-origin", Setup::default());
-    host.agents.set_model_access(true);
     let (first, second) = (id(1), id(2));
     host.agents.start(claude(&first, "Chat 1", true)).unwrap();
     host.agents.start(claude(&second, "Chat 2", true)).unwrap();
@@ -770,33 +742,43 @@ fn the_window_gets_the_conversation_a_token_is_bound_to() {
 }
 
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
-/// "revoked", and never runs when the window comes to it.
+/// "revoked", and never runs when the window comes to it: the token revoked by its conversation's
+/// end, or the whole opening closed by quitting.
 #[test]
 fn a_queued_request_of_a_revoked_token_never_runs() {
-    let host = Host::new("queued", Setup::default());
-    host.agents.set_model_access(true);
-    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
-    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
-    let (port, file) = bridge_of(&host.mcp(CHAT));
-    let client = Client::from_token_file(&file, port).unwrap();
-    let call = std::thread::spawn(move || {
-        let started = Instant::now();
-        (client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })), started.elapsed())
-    });
-    // The request waits in the window's queue, not taken.
-    let queued = host.requests.recv_timeout(WAIT).unwrap();
-    let revoked = Instant::now();
-    host.agents.set_model_access(false);
-    let (answer, _) = call.join().unwrap();
-    assert!(revoked.elapsed() < Duration::from_secs(2), "given up at once: {:?}", revoked.elapsed());
-    assert_eq!(answer, Err(CallError::Refused(archforge_control::REVOKED.into())));
-    // When the window comes to it, it is not run.
-    assert_eq!(queued.state.load(Ordering::SeqCst), archforge_ui_egui::control::ABANDONED);
-    let mut window = shell();
-    let before = window.session.as_ref().unwrap().revision();
-    assert!(queued.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err(), "the window does not take it");
-    assert_eq!(archforge_ui_egui::control::answer_request(&mut window, &queued), Err(archforge_control::REVOKED.into()), "nor would it run");
-    assert_eq!(window.session.as_ref().unwrap().revision(), before);
+    for quit in [false, true] {
+        let host = Host::new(if quit { "queued-quit" } else { "queued" }, Setup::default());
+        host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
+        host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+        let (port, file) = bridge_of(&host.mcp(CHAT));
+        let client = Client::from_token_file(&file, port).unwrap();
+        let call = std::thread::spawn(move || client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })));
+        // The request waits in the window's queue, not taken.
+        let queued = host.requests.recv_timeout(WAIT).unwrap();
+        let revoked = Instant::now();
+        // Quitting runs on a thread of its own, as it waits for the programs; an end revokes the
+        // token on this thread, before the call returns.
+        let quitting = if quit {
+            let agents = Agents { inner: host.agents.inner.clone() };
+            Some(std::thread::spawn(move || agents.shutdown()))
+        } else {
+            host.agents.end(CHAT).unwrap();
+            None
+        };
+        let answer = call.join().unwrap();
+        assert!(revoked.elapsed() < Duration::from_secs(2), "quit {quit}: given up at once: {:?}", revoked.elapsed());
+        assert_eq!(answer, Err(CallError::Refused(archforge_control::REVOKED.into())), "quit {quit}");
+        // When the window comes to it, it is not run.
+        assert_eq!(queued.state.load(Ordering::SeqCst), archforge_ui_egui::control::ABANDONED, "quit {quit}");
+        let mut window = shell();
+        let before = window.session.as_ref().unwrap().revision();
+        assert!(queued.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err(), "the window does not take it");
+        assert_eq!(archforge_ui_egui::control::answer_request(&mut window, &queued), Err(archforge_control::REVOKED.into()), "nor would it run");
+        assert_eq!(window.session.as_ref().unwrap().revision(), before);
+        if let Some(quitting) = quitting {
+            quitting.join().unwrap();
+        }
+    }
 }
 
 /// A conversation whose events nobody takes keeps at most `MAX_WAITING` of them waiting, the drop
@@ -832,7 +814,6 @@ fn a_conversation_whose_events_wait_is_capped_and_its_end_still_comes() {
 fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     let host =
         Host::new("accounts", Setup { claude: &claude_replay("claude/doc-turn-with-mcp-tool.jsonl"), codex: CODEX_ACCOUNT, ..Setup::default() });
-    host.agents.set_model_access(true);
     assert_eq!(host.agents.test_message(Provider::Claude, "sonnet", CodexSignIn::ChatGpt).recv_timeout(WAIT).unwrap(), Ok(()));
     let args = std::fs::read_to_string(host.base.join("claude.args")).unwrap();
     let session = args.lines().skip_while(|l| *l != "--session-id").nth(1).unwrap().to_string();
@@ -1000,7 +981,6 @@ fn at_most_eight_conversations_run_and_a_bad_id_is_refused() {
 #[test]
 fn a_failing_conversation_thread_still_gives_its_access_back() {
     let host = Host::new("panic", Setup { cli: Arc::new(|| panic!("a failure inside the host")), ..Setup::default() });
-    host.agents.set_model_access(true);
     host.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     let events = host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
     assert!(access(&events, true), "access was granted first: {events:?}");

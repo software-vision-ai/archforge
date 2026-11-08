@@ -235,8 +235,8 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
     let on = shell.state.agents.chat_uses_model;
     if toggle(shell, ui, p, "settings.agents.chat-uses-model", toggle_rect, on, &tr("Let Chat use the model")).clicked() {
         shell.state.agents.chat_uses_model = !on;
-        // Told at once: turning it off closes agent access in this frame.
-        crate::chat::tell_access(shell);
+        // Followed at once: turning it off ends every running conversation in this frame.
+        crate::chat::follow_switch(shell);
     }
     y += 16.0;
     paint.hline(left..=left + width, y, Stroke::new(1.0, p.border));

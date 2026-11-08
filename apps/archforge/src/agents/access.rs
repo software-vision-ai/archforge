@@ -8,9 +8,9 @@
 //! read-only token may not do (`archforge_ui_egui::control::answer_request`).
 //!
 //! Chat's opening ([`Access`]) is made when the first conversation is granted access, on a free
-//! loopback port, and only while Let Chat use the model is on; each conversation gets its own token
-//! in its own file, read-only unless the conversation allows changes; the opening closes with the
-//! last conversation's grant, at once when the opt-in turns off, and on quit.
+//! loopback port; each conversation gets its own token in its own file, read-only unless the
+//! conversation allows changes; the opening closes with the last conversation's grant, and on
+//! quit.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -105,12 +105,12 @@ pub fn start_control(port: u16, settings: &Path, window: &Window) -> Result<Serv
     Server::start(port, settings, handler(window.clone()))
 }
 
-/// Chat's agent access: the opt-in, and the opening while a conversation holds it.
+/// Chat's agent access: the opening while a conversation holds it.
 pub struct Access {
     settings: PathBuf,
     window: Window,
-    /// Let Chat use the model.
-    on: bool,
+    /// Set at quit: no conversation is granted access any more.
+    quit: bool,
     server: Option<Server>,
     /// The listening socket of the last opening closed, watched after it is gone (only the last
     /// one: a close replaces it).
@@ -118,18 +118,18 @@ pub struct Access {
 }
 
 impl Access {
-    /// Access off, with no opening, its token files to go in `settings`.
+    /// No opening yet, its token files to go in `settings`.
     pub fn new(settings: &Path, window: Window) -> Access {
-        Access { settings: settings.to_path_buf(), window, on: false, server: None, closed: None }
+        Access { settings: settings.to_path_buf(), window, quit: false, server: None, closed: None }
     }
 
     /// A token for one conversation, read-only unless `allow_changes`, bound to that conversation
     /// (`bound`: its key and origin label), so every request on it is that conversation's (AR-230);
-    /// the opening made when none is open (then the window is told agent access is held). `None`
-    /// while the opt-in is off.
-    pub fn grant(&mut self, allow_changes: bool, bound: Bound, sink: Option<&EventSink>) -> Result<Option<Grant>, String> {
-        if !self.on {
-            return Ok(None);
+    /// the opening made when none is open (then the window is told agent access is held). Refused
+    /// after quit ([`Access::quit`]).
+    pub fn grant(&mut self, allow_changes: bool, bound: Bound, sink: Option<&EventSink>) -> Result<Grant, String> {
+        if self.quit {
+            return Err("Archforge is closing".into());
         }
         let opened = self.server.is_none();
         if opened {
@@ -147,7 +147,7 @@ impl Access {
         if opened && let Some(sink) = sink {
             sink.send(HostEvent::Access { held: true });
         }
-        Ok(Some(grant))
+        Ok(grant)
     }
 
     /// After a grant was dropped: the opening closes when no conversation holds a token any more.
@@ -165,12 +165,10 @@ impl Access {
         self.server.is_some() || self.closed.as_ref().is_some_and(|w| !w.closed())
     }
 
-    /// Turns the opt-in on or off; off closes the opening at once.
-    pub fn set(&mut self, on: bool, sink: Option<&EventSink>) {
-        self.on = on;
-        if !on {
-            self.close(sink);
-        }
+    /// At quit: closes the opening and keeps it closed, so no conversation is granted access after.
+    pub fn quit(&mut self, sink: Option<&EventSink>) {
+        self.quit = true;
+        self.close(sink);
     }
 
     /// Closes the opening, when one is open: every token is revoked, held connections are

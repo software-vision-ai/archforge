@@ -199,8 +199,8 @@ model** is on in it (see [Chat](#chat)).
 
 Archforge enforces that itself: through its agent access, a conversation without Allow changes is
 refused every change, undo and save it asks for. The access opens on your computer alone when a
-conversation needs it. It closes when the last conversation ends, at once when you turn the switch
-off, and when you quit.
+conversation needs it. It closes when the last conversation ends (turning the switch off ends them
+all, and each one's access is revoked at once), and when you quit.
 
 Turning it off also ends every conversation that runs: a reply under way stops, and what it wrote
 so far stays, marked as stopped. Until you turn it on again:

@@ -236,7 +236,7 @@ impl Agents {
             inner.quitting.store(true, Ordering::SeqCst);
             std::mem::take(&mut *threads)
         };
-        locked(&inner.access).set(false, inner.sink().as_ref());
+        locked(&inner.access).quit(inner.sink().as_ref());
         if let Some(cancel) = locked(&inner.login).take() {
             cancel.store(true, Ordering::SeqCst);
         }
@@ -448,13 +448,6 @@ impl AgentHost for Agents {
     /// Keeps the window's sink for the conversations' events.
     fn connect(&self, sink: EventSink) {
         *locked(&self.inner.sink) = Some(sink);
-    }
-
-    /// Let Chat use the model: off closes agent access at once.
-    fn set_model_access(&self, on: bool) {
-        let sink = self.inner.sink();
-        locked(&self.inner.access).set(on, sink.as_ref());
-        log::info!("Let Chat use the model is {}", if on { "on" } else { "off" });
     }
 
     /// Starts a conversation ([`sessions::start`]).
