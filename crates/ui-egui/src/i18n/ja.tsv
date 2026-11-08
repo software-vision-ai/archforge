@@ -425,6 +425,8 @@ str		A description has to fit on one line.	説明は1行で入力してくださ
 str		A description is at most {max} characters; this one has {n}.	説明は最大 {max} 文字です。この説明は {n} 文字あります。
 str		This description holds one of your saved API keys, so nothing was saved.	この説明には保存済みの API キーが含まれているため、何も保存されませんでした。
 str		This description could not be checked against your saved API keys, so nothing was saved.	この説明を保存済みの API キーと照合できなかったため、何も保存されませんでした。
+str		A description has to be text, so nothing was saved.	説明はテキストである必要があるため、何も保存されませんでした。
+str		A save is under way, so this description was not used. Try again when it has finished.	保存の処理中のため、この説明は使用されませんでした。完了してからもう一度お試しください。
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	確認後にプロジェクトが変更されたため、何も保存されませんでした。変更内容を確認して、もう一度保存してください。
 str		The opening stopped without an answer	開く処理が応答なしで終了しました
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	このリクエストの送信後に表示中のプロジェクトが変わったため、実行しませんでした。現在の表示を確認して、もう一度送信してください。

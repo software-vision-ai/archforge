@@ -552,7 +552,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
 - **Change the model**: one tool per command, such as `er_entity_add`, `er_relationship_add`,
   `uml_class_add`, `uml_association_add` or `diagram_place`, plus `batch` to make several changes
   as one undo step, `undo`, `redo`, `inspect_document` to see what is open and selected, and
-  `save_project`, which saves as ⌘S does.
+  `save_project`, which saves as ⌘S does and can describe the version in one line.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
   resources `archforge://project` (the open project, its revision, the selection),
   `archforge://skills`, `archforge://element/{id}` (a schema with its tables, a table, a diagram, or

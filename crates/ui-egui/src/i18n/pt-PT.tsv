@@ -425,6 +425,8 @@ str		A description has to fit on one line.	Uma descrição tem de caber numa só
 str		A description is at most {max} characters; this one has {n}.	Uma descrição tem no máximo {max} caracteres; esta tem {n}.
 str		This description holds one of your saved API keys, so nothing was saved.	Esta descrição contém uma das suas chaves de API guardadas, por isso nada foi guardado.
 str		This description could not be checked against your saved API keys, so nothing was saved.	Não foi possível verificar esta descrição com as suas chaves de API guardadas, por isso nada foi guardado.
+str		A description has to be text, so nothing was saved.	Uma descrição tem de ser texto, por isso nada foi guardado.
+str		A save is under way, so this description was not used. Try again when it has finished.	Está em curso uma gravação, por isso esta descrição não foi usada. Tente novamente quando terminar.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	O projeto foi alterado depois da sua revisão, por isso nada foi guardado. Reveja as alterações e guarde novamente.
 str		The opening stopped without an answer	A abertura terminou sem resposta
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	O projeto apresentado mudou depois de este pedido ser enviado, por isso não foi executado. Veja o que está apresentado agora e envie-o novamente.
