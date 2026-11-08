@@ -484,8 +484,8 @@ pub fn context_line(chips: &[Anchor]) -> String {
 // Whether Chat can answer here.
 
 /// Whether the agent `provider` is set up for Chat, as far as is known without starting anything:
-/// its program found and its key saved, or Codex signed in (or its sign-in not read yet); and Let
-/// Chat use the model on. None while the keys are still being read.
+/// its program found and its key saved, or Codex signed in (or its sign-in not read yet). None
+/// while the keys are still being read.
 pub fn set_up(shell: &Shell, provider: Provider) -> Option<bool> {
     if shell.services.agents.as_ref().is_none_or(|h| h.system() != crate::ai_agents::System::Supported) {
         return Some(false);
@@ -502,7 +502,7 @@ pub fn set_up(shell: &Shell, provider: Provider) -> Option<bool> {
         }
         _ => false,
     };
-    Some(ready && shell.state.agents.chat_uses_model)
+    Some(ready)
 }
 
 /// Shows the panel: the keys are read the first time, a new conversation is ready when there is
@@ -582,20 +582,6 @@ pub fn refusal_text(r: &Refusal) -> String {
 }
 
 // Asking.
-
-/// Let Chat use the model turned off: every panel's conversation, the shown one and those of tabs
-/// left, whose program is in `ended` waits for that end, as [`restart`] does, so a question asked
-/// before it comes waits for it and starts the program again.
-pub(crate) fn switched_off(shell: &mut Shell, ended: &[String]) {
-    let mut panels: Vec<&mut Panel> = vec![&mut shell.chat_panel];
-    panels.extend(shell.tabs.iter_mut().filter_map(|t| t.parked.as_mut()).map(|p| &mut p.chat_panel));
-    for panel in panels {
-        let Some(chat) = panel.chat.as_mut() else { continue };
-        if chat.session == Session::Running && ended.contains(&chat.key) {
-            chat.session = Session::Ending;
-        }
-    }
-}
 
 /// Sends the composer's text: a new turn, or the failed turn run again when its question went back
 /// to the composer. Refused while a turn runs, for an empty or too long question, or without a

@@ -450,7 +450,7 @@ fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str)
 /// Chat's agent access in the status bar (the design's "Agent" item), its right edge at `right`:
 /// an accent dot and "Chat is using the model" while a conversation holds it, a purple dot and
 /// "Agent access off" while none does. A control like any other (pointer, Tab, Enter, its id);
-/// either opens Settings on AI Agents, where the opt-in is. Gives its left edge.
+/// either opens Settings on AI Agents, where the agents are set up. Gives its left edge.
 fn agent_status(shell: &mut Shell, ui: &egui::Ui, p: &Palette, bar: Rect, right: f32) -> f32 {
     let held = shell.chats.holds_access();
     let (text, dot) = if held { (tr("Chat is using the model"), p.accent) } else { (tr("Agent access off"), p.purple) };

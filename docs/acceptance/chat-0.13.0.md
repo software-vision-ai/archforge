@@ -103,7 +103,7 @@ One full round trip per route. Each uses the project of P1.
    version, or *Not yet tested with this version · claude* and its version.
 2. Paste the Anthropic key on the Claude card and choose **Save key**. **Expect:** the field shows
    only the key's last four characters, with **Replace** and **Remove**.
-3. Set **Default agent** to Claude. Turn **Let Chat use the model** on.
+3. Set **Default agent** to Claude.
 4. Choose **Send test message**. **Expect:** *Claude answered the test message just now* within a
    minute.
 5. Close Settings. Open the Chat panel (the speech bubble at the top of the right rail). Select one
@@ -342,30 +342,6 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
    sign-in in its own files, so it works without the secure store; R3 step 5 finds `auth.json`,
    as on every system.
 
-### F6. Let Chat use the model turned off
-
-1. With Claude the default agent, open a started conversation (R1's, from **Conversations**) and
-   ask a long question. While the reply runs, run `ours`. **Expect:** a `claude` line and an
-   `archforge-cli mcp` line.
-2. Open **Settings ▸ AI Agents**, turn **Let Chat use the model** off, and close Settings.
-   **Expect:** the reply so far stays, marked as stopped; the status bar says *Agent access off*.
-   Check that the programs ended:
-
-   ```sh
-   agents() { ours | grep -v -E '(^| |/)dolt( |$)'; }
-   for i in $(seq 1 15); do [ -z "$(agents)" ] && break; sleep 1; done
-   agents || echo "no agent program runs"
-   ```
-
-   **Expect:** *no agent program runs*.
-3. Type a question and press Enter. **Expect:** the question is sent once and answered; `ours`
-   lists the program again, and the status bar says *Chat is using the model* while the switch is
-   still off. The switch no longer refuses sending (AR-240).
-4. Start a new conversation (**New conversation**, +). **Expect:** *No agent set up yet*, with
-   **Configure agent**.
-5. Turn **Let Chat use the model** on again. **Expect:** the new conversation's box shows, ready to
-   ask.
-
 ### W1. Windows (Windows only)
 
 Open **Settings ▸ AI Agents**. **Expect:** *Not available on this system yet* and *AI Agents work
@@ -540,14 +516,14 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
 1. **Logs:**
 
    ```sh
-   probe "Let Chat use the model is" "$SETTINGS/logs"   # logged at every start
+   probe "agent programs: claude" "$SETTINGS/logs"      # logged at every start
    search "$WORK/canaries" "$SETTINGS/logs"
    ```
 
 2. **Preferences:**
 
    ```sh
-   probe chat_uses_model "$SETTINGS/prefs.json"         # the Let Chat use the model setting
+   probe default_agent "$SETTINGS/prefs.json"           # the default agent setting
    search "$WORK/canaries" "$SETTINGS/prefs.json"
    ```
 
@@ -749,7 +725,6 @@ to the pass's folder (`find "$HOME" -maxdepth 1 -name 'archforge-acceptance.*'` 
 | F3 | Network off (Claude, Codex) | | |
 | F4 | A program removed (claude, codex) | | |
 | F5 | Linux without a secure store | | |
-| F6 | Let Chat use the model turned off | | |
 | W1 | Windows | | |
 | K2 | The real keys: command lines and environments | | |
 | K3 | The canaries sent | | |

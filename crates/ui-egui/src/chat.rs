@@ -4,7 +4,6 @@
 //! The shell runs no program and opens no port: the host does ([`crate::ai_agents::AgentHost`]),
 //! starting each conversation's agent program on a thread of its own and giving it agent access
 //! through a loopback control channel that is open only while a conversation holds it.
-//! Turning Let Chat use the model off ends every conversation that runs (`follow_switch`).
 //! The host says when access opens and closes ([`HostEvent::Access`]), and the status bar shows
 //! it.
 //!
@@ -284,8 +283,6 @@ pub struct State {
     kept: Vec<Kept>,
     /// Whether a conversation holds agent access now, as the host last said.
     access: bool,
-    /// Let Chat use the model as last seen.
-    seen: Option<bool>,
     /// The Chat conversations let go of (a new one started, another opened, their project closed),
     /// with their labels: their events are taken and dropped until each has ended, and requests on
     /// behalf of their labels are refused meanwhile.
@@ -325,7 +322,7 @@ fn host(shell: &crate::Shell) -> Option<Arc<dyn crate::ai_agents::AgentHost>> {
 }
 
 /// Once per frame: connects the host's events to this window the first time (their wake repaints
-/// it), follows Let Chat use the model ([`follow_switch`]), and takes in what the host sent.
+/// it), and takes in what the host sent.
 pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
     let Some(host) = host(shell) else { return };
     if shell.chats.rx.is_none() {
@@ -334,34 +331,7 @@ pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
         host.connect(EventSink::new(tx, Arc::new(move || window.request_repaint())));
         shell.chats.rx = Some(rx);
     }
-    follow_switch(shell);
     poll(shell);
-}
-
-/// Follows Let Chat use the model when it differs from what was seen last: turning it off ends
-/// every conversation that runs, each end revoking its token at once and agent access closing with
-/// the last (AR-221), and the panels wait for those ends ([`crate::chat_panel::switched_off`]).
-pub(crate) fn follow_switch(shell: &mut crate::Shell) {
-    let on = shell.state.agents.chat_uses_model;
-    if shell.chats.seen == Some(on) {
-        return;
-    }
-    if let Some(host) = host(shell) {
-        shell.chats.seen = Some(on);
-        log::info!("Let Chat use the model is {}", if on { "on" } else { "off" });
-        if !on {
-            let mut ended = Vec::new();
-            for kept in shell.chats.kept.iter().filter(|k| k.running) {
-                match host.end(&kept.chat) {
-                    Ok(()) => ended.push(kept.chat.clone()),
-                    // Already ending: its end is on its way.
-                    Err(ChatRefusal::NotRunning) => {}
-                    Err(e) => log::warn!("the conversation {:?} could not be ended as Let Chat use the model went off: {e}", kept.chat),
-                }
-            }
-            crate::chat_panel::switched_off(shell, &ended);
-        }
-    }
 }
 
 /// Takes in the host's events, at most [`PER_FRAME`] a frame.

@@ -285,7 +285,7 @@ str		the conversation {who} has no turn running in the project shown in Archforg
 str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	a conversa {who} só pode anular as suas próprias alterações deste turno, e o passo do topo não é uma delas
 str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	a conversa {who} só pode refazer as suas próprias alterações deste turno, e o passo a refazer não é uma delas
 str		No agent set up yet	Ainda não há nenhum agente configurado
-str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	A Conversa responde com o Claude ou o Codex, executados pelo programa instalado neste computador. Escolha um nas Definições e deixe a Conversa usar o modelo.
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.	A Conversa responde com o Claude ou o Codex, executados pelo programa instalado neste computador. Configure um nas Definições.
 str		Configure agent	Configurar agente
 str		Ask about {project}	Perguntar sobre {project}
 str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	A Conversa lê o modelo para responder e mostra abaixo cada leitura. Não altera nada até permitir alterações nesta conversa.
@@ -495,8 +495,6 @@ str		{agent} sign-in not available yet	início de sessão de {agent} ainda indis
 str		{agent} not looked for yet	{agent} ainda não procurado
 str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	A Conversa fala com um programa de agente instalado neste computador. O Archforge encontra o programa e guarda as suas chaves no armazenamento seguro do sistema. Abrir esta página não envia nada.
 str		Default agent	Agente predefinido
-str		Let Chat use the model	Deixar a Conversa usar o modelo
-str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	Desligado até o ligar. Enquanto uma conversa tiver este acesso, a Conversa lê o modelo do projeto e a barra de estado indica-o. As alterações continuam a aguardar Permitir alterações em cada conversa.
 str		Checking…	A verificar…
 str		Check connection	Verificar ligação
 str		Sending…	A enviar…

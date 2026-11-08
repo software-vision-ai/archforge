@@ -29,15 +29,15 @@ works as usual.
 
 Chat talks to an agent program installed on your computer: Claude through the program `claude`,
 or Codex through the program `codex`. Archforge never bundles them. You install one, give it a key
-or a sign-in, and let Chat use the model. You need to do this once.
+or a sign-in, and Chat is ready. You need to do this once.
 
 You set them up in **Settings ▸ AI Agents**: click the avatar at the right of the bar, or press
 ⌘, (Ctrl ,), and choose **AI Agents** on the left.
 
-<!-- picture: settings-ai-agents-ready light | Settings, AI Agents: Claude with a saved API key and its model, Codex signed in with ChatGPT, and Let Chat use the model on -->
+<!-- picture: settings-ai-agents-ready light | Settings, AI Agents: Claude with a saved API key and its model, Codex signed in with ChatGPT -->
 
-The page has a card for each agent, then **Let Chat use the model**, **Check connection** and
-**Send test message**. **Default agent**, at the top, is the agent a new conversation starts with.
+The page has a card for each agent, then **Check connection** and **Send test message**.
+**Default agent**, at the top, is the agent a new conversation starts with.
 
 Opening the page sends nothing over the network. Archforge looked for the programs when it
 started, asking each only for its version. Your keys are read from the secure store the first
@@ -192,26 +192,16 @@ Archforge's private settings folder is `~/Library/Application Support/Archforge`
 `~/.config/archforge` on Linux (`$XDG_CONFIG_HOME/archforge` where that is set). The agents' working
 files are in its `agents` folder.
 
-### Let Chat use the model
+### How Chat reaches the model
 
-**Let Chat use the model** is off until you turn it on. While it is off, a new conversation says
-*No agent set up yet*.
-
-Each Chat conversation gets agent access of its own while it runs. Chat reads the project's model
-through it. A conversation changes the model only when **Allow changes to the
+Chat is ready as soon as the default agent is: its program is found, and a key is saved or it is
+signed in. Each Chat conversation then gets agent access of its own while it runs. Chat reads the
+project's model through it. A conversation changes the model only when **Allow changes to the
 model** is on in it (see [Chat](#chat)).
 
 Archforge enforces that itself: through its agent access, a conversation without Allow changes is
 refused every change, undo and save it asks for. The access opens on your computer alone when a
-conversation needs it. It closes when the last conversation ends (turning the switch off ends them
-all, and each one's access is revoked at once), and when you quit.
-
-Turning it off also ends every conversation that runs: a reply under way stops, and what it wrote
-so far stays, marked as stopped. Until you turn it on again:
-
-- A new conversation says *No agent set up yet*, with **Configure agent**.
-- A conversation already started, or one reopened from the history, keeps its box. A question
-  sent there, or **Send again**, starts its agent again and is sent.
+conversation needs it. It closes when the last conversation ends, and when you quit.
 
 The status bar says which, at its right beside the project's location:
 
@@ -241,10 +231,9 @@ moment.
 The Chat panel is the speech bubble at the top of the right rail. It holds the open project's
 conversations with Claude or Codex.
 
-Until the default agent is ready and **Let Chat use the model** is on, a new conversation says
-*No agent set up yet*; **Configure agent** opens **Settings ▸ AI Agents** (see
-[Setting up AI agents for Chat](#setting-up-ai-agents-for-chat)). A key the test message found
-refused counts as not ready.
+Until the default agent is ready, a new conversation says *No agent set up yet*; **Configure
+agent** opens **Settings ▸ AI Agents** (see [Setting up AI agents for
+Chat](#setting-up-ai-agents-for-chat)). A key the test message found refused counts as not ready.
 
 <!-- picture: workspace-chat light | The Chat panel ready: the intro, the context chips, the composer with Claude's badge, Allow changes off -->
 

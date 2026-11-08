@@ -32,8 +32,8 @@ pub struct UiState {
     pub recent_sort: RecentSort,
     /// The user's name as entered in Settings; the bar shows its initials. Empty: JD, for John Doe.
     pub user_name: String,
-    /// Settings → AI Agents' choices: the default agent, the models, how Codex signs in, and
-    /// whether Chat may use the model. No key is ever kept here. A section a preferences file
+    /// Settings → AI Agents' choices: the default agent, the models and how Codex signs in. No key
+    /// is ever kept here. A section a preferences file
     /// holds in a shape the window does not read (a later version's choice) goes back to the
     /// defaults, not the whole file.
     #[serde(deserialize_with = "lenient_agents")]

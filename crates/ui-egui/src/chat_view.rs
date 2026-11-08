@@ -210,8 +210,7 @@ fn empty(shell: &mut Shell, ui: &egui::Ui, p: &Palette, body: Rect, acts: &mut V
     let paint = ui.painter().clone();
     let width = (body.width() - 2.0 * PAD).max(0.0);
     let title = ux::galley(&paint, &tr("No agent set up yet"), types::UI_STRONG, p.text, Some(width));
-    let text =
-        tr("Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.");
+    let text = tr("Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.");
     let lines = centred(&paint, &text, types::SMALL, p.text_secondary, width);
     let height = 22.0 + 10.0 + title.size().y + 10.0 + lines.size().y + 10.0 + 28.0;
     let top = (body.top() + (body.height() * 0.3).min((body.height() - height).max(16.0))).round();

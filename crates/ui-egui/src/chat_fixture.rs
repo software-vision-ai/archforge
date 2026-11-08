@@ -30,8 +30,8 @@ pub struct Rig {
 }
 
 /// Sets `shell` up for Chat: the fake host with both programs found (Claude's key saved when
-/// `ready`, and Let Chat use the model on), conversations in memory, the fixed clock, Claude's
-/// Sonnet as the default, and the Chat panel shown.
+/// `ready`), conversations in memory, the fixed clock, Claude's Sonnet as the default, and the
+/// Chat panel shown.
 pub fn rig(shell: &mut Shell, ready: bool) -> Rig {
     let fake = Fake::default();
     let key = if ready { crate::ai_agents::Key::Saved { last4: "4F2a".into() } } else { crate::ai_agents::Key::Absent };
@@ -52,7 +52,6 @@ pub fn rig(shell: &mut Shell, ready: bool) -> Rig {
     let clock = now.clone();
     shell.services.clock = Some(Arc::new(move || Clock { now: clock.load(std::sync::atomic::Ordering::Relaxed), offset: Some(OFFSET) }));
     shell.state.agents.claude_model = "sonnet".into();
-    shell.state.agents.chat_uses_model = ready;
     shell.state.show_panel(crate::state::Panel::Agent);
     Rig { agents, store, now }
 }

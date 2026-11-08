@@ -1077,12 +1077,10 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
             look.codex_key = saved("9c1E");
             shell.state.agents.default_agent = Provider::Codex;
             shell.state.agents.codex_sign_in = CodexSignIn::ApiKey;
-            shell.state.agents.chat_uses_model = true;
         }
         Screen::SettingsAgentsReady | Screen::SettingsAgentsRefused | Screen::SettingsAgentsDeviceCode => {
             look.claude_key = saved("4F2a");
             shell.state.agents.claude_model = "sonnet".into();
-            shell.state.agents.chat_uses_model = true;
             account = match screen {
                 Screen::SettingsAgentsReady => signed_in.clone(),
                 Screen::SettingsAgentsRefused => CodexAccount::Expired { email: "you@example.com".into() },
@@ -1093,7 +1091,6 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
             look.store = Store::Missing { why: "no Secret Service answers on the session bus".into() };
             account = signed_in.clone();
             shell.state.agents.claude_model = "sonnet".into();
-            shell.state.agents.chat_uses_model = true;
         }
         _ => {}
     }

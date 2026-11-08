@@ -7291,8 +7291,7 @@ fn a_table_box_shorter_than_its_columns_shows_those_that_fit_and_counts_the_rest
 }
 
 /// The sample class model with the Chat panel shown, over the fake agents host and conversations
-/// kept in memory (`crate::chat_fixture`), Claude set up and Let Chat use the model on when
-/// `ready`.
+/// kept in memory (`crate::chat_fixture`), Claude set up when `ready`.
 fn chat_harness(theme: ThemeKind, ready: bool) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
     crate::i18n::set_language("en");
     let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
@@ -7343,6 +7342,82 @@ fn chat_calls(rig: &crate::chat_fixture::Rig) -> (usize, usize, usize, usize) {
 /// A turn's end failed with `kind`.
 fn failed_turn(kind: crate::chat::FailureKind) -> crate::chat::ChatEvent {
     crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Failed(crate::chat::ChatFailure { kind, detail: "x".into(), reset: None }))
+}
+
+/// The choices of Settings ▸ AI Agents as an earlier build kept them, its switch for Chat `on` or
+/// off, Claude the default with Sonnet (AR-237).
+fn earlier_agent_choices(on: bool) -> crate::ai_agents::AgentPrefs {
+    let file = format!(r#"{{"agents":{{"default_agent":"Claude","claude_model":"sonnet","chat_uses_model":{on}}}}}"#);
+    serde_json::from_str::<UiState>(&file).unwrap().agents
+}
+
+/// With Claude set up as the default agent, a new conversation is ready to ask with no switch
+/// involved (AR-237): the composer shows, and a question starts Claude's program and reaches it,
+/// even with an earlier build's switch read as off. In both appearances.
+#[test]
+fn a_new_conversation_is_ready_to_ask_as_soon_as_the_default_agent_is_set_up() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        h.state_mut().state.agents = earlier_agent_choices(false);
+        h.run();
+        assert_eq!(crate::chat_panel::set_up(h.state(), crate::ai_agents::Provider::Claude), Some(true), "{theme:?}");
+        assert!(!painted_has(&h, "No agent set up yet"), "{theme:?}: {:?}", painted(&h));
+        let found = ids(&h);
+        for id in ["workspace.chat.composer", "workspace.chat.send", "workspace.chat.badge"] {
+            assert!(found.iter().any(|i| i == id), "{theme:?}: {id} in {found:?}");
+        }
+        ask_in_chat(&mut h, "Describe Customer.");
+        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "{theme:?}: started and sent");
+        let started = rig.agents.started.lock().unwrap().last().map(|s| (s.provider, s.allow_changes));
+        assert_eq!(started, Some((crate::ai_agents::Provider::Claude, false)), "{theme:?}: Claude, read-only");
+        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("Describe Customer.")), "{theme:?}");
+    }
+}
+
+/// With no agent set up, Chat shows only the setup prompt with Configure agent (AR-237), even with
+/// an earlier build's switch read as on: no composer, and nothing starts. In both appearances.
+#[test]
+fn without_an_agent_set_up_chat_shows_only_the_setup_prompt() {
+    const PROMPT: &str = "Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, false);
+        h.state_mut().state.agents = earlier_agent_choices(true);
+        h.run();
+        assert_eq!(crate::chat_panel::set_up(h.state(), crate::ai_agents::Provider::Claude), Some(false), "{theme:?}");
+        for text in ["No agent set up yet", PROMPT, "Configure agent"] {
+            assert!(painted_has(&h, text), "{theme:?}: {text} in {:?}", painted(&h));
+        }
+        let found = ids(&h);
+        assert!(found.iter().any(|i| i == "workspace.chat.configure"), "{theme:?}");
+        for absent in ["workspace.chat.new", "workspace.chat.composer", "workspace.chat.send", "workspace.chat.badge"] {
+            assert!(!found.iter().any(|i| i == absent), "{theme:?}: {absent} with no agent set up");
+        }
+        assert_eq!(chat_calls(&rig), (0, 0, 0, 0), "{theme:?}: nothing started");
+    }
+}
+
+/// Chat's readiness is the default agent's alone (AR-237): Claude's key found refused by the test
+/// message shows the setup prompt; Codex signed in with ChatGPT, its sign-in not read yet and its
+/// program found, is ready. In both appearances.
+#[test]
+fn chat_is_ready_exactly_when_the_default_agent_is() {
+    use crate::ai_agents::{CodexSignIn, Provider};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        // Claude is the first of the two agents.
+        h.state_mut().agents.refused[0] = Some("401 invalid x-api-key".into());
+        h.run();
+        assert_eq!(crate::chat_panel::set_up(h.state(), Provider::Claude), Some(false), "{theme:?}: a refused key");
+        assert!(painted_has(&h, "No agent set up yet"), "{theme:?}: {:?}", painted(&h));
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.composer"), "{theme:?}");
+        h.state_mut().state.agents.default_agent = Provider::Codex;
+        h.state_mut().state.agents.codex_sign_in = CodexSignIn::ChatGpt;
+        h.run();
+        assert!(h.state().agents.codex.is_none(), "{theme:?}: Codex's sign-in is not read yet");
+        assert_eq!(crate::chat_panel::set_up(h.state(), Provider::Codex), Some(true), "{theme:?}: Codex is ready");
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.composer"), "{theme:?}");
+        assert_eq!(chat_calls(&rig), (0, 0, 0, 0), "{theme:?}: nothing started");
+    }
 }
 
 /// B1 without an agent (AR-63 rewritten): Configure agent opens Settings; B2 with one: intro, chips, composer, badge, switch.
@@ -7553,120 +7628,6 @@ fn while_the_agent_retries_the_turn_says_so_with_the_attempt_and_stop_stays() {
         click(&mut h, at);
         assert_eq!(chat_calls(&rig).2, 1, "Stop asks the program to stop");
         assert!(!painted(&h).iter().any(|t| t.contains("Trying again")), "once Stop is asked, it no longer says it tries again");
-    }
-}
-
-/// Turning Let Chat use the model off ends a conversation that runs (AR-221): its program ends, and
-/// the reply so far stays, marked stopped. The switch no longer refuses sending (AR-240): still
-/// off, the next question starts the program again and is sent, and so does Send again on a failed
-/// turn. In both appearances.
-#[test]
-fn turning_model_use_off_ends_a_running_conversation_and_sending_still_goes() {
-    use crate::chat::ChatEvent;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, rig) = chat_harness(theme, true);
-        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
-        chat_event(&mut h, &rig, ChatEvent::Text { delta: "Payment is linked to Order by".into() });
-        assert_eq!(chat_calls(&rig), (1, 1, 0, 0), "{theme:?}");
-        h.state_mut().state.agents.chat_uses_model = false;
-        h.run();
-        assert_eq!(chat_calls(&rig).3, 1, "{theme:?}: the running conversation's program ends");
-        assert_eq!(kept_chat(&h, &rig).turns[0].outcome, crate::chat_store::Outcome::Stopped, "{theme:?}");
-        assert!(painted_has(&h, "Payment is linked to Order by"), "{theme:?}: the reply so far stays");
-        // Still off: the next question starts the program again and is sent.
-        ask_in_chat(&mut h, "And how does Invoice relate to Order?");
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "{theme:?}: started again and sent");
-        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And how does Invoice relate to Order?")), "{theme:?}");
-        // Still off: Send again on a failed turn sends it again.
-        chat_event(&mut h, &rig, failed_turn(crate::chat::FailureKind::Other));
-        let at = rect_of(&h, "workspace.chat.turn.2.retry").center();
-        click(&mut h, at);
-        h.run();
-        assert_eq!(chat_calls(&rig).1, 3, "{theme:?}: Send again sends");
-        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And how does Invoice relate to Order?")), "{theme:?}");
-    }
-}
-
-/// Clicking Let Chat use the model off ends every running conversation in the frame of the click
-/// (AR-221, AR-238): the shown one and another, each end revoking its token in the host, and only
-/// once. In both appearances.
-#[test]
-fn clicking_the_switch_off_ends_every_running_conversation_in_that_frame() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, rig) = chat_harness(theme, true);
-        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
-        crate::chat::start(h.state_mut(), chat_start(7, crate::ai_agents::Provider::Claude)).unwrap();
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).3), (2, 0), "{theme:?}: two running");
-        crate::settings::open_at(h.state_mut(), crate::settings::Section::Agents);
-        h.run();
-        let at = rect_of(&h, "settings.agents.chat-uses-model").center();
-        h.event(egui::Event::PointerMoved(at));
-        for pressed in [true, false] {
-            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
-        }
-        h.step();
-        assert!(!h.state().state.agents.chat_uses_model, "{theme:?}");
-        assert_eq!(chat_calls(&rig).3, 2, "{theme:?}: both ended in the frame of the click");
-        h.run();
-        assert_eq!(chat_calls(&rig).3, 2, "{theme:?}: and only once");
-    }
-}
-
-/// Off before the ended program has gone (AR-221): a question asked meanwhile waits for its end,
-/// then starts the program again and is sent, never lost into the ending one. In both appearances.
-#[test]
-fn a_question_asked_after_model_use_goes_off_waits_for_the_end_then_goes() {
-    use crate::chat::ChatEvent;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, rig) = chat_harness(theme, true);
-        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
-        chat_event(&mut h, &rig, ChatEvent::Message { text: "Payment is linked to Order.".into() });
-        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-        let key = crate::chat_fixture::key(h.state());
-        rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
-        h.state_mut().state.agents.chat_uses_model = false;
-        h.run();
-        assert_eq!(chat_calls(&rig).3, 1, "{theme:?}: its program is asked to end");
-        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.session), Some(crate::chat_panel::Session::Ending), "{theme:?}");
-        ask_in_chat(&mut h, "And Invoice?");
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "{theme:?}: the question waits for the end");
-        rig.agents.hold_ends.store(false, std::sync::atomic::Ordering::Relaxed);
-        rig.agents.running.lock().unwrap().retain(|k| *k != key);
-        chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "{theme:?}: then starts the program again and sends it");
-        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And Invoice?")), "{theme:?}");
-    }
-}
-
-/// A question still being kept in the project when Let Chat use the model goes off (AR-240): no
-/// longer ended unsent; once kept, it waits for the ended program and is then sent once, to a
-/// program started again. In both appearances.
-#[test]
-fn a_question_being_kept_when_model_use_goes_off_is_sent_once_after_the_end() {
-    use crate::chat::ChatEvent;
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, rig) = chat_harness(theme, true);
-        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
-        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-        let key = crate::chat_fixture::key(h.state());
-        rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
-        ask_in_chat(&mut h, "And Invoice?");
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "{theme:?}: still being kept");
-        rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
-        h.state_mut().state.agents.chat_uses_model = false;
-        h.run();
-        assert_eq!(chat_calls(&rig).3, 1, "{theme:?}: its program is asked to end");
-        rig.store.release();
-        for _ in 0..4 {
-            h.run();
-        }
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (1, 1), "{theme:?}: kept, and waiting for the end");
-        rig.agents.hold_ends.store(false, std::sync::atomic::Ordering::Relaxed);
-        rig.agents.running.lock().unwrap().retain(|k| *k != key);
-        chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
-        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "{theme:?}: started again and sent once");
-        assert!(sent_texts(&rig).last().is_some_and(|t| t.starts_with("And Invoice?")), "{theme:?}");
-        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.turns.len()), Some(2), "{theme:?}");
     }
 }
 
@@ -15859,7 +15820,6 @@ fn settings_has_a_profile_and_an_ai_agents_section_with_done_in_the_footer() {
             "settings.agents.codex.sign-in",
             "settings.agents.codex.device-code",
             "settings.agents.codex.model",
-            "settings.agents.chat-uses-model",
             "settings.agents.check",
             "settings.agents.test",
         ] {
@@ -16133,28 +16093,29 @@ fn the_own_files_note_shows_where_no_secure_store_opened() {
     }
 }
 
+/// Settings ▸ AI Agents has no switch for Chat (AR-237): the default agent is kept in the
+/// preferences and read back, nothing of a switch is written, and the choices an earlier build kept
+/// with its switch, on or off, read as the same choices. In both appearances.
 #[test]
-fn let_chat_use_the_model_is_off_until_turned_on_and_kept() {
-    let (mut h, _) = agents_harness(ThemeKind::Dark, |_| {});
-    assert!(!h.state().state.agents.chat_uses_model, "off until turned on");
-    open_agents(&mut h);
-    let at = rect_of(&h, "settings.agents.chat-uses-model").center();
-    click(&mut h, at);
-    assert!(h.state().state.agents.chat_uses_model);
-    // The default agent and the toggle are kept in the preferences, and read back.
-    let at = rect_of(&h, "settings.agents.default").center();
-    click(&mut h, at);
-    let at = rect_of(&h, "settings.agents.default.1").center();
-    click(&mut h, at);
-    assert_eq!(h.state().state.agents.default_agent, crate::ai_agents::Provider::Codex);
-    let text = serde_json::to_string(&h.state().state).unwrap();
-    let mut back: UiState = serde_json::from_str(&text).unwrap();
-    back.sanitize();
-    assert!(back.agents.chat_uses_model);
-    assert_eq!(back.agents.default_agent, crate::ai_agents::Provider::Codex);
-    // A file without the section reads as the defaults: off.
-    let old: UiState = serde_json::from_str(r#"{"user_name":"Ada"}"#).unwrap();
-    assert!(!old.agents.chat_uses_model);
+fn ai_agents_has_no_chat_switch_and_keeps_the_default_agent() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = agents_harness(theme, |_| {});
+        open_agents(&mut h);
+        assert!(!ids(&h).iter().any(|i| i == "settings.agents.chat-uses-model"), "{theme:?}");
+        assert!(!painted_has(&h, "Let Chat use the model"), "{theme:?}");
+        let at = rect_of(&h, "settings.agents.default").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "settings.agents.default.1").center();
+        click(&mut h, at);
+        assert_eq!(h.state().state.agents.default_agent, crate::ai_agents::Provider::Codex, "{theme:?}");
+        let text = serde_json::to_string(&h.state().state).unwrap();
+        assert!(!text.contains("chat_uses_model"), "{theme:?}: {text}");
+        let mut back: UiState = serde_json::from_str(&text).unwrap();
+        back.sanitize();
+        assert_eq!(back.agents.default_agent, crate::ai_agents::Provider::Codex, "{theme:?}");
+    }
+    assert_eq!(earlier_agent_choices(true), earlier_agent_choices(false));
+    assert_eq!(earlier_agent_choices(true).claude_model, "sonnet");
 }
 
 #[test]
@@ -16636,8 +16597,6 @@ fn a_conversation_is_checked_before_the_host_is_asked_and_its_events_are_kept_in
     use crate::chat::{ChatEvent, ChatRefusal, MAX_SESSIONS, MAX_WAITING};
     use std::sync::atomic::Ordering::Relaxed;
     let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    // Let Chat use the model off does not refuse a start or a message (AR-240): the host is asked.
-    assert!(!h.state().state.agents.chat_uses_model);
     assert_eq!(f.calls.connect.load(Relaxed), 1, "the window connected its events once");
     // A bad id is refused here, never asked of the host.
     for bad in ["", "Chat 1", "00000000-0000-4000-8000-00000000000G", "00000000-0000-4000-8000-0000000000001", "../../etc/passwd"] {

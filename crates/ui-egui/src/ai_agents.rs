@@ -468,7 +468,8 @@ pub enum CodexSignIn {
 }
 
 /// The choices of Settings → AI Agents that are kept in the preferences. None of them is a secret:
-/// keys live in the system's secure store alone.
+/// keys live in the system's secure store alone. A choice an earlier build kept and this one no
+/// longer has (its switch for Chat, AR-237) is skipped when read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentPrefs {
@@ -476,19 +477,13 @@ pub struct AgentPrefs {
     pub claude_model: String,
     pub codex_model: String,
     pub codex_sign_in: CodexSignIn,
-    /// Let Chat use the model: off until the user turns it on.
-    pub chat_uses_model: bool,
 }
 
 impl Default for AgentPrefs {
+    /// Claude as the default agent, each agent on its program's default model, Codex signed in
+    /// with ChatGPT.
     fn default() -> Self {
-        Self {
-            default_agent: Provider::Claude,
-            claude_model: "default".into(),
-            codex_model: "default".into(),
-            codex_sign_in: CodexSignIn::ChatGpt,
-            chat_uses_model: false,
-        }
+        Self { default_agent: Provider::Claude, claude_model: "default".into(), codex_model: "default".into(), codex_sign_in: CodexSignIn::ChatGpt }
     }
 }
 

@@ -308,8 +308,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   dialog and the window behind takes no keys.
 - AI Agents (page 07 of the design, frames A1-A8): the default agent select on top, a card per
   agent (the neutral hexagon agent mark beside its name, never a provider's logo; a status badge
-  at the card's right), Let Chat use the model, then Check connection and Send test message, each
-  with its note beside it, and the status badge under them.
+  at the card's right), then Check connection and Send test message, each with its note beside
+  it, and the status badge under them.
 - Archforge never touches the system's credential store at launch, so it never asks for access
   to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
   starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
@@ -348,18 +348,21 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   nothing falls back; ChatGPT sign-in still works. The store's answer holds until Archforge
   restarts, so the notice says to start one and restart, and offers no Look again (a departure
   from frame A7, which could not keep its promise). On Windows the page says AI Agents are not available on this system yet.
-- What is kept in the preferences: the default agent, each agent's model, Codex's way of signing
-  in and Let Chat use the model (off until turned on). Never a key, nor any part of one.
+- What is kept in the preferences: the default agent, each agent's model and Codex's way of
+  signing in. Never a key, nor any part of one. There is no switch for Chat (owner, AR-237): Chat
+  is ready when the default agent is; an earlier build's switch is skipped when read.
 - The codex program keeps a ChatGPT sign-in in its own files in Archforge's private `CODEX_HOME`
   (`agents/codex-home`, mode 0700), on every system, never in the system keychain or Secret
   Service (owner, 2026-11-08, AR-236; it replaces the 2026-11-06 rule "the keyring where the
   secure store opens"): the codex program runs with a private `HOME`, where no keychain is
   found. The note "keeps its ChatGPT sign-in in its own files" shows once Codex is signed in and
   only where no secure store opened, as there it tells why the sign-in works without one.
-- Agent access for Chat (AR-203) opens only while a conversation holds it and Let Chat use the
-  model is on, and closes with the last conversation (turning it off ends them all, each token
-  revoked at once) and on quit. The status bar's Agent item (page 07, the dot and text beside the location) says which:
-  an accent dot and "Chat is using the model" while a conversation holds access, a purple dot and
+- Agent access for Chat (AR-203) opens only while a conversation holds it, and closes with the
+  last conversation and on quit; asking a conversation to end revokes its token at once. With no
+  switch for Chat (AR-237), asking a question is the opt-in: a conversation's program and its
+  token start only when the person sends one in it, read-only unless Allow changes. The
+  status bar's Agent item (page 07, the dot and text beside the location) says which: an accent
+  dot and "Chat is using the model" while a conversation holds access, a purple dot and
   "Agent access off" otherwise, one at a time. It is a control (pointer, Tab, Enter, its id
   `workspace.status.agent`); either state opens Settings on AI Agents, as the design's agent setup
   overlay does.
@@ -371,11 +374,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   or danger notice of a failure, the context chips, the composer with the provider badge and Send
   (Stop while a reply runs), the read-only switch, and the history. Its header holds the history
   and New conversation (New is hidden while no agent is set up).
-- No agent set up (B1) shows until the default agent is ready and Let Chat use the model is on;
-  Configure agent opens Settings on AI Agents. While the keys are first read it draws nothing.
-- Let Chat use the model turned off ends every conversation's program; a reply under way ends
-  stopped (AR-221). It no longer refuses sending (AR-240, owner decision AR-237): a conversation
-  already started or reopened keeps its box, and a question sent there starts its program again.
+- No agent set up (B1) shows until the default agent is ready; Configure agent opens Settings on
+  AI Agents. While the keys are first read it draws nothing.
 - Opening the panel the first time in a project starts a new conversation (B2); it stays while
   the project is open. One read back from the history opens read-only: Allow changes is off for
   every conversation until turned on in it. Choosing in the history the conversation already
