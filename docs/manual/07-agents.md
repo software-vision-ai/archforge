@@ -269,14 +269,12 @@ Your question is kept in the project first, then sent. A question that holds one
 keys is neither sent nor kept: the panel says so and leaves it in the box for you to edit. So does a
 project that cannot be written.
 
-- **The chips** above the box are sent with your question: the project, the open diagram and what is
-  selected, by name. Remove one with its ×; it stays removed while this conversation stays shown.
-  Open another conversation and then this one again from **Conversations**, and the chip is back and
-  goes with the next question: check the chips before you ask. **Send again** sends a question with
-  the chips it last went with, unless the question is back in the box: then it goes with the chips
-  shown now, so a chip that came back on reopening goes too (see [When something goes
-  wrong](#when-something-goes-wrong)). The line under them is a reminder: they, and everything the
-  agent reads, go to the agent's provider.
+- **The chips** above the box are sent with your question: the project, the open diagram and what
+  is selected, by name. Remove one with its ×; it stays removed while this conversation stays
+  shown. Open another conversation and then this one again from **Conversations**, and the chip is
+  back and goes with the next question: check the chips before you ask. Which chips **Send again**
+  sends is in [What Send again and Enter send](#what-send-again-and-enter-send). The line under
+  them is a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
   Archforge itself answered the agent, so a refused change says *refused*. The reply is written in
@@ -380,22 +378,38 @@ A card in the conversation says what went wrong and what to do.
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
 | *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**: the Codex card says the sign-in expired. Choose **Sign in again…**, then ask again. |
-| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**. If the question is back in the box, press Enter. If the box held something else, the question stayed in the conversation: choose **Send again** on its card, as Enter would send what is in the box as a new question. |
+| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**. If the question is back in the box, press Enter. If the box held something else, the question stayed in the conversation: choose **Send again** on its card, as Enter would send what is in the box as a new question (see [What Send again and Enter send](#what-send-again-and-enter-send)). |
 | *Not started yet* | The conversation's working files are being removed: a copy of the project deleted it, or it was just brought back with Undo. | **Send again** in a moment. Reopened from **Conversations** later, the same turn shows *No answer*, as the reason is not kept. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
 
 **Send again** asks the same question again in the same place: the conversation keeps it once. A
 question whose turn already changed the model is not sent again; ask again in your own words.
 
-Which question and which chips **Send again** sends depends on where the question is:
+#### What Send again and Enter send
 
-- **Still in the conversation** (it did not come back into the box): **Send again** on its card
-  sends it as it was last sent, with the chips it last went with, even one you removed since. A
-  question sent again before goes as that last attempt, with that attempt's chips.
-- **Back in the box**: Enter and **Send again** on the card both send what the box holds now,
-  edited or not, with the chips shown now, a newly selected element included. Check the box and
-  the chips first. Empty the box, and **Send again** sends the question as it was last sent, with
-  the chips it last went with.
+A failed question either stays in the conversation or, after *Connection lost* or *Not sent* with
+the box empty, comes back into the box. What the card's **Send again** and Enter then send:
+
+| Where the failed question is | **Send again** on its card sends | Enter sends |
+|---|---|---|
+| In the conversation, the box empty | The question as last sent, with the chips it last went with | Nothing |
+| In the conversation, other text in the box | The question as last sent, with the chips it last went with | The box's text, as a new question, with the chips shown now |
+| Back in the box, as it came back or edited | The box's text, with the chips shown now | The box's text, with the chips shown now |
+| Back in the box, then the box emptied | The question as last sent, with the chips it last went with | Nothing |
+
+- **Send again** and Enter on a question back in the box run the failed turn again in its place:
+  the conversation keeps the question once. Enter on other text starts a new turn.
+- *As last sent*: each time a question is sent again, what was sent replaces the earlier question
+  and chips.
+- *The chips shown now* are the chips above the box, a newly selected element included, without
+  those you removed in this conversation.
+- **Opened again from Conversations** (after another conversation was shown), a question that was
+  back in the box counts as in the conversation: the first two rows. The box keeps its text when
+  you switch conversations, so an edited question still in it goes with Enter as a new question,
+  with the chips shown now, including any you had removed (the chips come back on reopening).
+- The card offers **Send again** only as the [table above](#when-something-goes-wrong) says: not
+  on a card that sends you to Settings, and on *Model not available* only after another model was
+  chosen.
 
 To send only the chips shown now, ask a new question. The earlier question, with its chips' line,
 stays part of the conversation so far, so it may still reach the provider.
