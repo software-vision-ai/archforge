@@ -26,7 +26,10 @@ are the two kinds of diagram Archforge has today; what is planned is listed belo
 - **Undo and saving**: every change is one step you can undo; edits are written to the project as
   you go, and Save makes a version.
 - **Chat**: ask Claude or Codex about the model in the Chat panel; with your permission it changes
-  the model, and one step undoes what a question changed (see [Working with an agent](07-agents.md)).
+  the model, and one step undoes what a question changed, as long as nothing else changed the
+  model while it answered. It runs the agent's program installed on
+  your computer, with your own API key or ChatGPT sign-in (see
+  [Setting up AI agents for Chat](07-agents.md#setting-up-ai-agents-for-chat)).
 - Light and dark appearances, and an interface in English, German, Spanish, French, Portuguese,
   Japanese and simplified Chinese.
 
@@ -50,6 +53,8 @@ These are not in Archforge yet. Where the window shows a place for them, it says
 - **Diagram**: a drawing of part of the model. The same element can appear on several diagrams.
 - **Box** and **line**: how a diagram draws an element. A table or a class is a box; a relationship
   is a line.
-- **Agent**: an AI assistant, connected from outside Archforge, that works on the open project.
+- **Agent**: an AI assistant that works on the open project: Claude or Codex in the Chat panel,
+  or one you connect from outside Archforge.
+- **Provider**: the company that runs an agent's AI model: Anthropic for Claude, OpenAI for Codex.
 
 Next: [Getting started](02-getting-started.md).

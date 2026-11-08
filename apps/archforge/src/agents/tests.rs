@@ -696,6 +696,45 @@ fn a_conversation_asked_to_end_has_its_token_revoked_before_the_call_returns() {
     host.agents.end(&other).unwrap();
 }
 
+/// A conversation's token speaks only for that conversation (AR-230): the channel bound it to the
+/// conversation when it granted it, so a request on it that names no origin is still that
+/// conversation's, its change labelled with its name, and one naming another conversation is
+/// refused and changes nothing.
+#[test]
+fn a_conversations_token_speaks_only_for_its_conversation() {
+    let host = Host::new("bound-origin", Setup::default());
+    host.agents.set_model_access(true);
+    let (first, second) = (id(1), id(2));
+    host.agents.start(claude(&first, "Chat 1", true)).unwrap();
+    host.agents.start(claude(&second, "Chat 2", true)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(&first));
+    let token = archforge_control::read_token(&file).unwrap();
+    let calls = std::thread::spawn(move || {
+        let add = |c: Client, name: &str| c.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": name } }));
+        vec![
+            ("no origin", add(Client::with_token(port, token.clone()), "shop")),
+            ("another conversation's origin", add(Client::with_token(port, token.clone()).with_origin(Some("Chat 2".into())).unwrap(), "stock")),
+            ("its own origin", add(Client::with_token(port, token).with_origin(Some("Chat 1".into())).unwrap(), "sales")),
+        ]
+    });
+    let mut window = shell();
+    host.window(&mut window, || calls.is_finished());
+    for (what, answer) in calls.join().unwrap() {
+        match what {
+            "another conversation's origin" => {
+                assert!(matches!(&answer, Err(CallError::Refused(e)) if e.contains("speaks for \"Chat 1\"")), "{what}: {answer:?}");
+            }
+            _ => assert_eq!(answer.as_ref().map(|a| a["origin"].clone()), Ok(json!("Chat 1")), "{what}: {answer:?}"),
+        }
+    }
+    let schemas = archforge_ui_egui::control::answer(&mut window, "engine.execute", &json!({ "command": "er.schema.list" })).unwrap();
+    assert_eq!(schemas["result"].as_array().map(Vec::len), Some(2), "the refused one changed nothing: {schemas}");
+    for chat in [&first, &second] {
+        host.agents.end(chat).unwrap();
+    }
+}
+
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
 /// "revoked", and never runs when the window comes to it.
 #[test]

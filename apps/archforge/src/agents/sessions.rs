@@ -545,7 +545,9 @@ fn begin(
     let sink = inner.sink();
     // Held by the guard from the moment it exists, so any end after it gives it back; one asked to
     // end meanwhile has it revoked here, never kept.
-    let grant = locked(&inner.access).grant(request.allow_changes, sink.as_ref()).map_err(other)?;
+    // Bound to this conversation: the server, not a request, says whose a request is (AR-230).
+    let bound = archforge_control::Bound { key: request.chat.clone(), origin: request.origin.clone() };
+    let grant = locked(&inner.access).grant(request.allow_changes, bound, sink.as_ref()).map_err(other)?;
     guard.granted = grant.is_some();
     let place = grant.as_ref().map(|g| (g.port(), g.path().to_path_buf()));
     let late = {
@@ -673,7 +675,9 @@ mod revoke_tests {
         let settings = folder.0.clone();
         let handler: archforge_control::Handler = Arc::new(|_| Ok(serde_json::Value::Null));
         let server = archforge_control::Server::open(&settings, handler).unwrap();
-        let grant = server.grant(archforge_control::Role::Full).unwrap();
+        // A conversation's grant, bound to it as the host binds every one (AR-230).
+        let bound = archforge_control::Bound { key: "7f3c2a10-0000-4000-8000-0000000000d1".into(), origin: "Chat 1".into() };
+        let grant = server.grant(archforge_control::Role::Full, Some(bound)).unwrap();
         let file = grant.path().to_path_buf();
         let token = Token::default();
         let (took_tx, took) = std::sync::mpsc::channel();
