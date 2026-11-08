@@ -463,9 +463,12 @@ else KEYS_OK=0; echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; fix the stor
 4. With Codex the default agent and still on **API key**, start a new conversation and paste the
    first question K1 printed, the one ending in `$MARKER_CODEX_KEY`'s value, whole and unchanged.
    Then switch the card to **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed
-   in*), start another new conversation and paste the second, ending in `$MARKER_CODEX_GPT`'s
-   value. **Expect:** a reply each time, repeating the word. Each Codex route has now sent one question with a marker of its own, for
-   K4 step 8.
+   in*, or with **Sign in again…** if it says the sign-in *has expired*), start another new
+   conversation and paste the second, ending in `$MARKER_CODEX_GPT`'s value. **Expect:** a reply
+   each time, repeating the word. A *Sign-in expired* card instead of the second reply means the
+   sign-in ended since F2: sign in again from **Open Settings**, then paste the question again in
+   another new conversation. Each Codex route has now sent one question with a marker of its
+   own, for K4 step 8.
 5. Make Claude the default agent again, start a new conversation and paste the third question K1
    printed, ending in `$MARKER_DELETED`'s value. **Expect:** a reply. This is the
    conversation K3 step 5 deletes; its title starts with the question.
@@ -693,10 +696,11 @@ Run this only after every K4 search, step 8 included: it removes `$WORK`, with t
 key files the searches read.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
-2. If R2 kept an earlier sign-in (`$KEPT` is set): the pass signed Codex in again, and F2's
-   *sign out of all devices* may have ended the earlier sign-in too. Choose, and record your
-   choice: keep the pass's sign-in, or put the earlier one back. Quit Archforge, run `wait_quit`,
-   then run one of the two commands:
+2. If R2 kept an earlier sign-in (it printed *KEPT* and a folder): the pass signed Codex in
+   again, and F2's *sign out of all devices* may have ended the earlier sign-in too. Choose, and
+   record your choice: keep the pass's sign-in, or put the earlier one back. Quit Archforge, run
+   `wait_quit`, then run one of the two commands. In a new shell, first set `SETTINGS` as in
+   *Before you start* and `KEPT` to the folder R2 printed:
 
    ```sh
    # either: keep the pass's sign-in
@@ -706,8 +710,16 @@ key files the searches read.
      && echo "put the earlier sign-in back" || echo "NOT DONE: KEPT is empty, or see the error above"
    ```
 
-   Start Archforge. **Expect:** the Codex card says *Signed in as* your email. *has expired*
-   after putting the earlier one back means F2 ended it too: sign in again (R3 steps 1 and 2).
+   Start Archforge and open **Settings ▸ AI Agents**. K3 and step 1 left the Codex card on
+   **API key**, which shows the key, not the account: choose **Sign in with ChatGPT** under
+   **Sign-in**. **Expect:** *Signed in as* your email. That reads only what the codex program
+   keeps; it does not ask OpenAI whether the sign-in still holds, so test it: set **Default
+   agent** to Codex and choose **Send test message**. **Expect:** *Codex answered the test message
+   just now*. If it fails, find out why: open *Chat acceptance*, start a new conversation with
+   Codex and ask one question. The card *Sign-in expired* means F2 ended that sign-in too: choose
+   **Open Settings**, then **Sign in again…**, sign in, and send the test message again. Any other
+   card, or a reply, means the test message failed for another cause: record its text. Then set
+   **Sign-in** and **Default agent** back to how you use them.
 3. Remove the pass's files, which hold the real keys and the project's rows:
 
    ```sh
