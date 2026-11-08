@@ -284,7 +284,7 @@ str		the conversation {who} has no turn running in the project shown in Archforg
 str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	the conversation {who} may undo only its own changes in this turn, and the step on top is not one
 str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	the conversation {who} may redo only its own changes in this turn, and the step to redo is not one
 str		No agent set up yet	No agent set up yet
-str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.	Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.
 str		Configure agent	Configure agent
 str		Ask about {project}	Ask about {project}
 str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.
@@ -494,8 +494,6 @@ str		{agent} sign-in not available yet	{agent} sign-in not available yet
 str		{agent} not looked for yet	{agent} not looked for yet
 str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.
 str		Default agent	Default agent
-str		Let Chat use the model	Let Chat use the model
-str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.
 str		Checking…	Checking…
 str		Check connection	Check connection
 str		Sending…	Sending…

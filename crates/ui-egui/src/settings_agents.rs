@@ -1,6 +1,6 @@
 //! Settings → AI Agents: the default agent, a card for each agent program (Claude with an API
-//! key; Codex signed in with ChatGPT or with an API key), Let Chat use the model, and Check
-//! connection and Send test message with the status badge under them.
+//! key; Codex signed in with ChatGPT or with an API key), and Check connection and Send test
+//! message with the status badge under them.
 //!
 //! The page shows what this run already knows: the programs were looked for when Archforge
 //! started, through the host; the keys are read from the secure store the first time the page is
@@ -25,7 +25,6 @@ use crate::{Shell, widgets};
 /// The page's longest sentences, looked up through `tr` by name; the catalogue test reads them
 /// through [`texts`].
 const INTRO: &str = "Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.";
-const MODEL_ACCESS: &str = "Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.";
 const NOT_ON_WINDOWS: &str =
     "AI Agents work on macOS and Linux for now. On Windows, Chat and these settings stay off; everything else in Archforge works as usual.";
 const NO_STORE: &str = "Archforge keeps API keys only in the system's secure store, and this session has none running (a Secret Service such as GNOME Keyring or KWallet). Start one and restart Archforge to save keys; Archforge never keeps them anywhere else.";
@@ -36,8 +35,8 @@ const OWN_FILES: &str =
 
 /// The sentences the page looks up by name, for the catalogue test.
 #[cfg(test)]
-pub(crate) fn texts() -> [&'static str; 6] {
-    [INTRO, MODEL_ACCESS, NOT_ON_WINDOWS, NO_STORE, MISSING, OWN_FILES]
+pub(crate) fn texts() -> [&'static str; 5] {
+    [INTRO, NOT_ON_WINDOWS, NO_STORE, MISSING, OWN_FILES]
 }
 
 /// A select's list open on the page.
@@ -228,17 +227,6 @@ pub(crate) fn page(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut
         models[slot(agent)] = model;
         y = bottom + 20.0;
     }
-    // Let Chat use the model.
-    let toggle_rect = Rect::from_min_size(pos2(left + width - 28.0, y + 2.0), vec2(28.0, 16.0));
-    ux::text(&paint, pos2(left, y), &tr("Let Chat use the model"), types::UI, p.text, Some(width - 60.0));
-    y += 20.0 + wrapped(&paint, pos2(left, y + 20.0), width - 60.0, &tr(MODEL_ACCESS), types::SMALL, p.text_secondary, 3);
-    let on = shell.state.agents.chat_uses_model;
-    if toggle(shell, ui, p, "settings.agents.chat-uses-model", toggle_rect, on, &tr("Let Chat use the model")).clicked() {
-        shell.state.agents.chat_uses_model = !on;
-        // Followed at once: turning it off ends every running conversation in this frame.
-        crate::chat::follow_switch(shell);
-    }
-    y += 16.0;
     paint.hline(left..=left + width, y, Stroke::new(1.0, p.border));
     y += 24.0;
     // Check connection and Send test message, their notes beside them, the badge under them.

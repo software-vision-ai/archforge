@@ -285,7 +285,7 @@ str		the conversation {who} has no turn running in the project shown in Archforg
 str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	对话 {who} 只能撤销本轮中它自己的更改，而最上面的步骤不是其中之一
 str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	对话 {who} 只能重做本轮中它自己的更改，而要重做的步骤不是其中之一
 str		No agent set up yet	尚未设置智能体
-str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	聊天通过这台电脑上安装的程序运行 Claude 或 Codex 来回答。请在设置中选择一个，并允许聊天使用模型。
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.	聊天通过这台电脑上安装的程序运行 Claude 或 Codex 来回答。请在设置中配置一个。
 str		Configure agent	设置智能体
 str		Ask about {project}	询问关于 {project} 的问题
 str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	聊天会读取模型来回答，并在下方显示每次读取。在你允许此对话进行更改之前，它不会更改任何内容。
@@ -495,8 +495,6 @@ str		{agent} sign-in not available yet	{agent} 登录暂不可用
 str		{agent} not looked for yet	尚未查找 {agent}
 str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	聊天与安装在这台计算机上的智能体程序对话。 Archforge 会找到该程序，并把您的密钥保存在系统的安全存储中。打开此页面不会发送任何内容。
 str		Default agent	默认智能体
-str		Let Chat use the model	允许聊天使用模型
-str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	在您打开之前保持关闭。对话拥有此访问权限期间，聊天会读取项目的模型，状态栏也会显示。更改仍需在每个对话中“允许更改”。
 str		Checking…	正在检查…
 str		Check connection	检查连接
 str		Sending…	正在发送…

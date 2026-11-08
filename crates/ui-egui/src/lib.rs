@@ -1357,7 +1357,7 @@ impl Shell {
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);
-        // Chat's conversations: the host's events, and Let Chat use the model followed.
+        // Chat's conversations: the host's events.
         chat::frame(self, ctx);
         control::drain(self);
         // The Chat panels' conversations: the agent's events, the project's answers, undo's moves.

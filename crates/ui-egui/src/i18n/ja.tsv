@@ -285,7 +285,7 @@ str		the conversation {who} has no turn running in the project shown in Archforg
 str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	会話 {who} が元に戻せるのはこのターンの自分の変更だけで、いちばん上のステップはそれではありません
 str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	会話 {who} がやり直せるのはこのターンの自分の変更だけで、やり直すステップはそれではありません
 str		No agent set up yet	エージェントはまだ設定されていません
-str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	チャットは、このコンピュータにインストールされたプログラムで動く Claude または Codex で回答します。設定でどちらかを選び、チャットにモデルの使用を許可してください。
+str		Chat answers with Claude or Codex, run by the program installed on this computer. Set one up in Settings.	チャットは、このコンピュータにインストールされたプログラムで動く Claude または Codex で回答します。設定でどちらかをセットアップしてください。
 str		Configure agent	エージェントを設定
 str		Ask about {project}	{project} について質問
 str		Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.	チャットはモデルを読んで回答し、読んだ内容を下に表示します。この会話で変更を許可するまで、何も変更しません。
@@ -495,8 +495,6 @@ str		{agent} sign-in not available yet	{agent} のサインインはまだ使え
 str		{agent} not looked for yet	{agent} はまだ探していません
 str		Chat talks to an agent program installed on this computer. Archforge finds the program and keeps your keys in the system's secure store. Opening this page sends nothing.	チャットはこのコンピューターにインストールされたエージェントプログラムと話します。 Archforge はプログラムを見つけ、キーをシステムのセキュアストアに保管します。このページを開いても何も送信しません。
 str		Default agent	既定のエージェント
-str		Let Chat use the model	チャットにモデルの使用を許可
-str		Off until you turn it on. While a conversation holds this access, Chat reads the project's model and the status bar says so. Changes still wait for Allow changes in each conversation.	オンにするまではオフです。会話がこのアクセスを持つ間、チャットはプロジェクトのモデルを読み、ステータスバーにそう表示されます。変更は会話ごとに「変更を許可」を待ちます。
 str		Checking…	確認中…
 str		Check connection	接続を確認
 str		Sending…	送信中…
