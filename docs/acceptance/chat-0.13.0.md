@@ -693,14 +693,18 @@ project. Elsewhere, record where it shows: Claude's own transcript in that conve
 ### K5. Put things back
 
 Run this only after every K4 search, step 8 included: it removes `$WORK`, with the markers and the
-key files the searches read.
+key files the searches read. Run every step in the shell from *Before you start*, where `WORK`,
+`SETTINGS`, `wait_quit` and (if R2 kept a sign-in) `KEPT` are set. If that shell was closed, open
+a new one and set them again: `SETTINGS` and `wait_quit` by pasting those lines of the block in
+*Before you start* (not the `mktemp` line, which would make a second, empty work folder), `WORK`
+to the pass's folder (`find "$HOME" -maxdepth 1 -name 'archforge-acceptance.*'` lists it), and
+`KEPT` to the folder R2 printed, if any.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
 2. If R2 kept an earlier sign-in (it printed *KEPT* and a folder): the pass signed Codex in
    again, and F2's *sign out of all devices* may have ended the earlier sign-in too. Choose, and
    record your choice: keep the pass's sign-in, or put the earlier one back. Quit Archforge, run
-   `wait_quit`, then run one of the two commands. In a new shell, first set `SETTINGS` as in
-   *Before you start* and `KEPT` to the folder R2 printed:
+   `wait_quit`, then run one of the two commands:
 
    ```sh
    # either: keep the pass's sign-in
@@ -720,13 +724,25 @@ key files the searches read.
    **Open Settings**, then **Sign in again…**, sign in, and send the test message again. Any other
    card, or a reply, means the test message failed for another cause: record its text. Then set
    **Sign-in** and **Default agent** back to how you use them.
-3. Remove the pass's files, which hold the real keys and the project's rows:
+3. Remove the pass's files, which hold the real keys and the project's rows. The command removes
+   nothing unless `WORK` names the pass's folder:
 
    ```sh
-   rm -rf "$WORK"
-   unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY KEPT H
+   if case "$WORK" in "$HOME"/archforge-acceptance.?*) [ -d "$WORK" ] ;; *) false ;; esac; then
+     if rm -rf "$WORK"; then echo "removed $WORK"
+       unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
+         DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY KEPT H
+     else echo "REMOVE FAILED: see the error above, and run this again"; fi
+   else echo "STOP: WORK is not set to the pass's folder; use the first shell"; fi
+   find "$HOME" -maxdepth 1 \( -name 'archforge-acceptance.*' -o -name 'archforge-earlier-sign-in.*' \) \
+     | grep . || echo "nothing of the pass left"
    ```
+
+   **Expect:** *removed* and the folder, then *nothing of the pass left*. *STOP* removed nothing:
+   set `WORK` as above and run it again. A work folder still listed is one this pass or an
+   earlier one left: remove it the same way, with `WORK` set to it. An `archforge-earlier-sign-in`
+   folder still listed holds a sign-in step 2 did not settle: do step 2 for it, with `KEPT` set to
+   it.
 
 ## Results
 
