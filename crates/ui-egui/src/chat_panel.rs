@@ -1690,7 +1690,10 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&st
             || shell.tabs.iter().filter_map(|t| t.parked.as_ref()).any(|p| label_known(&p.chat_panel))
             || shell.chats.letting_go.iter().any(|(_, o)| o.as_deref() == Some(origin));
         if conversation.is_some() && taken {
-            return Err(format!("this token's conversation is not one Archforge knows; the label {origin:?} belongs to another conversation here"));
+            return Err(fmt(
+                &tr("this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here"),
+                &[("label", &format!("{origin:?}"))],
+            ));
         }
         return Ok(());
     }
@@ -1703,20 +1706,29 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&st
     // Said apart, so the reason is the one that holds: its program is being ended, or no turn of it
     // runs in the project shown.
     if ending {
-        return Err(format!("the conversation {who:?} is being ended; nothing more runs in its name until its program has ended"));
+        return Err(fmt(
+            &tr("the conversation {who} is being ended; nothing more runs in its name until its program has ended"),
+            &[("who", &format!("{who:?}"))],
+        ));
     }
     if !running(&shell.chat_panel) || parked.iter().any(|p| running(&p.chat_panel)) {
-        return Err(format!("the conversation {who:?} has no turn running in the project shown in Archforge"));
+        return Err(fmt(&tr("the conversation {who} has no turn running in the project shown in Archforge"), &[("who", &format!("{who:?}"))]));
     }
     let command = params.get("command").and_then(Value::as_str);
     let undo = method == "engine.undo" || (method == "engine.execute" && command == Some("edit.undo"));
     let redo = method == "engine.redo" || (method == "engine.execute" && command == Some("edit.redo"));
     let session = shell.session.as_ref();
     if undo && session.is_none_or(|s| !s.undo_in_group(label)) {
-        return Err(format!("the conversation {label:?} may undo only its own changes in this turn, and the step on top is not one"));
+        return Err(fmt(
+            &tr("the conversation {who} may undo only its own changes in this turn, and the step on top is not one"),
+            &[("who", &format!("{label:?}"))],
+        ));
     }
     if redo && session.is_none_or(|s| !s.redo_in_group(label)) {
-        return Err(format!("the conversation {label:?} may redo only its own changes in this turn, and the step to redo is not one"));
+        return Err(fmt(
+            &tr("the conversation {who} may redo only its own changes in this turn, and the step to redo is not one"),
+            &[("who", &format!("{label:?}"))],
+        ));
     }
     Ok(())
 }

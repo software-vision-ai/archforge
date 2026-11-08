@@ -280,6 +280,11 @@ str		Conversations	会話
 str		New conversation	新しい会話
 str		Stop the reply first	先に返答を停止してください
 str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	「チャットにモデルの使用を許可」がオフのため、何も送信されません。設定 ▸ AI エージェントでオンにしてください。
+str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	このトークンの会話は Archforge が知らないものです。ラベル {label} はここでは別の会話のものです
+str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	会話 {who} は終了処理中です。そのプログラムが終了するまで、その名前では何も実行されません
+str		the conversation {who} has no turn running in the project shown in Archforge	会話 {who} は Archforge に表示中のプロジェクトで実行中のターンがありません
+str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	会話 {who} が元に戻せるのはこのターンの自分の変更だけで、いちばん上のステップはそれではありません
+str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	会話 {who} がやり直せるのはこのターンの自分の変更だけで、やり直すステップはそれではありません
 str		No agent set up yet	エージェントはまだ設定されていません
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	チャットは、このコンピュータにインストールされたプログラムで動く Claude または Codex で回答します。設定でどちらかを選び、チャットにモデルの使用を許可してください。
 str		Configure agent	エージェントを設定

@@ -280,6 +280,11 @@ str		Conversations	Conversations
 str		New conversation	Nouvelle conversation
 str		Stop the reply first	Arrêtez d’abord la réponse
 str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	« Laisser Discussion utiliser le modèle » est désactivé, donc rien n’est envoyé. Activez-le dans Réglages ▸ Agents IA.
+str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	Archforge ne connaît pas la conversation de ce jeton ; l’étiquette {label} appartient ici à une autre conversation
+str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	la conversation {who} est en train de se terminer ; plus rien ne s’exécute en son nom tant que son programme n’est pas terminé
+str		the conversation {who} has no turn running in the project shown in Archforge	la conversation {who} n’a aucun tour en cours dans le projet affiché dans Archforge
+str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	la conversation {who} ne peut annuler que ses propres modifications de ce tour, et l’étape du dessus n’en fait pas partie
+str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	la conversation {who} ne peut rétablir que ses propres modifications de ce tour, et l’étape à rétablir n’en fait pas partie
 str		No agent set up yet	Aucun agent configuré pour l’instant
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Discussion répond avec Claude ou Codex, exécuté par le programme installé sur cet ordinateur. Choisissez-en un dans les Réglages et laissez Discussion utiliser le modèle.
 str		Configure agent	Configurer un agent

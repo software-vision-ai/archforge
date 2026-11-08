@@ -279,6 +279,11 @@ str		Conversations	Conversations
 str		New conversation	New conversation
 str		Stop the reply first	Stop the reply first
 str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.
+str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here
+str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	the conversation {who} is being ended; nothing more runs in its name until its program has ended
+str		the conversation {who} has no turn running in the project shown in Archforge	the conversation {who} has no turn running in the project shown in Archforge
+str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	the conversation {who} may undo only its own changes in this turn, and the step on top is not one
+str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	the conversation {who} may redo only its own changes in this turn, and the step to redo is not one
 str		No agent set up yet	No agent set up yet
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.
 str		Configure agent	Configure agent
