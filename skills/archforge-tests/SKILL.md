@@ -10,6 +10,8 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the shell and its screens: `crates/ui-egui/src/tests.rs`
   - translations: `crates/ui-egui/src/i18n/tests.rs`
   - the desktop app (arguments, preferences, graphics): the `tests` module in `apps/archforge/src/main.rs`
+  - the native menu bar's queue, wake and items: the `tests` module in
+    `apps/archforge/src/macos_menu.rs`, without a real menu (it needs the main thread)
   - the task runner: a `tests` module in the `xtask/src` file it checks
   - the project database's server: unit tests beside the code in `crates/dolt/src`, and
     `crates/dolt/tests/server.rs` against a real dolt

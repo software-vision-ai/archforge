@@ -61,14 +61,17 @@ project.
 
 ## 5. The menu bar
 
-**Do:** with a project open, look through the **Archforge** and **File** menus; open
-**Archforge ▸ About Archforge…**; with About open, look at **File** again.
+**Do:** with a project open, look through the **Archforge** and **File** menus; choose
+**File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
+**Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again.
 
 **Expect:** File offers **Open…** (⌘O), **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled while it
-can act: Save and Generate… need an open project, and Save is disabled while a save runs. About
-Archforge opens the About dialog. While About is open, Open… and Generate… are disabled.
+can act: Save and Generate… need an open project, and Save is disabled while a save runs. Each dialog
+opens within a second of choosing it, with the pointer still. While About is open, Open… and
+Generate… are disabled.
 
-**Covers:** the native macOS menu bar, which the harness has no part of.
+**Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
+when an item in it is chosen.
 
 ## 6. About Archforge and its support links
 
