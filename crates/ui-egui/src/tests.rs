@@ -1007,6 +1007,213 @@ fn a_quit_that_waited_for_a_failed_hold_asks_first() {
     }
 }
 
+/// The rows of the model shown, as a host reads them.
+fn rows_now(h: &Harness<'static, Shell>) -> std::sync::Arc<archforge_mof::rows::Rows> {
+    let (tables, junctions) = archforge_notations::storage();
+    std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap())
+}
+
+/// A job, whether it has started, and where its answer goes.
+type TestJob = (crate::replace::Job, std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::mpsc::Sender<Result<(), crate::replace::JobFailure>>);
+
+/// A job that tells when it starts and answers when the test says.
+fn test_job() -> TestJob {
+    let (answer, answers) = std::sync::mpsc::channel();
+    let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = started.clone();
+    let run = Box::new(move || {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        answers
+    });
+    (crate::replace::Job { run }, started, answer)
+}
+
+/// Starts replacing the session; gives where the model read goes.
+fn start_replacing(
+    h: &mut Harness<'static, Shell>,
+    job: Option<crate::replace::Job>,
+) -> std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+    let (read, answer) = std::sync::mpsc::channel();
+    h.state_mut().begin_replacement(answer, job).unwrap();
+    h.run_steps(4);
+    read
+}
+
+/// A save under way answers first; the latest rows go over, and the replacement then takes over.
+#[test]
+fn a_replacement_waits_for_a_save_then_takes_the_sessions_place() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    let saved_rows = rows_now(&h);
+    add_schema(&mut h, "billing");
+    h.state_mut().save();
+    let generation = h.state().session_generation();
+    let read = start_replacing(&mut h, None);
+    let handed = host.written.lock().unwrap().len();
+    read.send(Ok(saved_rows)).unwrap();
+    h.run_steps(3);
+    assert!(h.state().is_held() && schema_names(&h).len() == 2, "the save has not answered: {:?}", schema_names(&h));
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+    h.run_steps(4);
+    assert!(!h.state().is_held());
+    assert_eq!(schema_names(&h), ["shop"]);
+    assert!(!h.state().session.as_ref().unwrap().can_undo(), "undo starts fresh");
+    assert!(h.state().session_generation() > generation, "requests sent before it are refused");
+    assert_eq!(host.written.lock().unwrap().len(), handed, "what was read is not written back");
+}
+
+/// One that cannot be read or built ends with nothing written and the session as it was.
+#[test]
+fn a_replacement_that_cannot_be_read_or_built_runs_no_job() {
+    for answer in [Some(Err("the commit is gone".to_string())), Some(Ok(std::sync::Arc::new(archforge_mof::rows::Rows::default()))), None] {
+        let (mut h, _) = saving_harness(Some(commerce()), None);
+        add_schema(&mut h, "shop");
+        let (job, started, _) = test_job();
+        let read = start_replacing(&mut h, Some(job));
+        match answer {
+            Some(a) => read.send(a).unwrap(),
+            None => drop(read),
+        }
+        h.run_steps(3);
+        assert!(!h.state().is_held() && !started.load(std::sync::atomic::Ordering::SeqCst), "no job ran");
+        assert_eq!(schema_names(&h), ["shop"]);
+        assert!(h.state().save_error.is_some(), "it says why");
+    }
+}
+
+/// Chat settles first: a running turn is stopped, and one that never ends refuses the operation.
+#[test]
+fn a_replacement_stops_a_running_turn_and_is_refused_when_chat_does_not_settle() {
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "A long question");
+    let _read = start_replacing(&mut h, None);
+    assert_eq!(chat_calls(&rig).2, 1, "the turn was asked to stop");
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "A question its project never answers");
+    let _read = start_replacing(&mut h, None);
+    rig.now.fetch_add(crate::hold::CHAT_SETTLE_LIMIT, std::sync::atomic::Ordering::Relaxed);
+    h.run_steps(3);
+    assert!(!h.state().is_held());
+    assert_eq!(h.state().save_error.as_deref(), Some("Chat did not finish in time, so nothing was changed."));
+}
+
+/// Rows that cannot reach the host stop it before anything is read or written.
+#[test]
+fn a_replacement_stops_when_the_latest_rows_cannot_be_handed_over() {
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().services.projects = None;
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "billing" })).unwrap();
+    let (job, started, _) = test_job();
+    let _read = start_replacing(&mut h, Some(job));
+    assert!(!h.state().is_held() && !started.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(schema_names(&h).len(), 2, "the session is as it was");
+}
+
+/// The job runs once the replacement is built; only its finishing puts the replacement in place.
+#[test]
+fn a_job_runs_after_the_build_and_decides_by_its_answer() {
+    use crate::replace::JobFailure::Failed;
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    let empty = rows_now(&h);
+    add_schema(&mut h, "shop");
+    let (job, started, answer) = test_job();
+    let read = start_replacing(&mut h, Some(job));
+    assert!(!started.load(SeqCst), "nothing is written before the replacement is built");
+    read.send(Ok(empty.clone())).unwrap();
+    h.run_steps(3);
+    assert!(started.load(SeqCst) && h.state().is_held() && schema_names(&h) == ["shop"]);
+    answer.send(Ok(())).unwrap();
+    h.run_steps(3);
+    assert!(!h.state().is_held() && schema_names(&h).is_empty(), "{:?}", schema_names(&h));
+    // A job that says it failed leaves the session as it was, and nothing is read back.
+    add_schema(&mut h, "shop");
+    let (job, _, answer) = test_job();
+    let read = start_replacing(&mut h, Some(job));
+    read.send(Ok(empty)).unwrap();
+    h.run_steps(3);
+    answer.send(Err(Failed("the disk is full".into()))).unwrap();
+    h.run_steps(3);
+    assert!(!h.state().is_held() && schema_names(&h) == ["shop"]);
+    assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
+}
+
+/// A reply lost is never guessed at: it says it could not tell, and the session and hold stay.
+#[test]
+fn a_lost_reply_says_it_could_not_tell_and_stays_held() {
+    for clear_failure in [false, true] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        let empty = rows_now(&h);
+        add_schema(&mut h, "shop");
+        let (job, _, answer) = test_job();
+        let read = start_replacing(&mut h, Some(job));
+        read.send(Ok(empty)).unwrap();
+        h.run_steps(3);
+        let written = host.written.lock().unwrap().len();
+        if clear_failure {
+            answer.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
+        } else {
+            drop(answer);
+        }
+        h.run_steps(3);
+        assert!(h.state().is_held() && schema_names(&h) == ["shop"]);
+        assert!(h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
+        assert_eq!(host.written.lock().unwrap().len(), written, "nothing was written back");
+    }
+}
+
+/// A chat write started after Chat settled is waited for before the job and before the replacement.
+#[test]
+fn a_chat_write_started_after_settling_holds_the_replacement_back() {
+    use std::sync::atomic::Ordering::{Relaxed, SeqCst};
+    let deleting = |wrote_first: bool, release: bool| {
+        let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+        h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        let (job, started, answer) = test_job();
+        let read = start_replacing(&mut h, Some(job));
+        if wrote_first {
+            read.send(Ok(rows.clone())).unwrap();
+            h.run_steps(3);
+        }
+        rig.store.hold.store(true, SeqCst);
+        crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+        crate::chat_delete::confirm(h.state_mut());
+        h.run_steps(2);
+        if wrote_first {
+            answer.send(Ok(())).unwrap();
+        } else {
+            read.send(Ok(rows)).unwrap();
+        }
+        h.run_steps(3);
+        assert_eq!(started.load(SeqCst), wrote_first, "no job starts while Chat is writing");
+        let generation = h.state().session_generation();
+        assert!(h.state().is_held());
+        if release {
+            rig.store.release();
+            h.run_steps(3);
+            if !wrote_first {
+                assert!(started.load(SeqCst));
+                answer.send(Ok(())).unwrap();
+                h.run_steps(3);
+            }
+            assert!(!h.state().is_held() && h.state().session_generation() > generation, "then it goes on");
+        } else {
+            rig.now.fetch_add(crate::hold::CHAT_SETTLE_LIMIT, Relaxed);
+            h.run_steps(3);
+        }
+        h
+    };
+    deleting(false, true);
+    deleting(true, true);
+    assert!(!deleting(false, false).state().is_held(), "before anything was written the operation just stops");
+    let h = deleting(true, false);
+    assert!(h.state().is_held() && h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "written, so it cannot just stop");
+}
+
 #[test]
 fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     // A model made elsewhere, as the host reads it from a project.
