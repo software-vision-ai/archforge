@@ -422,6 +422,7 @@ str		A description has to fit on one line.	Une description doit tenir sur une se
 str		A description is at most {max} characters; this one has {n}.	Une description compte au plus {max} caractères ; celle-ci en compte {n}.
 str		This description holds one of your saved API keys, so nothing was saved.	Cette description contient l’une de vos clés d’API enregistrées ; rien n’a donc été enregistré.
 str		This description could not be checked against your saved API keys, so nothing was saved.	Cette description n’a pas pu être vérifiée par rapport à vos clés d’API enregistrées ; rien n’a donc été enregistré.
+str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	Le projet a changé après votre vérification ; rien n’a donc été enregistré. Vérifiez les modifications et enregistrez à nouveau.
 str		The opening stopped without an answer	L’ouverture s’est arrêtée sans réponse
 str		Close a project to open another	Fermez un projet pour en ouvrir un autre
 str		The closing stopped without an answer	La fermeture s’est arrêtée sans réponse

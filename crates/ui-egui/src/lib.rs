@@ -162,11 +162,12 @@ pub trait ProjectHost: Send + Sync {
     /// Save: writes what waits, then commits it in the project at `project`; true when there was
     /// something to commit. The commit carries `description`, or the automatic `Saved <time>`
     /// when there is none. A description that is empty, more than one line or too long, or that
-    /// holds a kept API key, is refused and nothing is committed. A save for a project that is no
-    /// longer open fails.
-    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, String>> {
+    /// holds a kept API key, is refused and nothing is committed. A described save commits only
+    /// what had been handed over when it was asked: rows handed over before it is carried out
+    /// answer [`SaveError::Changed`]. A save for a project that is no longer open fails.
+    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, SaveError>> {
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = tx.send(Err("this host saves no projects".into()));
+        let _ = tx.send(Err(SaveError::Failed("this host saves no projects".into())));
         rx
     }
 
@@ -234,8 +235,28 @@ impl Tab {
     }
 }
 
+/// Why a save made no version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SaveError {
+    /// The model moved after the state being saved was reviewed: nothing was saved, and the work
+    /// stands as it was.
+    Changed,
+    /// Any other failure, in words.
+    Failed(String),
+}
+
+impl std::fmt::Display for SaveError {
+    /// The reason in words, for the log; the shell shows [`SaveError::Changed`] from its catalogue.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SaveError::Changed => f.write_str("the model changed after it was reviewed"),
+            SaveError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
 /// A save the host works on: its answer, the model's revision it writes, and its ticket.
-type Saving = (std::sync::mpsc::Receiver<Result<bool, String>>, u64, u64);
+type Saving = (std::sync::mpsc::Receiver<Result<bool, SaveError>>, u64, u64);
 
 /// How many finished saves the shell remembers for the agent asking how its save went.
 const SAVES_KEPT: usize = 16;
@@ -273,6 +294,12 @@ fn poll_save(
             SaveState::Saved(revision)
         }
         Ok(Err(e)) => {
+            let e = match e {
+                SaveError::Changed => {
+                    crate::i18n::tr("The project changed after you reviewed it, so nothing was saved. Review the changes and save again.")
+                }
+                SaveError::Failed(why) => why,
+            };
             *save_error = Some(e.clone());
             SaveState::Failed(e)
         }
@@ -1062,6 +1089,18 @@ impl Shell {
     /// typed included. A description whose write is refused stops the save before the host is
     /// asked: it stays in its field with the refusal, and the project stays unsaved.
     pub fn save(&mut self) {
+        self.start_save(None);
+    }
+
+    /// Save version: a save under `description` of the state reviewed at session revision
+    /// `reviewed`. When the model has moved since, the host is not asked and the save answers
+    /// [`SaveError::Changed`], so nothing unreviewed becomes a version.
+    pub fn save_reviewed(&mut self, description: String, reviewed: u64) {
+        self.start_save(Some((description, reviewed)));
+    }
+
+    /// Starts a save, of the reviewed state with its description when `review` is given.
+    fn start_save(&mut self, review: Option<(String, u64)>) {
         if self.saving.is_some() || self.session.is_none() {
             return;
         }
@@ -1077,9 +1116,18 @@ impl Shell {
             return;
         }
         let Some(revision) = self.written else { return };
+        // After the writes above: text still being typed counts as a move, since it was not reviewed.
+        let moved = review.as_ref().is_some_and(|(_, reviewed)| current != Some(*reviewed) || revision != *reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
             self.save_ticket += 1;
-            self.saving = Some((host.save(&project.path, None), revision, self.save_ticket));
+            let answer = if moved {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let _ = tx.send(Err(SaveError::Changed));
+                rx
+            } else {
+                host.save(&project.path, review.map(|(description, _)| description))
+            };
+            self.saving = Some((answer, revision, self.save_ticket));
             self.save_error = None;
             self.open_error = None;
         }
