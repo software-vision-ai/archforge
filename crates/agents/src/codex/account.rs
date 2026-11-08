@@ -385,8 +385,8 @@ impl CodexAccount {
         }
     }
 
-    /// `account/logout`, one request: signs Codex out (a ChatGPT sign-in leaves Codex's own files in
-    /// the private `CODEX_HOME`).
+    /// `account/logout`, one request: asks Codex to sign out of the ChatGPT sign-in it keeps in its
+    /// own files in the private `CODEX_HOME`; what it removes there is Codex's own doing.
     pub fn logout(&mut self, timeout: Duration) -> Result<(), AgentError> {
         let deadline = self.deadline(timeout);
         self.call("account/logout", None, deadline, None).map(drop)

@@ -131,7 +131,8 @@ One full round trip per route. Each uses the project of P1.
    test message just now*.
 3. In the Chat panel choose **New conversation** (+). Repeat R1 steps 6 to 11 with Codex; the badge
    reads *Codex*.
-4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there:
+4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there. Codex is
+   not signed in with ChatGPT yet (R3 comes next), so any `auth.json` here came from the API key:
 
    ```sh
    wait_quit
@@ -155,16 +156,18 @@ One full round trip per route. Each uses the project of P1.
    ```sh
    H="$SETTINGS/agents/codex-home"
    if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
-   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
+   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; ls -l "$H/auth.json"; else echo "no auth.json in $H"; fi
    ls -ld "$H"
    ```
 
-   **Expect:** *auth.json EXISTS*, on every system: the codex program keeps the ChatGPT sign-in in
-   its own files in `codex-home`, never in the Keychain or the Secret Service. `ls -ld` shows
-   `drwx------` and you as the owner: only you can open the folder. *NO FOLDER* proves nothing:
-   fix `SETTINGS` first. Record the line `ls -l "$H/auth.json"` prints too; its mode is the codex
-   program's own choice.
-6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**.
+   **Expect:** *auth.json EXISTS*, on macOS and Linux alike: the codex program keeps the ChatGPT
+   sign-in in its own files in `codex-home`, never in the Keychain or the Secret Service. `ls -ld`
+   shows `drwx------` (on macOS perhaps with a trailing `@` or `+`) and you as the owner: only you
+   can open the folder. *NO FOLDER* proves nothing: fix `SETTINGS` first. Record the line
+   `ls -l` prints for `auth.json` too; its mode is the codex program's own choice.
+6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**. Run step 5's block again
+   and record what it says: what sign-out removes from `codex-home` is the codex program's own
+   doing. *no auth.json in* the folder makes R4's *auth.json EXISTS* proof that R4 wrote it.
 
 ### R4. Codex with ChatGPT, with a device code
 
@@ -178,7 +181,8 @@ One full round trip per route. Each uses the project of P1.
 3. On the second device, open that address (type it, or send it there) and enter the code.
    **Expect:** *Signed in as* your email and plan on the card.
 4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4, and R3
-   step 5's check says *auth.json EXISTS*: the sign-in is kept in `codex-home` as in R3.
+   step 5's check says *auth.json EXISTS*: the sign-in is kept in `codex-home` as in R3. If R3
+   step 6 still found `auth.json` after signing out, compare the `ls -l` line's time with R3's.
 5. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
    card goes back to *Not signed in*; no error.
 
@@ -218,8 +222,10 @@ This shows Check connection needs no network; it does not by itself prove that n
 
 ### F2. An expired sign-in
 
-1. F1 left the Codex card on **API key**. Switch it to **Sign in with ChatGPT** (sign in as in
-   R3 if it says *Not signed in*), set **Default agent** to Codex, start a new conversation
+1. F1 left the Codex card on **API key**. Switch it to **Sign in with ChatGPT**. **Expect:**
+   still *Signed in as* your email, as before F1 (the API key's runs use the ephemeral store and
+   share `codex-home` with the sign-in); if it says *Not signed in*, record that, then sign in as
+   in R3. Set **Default agent** to Codex, start a new conversation
    (**New conversation**, +) and ask one question. **Expect:** a reply: this conversation runs on
    the ChatGPT sign-in.
 2. End the sign-in from the ChatGPT account: use its security settings to sign out of all
@@ -720,5 +726,6 @@ Note what the pass shows for these:
 - R1 step 11: Claude resumes a conversation after **Allow changes** was switched.
 - K2: the bridge (`archforge-cli`) never holds Claude's key in its environment.
 - R2 step 4: Codex with an API key writes no `auth.json`.
+- R3 step 6: what signing out removes from `codex-home` (whether `auth.json` is gone).
 - K4 step 8: whether Codex's own databases in `codex-home` hold question text, for each route
   (API key, ChatGPT) on its own, from the marker each sent in K2 step 4.

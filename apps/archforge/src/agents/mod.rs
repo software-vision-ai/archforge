@@ -13,8 +13,9 @@
 //!   adapter; they are never logged, and nothing here shows them in a `Debug`.
 //! - A ChatGPT sign-in is kept by the codex program in its own files in Archforge's private
 //!   `CODEX_HOME` (`codex-home` in the workspace, mode 0700), on every system and whatever the
-//!   secure store answers (owner decision, AR-236): the codex program runs with a private `HOME`,
-//!   where no system keychain can be reached. The secure store holds the API keys alone.
+//!   secure store answers (owner decision, AR-236): the codex program runs with a private `HOME`
+//!   and an emptied environment, where macOS found no default keychain. The secure store holds the
+//!   API keys alone.
 //! - Conversations ([`sessions`]) and agent access ([`access`]) are described in their modules.
 
 mod access;

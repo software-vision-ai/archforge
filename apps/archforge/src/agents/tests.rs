@@ -957,9 +957,12 @@ fn a_test_message_without_a_key_needs_one() {
     assert!(!host.log("claude").iter().any(|l| l != "--version"), "nothing was started");
 }
 
-/// The `cli_auth_credentials_store` value the codex program's latest start was given.
+/// The `cli_auth_credentials_store` value the codex program's latest start was given, taken: the
+/// arguments' file is removed, so the next call fails unless another start wrote it again.
 fn codex_store(host: &Host) -> String {
-    let args = std::fs::read_to_string(host.base.join("codex.args")).unwrap();
+    let path = host.base.join("codex.args");
+    let args = std::fs::read_to_string(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
     let values: Vec<&str> = args.lines().filter_map(|l| l.strip_prefix("cli_auth_credentials_store=")).collect();
     assert_eq!(values.len(), 1, "one store: {args}");
     values[0].to_owned()

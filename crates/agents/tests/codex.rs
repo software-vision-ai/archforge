@@ -845,11 +845,41 @@ fn an_api_key_signs_in_over_standard_input_only() {
     // A ChatGPT store never takes a key.
     drop(account);
     let world2 = World::new("account-key-store", "hello\ndrain");
+    // Codex's own files would put the key in `auth.json`: refused before anything is sent.
     let mut files = world2.account(CredentialStore::File, Duration::from_secs(5));
-    assert!(matches!(files.login_api_key(&canary(), Duration::from_secs(1)), Err(AgentError::InvalidSetting { .. })));
+    let refused = files.login_api_key(&canary(), Duration::from_secs(1));
+    assert!(matches!(refused, Err(AgentError::InvalidSetting { setting: "credential store", .. })), "{refused:?}");
     drop(files);
+    let sent = world2.stdin(1);
+    assert!(sent[0].contains("\"initialize\""), "{sent:?}");
+    assert!(!sent.iter().any(|l| l.contains(CANARY) || l.contains("account/login")), "only the handshake: {sent:?}");
     assert!(!LOG.lock().unwrap_or_else(PoisonError::into_inner).iter().any(|l| l.contains(CANARY)), "the key reached the log");
     world2.remove();
+    world.remove();
+}
+
+/// The private `CODEX_HOME`, which holds the ChatGPT sign-in's files, is made with mode 0700; one
+/// others may enter, or a link in its place, is refused and left as it is, never changed (AR-236).
+#[test]
+fn the_private_codex_home_is_0700_and_an_open_one_or_a_link_is_refused() {
+    let world = World::new("codex-home-private", "hello\ndrain");
+    let path = world.home.path().to_path_buf();
+    assert_eq!(path, world.workspace.root().join(archforge_agents::codex::HOME_FOLDER));
+    let mode = |p: &Path| std::fs::symlink_metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&path), 0o700, "made 0700");
+    assert_eq!(CodexHome::open(&world.workspace).unwrap().path(), path, "a private one opens again");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = CodexHome::open(&world.workspace).unwrap_err();
+    assert!(matches!(&error, AgentError::Folder { path: p, .. } if p == &path), "{error:?}");
+    assert_eq!(mode(&path), 0o755, "refused, never changed");
+    std::fs::remove_dir(&path).unwrap();
+    let elsewhere = world.base.join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::fs::set_permissions(&elsewhere, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &path).unwrap();
+    let error = CodexHome::open(&world.workspace).unwrap_err();
+    assert!(matches!(&error, AgentError::Folder { path: p, .. } if p == &path), "{error:?}");
+    assert!(std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink(), "the link is left as it is");
     world.remove();
 }
 

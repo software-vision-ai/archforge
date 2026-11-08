@@ -16009,8 +16009,12 @@ fn the_own_files_note_shows_where_no_secure_store_opened() {
     use crate::ai_agents::{CodexAccount, Store};
     let note = "keeps its ChatGPT sign-in in its own files";
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        for (store, shown) in [(Store::Missing { why: "no Secret Service".into() }, true), (Store::MacKeychain, false), (Store::SecretService, false)]
-        {
+        for (store, shown) in [
+            (Store::Missing { why: "no Secret Service".into() }, true),
+            (Store::MacKeychain, false),
+            (Store::SecretService, false),
+            (Store::NotLooked, false),
+        ] {
             let (mut h, _) = agents_harness(theme, |f| {
                 f.look.lock().unwrap().store = store.clone();
                 *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });

@@ -349,8 +349,8 @@ names the computer's host name and an installation id (sanitised in the fixtures
   [auth](https://learn.chatgpt.com/docs/auth)): `file` (`CODEX_HOME/auth.json`), `keyring` (the
   system store; fails when unavailable), `auto` (keyring, else file), `ephemeral` (in memory for
   this process only). With a private `CODEX_HOME` and `file`, ChatGPT tokens stay in Codex's own
-  `auth.json` in that folder (owner decision 2026-11-08, AR-236; `keyring` fails under Codex's
-  private `HOME`). `forced_login_method = "chatgpt" | "api"` pins one mode.
+  `auth.json` in that folder (owner decision 2026-11-08, AR-236; with `keyring`, macOS found no
+  default keychain under Codex's private `HOME`). `forced_login_method = "chatgpt" | "api"` pins one mode.
 - **Rate limits**: `account/rateLimits/read` returns `{ordinaryUsageAllowed, rateLimits{primary,
   secondary{usedPercent, windowDurationMins, resetsAt}, credits, planType, rateLimitReachedType},
   rateLimitsByLimitId}`; `account/rateLimits/updated` sends sparse updates to merge (schema).
@@ -583,7 +583,8 @@ Each needs a real key or sign-in and costs a little.
 5. Claude: `--resume` of a conversation that had tool calls, with a different `--mcp-config`
    (for switching "Allow changes" on).
 6. Codex: API-key sign-in with `cli_auth_credentials_store="ephemeral"`, then a turn; whether
-   `auth.json` stays absent.
+   the key stays out of `codex-home` (no `auth.json` appears while Codex is not signed in with
+   ChatGPT).
 7. Codex: ChatGPT sign-in (browser and device code) with `file` in a private `CODEX_HOME`, sign
    out, and what an expired sign-in looks like.
 8. Codex: a turn with the bridge: `mcpToolCall` items, whether MCP tool calls raise an elicitation

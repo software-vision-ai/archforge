@@ -171,7 +171,7 @@ in the preferences, never in a file of its own. A key reaches the agent's progra
 runs it or sends the test message: Claude's through the program's environment, Codex's through its
 input, never on a command line. A ChatGPT sign-in is kept by the codex program itself, in its own
 files in Archforge's private settings folder (`agents/codex-home`, which only you can open), on
-every system; it never goes in the system's Keychain or Secret Service. Archforge reads only who is
+macOS and Linux alike; it never goes in the system's Keychain or Secret Service. Archforge reads only who is
 signed in, never the sign-in's tokens.
 
 | System | API keys (Claude, Codex) | Codex's sign-in with ChatGPT |

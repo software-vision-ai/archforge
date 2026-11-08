@@ -177,6 +177,10 @@ fn account_program(inner: &Inner) -> Result<Program, AccountError> {
     let runtime = inner.runtime(RuntimeKind::Codex).map_err(failed)?;
     let workspace = Workspace::open(&inner.workspace).map_err(failed)?;
     let home = CodexHome::open(&workspace).map_err(failed)?;
+    // The program's look (its version probe) may have run past a quit: no program starts then.
+    if inner.quitting() {
+        return Err(AccountError::Failed { detail: "Archforge is closing".into() });
+    }
     Program::start(&runtime, &workspace, &home, Auth::ChatGpt.store(), Limits::default(), REQUEST, REQUEST).map_err(failed)
 }
 
