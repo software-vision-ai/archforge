@@ -279,7 +279,6 @@ str		Agent access off	Agentenzugriff aus
 str		Conversations	Unterhaltungen
 str		New conversation	Neue Unterhaltung
 str		Stop the reply first	Zuerst die Antwort stoppen
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	„Chat das Modell nutzen lassen“ ist aus, daher wird nichts gesendet. Schalten Sie es unter Einstellungen ▸ KI-Agenten ein.
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	die Unterhaltung dieses Tokens kennt Archforge nicht; die Bezeichnung {label} gehört hier zu einer anderen Unterhaltung
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	die Unterhaltung {who} wird gerade beendet; in ihrem Namen läuft nichts mehr, bis ihr Programm beendet ist
 str		the conversation {who} has no turn running in the project shown in Archforge	die Unterhaltung {who} hat im angezeigten Projekt in Archforge keinen laufenden Schritt
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	Keine Antwort
 str		Not started yet	Noch nicht gestartet
 str		This conversation is being removed. Try again in a moment.	Diese Unterhaltung wird gerade entfernt. Versuchen Sie es gleich noch einmal.
-str		Not sent	Nicht gesendet
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	„Chat das Modell nutzen lassen“ wurde ausgeschaltet, daher wurde diese Frage nicht gesendet. Sie steht wieder im Feld, bereit, sobald der Schalter an ist.
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	„Chat das Modell nutzen lassen“ wurde ausgeschaltet, daher wurde diese Frage nicht gesendet. Senden Sie sie erneut, sobald der Schalter an ist.
 str		{agent} stopped before answering.	{agent} hat vor der Antwort aufgehört.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Diese Runde hat das Modell geändert und wird daher nicht erneut gesendet; fragen Sie erneut, um fortzufahren.
 str		Open Settings	Einstellungen öffnen

@@ -279,7 +279,6 @@ str		Agent access off	代理访问已关闭
 str		Conversations	对话
 str		New conversation	新对话
 str		Stop the reply first	请先停止回复
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	“允许聊天使用模型”已关闭，因此不会发送任何内容。请在“设置 ▸ AI 智能体”中将其打开。
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	Archforge 不认识此令牌的对话；标签 {label} 在这里属于另一个对话
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	对话 {who} 正在结束；在其程序结束之前，不会再以它的名义运行任何操作
 str		the conversation {who} has no turn running in the project shown in Archforge	对话 {who} 在 Archforge 显示的项目中没有正在进行的轮次
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	没有回答
 str		Not started yet	尚未开始
 str		This conversation is being removed. Try again in a moment.	此对话正在被移除。请稍后再试。
-str		Not sent	未发送
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	“允许聊天使用模型”已被关闭，因此此问题未发送。它已回到输入框中，开关打开后即可发送。
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	“允许聊天使用模型”已被关闭，因此此问题未发送。请在开关打开后再次发送。
 str		{agent} stopped before answering.	{agent} 在回答前已停止。
 str		This turn changed the model, so it is not sent again; ask again to go on.	此轮更改了模型，因此不会再次发送；请再次提问以继续。
 str		Open Settings	打开设置

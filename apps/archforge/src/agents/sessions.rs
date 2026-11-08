@@ -8,8 +8,8 @@
 //! allows changes), starts the adapter with the bridge (`archforge-cli mcp --bridge <port>
 //! --token-file <file> [--read-only] --origin <label>`), and then passes the person's messages in
 //! and the program's events out, each with its place among the waiting ones ([`Ticket`]), until
-//! the conversation ends. Whether a conversation may run at all is the shell's to decide
-//! (`archforge_ui_egui::chat::start`).
+//! the conversation ends. The shell asks for a conversation only to send a question the person
+//! asked in it (`archforge_ui_egui::chat::start`).
 //!
 //! A guard on every thread ([`Guard`]) gives everything back however the thread ends, a panic
 //! included: the conversation leaves the running list, its token is revoked, agent access closes

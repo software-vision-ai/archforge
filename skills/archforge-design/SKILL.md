@@ -371,12 +371,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - No agent set up (B1) shows until the default agent is ready and Let Chat use the model is on;
   Configure agent opens Settings on AI Agents. While the keys are first read it draws nothing.
 - Let Chat use the model turned off ends every conversation's program; a reply under way ends
-  stopped. While it is off nothing is sent from any conversation, a running or reopened one
-  included: Send and Send again refuse with the panel's red line "Let Chat use the model is off,
-  so nothing is sent. Turn it on in Settings ▸ AI Agents.", the question stays in the box and is
-  not kept; turning it on takes the line away (AR-221, decided by UX). A question being kept when
-  it goes off ends failed and unsent: an amber "Not sent" card with Send again, the question back
-  in the box (bubble hidden) when the box is empty, else in its bubble with the box's text kept.
+  stopped (AR-221). It no longer refuses sending (AR-240, owner decision AR-237): a conversation
+  already started or reopened keeps its box, and a question sent there starts its program again.
 - Opening the panel the first time in a project starts a new conversation (B2); it stays while
   the project is open. One read back from the history opens read-only: Allow changes is off for
   every conversation until turned on in it. Choosing in the history the conversation already

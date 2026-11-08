@@ -1026,9 +1026,7 @@ fn codex_account_is_read_on_first_use_never_at_launch() {
     // Time for a read, had one been asked, to start its program.
     std::thread::sleep(Duration::from_millis(500));
     assert!(host.log("codex").iter().all(|l| l == "--version"), "a plain launch starts no app-server: {:?}", host.log("codex"));
-    // A Claude conversation reads no Codex account. It starts only while Let Chat use the model
-    // is on (AR-221).
-    h.state_mut().state.agents.chat_uses_model = true;
+    // A Claude conversation reads no Codex account.
     archforge_ui_egui::chat::start(h.state_mut(), claude(CHAT, "Chat 1", false)).unwrap();
     for _ in 0..20 {
         h.run();

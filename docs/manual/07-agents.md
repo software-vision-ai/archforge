@@ -190,11 +190,11 @@ files are in its `agents` folder.
 
 ### Let Chat use the model
 
-**Let Chat use the model** is off until you turn it on. While it is off, no conversation sends
-anything to its provider.
+**Let Chat use the model** is off until you turn it on. While it is off, a new conversation says
+*No agent set up yet*.
 
-While it is on, each Chat conversation gets agent access of its own while it runs. Chat reads the
-project's model through it. A conversation changes the model only when **Allow changes to the
+Each Chat conversation gets agent access of its own while it runs. Chat reads the project's model
+through it. A conversation changes the model only when **Allow changes to the
 model** is on in it (see [Chat](#chat)).
 
 Archforge enforces that itself: through its agent access, a conversation without Allow changes is
@@ -206,14 +206,8 @@ Turning it off also ends every conversation that runs: a reply under way stops, 
 so far stays, marked as stopped. Until you turn it on again:
 
 - A new conversation says *No agent set up yet*, with **Configure agent**.
-- A conversation already started, or one reopened from the history, keeps its box, but sends
-  nothing: Enter leaves your question in the box, **Send again** sends nothing, and the panel says
-  *Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.*
-- A question still on its way when you turn it off is not sent either. Its card says *Not sent*.
-  The question goes back into the box when the box is empty; otherwise it stays in the
-  conversation, and **Send again** sends it once the switch is on.
-
-Turn it on, and the line goes; press Enter, or **Send again**, to send.
+- A conversation already started, or one reopened from the history, keeps its box. A question
+  sent there, or **Send again**, starts its agent again and is sent.
 
 The status bar says which, at its right beside the project's location:
 
@@ -378,7 +372,6 @@ A card in the conversation says what went wrong and what to do.
 | *Key refused* | The provider refused the saved key: it is wrong, or was revoked. | **Open Settings**, **Replace** the key, then ask again. |
 | *No key saved* | There is no key or sign-in for the agent. | **Open Settings**, add one, then ask again. |
 | *Sign-in expired* | Codex's ChatGPT sign-in has expired. | **Open Settings**: the Codex card says the sign-in expired. Choose **Sign in again…**, then ask again. |
-| *Not sent* | **Let Chat use the model** was turned off while the question was on its way. | Turn it on in **Settings ▸ AI Agents**. If the question is back in the box, press Enter. If the box held something else, the question stayed in the conversation: choose **Send again** on its card, as Enter would send what is in the box as a new question (see [What Send again and Enter send](#what-send-again-and-enter-send)). |
 | *Not started yet* | The conversation's working files are being removed: a copy of the project deleted it, or it was just brought back with Undo. | **Send again** in a moment. Reopened from **Conversations** later, the same turn shows *No answer*, as the reason is not kept. |
 | *No answer* | Anything else: the agent stopped before answering. | **Send again**. |
 
@@ -387,8 +380,8 @@ question whose turn already changed the model is not sent again; ask again in yo
 
 #### What Send again and Enter send
 
-A failed question either stays in the conversation or, after *Connection lost* or *Not sent* with
-the box empty, comes back into the box. What the card's **Send again** and Enter then send:
+A failed question either stays in the conversation or, after *Connection lost* with the box
+empty, comes back into the box. What the card's **Send again** and Enter then send:
 
 | Where the failed question is | **Send again** on its card sends | Enter sends |
 |---|---|---|

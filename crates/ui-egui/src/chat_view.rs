@@ -822,9 +822,9 @@ fn changes_card(
 }
 
 /// A failed turn's card: rate limited and the time it can send again, the connection lost and the
-/// question back in the composer, a question not sent as Let Chat use the model went off, a
-/// conversation not started yet as its folder is being removed, no answer (amber, Send again), or
-/// what Settings must fix (danger, Open Settings). Gives its height.
+/// question back in the composer, a conversation not started yet as its folder is being removed,
+/// no answer (amber, Send again), or what Settings must fix (danger, Open Settings). Gives its
+/// height.
 #[allow(clippy::too_many_arguments)]
 fn failure_card(
     shell: &mut Shell,
@@ -917,15 +917,6 @@ fn failure_card(
         }
         // Its folder was being removed after a deletion of it, so its program did not start (AR-225).
         FailureKind::Other if turn.removing => (false, tr("Not started yet"), tr("This conversation is being removed. Try again in a moment.")),
-        // Let Chat use the model went off while its question was being kept (AR-221).
-        FailureKind::Other if turn.unsent => {
-            let body = if turn.returned {
-                tr("Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.")
-            } else {
-                tr("Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.")
-            };
-            (false, tr("Not sent"), body)
-        }
         FailureKind::Other => (false, tr("No answer"), format!("{}{nothing}", fmt(&tr("{agent} stopped before answering."), &[("agent", agent)]))),
     };
     let body = if turn.change.is_some() && last {

@@ -279,7 +279,6 @@ str		Agent access off	Acesso de agentes desligado
 str		Conversations	Conversas
 str		New conversation	Nova conversa
 str		Stop the reply first	Pare primeiro a resposta
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	«Deixar a Conversa usar o modelo» está desligado, por isso nada é enviado. Ligue-o em Definições ▸ Agentes de IA.
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	o Archforge não conhece a conversa deste token; a etiqueta {label} pertence aqui a outra conversa
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	a conversa {who} está a ser terminada; nada mais corre em seu nome até o seu programa ter terminado
 str		the conversation {who} has no turn running in the project shown in Archforge	a conversa {who} não tem nenhum turno em curso no projeto mostrado no Archforge
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	Sem resposta
 str		Not started yet	Ainda não iniciada
 str		This conversation is being removed. Try again in a moment.	Esta conversa está a ser removida. Tente de novo dentro de momentos.
-str		Not sent	Não enviada
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	«Deixar a Conversa usar o modelo» foi desligado, por isso esta pergunta não foi enviada. Voltou à caixa, pronta quando o interruptor estiver ligado.
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	«Deixar a Conversa usar o modelo» foi desligado, por isso esta pergunta não foi enviada. Envie-a de novo quando o interruptor estiver ligado.
 str		{agent} stopped before answering.	O {agent} parou antes de responder.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Esta vez alterou o modelo, por isso não é enviada de novo; pergunte outra vez para continuar.
 str		Open Settings	Abrir Definições
