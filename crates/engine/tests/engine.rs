@@ -1038,3 +1038,118 @@ fn random_sequences_undo_to_the_start_and_redo_to_the_end_and_clean_means_saved(
         assert_eq!(*s.doc(), end, "seed {seed}: redo all");
     }
 }
+
+/// A session holding one item, with a step to undo, a step to redo and that item selected.
+fn with_history() -> S {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    s.execute("item.add", &json!({ "name": "B" })).unwrap();
+    s.undo().unwrap();
+    s.execute("view.select", &json!({ "index": 0 })).unwrap();
+    s
+}
+
+/// What an edit that was refused must leave as it was: the items, the view, the counter, the
+/// revision, whether unsaved, and the labels of the steps to undo and redo.
+type Held = (Vec<String>, Selection, u64, u64, bool, Option<String>, Option<String>);
+
+/// The session's [`Held`] state now.
+fn held(s: &S) -> Held {
+    (
+        s.doc().0.clone(),
+        s.view().clone(),
+        s.counter(),
+        s.revision(),
+        s.is_dirty(),
+        s.undo_label().map(str::to_string),
+        s.redo_label().map(str::to_string),
+    )
+}
+
+/// Every way to change the document is refused as read-only, by name, and changes nothing.
+#[test]
+fn a_read_only_session_refuses_every_change_and_leaves_everything_as_it_was() {
+    let mut s = with_history();
+    s.set_read_only(true).unwrap();
+    assert!(s.read_only());
+    let before = held(&s);
+    let add = json!({ "name": "C" });
+    let entry = JournalEntry::Command { id: "item.add".into(), params: add.clone() };
+    let refused = [
+        ("execute", s.execute("item.add", &add).err()),
+        ("execute_from", s.execute_from("item.add", &add, Some("Chat 1")).err()),
+        ("the undo command", s.execute("edit.undo", &json!({})).err()),
+        ("the redo command", s.execute("edit.redo", &json!({})).err()),
+        ("undo", s.undo().err()),
+        ("redo", s.redo().err()),
+        ("replay", s.replay(&entry).err()),
+        ("a batch", s.batch("Add", |b| b.execute("item.add", &add).map(|_| ())).err()),
+        ("a gesture", s.begin_interaction("item.move").err()),
+    ];
+    for (what, error) in refused {
+        assert!(matches!(error, Some(EngineError::ReadOnly)), "{what}: {error:?}");
+    }
+    assert_eq!(held(&s), before);
+    // A batch that looks first and changes after is taken back whole.
+    let mixed = s.batch("Select and add", |b| {
+        b.execute("view.select", &json!({ "index": 0 }))?;
+        b.execute("item.add", &json!({ "name": "D" })).map(|_| ())
+    });
+    assert!(matches!(mixed, Err(EngineError::ReadOnly)));
+    assert_eq!(held(&s), before);
+    // A command that says it changes only the view and then changes the document is still refused.
+    assert!(matches!(s.execute("item.sneak", &json!({})), Err(EngineError::Failed { .. })));
+    assert_eq!(held(&s), before);
+}
+
+/// Looking goes on while the document is held still: view commands and queries run.
+#[test]
+fn a_read_only_session_runs_view_commands_and_queries() {
+    let mut s = with_history();
+    s.execute("item.add", &json!({ "name": "B" })).unwrap();
+    s.set_read_only(true).unwrap();
+    let (items, revision) = (s.doc().0.clone(), s.revision());
+    s.execute("view.select", &json!({ "index": 0 })).unwrap();
+    assert_eq!(s.view(), &Selection(Some(0)));
+    assert_eq!(s.execute("item.count", &json!({})).unwrap().value, json!(2));
+    s.batch("Look", |b| b.execute("view.select", &json!({ "index": 1 })).map(|_| ())).unwrap();
+    assert_eq!(s.view(), &Selection(Some(1)), "a batch of view commands runs too");
+    assert_eq!((s.doc().0.clone(), s.revision()), (items, revision), "and the document did not move");
+}
+
+/// Undo is refused for being read-only even with nothing to undo: the state decides, not the history.
+#[test]
+fn a_read_only_session_says_so_when_there_is_nothing_to_undo_either() {
+    let mut s = session();
+    s.set_read_only(true).unwrap();
+    assert!(matches!(s.execute("edit.undo", &json!({})), Err(EngineError::ReadOnly)));
+    assert!(matches!(s.execute("edit.redo", &json!({})), Err(EngineError::ReadOnly)));
+}
+
+/// Read-only is a state the session comes back from with its history whole.
+#[test]
+fn a_session_let_go_again_edits_and_undoes_as_before() {
+    let mut s = with_history();
+    s.set_read_only(true).unwrap();
+    assert!(matches!(s.undo(), Err(EngineError::ReadOnly)));
+    s.set_read_only(false).unwrap();
+    assert!(!s.read_only());
+    assert_eq!(s.undo().unwrap(), "Add item", "the step refused before is still there");
+    assert!(s.doc().0.is_empty());
+    s.execute("item.add", &json!({ "name": "C" })).unwrap();
+    assert_eq!(s.doc().0, ["C"]);
+}
+
+/// A gesture under way would end in a change, so the session can't be made read-only during it.
+#[test]
+fn a_session_is_not_made_read_only_during_a_gesture() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "A" })).unwrap();
+    s.execute("item.add", &json!({ "name": "B" })).unwrap();
+    s.begin_interaction("item.move").unwrap();
+    assert!(matches!(s.set_read_only(true), Err(EngineError::InteractionRunning)));
+    assert!(!s.read_only(), "the refusal leaves the flag as it was");
+    s.cancel().unwrap();
+    s.set_read_only(true).unwrap();
+    assert!(s.read_only());
+}

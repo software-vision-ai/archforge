@@ -60,6 +60,8 @@ pub enum EngineError {
     Poisoned {
         message: String,
     },
+    /// The session is read-only for now ([`crate::Session::set_read_only`]); nothing was changed.
+    ReadOnly,
     InteractionRunning,
     NoInteraction,
     /// The command cannot run inside a batch (undo and redo).
@@ -130,6 +132,7 @@ impl fmt::Display for EngineError {
             EngineError::Poisoned { message } => {
                 write!(f, "the session's state could not be restored after a failure ({message}); reopen the project")
             }
+            EngineError::ReadOnly => f.write_str("the model cannot be changed at the moment; nothing was changed"),
             EngineError::InteractionRunning => f.write_str("a gesture is in progress; retry after the gesture"),
             EngineError::NoInteraction => f.write_str("no gesture is in progress"),
             EngineError::NotInBatch { id } => write!(f, "{id} cannot run inside a batch"),
