@@ -1034,6 +1034,22 @@ fn test_job() -> TestJob {
     (crate::replace::Job { run, read_back: Box::new(move || readings) }, started, answer, reading)
 }
 
+/// Runs a replacement, doing `during` once it holds, whose job's reply and reading back are both
+/// lost, which leaves the project held until closed.
+fn held_until_closed(h: &mut Harness<'static, Shell>, schema: &str, during: impl FnOnce(&mut Shell)) {
+    let empty = rows_now(h);
+    add_schema(h, schema);
+    let (job, _, answer, reading) = test_job();
+    let read = start_replacing(h, Some(job));
+    during(h.state_mut());
+    read.send(Ok(empty)).unwrap();
+    h.run_steps(3);
+    drop(answer);
+    h.run_steps(2);
+    drop(reading);
+    h.run_steps(3);
+}
+
 /// Starts replacing the session; gives where the model read goes.
 fn start_replacing(
     h: &mut Harness<'static, Shell>,
@@ -1172,17 +1188,8 @@ fn a_lost_reply_is_read_back_and_that_decides() {
 fn an_outcome_that_cannot_be_read_stays_held_until_the_project_is_closed() {
     use crate::close_ask::Ask;
     let (mut h, host) = saving_harness(Some(commerce()), None);
-    let empty = rows_now(&h);
-    add_schema(&mut h, "shop");
-    let (job, _, answer, reading) = test_job();
-    let read = start_replacing(&mut h, Some(job));
-    read.send(Ok(empty)).unwrap();
-    h.run_steps(3);
+    held_until_closed(&mut h, "shop", |_| {});
     let written = host.written.lock().unwrap().len();
-    drop(answer);
-    h.run_steps(2);
-    drop(reading);
-    h.run_steps(3);
     let held = |h: &Harness<'static, Shell>| h.state().is_held() && schema_names(h) == ["shop"];
     assert!(held(&h) && h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
     // A quit asks about this project first, and Keep open forgets it.
@@ -1203,6 +1210,8 @@ fn an_outcome_that_cannot_be_read_stays_held_until_the_project_is_closed() {
     assert_eq!(host.unwritten.lock().unwrap().len(), 1);
     assert!(host.discarded.lock().unwrap().is_empty(), "nothing was put back");
     assert_eq!(host.written.lock().unwrap().len(), written, "nothing was written back");
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(3);
     assert!(!h.state().quit_confirmed() && !h.state().quitting(), "the quit was forgotten");
 }
 
@@ -1238,6 +1247,85 @@ fn a_hold_until_closed_lets_only_closing_without_writing_end_it() {
     assert!(h.state().quit_confirmed(), "the quit follows the closing");
 }
 
+/// A closing refused leaves the project held: still read-only, writing nothing, and closable again.
+#[test]
+fn a_closing_refused_keeps_the_hold_until_the_project_really_closes() {
+    use crate::close_ask::Ask;
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    held_until_closed(&mut h, "shop", |_| {});
+    let written = host.written.lock().unwrap().len();
+    let close = |h: &mut Harness<'static, Shell>| {
+        h.state_mut().ask = None;
+        h.state_mut().discard_tab(0, false);
+        h.run_steps(2);
+    };
+    h.state_mut().request_quit();
+    h.run_steps(2);
+    close(&mut h);
+    assert_eq!(h.state_mut().begin_hold(), Err(crate::hold::HoldRefused::Another), "its closing is not over yet");
+    host.closings.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    h.run_steps(3);
+    assert!(h.state().is_held() && h.state().session.as_ref().unwrap().read_only() && !h.state().can_save());
+    assert_eq!(h.state().active, Some(0), "it shows again");
+    assert_eq!(host.written.lock().unwrap().len(), written, "and nothing was written");
+    h.state_mut().close_tab(0);
+    assert!(matches!(&h.state().ask, Some(Ask::CannotWrite { why, .. }) if why == "the disk is full"), "{:?}", h.state().ask);
+    // A closing that stops without an answer is no closing either.
+    close(&mut h);
+    drop(host.closings.lock().unwrap().pop());
+    h.run_steps(3);
+    assert!(h.state().is_held() && h.state().session.as_ref().unwrap().read_only());
+    close(&mut h);
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(3);
+    assert!(!h.state().is_held() && h.state().tabs.is_empty() && !h.state().holding.pending(), "only a real closing ends it");
+    assert!(!h.state().quit_confirmed(), "the quit went with the refusal");
+}
+
+/// With no host to ask, closing is immediate, and the hold goes with the project.
+#[test]
+fn a_hold_until_closed_ends_when_there_is_no_host_to_ask() {
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    held_until_closed(&mut h, "shop", |_| {});
+    h.state_mut().services.projects = None;
+    h.state_mut().discard_tab(0, false);
+    h.run_steps(2);
+    assert!(h.state().tabs.is_empty() && !h.state().is_held() && !h.state().holding.pending());
+}
+
+/// Another project's closing refused meanwhile holds nothing: only the held project's does.
+#[test]
+fn another_projects_closing_refused_does_not_bring_the_hold_back() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(3);
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    held_until_closed(&mut h, "billing", |_| {});
+    let closing = h.state().tabs.iter().position(|t| t.path.ends_with("Library.archforge")).unwrap();
+    h.state_mut().discard_tab(closing, false);
+    h.run_steps(2);
+    assert_eq!(h.state_mut().begin_hold(), Err(crate::hold::HoldRefused::Another), "its closing is not over yet");
+    let first = host.closings.lock().unwrap().remove(0);
+    first.send(Err("the disk is full".into())).unwrap();
+    h.run_steps(3);
+    assert!(!h.state().is_held(), "the project refused was not the one held");
+}
+
+/// Another project closing for real leaves the hold where it is.
+#[test]
+fn another_project_closing_does_not_end_the_hold() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(3);
+    h.state_mut().close_tab(0);
+    h.run_steps(2);
+    held_until_closed(&mut h, "billing", |_| {});
+    host.closings.lock().unwrap().remove(0).send(Ok(())).unwrap();
+    h.run_steps(3);
+    assert!(h.state().is_held() && h.state().tabs.len() == 1);
+}
+
 /// What waited behind a hold kept until closed asks again once it has been closed.
 #[test]
 fn a_close_that_waited_behind_a_hold_until_closed_asks_again() {
@@ -1245,18 +1333,11 @@ fn a_close_that_waited_behind_a_hold_until_closed_asks_again() {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
     h.run_steps(3);
-    let empty = rows_now(&h);
-    add_schema(&mut h, "billing");
-    let (job, _, answer, reading) = test_job();
-    let read = start_replacing(&mut h, Some(job));
-    h.state_mut().close_tab(0);
-    read.send(Ok(empty)).unwrap();
-    h.run_steps(3);
-    drop(answer);
-    h.run_steps(2);
-    drop(reading);
-    h.run_steps(3);
+    held_until_closed(&mut h, "billing", |s| s.close_tab(0));
     h.state_mut().discard_tab(1, false);
+    h.run_steps(3);
+    assert!(h.state().ask.is_none(), "what waited waits for the closing's answer");
+    host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(3);
     assert!(!h.state().is_held());
     assert!(matches!(&h.state().ask, Some(Ask::HoldFailed { path, .. }) if path.ends_with("Commerce platform.archforge")), "{:?}", h.state().ask);
