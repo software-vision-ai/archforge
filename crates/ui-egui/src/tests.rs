@@ -7657,7 +7657,7 @@ fn requests_in_the_name_of_a_conversation_whose_program_ends_are_refused() {
         // Its token is known by the key it was granted for (AR-230).
         let key = crate::chat_fixture::key(h.state());
         let refused = crate::chat_panel::gate(h.state(), Some(&origin), Some(&key), "engine.execute", &change);
-        assert!(refused.is_err(), "{theme:?}: refused while its program ends: {refused:?}");
+        assert!(refused.as_ref().unwrap_err().contains("is being ended"), "{theme:?}: refused while its program ends: {refused:?}");
     }
 }
 
@@ -8604,7 +8604,7 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         let undo = fx::call(h.state_mut(), "engine.undo", serde_json::json!({}));
         assert!(undo.unwrap_err().contains("may undo only its own changes"));
         let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
-        assert!(undo.is_err());
+        assert!(undo.unwrap_err().contains("may undo only its own changes"), "the edit.undo command alike");
         assert_eq!(crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(order).unwrap()), "Mine");
         // Its own change it may undo.
         fx::call(
@@ -8661,7 +8661,8 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         // The fake's program ends at once; one still ending is held as a slow program's would be.
         h.state_mut().chats.letting_go.push((key.clone(), origin.clone()));
         let inspect = serde_json::json!({});
-        assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect).is_err(), "refused while it ends");
+        let ends = crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect);
+        assert!(ends.as_ref().unwrap_err().contains("is being ended"), "refused while it ends, for that reason: {ends:?}");
         h.run();
         assert!(h.state().chats.letting_go.is_empty(), "its end taken, it is forgotten");
         assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect).is_ok(), "known no more once ended");

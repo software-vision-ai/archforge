@@ -1699,9 +1699,13 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&st
     let found = shell.chat_panel.chat.as_ref().filter(|c| is_it(c)).and_then(|c| c.origin.as_deref());
     let label = found.unwrap_or(origin);
     let running = |p: &Panel| p.chat.as_ref().is_some_and(|c| is_it(c) && c.turns.last().is_some_and(|t| t.state == TurnState::Running));
-    let elsewhere = ending || parked.iter().any(|p| running(&p.chat_panel));
-    if !running(&shell.chat_panel) || elsewhere {
-        let who = if label.is_empty() { conversation.unwrap_or_default() } else { label };
+    let who = if label.is_empty() { conversation.unwrap_or_default() } else { label };
+    // Said apart, so the reason is the one that holds: its program is being ended, or no turn of it
+    // runs in the project shown.
+    if ending {
+        return Err(format!("the conversation {who:?} is being ended; nothing more runs in its name until its program has ended"));
+    }
+    if !running(&shell.chat_panel) || parked.iter().any(|p| running(&p.chat_panel)) {
         return Err(format!("the conversation {who:?} has no turn running in the project shown in Archforge"));
     }
     let command = params.get("command").and_then(Value::as_str);
