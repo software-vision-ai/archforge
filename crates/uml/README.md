@@ -59,7 +59,10 @@ element's id or a built-in type's name, Integer, String, Boolean, Real or Unlimi
 the package Types the first time it is used and never twice, a built-in name always meaning the one
 in Types; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text, member_text,
-operation_text, multiplicity, visibility, is_static, member_ends, navigable, MAX_CARD_ROWS}` (a class's card with its
+operation_text, multiplicity, visibility, is_static, member_ends, navigable, grow_cards, grow_node, MAX_CARD_ROWS}` (`grow_cards`
+grows a classifier's nodes to their card's height, never shrinking one and keeping its width, which every command that adds
+or edits a member does in its own step; `grow_node` grows one node so, a plain card only, which `uml.stereotype.set-value`
+and `uml.stereotype.show-values` do for the nodes on diagrams that show values (AR-241); a class's card with its
 members' visibility, type and multiplicity, abstract names slanted, static members underlined; an interface's and a data
 type's the same under `«interface»` and `«dataType»`; a primitive type's `«primitive»` over its
 name and no compartment; an enumeration's with

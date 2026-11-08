@@ -519,7 +519,8 @@ fn content_height(store: &Store, c: Obj) -> f64 {
 pub(crate) fn literals_height(literals: usize) -> f64 {
     use crate::canvas::{ENTITY_FIRST_ROW, ENTITY_ROW};
     let slots = literals.max(1) as f64;
-    (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
+    (f64::from(ENTITY_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(ENTITY_ROW))
+        .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
 /// How tall a card is to show `attributes` and `operations` rows, each compartment padded at its
@@ -528,29 +529,8 @@ pub(crate) fn members_height(attributes: usize, operations: usize) -> f64 {
     use crate::canvas::{COMPARTMENT_GAP, ENTITY_FIRST_ROW, ENTITY_ROW};
     let rows = |n: usize| n.max(1) as f64;
     let slots = rows(attributes) + f64::from(COMPARTMENT_GAP) + rows(operations);
-    (f64::from(ENTITY_FIRST_ROW) + 9.0 + slots * f64::from(ENTITY_ROW)).clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
-}
-
-/// Every card of class `c`, on every diagram, too short for its members once it has `more`
-/// attributes and operations besides those it has (an enumeration: `more.0` literals): each with
-/// its width and the height that shows them all. A card is only ever grown, so one the user made
-/// taller keeps its height.
-pub(crate) fn short_cards(store: &Store, c: Obj, more: (usize, usize)) -> Vec<(Uuid, f64, f64)> {
-    let needed = if is_enumeration(store, c) {
-        literals_height(archforge_uml::commands::literals(store, c).len().saturating_add(more.0))
-    } else {
-        let attributes = archforge_uml::members::attributes(store, c).len().saturating_add(more.0);
-        let operations = archforge_uml::members::operations(store, c).len().saturating_add(more.1);
-        members_height(attributes, operations)
-    };
-    archforge_diagram::views_of(store, c)
-        .2
-        .into_iter()
-        .filter_map(|n| {
-            let b = archforge_diagram::grid::bounds_of(store, n);
-            (b.height < needed).then_some((store.uuid(n).ok()?, b.width, needed))
-        })
-        .collect()
+    (f64::from(ENTITY_FIRST_ROW) + f64::from(archforge_diagram::figure::CARD_FOOT) + slots * f64::from(ENTITY_ROW))
+        .clamp(archforge_uml::CLASS_SIZE.1, archforge_diagram::rules::MAX_SIZE)
 }
 
 /// UML in the shell's explorers, search and panels.
@@ -1318,7 +1298,6 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
         .find(|n| archforge_diagram::diagram_of(store, *n) == Some(diagram))
         .ok_or("Order's card")?;
     let b = archforge_diagram::grid::bounds_of(store, node);
-    let grow = crate::uml_ui::short_cards(store, order, (1, 0));
     let order = store.uuid(order).map_err(|e| e.to_string())?.to_string();
     let id = |v: serde_json::Value| v["id"].as_str().unwrap_or_default().to_string();
     let mut priority = String::new();
@@ -1329,10 +1308,8 @@ pub(crate) fn put_nested_priority(shell: &mut Shell) -> Result<(String, String),
                 b2.execute("uml.literal.add", &json!({ "enumeration": priority, "name": l }))?;
             }
             // An attribute and a nested classifier are different kinds and share a name (AR-208).
+            // The command grows Order's card to show it (AR-241).
             b2.execute("uml.attribute.add", &json!({ "class": order, "name": "priority", "type": priority }))?;
-            for (n, width, height) in &grow {
-                b2.execute("diagram.resize", &json!({ "node": n.to_string(), "width": width, "height": height }))?;
-            }
             // Above Order, where the sample has room, so the ⊕ line runs straight up to it.
             let (x, y) = (b.x + 60.0, b.y - literals_height(2) - 90.0);
             b2.execute(

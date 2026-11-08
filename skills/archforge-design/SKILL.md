@@ -897,9 +897,11 @@ What is UML's own, beside the shared rules above.
   visibility, multiplicity, static, abstract and parameters. Below the detail zoom, or without
   the class's card on the open diagram, Properties' editor opens instead.
 - A card never hides a member silently (2026-11-02). A new class is as tall as a row in
-  each compartment. Applying a member in Properties, added or edited, grows every card of its class
-  that would hide one, on every diagram, in the same undo step and keeping its width; a card is
-  never shrunk. A card made shorter by hand stays so until a member of its class is next applied;
+  each compartment. Adding or editing a member, from Properties, the card itself, the control
+  channel or Chat, grows every card of its class that would hide one, on every diagram, in the same
+  undo step and keeping its width: the member's command grows it (AR-241); a card is never shrunk.
+  A card made shorter by hand stays so until a member of its class is next added or edited (a
+  move, which hides no row, leaves it);
   the rows it cannot show are said in one muted row, `+ n more members`, in the last place that
   fits, whichever compartment they are in; with no row's place left, a row above the card's foot
   while that is under the header, and on a card shorter still at the right of its eyebrow's line.

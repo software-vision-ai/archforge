@@ -45,12 +45,12 @@ const TOOLBAR_HEIGHT: f32 = 50.0;
 const TOOLBAR_GAP: f32 = 14.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
-pub(crate) const ENTITY_HEADER: f32 = 66.0;
-pub(crate) const ENTITY_FIRST_ROW: f32 = 77.0;
-pub(crate) const ENTITY_ROW: f32 = 20.0;
+pub(crate) const ENTITY_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
+pub(crate) const ENTITY_FIRST_ROW: f32 = archforge_diagram::figure::CARD_FIRST_ROW;
+pub(crate) const ENTITY_ROW: f32 = archforge_diagram::figure::CARD_ROW;
 /// The pitches between the last row of a card's compartment and the first of the next: the
 /// compartment's foot, as far as a card's last row is from its foot, and the next one's head.
-pub(crate) const COMPARTMENT_GAP: f32 = 1.0;
+pub(crate) const COMPARTMENT_GAP: f32 = archforge_diagram::figure::COMPARTMENT_GAP;
 /// How far a compartment's first row is under the line over it: as far as a card's first row is
 /// under its header's line.
 const COMPARTMENT_TOP: f32 = ENTITY_FIRST_ROW - ENTITY_HEADER;
@@ -1403,9 +1403,10 @@ pub(crate) fn compartment_top(card: &archforge_diagram::figure::Card, c: usize) 
     slots(card).into_iter().find(|(_, s, at)| *at == c && !matches!(s, Slot::Line)).map(|(top, _, _)| top)
 }
 
-/// How tall `card` is to show every place it has.
+/// How tall `card` is to show every place it has: [`archforge_diagram::figure::Card::height`],
+/// the height a command grows a node to, which lays the places out as [`slots`] does.
 pub(crate) fn card_height(card: &archforge_diagram::figure::Card) -> f32 {
-    slots(card).last().map_or(ENTITY_HEADER, |(top, _, _)| top + ENTITY_ROW + 9.0)
+    card.height()
 }
 
 /// `card` with a row being typed in place: a new, blank one at the end of compartment
@@ -2848,6 +2849,33 @@ fn an_end_text_sits_thirty_along_its_line_and_a_long_one_clears_the_mark() {
     let (len, half) = mark_extent(EndMark::OpenArrow, 1.0);
     assert!(at.x - long.x / 2.0 >= len + 8.0, "its near edge clears the arrowhead: {at:?}");
     assert!(at.y - long.y / 2.0 >= half + 4.0, "and its wings: {at:?}");
+}
+
+/// The height a command grows a node to, [`archforge_diagram::figure::Card::height`], is the one the
+/// canvas lays a card's places out by: the last place's top, a row and the foot, or the header for
+/// a card with none, whether its compartments are empty, full or both (AR-241).
+#[cfg(test)]
+#[test]
+fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
+    use archforge_diagram::figure::{Card, Row, Text, Tone};
+    let row = || Row { mark: None, text: "x".into(), linked: false, slanted: false, underlined: false };
+    let card = |compartments: Vec<Vec<Row>>| Card {
+        eyebrow: Text::said("Class"),
+        name: "C".into(),
+        compartments,
+        more: ("", ""),
+        hidden: 0,
+        elsewhere: false,
+        tone: Tone::Plain,
+        slanted: false,
+        braces: None,
+        template: Vec::new(),
+    };
+    for compartments in [vec![], vec![vec![]], vec![vec![row()]], vec![vec![], vec![]], vec![vec![row(), row()], vec![], vec![row(); 3]]] {
+        let c = card(compartments);
+        let laid = slots(&c).last().map_or(ENTITY_HEADER, |(top, _, _)| top + ENTITY_ROW + archforge_diagram::figure::CARD_FOOT);
+        assert_eq!(card_height(&c), laid, "{:?}", c.compartments.iter().map(Vec::len).collect::<Vec<_>>());
+    }
 }
 
 /// On a straight slanted route, direction (0.8, 0.6), an end text sits off the line along its true

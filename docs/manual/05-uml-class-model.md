@@ -1634,7 +1634,10 @@ stereotypes. A stereotype and its values are model data, saved with the model.
 
 ### Cards
 
-A card grows to show every member you add. A card you made shorter by hand says how many rows it
+A card grows to show every member you add or edit, on every diagram, keeping its width, whether
+you add it here or Chat or another tool does, and one undo takes the growth back with the member.
+A card is never made shorter for you: one you made shorter by hand stays so until a member of its
+class is next added or edited (moving a member leaves it as it is), and says how many rows it
 cannot show, such as `+ 2 more literals`. An enumeration holds at most 256 literals; past that, a
 new one is refused and the reason says so.
 
