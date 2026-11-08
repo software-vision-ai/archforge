@@ -446,7 +446,9 @@ fn begin(
     };
     let sink = inner.sink();
     // Held by the guard from the moment it exists, so any end after it gives it back.
-    guard.grant = locked(&inner.access).grant(request.allow_changes, sink.as_ref()).map_err(other)?;
+    // Bound to this conversation: the server, not a request, says whose a request is (AR-230).
+    let bound = archforge_control::Bound { key: request.chat.clone(), origin: request.origin.clone() };
+    guard.grant = locked(&inner.access).grant(request.allow_changes, bound, sink.as_ref()).map_err(other)?;
     let bridge = match &guard.grant {
         Some(grant) => Some(Bridge {
             cli: (inner.cli)().map_err(other)?,

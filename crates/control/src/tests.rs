@@ -21,6 +21,32 @@ fn echo(name: &str) -> (Server, PathBuf) {
     (Server::start(0, &dir, handler).unwrap(), dir)
 }
 
+/// A folder of a test's own, made new (never one found there) and private to this user, removed on
+/// every way out of the test, a failing assertion included.
+struct OwnFolder(PathBuf);
+
+impl OwnFolder {
+    /// Makes a new folder under the temporary directory, named for `name`, this process and a
+    /// count, trying the next count while a name is taken.
+    fn new(name: &str) -> std::io::Result<OwnFolder> {
+        let path = |n: u32| std::env::temp_dir().join(format!("archforge-control-{name}-{}-{n}", std::process::id()));
+        let n = (0u32..1000)
+            .find(|n| std::fs::create_dir(path(*n)).is_ok())
+            .ok_or_else(|| std::io::Error::other(format!("no free folder name for {name}")))?;
+        let folder = OwnFolder(path(n));
+        #[cfg(unix)]
+        std::fs::set_permissions(&folder.0, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+        Ok(folder)
+    }
+}
+
+impl Drop for OwnFolder {
+    /// Removes the folder and what is in it.
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Sends raw `lines` on a fresh connection and gives what came back before it closed.
 fn raw(port: u16, lines: &[&[u8]]) -> Vec<u8> {
     let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
@@ -281,8 +307,8 @@ fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
     let server = Server::open(&dir, roles()).unwrap();
     let port = server.port();
     assert_eq!(server.grants(), 0, "an opening starts with no token");
-    let read = server.grant(Role::ReadOnly).unwrap();
-    let full = server.grant(Role::Full).unwrap();
+    let read = server.grant(Role::ReadOnly, None).unwrap();
+    let full = server.grant(Role::Full, None).unwrap();
     for g in [&read, &full] {
         let name = g.path().file_name().unwrap().to_str().unwrap().to_string();
         let hex = name.strip_prefix(&format!("control-{port}-")).and_then(|r| r.strip_suffix(".token")).unwrap_or_else(|| panic!("{name}"));
@@ -323,10 +349,11 @@ fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
 #[cfg(unix)]
 #[test]
 fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_listening() {
-    let dir = folder("close");
+    let own = OwnFolder::new("close").unwrap();
+    let dir = own.0.clone();
     let server = Server::open(&dir, roles()).unwrap();
     let port = server.port();
-    let grant = server.grant(Role::Full).unwrap();
+    let grant = server.grant(Role::Full, None).unwrap();
     let path = grant.path().to_path_buf();
     let token = read_token(&path).unwrap();
     let (_s, mut r, first) = held(port, &format!("{{\"id\":1,\"method\":\"m\",\"token\":\"{token}\"}}\n"));
@@ -334,15 +361,16 @@ fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_liste
     // The grant outlives nothing: the close revokes it.
     assert!(grant.live());
     let started = Instant::now();
+    let watch = server.listener_watch();
     drop(server);
     assert!(!grant.live(), "a grant of a closed opening opens nothing");
     assert!(started.elapsed() < Duration::from_secs(3), "the close is bounded: {:?}", started.elapsed());
     let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], REVOKED, "{last}");
     assert!(!path.exists(), "the file went with the close");
-    assert!(!listens(port), "nothing listens after the close");
+    // Judged by the server's own listener, never by the freed port, which anything may bind (AR-229).
+    assert!(watch.closed(), "nothing listens after the close");
     drop(grant);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A token file is never created over another, and removed only while its name holds the very file written.
@@ -499,4 +527,62 @@ fn a_linked_executable_finds_the_command_line_tool_beside_the_file_it_links_to()
     std::fs::write(elsewhere.join(CLI_FILE), b"another install").unwrap();
     let found = find_cli(&link, &[]).unwrap();
     assert_eq!(found, std::fs::canonicalize(&dir).unwrap().join(CLI_FILE));
+}
+
+/// A server's listener watch says closed only once its listening socket is closed (AR-229): open
+/// while it serves, closed once it is dropped, whatever binds the freed port since; and never
+/// closed for a server still running, so a check by it fails on a listener really left open.
+#[test]
+fn a_listener_watch_says_closed_only_once_the_socket_is_closed() {
+    let echoes = || -> Handler { Arc::new(|call: Call<'_>| Ok(json!({ "method": call.method }))) };
+    let own = OwnFolder::new("listener-watch").unwrap();
+    let server = Server::start(0, &own.0, echoes()).unwrap();
+    let port = server.port();
+    let watch = server.listener_watch();
+    assert!(!watch.closed(), "open while it serves");
+    drop(server);
+    assert!(watch.closed(), "closed once dropped");
+    // Another socket on the freed port changes nothing.
+    let squatter = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
+    assert!(watch.closed(), "still closed with the port taken again: {:?}", squatter.as_ref().map(|_| ()));
+    // A server still open, its port free of anything else: its watch does not say closed, so a
+    // check by it fails on a listener left open.
+    let left_own = OwnFolder::new("listener-watch-left").unwrap();
+    let left = Server::start(0, &left_own.0, echoes()).unwrap();
+    let left_watch = left.listener_watch();
+    assert!(listens(left.port()) && !left_watch.closed(), "a listener left open is never said closed");
+    drop(left);
+    assert!(left_watch.closed());
+    drop(squatter);
+}
+
+/// A grant bound to a conversation speaks only for it (AR-230): the handler gets the bound origin
+/// and conversation key whatever the request names, a request naming another origin is refused
+/// before the handler, and an unbound grant passes the request's own origin with no conversation.
+/// A bound origin the channel would refuse is refused at the grant.
+#[cfg(unix)]
+#[test]
+fn a_bound_grant_speaks_only_for_its_conversation() {
+    let dir = folder("bound");
+    let who: Handler = Arc::new(|call: Call<'_>| Ok(json!({ "origin": call.origin, "conversation": call.conversation })));
+    let server = Server::open(&dir, who).unwrap();
+    let port = server.port();
+    let bound = Bound { key: "7f3c2a10-0000-4000-8000-0000000000d1".into(), origin: "Chat 1".into() };
+    let grant = server.grant(Role::Full, Some(bound.clone())).unwrap();
+    let token = read_token(grant.path()).unwrap();
+    let mine = json!({ "origin": "Chat 1", "conversation": bound.key });
+    assert_eq!(Client::with_token(port, token.clone()).call("m", json!({})).unwrap(), mine, "no origin: the bound one");
+    let own = Client::with_token(port, token.clone()).with_origin(Some("Chat 1".into())).unwrap();
+    assert_eq!(own.call("m", json!({})).unwrap(), mine, "its own origin");
+    let other = Client::with_token(port, token).with_origin(Some("Chat 2".into())).unwrap();
+    assert!(matches!(other.call("m", json!({})), Err(CallError::Refused(e)) if e.contains("speaks for \"Chat 1\"")));
+    // Unbound: the request's own label, and no conversation.
+    let free = server.grant(Role::Full, None).unwrap();
+    let labelled = Client::from_token_file(free.path(), port).unwrap().with_origin(Some("Chat 2".into())).unwrap();
+    assert_eq!(labelled.call("m", json!({})).unwrap(), json!({ "origin": "Chat 2", "conversation": null }));
+    // A bound origin the channel refuses, or no key, is refused at the grant.
+    assert!(server.grant(Role::Full, Some(Bound { key: "k".into(), origin: " padded".into() })).is_err());
+    assert!(server.grant(Role::Full, Some(Bound { key: String::new(), origin: "Chat 3".into() })).is_err());
+    drop((grant, free, server));
+    let _ = std::fs::remove_dir_all(&dir);
 }
