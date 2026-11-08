@@ -15636,7 +15636,6 @@ fn agents_harness(
         codex: fake::found(Provider::Codex),
         claude_key: crate::ai_agents::Key::Absent,
         codex_key: crate::ai_agents::Key::Absent,
-        sign_in_files: false,
     };
     setup(&mut f);
     let f = std::sync::Arc::new(f);
@@ -15958,22 +15957,30 @@ fn without_a_secure_store_keys_cannot_be_saved_but_chatgpt_sign_in_works() {
     }
 }
 
-/// The note that the codex program keeps its ChatGPT sign-in in its own files shows exactly where
-/// the host keeps it there.
+/// The note that the codex program keeps its ChatGPT sign-in in its own files, so it works without
+/// the secure store, shows where no secure store opened, and only there (AR-236: the sign-in is in
+/// those files on every system, so the note follows the store alone).
 #[test]
-fn the_own_files_note_follows_where_the_host_keeps_the_sign_in() {
+fn the_own_files_note_shows_where_no_secure_store_opened() {
     use crate::ai_agents::{CodexAccount, Store};
     let note = "keeps its ChatGPT sign-in in its own files";
-    for (files, shown) in [(true, true), (false, false)] {
-        let (mut h, _) = agents_harness(ThemeKind::Light, |f| {
-            let mut look = f.look.lock().unwrap();
-            look.store = Store::Missing { why: "no Secret Service".into() };
-            look.sign_in_files = files;
-            *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
-        });
-        open_agents(&mut h);
-        h.run();
-        assert_eq!(painted_has(&h, note), shown, "files {files}");
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (store, shown) in [
+            (Store::Missing { why: "no Secret Service".into() }, true),
+            (Store::MacKeychain, false),
+            (Store::SecretService, false),
+            (Store::NotLooked, false),
+            (Store::Other, false),
+        ] {
+            let (mut h, _) = agents_harness(theme, |f| {
+                f.look.lock().unwrap().store = store.clone();
+                *f.account.lock().unwrap() = Ok(CodexAccount::SignedIn { email: "you@example.com".into(), plan: None });
+            });
+            open_agents(&mut h);
+            h.run();
+            assert_eq!(painted_has(&h, note), shown, "{theme:?}: {store:?}");
+            assert!(painted_has(&h, "you@example.com"), "{theme:?}: {store:?}: the account was read");
+        }
     }
 }
 

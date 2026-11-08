@@ -293,7 +293,7 @@ impl CodexAccount {
 
     /// `account/login/start` with an API key, one request: the key goes to Codex in that request
     /// alone, over its standard input, in a buffer overwritten once written; it is never written to a
-    /// file, the keyring or the command line. Only for an account process with the ephemeral store
+    /// file, the keychain or the command line. Only for an account process with the ephemeral store
     /// (owner decision), refused otherwise; a key with characters JSON would have to escape is
     /// refused before anything is sent. A refusal by Codex is [`ErrorKind::InvalidCredential`].
     pub fn login_api_key(&mut self, key: &archforge_secrets::Secret, timeout: Duration) -> Result<(), AgentError> {
@@ -385,8 +385,8 @@ impl CodexAccount {
         }
     }
 
-    /// `account/logout`, one request: signs Codex out (a ChatGPT sign-in leaves the keyring or
-    /// Codex's files).
+    /// `account/logout`, one request: asks Codex to sign out of the ChatGPT sign-in it keeps in its
+    /// own files in the private `CODEX_HOME`; what it removes there is Codex's own doing.
     pub fn logout(&mut self, timeout: Duration) -> Result<(), AgentError> {
         let deadline = self.deadline(timeout);
         self.call("account/logout", None, deadline, None).map(drop)
@@ -475,7 +475,7 @@ impl CodexAccount {
             return Err(AgentError::InvalidSetting {
                 setting: "credential store",
                 bytes: 0,
-                reason: "a ChatGPT sign-in is kept in the keyring or Codex's own files; the ephemeral store would lose it".to_owned(),
+                reason: "a ChatGPT sign-in is kept in Codex's own files; the ephemeral store would lose it".to_owned(),
             });
         }
         Ok(())

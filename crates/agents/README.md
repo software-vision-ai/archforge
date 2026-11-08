@@ -36,7 +36,7 @@ folders, so the shell never depends on it and it is never built for the portable
 | `claude::command_line`, `mcp_config`, `write_mcp_config` | the arguments; the tool server configuration as JSON; that configuration written to `claude-mcp.json` in the conversation's folder (atomic, 0600) |
 | `claude::ClaudeParser`, `kind_of` | stream-json lines to events, usable alone; an error category to its `ErrorKind` |
 | `codex::CodexSession` | `start(&Runtime, &ConversationFolder, &CodexHome, CodexConfig, Auth) -> Result<CodexSession, _>`, `AgentSession`, `history`, `damaged_copy`, `copy_error`, `skipped`, `turn_running`, `process` |
-| `codex::CodexConfig`, `Auth`, `ChatGptStore`, `CredentialStore` | `start: Start`, `model: Option<Model>`, `bridge: Option<Bridge>` (`None`: no tool server), `instructions` (64 KiB), `limits` (`max_line_bytes` at least 8 MiB), `request_timeout` (10 ms to 600 s, default 30 s); `Auth::ApiKey(Secret)` or `Auth::ChatGpt(ChatGptStore::{Keyring, File})`; `CredentialStore::{Ephemeral, Keyring, File}` |
+| `codex::CodexConfig`, `Auth`, `CredentialStore` | `start: Start`, `model: Option<Model>`, `bridge: Option<Bridge>` (`None`: no tool server), `instructions` (64 KiB), `limits` (`max_line_bytes` at least 8 MiB), `request_timeout` (10 ms to 600 s, default 30 s); `Auth::ApiKey(Secret)` (the ephemeral store) or `Auth::ChatGpt` (Codex's own files); `CredentialStore::{Ephemeral, File}` |
 | `codex::CodexHome` | `open(&Workspace)`: `codex-home` in the workspace, 0700, Archforge's private `CODEX_HOME` |
 | `codex::CodexAccount` | `start(&Runtime, &Workspace, &CodexHome, CredentialStore, Limits, request_timeout, timeout)`, `read`, `login_api_key`, `login_chatgpt`, `login_device_code`, `cancel_login`, `logout`, `models`, `next_event`, `shutdown`, `folder`, `skipped`, `process` |
 | `codex::command_line`, `kind_of`, `RpcError`, `EXPIRED_SIGN_IN_MESSAGES` | the arguments; a `codexErrorInfo` to its `ErrorKind`; an error answer (`unknown_method`, `expired_sign_in`); Codex's exact refresh sentences |
@@ -209,12 +209,14 @@ bridge no `mcp_servers` value is given at all. That `-c mcp_servers.*` works lik
 
 *Stores (owner decisions).* An API key (`Auth::ApiKey`) goes to Codex over its standard input in
 `account/login/start {"type":"apiKey"}`, with `cli_auth_credentials_store="ephemeral"`: never a file,
-the keyring, the environment or the command line (it is an `input_secrets` entry, so it is refused
+the keychain, the environment or the command line (it is an `input_secrets` entry, so it is refused
 there and scrubbed from the error tail and `redact`; an account process adds the key it is given to
 what it scrubs before sending it, as Codex may echo it). The line is built in one buffer of its final
 size and overwritten when dropped; a key with characters JSON would escape is refused first. A
-ChatGPT sign-in is kept in the system keyring (`ChatGptStore::Keyring`) or, where no usable keyring
-exists, in Codex's own files in `codex-home` (`ChatGptStore::File`); the application chooses.
+ChatGPT sign-in (`Auth::ChatGpt`) is kept in Codex's own files in `codex-home`, with
+`cli_auth_credentials_store="file"`, on every system (AR-236): Codex runs with a private `HOME` and an
+emptied environment, where macOS finds no default keychain and the Secret Service's session bus
+address is not passed on.
 
 *Requests and bounds.* Every request has its own timeout (`request_timeout`). The session's methods
 never wait, but `next_event` (at most its timeout) and `shutdown` (at most twice its grace). The one

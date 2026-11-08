@@ -12,12 +12,12 @@
 //!
 //! Where the sign-in lives (owner decisions): an API key goes to Codex over its standard input in
 //! `account/login/start`, with `cli_auth_credentials_store="ephemeral"`, so it is never written to a
-//! file, the keyring or the command line, and every process signs in again. A ChatGPT sign-in is
-//! kept in the system keyring (`"keyring"`) or, where no usable keyring exists, in Codex's own files
-//! (`"file"`) inside Archforge's private `CODEX_HOME` ([`CodexHome`], a 0700 folder in the
-//! workspace); [`ChatGptStore`] offers both and the application chooses. Every process of a person
-//! shares that `CODEX_HOME`, as the keyring entry is tied to its path; each conversation keeps its
-//! own home, working and temporary folders.
+//! file, the keychain or the command line, and every process signs in again. A ChatGPT sign-in is
+//! kept in Codex's own files (`"file"`) inside Archforge's private `CODEX_HOME` ([`CodexHome`], a
+//! 0700 folder in the workspace), on every system (AR-236): Codex runs with a private `HOME` and an
+//! emptied environment, where macOS finds no default keychain and the Secret Service's session bus
+//! address is not passed on. Every process of a person shares that `CODEX_HOME`, as it holds the
+//! sign-in; each conversation keeps its own home, working and temporary folders.
 
 pub mod account;
 pub mod history;
@@ -95,10 +95,7 @@ const DISABLED: [&str; 14] = [
 pub enum CredentialStore {
     /// In the process's memory only: for an API key, which every process is given again.
     Ephemeral,
-    /// The system keyring: for a ChatGPT sign-in.
-    Keyring,
-    /// Codex's own files in Archforge's private `CODEX_HOME`: for a ChatGPT sign-in where no usable
-    /// keyring exists.
+    /// Codex's own files in Archforge's private `CODEX_HOME` (mode 0700): for a ChatGPT sign-in.
     File,
 }
 
@@ -107,19 +104,9 @@ impl CredentialStore {
     pub fn as_str(self) -> &'static str {
         match self {
             CredentialStore::Ephemeral => "ephemeral",
-            CredentialStore::Keyring => "keyring",
             CredentialStore::File => "file",
         }
     }
-}
-
-/// Where a ChatGPT sign-in is kept; the application decides which.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChatGptStore {
-    /// The system keyring.
-    Keyring,
-    /// Codex's own files in Archforge's private `CODEX_HOME` (mode 0700).
-    File,
 }
 
 /// How a session signs in.
@@ -127,17 +114,17 @@ pub enum ChatGptStore {
 pub enum Auth {
     /// With an API key, sent in `account/login/start` during the handshake; the ephemeral store.
     ApiKey(Secret),
-    /// With the ChatGPT sign-in already kept in `store`.
-    ChatGpt(ChatGptStore),
+    /// With the ChatGPT sign-in already kept in Codex's own files in the private `CODEX_HOME`.
+    ChatGpt,
 }
 
 impl Auth {
-    /// The credential store the session's Codex is started with.
+    /// The credential store the session's Codex is started with: the ephemeral store for an API key,
+    /// Codex's own files for a ChatGPT sign-in, whatever secure store Archforge itself has.
     pub fn store(&self) -> CredentialStore {
         match self {
             Auth::ApiKey(_) => CredentialStore::Ephemeral,
-            Auth::ChatGpt(ChatGptStore::Keyring) => CredentialStore::Keyring,
-            Auth::ChatGpt(ChatGptStore::File) => CredentialStore::File,
+            Auth::ChatGpt => CredentialStore::File,
         }
     }
 
@@ -145,13 +132,13 @@ impl Auth {
     pub fn signed_in_with(&self) -> SignedInWith {
         match self {
             Auth::ApiKey(_) => SignedInWith::ApiKey,
-            Auth::ChatGpt(_) => SignedInWith::ChatGpt,
+            Auth::ChatGpt => SignedInWith::ChatGpt,
         }
     }
 }
 
 /// Archforge's private `CODEX_HOME`: `codex-home` in the workspace, a real folder of this user
-/// with mode 0700, shared by every Codex process of the person, as the ChatGPT sign-in is.
+/// with mode 0700, shared by every Codex process of the person, as it holds the ChatGPT sign-in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodexHome {
     path: PathBuf,
@@ -590,7 +577,7 @@ impl CodexSession {
                 })?;
                 (vec![(KEY_LABEL.to_owned(), scrub)], Some(key))
             }
-            Auth::ChatGpt(_) => (Vec::new(), None),
+            Auth::ChatGpt => (Vec::new(), None),
         };
         let request = SpawnRequest {
             args: command_line(store, config.bridge.as_ref())?,
@@ -1509,9 +1496,8 @@ mod tests {
             allow_changes: false,
             token_file: PathBuf::from("/Users/person/Library/Application Support/Archforge/control-47000-0123456789abcdef.token"),
         };
-        let args: Vec<String> =
-            command_line(CredentialStore::Keyring, Some(&bridge)).unwrap().into_iter().map(|a| a.into_string().unwrap()).collect();
-        assert_eq!(&args[..4], ["app-server", "--strict-config", "-c", "cli_auth_credentials_store=\"keyring\""]);
+        let args: Vec<String> = command_line(Auth::ChatGpt.store(), Some(&bridge)).unwrap().into_iter().map(|a| a.into_string().unwrap()).collect();
+        assert_eq!(&args[..4], ["app-server", "--strict-config", "-c", "cli_auth_credentials_store=\"file\""]);
         for feature in DISABLED {
             assert!(args.windows(2).any(|w| w[0] == "--disable" && w[1] == feature), "{feature}");
         }
@@ -1538,7 +1524,7 @@ mod tests {
             Bridge { token_file: PathBuf::from("control.token"), ..bridge.clone() },
             Bridge { cli: PathBuf::from("/opt/a\u{7}b"), ..bridge.clone() },
         ] {
-            assert!(matches!(command_line(CredentialStore::Keyring, Some(&bad)), Err(AgentError::InvalidSetting { .. })), "{bad:?}");
+            assert!(matches!(command_line(CredentialStore::File, Some(&bad)), Err(AgentError::InvalidSetting { .. })), "{bad:?}");
         }
         assert_eq!(toml_string("x", "a\"b\\c").unwrap(), "\"a\\\"b\\\\c\"");
     }
