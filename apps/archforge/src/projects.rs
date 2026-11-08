@@ -36,6 +36,8 @@ use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, Save
 const SETTLE: Duration = Duration::from_millis(300);
 /// How long a closing, or the exit, waits for pending writes.
 const FLUSH_BUDGET: Duration = Duration::from_secs(10);
+/// The most reads of one project's versions that run at once.
+const MOST_READS: usize = 4;
 /// The most projects open at once, one per tab: each runs a database server.
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
@@ -256,9 +258,18 @@ impl ProjectHost for Projects {
     /// readers is taken here, so the read waits for no write and no write waits for it.
     fn versions(&self, project: &Path, after: Option<String>, limit: usize) -> Receiver<Result<VersionsPage, String>> {
         let (tx, rx) = channel();
-        let Some(reader) = lock(&self.inner.readers).get(project).cloned() else {
-            let _ = tx.send(Err(format!("{} is no longer open", project.display())));
-            return rx;
+        let reader = {
+            let readers = lock(&self.inner.readers);
+            let Some(reader) = readers.get(project) else {
+                let _ = tx.send(Err(format!("{} is no longer open", project.display())));
+                return rx;
+            };
+            // Counted and taken under one lock: the map holds one, each read under way another.
+            if Arc::strong_count(reader) > MOST_READS {
+                let _ = tx.send(Err(tr("Too many versions are being read at once. Try again in a moment.")));
+                return rx;
+            }
+            reader.clone()
         };
         let answer = tx.clone();
         let read = move || {
@@ -1631,6 +1642,20 @@ mod tests {
         assert_eq!(read(None, 1), closed, "the reader goes with the project");
         wait(&host.open(&path)).unwrap();
         assert_eq!(read(None, 1).unwrap().versions[0].hash, newest.hash, "and comes back with it, on the new server");
+    }
+
+    /// Reads past the cap are refused until one ends, and the cap is each project's own.
+    #[test]
+    fn reads_of_one_project_are_capped() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
+        let read = |project: &Path| host.versions(project, None, 1).recv_timeout(Duration::from_secs(30)).expect("the read answers");
+        let mut under_way: Vec<_> = (0..MOST_READS).map(|_| lock(&host.inner.readers).get(&path).cloned().unwrap()).collect();
+        assert_eq!(read(&path), Err("Too many versions are being read at once. Try again in a moment.".to_string()));
+        assert!(read(&other).is_ok(), "another project is not held back");
+        under_way.pop();
+        assert!(read(&path).is_ok(), "one ended, so one may start");
     }
 
     /// Closing waits for a read under way, and for no longer than its budget.
