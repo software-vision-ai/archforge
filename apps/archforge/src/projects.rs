@@ -2,7 +2,7 @@
 //! per tab of the window, at most [`MAX_OPEN`], each with its own server), and writes their models
 //! as the user works (owner decision) on a writer thread: each project's newest
 //! rows a moment after its last change, all of them in one transaction; Save writes what waits and
-//! commits it. A failed write keeps the rows and tries again with the next change or Save; the
+//! commits it, under a description when one is given (AR-247). A failed write keeps the rows and tries again with the next change or Save; the
 //! status bar says why meanwhile.
 //!
 //! One creation or opening runs at a time, and a project joins the open ones only once it is
@@ -23,12 +23,13 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::rows::Rows;
-use archforge_project::{Hooks, ModelSchema, Project};
+use archforge_project::{DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, check_description};
+use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::{CreateError, Opened, ProjectHost, Writing};
 
 /// How long the writer waits after a change for the next one before it writes.
@@ -39,11 +40,12 @@ const FLUSH_BUDGET: Duration = Duration::from_secs(10);
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
-/// project named, or only write when none is) with its answer; or a flush of one project (write
-/// what waits, answer whether that project's rows reached it).
+/// project named under the description given or an automatic one, or only write when no project
+/// is named) with its answer; or a flush of one project (write what waits, answer whether that
+/// project's rows reached it).
 enum Job {
     Write(PathBuf, Rows),
-    Save(Option<PathBuf>, Sender<Result<bool, String>>),
+    Save(Option<PathBuf>, Option<String>, Sender<Result<bool, String>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
     Drop(PathBuf, Sender<()>),
@@ -84,6 +86,8 @@ struct Inner {
     writing: Mutex<BTreeMap<PathBuf, Writing>>,
     /// The closings under way, waited for at exit.
     closers: Mutex<Vec<std::thread::JoinHandle<()>>>,
+    /// Who checks a description against the kept API keys; while nobody does, a description is refused.
+    keys: OnceLock<Arc<crate::agents::Agents>>,
 }
 
 /// A lock that a panic elsewhere left poisoned is taken over: the data behind it is still whole.
@@ -106,6 +110,7 @@ impl Projects {
                 writer: Mutex::new(None),
                 writing: Mutex::new(BTreeMap::new()),
                 closers: Mutex::new(Vec::new()),
+                keys: OnceLock::new(),
             }),
         }
     }
@@ -113,6 +118,11 @@ impl Projects {
     /// Who creates projects and conversations: the version line.
     pub fn created_by(&self) -> &str {
         &self.inner.created_by
+    }
+
+    /// Names who checks a save's description against the kept API keys. Only the first call counts.
+    pub fn check_descriptions_with(&self, agents: Arc<crate::agents::Agents>) {
+        let _ = self.inner.keys.set(agents);
     }
 
     /// Runs `job` on the writer against the open project at `path`, after every job sent before
@@ -203,10 +213,18 @@ impl ProjectHost for Projects {
         }
     }
 
-    fn save(&self, project: &Path) -> Receiver<Result<bool, String>> {
+    /// Save, under `description` when one is given. A description of the wrong shape is refused
+    /// here; a good one is checked against the kept API keys first, and only then asked of the writer.
+    fn save(&self, project: &Path, description: Option<String>) -> Receiver<Result<bool, String>> {
         let (tx, rx) = channel();
-        if let Err(e) = writer(&self.inner).send(Job::Save(Some(project.to_path_buf()), tx.clone())) {
-            let _ = tx.send(Err(format!("the writer stopped: {e}")));
+        match description {
+            None => send_save(&self.inner, project, None, tx),
+            Some(text) => match check_description(&text) {
+                Ok(()) => save_described(&self.inner, project, text, tx),
+                Err(problem) => {
+                    let _ = tx.send(Err(refusal(problem)));
+                }
+            },
         }
         rx
     }
@@ -581,13 +599,13 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 write_waiting(inner, &mut waiting);
                 failed = !waiting.is_empty();
             }
-            Some(Job::Save(project, reply)) => {
+            Some(Job::Save(project, description, reply)) => {
                 write_waiting(inner, &mut waiting);
                 failed = !waiting.is_empty();
                 let answer = match project {
                     // A save needs its own project's rows written; a flush needs all.
                     Some(p) if waiting.contains_key(&p) => Err(unwritten(inner, &p)),
-                    Some(p) => commit(inner, &p),
+                    Some(p) => commit(inner, &p, description),
                     None => match waiting.keys().next() {
                         Some(p) => Err(unwritten(inner, p)),
                         None => Ok(false),
@@ -674,9 +692,61 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
     }
 }
 
-/// Save: a commit of everything written to the project at `target`, with the time it was made.
-fn commit(inner: &Inner, target: &Path) -> Result<bool, String> {
-    let message = format!("Saved {}", now());
+/// Hands a save to the writer; a writer that has stopped is the save's answer.
+fn send_save(inner: &Arc<Inner>, project: &Path, description: Option<String>, reply: Sender<Result<bool, String>>) {
+    if let Err(e) = writer(inner).send(Job::Save(Some(project.to_path_buf()), description, reply.clone())) {
+        let _ = reply.send(Err(format!("the writer stopped: {e}")));
+    }
+}
+
+/// Why a description of the wrong shape is refused, in the language shown.
+fn refusal(problem: DescriptionProblem) -> String {
+    match problem {
+        DescriptionProblem::Empty => tr("A description can't be empty."),
+        DescriptionProblem::NotOneLine => tr("A description has to fit on one line."),
+        DescriptionProblem::TooLong { chars } => fmt(
+            &tr("A description is at most {max} characters; this one has {n}."),
+            &[("max", &DESCRIPTION_CHARS.to_string()), ("n", &chars.to_string())],
+        ),
+    }
+}
+
+/// A save under `text`, once the text holds no kept API key: reading a key may wait for the system
+/// to ask the person, so that runs on the agents host's thread and the writer is never held up.
+/// Text that cannot be checked is not saved: it would stay in the project's history. Both refusals
+/// are put in words here, since `tr` reads the language of the thread that calls it.
+fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sender<Result<bool, String>>) {
+    let held = tr("This description holds one of your saved API keys, so nothing was saved.");
+    let unchecked = tr("This description could not be checked against your saved API keys, so nothing was saved.");
+    let Some(agents) = inner.keys.get() else {
+        log::warn!("a description was refused: nothing checks it against the kept API keys");
+        let _ = reply.send(Err(unchecked));
+        return;
+    };
+    let checked = agents.check_keys(text.clone());
+    let (inner, path, answer, words) = (inner.clone(), project.to_path_buf(), reply.clone(), unchecked.clone());
+    let started = std::thread::Builder::new().name("archforge-save-keys".into()).spawn(move || {
+        match checked.recv().unwrap_or_else(|_| Err("the agents host stopped".into())) {
+            Ok(None) => send_save(&inner, &path, Some(text), answer),
+            Ok(Some(_)) => {
+                let _ = answer.send(Err(held));
+            }
+            Err(why) => {
+                log::warn!("a description could not be checked against the kept API keys: {why}");
+                let _ = answer.send(Err(words));
+            }
+        }
+    });
+    if let Err(e) = started {
+        log::warn!("a description could not be checked: {e}");
+        let _ = reply.send(Err(unchecked));
+    }
+}
+
+/// Save: a commit of everything written to the project at `target`, under `description` or else
+/// the automatic description, the time it was made.
+fn commit(inner: &Inner, target: &Path, description: Option<String>) -> Result<bool, String> {
+    let message = description.unwrap_or_else(|| format!("Saved {}", now()));
     match lock(&inner.open).iter().find(|p| p.path() == target) {
         Some(project) => project.commit(&message).map_err(|e| e.to_string()),
         None => Err(format!("{} is no longer open", target.display())),
@@ -740,7 +810,7 @@ fn flush(inner: &Inner) -> Result<(), CreateError> {
     let Some(tx) = lock(&inner.writer).clone() else { return Ok(()) };
     let (reply, answer) = channel();
     let unwritten = |why: String| CreateError::Failed { detail: format!("the last changes could not be written ({why})") };
-    if tx.send(Job::Save(None, reply)).is_err() {
+    if tx.send(Job::Save(None, None, reply)).is_err() {
         return Err(unwritten("the writer stopped".into()));
     }
     match answer.recv_timeout(FLUSH_BUDGET) {
@@ -1221,8 +1291,184 @@ mod tests {
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
+    /// A save of `project` without a description, and its answer.
     fn saved(host: &Projects, project: &Path) -> Result<bool, String> {
-        host.save(project).recv_timeout(Duration::from_secs(60)).expect("the save answers")
+        host.save(project, None).recv_timeout(Duration::from_secs(60)).expect("the save answers")
+    }
+
+    /// A save of `project` under `text`, and its answer.
+    fn described(host: &Projects, project: &Path, text: &str) -> Result<bool, String> {
+        host.save(project, Some(text.to_string())).recv_timeout(Duration::from_secs(60)).expect("the save answers")
+    }
+
+    /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
+    /// against `keys` when given. Dropped, even by a failing test, it stops what it started and
+    /// the folder goes.
+    struct Sandbox {
+        base: PathBuf,
+        host: Projects,
+        agents: Option<Arc<crate::agents::Agents>>,
+    }
+
+    impl Sandbox {
+        /// The host, with its folder created and `keys` wired in.
+        fn new(keys: Option<Box<dyn archforge_secrets::SecretStore>>) -> Sandbox {
+            let base = (0..1000)
+                .map(|n| std::env::temp_dir().join(format!("af-d{}-{n}", std::process::id())))
+                .find(|p| std::fs::create_dir(p).is_ok())
+                .expect("a folder of the test's own");
+            let host = Projects::new(&base.join("settings"), "Archforge test".into());
+            let agents = keys.map(|k| Arc::new(crate::agents::Agents::with(&base.join("settings"), k, archforge_agents::HostEnv::default())));
+            if let Some(a) = &agents {
+                host.check_descriptions_with(a.clone());
+            }
+            Sandbox { base, host, agents }
+        }
+
+        /// A project made in the sandbox.
+        fn project(&self) -> PathBuf {
+            wait(&self.host.create(&self.base.join("p"), "Shop")).unwrap().path
+        }
+
+        /// The project's commit messages, newest first.
+        fn messages(&self) -> Vec<String> {
+            lock(&self.host.inner.open)[0].newest_commit_messages(50).unwrap()
+        }
+    }
+
+    impl Drop for Sandbox {
+        /// Stops the servers and threads, then removes the folder, retrying while a stopping server
+        /// still writes. It never panics, so it is safe while a failed test unwinds.
+        fn drop(&mut self) {
+            self.host.shutdown();
+            if let Some(a) = &self.agents {
+                a.shutdown();
+            }
+            for _ in 0..50 {
+                if std::fs::remove_dir_all(&self.base).is_ok() || !self.base.exists() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
+    /// A store holding [`KEY`] as the Anthropic key.
+    fn store_with_key() -> Box<dyn archforge_secrets::SecretStore> {
+        use archforge_secrets::{MemoryStore, Secret, SecretName, SecretStore};
+        let keys = MemoryStore::new();
+        keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(KEY.to_string()).unwrap()).unwrap();
+        Box::new(keys)
+    }
+
+    /// A key no real account has.
+    const KEY: &str = "sk-ant-canary-0123456789";
+
+    /// The description given is the commit message as typed, and a save without one keeps its time.
+    #[test]
+    fn a_description_becomes_the_saved_message_exactly_and_a_save_without_one_stays_automatic() {
+        let sandbox = Sandbox::new(Some(store_with_key()));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        host.write(&path, model("a"));
+        // Bound as a value: quotes and other languages come back as typed.
+        let typed = "Client's \"orders\" renamed · 顧客";
+        assert_eq!(described(host, &path, typed), Ok(true));
+        assert_eq!(sandbox.messages()[0], typed);
+        // A text shaped like one of the commit's options is still only the text: it makes a new
+        // version and amends nothing.
+        let before = sandbox.messages().len();
+        host.write(&path, model("b"));
+        assert_eq!(described(host, &path, "--amend"), Ok(true));
+        assert_eq!(sandbox.messages()[0], "--amend");
+        assert_eq!(sandbox.messages().len(), before + 1);
+        // Without a description a save is described by its time, as before.
+        host.write(&path, model("d"));
+        assert_eq!(saved(host, &path), Ok(true));
+        let automatic = sandbox.messages()[0].clone();
+        let time = automatic.strip_prefix("Saved ").unwrap_or_else(|| panic!("automatic: {automatic}"));
+        assert!(time.len() == 20 && time.ends_with('Z'), "an RFC 3339 time: {automatic}");
+        // Nothing new to save makes no version, described or not.
+        let before = sandbox.messages();
+        assert_eq!(described(host, &path, "Nothing changed"), Ok(false));
+        assert_eq!(sandbox.messages(), before);
+    }
+
+    /// Every refusal says its own reason, makes no version and leaves the work for the next save.
+    #[test]
+    fn a_refused_description_makes_no_version_and_the_work_stays_to_be_saved() {
+        let sandbox = Sandbox::new(Some(store_with_key()));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        host.write(&path, model("a"));
+        assert_eq!(saved(host, &path), Ok(true));
+        host.write(&path, model("b"));
+        let before = sandbox.messages();
+        let too_long = "x".repeat(DESCRIPTION_CHARS + 1);
+        let refusals = [
+            ("   ", "A description can't be empty.".to_string()),
+            ("two\nlines", "A description has to fit on one line.".to_string()),
+            (too_long.as_str(), "A description is at most 200 characters; this one has 201.".to_string()),
+            (&format!("see {KEY} here"), "This description holds one of your saved API keys, so nothing was saved.".to_string()),
+        ];
+        for (text, words) in refusals {
+            assert_eq!(described(host, &path, text), Err(words));
+            assert_eq!(sandbox.messages(), before, "no version from {text:?}");
+        }
+        // The refusal is in the language shown, though the check ran on another thread.
+        archforge_ui_egui::i18n::set_language("de");
+        let german = described(host, &path, KEY);
+        let expected = tr("This description holds one of your saved API keys, so nothing was saved.");
+        archforge_ui_egui::i18n::set_language("en");
+        assert_eq!(german, Err(expected.clone()));
+        assert_ne!(expected, "This description holds one of your saved API keys, so nothing was saved.");
+        // What was being saved is still there for the next save, and the key is in no message.
+        assert_eq!(described(host, &path, "After the refusals"), Ok(true));
+        let after = sandbox.messages();
+        assert_eq!(after[0], "After the refusals");
+        assert!(after.iter().all(|m| !m.contains(KEY)));
+    }
+
+    /// A store that is locked: no key can be read from it.
+    struct Locked;
+
+    impl archforge_secrets::SecretStore for Locked {
+        /// Refuses every read, as a locked store does.
+        fn get(&self, name: &archforge_secrets::SecretName) -> Result<archforge_secrets::Secret, archforge_secrets::SecretError> {
+            Err(archforge_secrets::SecretError::Denied { name: name.to_string(), detail: "locked".into() })
+        }
+        /// Not used here.
+        fn set(&self, _: &archforge_secrets::SecretName, _: &archforge_secrets::Secret) -> Result<(), archforge_secrets::SecretError> {
+            Ok(())
+        }
+        /// Not used here.
+        fn delete(&self, _: &archforge_secrets::SecretName) -> Result<archforge_secrets::Deleted, archforge_secrets::SecretError> {
+            Ok(archforge_secrets::Deleted::WasAbsent)
+        }
+    }
+
+    /// A description whose keys cannot be checked is refused, whether the store or the checker is missing.
+    #[test]
+    fn a_description_that_cannot_be_checked_for_keys_is_not_saved() {
+        let unchecked = Err("This description could not be checked against your saved API keys, so nothing was saved.".to_string());
+        // Keys that cannot be read, and a host told of no one to check them.
+        for keys in [Some(Box::new(Locked) as Box<dyn archforge_secrets::SecretStore>), None] {
+            let sandbox = Sandbox::new(keys);
+            let (host, path) = (&sandbox.host, sandbox.project());
+            host.write(&path, model("a"));
+            let before = sandbox.messages();
+            assert_eq!(described(host, &path, "Renamed the client"), unchecked);
+            assert_eq!(sandbox.messages(), before);
+            // A save without a description needs no check.
+            assert_eq!(saved(host, &path), Ok(true));
+        }
+    }
+
+    /// The application's services wire the key check, so a description reaches the writer.
+    #[test]
+    fn the_native_services_give_the_host_its_key_check() {
+        let sandbox = Sandbox::new(Some(Box::new(archforge_secrets::MemoryStore::new())));
+        let host = Arc::new(Projects::new(&sandbox.base.join("wired"), "Archforge test".into()));
+        let _services = crate::services::native(host.clone(), sandbox.agents.clone().unwrap());
+        assert!(host.inner.keys.get().is_some(), "a description would be refused in the application");
     }
 
     #[test]

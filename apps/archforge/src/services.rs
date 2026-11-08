@@ -9,6 +9,7 @@ use archforge_ui_egui::{Folder, Services};
 /// The host's services: the system's, with `agents` the host of AI Agents and Chat.
 pub fn native(projects: std::sync::Arc<crate::projects::Projects>, agents: std::sync::Arc<crate::agents::Agents>) -> Services {
     let chats = std::sync::Arc::new(crate::chats::Chats::new(projects.clone(), agents.clone()));
+    projects.check_descriptions_with(agents.clone());
     Services {
         // The installed fonts, scanned and read on the shell's font worker.
         fonts: Some(std::sync::Arc::new(crate::fonts::SystemFonts::installed())),

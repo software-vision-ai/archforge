@@ -160,8 +160,11 @@ pub trait ProjectHost: Send + Sync {
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
     /// Save: writes what waits, then commits it in the project at `project`; true when there was
-    /// something to commit. A save for a project that is no longer open fails.
-    fn save(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<bool, String>> {
+    /// something to commit. The commit carries `description`, or the automatic `Saved <time>`
+    /// when there is none. A description that is empty, more than one line or too long, or that
+    /// holds a kept API key, is refused and nothing is committed. A save for a project that is no
+    /// longer open fails.
+    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, String>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err("this host saves no projects".into()));
         rx
@@ -1076,7 +1079,7 @@ impl Shell {
         let Some(revision) = self.written else { return };
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
             self.save_ticket += 1;
-            self.saving = Some((host.save(&project.path), revision, self.save_ticket));
+            self.saving = Some((host.save(&project.path, None), revision, self.save_ticket));
             self.save_error = None;
             self.open_error = None;
         }
