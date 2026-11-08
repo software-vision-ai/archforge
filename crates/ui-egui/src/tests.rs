@@ -681,6 +681,108 @@ fn a_save_whose_tab_closes_before_the_host_answers_is_not_known() {
     assert!(unknown.contains("not known") && !unknown.contains("failed"), "{unknown}");
 }
 
+/// A hold starts alone, on a model, outside a gesture, and leaves read-only what it found.
+#[test]
+fn a_hold_runs_alone_on_a_model_outside_a_gesture() {
+    use crate::hold::HoldRefused;
+    assert_eq!(saving_harness(None, None).0.state_mut().begin_hold(), Err(HoldRefused::NoProject));
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    let read_only = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().read_only();
+    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    assert_eq!(h.state_mut().begin_hold(), Err(HoldRefused::Gesture));
+    assert!(!h.state().is_held() && !read_only(&h));
+    h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+    h.state_mut().begin_hold().unwrap();
+    assert!(h.state().is_held() && read_only(&h));
+    assert_eq!(h.state_mut().begin_hold(), Err(HoldRefused::Another));
+    h.state_mut().end_hold();
+    assert!(!h.state().is_held() && !read_only(&h), "the session can change again");
+    // A session that was read-only already, as a version being viewed is, stays so.
+    h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+    h.state_mut().begin_hold().unwrap();
+    h.state_mut().end_hold();
+    assert!(read_only(&h));
+}
+
+/// While held nothing changes the model or makes a version; afterwards both work again.
+#[test]
+fn while_held_edits_undo_and_save_are_refused() {
+    use archforge_engine::EngineError;
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().begin_hold().unwrap();
+    let session = h.state_mut().session.as_mut().unwrap();
+    assert!(matches!(session.execute("er.schema.add", &serde_json::json!({ "name": "billing" })), Err(EngineError::ReadOnly)));
+    assert!(matches!(session.undo(), Err(EngineError::ReadOnly)));
+    assert!(!h.state().can_save());
+    h.state_mut().save();
+    h.state_mut().save_reviewed("A description".into(), 0);
+    h.run_steps(2);
+    assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "no save was asked for");
+    h.state_mut().end_hold();
+    assert!(h.state().can_save());
+    h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().save();
+    assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
+}
+
+/// While held the Save key is left alone, as the menu's Save is disabled, and afterwards it saves.
+#[test]
+fn the_save_key_is_left_alone_and_saves_nothing_while_held() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() });
+    shell.open_project(commerce());
+    // Whether the key is still there once the shell's logic has run: taken, it is gone.
+    let left = std::sync::Arc::new(AtomicBool::new(false));
+    let seen = left.clone();
+    let frame = move |ui: &mut egui::Ui, shell: &mut Shell| {
+        shell.logic(ui.ctx());
+        seen.fetch_or(ui.input(|i| i.key_pressed(egui::Key::S)), Ordering::SeqCst);
+        shell.ui(ui);
+    };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(frame, shell);
+    h.run_steps(4);
+    add_schema(&mut h, "shop");
+    let press = |h: &mut Harness<'static, Shell>| {
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+    };
+    h.state_mut().begin_hold().unwrap();
+    press(&mut h);
+    assert!(left.swap(false, Ordering::SeqCst), "while held the shell does not take the key");
+    assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "and no save starts");
+    h.state_mut().end_hold();
+    press(&mut h);
+    assert!(!left.load(Ordering::SeqCst), "after the hold it takes the key");
+    assert_eq!(host.saves.lock().unwrap().len(), 1, "and saves");
+}
+
+/// Rows go over until the hand-over, which sends the latest, and none after it.
+#[test]
+fn a_hold_hands_the_latest_rows_over_once_and_then_stops_writing() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let written = || host.written.lock().unwrap().len();
+    let edit = |h: &mut Harness<'static, Shell>, name: &str| {
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+    };
+    assert!(!h.state_mut().hand_over_held(), "there is no hold to hand over for");
+    edit(&mut h, "first");
+    let before = written();
+    h.state_mut().begin_hold().unwrap();
+    assert!(h.state_mut().hand_over_held() && h.state_mut().hand_over_held());
+    assert_eq!(written(), before + 1, "the latest rows go over, once");
+    // Nothing goes after it, whatever moved: the rows would reach the replaced state.
+    h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+    edit(&mut h, "second");
+    h.run_steps(3);
+    assert_eq!(written(), before + 1);
+    h.state_mut().end_hold();
+    h.run_steps(3);
+    assert_eq!(written(), before + 2, "after the hold the writing goes on");
+}
+
 #[test]
 fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     // A model made elsewhere, as the host reads it from a project.

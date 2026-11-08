@@ -29,6 +29,7 @@ mod er_ui;
 pub mod explorer;
 pub mod fonts;
 pub mod generate;
+pub mod hold;
 pub mod home;
 pub mod home_search;
 pub mod i18n;
@@ -480,6 +481,8 @@ pub struct Shell {
     /// why not), whichever project they saved.
     save_ticket: u64,
     saves: std::collections::VecDeque<(u64, SaveState)>,
+    /// The hold under way.
+    holding: hold::Holding,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
     /// The look for Dolt the host works on: started at the first frame and by Home's Look again.
@@ -557,6 +560,7 @@ impl Shell {
             saving: None,
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
+            holding: hold::Holding::default(),
             opening: None,
             dolt_check: None,
             dolt_asked: false,
@@ -1101,7 +1105,7 @@ impl Shell {
     fn write_changes(&mut self) {
         let (Some(session), Some(host), Some(project)) = (&self.session, &self.services.projects, &self.project) else { return };
         let revision = session.revision();
-        if self.written == Some(revision) || self.refused == Some(revision) || session.interacting() {
+        if self.written == Some(revision) || self.refused == Some(revision) || session.interacting() || self.holding.writes_stopped() {
             return;
         }
         let (tables, junctions) = archforge_notations::storage();
@@ -1149,7 +1153,7 @@ impl Shell {
 
     /// Starts a save recorded as `by`, of the reviewed state with its description when `review` is given.
     fn start_save(&mut self, review: Option<(String, u64)>, by: SavedBy) {
-        if self.saving.is_some() || self.session.is_none() {
+        if self.saving.is_some() || self.session.is_none() || self.is_held() {
             return;
         }
         skill_tab::sync(self, 0.0, true, None);
@@ -1321,9 +1325,9 @@ impl Shell {
         self.dolt_check.is_some()
     }
 
-    /// Whether Save can act now: a model is open and no save is under way.
+    /// Whether Save can act now: a model is open, no save is under way and it is not held.
     pub fn can_save(&self) -> bool {
-        self.session.is_some() && self.saving.is_none()
+        self.session.is_some() && self.saving.is_none() && !self.is_held()
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.
@@ -1507,7 +1511,7 @@ impl Shell {
         {
             self.open_generate();
         }
-        if self.session.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
+        if self.can_save() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             self.save();
         }
         if self.about.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
