@@ -354,8 +354,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   and otherwise in its own files in Archforge's private folder (owner, 2026-11-06), so the
   without-a-store note's "keeps its ChatGPT sign-in in its own files" is exactly what happens.
 - Agent access for Chat (AR-203) opens only while a conversation holds it and Let Chat use the
-  model is on, and closes with the last conversation, at once when the opt-in turns off, and on
-  quit. The status bar's Agent item (page 07, the dot and text beside the location) says which:
+  model is on, and closes with the last conversation (turning it off ends them all, each token
+  revoked at once) and on quit. The status bar's Agent item (page 07, the dot and text beside the location) says which:
   an accent dot and "Chat is using the model" while a conversation holds access, a purple dot and
   "Agent access off" otherwise, one at a time. It is a control (pointer, Tab, Enter, its id
   `workspace.status.agent`); either state opens Settings on AI Agents, as the design's agent setup

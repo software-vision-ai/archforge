@@ -742,33 +742,43 @@ fn the_window_gets_the_conversation_a_token_is_bound_to() {
 }
 
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
-/// "revoked", and never runs when the window comes to it.
+/// "revoked", and never runs when the window comes to it: the token revoked by its conversation's
+/// end, or the whole opening closed by quitting.
 #[test]
 fn a_queued_request_of_a_revoked_token_never_runs() {
-    let host = Host::new("queued", Setup::default());
-    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
-    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
-    let (port, file) = bridge_of(&host.mcp(CHAT));
-    let client = Client::from_token_file(&file, port).unwrap();
-    let call = std::thread::spawn(move || {
-        let started = Instant::now();
-        (client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })), started.elapsed())
-    });
-    // The request waits in the window's queue, not taken.
-    let queued = host.requests.recv_timeout(WAIT).unwrap();
-    let revoked = Instant::now();
-    // Asking the conversation to end revokes its token on this thread, before the call returns.
-    host.agents.end(CHAT).unwrap();
-    let (answer, _) = call.join().unwrap();
-    assert!(revoked.elapsed() < Duration::from_secs(2), "given up at once: {:?}", revoked.elapsed());
-    assert_eq!(answer, Err(CallError::Refused(archforge_control::REVOKED.into())));
-    // When the window comes to it, it is not run.
-    assert_eq!(queued.state.load(Ordering::SeqCst), archforge_ui_egui::control::ABANDONED);
-    let mut window = shell();
-    let before = window.session.as_ref().unwrap().revision();
-    assert!(queued.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err(), "the window does not take it");
-    assert_eq!(archforge_ui_egui::control::answer_request(&mut window, &queued), Err(archforge_control::REVOKED.into()), "nor would it run");
-    assert_eq!(window.session.as_ref().unwrap().revision(), before);
+    for quit in [false, true] {
+        let host = Host::new(if quit { "queued-quit" } else { "queued" }, Setup::default());
+        host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
+        host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+        let (port, file) = bridge_of(&host.mcp(CHAT));
+        let client = Client::from_token_file(&file, port).unwrap();
+        let call = std::thread::spawn(move || client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })));
+        // The request waits in the window's queue, not taken.
+        let queued = host.requests.recv_timeout(WAIT).unwrap();
+        let revoked = Instant::now();
+        // Quitting runs on a thread of its own, as it waits for the programs; an end revokes the
+        // token on this thread, before the call returns.
+        let quitting = if quit {
+            let agents = Agents { inner: host.agents.inner.clone() };
+            Some(std::thread::spawn(move || agents.shutdown()))
+        } else {
+            host.agents.end(CHAT).unwrap();
+            None
+        };
+        let answer = call.join().unwrap();
+        assert!(revoked.elapsed() < Duration::from_secs(2), "quit {quit}: given up at once: {:?}", revoked.elapsed());
+        assert_eq!(answer, Err(CallError::Refused(archforge_control::REVOKED.into())), "quit {quit}");
+        // When the window comes to it, it is not run.
+        assert_eq!(queued.state.load(Ordering::SeqCst), archforge_ui_egui::control::ABANDONED, "quit {quit}");
+        let mut window = shell();
+        let before = window.session.as_ref().unwrap().revision();
+        assert!(queued.state.compare_exchange(WAITING, TAKEN, Ordering::SeqCst, Ordering::SeqCst).is_err(), "the window does not take it");
+        assert_eq!(archforge_ui_egui::control::answer_request(&mut window, &queued), Err(archforge_control::REVOKED.into()), "nor would it run");
+        assert_eq!(window.session.as_ref().unwrap().revision(), before);
+        if let Some(quitting) = quitting {
+            quitting.join().unwrap();
+        }
+    }
 }
 
 /// A conversation whose events nobody takes keeps at most `MAX_WAITING` of them waiting, the drop

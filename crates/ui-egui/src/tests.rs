@@ -7442,6 +7442,31 @@ fn turning_model_use_off_ends_a_running_conversation_and_sends_nothing_more() {
     assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (2, 2), "started again and sent");
 }
 
+/// Clicking Let Chat use the model off ends every running conversation in the frame of the click
+/// (AR-221, AR-238): the shown one and another, each end revoking its token in the host, and only
+/// once. In both appearances.
+#[test]
+fn clicking_the_switch_off_ends_every_running_conversation_in_that_frame() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Explain how Payment relates to Order.");
+        crate::chat::start(h.state_mut(), chat_start(7, crate::ai_agents::Provider::Claude)).unwrap();
+        assert_eq!((chat_calls(&rig).0, chat_calls(&rig).3), (2, 0), "{theme:?}: two running");
+        crate::settings::open_at(h.state_mut(), crate::settings::Section::Agents);
+        h.run();
+        let at = rect_of(&h, "settings.agents.chat-uses-model").center();
+        h.event(egui::Event::PointerMoved(at));
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+        }
+        h.step();
+        assert!(!h.state().state.agents.chat_uses_model, "{theme:?}");
+        assert_eq!(chat_calls(&rig).3, 2, "{theme:?}: both ended in the frame of the click");
+        h.run();
+        assert_eq!(chat_calls(&rig).3, 2, "{theme:?}: and only once");
+    }
+}
+
 /// Off and on again before the ended program has gone (AR-221): a question asked meanwhile waits
 /// for its end, then starts the program again and is sent, never lost into the ending one.
 #[test]

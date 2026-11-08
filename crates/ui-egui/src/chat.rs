@@ -3,9 +3,10 @@
 //!
 //! The shell runs no program and opens no port: the host does ([`crate::ai_agents::AgentHost`]),
 //! starting each conversation's agent program on a thread of its own and giving it agent access
-//! through a loopback control channel that is open only while a conversation holds it. Conversations
-//! run only while Let Chat use the model is on. The host says when access opens and closes ([`HostEvent::Access`]), and
-//! the status bar shows it.
+//! through a loopback control channel that is open only while a conversation holds it.
+//! Conversations run only while Let Chat use the model is on, which [`start`] and [`send`] check.
+//! The host says when access opens and closes ([`HostEvent::Access`]), and the status bar shows
+//! it.
 //!
 //! Everything here is bounded: at most [`MAX_SESSIONS`] conversations are kept, each with at most
 //! [`MAX_WAITING`] events and [`MAX_WAITING_BYTES`] of their text waiting to be taken; past either
@@ -350,6 +351,7 @@ pub(crate) fn follow_switch(shell: &mut crate::Shell) {
     }
     if let Some(host) = host(shell) {
         shell.chats.seen = Some(on);
+        log::info!("Let Chat use the model is {}", if on { "on" } else { "off" });
         let mut ended = Vec::new();
         if !on {
             for kept in shell.chats.kept.iter().filter(|k| k.running) {
