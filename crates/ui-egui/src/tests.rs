@@ -726,6 +726,39 @@ fn while_held_edits_undo_and_save_are_refused() {
     assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
 }
 
+/// While held the Save key is left alone, as the menu's Save is disabled, and afterwards it saves.
+#[test]
+fn the_save_key_is_left_alone_and_saves_nothing_while_held() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    crate::i18n::set_language("en");
+    let host = std::sync::Arc::new(SavingHost::default());
+    let mut shell = Shell::new(Services { projects: Some(host.clone()), ids: Some(test_ids()), ..Services::default() });
+    shell.open_project(commerce());
+    // Whether the key is still there once the shell's logic has run: taken, it is gone.
+    let left = std::sync::Arc::new(AtomicBool::new(false));
+    let seen = left.clone();
+    let frame = move |ui: &mut egui::Ui, shell: &mut Shell| {
+        shell.logic(ui.ctx());
+        seen.fetch_or(ui.input(|i| i.key_pressed(egui::Key::S)), Ordering::SeqCst);
+        shell.ui(ui);
+    };
+    let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1120.0)).build_ui_state(frame, shell);
+    h.run_steps(4);
+    add_schema(&mut h, "shop");
+    let press = |h: &mut Harness<'static, Shell>| {
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+    };
+    h.state_mut().begin_hold().unwrap();
+    press(&mut h);
+    assert!(left.swap(false, Ordering::SeqCst), "while held the shell does not take the key");
+    assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "and no save starts");
+    h.state_mut().end_hold();
+    press(&mut h);
+    assert!(!left.load(Ordering::SeqCst), "after the hold it takes the key");
+    assert_eq!(host.saves.lock().unwrap().len(), 1, "and saves");
+}
+
 /// Rows go over until the hand-over, which sends the latest, and none after it.
 #[test]
 fn a_hold_hands_the_latest_rows_over_once_and_then_stops_writing() {
