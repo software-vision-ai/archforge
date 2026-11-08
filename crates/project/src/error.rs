@@ -69,6 +69,12 @@ pub enum Error {
     NotAVersion {
         commit: String,
     },
+    /// A version is a commit of the project, but its model tables are not ones this Archforge can
+    /// read: another model's or a later Archforge's, or none it can recognise; `why` says which.
+    VersionShape {
+        commit: String,
+        why: String,
+    },
     /// The project's database holds triggers, stored procedures or events.
     Scripted {
         path: PathBuf,
@@ -182,6 +188,7 @@ impl fmt::Display for Error {
             ),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
             Error::NotAVersion { commit } => write!(f, "{commit:?} is not a version of this project"),
+            Error::VersionShape { commit, why } => write!(f, "the version {commit} cannot be read by this Archforge: {why}"),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
             Error::TooLarge { what, size, max, unit } => write!(f, "{what} of {size} {unit} is longer than the {max} {unit} allowed"),
             Error::Full { what, max } => write!(f, "{what} already holds {max}, the most it may"),
