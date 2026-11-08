@@ -23,7 +23,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   - the app's agents host (conversations, agent access, the test message, Codex's account):
     `apps/archforge/src/agents/tests.rs`, the real host against fake `claude` and `codex` scripts
     replaying `crates/agents/tests/fixtures/`, keys as canaries in a `MemoryStore`, never an
-    installed program, a real key, `~/.claude` or `~/.codex`
+    installed program, a real key, `~/.claude` or `~/.codex`; a race on a conversation's private
+    token that the host cannot drive reliably is tested beside it, in `sessions.rs`'s
+    `revoke_tests` through a `#[cfg(test)]` hook
   - the control channel's tokens, roles and revocation: `crates/control/src/tests.rs`; what the
     window lets a read-only token do: the `tests` module in `crates/ui-egui/src/control.rs`
   - the shell's process and network scan: the `tests` module in `xtask/src/shell_io.rs`

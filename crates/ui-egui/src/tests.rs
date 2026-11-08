@@ -7630,6 +7630,35 @@ fn a_question_asked_while_the_reopened_conversations_program_ends_starts_it_read
     }
 }
 
+/// While the program of a conversation is still ending after Allow changes went off, a question
+/// asked meanwhile waits for its end; requests in that conversation's name are refused until then,
+/// so the ending program cannot act for the new, read-only turn (AR-228). In both appearances.
+#[test]
+fn requests_in_the_name_of_a_conversation_whose_program_ends_are_refused() {
+    use crate::chat::ChatEvent;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "Describe Customer.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let origin = h.state().chat_panel.chat.as_ref().and_then(|c| c.origin.clone()).unwrap();
+        // Allow changes off: its program is asked to end, and is slow to.
+        rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.session), Some(crate::chat_panel::Session::Ending), "{theme:?}");
+        ask_in_chat(&mut h, "And Product?");
+        let chat = h.state().chat_panel.chat.as_ref().unwrap();
+        assert!(chat.queued.is_some(), "{theme:?}: the new question waits for the end");
+        assert_eq!(chat.turns.last().map(|t| t.state.clone()), Some(crate::chat_panel::TurnState::Running), "{theme:?}: as a running turn");
+        let change = json!({ "command": "uml.class.set", "params": {} });
+        let refused = crate::chat_panel::gate(h.state(), Some(&origin), "engine.execute", &change);
+        assert!(refused.is_err(), "{theme:?}: refused while its program ends: {refused:?}");
+    }
+}
+
 /// Stop keeps the reply so far, marked cut off and kept; an unreachable program's turn ends here.
 #[test]
 fn stop_keeps_the_reply_so_far_marked_cut_off_and_keeps_it_in_the_project() {

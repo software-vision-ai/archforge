@@ -625,6 +625,88 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     assert!(listens(port) && host_listens(&host), "the writer still holds access");
 }
 
+/// A conversation asked to end has its token revoked as the end is asked, before its program has
+/// shut down (AR-228): a call with it while the program still ends, here a change from a
+/// conversation that allowed changes, is refused and changes nothing.
+#[test]
+fn an_ending_conversations_token_is_revoked_before_its_program_shuts_down() {
+    // The program says when its input closed, that is when it was asked to end, then takes most of
+    // the shutdown's grace to go.
+    let host = Host::new(
+        "revoke-on-end",
+        Setup { claude: "while IFS= read -r line; do :; done\nprintf 'closed\\n' >> \"$IN\"\nsleep 1.5\n", ..Setup::default() },
+    );
+    host.agents.set_model_access(true);
+    host.agents.start(claude(CHAT, "Chat 1", true)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(CHAT));
+    let client = Client::from_token_file(&file, port).unwrap().with_origin(Some("Chat 1".into())).unwrap();
+    host.agents.end(CHAT).unwrap();
+    let closed = || std::fs::read_to_string(host.base.join("claude.stdin")).unwrap_or_default().contains("closed");
+    let deadline = Instant::now() + WAIT;
+    while !closed() {
+        assert!(Instant::now() < deadline, "its program was asked to end");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    // The program still ends: a change with its token.
+    let call = std::thread::spawn(move || client.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } })));
+    let mut window = shell();
+    host.window(&mut window, || call.is_finished());
+    let answer = call.join().unwrap();
+    assert!(
+        matches!(&answer, Err(CallError::Unreachable(_))) || answer == Err(CallError::Refused(archforge_control::REVOKED.into())),
+        "refused while the program ends: {answer:?}"
+    );
+    let schemas = archforge_ui_egui::control::answer(&mut window, "engine.execute", &json!({ "command": "er.schema.list" })).unwrap();
+    assert_eq!(schemas["result"].as_array().map(Vec::len), Some(0), "nothing changed: {schemas}");
+    host.until("the end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
+}
+
+/// Asking a conversation to end revokes its token before the asking call returns (AR-228, review):
+/// a call with that full-access token right after, with no origin or in another conversation's
+/// name, is refused and changes nothing; another conversation's own token still works. The window
+/// here shows no conversation, so its gate lets every origin through: what refuses them is the
+/// revocation alone.
+#[test]
+fn a_conversation_asked_to_end_has_its_token_revoked_before_the_call_returns() {
+    let host = Host::new("revoke-at-ask", Setup::default());
+    host.agents.set_model_access(true);
+    let (ending, other) = (id(1), id(2));
+    host.agents.start(claude(&ending, "Chat 1", true)).unwrap();
+    host.agents.start(claude(&other, "Chat 2", false)).unwrap();
+    host.until("access held", |e| matches!(e, HostEvent::Access { held: true }));
+    let (port, file) = bridge_of(&host.mcp(&ending));
+    let (_, other_file) = bridge_of(&host.mcp(&other));
+    let token = archforge_control::read_token(&file).unwrap();
+    host.agents.end(&ending).unwrap();
+    assert!(!file.exists(), "its token file went as the end was asked");
+    let calls = std::thread::spawn(move || {
+        let change = |c: Client| c.call("engine.execute", json!({ "command": "er.schema.add", "params": { "name": "late" } }));
+        let other_reads = Client::from_token_file(&other_file, port).unwrap().with_origin(Some("Chat 2".into())).unwrap();
+        vec![
+            ("no origin", change(Client::with_token(port, token.clone()))),
+            ("another conversation's origin", change(Client::with_token(port, token).with_origin(Some("Chat 2".into())).unwrap())),
+            ("the other conversation's own token", other_reads.call("document.inspect", json!({}))),
+        ]
+    });
+    let mut window = shell();
+    host.window(&mut window, || calls.is_finished());
+    for (what, answer) in calls.join().unwrap() {
+        if what == "the other conversation's own token" {
+            assert!(answer.is_ok(), "{what}: {answer:?}");
+        } else {
+            assert!(
+                matches!(&answer, Err(CallError::Unreachable(_))) || answer == Err(CallError::Refused(archforge_control::REVOKED.into())),
+                "{what}: refused: {answer:?}"
+            );
+        }
+    }
+    let schemas = archforge_ui_egui::control::answer(&mut window, "engine.execute", &json!({ "command": "er.schema.list" })).unwrap();
+    assert_eq!(schemas["result"].as_array().map(Vec::len), Some(0), "nothing changed: {schemas}");
+    host.until("its end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if *chat == ending));
+    host.agents.end(&other).unwrap();
+}
+
 /// A conversation's token speaks only for that conversation (AR-230): the channel bound it to the
 /// conversation when it granted it, so a request on it that names no origin is still that
 /// conversation's, its change labelled with its name, and one naming another conversation is
@@ -1124,9 +1206,11 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
     );
     slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     let folder = slow.settings.join("agents").join(format!("conversation-{CHAT}"));
+    // Its program has started (a conversation asked to end before then starts none, AR-228).
+    let started = || slow.base.join("claude.pids").exists();
     let deadline = Instant::now() + WAIT;
-    while !folder.is_dir() {
-        assert!(Instant::now() < deadline, "its program made its folder");
+    while !folder.is_dir() || !started() {
+        assert!(Instant::now() < deadline, "its program started in its folder");
         std::thread::sleep(Duration::from_millis(10));
     }
     let removal = slow.agents.forget(CHAT);
