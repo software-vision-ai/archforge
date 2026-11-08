@@ -771,7 +771,7 @@ pub(crate) fn is_commit(text: &str) -> bool {
 }
 
 /// The hash of the commit the project's branch is at, checked to be one.
-fn head(c: &mut impl Queryable) -> Result<String, String> {
+pub(crate) fn head(c: &mut impl Queryable) -> Result<String, String> {
     let row: Option<mysql::Row> =
         c.query_first("SELECT LEFT(CAST(HASHOF('HEAD') AS CHAR), 64)").map_err(|e| format!("its last commit cannot be read: {e}"))?;
     let hash = row.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).unwrap_or_default();

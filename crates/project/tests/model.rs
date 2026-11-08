@@ -930,3 +930,33 @@ fn a_change_of_the_model_tables_keeps_the_fingerprint_it_had() {
 }
 
 const CURRENT: &str = "bb92f9913c8937ef";
+
+/// A failed save says whether a version exists, by the head and by whether the server answered;
+/// a retry then finds nothing left and makes no second version.
+#[test]
+fn a_save_says_whether_it_made_a_version_and_a_retry_makes_no_second_one() {
+    use archforge_project::{AfterFailure, Saved};
+    let env = Env::new("made");
+    let schema = schema();
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    project.write_model(&schema, &rows_of(model().doc(), &schema)).unwrap();
+    let lost = || mysql::Error::IoError(std::io::ErrorKind::TimedOut.into());
+
+    // The server refuses an empty message: it answered, the head did not move, so no version.
+    let refused = project.save_version("").unwrap_err();
+    assert_eq!(refused.version, AfterFailure::NoVersion, "{}", refused.error);
+    // A lost reply with a head that did not move: the commit may still be running.
+    assert_eq!(project.save_with(|_| Err(lost())).unwrap_err().version, AfterFailure::CannotTell);
+    assert!(project.has_unsaved().unwrap(), "the work is still there");
+
+    // The commit went through and only its reply was lost: the moved head proves the version.
+    let made = project.save_with(|c| c.query_drop("CALL DOLT_COMMIT('-m', 'Kept', '--author', 'T <t@t>')").and(Err(lost()))).unwrap_err();
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    let newest: String = c.query_first("SELECT commit_hash FROM dolt_log LIMIT 1").unwrap().unwrap();
+    assert_eq!(made.version, AfterFailure::Version(newest));
+    assert_eq!(project.save_version("Again").unwrap(), Saved::NothingNew, "the retry makes no second version");
+    project.close().unwrap();
+}

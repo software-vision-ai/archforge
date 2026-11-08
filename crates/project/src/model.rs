@@ -18,7 +18,8 @@ use std::collections::BTreeMap;
 
 use mysql::prelude::Queryable;
 
-use crate::chat::{is_chat_table, is_commit};
+use crate::chat::{head, is_chat_table, is_commit};
+use crate::saving::{AfterFailure, SaveFailure, Saved, after_failed_commit, reply_lost};
 use crate::{AUTHOR, DATABASE, Error, Project};
 
 /// The most rows a table of the model may hold when read back: the store's own limit.
@@ -500,19 +501,45 @@ impl Project {
     /// name, never with `-A`, so a turn still running is never committed half-way by a Save: its rows
     /// wait for the turn's own chat commit.
     pub fn commit(&self, message: &str) -> Result<bool, Error> {
-        let mut c = self.model_connection()?;
-        let tables = unsaved_tables(&mut c, self.path())?;
+        self.save_version(message).map(|saved| matches!(saved, Saved::Version { .. })).map_err(|failure| failure.error)
+    }
+
+    /// [`Project::commit`], saying what it did: the new version's hash, or, when it failed, whether
+    /// a version exists all the same, told by the head before and after the commit.
+    pub fn save_version(&self, message: &str) -> Result<Saved, SaveFailure> {
+        // The commit's reply is not read: converting a row that is not one string would panic.
+        self.save_with(|c| c.exec_drop("CALL DOLT_COMMIT('-m', ?, '--author', ?)", (message, AUTHOR)))
+    }
+
+    /// [`Project::save_version`] with its commit step given, so a test can lose the reply.
+    pub fn save_with(&self, commit: impl FnOnce(&mut mysql::Conn) -> Result<(), mysql::Error>) -> Result<Saved, SaveFailure> {
+        // Everything before the commit fails with the history untouched.
+        let untouched = |error| SaveFailure { error, version: AfterFailure::NoVersion };
+        let mut c = self.model_connection().map_err(untouched)?;
+        let tables = unsaved_tables(&mut c, self.path()).map_err(untouched)?;
         if tables.is_empty() {
             self.changes_saved();
-            return Ok(false);
+            return Ok(Saved::NothingNew);
         }
         // Whatever an interrupted step left staged is unstaged first, so only these tables go in.
-        c.query_drop("CALL DOLT_RESET()").map_err(sql("cannot prepare the save"))?;
-        stage(&mut c, &tables).map_err(sql("cannot prepare the save"))?;
-        // The commit's reply is not read: converting a row that is not one string would panic.
-        c.exec_drop("CALL DOLT_COMMIT('-m', ?, '--author', ?)", (message, AUTHOR)).map_err(sql("cannot save the project"))?;
-        self.changes_saved();
-        Ok(true)
+        c.query_drop("CALL DOLT_RESET()").map_err(sql("cannot prepare the save")).map_err(untouched)?;
+        stage(&mut c, &tables).map_err(sql("cannot prepare the save")).map_err(untouched)?;
+        let before = head(&mut c).ok();
+        match commit(&mut c) {
+            Ok(()) => {
+                self.changes_saved();
+                Ok(Saved::Version { hash: head(&mut c).ok() })
+            }
+            Err(source) => {
+                // On a connection of its own: the failure may have been this one's.
+                let after = self.model_connection().ok().and_then(|mut fresh| head(&mut fresh).ok());
+                let version = after_failed_commit(before.as_deref(), after.as_deref(), reply_lost(&source));
+                if matches!(version, AfterFailure::Version(_)) {
+                    self.changes_saved();
+                }
+                Err(SaveFailure { error: sql("cannot save the project")(source), version })
+            }
+        }
     }
 
     /// The messages of the newest `limit` commits of the project, newest first.
