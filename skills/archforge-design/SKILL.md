@@ -297,8 +297,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   skills in effect with where each comes from and what overrides it, and the request to copy for
   the agent, naming the MCP resources it reads (`archforge://element/{id}`,
   `archforge://skills/effective/{id}/export`) and the model's revision. Its status line says
-  whether agent access is on, that the request was copied, and when the model changed after;
-  nothing in it shows output or claims the agent did anything. The dialog changes nothing.
+  whether the person turned agent access on for this start (never Chat's), that the request was
+  copied, and when the model changed after; nothing in it shows output or claims the agent did anything. The dialog changes nothing.
 
 ## Settings and AI Agents
 - Settings is an 880-wide modal dialog (owner, 2026-11-06, AR-204): its title and close button on

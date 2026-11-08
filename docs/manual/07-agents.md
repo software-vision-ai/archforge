@@ -500,9 +500,10 @@ none of this for Chat. Agent access works on macOS and Linux for now.
    with the path of step 2 (`target/debug/archforge-cli` from the source). The repository's
    `.mcp.json` registers the source build for agents that read it.
 
-**File ▸ Generate…** says whether agent access is on. The port listens only on your own computer,
-and a token made for each start, kept in a file only you can read in Archforge's settings folder,
-guards it. Without `--control`, nothing listens.
+**File ▸ Generate…** says whether you turned agent access on for this start; a Chat conversation
+doesn't change what it says. The port listens only on your own computer, and a token made for each
+start, kept in a file only you can read in Archforge's settings folder, guards it. Without
+`--control`, this port stays closed; Chat's own access, described above, is separate.
 
 For an agent short of context, `archforge-cli mcp --bridge 47000 --compact` lists a few general
 tools and `search_tools` in place of one tool per command. To try agent access by hand,
