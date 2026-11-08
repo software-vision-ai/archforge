@@ -38,6 +38,8 @@ struct Hold {
     handed_over: bool,
     /// When Chat began to settle for this hold, by the panel's clock.
     chat_since: Option<u64>,
+    /// Whether what happened could not be told, so that only closing the project ends the hold.
+    until_closed: bool,
 }
 
 /// An action that waits for the hold to end.
@@ -65,6 +67,34 @@ pub(crate) struct Holding {
 }
 
 impl Holding {
+    /// Keeps the hold until its project is closed.
+    pub(crate) fn keep_until_closed(&mut self) {
+        if let Some(hold) = self.hold.as_mut() {
+            hold.until_closed = true;
+        }
+    }
+
+    /// Whether the hold lasts until its project is closed.
+    pub(crate) fn until_closed(&self) -> bool {
+        self.hold.as_ref().is_some_and(|h| h.until_closed)
+    }
+
+    /// The project held until it was closed has gone: nothing holds any more, and what waited asks
+    /// again, as after any hold that failed.
+    pub(crate) fn let_go(&mut self) {
+        if self.until_closed() {
+            self.hold = None;
+            self.failed = true;
+        }
+    }
+
+    /// Keep open was answered while held until closed: a quit that waited for that closing is off.
+    pub(crate) fn forget_quit(&mut self) {
+        if self.until_closed() {
+            self.waiting.retain(|w| !matches!(w, Waiting::Quit));
+        }
+    }
+
     /// Whether a hold runs or something still waits for one.
     pub(crate) fn pending(&self) -> bool {
         self.hold.is_some() || !self.waiting.is_empty()
@@ -90,7 +120,7 @@ impl Shell {
         let session = self.session.as_mut().ok_or(HoldRefused::NoProject)?;
         let was_read_only = session.read_only();
         session.set_read_only(true).map_err(|_| HoldRefused::Gesture)?;
-        self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None });
+        self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None, until_closed: false });
         Ok(())
     }
 
@@ -157,7 +187,8 @@ impl Shell {
 
     /// While held, keeps `action` for when the hold ends (a quit once) and gives true.
     pub(crate) fn remember(&mut self, action: Waiting) -> bool {
-        if !self.is_held() {
+        // Closing is what ends a hold kept until closed, and only without writing anything back.
+        if !self.is_held() || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false))) {
             return false;
         }
         if !(matches!(action, Waiting::Quit) && self.holding.waiting.iter().any(|w| matches!(w, Waiting::Quit))) {

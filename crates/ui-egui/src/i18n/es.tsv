@@ -431,6 +431,7 @@ str		The project changed after you reviewed it, so nothing was saved. Review the
 str		The opening stopped without an answer	La apertura terminó sin respuesta
 str		Chat did not finish in time, so nothing was changed.	El chat no terminó a tiempo, así que no se cambió nada.
 str		The reading stopped without an answer, so nothing was changed.	La lectura terminó sin respuesta, así que no se cambió nada.
+str		The change did not finish, so the project is as it was.	El cambio no terminó, así que el proyecto sigue como estaba.
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge no pudo saber si el último cambio terminó. No se escribió nada más. Cierra el proyecto y vuelve a abrirlo.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	El proyecto mostrado cambió después de enviar esta solicitud, por lo que no se ejecutó. Revisa lo que se muestra ahora y vuelve a enviarla.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	El proyecto está en espera mientras se reemplaza, por lo que esta solicitud no se ejecutó. Inténtalo de nuevo cuando termine.

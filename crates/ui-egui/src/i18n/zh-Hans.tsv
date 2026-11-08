@@ -431,6 +431,7 @@ str		The project changed after you reviewed it, so nothing was saved. Review the
 str		The opening stopped without an answer	打开未返回结果即已停止
 str		Chat did not finish in time, so nothing was changed.	聊天未能及时完成，因此未做任何更改。
 str		The reading stopped without an answer, so nothing was changed.	读取未得到应答就停止了，因此未做任何更改。
+str		The change did not finish, so the project is as it was.	更改未完成，因此项目保持原样。
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge 无法确定上一次更改是否完成。没有再写入任何内容。请关闭项目并重新打开。
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。

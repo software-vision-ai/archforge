@@ -1013,19 +1013,25 @@ fn rows_now(h: &Harness<'static, Shell>) -> std::sync::Arc<archforge_mof::rows::
     std::sync::Arc::new(archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap())
 }
 
-/// A job, whether it has started, and where its answer goes.
-type TestJob = (crate::replace::Job, std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::mpsc::Sender<Result<(), crate::replace::JobFailure>>);
+/// A job, whether it has started, where its answer goes, and where its reading back goes.
+type TestJob = (
+    crate::replace::Job,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+    std::sync::mpsc::Sender<Result<(), crate::replace::JobFailure>>,
+    std::sync::mpsc::Sender<Result<bool, String>>,
+);
 
 /// A job that tells when it starts and answers when the test says.
 fn test_job() -> TestJob {
     let (answer, answers) = std::sync::mpsc::channel();
+    let (reading, readings) = std::sync::mpsc::channel();
     let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag = started.clone();
     let run = Box::new(move || {
         flag.store(true, std::sync::atomic::Ordering::SeqCst);
         answers
     });
-    (crate::replace::Job { run }, started, answer)
+    (crate::replace::Job { run, read_back: Box::new(move || readings) }, started, answer, reading)
 }
 
 /// Starts replacing the session; gives where the model read goes.
@@ -1068,7 +1074,7 @@ fn a_replacement_that_cannot_be_read_or_built_runs_no_job() {
     for answer in [Some(Err("the commit is gone".to_string())), Some(Ok(std::sync::Arc::new(archforge_mof::rows::Rows::default()))), None] {
         let (mut h, _) = saving_harness(Some(commerce()), None);
         add_schema(&mut h, "shop");
-        let (job, started, _) = test_job();
+        let (job, started, ..) = test_job();
         let read = start_replacing(&mut h, Some(job));
         match answer {
             Some(a) => read.send(a).unwrap(),
@@ -1105,7 +1111,7 @@ fn a_replacement_stops_when_the_latest_rows_cannot_be_handed_over() {
     add_schema(&mut h, "shop");
     h.state_mut().services.projects = None;
     h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "billing" })).unwrap();
-    let (job, started, _) = test_job();
+    let (job, started, ..) = test_job();
     let _read = start_replacing(&mut h, Some(job));
     assert!(!h.state().is_held() && !started.load(std::sync::atomic::Ordering::SeqCst));
     assert_eq!(schema_names(&h).len(), 2, "the session is as it was");
@@ -1119,7 +1125,7 @@ fn a_job_runs_after_the_build_and_decides_by_its_answer() {
     let (mut h, _) = saving_harness(Some(commerce()), None);
     let empty = rows_now(&h);
     add_schema(&mut h, "shop");
-    let (job, started, answer) = test_job();
+    let (job, started, answer, _) = test_job();
     let read = start_replacing(&mut h, Some(job));
     assert!(!started.load(SeqCst), "nothing is written before the replacement is built");
     read.send(Ok(empty.clone())).unwrap();
@@ -1130,7 +1136,7 @@ fn a_job_runs_after_the_build_and_decides_by_its_answer() {
     assert!(!h.state().is_held() && schema_names(&h).is_empty(), "{:?}", schema_names(&h));
     // A job that says it failed leaves the session as it was, and nothing is read back.
     add_schema(&mut h, "shop");
-    let (job, _, answer) = test_job();
+    let (job, _, answer, _reading) = test_job();
     let read = start_replacing(&mut h, Some(job));
     read.send(Ok(empty)).unwrap();
     h.run_steps(3);
@@ -1140,28 +1146,139 @@ fn a_job_runs_after_the_build_and_decides_by_its_answer() {
     assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
 }
 
-/// A reply lost is never guessed at: it says it could not tell, and the session and hold stay.
+/// A lost reply is read back, and what that shows is what happened.
 #[test]
-fn a_lost_reply_says_it_could_not_tell_and_stays_held() {
-    for clear_failure in [false, true] {
-        let (mut h, host) = saving_harness(Some(commerce()), None);
+fn a_lost_reply_is_read_back_and_that_decides() {
+    for finished in [true, false] {
+        let (mut h, _) = saving_harness(Some(commerce()), None);
         let empty = rows_now(&h);
         add_schema(&mut h, "shop");
-        let (job, _, answer) = test_job();
+        let (job, _, answer, reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         read.send(Ok(empty)).unwrap();
         h.run_steps(3);
-        let written = host.written.lock().unwrap().len();
-        if clear_failure {
-            answer.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
-        } else {
-            drop(answer);
-        }
+        drop(answer);
         h.run_steps(3);
-        assert!(h.state().is_held() && schema_names(&h) == ["shop"]);
-        assert!(h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
-        assert_eq!(host.written.lock().unwrap().len(), written, "nothing was written back");
+        assert!(h.state().is_held(), "waiting for the reading back");
+        reading.send(Ok(finished)).unwrap();
+        h.run_steps(3);
+        assert!(!h.state().is_held());
+        assert_eq!(schema_names(&h).is_empty(), finished, "finished {finished}");
     }
+}
+
+/// When it cannot be read back either: it says so, writes nothing, and stays held until closed.
+#[test]
+fn an_outcome_that_cannot_be_read_stays_held_until_the_project_is_closed() {
+    use crate::close_ask::Ask;
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let empty = rows_now(&h);
+    add_schema(&mut h, "shop");
+    let (job, _, answer, reading) = test_job();
+    let read = start_replacing(&mut h, Some(job));
+    read.send(Ok(empty)).unwrap();
+    h.run_steps(3);
+    let written = host.written.lock().unwrap().len();
+    drop(answer);
+    h.run_steps(2);
+    drop(reading);
+    h.run_steps(3);
+    let held = |h: &Harness<'static, Shell>| h.state().is_held() && schema_names(h) == ["shop"];
+    assert!(held(&h) && h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
+    // A quit asks about this project first, and Keep open forgets it.
+    h.state_mut().request_quit();
+    h.run_steps(3);
+    assert!(matches!(h.state().ask, Some(Ask::CannotWrite { .. })) && !h.state().quit_confirmed());
+    let at = rect_of(&h, "close-ask.keep").center();
+    click(&mut h, at);
+    h.run_steps(3);
+    assert!(held(&h) && h.state().ask.is_none());
+    // Closing offers only to close without writing, and that ends it.
+    h.state_mut().close_tab(0);
+    assert!(matches!(h.state().ask, Some(Ask::CannotWrite { .. })));
+    h.state_mut().ask = None;
+    h.state_mut().discard_tab(0, false);
+    h.run_steps(2);
+    assert!(!h.state().is_held());
+    assert_eq!(host.unwritten.lock().unwrap().len(), 1);
+    assert!(host.discarded.lock().unwrap().is_empty(), "nothing was put back");
+    assert_eq!(host.written.lock().unwrap().len(), written, "nothing was written back");
+    assert!(!h.state().quit_confirmed() && !h.state().quitting(), "the quit was forgotten");
+}
+
+/// Held until closed: a reset is not a way out, a quit follows the closing, and a reading back that
+/// never answers counts as unknown.
+#[test]
+fn a_hold_until_closed_lets_only_closing_without_writing_end_it() {
+    use std::sync::atomic::Ordering::Relaxed;
+    let (mut h, rig_host) = saving_harness(Some(commerce()), None);
+    let empty = rows_now(&h);
+    add_schema(&mut h, "shop");
+    let now = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1_000));
+    let clock = now.clone();
+    h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now: clock.load(Relaxed), offset: None }));
+    let (job, _, answer, _reading) = test_job();
+    let read = start_replacing(&mut h, Some(job));
+    read.send(Ok(empty)).unwrap();
+    h.run_steps(3);
+    drop(answer);
+    h.run_steps(3);
+    assert!(h.state().save_error.is_none(), "still reading back");
+    now.fetch_add(crate::replace::READ_BACK_LIMIT, Relaxed);
+    h.run_steps(3);
+    assert!(h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
+    h.state_mut().discard_tab(0, true);
+    assert!(rig_host.discarded.lock().unwrap().is_empty() && h.state().is_held(), "Don't save puts nothing back");
+    h.state_mut().request_quit();
+    h.run_steps(3);
+    h.state_mut().ask = None;
+    h.state_mut().discard_tab(0, false);
+    rig_host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+    h.run_steps(4);
+    assert!(h.state().quit_confirmed(), "the quit follows the closing");
+}
+
+/// What waited behind a hold kept until closed asks again once it has been closed.
+#[test]
+fn a_close_that_waited_behind_a_hold_until_closed_asks_again() {
+    use crate::close_ask::Ask;
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(3);
+    let empty = rows_now(&h);
+    add_schema(&mut h, "billing");
+    let (job, _, answer, reading) = test_job();
+    let read = start_replacing(&mut h, Some(job));
+    h.state_mut().close_tab(0);
+    read.send(Ok(empty)).unwrap();
+    h.run_steps(3);
+    drop(answer);
+    h.run_steps(2);
+    drop(reading);
+    h.run_steps(3);
+    h.state_mut().discard_tab(1, false);
+    h.run_steps(3);
+    assert!(!h.state().is_held());
+    assert!(matches!(&h.state().ask, Some(Ask::HoldFailed { path, .. }) if path.ends_with("Commerce platform.archforge")), "{:?}", h.state().ask);
+    assert!(host.closed.lock().unwrap().is_empty());
+}
+
+/// Cancelling a question while an ordinary hold runs leaves a quit that waited in place.
+#[test]
+fn keep_open_forgets_a_waiting_quit_only_when_held_until_closed() {
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    add_schema(&mut h, "shop");
+    h.state_mut().begin_hold().unwrap();
+    h.state_mut().request_quit();
+    h.run_steps(2);
+    h.state_mut().ask = asked_unsaved(COMMERCE);
+    h.run_steps(2);
+    let at = rect_of(&h, "close-ask.cancel").center();
+    click(&mut h, at);
+    assert_eq!(h.state().ask, None);
+    h.state_mut().end_hold();
+    h.run_steps(3);
+    assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "the quit that waited still runs");
 }
 
 /// A chat write started after Chat settled is waited for before the job and before the replacement.
@@ -1173,7 +1290,7 @@ fn a_chat_write_started_after_settling_holds_the_replacement_back() {
         h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
         h.run_steps(2);
         let rows = rows_now(&h);
-        let (job, started, answer) = test_job();
+        let (job, started, answer, _reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         if wrote_first {
             read.send(Ok(rows.clone())).unwrap();

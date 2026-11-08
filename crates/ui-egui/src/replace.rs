@@ -1,8 +1,8 @@
 //! Replacing the session under a hold (`docs/design/versioning.md`, section 6, steps 5 to 8): a
 //! save under way answers and the latest rows go over, the replacement is read and built before
 //! anything is written, the operation's writes run as one job, and the replacement takes the
-//! session's place. A job with no clear answer is never guessed at: Archforge says it could not
-//! tell, writes nothing back, and the project stays held.
+//! session's place. A job with no clear answer is read back; when that cannot be read either,
+//! Archforge says so, writes nothing back, and the project stays held until it is closed.
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -14,20 +14,27 @@ use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
 use crate::{Shell, chat_panel, editing};
 
+/// The most seconds reading a job back may take before what happened counts as unknown.
+pub const READ_BACK_LIMIT: u64 = 30;
+
 /// How a job that did not plainly finish went.
 pub enum JobFailure {
     /// It failed, and the project is as it was.
     Failed(String),
-    /// It gave no clear answer.
+    /// It gave no clear answer: what happened has to be read back.
     Unclear,
 }
 
 /// What a job's starting gives: its answer, later.
 pub type JobAnswer = Receiver<Result<(), JobFailure>>;
+/// What reading a job back gives: whether it finished, later, or why that could not be read.
+pub type ReadBack = Receiver<Result<bool, String>>;
 
 /// An operation's writes, run as one job on the writer.
 pub struct Job {
     pub run: Box<dyn FnOnce() -> JobAnswer>,
+    /// Reads `HEAD` or the branch list to see whether the job finished.
+    pub read_back: Box<dyn FnOnce() -> ReadBack>,
 }
 
 /// Where a replacement stands.
@@ -38,7 +45,8 @@ enum Stage {
     /// Built, and waiting for Chat to be still before the job or the replacement.
     Ready(Box<Session>, Option<u64>),
     Writing(Box<Session>, JobAnswer),
-    /// What happened could not be told: the project stays held.
+    Reading(Box<Session>, ReadBack, Option<u64>),
+    /// What happened could not be told: held until the project is closed.
     Unknown,
 }
 
@@ -47,6 +55,7 @@ pub(crate) struct Replacing {
     stage: Stage,
     read: Receiver<Result<Arc<Rows>, String>>,
     job: Option<Job>,
+    read_back: Option<Box<dyn FnOnce() -> ReadBack>>,
     /// Whether the job has written, after which the operation can no longer simply stop.
     wrote: bool,
 }
@@ -56,7 +65,7 @@ impl Shell {
     /// `job` once it is built. What happens is driven frame by frame.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
         self.begin_hold()?;
-        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, wrote: false });
+        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false });
         Ok(())
     }
 
@@ -107,6 +116,7 @@ impl Shell {
                         return self.give_up(Some(tr("Chat did not finish in time, so nothing was changed.")));
                     }
                 } else if let Some(job) = r.job.take() {
+                    r.read_back = Some(job.read_back);
                     Stage::Writing(session, (job.run)())
                 } else {
                     self.install(*session);
@@ -120,8 +130,24 @@ impl Shell {
                     Stage::Ready(session, None)
                 }
                 Ok(Err(JobFailure::Failed(why))) => return self.give_up(Some(why)),
-                // A lost reply says nothing about what happened: it is never guessed at.
-                Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => self.could_not_tell(),
+                // A lost reply says nothing about what happened: it is read back, never guessed.
+                Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
+                    Some(read) => Stage::Reading(session, read(), None),
+                    None => self.could_not_tell(),
+                },
+            },
+            Stage::Reading(session, answer, since) => match answer.try_recv() {
+                Err(TryRecvError::Empty) => {
+                    let now = chat_panel::clock(self).now;
+                    let since = since.unwrap_or(now);
+                    if now.saturating_sub(since) < READ_BACK_LIMIT { Stage::Reading(session, answer, Some(since)) } else { self.could_not_tell() }
+                }
+                Ok(Ok(true)) => {
+                    r.wrote = true;
+                    Stage::Ready(session, None)
+                }
+                Ok(Ok(false)) => return self.give_up(Some(tr("The change did not finish, so the project is as it was."))),
+                Ok(Err(_)) | Err(TryRecvError::Disconnected) => self.could_not_tell(),
             },
             Stage::Unknown => Stage::Unknown,
         };
@@ -143,10 +169,15 @@ impl Shell {
         None
     }
 
-    /// Says that what happened cannot be told. Nothing is written back, and the project stays held.
+    /// Says that what happened cannot be told. Nothing is written back; the project stays held and
+    /// its closing offers only to close without writing.
     fn could_not_tell(&mut self) -> Stage {
         let why = tr("Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.");
+        if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
+            tab.close_error = Some(why.clone());
+        }
         self.save_error = Some(why);
+        self.holding.keep_until_closed();
         Stage::Unknown
     }
 
