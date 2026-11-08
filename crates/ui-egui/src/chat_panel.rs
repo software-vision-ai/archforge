@@ -259,6 +259,11 @@ pub struct Chat {
     pub queued: Option<String>,
     /// Writes not yet answered.
     pub writes: Vec<Receiver<Result<Answer, Refusal>>>,
+    /// The writes of the chips removed not yet answered (AR-227).
+    pub chip_writes: Vec<Receiver<Result<Answer, Refusal>>>,
+    /// A write of the chips removed was refused or not answered: the next question keeps the whole
+    /// set again before it goes, so a refused removal is never lost.
+    pub chips_unsaved: bool,
     /// Why the last write failed: "This conversation could not be saved: {why}".
     pub save_error: Option<String>,
     /// The text it holds in memory, in bytes.
@@ -285,6 +290,8 @@ impl Chat {
             step: Step::Idle,
             queued: None,
             writes: Vec::new(),
+            chip_writes: Vec::new(),
+            chips_unsaved: false,
             save_error: None,
             held: 0,
         }
@@ -642,7 +649,8 @@ pub fn send(shell: &mut Shell) {
     ask(shell, text, true);
 }
 
-/// Starts a new turn with `text`: the conversation is made first when it is new.
+/// Starts a new turn with `text`: the conversation is made first when it is new, and chips removed
+/// whose write was refused are kept again before the question.
 fn ask(shell: &mut Shell, text: String, from_draft: bool) {
     let (Some(project), Some(turn), Some(question)) = (shell.project.as_ref().map(|p| p.path.clone()), fresh(shell), fresh(shell)) else {
         shell.chat_panel.notice = Some(tr("This project keeps no conversations"));
@@ -666,8 +674,19 @@ fn ask(shell: &mut Shell, text: String, from_draft: bool) {
         let rx = s.write(&project, Write::Create { chat: chat.id, title: text, provider: chat.provider, model: chat.model.clone(), skip, now });
         chat.step = Step::Creating(rx, pending);
     } else {
+        if chat.chips_unsaved {
+            keep_chips(chat, s.as_ref(), &project);
+        }
         chat.step = Step::Asking(s.write(&project, ask_write(chat, &pending, now)), pending);
     }
+}
+
+/// Writes the chips removed from `chat`, the whole set, to the project at `project`; its answer is
+/// taken with the conversation's other writes, and a refusal leaves the set to be kept again with
+/// the next question.
+fn keep_chips(chat: &mut Chat, store: &dyn ChatStore, project: &std::path::Path) {
+    chat.chips_unsaved = false;
+    chat.chip_writes.push(store.write(project, Write::Chips { chat: chat.id, removed: chat.removed.clone() }));
 }
 
 /// The write that keeps `pending` as a new turn of `chat`.
@@ -688,8 +707,8 @@ fn ask_write(chat: &Chat, pending: &Pending, now: u64) -> Write {
 /// decision): only a failed turn that changed nothing, and not before a rate limit's reset. While
 /// the question is back in the composer, what the composer holds is the question sent. The question
 /// always goes with its chips (an edited one with the chips now), so the project checks it against
-/// the kept keys again and the agent gets its context line again. Refused while Let Chat use the
-/// model is off.
+/// the kept keys again and the agent gets its context line again; chips removed whose write was
+/// refused are kept again first. Refused while Let Chat use the model is off.
 pub fn retry(shell: &mut Shell, edited: Option<String>) {
     if refused_while_off(shell) {
         return;
@@ -723,9 +742,13 @@ pub fn retry(shell: &mut Shell, edited: Option<String>) {
     let text = edited.unwrap_or_else(|| last.question.clone());
     let chips = if from_draft { chips_now } else { last.chips.clone() };
     let context = context_line(&chips);
-    let pending = Pending { text: text.clone(), chips: chips.clone(), context, turn: last.id, question: last.question_id, from_draft };
+    let turn = last.id;
+    let pending = Pending { text: text.clone(), chips: chips.clone(), context, turn, question: last.question_id, from_draft };
     shell.chat_panel.notice = None;
-    let rx = s.write(&project, Write::Rerun { turn: last.id, model, allow_changes: allow, question: Some((text, chips)), now });
+    if chat.chips_unsaved {
+        keep_chips(chat, s.as_ref(), &project);
+    }
+    let rx = s.write(&project, Write::Rerun { turn, model, allow_changes: allow, question: Some((text, chips)), now });
     chat.step = Step::Rerunning(rx, pending);
 }
 
@@ -742,7 +765,7 @@ pub fn set_chip(shell: &mut Shell, chip: Chip, removed: bool) {
         return;
     }
     if let (Some(project), Some(s)) = (project, store) {
-        chat.writes.push(s.write(&project, Write::Chips { chat: chat.id, removed: chat.removed.clone() }));
+        keep_chips(chat, s.as_ref(), &project);
     }
 }
 
@@ -1434,8 +1457,9 @@ fn event(chat: &mut Chat, e: ChatEvent, session: Option<&mut archforge_notations
     None
 }
 
-/// Takes the project's answers: the step under way, the writes, the history and a conversation
-/// read back.
+/// Takes the project's answers: the step under way, the writes (a refused write of the chips
+/// removed is said and kept again with the next question), the history and a conversation read
+/// back.
 fn answers(shell: &mut Shell) {
     // The step of the conversation shown.
     let step = shell.chat_panel.chat.as_mut().map(|c| std::mem::take(&mut c.step));
@@ -1449,7 +1473,7 @@ fn answers(shell: &mut Shell) {
                     chat.origin = Some(origin);
                     // Chips removed before the first question are kept now that it is in the project.
                     if !chat.removed.is_empty() {
-                        chat.writes.push(s.write(&project, Write::Chips { chat: chat.id, removed: chat.removed.clone() }));
+                        keep_chips(chat, s.as_ref(), &project);
                     }
                     chat.step = Step::Asking(s.write(&project, ask_write(chat, &pending, now)), pending);
                 }
@@ -1485,6 +1509,22 @@ fn answers(shell: &mut Shell) {
     }
     // The writes of every project's conversation.
     let take = |chat: &mut Chat| {
+        // A refused write of the chips removed is kept again with the next question.
+        chat.chip_writes.retain(|rx| match rx.try_recv() {
+            Ok(Ok(_)) => false,
+            Ok(Err(r)) => {
+                log::warn!("the chips removed from the conversation were not kept: {}", refusal_text(&r));
+                chat.save_error = Some(refusal_text(&r));
+                chat.chips_unsaved = true;
+                false
+            }
+            Err(TryRecvError::Empty) => true,
+            Err(TryRecvError::Disconnected) => {
+                chat.save_error = Some(refusal_text(&Refusal::Failed(tr("the project did not answer"))));
+                chat.chips_unsaved = true;
+                false
+            }
+        });
         chat.writes.retain(|rx| match rx.try_recv() {
             Ok(Ok(_)) => false,
             Ok(Err(r)) => {

@@ -8035,6 +8035,36 @@ fn putting_a_removed_chip_back_is_kept_with_the_conversation() {
     }
 }
 
+/// A chip removal the project refused is not lost (AR-227): the chip stays removed, the panel says
+/// the conversation could not be saved, and the next question keeps the whole set first, so the
+/// latest set is the one stored. In both appearances.
+#[test]
+fn a_refused_chip_removal_is_kept_again_with_the_next_question() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        *rig.store.refuse.lock().unwrap() = Some("the disk is full".into());
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        h.run();
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.chip.diagram.remove"), "{theme:?}: still removed here");
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert!(rig.store.kept(first).unwrap().row.removed.is_empty(), "{theme:?}: not kept yet");
+        // The project takes writes again: the next question keeps the removal before it goes.
+        *rig.store.refuse.lock().unwrap() = None;
+        ask_in_chat(&mut h, "And Payment?");
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "ask"], "{theme:?}: {log:?}");
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Diagram]), "{theme:?}");
+        let sent = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(sent.starts_with("And Payment?") && !sent.contains("open diagram"), "{theme:?}: {sent}");
+    }
+}
+
 /// The Chat panel's history of page 07 (B7): five conversations kept, the first open, the history
 /// shown; their ids in the list's order.
 fn chat_history(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig, Vec<archforge_mof::Uuid>) {
