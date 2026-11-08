@@ -264,7 +264,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                     (tr("The model changed after the request was copied; copy it again so the agent reads this revision."), p.amber)
                 } else if g.copied.is_some() {
                     (tr("Copied. Paste the request to your agent; it reads the model through MCP."), p.text_secondary)
-                } else if shell.control.is_some() {
+                } else if shell.own_agent_access {
                     (tr("Agent access is on: a connected agent reads this context through MCP. Nothing is generated here."), p.text_secondary)
                 } else {
                     (tr("Agent access is off: start Archforge with --control <port> so an agent can read this context."), p.text_secondary)

@@ -9350,6 +9350,66 @@ fn generate_scrolls_its_body_in_a_short_window_and_keeps_its_footer_clear() {
     assert_eq!(rect_of(&h, "generate.close").top() - 20.0, foot, "the footer stays put");
 }
 
+/// Chat's workspace with a schema selected and File ▸ Generate… open for it, and the queue of
+/// control requests attached as the app attaches it on every start. The sender keeps the queue open.
+fn generate_with_the_queue(
+    theme: ThemeKind,
+) -> (Harness<'static, Shell>, std::sync::Arc<crate::ai_agents::fake::Fake>, std::sync::mpsc::Sender<crate::control::ControlRequest>) {
+    let (mut h, f) = chat_workspace(theme);
+    {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap().value["id"].as_str().unwrap().to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
+    }
+    let (queue, requests) = std::sync::mpsc::channel();
+    h.state_mut().attach_control(requests);
+    h.state_mut().open_generate();
+    h.run();
+    (h, f, queue)
+}
+
+/// AR-244: the queue is attached on every start, so it must not read as the person's agent access.
+#[test]
+fn generate_says_agent_access_is_off_with_the_queue_attached_and_no_control_port() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f, _queue) = generate_with_the_queue(theme);
+        assert!(h.state().control.is_some(), "{theme:?}: the queue is attached");
+        assert!(painted_has(&h, "Agent access is off: start Archforge with --control <port>"), "{theme:?}: {:?}", painted(&h));
+        assert!(!painted_has(&h, "Agent access is on"), "{theme:?}: {:?}", painted(&h));
+        // Chat's access is its own: a conversation holding it leaves the message alone.
+        assert!(f.access(true), "{theme:?}");
+        h.run();
+        assert!(h.state().chats.holds_access(), "{theme:?}");
+        assert!(painted_has(&h, "Agent access is off: start Archforge with --control <port>"), "{theme:?}: {:?}", painted(&h));
+        assert!(!painted_has(&h, "Agent access is on"), "{theme:?}: {:?}", painted(&h));
+    }
+}
+
+/// AR-244: only the person's own access says on, whether or not the queue or Chat's access is there.
+#[test]
+fn generate_says_agent_access_is_on_when_the_person_turned_it_on_for_this_start() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, f, _queue) = generate_with_the_queue(theme);
+        h.state_mut().set_own_agent_access(true);
+        h.run();
+        assert!(painted_has(&h, "Agent access is on: a connected agent reads this context through MCP."), "{theme:?}: {:?}", painted(&h));
+        assert!(!painted_has(&h, "Agent access is off"), "{theme:?}: {:?}", painted(&h));
+        // A conversation holding Chat's access and giving it back changes nothing.
+        assert!(f.access(true), "{theme:?}");
+        h.run();
+        assert!(painted_has(&h, "Agent access is on: a connected agent"), "{theme:?}: {:?}", painted(&h));
+        assert!(f.access(false), "{theme:?}");
+        h.run();
+        assert!(!h.state().chats.holds_access(), "{theme:?}");
+        assert!(painted_has(&h, "Agent access is on: a connected agent"), "{theme:?}: {:?}", painted(&h));
+        // The flag alone decides: with no queue at all it still says on.
+        h.state_mut().control = None;
+        h.run();
+        assert!(painted_has(&h, "Agent access is on: a connected agent"), "{theme:?}: {:?}", painted(&h));
+        assert!(!painted_has(&h, "Agent access is off"), "{theme:?}: {:?}", painted(&h));
+    }
+}
+
 #[test]
 fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can_copy() {
     let (mut h, _customer, _diagram) = diagram_harness();
@@ -9381,7 +9441,7 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
     assert!(texts.iter().any(|t| t == "Schema · Shop"), "{texts:?}");
     assert!(texts.iter().any(|t| t == "DDL conventions · on this element · MySQL"), "{texts:?}");
     assert!(texts.iter().any(|t| t == "DDL conventions · from the project · overridden"), "{texts:?}");
-    assert!(texts.iter().any(|t| t.starts_with("Agent access is off")), "no control channel in the harness: {texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Agent access is off")), "the harness did not turn agent access on: {texts:?}");
     // The request names the resources to read and the revision it is of.
     let revision = h.state().session.as_ref().unwrap().revision();
     let request = texts.iter().find(|t| t.starts_with("Generate SQL DDL (MySQL)")).expect("the request").clone();

@@ -213,6 +213,7 @@ fn run() -> i32 {
                 if let Some(rx) = requests.borrow_mut().take() {
                     shell.attach_control(rx);
                 }
+                shell.set_own_agent_access(server.borrow().is_some());
                 window.attach(cc.egui_ctx.clone());
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell, &cc.egui_ctx);

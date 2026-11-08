@@ -446,6 +446,9 @@ pub struct Shell {
     quit_requested: bool,
     /// The control channel's requests, from every opening of agent access.
     pub(crate) control: Option<std::sync::mpsc::Receiver<control::ControlRequest>>,
+    /// Whether the person turned agent access on for this start. The queue above says nothing about
+    /// it: the app attaches that on every start, for Chat's access too.
+    pub(crate) own_agent_access: bool,
 }
 
 impl Shell {
@@ -501,6 +504,7 @@ impl Shell {
             problems: Default::default(),
             quit_requested: false,
             control: None,
+            own_agent_access: false,
         }
     }
 
@@ -1315,6 +1319,13 @@ impl Shell {
     /// allows.
     pub fn attach_control(&mut self, requests: std::sync::mpsc::Receiver<control::ControlRequest>) {
         self.control = Some(requests);
+    }
+
+    /// Tells the shell whether the person turned agent access on for this start (its port is
+    /// listening), which File ▸ Generate… reports. Attaching the queue or a Chat conversation
+    /// holding access doesn't change this.
+    pub fn set_own_agent_access(&mut self, on: bool) {
+        self.own_agent_access = on;
     }
 
     /// Asks the window to quit through the normal close path at the next frame.
