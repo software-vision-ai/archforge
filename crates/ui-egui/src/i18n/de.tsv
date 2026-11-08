@@ -427,6 +427,9 @@ str		This description holds one of your saved API keys, so nothing was saved.	Di
 str		This description could not be checked against your saved API keys, so nothing was saved.	Diese Beschreibung konnte nicht mit Ihren gespeicherten API-Schlüsseln abgeglichen werden; daher wurde nichts gespeichert.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	Das Projekt wurde nach Ihrer Prüfung geändert; daher wurde nichts gespeichert. Prüfen Sie die Änderungen und speichern Sie erneut.
 str		The opening stopped without an answer	Das Öffnen endete ohne Antwort
+str		Chat did not finish in time, so nothing was changed.	Chat wurde nicht rechtzeitig fertig, daher wurde nichts geändert.
+str		The reading stopped without an answer, so nothing was changed.	Das Lesen endete ohne Antwort, daher wurde nichts geändert.
+str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge konnte nicht feststellen, ob die letzte Änderung abgeschlossen wurde. Es wurde nichts weiter geschrieben. Schließen Sie das Projekt und öffnen Sie es erneut.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Das angezeigte Projekt hat sich geändert, nachdem diese Anfrage gesendet wurde, daher wurde sie nicht ausgeführt. Prüfen Sie, was jetzt angezeigt wird, und senden Sie sie erneut.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Das Projekt wird angehalten, während es ersetzt wird, daher wurde diese Anfrage nicht ausgeführt. Versuchen Sie es erneut, wenn das abgeschlossen ist.
 str		Close a project to open another	Schließen Sie ein Projekt, um ein weiteres zu öffnen

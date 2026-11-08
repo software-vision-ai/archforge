@@ -47,6 +47,7 @@ pub mod panels;
 pub mod problems;
 mod project_search;
 pub mod relation;
+pub mod replace;
 pub mod settings;
 mod settings_agents;
 pub mod skill_tab;
@@ -481,6 +482,8 @@ pub struct Shell {
     /// why not), whichever project they saved.
     save_ticket: u64,
     saves: std::collections::VecDeque<(u64, SaveState)>,
+    /// The replacement of the session under way, if any.
+    replacing: Option<replace::Replacing>,
     /// The hold under way, and what waits for it to end.
     holding: hold::Holding,
     /// An opening the host works on.
@@ -562,6 +565,7 @@ impl Shell {
             saving: None,
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
+            replacing: None,
             holding: hold::Holding::default(),
             opening: None,
             dolt_check: None,
@@ -1593,6 +1597,7 @@ impl Shell {
             self.start_quit(ctx);
         }
         self.continue_quit(ctx);
+        self.drive_replacement();
         self.run_after_hold(ctx);
     }
 
