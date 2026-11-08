@@ -584,9 +584,12 @@ pub fn refusal_text(r: &Refusal) -> String {
 // Asking.
 
 /// Sends the composer's text: a new turn, or the failed turn run again when its question went back
-/// to the composer. Refused while a turn runs, for an empty or too long question, or without a
-/// project.
+/// to the composer. Refused while a turn runs, while the project is held, for an empty or too long
+/// question, or without a project.
 pub fn send(shell: &mut Shell) {
+    if shell.is_held() {
+        return;
+    }
     let text = shell.chat_panel.draft.trim().to_string();
     let Some(busy) = shell.chat_panel.chat.as_ref().map(Chat::busy) else { return };
     if busy || text.is_empty() {
@@ -817,8 +820,14 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
 
 /// Gives the agent `text`: its program starts first when it does not run, and the text waits
 /// while it ends to start again. A start refused ends the turn failed; refused as the
-/// conversation's folder is being removed, its card says so.
+/// conversation's folder is being removed, its card says so. While the project is held the turn
+/// ends stopped and nothing reaches the program.
 fn deliver(shell: &mut Shell, text: String) {
+    // What holds the project may replace the session: a question answered now starts no turn.
+    if shell.is_held() {
+        end_here(shell, TurnState::Stopped);
+        return;
+    }
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
     match chat.session {
         Session::Ending => {
@@ -1647,13 +1656,21 @@ pub fn undo_turn(shell: &mut Shell, turn: Uuid) {
 /// Whether the panel waits for the project, a write of the chips removed included: the window looks
 /// again soon while it does, so a refusal is said without other input.
 pub(crate) fn waiting(shell: &Shell) -> bool {
-    let stopping = |c: &Chat| c.turns.last().is_some_and(|t| t.stopping);
-    let busy = |p: &Panel| {
-        p.chat.as_ref().is_some_and(|c| c.step.busy() || !c.writes.is_empty() || !c.chip_writes.is_empty() || stopping(c))
-            || p.listing.is_some()
-            || p.loading.is_some()
-    };
     busy(&shell.chat_panel) || shell.tabs.iter().any(|t| t.parked.as_ref().is_some_and(|p| busy(&p.chat_panel)))
+}
+
+/// Whether `p` waits for its project or for a turn to stop.
+fn busy(p: &Panel) -> bool {
+    let stopping = |c: &Chat| c.turns.last().is_some_and(|t| t.stopping);
+    p.chat.as_ref().is_some_and(|c| c.step.busy() || !c.writes.is_empty() || !c.chip_writes.is_empty() || stopping(c))
+        || p.listing.is_some()
+        || p.loading.is_some()
+}
+
+/// Whether Chat has nothing on its way for the project shown: no turn still stopping, and no
+/// question, write, deletion or restoration still to be answered.
+pub(crate) fn settled(shell: &Shell) -> bool {
+    !busy(&shell.chat_panel) && !shell.project.as_ref().is_some_and(|p| crate::chat_delete::under_way(shell, &p.path))
 }
 
 // Project tabs.

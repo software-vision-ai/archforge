@@ -7685,6 +7685,105 @@ fn chat_calls(rig: &crate::chat_fixture::Rig) -> (usize, usize, usize, usize) {
     (c.start.load(Relaxed), c.send.load(Relaxed), c.stop.load(Relaxed), c.end.load(Relaxed))
 }
 
+/// Chat settles for a hold: the turn is stopped once, and it is settled only when its end is written.
+#[test]
+fn chat_settles_once_the_turn_has_ended_and_its_end_is_written() {
+    use crate::hold::ChatSettling::{Settled, Waiting};
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    ask_in_chat(&mut h, "A long question");
+    let key = crate::chat_fixture::key(h.state());
+    let id = h.state().chat_panel.chat.as_ref().unwrap().id;
+    h.state_mut().begin_hold().unwrap();
+    assert_eq!((h.state_mut().settle_chat(), h.state_mut().settle_chat()), (Waiting, Waiting));
+    assert_eq!(chat_calls(&rig).2, 1, "the turn was stopped once");
+    h.state_mut().chat_panel.menu = true;
+    assert_eq!(h.state_mut().settle_chat(), Waiting);
+    assert!(h.state().chat_panel.menu, "only the first look leaves the conversation");
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert!(rig.agents.emit(&key, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Stopped)));
+    h.run_steps(3);
+    assert_eq!(h.state_mut().settle_chat(), Waiting, "its end has not been written");
+    rig.store.release();
+    h.run_steps(3);
+    assert_eq!(h.state_mut().settle_chat(), Settled);
+    assert_eq!(rig.store.kept(id).unwrap().turns[0].outcome, crate::chat_store::Outcome::Stopped);
+}
+
+/// Past the limit the operation is refused and the hold ends as failed, so a close that waited asks.
+#[test]
+fn chat_that_does_not_settle_in_time_ends_the_hold_as_failed() {
+    use crate::hold::{
+        CHAT_SETTLE_LIMIT,
+        ChatSettling::{Refused, Waiting},
+    };
+    use std::sync::atomic::Ordering;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    assert_eq!(h.state_mut().settle_chat(), Refused, "there is no hold");
+    rig.store.hold.store(true, Ordering::SeqCst);
+    ask_in_chat(&mut h, "A question its project never answers");
+    h.state_mut().begin_hold().unwrap();
+    h.state_mut().close_tab(0);
+    assert_eq!(h.state_mut().settle_chat(), Waiting);
+    rig.now.fetch_add(CHAT_SETTLE_LIMIT - 1, Ordering::Relaxed);
+    assert_eq!(h.state_mut().settle_chat(), Waiting, "within the limit");
+    rig.now.fetch_add(1, Ordering::Relaxed);
+    assert_eq!(h.state_mut().settle_chat(), Refused);
+    assert!(!h.state().is_held());
+    h.run_steps(3);
+    assert!(h.state().ask.is_some(), "the close that waited asks again");
+}
+
+/// A question answered while held starts no turn, and the composer takes no new one until the end.
+#[test]
+fn while_held_a_question_starts_no_turn_and_the_composer_refuses() {
+    use crate::chat_panel::TurnState;
+    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
+    rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+    ask_in_chat(&mut h, "Asked before the hold");
+    let (started, sent) = (chat_calls(&rig).0, chat_calls(&rig).1);
+    h.state_mut().begin_hold().unwrap();
+    rig.store.release();
+    h.run_steps(4);
+    assert_eq!((chat_calls(&rig).0, chat_calls(&rig).1), (started, sent), "the question reached no program");
+    assert_eq!(h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap().state, TurnState::Stopped);
+    let writes = rig.store.log.lock().unwrap().len();
+    h.state_mut().chat_panel.draft = "Asked during the hold".into();
+    crate::chat_panel::send(h.state_mut());
+    h.run_steps(3);
+    assert_eq!(rig.store.log.lock().unwrap().len(), writes, "the composer took nothing");
+    assert_eq!(h.state().chat_panel.draft, "Asked during the hold", "and the text stays");
+    h.state_mut().end_hold();
+    crate::chat_panel::send(h.state_mut());
+    h.run_steps(4);
+    assert!(rig.store.log.lock().unwrap().len() > writes, "after the hold it goes");
+    assert_eq!(chat_calls(&rig).1, sent + 1);
+}
+
+/// A deletion on its way keeps Chat from settling; one in another project does not.
+#[test]
+fn a_deletion_on_its_way_is_waited_for_only_in_its_own_project() {
+    use crate::hold::ChatSettling::{Settled, Waiting};
+    let start_deleting = || {
+        let (mut h, rig, chats) = chat_history(ThemeKind::Light);
+        rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+        crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+        crate::chat_delete::confirm(h.state_mut());
+        h.run_steps(3);
+        (h, rig)
+    };
+    let (mut h, rig) = start_deleting();
+    h.state_mut().begin_hold().unwrap();
+    assert_eq!(h.state_mut().settle_chat(), Waiting);
+    rig.store.release();
+    h.run_steps(3);
+    assert_eq!(h.state_mut().settle_chat(), Settled);
+    let (mut h, _rig) = start_deleting();
+    h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+    h.run_steps(4);
+    h.state_mut().begin_hold().unwrap();
+    assert_eq!(h.state_mut().settle_chat(), Settled, "the other project's deletion is not this one's");
+}
+
 /// A turn's end failed with `kind`.
 fn failed_turn(kind: crate::chat::FailureKind) -> crate::chat::ChatEvent {
     crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Failed(crate::chat::ChatFailure { kind, detail: "x".into(), reset: None }))

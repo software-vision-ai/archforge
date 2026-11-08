@@ -7,7 +7,19 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 
 use crate::close_ask::Ask;
-use crate::{Opened, Shell};
+use crate::{Opened, Shell, chat_panel};
+
+/// The most seconds Chat may take to settle for a hold, past a turn's own grace to stop.
+pub const CHAT_SETTLE_LIMIT: u64 = 30;
+
+/// How far Chat has settled for the hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatSettling {
+    Waiting,
+    Settled,
+    /// There is no hold, or the time limit passed and the hold ended as failed: the operation stops.
+    Refused,
+}
 
 /// Why a hold did not start.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +36,8 @@ pub enum HoldRefused {
 struct Hold {
     was_read_only: bool,
     handed_over: bool,
+    /// When Chat began to settle for this hold, by the panel's clock.
+    chat_since: Option<u64>,
 }
 
 /// An action that waits for the hold to end.
@@ -76,8 +90,31 @@ impl Shell {
         let session = self.session.as_mut().ok_or(HoldRefused::NoProject)?;
         let was_read_only = session.read_only();
         session.set_read_only(true).map_err(|_| HoldRefused::Gesture)?;
-        self.holding.hold = Some(Hold { was_read_only, handed_over: false });
+        self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None });
         Ok(())
+    }
+
+    /// One look at Chat for the hold, once per frame until it answers: the first ends the turn
+    /// running, as leaving the tab does. Settled once the turn's end is written and the held
+    /// project's questions, writes, deletions and restorations have been answered. Past
+    /// [`CHAT_SETTLE_LIMIT`] the hold ends as failed.
+    pub fn settle_chat(&mut self) -> ChatSettling {
+        let now = chat_panel::clock(self).now;
+        let Some(hold) = self.holding.hold.as_mut() else { return ChatSettling::Refused };
+        let first = hold.chat_since.is_none();
+        let since = *hold.chat_since.get_or_insert(now);
+        if first {
+            chat_panel::leaving(self);
+        }
+        if chat_panel::settled(self) {
+            return ChatSettling::Settled;
+        }
+        if now.saturating_sub(since) < CHAT_SETTLE_LIMIT {
+            return ChatSettling::Waiting;
+        }
+        log::warn!("Chat did not settle within {CHAT_SETTLE_LIMIT} s; the operation is refused");
+        self.fail_hold();
+        ChatSettling::Refused
     }
 
     /// Hands the latest rows to the host and stops handing any over for the rest of the hold. False,
