@@ -1031,6 +1031,101 @@ fn damaged_conversations_are_refused_with_a_reason_and_never_block_the_model() {
     again.close().unwrap();
 }
 
+/// The chips removed of `chat` as its `chat` row holds them.
+fn chips_cell(p: &Project, chat: Uuid) -> Option<String> {
+    sql(p).exec_first("SELECT removed_chips FROM chat WHERE id = ?", (chat.0.to_vec(),)).unwrap().unwrap()
+}
+
+/// The chips a person removed from a conversation are kept (AR-227), the whole set each time, so a
+/// chip put back is kept too; they leave the last activity alone, wait for the next chat commit and
+/// come back after closing and with a deleted conversation brought back. Only chips are taken, and
+/// a damaged cell is refused with its reason.
+#[test]
+fn the_chips_removed_from_a_conversation_are_kept_and_a_chip_put_back_is_kept_too() {
+    use std::collections::BTreeSet;
+    let env = Env::new("chips");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let chat = one_turn(&p, 1, "Chat 1", 0);
+    assert!(p.load_chat(chat).unwrap().chat.removed_chips.is_empty(), "none removed at first");
+    let updated = p.load_chat(chat).unwrap().chat.updated_at;
+    // Removed: the diagram, then the project too.
+    p.set_removed_chips(chat, &BTreeSet::from([AnchorRole::Diagram])).unwrap();
+    assert_eq!(p.load_chat(chat).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Diagram]));
+    p.set_removed_chips(chat, &BTreeSet::from([AnchorRole::Diagram, AnchorRole::Project])).unwrap();
+    assert_eq!(chips_cell(&p, chat).as_deref(), Some("project,diagram"), "comma-separated, in order");
+    let listed = p.list_chats().unwrap();
+    let row = listed.iter().find(|l| l.id == chat).and_then(|l| l.entry.as_ref().ok()).unwrap();
+    assert_eq!(row.chat.removed_chips, BTreeSet::from([AnchorRole::Diagram, AnchorRole::Project]));
+    assert_eq!(row.chat.updated_at, updated, "no message was written: its last activity stays");
+    assert_eq!(uncommitted_chats(&p), ["chat"], "waits for the next chat commit");
+    // Put back: the project, then the diagram, so none is removed and the cell is empty again.
+    p.set_removed_chips(chat, &BTreeSet::from([AnchorRole::Diagram])).unwrap();
+    assert_eq!(p.load_chat(chat).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Diagram]));
+    p.set_removed_chips(chat, &BTreeSet::new()).unwrap();
+    assert_eq!(chips_cell(&p, chat), None);
+    assert!(p.load_chat(chat).unwrap().chat.removed_chips.is_empty());
+    // Only chips, and only a conversation the project holds.
+    assert!(matches!(p.set_removed_chips(chat, &BTreeSet::from([AnchorRole::Read])), Err(Error::ChatValue { why, .. }) if why.contains("read")));
+    assert!(matches!(p.set_removed_chips(id(99), &BTreeSet::from([AnchorRole::Project])), Err(Error::ChatMissing { .. })));
+    // Kept through closing.
+    p.set_removed_chips(chat, &BTreeSet::from([AnchorRole::Selection])).unwrap();
+    assert!(p.commit_chats().unwrap());
+    let path = p.path().to_path_buf();
+    p.close().unwrap();
+    let p = env.open(&path, &schema);
+    assert_eq!(p.load_chat(chat).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Selection]));
+    // Deleted and brought back with Undo: its chips removed come back with it.
+    let deleted = p.delete_chat(chat).unwrap();
+    p.restore_chat(chat, &deleted.before).unwrap();
+    assert_eq!(p.load_chat(chat).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Selection]));
+    // A damaged cell makes the conversation unreadable, naming what is wrong.
+    for (cell, says) in [("gemini", "project, diagram, selection, read, target"), ("diagram,read", "not a chip"), ("diagram,diagram", "twice")] {
+        sql(&p).exec_drop("UPDATE chat SET removed_chips = ? WHERE id = ?", (cell, chat.0.to_vec())).unwrap();
+        assert!(matches!(p.load_chat(chat), Err(Error::ChatUnreadable { ref why, .. }) if why.contains(says)), "{cell}: {:?}", p.load_chat(chat));
+    }
+    sql(&p).exec_drop("UPDATE chat SET removed_chips = '' WHERE id = ?", (chat.0.to_vec(),)).unwrap();
+    assert!(p.load_chat(chat).unwrap().chat.removed_chips.is_empty(), "an empty cell is none removed");
+    p.close().unwrap();
+}
+
+/// A `chat` table written before the chips column (chat shape 1 as it first was) still reads: its
+/// rows have no chip removed. The first write of chips adds the column at its end, in the next chat
+/// commit, and a conversation deleted before that comes back with none removed.
+#[test]
+fn an_older_chat_row_without_the_chips_column_reads_as_none_removed() {
+    use std::collections::BTreeSet;
+    let env = Env::new("chips-older");
+    let schema = schema();
+    let p = env.create("Commerce platform", &schema);
+    let older = one_turn(&p, 1, "Chat 1", 0);
+    let gone = one_turn(&p, 10, "Chat 2", 1);
+    sql(&p).query_drop("ALTER TABLE chat DROP COLUMN removed_chips").unwrap();
+    assert!(p.commit_chats().unwrap(), "committed as an older project holds it");
+    // Read: listed and loaded, none removed; opening it again changes nothing.
+    let listed = p.list_chats().unwrap();
+    assert!(listed.iter().all(|l| l.entry.as_ref().is_ok_and(|s| s.chat.removed_chips.is_empty())), "{listed:?}");
+    assert!(p.load_chat(older).unwrap().chat.removed_chips.is_empty());
+    p.open_chats(&at(2)).unwrap();
+    assert!(uncommitted_chats(&p).is_empty(), "reading adds no column");
+    let deleted = p.delete_chat(gone).unwrap();
+    // Written: the column comes at the end of the table, the rows it held with none removed.
+    p.set_removed_chips(older, &BTreeSet::from([AnchorRole::Diagram])).unwrap();
+    let last: String = sql(&p)
+        .query_first("SELECT column_name FROM information_schema.columns WHERE table_schema = 'project' AND table_name = 'chat' ORDER BY ordinal_position DESC LIMIT 1")
+        .unwrap()
+        .unwrap();
+    assert_eq!(last, "removed_chips");
+    assert_eq!(p.load_chat(older).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Diagram]));
+    assert_eq!(uncommitted_chats(&p), ["chat"]);
+    assert!(p.commit_chats().unwrap());
+    // Brought back from the commit before its deletion, which lacks the column: none removed.
+    assert_eq!(p.restore_chat(gone, &deleted.before).unwrap(), "Chat 2");
+    assert!(p.load_chat(gone).unwrap().chat.removed_chips.is_empty());
+    assert_eq!(p.load_chat(older).unwrap().chat.removed_chips, BTreeSet::from([AnchorRole::Diagram]));
+    p.close().unwrap();
+}
+
 #[test]
 fn a_model_table_may_not_take_a_conversations_name() {
     let universe = archforge_notations::store(ids(0)).unwrap().universe().clone();
