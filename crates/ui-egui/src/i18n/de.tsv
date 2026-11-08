@@ -1382,7 +1382,10 @@ str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt 
 # Ungesicherte Änderungen beim Schließen
 str		Close and lose changes	Schließen und Änderungen verwerfen
 str		Close without writing	Ohne Schreiben schließen
+str		Close {name}?	{name} schließen?
 str		Close {name} without writing?	{name} ohne Schreiben schließen?
+str		Quit Archforge?	Archforge beenden?
+str		The last change to {name} did not finish. Check it before you go on.	Die letzte Änderung an {name} wurde nicht abgeschlossen. Prüfen Sie sie, bevor Sie fortfahren.
 str		Don't save	Nicht sichern
 str		If you don't save, the changes since the last save are lost.	Wenn Sie nicht sichern, gehen die Änderungen seit dem letzten Sichern verloren.
 str		It stays open until its changes are written, or you close it without them.	Es bleibt geöffnet, bis seine Änderungen geschrieben sind oder Sie es ohne sie schließen.

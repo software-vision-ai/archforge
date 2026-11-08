@@ -481,7 +481,7 @@ pub struct Shell {
     /// why not), whichever project they saved.
     save_ticket: u64,
     saves: std::collections::VecDeque<(u64, SaveState)>,
-    /// The hold under way.
+    /// The hold under way, and what waits for it to end.
     holding: hold::Holding,
     /// An opening the host works on.
     opening: Option<std::sync::mpsc::Receiver<Result<Opened, CreateError>>>,
@@ -588,6 +588,10 @@ impl Shell {
     /// Opens a project in a new tab and shows it: the workspace replaces Home at the next frame. A
     /// project already open in a tab is shown in it instead.
     pub fn open_project(&mut self, opened: Opened) {
+        if self.is_held() {
+            self.remember(hold::Waiting::Opened(Box::new(opened)));
+            return;
+        }
         self.open_error = None;
         // A project made or opened is kept in Dolt: Home no longer asks to install it.
         self.dolt_missing = None;
@@ -607,12 +611,18 @@ impl Shell {
 
     /// Shows Home; the open projects stay open in their tabs.
     pub fn go_home(&mut self) {
+        if self.remember(hold::Waiting::Home) {
+            return;
+        }
         self.park();
     }
 
     /// Shows the project of tab `i`, parking the one shown.
     pub fn activate(&mut self, i: usize) {
         if self.active == Some(i) || i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        if self.remember(hold::Waiting::Show(self.tabs[i].path.clone())) {
             return;
         }
         self.park();
@@ -641,6 +651,9 @@ impl Shell {
     /// description being typed is written first; one refused counts as unsaved.
     pub fn close_tab(&mut self, i: usize) {
         if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        if self.remember(hold::Waiting::Close(self.tabs[i].path.clone())) {
             return;
         }
         if self.active == Some(i) {
@@ -679,6 +692,9 @@ impl Shell {
         if i >= self.tabs.len() {
             return;
         }
+        if self.remember(hold::Waiting::SaveAndClose(self.tabs[i].path.clone())) {
+            return;
+        }
         if self.active != Some(i) {
             self.activate(i);
         }
@@ -707,6 +723,9 @@ impl Shell {
         if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
             return;
         }
+        if self.remember(hold::Waiting::Discard(self.tabs[i].path.clone(), reset)) {
+            return;
+        }
         self.tabs[i].close_error = None;
         self.end_chats(i);
         let path = &self.tabs[i].path;
@@ -729,6 +748,9 @@ impl Shell {
     /// Quitting: asks about each project with unsaved changes in turn, then lets the window close.
     /// The description being typed is written first; one refused counts as unsaved.
     fn start_quit(&mut self, ctx: &egui::Context) {
+        if self.remember(hold::Waiting::Quit) {
+            return;
+        }
         if self.active.is_some() {
             panels::commit_description(self);
         }
@@ -744,7 +766,7 @@ impl Shell {
     /// The next step of quitting, once the last question is answered and its closing or save is
     /// done: the next project to ask about, or the window closing.
     fn continue_quit(&mut self, ctx: &egui::Context) {
-        if self.ask.is_some() || !self.close_after_save.is_empty() || self.tabs.iter().any(|t| t.closing.is_some()) {
+        if self.is_held() || self.ask.is_some() || !self.close_after_save.is_empty() || self.tabs.iter().any(|t| t.closing.is_some()) {
             return;
         }
         let Some(mut queue) = self.quitting.take() else { return };
@@ -785,6 +807,9 @@ impl Shell {
     /// it closes.
     fn close_tab_now(&mut self, i: usize) {
         if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+            return;
+        }
+        if self.remember(hold::Waiting::Close(self.tabs[i].path.clone())) {
             return;
         }
         self.tabs[i].close_error = None;
@@ -1227,6 +1252,9 @@ impl Shell {
     /// Opens the project at `path` (from the picker or Home's recent list): a project open in a
     /// tab shows there without asking the host; another opens in a tab of its own while one is free.
     pub fn open_path(&mut self, path: &std::path::Path) {
+        if self.remember(hold::Waiting::Open(path.to_path_buf())) {
+            return;
+        }
         if let Some(i) = self.tabs.iter().position(|t| t.path == path) {
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
             let name = self.tabs[i].name.clone();
@@ -1283,7 +1311,10 @@ impl Shell {
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => self.dolt_check = None,
             }
         }
-        if let Some(rx) = &self.opening {
+        // An answer waits in its channel for the hold to end.
+        if !self.is_held()
+            && let Some(rx) = &self.opening
+        {
             match rx.try_recv() {
                 Ok(Ok(opened)) => {
                     self.opening = None;
@@ -1495,6 +1526,7 @@ impl Shell {
             || self.saving.is_some()
             || writing
             || closing
+            || self.holding.pending()
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
@@ -1542,6 +1574,7 @@ impl Shell {
             self.start_quit(ctx);
         }
         self.continue_quit(ctx);
+        self.run_after_hold(ctx);
     }
 
     /// The window title: the open project's name and the application's, or the application's alone.

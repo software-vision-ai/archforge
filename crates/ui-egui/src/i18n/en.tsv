@@ -1381,7 +1381,10 @@ str		{name} removed; what it held moved to {parent}	{name} removed; what it held
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes
 str		Close without writing	Close without writing
+str		Close {name}?	Close {name}?
 str		Close {name} without writing?	Close {name} without writing?
+str		Quit Archforge?	Quit Archforge?
+str		The last change to {name} did not finish. Check it before you go on.	The last change to {name} did not finish. Check it before you go on.
 str		Don't save	Don't save
 str		If you don't save, the changes since the last save are lost.	If you don't save, the changes since the last save are lost.
 str		It stays open until its changes are written, or you close it without them.	It stays open until its changes are written, or you close it without them.

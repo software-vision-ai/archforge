@@ -1382,7 +1382,10 @@ str		{name} removed; what it held moved to {parent}	{name} removido; o conteúdo
 # Alterações por guardar ao fechar
 str		Close and lose changes	Fechar e perder as alterações
 str		Close without writing	Fechar sem escrever
+str		Close {name}?	Fechar {name}?
 str		Close {name} without writing?	Fechar {name} sem escrever?
+str		Quit Archforge?	Sair do Archforge?
+str		The last change to {name} did not finish. Check it before you go on.	A última alteração a {name} não terminou. Verifique-a antes de continuar.
 str		Don't save	Não guardar
 str		If you don't save, the changes since the last save are lost.	Se não guardar, as alterações desde a última gravação perdem-se.
 str		It stays open until its changes are written, or you close it without them.	Fica aberto até as alterações serem escritas ou até o fechar sem elas.
