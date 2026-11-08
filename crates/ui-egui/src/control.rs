@@ -23,12 +23,17 @@
 //! `engine.batch` read only when every command they run is a query by the engine's own test
 //! (neither journaled nor undoable, run by its own handler). Everything else (a change, undo, redo,
 //! save) is refused, so the read-only promise holds at the channel whatever the bridge does.
+//!
+//! A request can wait its turn after it is accepted, so it carries the window's session generation
+//! from that moment: one from an earlier generation is refused and cannot land on a session it was
+//! not sent to. While the project is held still, a request that may change anything is refused.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 
+use crate::i18n::tr;
 use crate::{SaveState, Shell};
 
 /// One request from the control channel, where its answer goes, and whether it may still run: the
@@ -51,7 +56,13 @@ pub struct ControlRequest {
     /// The liveness of that token: false once it is revoked or its server closed, and a request
     /// whose token is no longer live is refused with [`REVOKED`], never run.
     pub live: Arc<AtomicBool>,
+    /// The window's session generation when the channel accepted the request.
+    pub generation: u64,
 }
+
+/// The window's session generation, moved whenever another session takes the place of the one
+/// shown and read by the channel as it accepts each request.
+pub type SessionGeneration = Arc<AtomicU64>;
 
 /// The answer to a request whose token was revoked before the window took it: the control
 /// channel's own words.
@@ -166,10 +177,20 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
     if !req.live.load(Ordering::SeqCst) {
         return Err(REVOKED.to_string());
     }
+    if req.generation != shell.session_generation() {
+        return Err(tr("The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again."));
+    }
     // A Chat conversation's request runs only while its turn runs in the project shown, and makes
     // the turn's tool rows from what it is answered.
     crate::chat_panel::gate(shell, req.origin.as_deref(), req.conversation.as_deref(), &req.method, &req.params)?;
     let before = crate::chat_panel::before(shell, &req.method, &req.params, req.origin.as_deref());
+    if shell.is_held() && !only_reads(shell, &req.method, &req.params)? {
+        let refused = Err(tr("The project is held still while it is being replaced, so this request was not run. Try again when that has finished."));
+        if let Some(b) = before {
+            crate::chat_panel::after(shell, &req.method, b, &refused, true);
+        }
+        return refused;
+    }
     if req.read_only && !only_reads(shell, &req.method, &req.params)? {
         let what = match req.params.get("command").and_then(Value::as_str) {
             Some(id) if req.method == "engine.execute" => format!("the command {id:?} is not a query"),
@@ -463,6 +484,7 @@ mod tests {
             state: Arc::new(AtomicU8::new(TAKEN)),
             read_only,
             live: Arc::new(AtomicBool::new(live)),
+            generation: 0,
         }
     }
 
@@ -533,6 +555,56 @@ mod tests {
         let done = answer_request(&mut shell, &request("engine.execute", add, false, true)).unwrap();
         assert_eq!(done["origin"], "Chat 1");
         assert!(revision(&shell) > before);
+    }
+
+    /// While held, whatever may change anything is refused by the hold's own answer, whichever
+    /// token asks, and what only reads is answered; afterwards the same request runs.
+    #[test]
+    fn while_held_a_changing_request_is_refused_naming_the_hold_and_reads_are_answered() {
+        crate::i18n::set_language("en");
+        let mut shell = project();
+        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        answer_request(&mut shell, &request("engine.execute", add.clone(), false, true)).unwrap();
+        let before = shell.session.as_ref().unwrap().revision();
+        shell.begin_hold().unwrap();
+        for (method, params) in [
+            ("engine.execute", add.clone()),
+            ("engine.batch", json!({ "steps": [{ "command": "er.schema.add", "params": { "name": "x" } }] })),
+            ("engine.undo", json!({})),
+            ("engine.redo", json!({})),
+            ("app.save", json!({})),
+        ] {
+            let refused = answer_request(&mut shell, &request(method, params, false, true)).unwrap_err();
+            assert!(refused.contains("held still"), "{method}: {refused}");
+        }
+        assert_eq!(shell.session.as_ref().unwrap().revision(), before);
+        for (method, params) in [("document.inspect", json!({})), ("engine.execute", json!({ "command": "er.schema.list" }))] {
+            assert!(answer_request(&mut shell, &request(method, params, false, true)).is_ok(), "{method} reads");
+        }
+        shell.end_hold();
+        let other = json!({ "command": "er.schema.add", "params": { "name": "billing" } });
+        assert!(answer_request(&mut shell, &request("engine.execute", other, false, true)).is_ok(), "afterwards it runs");
+    }
+
+    /// A request accepted before the session was replaced is not run, even one that only reads;
+    /// one accepted after it is.
+    #[test]
+    fn a_request_from_an_earlier_session_is_refused_and_a_later_one_runs() {
+        crate::i18n::set_language("en");
+        let mut shell = project();
+        let add = json!({ "command": "er.schema.add", "params": { "name": "shop" } });
+        let earlier = request("engine.execute", add.clone(), false, true);
+        let reading = request("document.inspect", json!({}), false, true);
+        let before = shell.session.as_ref().unwrap().revision();
+        shell.session_replaced();
+        for req in [&earlier, &reading] {
+            let refused = answer_request(&mut shell, req).unwrap_err();
+            assert!(refused.contains("after this request was sent"), "{refused}");
+        }
+        assert_eq!(shell.session.as_ref().unwrap().revision(), before, "nothing ran");
+        let mut later = request("engine.execute", add, false, true);
+        later.generation = shell.session_generation();
+        assert!(answer_request(&mut shell, &later).is_ok());
     }
 
     #[test]

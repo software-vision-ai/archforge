@@ -741,6 +741,27 @@ fn the_window_gets_the_conversation_a_token_is_bound_to() {
     assert_eq!(call.join().unwrap(), Ok(json!(null)));
 }
 
+/// The generation a request carries is the window's when the channel accepted it, whatever the
+/// window does while the request waits.
+#[test]
+fn a_request_carries_the_generation_it_was_accepted_under() {
+    use std::sync::atomic::AtomicBool;
+    let (window, requests) = Window::new();
+    let generation = window.generation();
+    generation.store(7, Ordering::SeqCst);
+    let handler = super::access::handler(window);
+    let call = std::thread::spawn(move || {
+        let live = Arc::new(AtomicBool::new(true));
+        let role = archforge_control::Role::Full;
+        handler(archforge_control::Call { method: "document.inspect", params: json!({}), origin: None, conversation: None, role, live: &live })
+    });
+    let request = requests.recv_timeout(WAIT).unwrap();
+    generation.store(8, Ordering::SeqCst);
+    assert_eq!(request.generation, 7);
+    request.reply.send(Ok(json!(null))).unwrap();
+    assert_eq!(call.join().unwrap(), Ok(json!(null)));
+}
+
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
 /// "revoked", and never runs when the window comes to it: the token revoked by its conversation's
 /// end, or the whole opening closed by quitting.

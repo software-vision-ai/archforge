@@ -95,6 +95,7 @@ pub fn call(shell: &mut Shell, method: &str, params: serde_json::Value) -> Resul
     let conversation = shell.chat_panel.chat.as_ref().map(|c| c.key.clone());
     let read_only = shell.chat_panel.chat.as_ref().is_none_or(|c| !c.allow_changes);
     let (reply, _) = std::sync::mpsc::channel();
+    let generation = shell.session_generation();
     let req = crate::control::ControlRequest {
         method: method.to_string(),
         params,
@@ -104,6 +105,7 @@ pub fn call(shell: &mut Shell, method: &str, params: serde_json::Value) -> Resul
         state: Arc::new(std::sync::atomic::AtomicU8::new(0)),
         read_only,
         live: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        generation,
     };
     let answer = crate::control::answer_request(shell, &req);
     settle(shell);

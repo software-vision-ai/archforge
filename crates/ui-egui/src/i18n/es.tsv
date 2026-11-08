@@ -427,6 +427,8 @@ str		This description holds one of your saved API keys, so nothing was saved.	Es
 str		This description could not be checked against your saved API keys, so nothing was saved.	No se ha podido comprobar esta descripción con tus claves de API guardadas, así que no se ha guardado nada.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	El proyecto cambió después de que lo revisaras, así que no se ha guardado nada. Revisa los cambios y vuelve a guardar.
 str		The opening stopped without an answer	La apertura terminó sin respuesta
+str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	El proyecto mostrado cambió después de enviar esta solicitud, por lo que no se ejecutó. Revisa lo que se muestra ahora y vuelve a enviarla.
+str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	El proyecto está en espera mientras se reemplaza, por lo que esta solicitud no se ejecutó. Inténtalo de nuevo cuando termine.
 str		Close a project to open another	Cierra un proyecto para abrir otro
 str		The closing stopped without an answer	El cierre terminó sin respuesta
 str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}

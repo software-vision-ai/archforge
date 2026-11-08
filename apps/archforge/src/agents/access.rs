@@ -20,16 +20,17 @@ use std::time::{Duration, Instant};
 
 use archforge_control::{Bound, Call, Grant, Handler, ListenerWatch, Role, Server};
 use archforge_ui_egui::chat::{EventSink, HostEvent};
-use archforge_ui_egui::control::{ControlRequest, WAITING, abandon};
+use archforge_ui_egui::control::{ControlRequest, SessionGeneration, WAITING, abandon};
 
 /// How often a request waiting for the window looks whether its token is still live.
 const SLICE: Duration = Duration::from_millis(50);
 
-/// The window's side of the channel: the one queue every opening posts its requests to, and the
-/// window's context, once it exists, to wake it.
+/// The window's side of the channel: the one queue every opening posts its requests to, the
+/// window's session generation, and the window's context, once it exists, to wake it.
 #[derive(Clone)]
 pub struct Window {
     requests: Sender<ControlRequest>,
+    generation: SessionGeneration,
     context: Arc<Mutex<Option<egui::Context>>>,
 }
 
@@ -37,7 +38,12 @@ impl Window {
     /// A window side and the queue's receiving end, which the shell drains once per frame.
     pub fn new() -> (Window, Receiver<ControlRequest>) {
         let (requests, receiver) = std::sync::mpsc::channel();
-        (Window { requests, context: Arc::new(Mutex::new(None)) }, receiver)
+        (Window { requests, generation: SessionGeneration::default(), context: Arc::new(Mutex::new(None)) }, receiver)
+    }
+
+    /// The session generation, for the shell to move and the channel to read.
+    pub fn generation(&self) -> SessionGeneration {
+        self.generation.clone()
     }
 
     /// Gives the window's context, so a request wakes the window.
@@ -71,6 +77,8 @@ pub fn handler(window: Window) -> Handler {
             state: state.clone(),
             read_only: call.role == Role::ReadOnly,
             live: call.live.clone(),
+            // Taken here, as the channel accepts it: the window may come to it after a replacement.
+            generation: window.generation.load(Ordering::SeqCst),
         };
         window.requests.send(request).map_err(|_| "Archforge is closing".to_string())?;
         window.wake();

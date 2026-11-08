@@ -759,6 +759,30 @@ fn the_save_key_is_left_alone_and_saves_nothing_while_held() {
     assert_eq!(host.saves.lock().unwrap().len(), 1, "and saves");
 }
 
+/// Whatever puts another session in the place of the one shown moves the generation.
+#[test]
+fn the_session_generation_moves_with_every_session_shown() {
+    let (mut h, _) = saving_harness(Some(commerce()), None);
+    let moved = |h: &mut Harness<'static, Shell>, what: &str, last: &mut u64| {
+        h.run_steps(3);
+        let now = h.state().session_generation();
+        assert!(now > *last, "{what}: {now} after {last}");
+        *last = now;
+    };
+    let mut last = 0;
+    moved(&mut h, "the first project's model", &mut last);
+    h.state_mut().go_home();
+    moved(&mut h, "Home", &mut last);
+    h.state_mut().activate(0);
+    moved(&mut h, "its tab shown from Home", &mut last);
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    moved(&mut h, "another project", &mut last);
+    h.state_mut().activate(0);
+    moved(&mut h, "back to the first tab", &mut last);
+    h.run_steps(3);
+    assert_eq!(h.state().session_generation(), last, "frames alone do not move it");
+}
+
 /// Rows go over until the hand-over, which sends the latest, and none after it.
 #[test]
 fn a_hold_hands_the_latest_rows_over_once_and_then_stops_writing() {
@@ -9700,7 +9724,7 @@ fn generate_with_the_queue(
         s.execute("view.select", &serde_json::json!({ "ids": [schema] })).unwrap();
     }
     let (queue, requests) = std::sync::mpsc::channel();
-    h.state_mut().attach_control(requests);
+    h.state_mut().attach_control(requests, Default::default());
     h.state_mut().open_generate();
     h.run();
     (h, f, queue)
@@ -15188,6 +15212,7 @@ fn a_save_records_whether_the_person_or_an_agent_asked() {
                 state: Default::default(),
                 read_only: false,
                 live: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+                generation: h.state().session_generation(),
             };
             crate::control::answer_request(h.state_mut(), &request).unwrap();
             assert_eq!(saved(&mut h, &host), Agent(origin.map(str::to_string)));
