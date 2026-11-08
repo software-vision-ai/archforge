@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use mysql::prelude::Queryable;
 
-use crate::chat::is_chat_table;
+use crate::chat::{is_chat_table, is_commit};
 use crate::{AUTHOR, DATABASE, Error, Project};
 
 /// The most rows a table of the model may hold when read back: the store's own limit.
@@ -181,6 +181,35 @@ impl Project {
         Ok(c)
     }
 
+    /// A connection to the version `commit` through Dolt's revision database: it sees that commit
+    /// and nothing else, and the server itself refuses every write over it, so the working set
+    /// cannot be touched. The name goes into a `USE` only once it has the shape of a hash, and only
+    /// a commit on the project's own line of work is opened ([`Error::NotAVersion`] otherwise). A
+    /// commit never changes, so what is read over the connection is one consistent state however
+    /// many statements the reading takes and whatever is written meanwhile.
+    fn revision_connection(&self, commit: &str) -> Result<mysql::Conn, Error> {
+        let refused = || Error::NotAVersion { commit: commit.chars().take(40).collect() };
+        if !is_commit(commit) {
+            return Err(refused());
+        }
+        let mut c = self.model_connection()?;
+        // One of the line's own commits: the merge base of it and the head is itself. A hash Dolt
+        // does not know is the server's refusal; a connection lost here is not a wrong version.
+        let base: Option<mysql::Row> = match c.exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (commit,)) {
+            Ok(base) => base,
+            Err(mysql::Error::MySqlError(e)) => {
+                log::warn!("the commit {commit} of {} could not be looked up: {e}", self.path().display());
+                return Err(refused());
+            }
+            Err(e) => return Err(sql("cannot look up the version")(e)),
+        };
+        if base.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok).as_deref() != Some(commit) {
+            return Err(refused());
+        }
+        c.query_drop(format!("USE `{DATABASE}/{commit}`")).map_err(sql("cannot open the version"))?;
+        Ok(c)
+    }
+
     /// Records the model tables' fingerprint, bringing a project made by an earlier Archforge up to
     /// date; a project made for other tables is refused. The tables themselves are made as rows go
     /// there.
@@ -316,10 +345,25 @@ impl Project {
     /// than its type allows), and a table it lacks holds nothing; the rows are read one at a time
     /// within the budgets of rows per table and of cells and bytes for the whole model.
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
+        self.read_rows(&mut self.model_connection()?, schema)
+    }
+
+    /// The model's rows as the version `commit` holds them, read as [`Project::read_model`] reads
+    /// the working set, under the same budgets and from that commit's own table shapes. Nothing is
+    /// written and nothing moves: unsaved work, the head and the branch stay as they were. Refused
+    /// with [`Error::NotAVersion`] when `commit` is not a commit on the project's line of work, and
+    /// as [`Error::Damaged`] when that commit's tables are not exactly the generated shape or it
+    /// holds no list of the tables in use, which the commit that created the project does not.
+    pub fn read_model_at(&self, schema: &ModelSchema, commit: &str) -> Result<Rows, Error> {
+        self.read_rows(&mut self.revision_connection(commit)?, schema)
+    }
+
+    /// The model's rows as the database `c` is using holds them: the reading behind
+    /// [`Project::read_model`] and [`Project::read_model_at`].
+    fn read_rows(&self, c: &mut mysql::Conn, schema: &ModelSchema) -> Result<Rows, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
-        let mut c = self.model_connection()?;
-        let shapes = shapes(&mut c, schema).map_err(damaged)?;
-        for name in in_use(&mut c, &shapes).map_err(damaged)? {
+        let shapes = shapes(c, schema).map_err(damaged)?;
+        for name in in_use(c, &shapes).map_err(damaged)? {
             if !schema.is_model_table(&name) {
                 return Err(damaged(format!("the model uses the table {name:?}, which this Archforge does not know")));
             }
@@ -660,16 +704,14 @@ fn tables_held(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<Str
     tables_held_by(c, &|name| schema.knows(name))
 }
 
-/// [`tables_held`] for the tables `knows` names as Archforge's.
+/// [`tables_held`] for the tables `knows` names as Archforge's, in the database `c` is using: the
+/// project's working set, or the commit a revision connection shows.
 pub(crate) fn tables_held_by(c: &mut mysql::Conn, knows: &dyn Fn(&str) -> bool) -> Result<BTreeMap<String, bool>, String> {
     let names: Vec<mysql::Row> = c
-        .exec(
-            format!(
-                "SELECT LEFT(CAST(table_name AS CHAR), 64), LEFT(CAST(table_type AS CHAR), 32) FROM information_schema.tables WHERE table_schema = ? LIMIT {}",
-                MAX_TABLES + 1
-            ),
-            (DATABASE,),
-        )
+        .query(format!(
+            "SELECT LEFT(CAST(table_name AS CHAR), 64), LEFT(CAST(table_type AS CHAR), 32) FROM information_schema.tables WHERE table_schema = DATABASE() LIMIT {}",
+            MAX_TABLES + 1
+        ))
         .map_err(|e| format!("the tables cannot be listed: {e}"))?;
     if names.len() > MAX_TABLES {
         return Err(format!("it holds more than {MAX_TABLES} tables"));
@@ -727,8 +769,8 @@ fn shapes(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<BTreeMap<String, 
     Ok(shapes)
 }
 
-/// The columns of `tables`, in order, looked at in one query: each table may have at most
-/// [`MAX_COLUMNS`], and a table that has more is refused.
+/// The columns of `tables` in the database `c` is using, in order, looked at in one query: each
+/// table may have at most [`MAX_COLUMNS`], and a table that has more is refused.
 pub(crate) fn columns_of(c: &mut mysql::Conn, tables: Vec<String>) -> Result<BTreeMap<String, Vec<Found>>, String> {
     let mut out: BTreeMap<String, Vec<Found>> = tables.iter().map(|t| (t.clone(), Vec::new())).collect();
     if tables.is_empty() {
@@ -743,11 +785,11 @@ pub(crate) fn columns_of(c: &mut mysql::Conn, tables: Vec<String>) -> Result<BTr
                 "SELECT LEFT(CAST(table_name AS CHAR), 64), LEFT(CAST(column_name AS CHAR), 64), LEFT(CAST(data_type AS CHAR), 32), \
                  character_maximum_length, LEFT(CAST(COALESCE(extra, '') AS CHAR), 64), LEFT(CAST(COALESCE(generation_expression, '') AS CHAR), 64), \
                  LEFT(CAST(is_nullable AS CHAR), 8) \
-                 FROM information_schema.columns WHERE table_schema = ? AND table_name IN ({}) ORDER BY table_name, ordinal_position LIMIT {}",
+                 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name IN ({}) ORDER BY table_name, ordinal_position LIMIT {}",
                 vec!["?"; tables.len()].join(", "),
                 most + 1
             ),
-            std::iter::once(DATABASE.to_string()).chain(tables).collect::<Vec<_>>(),
+            tables,
         )
         .map_err(|e| format!("the columns of the tables cannot be looked at: {e}"))?;
     for (n, r) in columns.enumerate() {

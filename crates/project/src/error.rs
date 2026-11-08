@@ -64,6 +64,11 @@ pub enum Error {
         path: PathBuf,
         why: String,
     },
+    /// What was asked for as a version is no commit on the project's line of work: not the shape
+    /// of a commit's hash, one Dolt does not know, or a commit of another branch.
+    NotAVersion {
+        commit: String,
+    },
     /// The project's database holds triggers, stored procedures or events.
     Scripted {
         path: PathBuf,
@@ -176,6 +181,7 @@ impl fmt::Display for Error {
                 path.display()
             ),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
+            Error::NotAVersion { commit } => write!(f, "{commit:?} is not a version of this project"),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
             Error::TooLarge { what, size, max, unit } => write!(f, "{what} of {size} {unit} is longer than the {max} {unit} allowed"),
             Error::Full { what, max } => write!(f, "{what} already holds {max}, the most it may"),

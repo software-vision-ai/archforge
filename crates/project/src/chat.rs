@@ -765,8 +765,8 @@ fn first_int(row: Option<mysql::Row>) -> Result<i64, String> {
 }
 
 /// Whether `text` has the shape of a Dolt commit hash: 32 of the digits and lower-case letters `a`
-/// to `v` Dolt writes them in. Only such a text is put into a query's `AS OF`.
-fn is_commit(text: &str) -> bool {
+/// to `v` Dolt writes them in. Only such a text is put into a query's `AS OF` or a `USE`.
+pub(crate) fn is_commit(text: &str) -> bool {
     text.len() == 32 && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'v').contains(&b))
 }
 
