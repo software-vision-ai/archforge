@@ -94,7 +94,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use archforge_ui_egui::{CreateError, Opened, ProjectHost, Services};
+    use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
     const ITEMS: [&str; 5] = [ABOUT, QUIT, OPEN, SAVE, GENERATE];
@@ -115,7 +115,7 @@ mod tests {
         }
 
         /// Counts the save and never answers.
-        fn save(&self, _project: &Path, _description: Option<String>) -> Receiver<Result<archforge_ui_egui::Saved, archforge_ui_egui::SaveError>> {
+        fn save(&self, _project: &Path, _description: Option<String>, _by: SavedBy) -> Receiver<Result<Saved, SaveError>> {
             self.0.fetch_add(1, Ordering::SeqCst);
             channel().1
         }

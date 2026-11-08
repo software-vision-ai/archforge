@@ -358,15 +358,10 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
 fn profile(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, dialog: &mut Dialog, close: &mut bool, left: f32, top: f32, width: f32) -> f32 {
     let paint = ui.painter().clone();
     ux::text(&paint, pos2(left, top + 26.0), &tr("Profile"), types::LEAD, p.text, Some(width));
-    let h = wrapped(
-        &paint,
-        pos2(left, top + 52.0),
-        width,
-        &tr("Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account."),
-        types::UI,
-        p.text_secondary,
-        3,
-    );
+    // Kept on one line, though wider than the limit: the catalogue check needs the call and its text together.
+    #[rustfmt::skip]
+    let about = tr("Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.");
+    let h = wrapped(&paint, pos2(left, top + 52.0), width, &about, types::UI, p.text_secondary, 3);
     let y = top + 52.0 + h + 28.0;
     ux::text(&paint, pos2(left, y), &tr("Your name"), types::SMALL, p.text_secondary, Some(width));
     let field = Rect::from_min_size(pos2(left, y + 22.0), vec2(300.0_f32.min(width - 40.0).max(0.0), 28.0));

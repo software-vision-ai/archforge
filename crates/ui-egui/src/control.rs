@@ -182,7 +182,8 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
         }
         return refused;
     }
-    let answer = answer_from(shell, &req.method, &req.params, req.origin.as_deref());
+    // Every request on the channel is an agent's, with or without a label: the channel decides that.
+    let answer = answer_from(shell, &req.method, &req.params, req.origin.as_deref(), true);
     if let Some(b) = before {
         crate::chat_panel::after(shell, &req.method, b, &answer, false);
     }
@@ -191,11 +192,12 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
 
 /// Answers one request from the user's own side: its changes have no origin.
 pub fn answer(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, String> {
-    answer_from(shell, method, params, None)
+    answer_from(shell, method, params, None, false)
 }
 
-/// Answers one request sent on behalf of `origin`: the undo steps it makes carry the origin.
-pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Option<&str>) -> Result<Value, String> {
+/// Answers one request sent on behalf of `origin`: the undo steps it makes carry the origin, and
+/// a save it asks for is recorded as an agent's when `agent` says the channel brought it.
+pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Option<&str>, agent: bool) -> Result<Value, String> {
     let Some((_, keys)) = METHODS.iter().find(|(m, _)| *m == method) else {
         let all: Vec<&str> = METHODS.iter().map(|(m, _)| *m).collect();
         return Err(format!("unknown method {method:?}; the methods are {}", all.join(", ")));
@@ -210,7 +212,7 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
     }
     match method {
         "document.inspect" => Ok(inspect(shell)),
-        "app.save" => save(shell),
+        "app.save" => save(shell, agent.then_some(origin)),
         "app.saved" => saved(shell, params),
         "ui.inspect" => {
             Ok(json!({ "controls": shell.widgets().iter().map(|w| json!({ "id": w.id, "kind": w.kind, "rect": w.rect })).collect::<Vec<_>>() }))
@@ -245,8 +247,9 @@ fn inspect(shell: &Shell) -> Value {
 
 /// Saves the open project as the Save button does: its changes are written, then the host makes a
 /// version. Answers the save's ticket for `app.saved`, or why none could start, a description
-/// being typed that the model refused among the reasons (AR-186).
-fn save(shell: &mut Shell) -> Result<Value, String> {
+/// being typed that the model refused among the reasons (AR-186). `agent` holds an agent's label
+/// (or none) when an agent asked; the version then records that.
+fn save(shell: &mut Shell, agent: Option<Option<&str>>) -> Result<Value, String> {
     if shell.session.is_none() {
         return Err("no project is open in Archforge; open one first".into());
     }
@@ -256,7 +259,10 @@ fn save(shell: &mut Shell) -> Result<Value, String> {
     // One save at a time: a second request follows the one under way.
     if !shell.is_saving() {
         let revision = shell.session.as_ref().map(|s| s.revision());
-        shell.save();
+        match agent {
+            Some(origin) => shell.save_for_agent(origin),
+            None => shell.save(),
+        }
         if !shell.is_saving() {
             // A description being typed that the model refused stops the save: never reported saved.
             if crate::panels::refused_description(&shell.panels) {
