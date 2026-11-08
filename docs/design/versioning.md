@@ -221,7 +221,7 @@ and a test:
 | Path | Why it matters |
 |---|---|
 | `write_changes` (`lib.rs:1028`) | The one route from a document to the database. Unguarded, a preview overwrites current work |
-| `save` (`:1061`), ⌘S | Would make a version of the wrong state |
+| `save` (`:1061`), ⌘S | Would make a version of the wrong state, so Save is refused while viewing |
 | `tab_unsaved` (`:584`) | Would report the preview as clean, so closing would skip the Save question |
 | `keep_view` (`:1005`) | Would keep the preview's tabs as the ones to resume |
 | `retain_valid` calls (`:1424-1429`) | Would drop your selection against the old document unless set aside |
@@ -265,7 +265,7 @@ first Save there is no version and no model at `HEAD`, so the Before side is emp
 **Save version…** ties its review to `session.revision()`. If that moves, the dialog refreshes and
 says so before Save
 is enabled again. A failure compares HEAD before and after, so the message says truthfully whether a
-version exists. A
+version exists; when HEAD cannot be read it says it cannot tell. A
 description is required there (an empty one is what ⌘S is for), is one line of at most 200
 characters, and is refused
 when it holds a kept API key, as a chat question is (`chat.rs:744`), since it stays in history.
@@ -312,9 +312,10 @@ what is set aside is whatever exists and nothing is transformed.
 | Autosave failing | Viewing allowed, status keeps saying so. Switching refused, as the work could not be kept |
 | Description or skill text being typed | Committed to the document first (`lib.rs:849-850`). A refused description blocks leaving and shows the refusal |
 | Inline editor, a drawing under way, an open dialog, a drag | Refused: "Finish or cancel your edit first." |
+| Chat requests on their way | Settled first (below): a question answered later would start a turn on what replaced the session |
 | Chat turn running | Asks: "Chat is still changing the model. Stop it and go on?" **Stop and go on** / **Keep working** |
 | Agent with its own token, while viewing | `engine.*` and `app.save` are refused with an error naming the state and how to return. `document.inspect` reports what is shown. Nothing is queued |
-| Agent with its own token, while the project is held (below) | The same refusal, until the hold has ended |
+| Agent with its own token, while the project is held (below) | Changing requests are refused until the hold has ended |
 
 During viewing, switching project tab returns to current work first, and closing or quitting returns
 first and then asks the
@@ -324,16 +325,35 @@ its hash
 
 ### Holding the project still
 
-A branch change (a switch or a new branch) and Restore replace the session, so each holds the project still
-from before its first step until it has finished or failed.
+Entering viewing, Restore and a branch change (a switch or a new branch) replace the session, and each
+follows one order. Stepping between versions and returning have nothing to protect, and do not.
+
+1. Only one runs at a time; the others are unavailable until it has ended.
+2. The refusals above are checked, and a running Chat turn is asked about.
+3. The hold starts.
+4. Chat settles: the turn is ended and written, and requests still on their way are answered (questions
+   waiting on a key check, queued writes, deletions and restorations), within a time limit. Past it the
+   operation is refused and the hold ends.
+5. A save under way answers, and the latest rows are handed over.
+6. The replacement is read, checked and built into a session. One that cannot be built ends it here,
+   with nothing written.
+7. The operation's writes run as one job on the writer. Viewing has none.
+8. The replacement takes the session's place, and the hold ends.
 
 | While held | Why |
 |---|---|
-| The session is read-only; undo and ⌘S are refused | An edit made now would be replaced |
-| `write_changes` hands over the latest rows once, then stops; the job's first step writes what waits | A change not yet handed over would be lost, and rows handed over later would reach the replaced state |
+| The session is read-only; undo and Save are refused | An edit made now would be replaced |
+| `write_changes` is stopped once step 5 has handed over | Rows handed over later would reach the replaced state |
 | Control requests that change anything are refused, naming the state | An agent's change would be lost the same way |
-| The Chat composer is off | A question asked now could land on the other branch |
-| Closing and quitting wait for the answer | The job is still writing to the project |
+| The Chat composer is off, and a question answered under another session starts no turn | A turn must not start on what replaced the session |
+| Showing another project or Home, opening a project, closing and quitting wait for the answer | The session being replaced must still be there, and the job is still writing |
+
+| When it goes wrong | Result |
+|---|---|
+| Steps 1 to 6 | Nothing is written; the hold ends and the session is as it was |
+| A commit or branch operation gives no clear answer | `HEAD` or the branch list is read, and what it shows is what happened: the step counts as finished or failed by that |
+| Those cannot be read either | Archforge says it could not tell. Nothing is written back, and the project stays held until it is closed; reopening reads what is stored |
+| Archforge stops partway | Reopening reads what is stored. A Restore before its commit shows the restored rows as unsaved, with earlier work in its `Before restoring` version; a switch reopens where it was; a new branch may be listed, and its source is unchanged |
 
 A control request can wait its turn after it is accepted: `control::drain` takes 32 a frame
 (`control.rs:126`, `:149-160`). So each request carries the window's session generation, taken when the
@@ -362,8 +382,9 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 - Object tables have `id BINARY(16) PRIMARY KEY`, so rename and move stay one element.
 - List tables are keyed by owner and position, so values are compared per owner, which removes the
   shift noise.
-- `dolt_diff_summary` is a cheap "are these identical?" check, once the chat tables and `settings` are
-  left out of its rows: it counts every table.
+- `dolt_diff_summary` is a cheap "are these identical?" check between two saved versions only, once the
+  chat tables and `settings` are left out of its rows. Anything involving current work compares the live
+  session's rows, since an edit may not have reached the database yet.
 - `session_from_rows_repaired` fits table boxes on open (`crates/notations/src/lib.rs:169-178`). The
   same repair is applied to the
   Before side, or a false "layout changed" shows after opening.
@@ -376,31 +397,31 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 ## 7. Restore
 
 Restore makes a new version whose content equals an old one, on the current branch. It is offered in
-version details and in the viewing banner, after a confirmation that names the version. Section 6's
-rules for leaving current work apply, since the session is replaced, and the project is held still
-throughout (section 6). Viewing ends first.
+version details and in the viewing banner, after a confirmation that names the version. It follows
+section 6's order, and viewing ends first.
 
-It is compared first, with the same repair on both sides (section 6). A version whose model is the
-same as current work is not offered. If that is only found when it runs, it says "This version is the
-same as your current work." and makes no version, an empty commit included.
+At that order's step 6 the version is built and compared with current work, with the same repair on
+both sides. A version whose model is the same as current work is not offered. If that is only found when
+it runs, it says "This version is the same as your current work." and makes no version, an empty commit
+included.
 
-Steps 1 to 3 are one job on the writer, so no other write comes between them.
+Step 7 is one writer job:
 
 1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`.
-2. The version's model rows are read, in today's table shape, and written to the working set.
+2. The version's model rows, in today's table shape, are written to the working set.
 3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
    nothing differed, and is reported as above.
-4. The session is rebuilt from those rows, only once the commit has succeeded; then the hold ends.
 
 | Question | Decision |
 |---|---|
 | What comes back? | The model tables: elements, relationships, diagrams, skills, and the root element's name |
 | What stays as it is? | The `settings` table: `format`, `model_schema`, `name`, `created_by`, `created_at`. None is a setting a person changes. Keeping `format` and `model_schema` means an older version cannot lower the format of a branch that holds conversations |
 | Why forward-only? | Rewinding would drop later chat commits, and deleted-conversation Undo needs its commit to stay an ancestor of `HEAD` |
-| Undo across a Restore? | No: undo starts fresh. Chat cards say the undo history no longer holds their change, wording that exists |
-| Reading or step 1 fails | Nothing has changed |
-| Writing the rows fails | The write is one transaction, so the working set is unchanged. A version from step 1 stays, and the message says so |
-| The commit fails | The session was not rebuilt. Its rows are written back as autosave writes them, tried again with the next change if that fails too, and the message says so. The hold ends |
+| Undo across a Restore? | No: undo starts fresh after a Restore that finished. Chat cards say the undo history no longer holds their change, wording that exists. After a failure undo is as it was |
+| An older version needing opening's repairs | The restored project may read as unsaved at once, as opening it does |
+| Reading, building or step 1 fails | Nothing has changed |
+| Writing the rows fails | The write is one transaction, so the working set is unchanged. A version from step 1 stays, the message says so, and the project reads as saved |
+| The commit fails | Section 6 decides from `HEAD`. If the commit landed, Restore has finished. If not, the session stays, its rows are written back as autosave writes them, tried again with the next change if that fails too, and the message says so |
 | Restoring from another branch? | Not offered: History lists only the current branch |
 
 ---
@@ -447,9 +468,9 @@ All run on the writer, in order with every model and conversation write.
 
 | Operation | Where | What happens | On failure |
 |---|---|---|---|
-| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; switches. The source branch keeps its unsaved work as well | The new branch is deleted; you stay where you were |
+| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; switches. The source branch keeps its unsaved work as well | The new branch is deleted; you stay where you were. If that fails too it stays listed, and the message says so |
 | **Create from a version** | **Start a branch here…** in details and the viewing banner | `DOLT_BRANCH` at that hash; removes inherited conversations; switches. Viewing ends | The same. Not offered on a version that cannot be read |
-| **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
+| **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
 | **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
 
@@ -472,7 +493,7 @@ is dropped.
 | Situation | What you see |
 |---|---|
 | No unsaved changes | Switches at once |
-| Unsaved changes (the model's, as `has_unsaved` counts them) | "{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps." **Save version and switch** (the save finishes first) / **Switch** / **Cancel** |
+| Unsaved changes (the model's, as `has_unsaved` counts them) | "{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps." **Save version and switch** (an ordinary Save with the automatic description, inside the hold) / **Switch** / **Cancel** |
 | Editor open, turn running, description refused | Section 6 |
 | Viewing a version | Back to current work first, then the above |
 
@@ -480,6 +501,9 @@ is dropped.
 double the memory, and steps carry
 `Chat N` labels that a new conversation on the other branch could reuse, so that conversation could
 undo another's step (`session.rs:286-293`).
+
+Closing or quitting asks only about the current branch. Other branches keep their unsaved work for the
+next time they are shown.
 
 ### History on a branch
 
@@ -519,7 +543,7 @@ the inherited rows on the new branch only, in one chat commit. No table or colum
 |---|---|
 | A conversation is started | Its rows and chat commits are on the current branch |
 | New branch | Starts with none: "No conversations on this branch yet." The source branch keeps its own |
-| Switch | The running turn ends as closing a tab ends it (`lib.rs:758-765`), its reply so far kept and written before the switch; the requests still on their way are settled first (below); the program is let go of; the panel reloads from the new branch |
+| Switch | The running turn ends as closing a tab ends it (`lib.rs:758-765`), its reply so far kept and written before the switch; the requests still on their way are settled first (section 6); the program is let go of; the panel reloads from the new branch |
 | Numbering | `Chat N` is per branch, so a new branch starts at Chat 1 |
 | Rename a branch | Conversations unaffected |
 | Delete a branch | Its conversations go with it; the confirmation counts them; their private folders are let go |
@@ -535,7 +559,7 @@ Checks against what exists:
 | A conversation's rows at a branch point | The removed rows remain in the new branch's ancestor commits, the same statement as for a deleted conversation |
 | Restore | Touches no chat table, and forward-only keeps every chat commit an ancestor |
 | Save and Don't save | Work per connection, so per branch (measured for `DOLT_RESET`); chat commits come first as today |
-| Requests still on their way | A question in `Step::Creating`, `Asking`, `Rerunning` or `Keeping` waits on a key check off the writer (`apps/archforge/src/chats.rs:505-530`), and writes, chip writes, deletions and restorations may still be queued. The switch is sent only once `chat_panel::waiting` and `chat_delete::waiting` have cleared for this project, within a time limit; past it the switch is refused with "Chat is still saving" |
+| Requests still on their way | A question in `Step::Creating`, `Asking`, `Rerunning` or `Keeping` waits on a key check off the writer (`apps/archforge/src/chats.rs:505-530`), and writes, chip writes, deletions and restorations may still be queued. Section 6's step 4 waits for them (`chat_panel::waiting`, `chat_delete::waiting`) |
 | Writes arriving after a switch | A chat write names only the project path, so without more one arriving late would reach the new branch. Each carries the switch generation (section 8) and is refused on any other |
 | `format` raised on a branch | Per branch, and checked on switching. `main` can stay at an older format |
 
