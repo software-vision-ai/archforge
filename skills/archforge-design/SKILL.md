@@ -396,10 +396,15 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   origin: Read, Changed, Added or Removed and what it was about, with what was read or the aspect
   changed as its detail; a refused or failed call keeps its words with "refused" or "failed" and an
   amber mark. Looking up commands and the window's controls makes no row. A request from a
-  conversation's origin runs only while that conversation's turn runs in the project shown, never
-  while a conversation of the same label still runs or ends elsewhere, and it undoes or redoes
-  only a step of the turn running, never the person's, another conversation's or one of its own
-  earlier turns; while its turn runs, its own undo takes back the turn's latest step so far.
+  conversation's token runs only while that conversation's turn runs in the project shown, never
+  while it still runs or ends elsewhere; the window knows a conversation's request by the key the
+  control channel bound to its token, never by a label (AR-230), so another project's conversation
+  of the same label neither stands in for it nor blocks it, and a conversation's token the window
+  does not know may not act under a label it knows (one whose label it does not know either is let
+  through, as no such token is live). The person's own token is known by the label it names. It
+  undoes or redoes only a step of the turn running, never the person's, another conversation's or
+  one of its own earlier turns; while its turn runs, its own undo takes back the turn's latest step
+  so far.
 - A turn's changes are one step of the project's undo history, `Chat N: Turn n`, unless another
   change (the person's or another conversation's) lands while the turn runs: that ends the step,
   the turn's next change starts another, and the turn is several steps. Their card follows the

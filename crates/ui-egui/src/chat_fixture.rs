@@ -93,12 +93,14 @@ pub fn emit(rig: &Rig, shell: &mut Shell, event: ChatEvent) {
 /// does.
 pub fn call(shell: &mut Shell, method: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let origin = shell.chat_panel.chat.as_ref().and_then(|c| c.origin.clone());
+    let conversation = shell.chat_panel.chat.as_ref().map(|c| c.key.clone());
     let read_only = shell.chat_panel.chat.as_ref().is_none_or(|c| !c.allow_changes);
     let (reply, _) = std::sync::mpsc::channel();
     let req = crate::control::ControlRequest {
         method: method.to_string(),
         params,
         origin,
+        conversation,
         reply,
         state: Arc::new(std::sync::atomic::AtomicU8::new(0)),
         read_only,
