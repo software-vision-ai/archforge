@@ -827,6 +827,20 @@ fn showing_another_project_and_opening_wait_for_the_hold() {
     let names: Vec<&str> = h.state().tabs.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(names, ["Commerce platform", "Library", "Before", "Made"], "the answer, then what waited");
     assert_eq!(h.state().active, Some(3), "shown last: the project made");
+    // Going back to the held tab is the latest choice, and it stands.
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(opened("Library"));
+    h.run_steps(3);
+    through_hold(
+        &mut h,
+        &host,
+        |s| {
+            s.activate(0);
+            s.activate(1);
+        },
+        Shell::end_hold,
+    );
+    assert_eq!(h.state().active, Some(1));
     // With no opening under way, the host is asked only after the hold.
     let (mut h, host) = saving_harness(Some(commerce()), None);
     through_hold(&mut h, &host, |s| s.open_path(std::path::Path::new("/tmp/Later.archforge")), Shell::end_hold);
@@ -908,7 +922,7 @@ fn a_close_that_waited_for_a_failed_hold_asks_first() {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         h.state_mut().state.theme = theme;
         through_hold(&mut h, &host, |s| s.close_tab(0), Shell::fail_hold);
-        assert_eq!(h.state().ask, Some(crate::close_ask::Ask::HoldFailed { path: COMMERCE.into() }));
+        assert_eq!(h.state().ask, Some(crate::close_ask::Ask::HoldFailed { path: COMMERCE.into(), held: "Commerce platform".into() }));
         assert!(host.closed.lock().unwrap().is_empty(), "it did not run on a state nobody saw");
         assert!(painted(&h).iter().any(|t| t == "Close Commerce platform?"), "{:?}", painted(&h));
         let at = rect_of(&h, "close-ask.go-on").center();
@@ -929,6 +943,14 @@ fn a_close_that_waited_for_a_failed_hold_asks_first() {
     );
     assert_eq!(h.state().ask, asked_unsaved(COMMERCE));
     assert!(host.saves.lock().unwrap().is_empty() && host.discarded.lock().unwrap().is_empty());
+    // Closing another tab asks about that tab and names the project whose change failed.
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+    h.run_steps(3);
+    through_hold(&mut h, &host, |s| s.close_tab(0), Shell::fail_hold);
+    assert_eq!(h.state().ask, Some(crate::close_ask::Ask::HoldFailed { path: COMMERCE.into(), held: "Library".into() }));
+    assert!(painted(&h).iter().any(|t| t == "Close Commerce platform?"), "{:?}", painted(&h));
+    assert!(painted(&h).iter().any(|t| t.starts_with("The last change to Library")), "{:?}", painted(&h));
     // A hold that finishes runs what waited, whatever the last one did.
     let (mut h, host) = edited_project();
     through_hold(&mut h, &host, |s| s.close_tab(0), Shell::fail_hold);
@@ -940,6 +962,15 @@ fn a_close_that_waited_for_a_failed_hold_asks_first() {
 /// After a hold that failed, a quit that waited asks, in both appearances, and Keep open stops it.
 #[test]
 fn a_quit_that_waited_for_a_failed_hold_asks_first() {
+    // With Home shown by then, it still asks, about the project that was held.
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let home_then_quit = |s: &mut Shell| {
+        s.go_home();
+        assert!(s.remember(crate::hold::Waiting::Quit));
+    };
+    through_hold(&mut h, &host, home_then_quit, Shell::fail_hold);
+    assert_eq!(h.state().ask, Some(crate::close_ask::Ask::HoldFailed { path: COMMERCE.into(), held: "Commerce platform".into() }));
+    assert!(!h.state().quit_confirmed());
     let (mut h, host) = saving_harness(Some(commerce()), None);
     for (theme, go_on) in [(ThemeKind::Light, false), (ThemeKind::Dark, true)] {
         h.state_mut().state.theme = theme;

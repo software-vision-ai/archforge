@@ -46,6 +46,8 @@ pub(crate) struct Holding {
     hold: Option<Hold>,
     waiting: VecDeque<Waiting>,
     failed: bool,
+    /// The path and name of the project the failed hold held, which the question after it names.
+    held: Option<(PathBuf, String)>,
 }
 
 impl Holding {
@@ -110,6 +112,7 @@ impl Shell {
     /// [`Shell::end_hold`] for a hold that failed: a close or a quit that waited asks again.
     pub fn fail_hold(&mut self) {
         if self.is_held() {
+            self.holding.held = self.project.as_ref().map(|p| (p.path.clone(), p.name.clone()));
             self.end_hold();
             self.holding.failed = true;
         }
@@ -137,9 +140,12 @@ impl Shell {
                 Waiting::Open(path) => self.open_path(&path),
                 Waiting::Opened(opened) => self.open_project(*opened),
                 Waiting::Quit if failed && !(0..self.tabs.len()).any(|i| self.tab_unsaved(i)) => {
-                    let Some(path) = self.active.and_then(|i| self.tabs.get(i)).map(|t| t.path.clone()) else { return self.start_quit(ctx) };
+                    // The held project, not the one shown: what waited before may have moved on.
+                    let Some((path, held)) = self.holding.held.clone().filter(|(path, _)| self.tab_of(path).is_some()) else {
+                        return self.start_quit(ctx);
+                    };
                     self.quitting = Some(Vec::new());
-                    self.ask = Some(Ask::HoldFailed { path });
+                    self.ask = Some(Ask::HoldFailed { path, held });
                 }
                 Waiting::Quit => self.start_quit(ctx),
                 Waiting::Close(path) | Waiting::SaveAndClose(path) | Waiting::Discard(path, _) if failed => self.ask_before_closing(&path),
@@ -156,7 +162,8 @@ impl Shell {
         if self.tab_unsaved(i) || self.tabs[i].close_error.is_some() {
             self.close_tab(i);
         } else {
-            self.ask = Some(Ask::HoldFailed { path: path.to_path_buf() });
+            let held = self.holding.held.as_ref().map_or_else(|| self.tabs[i].name.clone(), |(_, name)| name.clone());
+            self.ask = Some(Ask::HoldFailed { path: path.to_path_buf(), held });
         }
     }
 }

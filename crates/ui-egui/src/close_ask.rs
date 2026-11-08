@@ -22,14 +22,14 @@ pub enum Ask {
     /// Close without writing, asked once more.
     ConfirmLoss { path: std::path::PathBuf },
     /// A close or a quit waited for a hold that failed, with nothing unsaved: the person looks first.
-    HoldFailed { path: std::path::PathBuf },
+    HoldFailed { path: std::path::PathBuf, held: String },
 }
 
 impl Ask {
     /// The project the question is about.
     fn path(&self) -> &std::path::Path {
         match self {
-            Ask::Unsaved { path } | Ask::CannotWrite { path, .. } | Ask::ConfirmLoss { path } | Ask::HoldFailed { path } => path,
+            Ask::Unsaved { path } | Ask::CannotWrite { path, .. } | Ask::ConfirmLoss { path } | Ask::HoldFailed { path, .. } => path,
         }
     }
 }
@@ -81,9 +81,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 ("close-ask.cancel", tr("Cancel"), Answer::Cancel, false),
             ],
         ),
-        Ask::HoldFailed { .. } => (
+        Ask::HoldFailed { held, .. } => (
             if quitting { tr("Quit Archforge?") } else { fmt(&tr("Close {name}?"), &[("name", &name)]) },
-            vec![fmt(&tr("The last change to {name} did not finish. Check it before you go on."), &[("name", &name)])],
+            vec![fmt(&tr("The last change to {name} did not finish. Check it before you go on."), &[("name", held)])],
             vec![
                 ("close-ask.go-on", if quitting { tr("Quit Archforge") } else { tr("Close") }, Answer::GoOn, true),
                 ("close-ask.keep", tr("Keep open"), Answer::Cancel, false),

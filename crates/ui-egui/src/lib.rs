@@ -619,10 +619,11 @@ impl Shell {
 
     /// Shows the project of tab `i`, parking the one shown.
     pub fn activate(&mut self, i: usize) {
-        if self.active == Some(i) || i >= self.tabs.len() || self.tabs[i].closing.is_some() {
+        if i >= self.tabs.len() || self.tabs[i].closing.is_some() {
             return;
         }
-        if self.remember(hold::Waiting::Show(self.tabs[i].path.clone())) {
+        // Before the check of what is shown: going back to the held tab is the latest choice too.
+        if self.remember(hold::Waiting::Show(self.tabs[i].path.clone())) || self.active == Some(i) {
             return;
         }
         self.park();
