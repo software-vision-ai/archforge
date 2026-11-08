@@ -1654,8 +1654,8 @@ pub(crate) fn closing(shell: &mut Shell, chat: Option<(String, Option<String>)>)
 /// token is known by `conversation`, the key the control channel bound to it when it granted it,
 /// never by a label a request names (AR-230); the person's own token, unbound, by the label it
 /// names, if any. A request of one of this window's conversations may act only while that
-/// conversation's turn runs in the project shown, never while it still runs or ends elsewhere, and
-/// may undo or redo only a step of the running turn: never the person's, another conversation's,
+/// conversation's turn runs in the project shown, never while it still runs or ends elsewhere or
+/// while its program is being ended (AR-228), and may undo or redo only a step of the running turn: never the person's, another conversation's,
 /// or one of its own earlier turns. A conversation's token the window does not know never stands in
 /// for one it knows under the same label; one whose label it does not know either is let through,
 /// as the person's own token naming an unknown label is (no such token is live: a conversation's
@@ -1673,10 +1673,14 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&st
     };
     let mine = |p: &Panel| p.chat.as_ref().is_some_and(is_it);
     let parked = shell.tabs.iter().filter_map(|t| t.parked.as_ref()).filter(|p| mine(&p.chat_panel)).collect::<Vec<_>>();
+    // A program asked to end (Allow changes or the model changed, AR-228) acts for nothing more:
+    // a question asked before its end waits for a new program.
+    let program_ends = |p: &Panel| mine(p) && p.chat.as_ref().is_some_and(|c| c.session == Session::Ending);
     let ending = shell.chats.letting_go.iter().any(|(k, o)| match conversation {
         Some(key) => k == key,
         None => o.as_deref() == Some(origin),
-    });
+    }) || program_ends(&shell.chat_panel)
+        || parked.iter().any(|p| program_ends(&p.chat_panel));
     let known = mine(&shell.chat_panel) || !parked.is_empty() || ending;
     if !known {
         // A conversation's token the window does not know is nobody's here: it may not act under the

@@ -100,6 +100,7 @@ CREATE TABLE chat (
   created_by  VARCHAR(1024) NOT NULL,             -- who started it; the same source as settings.created_by
   created_at  VARCHAR(20)   NOT NULL,
   updated_at  VARCHAR(20)   NOT NULL,             -- last activity: the history lists newest first by it
+  removed_chips VARCHAR(32) NULL,                 -- the context chips removed (AR-227): 'project,diagram'; null or empty: none
   INDEX chat_recent (updated_at)
 );
 ```
@@ -113,6 +114,18 @@ CREATE TABLE chat (
   offers Settings or a new conversation; it is never sent to the other provider (AR-173).
 - **`model`** is what the next turn asks for. Each turn records the model that actually answered
   (`chat_turn.model`), so the history stays true if the model is changed (open question 7).
+- **`removed_chips`** (AR-227, added after the sign-off) keeps the context chips the person removed
+  from the conversation, so a conversation opened again from the history never sends a chip removed
+  earlier. It holds a comma-separated subset of `project`, `diagram` and `selection`, each once
+  (written in that order); null (or empty) means none removed. It is written whenever a chip is
+  removed or put back, the whole set each time, and when chips were removed before the first
+  question, once the conversation is made; it leaves `updated_at` alone, waits for the next chat
+  commit, and a code outside the list makes the conversation unreadable. It cannot be derived from
+  the anchors: a question without a `diagram` anchor cannot tell a removed chip from no diagram
+  open. It joins chat shape 1 and format 3 with no format bump, as no release has written chat
+  tables (0.13 is unreleased; the latest release is 0.12.0): a `chat` table made before the column
+  lacks it, its rows read as none removed, and the first write of chips adds the column at the end
+  (a conversation brought back from a commit before the column comes back with none removed).
 - **Message count** in the history ("6 messages") is counted, not stored:
   `SELECT chat, COUNT(*) FROM chat_message WHERE role IN ('user','assistant') GROUP BY chat`.
 - **"Allow changes to the model"** is not a column here: it is recorded on each turn
@@ -212,8 +225,9 @@ CREATE TABLE chat_anchor (
 
 - **Context chips.** The design's three removable chips are stored as anchors on the user message
   they went with: `project` (the model's root, its `core_model` row), `diagram` (the open diagram)
-  and `selection` (each selected element). A chip the user removed is not stored, so the record
-  says what was actually sent.
+  and `selection` (each selected element). A chip the user removed is not stored as an anchor, so
+  the record says what was actually sent; which chips are removed is kept on the conversation, in
+  `chat.removed_chips`.
 - **`read`** anchors come from the ids in a tool's result that are live elements. They give the
   "Read 5 classes" row its subjects and let an element show the conversations that looked at it
   (open question 4).
@@ -391,7 +405,9 @@ Proposed:
   (`DOLT_RESET --hard`, `DOLT_CLEAN`) neither resets nor removes committed tables.
 - **Later chat-schema changes** bump the format again (4, …) and follow the model tables' upgrade
   rule: only columns added at the end, empty or with a default for old rows. Anything else is
-  refused, never changed.
+  refused, never changed. Until 0.13 is released, a nullable column added at the end joins shape 1
+  and format 3 without a bump (`chat.removed_chips`, AR-227): a table made before it reads its rows
+  as empty in it and takes the column when it is next written.
 
 ## 6. "Don't save" keeps chats: how, with Dolt
 

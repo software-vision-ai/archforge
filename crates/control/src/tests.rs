@@ -21,6 +21,32 @@ fn echo(name: &str) -> (Server, PathBuf) {
     (Server::start(0, &dir, handler).unwrap(), dir)
 }
 
+/// A folder of a test's own, made new (never one found there) and private to this user, removed on
+/// every way out of the test, a failing assertion included.
+struct OwnFolder(PathBuf);
+
+impl OwnFolder {
+    /// Makes a new folder under the temporary directory, named for `name`, this process and a
+    /// count, trying the next count while a name is taken.
+    fn new(name: &str) -> std::io::Result<OwnFolder> {
+        let path = |n: u32| std::env::temp_dir().join(format!("archforge-control-{name}-{}-{n}", std::process::id()));
+        let n = (0u32..1000)
+            .find(|n| std::fs::create_dir(path(*n)).is_ok())
+            .ok_or_else(|| std::io::Error::other(format!("no free folder name for {name}")))?;
+        let folder = OwnFolder(path(n));
+        #[cfg(unix)]
+        std::fs::set_permissions(&folder.0, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+        Ok(folder)
+    }
+}
+
+impl Drop for OwnFolder {
+    /// Removes the folder and what is in it.
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Sends raw `lines` on a fresh connection and gives what came back before it closed.
 fn raw(port: u16, lines: &[&[u8]]) -> Vec<u8> {
     let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).unwrap();
@@ -323,7 +349,8 @@ fn each_grant_has_its_own_file_and_role_and_a_revoked_one_is_refused() {
 #[cfg(unix)]
 #[test]
 fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_listening() {
-    let dir = folder("close");
+    let own = OwnFolder::new("close").unwrap();
+    let dir = own.0.clone();
     let server = Server::open(&dir, roles()).unwrap();
     let port = server.port();
     let grant = server.grant(Role::Full, None).unwrap();
@@ -334,15 +361,16 @@ fn closing_a_server_revokes_every_grant_answers_held_connections_and_stops_liste
     // The grant outlives nothing: the close revokes it.
     assert!(grant.live());
     let started = Instant::now();
+    let watch = server.listener_watch();
     drop(server);
     assert!(!grant.live(), "a grant of a closed opening opens nothing");
     assert!(started.elapsed() < Duration::from_secs(3), "the close is bounded: {:?}", started.elapsed());
     let last: Value = serde_json::from_slice(&read_line(&mut r, MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], REVOKED, "{last}");
     assert!(!path.exists(), "the file went with the close");
-    assert!(!listens(port), "nothing listens after the close");
+    // Judged by the server's own listener, never by the freed port, which anything may bind (AR-229).
+    assert!(watch.closed(), "nothing listens after the close");
     drop(grant);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A token file is never created over another, and removed only while its name holds the very file written.
@@ -499,6 +527,33 @@ fn a_linked_executable_finds_the_command_line_tool_beside_the_file_it_links_to()
     std::fs::write(elsewhere.join(CLI_FILE), b"another install").unwrap();
     let found = find_cli(&link, &[]).unwrap();
     assert_eq!(found, std::fs::canonicalize(&dir).unwrap().join(CLI_FILE));
+}
+
+/// A server's listener watch says closed only once its listening socket is closed (AR-229): open
+/// while it serves, closed once it is dropped, whatever binds the freed port since; and never
+/// closed for a server still running, so a check by it fails on a listener really left open.
+#[test]
+fn a_listener_watch_says_closed_only_once_the_socket_is_closed() {
+    let echoes = || -> Handler { Arc::new(|call: Call<'_>| Ok(json!({ "method": call.method }))) };
+    let own = OwnFolder::new("listener-watch").unwrap();
+    let server = Server::start(0, &own.0, echoes()).unwrap();
+    let port = server.port();
+    let watch = server.listener_watch();
+    assert!(!watch.closed(), "open while it serves");
+    drop(server);
+    assert!(watch.closed(), "closed once dropped");
+    // Another socket on the freed port changes nothing.
+    let squatter = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port)));
+    assert!(watch.closed(), "still closed with the port taken again: {:?}", squatter.as_ref().map(|_| ()));
+    // A server still open, its port free of anything else: its watch does not say closed, so a
+    // check by it fails on a listener left open.
+    let left_own = OwnFolder::new("listener-watch-left").unwrap();
+    let left = Server::start(0, &left_own.0, echoes()).unwrap();
+    let left_watch = left.listener_watch();
+    assert!(listens(left.port()) && !left_watch.closed(), "a listener left open is never said closed");
+    drop(left);
+    assert!(left_watch.closed());
+    drop(squatter);
 }
 
 /// A grant bound to a conversation speaks only for it (AR-230): the handler gets the bound origin
