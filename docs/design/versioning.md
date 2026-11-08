@@ -162,8 +162,12 @@ What `read_model` (`model.rs:318-394`) must change to read history:
 | Two or more branches, current work | Branch icon and name, `Current work`, a dot when unsaved |
 | Viewing | Tinted, branch name when there are two or more, `‹ 8 Nov 14:02 ›`, and `Back to current work` |
 
-Clicking the chip opens a popover: a branch row at the top (the current branch, opening the branch list),
-then Current work, then that branch's versions newest first, paged, then **New branch…**.
+Clicking the chip opens a popover: Current work, then that branch's versions newest first, paged, then
+**New branch…**. With two or more branches a branch row comes first (the current branch, opening the
+branch list); a one-branch project never sees the word.
+
+The left rail's entry keeps its existing branch glyph. Its unsaved state is a count badge: the number of
+working changes, shown when above zero.
 
 Narrowing order: the branch name truncates, then the label goes, then search hides as today. At 640
 px the chip
@@ -171,9 +175,9 @@ is one 32 px icon, with the full label in its tooltip and accessible name.
 
 Keys: ⇧⌘H opens the list; ↑/↓ moves, Enter views, Esc closes it; while viewing ⌘[ is older, ⌘]
 newer, ⇧⌘H returns;
-⇧⌘B opens the branch list. Esc does not return, so a stray Esc cannot drop your place. AR-154 checks
-these for
-clashes.
+⇧⌘B opens the branch list. Esc does not return, so a stray Esc cannot drop your place. That ⇧⌘H both
+opens the list and, while viewing, returns is intended. AR-154's shortcut audit confirms it and checks
+all of these for clashes.
 
 Stepping: from Current work, ‹ goes to the latest version when there are unsaved changes, otherwise
 to the one
@@ -206,8 +210,8 @@ so nobody meets an error on a click.
 | Start a branch | **Start a branch here…** in details and in the banner (section 8) | Viewing ends on the new branch |
 
 In viewing a banner over the centre says "Viewing the version of 8 Nov 14:02 · Read only", with
-Compare with
-current work and Back to current work. The status bar says the same.
+Compare with current work and Back to current work, and **Restore this version…** and **Start a branch
+here…** as icon buttons with tooltips. The status bar says the same.
 
 `shell.session` has about 490 uses, so the preview takes its place and the real session is set
 aside; `Parked`
@@ -245,7 +249,7 @@ writes (`projects.rs:647-657`).
 | Is undo kept across viewing? | Yes: the real session is only set aside |
 | Is undo kept across a branch change? | No: section 8 |
 | Are chat commits versions? | No: left out of History, still in the log |
-| Do existing `Saved <time>` commits count? | Yes, listed with their date and no description. The exact `Saved <RFC 3339>` shape is matched, so "Saved the day" stays a description |
+| Do existing `Saved <time>` commits count? | Yes, listed with their date and "No description" as the meta line. The exact `Saved <RFC 3339>` shape is matched, so "Saved the day" stays a description |
 
 **What a version is, in code:** a commit on the current branch whose committer email is not the chat
 committer's
@@ -304,18 +308,38 @@ what is set aside is whatever exists and nothing is transformed.
 |---|---|
 | Unsaved edits | Stay in the working set. Viewing keeps them in the set-aside session too |
 | Autosave waiting | Viewing: it finishes on its own. Switching: written first; if that fails the switch is refused |
+| A save under way | Waits for its answer: `poll_save` marks the session shown as saved (`lib.rs:255-289`) |
 | Autosave failing | Viewing allowed, status keeps saying so. Switching refused, as the work could not be kept |
 | Description or skill text being typed | Committed to the document first (`lib.rs:849-850`). A refused description blocks leaving and shows the refusal |
 | Inline editor, a drawing under way, an open dialog, a drag | Refused: "Finish or cancel your edit first." |
 | Chat turn running | Asks: "Chat is still changing the model. Stop it and go on?" **Stop and go on** / **Keep working** |
 | Agent with its own token, while viewing | `engine.*` and `app.save` are refused with an error naming the state and how to return. `document.inspect` reports what is shown. Nothing is queued |
-| Agent with its own token, while a switch runs | The same refusal, until the switch has finished |
+| Agent with its own token, while the project is held (below) | The same refusal, until the hold has ended |
 
 During viewing, switching project tab returns to current work first, and closing or quitting returns
 first and then asks the
 usual question from the real session's state. A version is checked just before loading: the shape of
 its hash
 (`is_commit`, `chat.rs:769`) and that it is an ancestor (the check at `chat.rs:1511-1519`).
+
+### Holding the project still
+
+A branch change (a switch or a new branch) and Restore replace the session, so each holds the project still
+from before its first step until it has finished or failed.
+
+| While held | Why |
+|---|---|
+| The session is read-only; undo and ⌘S are refused | An edit made now would be replaced |
+| `write_changes` hands over the latest rows once, then stops; the job's first step writes what waits | A change not yet handed over would be lost, and rows handed over later would reach the replaced state |
+| Control requests that change anything are refused, naming the state | An agent's change would be lost the same way |
+| The Chat composer is off | A question asked now could land on the other branch |
+| Closing and quitting wait for the answer | The job is still writing to the project |
+
+A control request can wait its turn after it is accepted: `control::drain` takes 32 a frame
+(`control.rs:126`, `:149-160`). So each request carries the window's session generation, taken when the
+channel accepts it, beside its token's liveness (`control.rs:37-59`). The window moves that counter whenever
+it replaces the session: viewing a version, returning, a branch change, Restore, showing another project's
+tab. A request from an earlier generation is refused, so it cannot land on a session it was not sent to.
 
 ### Comparisons
 
@@ -338,7 +362,8 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 - Object tables have `id BINARY(16) PRIMARY KEY`, so rename and move stay one element.
 - List tables are keyed by owner and position, so values are compared per owner, which removes the
   shift noise.
-- `dolt_diff_summary` is a cheap "are these identical?" check.
+- `dolt_diff_summary` is a cheap "are these identical?" check, once the chat tables and `settings` are
+  left out of its rows: it counts every table.
 - `session_from_rows_repaired` fits table boxes on open (`crates/notations/src/lib.rs:169-178`). The
   same repair is applied to the
   Before side, or a false "layout changed" shows after opening.
@@ -352,17 +377,20 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 
 Restore makes a new version whose content equals an old one, on the current branch. It is offered in
 version details and in the viewing banner, after a confirmation that names the version. Section 6's
-rules for leaving current work apply, since the session is replaced. Viewing ends.
+rules for leaving current work apply, since the session is replaced, and the project is held still
+throughout (section 6). Viewing ends first.
 
 It is compared first, with the same repair on both sides (section 6). A version whose model is the
 same as current work is not offered. If that is only found when it runs, it says "This version is the
 same as your current work." and makes no version, an empty commit included.
 
-1. Any unsaved changes are saved as a version first, `Before restoring <date>`.
+Steps 1 to 3 are one job on the writer, so no other write comes between them.
+
+1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`.
 2. The version's model rows are read, in today's table shape, and written to the working set.
 3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
    nothing differed, and is reported as above.
-4. The session is rebuilt from those rows, only once the commit has succeeded.
+4. The session is rebuilt from those rows, only once the commit has succeeded; then the hold ends.
 
 | Question | Decision |
 |---|---|
@@ -372,7 +400,7 @@ same as your current work." and makes no version, an empty commit included.
 | Undo across a Restore? | No: undo starts fresh. Chat cards say the undo history no longer holds their change, wording that exists |
 | Reading or step 1 fails | Nothing has changed |
 | Writing the rows fails | The write is one transaction, so the working set is unchanged. A version from step 1 stays, and the message says so |
-| The commit fails | The session was not rebuilt. Its rows are written back as autosave writes them, tried again with the next change if that fails too, and the message says so |
+| The commit fails | The session was not rebuilt. Its rows are written back as autosave writes them, tried again with the next change if that fails too, and the message says so. The hold ends |
 | Restoring from another branch? | Not offered: History lists only the current branch |
 
 ---
@@ -429,14 +457,15 @@ A delete cannot be undone in 0.14.0. The confirmation says the branch leaves the
 that its contents may remain in the
 project folder's storage, as a deleted conversation does in the project's saved history.
 
-While a switch runs the session is held read-only and `write_changes` is stopped, because rows
-handed over during the switch would
-reach the new branch. The target is read and checked over its own connection first; only then does
+A branch change holds the project still (section 6), because rows handed over during it would reach
+the new branch. The target is read and checked over its own connection first; only then does
 the current branch change.
 
 Every job handed to the writer names the switch generation it was made under, a counter a switch moves
 and a rename does not. The generation is taken when the job is asked for, before any key check. A job
 of another generation is refused with an error saying so, and is not applied to the branch now shown.
+Reads off the writer (the version list, a preview) carry it too, and an answer from another generation
+is dropped.
 
 ### Switching
 
@@ -455,8 +484,9 @@ undo another's step (`session.rs:286-293`).
 ### History on a branch
 
 History lists the current branch's line, including versions from before it split off (measured),
-with a divider "Started from main" at the
-merge base (`DOLT_MERGE_BASE`). The chat commit that removes inherited conversations is a chat
+with a divider "Shared with main up to here" at the
+merge base (`DOLT_MERGE_BASE`). Dolt does not record which branch a branch came from, so the divider
+does not claim it. The chat commit that removes inherited conversations is a chat
 commit, so it is not a version.
 
 ### Where it shows
@@ -465,7 +495,7 @@ commit, so it is not a version.
 |---|---|
 | Chip | Section 2: the name appears once a second branch exists, so a one-branch project never sees the word |
 | Versions panel | Sections **Branches**, **Working changes**, **History**. Branches is folded while there is only `main` |
-| Branch row | Name, current mark, unsaved dot, date of last change. The dot counts only the model's changes: `dirty` is a quick first look, and where it is set, that branch's `dolt_status` is read without the chat tables, as `has_unsaved` does; Enter switches; menu has Switch, Rename, Delete |
+| Branch row | Name, current mark, unsaved dot, date of its latest version. The dot counts only the model's changes: `dirty` is a quick first look, and where it is set, that branch's `dolt_status` is read without the chat tables, as `has_unsaved` does. The date is that of its latest version, not of its latest commit, which may be a chat commit; Enter switches; menu has Switch, Rename, Delete |
 | Status bar | "On {branch}" beside the save state, once a second branch exists |
 | Tab and title dot | The current branch's unsaved state |
 | Merging | One line under Branches: "Branches can't be merged yet." Compare shows how two branches differ |
@@ -519,10 +549,12 @@ Checks against what exists:
 | Before the first version | Working changes | No baseline: everything is Added, except the root Model element |
 | First version | Details, Compare | "First version: there is nothing earlier to compare it with." Before shows the absent state |
 | No changes | Working changes | "No changes since the last version." Save version… disabled, with the reason in its tooltip |
+| Unsaved only in `settings` or `model_tables` (an upgrade, a table first used) | Working changes, status bar | Working changes lists nothing; the status bar keeps Unsaved changes, and ⌘S saves them. Save version… stays disabled |
+| A branch with no version | Compare | That branch is not offered as a side of a comparison |
 | Identical pair | Compare | "These two versions are the same." |
 | Restoring a version equal to current work | Details, banner | Not offered; found only when it runs: "This version is the same as your current work." No version is made |
 | Loading | Chip, list, centre | Skeleton rows; the previous state stays usable |
-| Version unavailable | Row | "This version can't be shown", with the reason on request. Stays listed; stepping skips it and says so |
+| Version unavailable | Row | "This version can't be shown", with the reason behind a "Why?" in the meta text. Stays listed; stepping skips it and says so |
 | Newer or foreign model shape | Row | "Made with a newer Archforge." |
 | Read failed | Banner | The previous state stays, Retry offered; never half a model |
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
@@ -552,11 +584,13 @@ graph line and "Changed by" go.
 
 Menus (AR-154, deciding AR-20): **File**, **Edit**, **View**, **Model**, **Versions**, **Help**, the
 macOS application menu, and an in-window menu on Windows and
-Linux. A group appears only with real actions. **Model** holds the create-element and
-create-relationship actions, through the same commands as the diagram tools
-(`workspace.tools.*`, `crates/ui-egui/src/canvas.rs:2714-2750`). **Versions** holds Save version…,
-History, Compare…, New branch…, Switch branch, Back to current work and
-older and newer.
+Linux. A group appears only with real actions. **File** holds Save, and **Versions** holds Save version…. On
+Windows and Linux Quit is under File and About under Help. **Model** holds the create-element and
+create-relationship actions through the same commands as the diagram tools (`workspace.tools.*`,
+`crates/ui-egui/src/canvas.rs:2714-2750`): Note, Link note and the open diagram's own kinds, for UML those
+of the existing relationship and classifier lists. **Versions** also holds History, Compare…, New branch…,
+Switch branch, Back to current work, and older and newer. New project, Close project, the zooms and the
+tool picks show no shortcut, as none exists today.
 
 Journeys to draw in `ArchforgeUx.figcraft`, from page 02's components, in light and dark, with real
 content:
