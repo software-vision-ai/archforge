@@ -75,7 +75,8 @@ impl Handle {
 
 /// A conversation's token, shared by its thread and its handle, so that asking it to end revokes
 /// the token on the asking thread, before the call returns, and no later call can use it whatever
-/// origin it names (AR-228). `ended` keeps a grant that comes after that from being kept.
+/// origin it names (AR-228). `ended` keeps a grant that comes after that from being kept. Locks:
+/// taken under `sessions`, never while `access` is held; a grant is dropped outside it.
 type Token = Arc<Mutex<Held>>;
 
 /// What [`Token`] holds.
@@ -374,10 +375,11 @@ impl Drop for Guard {
     /// Gives everything back: the conversation leaves the running list, its token is revoked, agent
     /// access closes when no conversation holds it, and the window is told the conversation ended.
     fn drop(&mut self) {
+        // The token goes before the conversation leaves the running list, so an end asked in
+        // between, refused as not running, leaves no live token behind.
+        revoke_now(&self.token);
         locked(&self.inner.sessions).remove(&self.chat);
         let sink = self.inner.sink();
-        // The token is revoked as the grant drops, whatever follows.
-        revoke_now(&self.token);
         let held = std::mem::take(&mut self.granted);
         let failure = self.failure.take();
         let chat = self.chat.clone();
@@ -447,7 +449,9 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
         dropped: false,
     };
     let mut program = match begin(inner, &request, &id, session, &mut guard) {
-        Ok(p) => p,
+        Ok(Some(p)) => p,
+        // Asked to end before its program started: nothing to start, and nothing went wrong.
+        Ok(None) => return,
         Err(f) => {
             log::warn!("the conversation {:?} could not start: {}", request.chat, f.detail);
             guard.failure = Some(f);
@@ -505,14 +509,18 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
 
 /// The program of the conversation, started: found, its key or sign-in, its token and bridge when
 /// agent access is on, its folder. The token goes into the guard first, so a failure after it
-/// still revokes it.
+/// still revokes it. None, with nothing started, when the conversation was asked to end before
+/// its program started (AR-228).
 fn begin(
     inner: &Arc<Inner>,
     request: &ChatStart,
     id: &ConversationId,
     session: SessionId,
     guard: &mut Guard,
-) -> Result<Box<dyn AgentSession + Send>, ChatFailure> {
+) -> Result<Option<Box<dyn AgentSession + Send>>, ChatFailure> {
+    if locked(&guard.token).ended {
+        return Ok(None);
+    }
     let runtime = inner.runtime(super::kind(request.provider)).map_err(|e| failure(&e))?;
     let workspace = Workspace::open(&inner.workspace).map_err(|e| failure(&e))?;
     let folder = workspace.conversation(id).map_err(|e| failure(&e))?;
@@ -526,13 +534,20 @@ fn begin(
     let grant = locked(&inner.access).grant(request.allow_changes, sink.as_ref()).map_err(other)?;
     guard.granted = grant.is_some();
     let place = grant.as_ref().map(|g| (g.port(), g.path().to_path_buf()));
-    {
+    let late = {
         let mut held = locked(&guard.token);
         if held.ended {
-            drop(grant);
+            grant
         } else {
             held.grant = grant;
+            None
         }
+    };
+    // A grant taken for a conversation asked to end meanwhile is revoked outside the lock, and its
+    // program is not started.
+    if late.is_some() {
+        drop(late);
+        return Ok(None);
     }
     let bridge = match place {
         Some((port, token_file)) => Some(Bridge {
@@ -571,7 +586,7 @@ fn begin(
             Box::new(CodexSession::start(&runtime, &folder, &home, config, auth).map_err(|e| failure(&e))?)
         }
     };
-    Ok(program)
+    Ok(Some(program))
 }
 
 /// The API key of `provider`, or the failure that says there is none.
