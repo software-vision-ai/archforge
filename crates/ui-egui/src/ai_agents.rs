@@ -410,10 +410,10 @@ pub trait AgentHost: Send + Sync {
     fn codex_logout(&self) -> Receiver<Result<(), AccountError>>;
     /// Where the conversations' events and agent access's changes go from now on.
     fn connect(&self, sink: crate::chat::EventSink);
-    /// Starts a conversation, with its own agent access, answering at once (whether a conversation
-    /// may run at all is the shell's check, in [`crate::chat::start`]): refused for a bad id, one
-    /// already running, one whose private folder is being removed ([`AgentHost::forget`]), or past
-    /// [`crate::chat::MAX_RUNNING`]; the rest (the program found, the key read, the start) comes
+    /// Starts a conversation, with its own agent access, answering at once (the shell asks for one
+    /// only to send a question the person asked in it, through [`crate::chat::start`]): refused
+    /// for a bad id, one already running, one whose private folder is being removed
+    /// ([`AgentHost::forget`]), or past [`crate::chat::MAX_RUNNING`]; the rest (the program found, the key read, the start) comes
     /// as events, a failure as an end.
     fn start(&self, request: crate::chat::ChatStart) -> Result<(), crate::chat::ChatRefusal>;
     /// Sends the person's message to the running conversation `chat`.

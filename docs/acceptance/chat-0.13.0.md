@@ -332,23 +332,13 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
    ```
 
    **Expect:** *no agent program runs*.
-3. Type a question and press Enter. **Expect:** the question stays in the box, and the panel says
-   *Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.* Run
-   `agents || echo "no agent program runs"` again. **Expect:** *no agent program runs*: nothing
-   was started, so nothing was sent.
-4. Open another conversation from **Conversations** and press Enter on a question there.
-   **Expect:** the same line, and still *no agent program runs*.
-5. Start a new conversation (**New conversation**, +). **Expect:** *No agent set up yet*, with
+3. Type a question and press Enter. **Expect:** the question is sent once and answered; `ours`
+   lists the program again, and the status bar says *Chat is using the model* while the switch is
+   still off. The switch no longer refuses sending (AR-240).
+4. Start a new conversation (**New conversation**, +). **Expect:** *No agent set up yet*, with
    **Configure agent**.
-6. Turn **Let Chat use the model** on again and go back to the conversation of step 4.
-   **Expect:** the line has gone. Press Enter. **Expect:** the question is sent once and answered;
-   `ours` lists the program again.
-7. The *Not sent* card shows only when the switch goes off while a question is still being kept,
-   before it is sent: a moment too short to reach by hand, as the switch is in Settings. Record
-   *not reached*. The app's tests cover it:
-   `a_question_being_kept_when_model_use_goes_off_is_not_sent_and_goes_back_to_the_box` (the card,
-   the question back in the box, and sent once the switch is on) and
-   `a_question_not_sent_while_the_box_holds_other_text_can_be_sent_again` (**Send again**).
+5. Turn **Let Chat use the model** on again. **Expect:** the new conversation's box shows, ready to
+   ask.
 
 ### W1. Windows (Windows only)
 

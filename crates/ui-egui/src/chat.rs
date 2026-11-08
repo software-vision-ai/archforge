@@ -4,7 +4,7 @@
 //! The shell runs no program and opens no port: the host does ([`crate::ai_agents::AgentHost`]),
 //! starting each conversation's agent program on a thread of its own and giving it agent access
 //! through a loopback control channel that is open only while a conversation holds it.
-//! Conversations run only while Let Chat use the model is on, which [`start`] and [`send`] check.
+//! Turning Let Chat use the model off ends every conversation that runs (`follow_switch`).
 //! The host says when access opens and closes ([`HostEvent::Access`]), and the status bar shows
 //! it.
 //!
@@ -65,8 +65,6 @@ pub enum ChatRefusal {
     NotAvailable,
     /// Archforge is closing.
     Closing,
-    /// Let Chat use the model is off: no conversation starts or is sent anything.
-    ModelUseOff,
     /// The conversation's private folder is being removed, after a deletion of it (AR-218): it
     /// starts once that is done, so asking again shortly after succeeds.
     Forgetting,
@@ -84,7 +82,6 @@ impl std::fmt::Display for ChatRefusal {
             ChatRefusal::TooMany { most } => write!(f, "at most {most} conversations run at once"),
             ChatRefusal::NotAvailable => f.write_str("conversations are not available here"),
             ChatRefusal::Closing => f.write_str("Archforge is closing"),
-            ChatRefusal::ModelUseOff => f.write_str("Let Chat use the model is off"),
             ChatRefusal::Forgetting => f.write_str("the conversation's private folder is being removed; it starts once that is done"),
             ChatRefusal::Refused { why } => f.write_str(why),
         }
@@ -343,7 +340,7 @@ pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
 
 /// Follows Let Chat use the model when it differs from what was seen last: turning it off ends
 /// every conversation that runs, each end revoking its token at once and agent access closing with
-/// the last, so none sends anything more (AR-221); the panel says so.
+/// the last (AR-221), and the panels wait for those ends ([`crate::chat_panel::switched_off`]).
 pub(crate) fn follow_switch(shell: &mut crate::Shell) {
     let on = shell.state.agents.chat_uses_model;
     if shell.chats.seen == Some(on) {
@@ -352,8 +349,8 @@ pub(crate) fn follow_switch(shell: &mut crate::Shell) {
     if let Some(host) = host(shell) {
         shell.chats.seen = Some(on);
         log::info!("Let Chat use the model is {}", if on { "on" } else { "off" });
-        let mut ended = Vec::new();
         if !on {
+            let mut ended = Vec::new();
             for kept in shell.chats.kept.iter().filter(|k| k.running) {
                 match host.end(&kept.chat) {
                     Ok(()) => ended.push(kept.chat.clone()),
@@ -362,8 +359,8 @@ pub(crate) fn follow_switch(shell: &mut crate::Shell) {
                     Err(e) => log::warn!("the conversation {:?} could not be ended as Let Chat use the model went off: {e}", kept.chat),
                 }
             }
+            crate::chat_panel::switched_off(shell, &ended);
         }
-        crate::chat_panel::model_use_changed(shell, on, &ended);
     }
 }
 
@@ -421,12 +418,11 @@ fn drop_one(kept: &mut Kept) {
     kept.dropped = kept.dropped.saturating_add(1);
 }
 
-/// Starts a conversation: checked here (its id, Let Chat use the model on, a duplicate, the cap),
+/// Starts a conversation: checked here (its id, a duplicate, the cap),
 /// then asked of the host, which answers at once and reports the rest as events. A Codex
 /// conversation reads Codex's account the first time, as opening AI Agents does.
 pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRefusal> {
     check_id(&request.chat)?;
-    model_use_on(shell)?;
     let host = host(shell).ok_or(ChatRefusal::NotAvailable)?;
     if shell.chats.running(&request.chat) {
         return Err(ChatRefusal::AlreadyRunning);
@@ -449,17 +445,10 @@ pub fn start(shell: &mut crate::Shell, request: ChatStart) -> Result<(), ChatRef
     Ok(())
 }
 
-/// Sends the person's message to the running conversation `chat`; refused while Let Chat use the
-/// model is off.
+/// Sends the person's message to the running conversation `chat`.
 pub fn send(shell: &crate::Shell, chat: &str, text: String) -> Result<(), ChatRefusal> {
     check_id(chat)?;
-    model_use_on(shell)?;
     host(shell).ok_or(ChatRefusal::NotAvailable)?.send(chat, text)
-}
-
-/// Refuses while Let Chat use the model is off: then nothing of any conversation leaves Archforge.
-fn model_use_on(shell: &crate::Shell) -> Result<(), ChatRefusal> {
-    if shell.state.agents.chat_uses_model { Ok(()) } else { Err(ChatRefusal::ModelUseOff) }
 }
 
 /// Stops the turn the conversation `chat` runs; the conversation stays up.

@@ -279,7 +279,6 @@ str		Agent access off	Accès des agents désactivé
 str		Conversations	Conversations
 str		New conversation	Nouvelle conversation
 str		Stop the reply first	Arrêtez d’abord la réponse
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	« Laisser Discussion utiliser le modèle » est désactivé, donc rien n’est envoyé. Activez-le dans Réglages ▸ Agents IA.
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	Archforge ne connaît pas la conversation de ce jeton ; l’étiquette {label} appartient ici à une autre conversation
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	la conversation {who} est en train de se terminer ; plus rien ne s’exécute en son nom tant que son programme n’est pas terminé
 str		the conversation {who} has no turn running in the project shown in Archforge	la conversation {who} n’a aucun tour en cours dans le projet affiché dans Archforge
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	Pas de réponse
 str		Not started yet	Pas encore démarrée
 str		This conversation is being removed. Try again in a moment.	Cette conversation est en cours de suppression. Réessayez dans un instant.
-str		Not sent	Non envoyée
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	« Laisser Discussion utiliser le modèle » a été désactivé, donc cette question n’a pas été envoyée. Elle est de retour dans le champ, prête une fois l’interrupteur activé.
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	« Laisser Discussion utiliser le modèle » a été désactivé, donc cette question n’a pas été envoyée. Renvoyez-la une fois l’interrupteur activé.
 str		{agent} stopped before answering.	{agent} s’est arrêté avant de répondre.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Ce tour a modifié le modèle ; il n’est donc pas renvoyé. Posez à nouveau la question pour continuer.
 str		Open Settings	Ouvrir les Réglages

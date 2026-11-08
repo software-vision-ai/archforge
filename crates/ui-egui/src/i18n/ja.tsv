@@ -279,7 +279,6 @@ str		Agent access off	エージェントのアクセスはオフ
 str		Conversations	会話
 str		New conversation	新しい会話
 str		Stop the reply first	先に返答を停止してください
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	「チャットにモデルの使用を許可」がオフのため、何も送信されません。設定 ▸ AI エージェントでオンにしてください。
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	このトークンの会話は Archforge が知らないものです。ラベル {label} はここでは別の会話のものです
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	会話 {who} は終了処理中です。そのプログラムが終了するまで、その名前では何も実行されません
 str		the conversation {who} has no turn running in the project shown in Archforge	会話 {who} は Archforge に表示中のプロジェクトで実行中のターンがありません
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	回答がありません
 str		Not started yet	まだ開始していません
 str		This conversation is being removed. Try again in a moment.	この会話は削除中です。少ししてからもう一度お試しください。
-str		Not sent	未送信
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。入力欄に戻してあり、スイッチをオンにすれば送信できます。
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	「チャットにモデルの使用を許可」がオフにされたため、この質問は送信されませんでした。スイッチをオンにしてから、もう一度送信してください。
 str		{agent} stopped before answering.	{agent} は回答する前に停止しました。
 str		This turn changed the model, so it is not sent again; ask again to go on.	このターンはモデルを変更したため、再送信されません。続けるにはもう一度質問してください。
 str		Open Settings	設定を開く

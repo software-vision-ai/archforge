@@ -279,7 +279,6 @@ str		Agent access off	Acceso de agentes desactivado
 str		Conversations	Conversaciones
 str		New conversation	Nueva conversación
 str		Stop the reply first	Detén primero la respuesta
-str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	«Dejar que Chat use el modelo» está desactivado, así que no se envía nada. Actívalo en Ajustes ▸ Agentes de IA.
 str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	Archforge no conoce la conversación de este token; la etiqueta {label} pertenece aquí a otra conversación
 str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	la conversación {who} se está terminando; no se ejecuta nada más en su nombre hasta que su programa haya terminado
 str		the conversation {who} has no turn running in the project shown in Archforge	la conversación {who} no tiene ningún turno en curso en el proyecto mostrado en Archforge
@@ -344,9 +343,6 @@ str		{agent}'s sign-in has expired. Sign in again in Settings, then send again.	
 str		No answer	Sin respuesta
 str		Not started yet	Aún no iniciada
 str		This conversation is being removed. Try again in a moment.	Esta conversación se está eliminando. Inténtalo de nuevo en un momento.
-str		Not sent	No enviada
-str		Let Chat use the model was turned off, so this question was not sent. It is back in the box, ready once the switch is on.	«Dejar que Chat use el modelo» se desactivó, así que esta pregunta no se envió. Vuelve a estar en el cuadro, lista cuando el interruptor esté activado.
-str		Let Chat use the model was turned off, so this question was not sent. Send it again once the switch is on.	«Dejar que Chat use el modelo» se desactivó, así que esta pregunta no se envió. Envíala de nuevo cuando el interruptor esté activado.
 str		{agent} stopped before answering.	{agent} se detuvo antes de responder.
 str		This turn changed the model, so it is not sent again; ask again to go on.	Este turno cambió el modelo, así que no se envía de nuevo; pregunta otra vez para continuar.
 str		Open Settings	Abrir Ajustes
