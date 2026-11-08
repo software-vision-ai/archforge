@@ -1156,9 +1156,11 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
     );
     slow.agents.start(claude(CHAT, "Chat 1", false)).unwrap();
     let folder = slow.settings.join("agents").join(format!("conversation-{CHAT}"));
+    // Its program has started (a conversation asked to end before then starts none, AR-228).
+    let started = || slow.base.join("claude.pids").exists();
     let deadline = Instant::now() + WAIT;
-    while !folder.is_dir() {
-        assert!(Instant::now() < deadline, "its program made its folder");
+    while !folder.is_dir() || !started() {
+        assert!(Instant::now() < deadline, "its program started in its folder");
         std::thread::sleep(Duration::from_millis(10));
     }
     let removal = slow.agents.forget(CHAT);
