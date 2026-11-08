@@ -960,3 +960,62 @@ fn a_save_says_whether_it_made_a_version_and_a_retry_makes_no_second_one() {
     assert_eq!(project.save_version("Again", &Author::person("")).unwrap(), Saved::NothingNew, "the retry makes no second version");
     project.close().unwrap();
 }
+
+/// The versions of a line: every kind of commit in one history, read a page at a time.
+#[test]
+fn the_versions_are_saves_only_newest_first_and_a_page_starts_after_a_version() {
+    use archforge_project::CHAT_AUTHOR;
+    let env = Env::new("versions");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    let mut commit = |message: &str, author: &str| -> String {
+        c.exec_drop("CALL DOLT_COMMIT('--allow-empty', '-m', ?, '--author', ?)", (message, author)).unwrap();
+        c.query_first("SELECT commit_hash FROM dolt_log LIMIT 1").unwrap().unwrap()
+    };
+    let now = || timestamp(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+
+    // The root, the creation and a chat commit: nothing to list yet.
+    let chat = commit("Chat 1: turn 1", CHAT_AUTHOR);
+    assert_eq!(project.versions(None, 50).unwrap().versions, []);
+
+    let before = now();
+    let automatic = commit("Saved 2026-11-08T10:00:00Z", "Archforge <archforge@localhost>");
+    let after = now();
+    // A person's name decides nothing: this one is named like the chat, the next chat like a person.
+    let typed = commit("Saved the day", "Archforge chat <archforge@localhost>");
+    commit("Chat 1: turn 2", "Ada <chat@localhost>");
+    let agent = commit("Work of the agent", "Chat 3 <agent@localhost>");
+    let newest = commit("Renamed Customer", "Ada Lovelace <archforge@localhost>");
+
+    let first = project.versions(None, 2).unwrap();
+    let hashes = |page: &archforge_project::Versions| page.versions.iter().map(|v| v.hash.clone()).collect::<Vec<_>>();
+    assert_eq!(hashes(&first), [newest.clone(), agent.clone()]);
+    assert!(first.more);
+    assert_eq!(first.versions[0].previous.as_ref(), Some(&agent));
+    assert_eq!(first.versions[1].previous.as_ref(), Some(&typed), "past the chat commit, not the Dolt parent; and off the page");
+    assert_eq!(first.versions[0].author.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(first.versions[0].description.as_deref(), Some("Renamed Customer"));
+    assert!(!first.versions[0].by_agent);
+    assert_eq!(first.versions[1].author.as_deref(), Some("Chat 3"));
+    assert!(first.versions[1].by_agent);
+
+    // A save made meanwhile shifts nothing: the next page still starts after the same version.
+    commit("One more", "Ada <archforge@localhost>");
+    let second = project.versions(Some(&agent), 2).unwrap();
+    assert_eq!(hashes(&second), [typed.clone(), automatic.clone()]);
+    assert!(!second.more, "the root and the creation are left out");
+    assert_eq!(second.versions[0].previous.as_ref(), Some(&automatic));
+    assert_eq!(second.versions[0].description.as_deref(), Some("Saved the day"));
+    assert_eq!(second.versions[0].author.as_deref(), Some("Archforge chat"));
+    let oldest = &second.versions[1];
+    assert_eq!((oldest.description.as_ref(), oldest.author.as_ref(), oldest.previous.as_ref()), (None, None, None));
+    assert!(before <= oldest.date && oldest.date <= after, "in UTC: {before} {} {after}", oldest.date);
+
+    for not_one in [chat.as_str(), "nosuchversion"] {
+        assert!(matches!(project.versions(Some(not_one), 2), Err(Error::NotAVersion { commit }) if commit == not_one));
+    }
+    assert!(matches!(project.versions(None, 201), Err(Error::TooLarge { size: 201, .. })));
+    project.close().unwrap();
+}

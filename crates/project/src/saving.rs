@@ -59,6 +59,11 @@ pub fn is_version(email: &str) -> bool {
     !CHAT_AUTHOR.ends_with(&format!("<{email}>"))
 }
 
+/// Whether a commit recorded under `email` was a save an agent asked for.
+pub(crate) fn is_agent(email: &str) -> bool {
+    email == AGENT_EMAIL
+}
+
 /// The author History shows for a version recorded under `name` and `email`: nobody for plain
 /// `Archforge`, which is every version from before names were recorded and any saved with no name.
 pub fn shown_author<'a>(name: &'a str, email: &str) -> Option<&'a str> {
