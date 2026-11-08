@@ -7260,7 +7260,7 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
     click(&mut h, at);
     assert!(!ids(&h).iter().any(|i| i == "workspace.chat.chip.project.remove"));
     ask_in_chat(&mut h, "Which classes have no description yet?");
-    assert_eq!(*rig.store.log.lock().unwrap(), ["create", "ask"], "made and asked before the agent gets it");
+    assert_eq!(*rig.store.log.lock().unwrap(), ["create", "chips", "ask"], "made, its removed chip kept, and asked before the agent gets it");
     assert_eq!(h.state().chat_panel.draft, "", "the composer empties once the question is kept");
     let started = rig.agents.started.lock().unwrap().clone();
     assert_eq!(started.len(), 1);
@@ -7988,6 +7988,188 @@ fn the_history_lists_the_projects_conversations_and_opens_one_whole_and_read_onl
     let last = started.last().unwrap();
     assert_eq!((last.origin.as_str(), last.resume, last.allow_changes), ("Chat 1", true, false));
     assert_eq!(kept_chat(&h, &rig).turns.len(), 2, "its turns go on from where they were");
+}
+
+/// A chip removed before the first question stays removed when the conversation is opened again
+/// from Conversations (AR-227): it is kept in the project with the conversation, not drawn, and
+/// the next question's context line leaves it out. In both appearances.
+#[test]
+fn a_removed_chip_stays_removed_when_the_conversation_is_opened_again() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "Which classes have no description yet?");
+        assert_eq!(*rig.store.log.lock().unwrap(), ["create", "chips", "ask"], "{theme:?}: kept once the conversation is made");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Diagram]), "{theme:?}");
+        // Another conversation, then the first again from Conversations.
+        let at = rect_of(&h, "workspace.chat.new").center();
+        click(&mut h, at);
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.chip.diagram.remove"), "{theme:?}: a new conversation has every chip");
+        ask_in_chat(&mut h, "Second question");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let at = rect_of(&h, "workspace.chat.history").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.chat.history.1").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), Some(first), "{theme:?}");
+        let shown = ids(&h);
+        assert!(!shown.iter().any(|i| i == "workspace.chat.chip.diagram.remove"), "{theme:?}: still removed");
+        assert!(shown.iter().any(|i| i == "workspace.chat.chip.project.remove"), "{theme:?}: the others stay");
+        ask_in_chat(&mut h, "Go on");
+        let sent = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(sent.starts_with("Go on") && sent.contains("project \"Commerce platform\""), "{theme:?}: {sent}");
+        assert!(!sent.contains("open diagram"), "{theme:?}: the removed chip is not sent: {sent}");
+    }
+}
+
+/// A chip removed in a conversation already in the project is kept at once, and putting it back is
+/// kept too (AR-227): opened again, the conversation shows the chip and sends it. In both
+/// appearances.
+#[test]
+fn putting_a_removed_chip_back_is_kept_with_the_conversation() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        let at = rect_of(&h, "workspace.chat.chip.selection.remove").center();
+        click(&mut h, at);
+        assert_eq!(rig.store.log.lock().unwrap().last().copied(), Some("chips"), "{theme:?}: kept at once");
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Selection]), "{theme:?}");
+        crate::chat_panel::set_chip(h.state_mut(), Chip::Selection, false);
+        h.run();
+        assert!(rig.store.kept(first).unwrap().row.removed.is_empty(), "{theme:?}: put back, and kept so");
+        let writes = rig.store.log.lock().unwrap().len();
+        crate::chat_panel::set_chip(h.state_mut(), Chip::Selection, false);
+        assert_eq!(rig.store.log.lock().unwrap().len(), writes, "{theme:?}: nothing changed, nothing written");
+        // Opened again after another conversation: the chip is there and goes with the question.
+        let at = rect_of(&h, "workspace.chat.new").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.chat.history").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.chat.history.0").center();
+        click(&mut h, at);
+        h.run();
+        assert_eq!(h.state().chat_panel.chat.as_ref().map(|c| c.id), Some(first), "{theme:?}");
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.chip.selection.remove"), "{theme:?}: back");
+        ask_in_chat(&mut h, "And Payment?");
+        let sent = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(sent.contains("selected \"Order\""), "{theme:?}: {sent}");
+    }
+}
+
+/// A chip removal the project refused is not lost (AR-227): the chip stays removed, the panel says
+/// the conversation could not be saved, and the next question keeps the whole set first, so the
+/// latest set is the one stored. In both appearances.
+#[test]
+fn a_refused_chip_removal_is_kept_again_with_the_next_question() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        *rig.store.refuse.lock().unwrap() = Some("the disk is full".into());
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        h.run();
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.chip.diagram.remove"), "{theme:?}: still removed here");
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert!(rig.store.kept(first).unwrap().row.removed.is_empty(), "{theme:?}: not kept yet");
+        // The project takes writes again: the next question keeps the removal before it goes.
+        *rig.store.refuse.lock().unwrap() = None;
+        ask_in_chat(&mut h, "And Payment?");
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "ask"], "{theme:?}: {log:?}");
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Diagram]), "{theme:?}");
+        let sent = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(sent.starts_with("And Payment?") && !sent.contains("open diagram"), "{theme:?}: {sent}");
+    }
+}
+
+/// Answers every write the fake store holds back with a refusal, `why`.
+fn refuse_held(rig: &crate::chat_fixture::Rig, why: &str) {
+    for (_, tx) in rig.store.held.lock().unwrap().drain(..) {
+        let _ = tx.send(Err(crate::chat_store::Refusal::Failed(why.into())));
+    }
+}
+
+/// A question asked while a chip removal is still unanswered waits for the set to be kept
+/// (AR-227): it is not written or sent first, and when the project refuses the set the question
+/// stays in the box with the reason; asked again once the project takes writes, the set is kept
+/// first. In both appearances.
+#[test]
+fn a_question_waits_for_an_unanswered_chip_removal_and_stays_when_it_is_refused() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    use std::sync::atomic::Ordering::SeqCst;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        let sent = sent_texts(&rig).len();
+        let asks = |rig: &crate::chat_fixture::Rig| rig.store.log.lock().unwrap().iter().filter(|k| **k == "ask").count();
+        let asked = asks(&rig);
+        rig.store.hold.store(true, SeqCst);
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "And Payment?");
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "chips"], "{theme:?}: the set is kept again first, the question waits: {log:?}");
+        assert_eq!(sent_texts(&rig).len(), sent, "{theme:?}: nothing sent yet");
+        // The project refuses: the question stays in the box with the reason, nothing asked.
+        refuse_held(&rig, "the disk is full");
+        rig.store.hold.store(false, SeqCst);
+        h.run();
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(h.state().chat_panel.draft, "And Payment?", "{theme:?}");
+        assert_eq!(asks(&rig), asked, "{theme:?}: the question was not written");
+        assert_eq!(sent_texts(&rig).len(), sent, "{theme:?}: not sent");
+        assert!(rig.store.kept(first).unwrap().row.removed.is_empty(), "{theme:?}");
+        // Sent again: the set is kept, then the question goes without the diagram. Each answer is
+        // taken on a frame of its own (the window looks again every 100 ms while it waits).
+        crate::chat_panel::send(h.state_mut());
+        for _ in 0..3 {
+            h.run();
+        }
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "ask"], "{theme:?}: {log:?}");
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Diagram]), "{theme:?}");
+        let last = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(last.starts_with("And Payment?") && !last.contains("open diagram"), "{theme:?}: {last}");
+    }
+}
+
+/// A chip removal the project refuses after the removal was drawn is said without other input
+/// (AR-227): the panel keeps looking while the write is unanswered. In both appearances.
+#[test]
+fn a_late_refused_chip_removal_is_said_without_other_input() {
+    use crate::chat::ChatEvent;
+    use std::sync::atomic::Ordering::SeqCst;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        rig.store.hold.store(true, SeqCst);
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        assert!(crate::chat_panel::waiting(h.state()), "{theme:?}: the panel keeps looking while the removal is unanswered");
+        refuse_held(&rig, "the disk is full");
+        rig.store.hold.store(false, SeqCst);
+        h.run();
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert!(!crate::chat_panel::waiting(h.state()), "{theme:?}: answered");
+    }
 }
 
 /// The Chat panel's history of page 07 (B7): five conversations kept, the first open, the history

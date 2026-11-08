@@ -978,13 +978,15 @@ mod tests {
 
     /// The host's store of conversations (`crate::chats`), over a real project and a secure store
     /// in memory holding a canary key: a question asked, failed, sent again in place, edited and
-    /// sent again, its turn kept once; the conversation kept, the project closed and opened again,
-    /// and read back whole; a question holding the key refused with nothing written.
+    /// sent again, its turn kept once; the chips removed kept; the conversation kept, the project
+    /// closed and opened again, and read back whole; a question holding the key refused with
+    /// nothing written.
     #[test]
     fn the_hosts_chat_store_runs_a_failed_turn_again_in_place_keeps_conversations_and_refuses_a_key() {
         use archforge_secrets::{MemoryStore, Secret, SecretName, SecretStore};
         use archforge_ui_egui::ai_agents::Provider;
         use archforge_ui_egui::chat::FailureKind;
+        use archforge_ui_egui::chat_panel::Chip;
         use archforge_ui_egui::chat_store::{Anchor, AnchorRole, Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
         const CANARY: &str = "sk-ant-api03-canary-chat-store-0000-4F2a";
         let base = std::env::temp_dir().join(format!("af-chat-store-{}", std::process::id()));
@@ -1066,6 +1068,9 @@ mod tests {
             answer(chats.write(&path, Write::End { turn: id(2), outcome: Outcome::Completed, error: None, changes: None, now: now + 8 })),
             Ok(Answer::Done)
         );
+        // The chips the person removed (AR-227), its last activity left alone.
+        let removed = std::collections::BTreeSet::from([Chip::Diagram, Chip::Project]);
+        assert_eq!(answer(chats.write(&path, Write::Chips { chat, removed: removed.clone() })), Ok(Answer::Done));
         // Closed and opened again: the conversation is there, whole, its turn kept once.
         close(&host, &path).unwrap();
         let back = wait(&host.open(&path)).unwrap();
@@ -1076,6 +1081,7 @@ mod tests {
             (listed.len(), row.origin.as_str(), row.title.as_str(), row.messages, row.updated_at),
             (1, "Chat 1", "Which classes have no description yet?", 2, now + 8)
         );
+        assert_eq!(row.removed, removed, "its chips removed came back with it");
         let stored = chats.load(&path, chat).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!(stored.turns.len(), 1, "one stored row per turn");
         assert_eq!((stored.turns[0].outcome, stored.turns[0].model.as_str()), (Outcome::Completed, "opus"));

@@ -10,6 +10,7 @@
 //!
 //! The shell's times are seconds since 1970; the project stores them as RFC 3339 text in UTC.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
@@ -19,6 +20,7 @@ use archforge_project as project;
 use archforge_secrets::{Deleted, Secret, SecretError, SecretName, SecretStore};
 use archforge_ui_egui::ai_agents::Provider;
 use archforge_ui_egui::chat::FailureKind;
+use archforge_ui_egui::chat_panel::Chip;
 use archforge_ui_egui::chat_store::{
     Anchor, AnchorRole, Answer, ChangeKind, ChangeState, ChatStore, Listed, Outcome, Refusal, Row, Stored, StoredBody, StoredChange, StoredMessage,
     StoredTurn, ToolFacts, ToolStatus, Write,
@@ -354,6 +356,11 @@ fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before)
             p.set_chat_model(chat, &model, &stamp(now)).map_err(refused)?;
             Ok(Answer::Done)
         }
+        Write::Chips { chat, removed } => {
+            let roles: BTreeSet<project::AnchorRole> = removed.into_iter().map(chip_to).collect();
+            p.set_removed_chips(chat, &roles).map_err(refused)?;
+            Ok(Answer::Done)
+        }
         Write::Delete { chat } => {
             // A commit kept from an earlier deletion of it never serves this one.
             deleted.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&(p.path().to_path_buf(), chat));
@@ -379,10 +386,40 @@ fn apply(p: &project::Project, write: Write, created_by: &str, deleted: &Before)
     }
 }
 
-/// A kept conversation's row, in the shell's terms.
+/// A kept conversation's row, in the shell's terms: refused when its chips removed name an anchor
+/// role that is not a chip, which the project never reads back.
 fn row(chat: project::Chat, messages: u32) -> Result<Row, String> {
     let updated_at = seconds(&chat.updated_at).ok_or_else(|| format!("its last activity {:?} is not a time", chat.updated_at))?;
-    Ok(Row { id: chat.id, origin: chat.origin, title: chat.title, provider: provider_from(chat.provider), model: chat.model, updated_at, messages })
+    let removed = chat.removed_chips.iter().map(|r| chip_from(*r)).collect::<Result<BTreeSet<Chip>, String>>()?;
+    Ok(Row {
+        id: chat.id,
+        origin: chat.origin,
+        title: chat.title,
+        provider: provider_from(chat.provider),
+        model: chat.model,
+        updated_at,
+        messages,
+        removed,
+    })
+}
+
+/// A context chip as the project keeps it: its anchor role.
+fn chip_to(chip: Chip) -> project::AnchorRole {
+    match chip {
+        Chip::Project => project::AnchorRole::Project,
+        Chip::Diagram => project::AnchorRole::Diagram,
+        Chip::Selection => project::AnchorRole::Selection,
+    }
+}
+
+/// The context chip a kept anchor role names; refused for a role that is not a chip.
+fn chip_from(role: project::AnchorRole) -> Result<Chip, String> {
+    match role {
+        project::AnchorRole::Project => Ok(Chip::Project),
+        project::AnchorRole::Diagram => Ok(Chip::Diagram),
+        project::AnchorRole::Selection => Ok(Chip::Selection),
+        other => Err(format!("its chips removed name {:?}, which is not a chip", other.code())),
+    }
 }
 
 /// A whole conversation read back, in the shell's terms.
