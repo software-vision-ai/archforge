@@ -5,9 +5,9 @@ use std::collections::VecDeque;
 
 use mysql::prelude::Queryable;
 
-use crate::model::sql;
+use crate::model::{database_connection, sql};
 use crate::saving::{is_agent, is_version, shown_author};
-use crate::{DATABASE, Error, Project};
+use crate::{Error, Project};
 
 /// How many commits at the old end of a line are not versions: Dolt's root and the creation.
 const NOT_VERSIONS: usize = 2;
@@ -120,8 +120,7 @@ impl VersionReader {
         if limit > MOST_IN_A_PAGE {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
-        let mut c = self.connector.connect().map_err(Error::Server)?;
-        c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
+        let mut c = database_connection(&self.connector)?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \
              FROM dolt_log LIMIT {}",
