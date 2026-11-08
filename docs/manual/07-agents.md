@@ -273,7 +273,8 @@ project that cannot be written.
   is selected, by name. Remove one with its ×; it stays removed while this conversation stays
   shown. Open another conversation and then this one again from **Conversations**, and the chip
   is back and goes with the next question: check the chips before you ask. **Send again** keeps a
-  question's first chips (see [When something goes wrong](#when-something-goes-wrong)). The line under them is
+  question's first chips, unless the question is back in the box: then it goes with the chips
+  shown now (see [When something goes wrong](#when-something-goes-wrong)). The line under them is
   a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
@@ -385,10 +386,17 @@ A card in the conversation says what went wrong and what to do.
 **Send again** asks the same question again in the same place: the conversation keeps it once. A
 question whose turn already changed the model is not sent again; ask again in your own words.
 
-**Send again** sends the question with the chips it had the first time, even one you removed
-since. A question that came back into the box and is sent from there goes with the chips shown
-now. To send only the chips shown now, ask a new question. The earlier question, with its chips'
-line, stays part of the conversation so far, so it may still reach the provider.
+Which question and which chips **Send again** sends depends on where the question is:
+
+- **Still in the conversation** (it did not come back into the box): **Send again** on its card
+  sends it as it was, with the chips it had the first time, even one you removed since.
+- **Back in the box**: Enter and **Send again** on the card both send what the box holds now,
+  edited or not, with the chips shown now, a newly selected element included. Check the box and
+  the chips first. Empty the box, and **Send again** sends the question as it was, with its first
+  chips.
+
+To send only the chips shown now, ask a new question. The earlier question, with its chips' line,
+stays part of the conversation so far, so it may still reach the provider.
 
 While the provider does not answer (no network, or the provider is busy), the agent's program
 keeps trying again for a while: Claude for about three minutes without a network. The reply says
