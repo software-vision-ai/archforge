@@ -78,6 +78,8 @@ pub mod limits {
     pub const COMMAND_CHARS: usize = 128;
     /// The property or aspect a tool call was about, in characters: cut.
     pub const DETAIL_CHARS: usize = 64;
+    /// The chips removed of a conversation, as stored: `project,diagram,selection` at most.
+    pub const REMOVED_CHIPS_CHARS: usize = 32;
     /// What reading one conversation, or the list of them, may take, in bytes.
     pub const READ_BYTES: usize = 64 << 20;
 }
@@ -85,21 +87,44 @@ pub mod limits {
 use limits::*;
 
 /// One of the conversations' tables: its columns as `information_schema` checks them, in order,
-/// and its keys.
+/// and its keys. `first` counts the columns it was first made with; those after them are nullable,
+/// added at the end within chat shape 1, so a table made before them lacks them and its rows read
+/// them as empty.
 struct TableDef {
     name: &'static str,
     columns: &'static [(&'static str, &'static str)],
+    first: usize,
     keys: &'static str,
 }
 
 impl TableDef {
+    /// The statement that makes the table, with every column, when it is missing.
     fn create(&self) -> String {
         let columns: Vec<String> = self.columns.iter().map(|(name, sql)| format!("`{name}` {sql}")).collect();
         format!("CREATE TABLE IF NOT EXISTS `{}` ({}, {})", self.name, columns.join(", "), self.keys)
     }
 }
 
-/// The seven tables as the signed-off schema gives them.
+/// The chat tables a project holds: how many, and those made before their later columns, each with
+/// the count of the columns it has.
+struct Held {
+    tables: usize,
+    narrow: BTreeMap<&'static str, usize>,
+}
+
+/// Where `chat.removed_chips` is among the `chat` table's columns.
+const CHIPS_AT: usize = 8;
+
+impl Held {
+    /// Whether the `chat` table has the column of the chips removed: all its columns, or as many as
+    /// reach past it.
+    fn chips_column(&self) -> bool {
+        self.narrow.get("chat").is_none_or(|has| *has > CHIPS_AT)
+    }
+}
+
+/// The seven tables as the signed-off schema gives them, with the columns added since within
+/// chat shape 1.
 const TABLES: [TableDef; 7] = [
     TableDef {
         name: "chat",
@@ -112,7 +137,9 @@ const TABLES: [TableDef; 7] = [
             ("created_by", "VARCHAR(1024) NOT NULL"),
             ("created_at", "VARCHAR(20) NOT NULL"),
             ("updated_at", "VARCHAR(20) NOT NULL"),
+            ("removed_chips", "VARCHAR(32) NULL"),
         ],
+        first: 8,
         keys: "PRIMARY KEY (`id`), INDEX `chat_recent` (`updated_at`)",
     },
     TableDef {
@@ -128,6 +155,7 @@ const TABLES: [TableDef; 7] = [
             ("started_at", "VARCHAR(20) NOT NULL"),
             ("ended_at", "VARCHAR(20) NULL"),
         ],
+        first: 9,
         keys: "PRIMARY KEY (`id`), UNIQUE INDEX `chat_turn_order` (`chat`, `number`)",
     },
     TableDef {
@@ -144,6 +172,7 @@ const TABLES: [TableDef; 7] = [
             ("anchors_cut", "TINYINT NOT NULL"),
             ("created_at", "VARCHAR(20) NOT NULL"),
         ],
+        first: 10,
         keys: "PRIMARY KEY (`id`), UNIQUE INDEX `chat_message_order` (`chat`, `position`), INDEX `chat_message_turn` (`turn`)",
     },
     TableDef {
@@ -162,6 +191,7 @@ const TABLES: [TableDef; 7] = [
             ("error", "VARCHAR(1024) NULL"),
             ("shortened", "TINYINT NOT NULL"),
         ],
+        first: 12,
         keys: "PRIMARY KEY (`message`)",
     },
     TableDef {
@@ -173,6 +203,7 @@ const TABLES: [TableDef; 7] = [
             ("metaclass", "VARCHAR(64) NOT NULL"),
             ("name", "VARCHAR(256) NULL"),
         ],
+        first: 5,
         keys: "PRIMARY KEY (`message`, `element`, `role`), INDEX `chat_anchor_element` (`element`)",
     },
     TableDef {
@@ -184,6 +215,7 @@ const TABLES: [TableDef; 7] = [
             ("state", "VARCHAR(16) NOT NULL"),
             ("updated_at", "VARCHAR(20) NOT NULL"),
         ],
+        first: 5,
         keys: "PRIMARY KEY (`turn`)",
     },
     TableDef {
@@ -195,6 +227,7 @@ const TABLES: [TableDef; 7] = [
             ("metaclass", "VARCHAR(64) NOT NULL"),
             ("name", "VARCHAR(256) NULL"),
         ],
+        first: 5,
         keys: "PRIMARY KEY (`turn`, `element`), INDEX `chat_change_element_element` (`element`)",
     },
 ];
@@ -310,6 +343,9 @@ pub struct Chat {
     pub created_at: String,
     /// Its last activity: the list goes newest first by it.
     pub updated_at: String,
+    /// The context chips the person removed from it (AR-227): only `Project`, `Diagram` and
+    /// `Selection`; none for a row written before they were kept.
+    pub removed_chips: BTreeSet<AnchorRole>,
 }
 
 /// A conversation deleted (AR-217): its label, and the commit just before the deletion, which
@@ -762,9 +798,10 @@ impl Project {
         Error::ChatsUnreadable { path: self.path().to_path_buf(), why: why.into() }
     }
 
-    /// How many of the chat tables the project holds, each of exactly its shape; one of another
-    /// shape, or something else under its name, makes the conversations unreadable.
-    fn chat_shapes(&self, c: &mut mysql::Conn) -> Result<usize, Error> {
+    /// Which of the chat tables the project holds, each of exactly its shape, or of its first
+    /// shape with only later columns missing at its end; one of another shape, or something else
+    /// under its name, makes the conversations unreadable.
+    fn chat_shapes(&self, c: &mut mysql::Conn) -> Result<Held, Error> {
         let held = tables_held_by(c, &is_chat_table).map_err(|why| self.unreadable(why))?;
         let mut present = Vec::new();
         for name in CHAT_TABLES {
@@ -775,23 +812,51 @@ impl Project {
             }
         }
         let found = columns_of(c, present.clone()).map_err(|why| self.unreadable(why))?;
+        let mut narrow = BTreeMap::new();
         for def in &TABLES {
-            if let Some(columns) = found.get(def.name)
-                && (columns.len() != def.columns.len() || !columns.iter().zip(def.columns).all(|(f, e)| same_column(f, e)))
-            {
-                return Err(self.unreadable(format!("the table {} does not have the shape Archforge writes", def.name)));
+            if let Some(columns) = found.get(def.name) {
+                if columns.len() < def.first || columns.len() > def.columns.len() || !columns.iter().zip(def.columns).all(|(f, e)| same_column(f, e))
+                {
+                    return Err(self.unreadable(format!("the table {} does not have the shape Archforge writes", def.name)));
+                }
+                if columns.len() < def.columns.len() {
+                    narrow.insert(def.name, columns.len());
+                }
             }
         }
-        Ok(present.len())
+        Ok(Held { tables: present.len(), narrow })
+    }
+
+    /// The chat tables when the project holds them all, each of its shape (or of its first shape);
+    /// none when it holds none.
+    fn chat_tables(&self, c: &mut mysql::Conn) -> Result<Option<Held>, Error> {
+        let held = self.chat_shapes(c)?;
+        match held.tables {
+            0 => Ok(None),
+            n if n == CHAT_TABLES.len() => Ok(Some(held)),
+            _ => Err(self.unreadable("some of its chat tables are missing")),
+        }
     }
 
     /// Whether the project holds the conversations' tables, all of them, each of its shape.
     fn chats_held(&self, c: &mut mysql::Conn) -> Result<bool, Error> {
-        match self.chat_shapes(c)? {
-            0 => Ok(false),
-            n if n == CHAT_TABLES.len() => Ok(true),
-            _ => Err(self.unreadable("some of its chat tables are missing")),
+        Ok(self.chat_tables(c)?.is_some())
+    }
+
+    /// Adds to each chat table made before its later columns the columns it lacks, at its end,
+    /// empty for the rows it holds, before a write that names them. Each addition is a change to the
+    /// table that the next chat commit takes. Run outside a transaction: a change of a table's
+    /// shape ends one.
+    fn widen(&self, c: &mut mysql::Conn, held: &Held) -> Result<(), Error> {
+        for def in &TABLES {
+            let Some(has) = held.narrow.get(def.name) else { continue };
+            for (name, sql_type) in def.columns.iter().skip(*has) {
+                c.query_drop(format!("ALTER TABLE `{}` ADD COLUMN `{name}` {sql_type}", def.name))
+                    .map_err(sql("cannot add a column to the conversations' tables"))?;
+                log::info!("{}: the table {} took the column {name}", self.path().display(), def.name);
+            }
         }
+        Ok(())
     }
 
     /// A connection to a project that holds the conversations' tables; `missing` when it holds none.
@@ -1329,6 +1394,28 @@ impl Project {
         self.update_chat(chat, "`model` = ?", text_value(model), now).map(|_| ())
     }
 
+    /// Keeps the context chips the person removed from a conversation (AR-227), all of them: each
+    /// removal and each chip put back writes the whole set, none for every chip put back. Refused
+    /// for an anchor role that is not a chip. Its last activity stays, as no message was written;
+    /// committed with the next chat commit. A `chat` table made before the column takes it first,
+    /// and keeps it should the write then fail (a nullable column, empty for the rows it holds).
+    pub fn set_removed_chips(&self, chat: Uuid, removed: &BTreeSet<AnchorRole>) -> Result<(), Error> {
+        if let Some(role) = removed.iter().find(|r| !r.is_chip()) {
+            return Err(value("the chips removed", format!("{:?} is not a chip; the chips are project, diagram and selection", role.code())));
+        }
+        let missing = || Error::ChatMissing { what: "conversation", id: chat.to_string() };
+        let mut c = self.model_connection()?;
+        let held = self.chat_tables(&mut c)?.ok_or_else(missing)?;
+        let there: Option<mysql::Row> =
+            c.exec_first("SELECT 1 FROM `chat` WHERE `id` = ?", (id_value(chat),)).map_err(sql("cannot read the conversation"))?;
+        if there.is_none() {
+            return Err(missing());
+        }
+        self.widen(&mut c, &held)?;
+        c.exec_drop("UPDATE `chat` SET `removed_chips` = ? WHERE `id` = ?", vec![chips_value(removed), id_value(chat)])
+            .map_err(sql("cannot write the conversation"))
+    }
+
     /// Sets one column of a conversation's row and its last activity; gives its origin.
     fn update_chat(&self, chat: Uuid, set: &str, to: mysql::Value, now: &str) -> Result<String, Error> {
         let missing = || Error::ChatMissing { what: "conversation", id: chat.to_string() };
@@ -1408,14 +1495,17 @@ impl Project {
     /// restoring commit holds this conversation alone. Refused, with nothing written, when the
     /// conversation is listed already ([`Error::ChatListed`]), `from` is not such a commit, another
     /// conversation has taken its label since, or the project holds as many conversations as it
-    /// may; nothing of it is written then (the commit of what waited may have been made). Gives
-    /// its label.
+    /// may; nothing of it is written then (the commit of what waited may have been made). A
+    /// column added to a table after `from` comes back empty, and a table made before one takes it
+    /// first, kept in that commit even when the restore is then refused (a nullable column, empty
+    /// for the rows it holds). Gives its label.
     pub fn restore_chat(&self, chat: Uuid, from: &str) -> Result<String, Error> {
         let refuse = |why: String| Error::ChatNotRestored { id: chat.to_string(), why };
         if !is_commit(from) {
             return Err(refuse(format!("{:?} is not a commit of the project's saved history", from.chars().take(40).collect::<String>())));
         }
-        let mut c = self.chat_connection(|| refuse("the project holds no conversations".into()))?;
+        let mut c = self.model_connection()?;
+        let held = self.chat_tables(&mut c)?.ok_or_else(|| refuse("the project holds no conversations".into()))?;
         // One of the branch's own commits: the merge base of it and the branch is itself. A hash
         // Dolt does not know is an error here, so a refusal.
         let base: Option<mysql::Row> = c.exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (from,)).map_err(|e| {
@@ -1431,6 +1521,8 @@ impl Project {
         if listed.is_some() {
             return Err(Error::ChatListed { id: chat.to_string() });
         }
+        // Every column is written back, so a table made before its later columns takes them first.
+        self.widen(&mut c, &held)?;
         self.chat_commit(&mut c, "Conversations kept").map_err(|e| refuse(e.to_string()))?;
         let mut tx = c.start_transaction(mysql::TxOpts::default()).map_err(sql("cannot start writing the conversations"))?;
         let listed: Option<mysql::Row> =
@@ -1457,8 +1549,17 @@ impl Project {
             return Err(Error::Full { what: "the project's list of conversations", max: CHATS_PER_PROJECT });
         }
         for def in &TABLES {
-            let columns: Vec<String> = def.columns.iter().map(|(name, _)| format!("`{name}`")).collect();
-            let columns = columns.join(", ");
+            let names: Vec<String> = def.columns.iter().map(|(name, _)| format!("`{name}`")).collect();
+            let columns = names.join(", ");
+            // A column added after the commit was made is not in it: its rows come back without it.
+            // The commit's own columns are read from its table, so any other failure refuses.
+            let had = if def.first < def.columns.len() { Some(columns_at(&mut tx, def.name, from).map_err(&refuse)?) } else { None };
+            let mut taken = Vec::new();
+            for (n, ((plain, _), name)) in def.columns.iter().zip(names).enumerate() {
+                let there = n < def.first || had.as_ref().is_some_and(|h| h.contains(*plain));
+                taken.push(if there { name } else { "NULL".to_string() });
+            }
+            let taken = taken.join(", ");
             let rows = match def.name {
                 "chat" => "`id` = ?".to_string(),
                 "chat_turn" | "chat_message" => "`chat` = ?".to_string(),
@@ -1466,11 +1567,8 @@ impl Project {
                 "chat_change" | "chat_change_element" => format!("`turn` IN (SELECT `id` FROM `chat_turn` AS OF '{from}' WHERE `chat` = ?)"),
                 other => return Err(refuse(format!("Archforge does not know how the table {other} holds a conversation"))),
             };
-            tx.exec_drop(
-                format!("INSERT INTO `{0}` ({columns}) SELECT {columns} FROM `{0}` AS OF '{from}' WHERE {rows}", def.name),
-                (id_value(chat),),
-            )
-            .map_err(|e| refuse(format!("its rows of {} cannot be written back: {e}", def.name)))?;
+            tx.exec_drop(format!("INSERT INTO `{0}` ({columns}) SELECT {taken} FROM `{0}` AS OF '{from}' WHERE {rows}", def.name), (id_value(chat),))
+                .map_err(|e| refuse(format!("its rows of {} cannot be written back: {e}", def.name)))?;
         }
         tx.exec_drop(
             "UPDATE `chat_turn` SET `outcome` = 'interrupted', `ended_at` = `started_at` WHERE `chat` = ? AND `outcome` = 'running'",
@@ -1514,9 +1612,10 @@ impl Project {
     /// tables cannot be read.
     pub fn list_chats(&self) -> Result<Vec<Listed>, Error> {
         let mut c = self.model_connection()?;
-        if !self.chats_held(&mut c)? {
+        let Some(held) = self.chat_tables(&mut c)? else {
             return Ok(Vec::new());
-        }
+        };
+        let columns = chat_columns(&held);
         let mut budget = READ_BYTES;
         let mut counts = BTreeMap::new();
         let rows = c
@@ -1534,7 +1633,7 @@ impl Project {
         let mut out = Vec::new();
         let mut seen = BTreeSet::new();
         let rows = c
-            .query_iter(format!("SELECT {CHAT_COLUMNS} FROM `chat` ORDER BY `updated_at` DESC, `id` DESC LIMIT {}", CHATS_PER_PROJECT + 1))
+            .query_iter(format!("SELECT {columns} FROM `chat` ORDER BY `updated_at` DESC, `id` DESC LIMIT {}", CHATS_PER_PROJECT + 1))
             .map_err(|e| self.unreadable(format!("the conversations cannot be listed: {e}")))?;
         for row in rows {
             let row = row.map_err(|e| self.unreadable(format!("the conversations cannot be listed: {e}")))?;
@@ -1558,11 +1657,12 @@ impl Project {
     /// that does not read, an orphan or a broken order makes the conversation unreadable, with the
     /// reason; nothing is skipped.
     pub fn load_chat(&self, id: Uuid) -> Result<Conversation, Error> {
-        let mut c = self.chat_connection(|| Error::ChatMissing { what: "conversation", id: id.to_string() })?;
+        let mut c = self.model_connection()?;
+        let held = self.chat_tables(&mut c)?.ok_or_else(|| Error::ChatMissing { what: "conversation", id: id.to_string() })?;
         let bad = |why: String| Error::ChatUnreadable { id: id.to_string(), why };
         let mut budget = READ_BYTES;
         let rows: Vec<mysql::Row> = c
-            .exec(format!("SELECT {CHAT_COLUMNS} FROM `chat` WHERE `id` = ? LIMIT 2"), (id_value(id),))
+            .exec(format!("SELECT {} FROM `chat` WHERE `id` = ? LIMIT 2", chat_columns(&held)), (id_value(id),))
             .map_err(sql("cannot read the conversation"))?;
         let chat = match rows.as_slice() {
             [] => return Err(Error::ChatMissing { what: "conversation", id: id.to_string() }),
@@ -1770,6 +1870,56 @@ const ANCHOR_COLUMNS: &str = "a.`message`, a.`element`, a.`role`, a.`metaclass`,
 const CHANGE_COLUMNS: &str = "x.`turn`, x.`changes`, x.`elements`, x.`state`, x.`updated_at`";
 const CHANGED_COLUMNS: &str = "x.`element`, x.`kind`, x.`metaclass`, x.`name`";
 
+/// The columns of the table `table` as the commit `from` held it, by the names a select of none of
+/// its rows gives. `from` must be checked to be a commit hash already.
+fn columns_at(tx: &mut mysql::Transaction<'_>, table: &str, from: &str) -> Result<BTreeSet<String>, String> {
+    let result = tx
+        .query_iter(format!("SELECT * FROM `{table}` AS OF '{from}' LIMIT 0"))
+        .map_err(|e| format!("the table {table} of the commit {from} cannot be read: {e}"))?;
+    let names = result.columns().as_ref().iter().take(MAX_PAST_COLUMNS).map(|c| c.name_str().into_owned()).collect();
+    drop(result);
+    Ok(names)
+}
+
+/// The columns of a past commit's chat table looked at: more than any of the tables has.
+const MAX_PAST_COLUMNS: usize = 64;
+
+/// The `chat` columns read back: the chips removed as empty from a table made before that column.
+fn chat_columns(held: &Held) -> String {
+    format!("{CHAT_COLUMNS}, {}", if held.chips_column() { "`removed_chips`" } else { "NULL" })
+}
+
+/// The chips removed of a conversation as stored: none for an empty or missing cell, else a
+/// comma-separated list of chip codes, each once. Anything else is refused, naming the value.
+fn chips_at(row: &mysql::Row, i: usize) -> Result<BTreeSet<AnchorRole>, String> {
+    let mut out = BTreeSet::new();
+    let Some(text) = opt_text_at(row, i, REMOVED_CHIPS_CHARS).map_err(|why| format!("its chips removed: {why}"))? else { return Ok(out) };
+    if text.chars().count() > REMOVED_CHIPS_CHARS {
+        return Err(format!("its chips removed are longer than {REMOVED_CHIPS_CHARS} characters"));
+    }
+    if text.is_empty() {
+        return Ok(out);
+    }
+    for code in text.split(',') {
+        let role = AnchorRole::from_code(code).map_err(|why| format!("its chips removed: {why}"))?;
+        if !role.is_chip() {
+            return Err(format!("its chips removed name {code:?}, which is not a chip (project, diagram, selection)"));
+        }
+        if !out.insert(role) {
+            return Err(format!("its chips removed name {code:?} twice"));
+        }
+    }
+    Ok(out)
+}
+
+/// The chips removed as stored: null for none, else their codes in order, comma-separated.
+fn chips_value(removed: &BTreeSet<AnchorRole>) -> mysql::Value {
+    if removed.is_empty() {
+        return mysql::Value::NULL;
+    }
+    text_value(&removed.iter().map(|r| r.code()).collect::<Vec<_>>().join(","))
+}
+
 /// Takes a row's size from what a reading may still take.
 fn spend(budget: &mut usize, row: &mysql::Row) -> Result<(), String> {
     let mut cost = std::mem::size_of::<mysql::Row>();
@@ -1864,6 +2014,7 @@ fn chat_from(row: &mysql::Row) -> Result<Chat, String> {
         created_by: text_at(row, 5, CREATED_BY_CHARS)?,
         created_at: text_at(row, 6, 20)?,
         updated_at: text_at(row, 7, 20)?,
+        removed_chips: chips_at(row, 8)?,
     })
 }
 
