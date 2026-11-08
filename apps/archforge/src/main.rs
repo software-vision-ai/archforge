@@ -215,7 +215,7 @@ fn run() -> i32 {
                 }
                 window.attach(cc.egui_ctx.clone());
                 #[cfg(target_os = "macos")]
-                let menu = native_menu(&mut shell);
+                let menu = native_menu(&mut shell, &cc.egui_ctx);
                 let saved = prefs::capture(&shell);
                 Ok(Box::new(DesktopApp {
                     shell,
@@ -261,10 +261,12 @@ fn native_options() -> eframe::NativeOptions {
     eframe::NativeOptions { viewport, system_font_fallback: false, ..Default::default() }
 }
 
+/// Reserves the title strip and builds the macOS menu bar, whose items wake the window through
+/// `ctx`; `None`, with a warning in the log, when it cannot be built.
 #[cfg(target_os = "macos")]
-fn native_menu(shell: &mut Shell) -> Option<macos_menu::NativeMenu> {
+fn native_menu(shell: &mut Shell, ctx: &egui::Context) -> Option<macos_menu::NativeMenu> {
     shell.top_inset = macos_window::TITLE_BAR_INSET;
-    match macos_menu::build() {
+    match macos_menu::build(ctx.clone()) {
         Ok(menu) => Some(menu),
         Err(e) => {
             log::warn!("the native menu bar could not be built: {e}");
