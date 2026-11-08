@@ -353,7 +353,7 @@ follows one order. Stepping between versions and returning have nothing to prote
 | Steps 1 to 6 | Nothing is written; the hold ends and the session is as it was |
 | A commit or branch operation gives no clear answer | `HEAD` or the branch list is read, and what it shows is what happened: the step counts as finished or failed by that |
 | Those cannot be read either | Archforge says it could not tell. Nothing is written back, and the project stays held until it is closed; reopening reads what is stored |
-| Archforge stops partway | Reopening reads what is stored. A Restore before its commit shows the restored rows as unsaved, with earlier work in its `Before restoring` version; a switch reopens where it was; a new branch may be listed, and its source is unchanged |
+| Archforge stops partway | Reopening reads what is stored. A Restore before its commit shows the restored rows as unsaved, with earlier work in its `Before restoring` version; a switch reopens where it was; a new branch that did not finish is removed on reopening, and its source is unchanged |
 
 A control request can wait its turn after it is accepted: `control::drain` takes 32 a frame
 (`control.rs:126`, `:149-160`). So each request carries the window's session generation, taken when the
@@ -473,6 +473,11 @@ All run on the writer, in order with every model and conversation write.
 | **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
 | **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
+
+A new branch is made under a reserved name (`archforge-creating/…`, which the name encoding cannot
+produce and the branch list leaves out). It gets its real name last, once its conversations are removed
+and its rows copied; a rename keeps the uncommitted rows (measured). Opening a project removes any branch
+left under that name.
 
 A delete cannot be undone in 0.14.0. The confirmation says the branch leaves the project's list and
 that its contents may remain in the
