@@ -1382,7 +1382,10 @@ str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改
 str		Close without writing	不写入就关闭
+str		Close {name}?	关闭 {name}？
 str		Close {name} without writing?	不写入就关闭 {name}？
+str		Quit Archforge?	退出 Archforge？
+str		The last change to {name} did not finish. Check it before you go on.	对 {name} 的最后一次更改未完成。请先检查再继续。
 str		Don't save	不保存
 str		If you don't save, the changes since the last save are lost.	如果不保存，上次保存以来的更改将丢失。
 str		It stays open until its changes are written, or you close it without them.	在其更改写入或你不带更改关闭之前，它会保持打开。

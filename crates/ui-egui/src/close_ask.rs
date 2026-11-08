@@ -21,12 +21,15 @@ pub enum Ask {
     CannotWrite { path: std::path::PathBuf, why: String },
     /// Close without writing, asked once more.
     ConfirmLoss { path: std::path::PathBuf },
+    /// A close or a quit waited for a hold that failed, with nothing unsaved: the person looks first.
+    HoldFailed { path: std::path::PathBuf, held: String },
 }
 
 impl Ask {
+    /// The project the question is about.
     fn path(&self) -> &std::path::Path {
         match self {
-            Ask::Unsaved { path } | Ask::CannotWrite { path, .. } | Ask::ConfirmLoss { path } => path,
+            Ask::Unsaved { path } | Ask::CannotWrite { path, .. } | Ask::ConfirmLoss { path } | Ask::HoldFailed { path, .. } => path,
         }
     }
 }
@@ -38,6 +41,7 @@ enum Answer {
     DontSave,
     CloseWithoutWriting,
     LoseChanges,
+    GoOn,
     Cancel,
 }
 
@@ -77,6 +81,14 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 ("close-ask.cancel", tr("Cancel"), Answer::Cancel, false),
             ],
         ),
+        Ask::HoldFailed { held, .. } => (
+            if quitting { tr("Quit Archforge?") } else { fmt(&tr("Close {name}?"), &[("name", &name)]) },
+            vec![fmt(&tr("The last change to {name} did not finish. Check it before you go on."), &[("name", held)])],
+            vec![
+                ("close-ask.go-on", if quitting { tr("Quit Archforge") } else { tr("Close") }, Answer::GoOn, true),
+                ("close-ask.keep", tr("Keep open"), Answer::Cancel, false),
+            ],
+        ),
     };
     let p = *crate::ux::palette(ui.visuals().dark_mode);
     let window = ui.ctx().content_rect();
@@ -98,6 +110,9 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         Answer::DontSave => shell.discard_tab(i, true),
         Answer::LoseChanges => shell.discard_tab(i, false),
         Answer::CloseWithoutWriting => shell.ask = Some(Ask::ConfirmLoss { path: ask.path().to_path_buf() }),
+        // Quitting goes on by itself, with nothing left to ask about.
+        Answer::GoOn if quitting => {}
+        Answer::GoOn => shell.close_tab_now(i),
         Answer::Cancel => {
             if quitting {
                 shell.cancel_quit();

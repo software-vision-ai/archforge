@@ -1382,7 +1382,10 @@ str		{name} removed; what it held moved to {parent}	{name} を削除しました
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄
 str		Close without writing	書き込まずに閉じる
+str		Close {name}?	{name} を閉じますか？
 str		Close {name} without writing?	{name} を書き込まずに閉じますか？
+str		Quit Archforge?	Archforge を終了しますか？
+str		The last change to {name} did not finish. Check it before you go on.	{name} への最後の変更は完了しませんでした。続ける前に確認してください。
 str		Don't save	保存しない
 str		If you don't save, the changes since the last save are lost.	保存しないと、前回の保存以降の変更は失われます。
 str		It stays open until its changes are written, or you close it without them.	変更が書き込まれるか、変更なしで閉じるまで開いたままです。
