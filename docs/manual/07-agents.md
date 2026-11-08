@@ -269,13 +269,14 @@ Your question is kept in the project first, then sent. A question that holds one
 keys is neither sent nor kept: the panel says so and leaves it in the box for you to edit. So does a
 project that cannot be written.
 
-- **The chips** above the box are sent with your question: the project, the open diagram and what
-  is selected, by name. Remove one with its ×; it stays removed while this conversation stays
-  shown. Open another conversation and then this one again from **Conversations**, and the chip
-  is back and goes with the next question: check the chips before you ask. **Send again** keeps a
-  question's first chips, unless the question is back in the box: then it goes with the chips
-  shown now (see [When something goes wrong](#when-something-goes-wrong)). The line under them is
-  a reminder: they, and everything the agent reads, go to the agent's provider.
+- **The chips** above the box are sent with your question: the project, the open diagram and what is
+  selected, by name. Remove one with its ×; it stays removed while this conversation stays shown.
+  Open another conversation and then this one again from **Conversations**, and the chip is back and
+  goes with the next question: check the chips before you ask. **Send again** sends a question with
+  the chips it last went with, unless the question is back in the box: then it goes with the chips
+  shown now, so a chip that came back on reopening goes too (see [When something goes
+  wrong](#when-something-goes-wrong)). The line under them is a reminder: they, and everything the
+  agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
   Archforge itself answered the agent, so a refused change says *refused*. The reply is written in
@@ -389,11 +390,12 @@ question whose turn already changed the model is not sent again; ask again in yo
 Which question and which chips **Send again** sends depends on where the question is:
 
 - **Still in the conversation** (it did not come back into the box): **Send again** on its card
-  sends it as it was, with the chips it had the first time, even one you removed since.
+  sends it as it was last sent, with the chips it last went with, even one you removed since. A
+  question sent again before goes as that last attempt, with that attempt's chips.
 - **Back in the box**: Enter and **Send again** on the card both send what the box holds now,
   edited or not, with the chips shown now, a newly selected element included. Check the box and
-  the chips first. Empty the box, and **Send again** sends the question as it was, with its first
-  chips.
+  the chips first. Empty the box, and **Send again** sends the question as it was last sent, with
+  the chips it last went with.
 
 To send only the chips shown now, ask a new question. The earlier question, with its chips' line,
 stays part of the conversation so far, so it may still reach the provider.
