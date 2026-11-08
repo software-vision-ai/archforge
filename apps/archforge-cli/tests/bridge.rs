@@ -179,7 +179,7 @@ fn a_granted_token_file_reaches_the_window_until_it_is_revoked() {
         Arc::new(|call: archforge_control::Call<'_>| Ok(json!({ "method": call.method, "role": format!("{:?}", call.role), "origin": call.origin })));
     let server = archforge_control::Server::open(&settings, handler).unwrap();
     let port = server.port().to_string();
-    let grant = server.grant(archforge_control::Role::ReadOnly).unwrap();
+    let grant = server.grant(archforge_control::Role::ReadOnly, None).unwrap();
     let file = grant.path().to_str().unwrap().to_string();
     let out = cli(&home).args(["app", "document.inspect", "--port", &port, "--token-file", &file]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
