@@ -7724,6 +7724,10 @@ fn requests_in_the_name_of_a_conversation_whose_program_ends_are_refused() {
         let key = crate::chat_fixture::key(h.state());
         let refused = crate::chat_panel::gate(h.state(), Some(&origin), Some(&key), "engine.execute", &change);
         assert!(refused.as_ref().unwrap_err().contains("is being ended"), "{theme:?}: refused while its program ends: {refused:?}");
+        // Known by its key, not its label: under another label it is refused the same way.
+        let other = format!("{origin}!");
+        let refused = crate::chat_panel::gate(h.state(), Some(&other), Some(&key), "engine.execute", &change);
+        assert!(refused.as_ref().unwrap_err().contains("is being ended"), "{theme:?}: refused by its key under another label: {refused:?}");
     }
 }
 
@@ -8853,6 +8857,11 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         assert!(undo.unwrap_err().contains("may undo only its own changes"));
         let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
         assert!(undo.unwrap_err().contains("may undo only its own changes"), "the edit.undo command alike");
+        // Known by its key, not by the label a request names: refused under another label alike.
+        let key = fx::key(h.state());
+        let other = format!("{}!", h.state().chat_panel.chat.as_ref().and_then(|c| c.origin.clone()).unwrap());
+        let undo = crate::chat_panel::gate(h.state(), Some(&other), Some(&key), "engine.undo", &serde_json::json!({}));
+        assert!(undo.unwrap_err().contains("may undo only its own changes"), "{theme:?}: under another label alike");
         assert_eq!(crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(order).unwrap()), "Mine");
         // Its own change it may undo.
         fx::call(
@@ -8861,6 +8870,9 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
             serde_json::json!({ "command": "element.describe", "params": { "element": order.to_string(), "text": "Its" } }),
         )
         .unwrap();
+        // Which steps are its own is decided by its key, whatever label the request names.
+        let undo = crate::chat_panel::gate(h.state(), Some(&other), Some(&key), "engine.undo", &serde_json::json!({}));
+        assert!(undo.is_ok(), "{theme:?}: its own step, under another label: {undo:?}");
         assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_ok());
         // Another project open with its own Chat 1 running, while this one's is still running parked:
         // each is known by its key (AR-230), so the shown one acts for itself and the parked one,
@@ -8911,6 +8923,10 @@ fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_st
         let inspect = serde_json::json!({});
         let ends = crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect);
         assert!(ends.as_ref().unwrap_err().contains("is being ended"), "refused while it ends, for that reason: {ends:?}");
+        // Known by its key: under another label it is refused the same way.
+        let other = format!("{}!", origin.as_deref().unwrap_or_default());
+        let ends = crate::chat_panel::gate(h.state(), Some(&other), Some(&key), "document.inspect", &inspect);
+        assert!(ends.as_ref().unwrap_err().contains("is being ended"), "{theme:?}: refused by its key under another label: {ends:?}");
         h.run();
         assert!(h.state().chats.letting_go.is_empty(), "its end taken, it is forgotten");
         assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect).is_ok(), "known no more once ended");
