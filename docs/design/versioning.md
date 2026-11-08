@@ -475,9 +475,11 @@ All run on the writer, in order with every model and conversation write.
 | **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
 
 Creating a branch keeps a record in the project folder, beside the `.creating` marker: the branch being
-made and the branch it was made from. The record is written atomically and flushed to disk once the name
-is checked as free, before `DOLT_BRANCH`, and removed last. An older Archforge ignores the file. While a
-record names a branch, the branch list leaves it out. Opening a project deals with the record before
+made and the branch it was made from. The record is written atomically and flushed to disk, its folder included, once
+the name is checked as free, before `DOLT_BRANCH`. It is removed last, and that removal is flushed too,
+folder included, before the hold ends: a record that came back would delete a finished branch. A removal
+that fails counts as a failed creation. An older Archforge ignores the file. While a record names a branch,
+the branch list leaves it out. While a record remains, another creation is refused until cleanup has succeeded. Opening a project deals with the record before
 anything lists or reads branches:
 
 | On opening | Result |
@@ -601,6 +603,7 @@ Checks against what exists:
 | Very large model | Compare | The read budgets hold (`model.rs:26`, `:30`). Over them: "Too large to compare", no partial list |
 | Only `main` | Branches | Folded; New branch… offered |
 | Name empty, too long, or taken | New branch dialog | Under the field, Create disabled |
+| A creation record remains | New branch | Refused, saying the last new branch is not cleaned up yet; the next opening removes it |
 | Branch can't be opened | Row | Damaged, newer format, or holds scripts: the reason, and you stay on the current branch |
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
