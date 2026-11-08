@@ -397,6 +397,12 @@ fn bridge_of(mcp: &Value) -> (u16, PathBuf) {
     (after("--bridge").parse().unwrap(), PathBuf::from(after("--token-file")))
 }
 
+/// Whether Chat's agent access still listens, as the host itself knows it (AR-229): never judged by
+/// the port, which another test may bind as soon as it is free.
+fn host_listens(host: &Host) -> bool {
+    super::locked(&host.agents.inner.access).listening()
+}
+
 /// Whether anything listens on `port` of the loopback interface.
 fn listens(port: u16) -> bool {
     std::net::TcpStream::connect_timeout(&std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port)), Duration::from_millis(300)).is_ok()
@@ -457,7 +463,7 @@ fn a_conversation_holds_its_own_read_only_token_until_it_ends() {
     assert_eq!(server["env"], json!({ "ANTHROPIC_API_KEY": "" }));
     assert!(!mcp.to_string().contains(CLAUDE_CANARY));
     // While it runs: the port listens, the token file is this user's alone, named for the port.
-    assert!(listens(port));
+    assert!(listens(port) && host_listens(&host));
     assert_eq!(std::fs::metadata(&token_file).unwrap().permissions().mode() & 0o777, 0o600);
     assert_eq!(token_file.parent(), Some(host.settings.as_path()));
     let name = token_file.file_name().unwrap().to_string_lossy().into_owned();
@@ -495,7 +501,12 @@ fn a_conversation_holds_its_own_read_only_token_until_it_ends() {
     assert!(access(&ended, false), "access closed before the end was told: {ended:?}");
     assert_eq!(chat_events(ended, CHAT).last(), Some(&ChatEvent::Ended { failure: None }));
     assert!(!token_file.exists(), "the token file went with the conversation");
-    assert!(!listens(port), "nothing listens once the last conversation ended");
+    assert!(!host_listens(&host), "nothing listens once the last conversation ended");
+    // The freed port taken again, as another test may take it, fools no check (AR-229).
+    if let Ok(_squatter) = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)) {
+        assert!(listens(port), "something listens on the port again");
+        assert!(!host_listens(&host), "yet the host's own listener is closed");
+    }
     assert!(matches!(Client::with_token(port, "0".repeat(64)).call("document.inspect", json!({})), Err(CallError::Unreachable(_))));
     assert_eq!(host.agents.send(CHAT, "again".into()), Err(ChatRefusal::NotRunning));
     assert!(!logged(CLAUDE_CANARY) && !logged(CODEX_CANARY), "no key reached the log");
@@ -535,7 +546,7 @@ fn turning_the_opt_in_off_or_quitting_closes_access_at_once() {
     let last: Value = serde_json::from_slice(&archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], archforge_control::REVOKED);
     assert_eq!(archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap(), None, "then closed");
-    assert!(!listens(port) && !token_file.exists());
+    assert!(!host_listens(&host) && !token_file.exists());
     host.until("access closed", |e| matches!(e, HostEvent::Access { held: false }));
     assert!(host.agents.send(CHAT, "still here?".into()).is_ok(), "the conversation goes on without access");
     // On again, a second conversation holds it; quitting closes it and ends both.
@@ -548,7 +559,7 @@ fn turning_the_opt_in_off_or_quitting_closes_access_at_once() {
     host.agents.shutdown();
     let last: Value = serde_json::from_slice(&archforge_control::read_line(&mut r, archforge_control::MAX_REPLY).unwrap().unwrap()).unwrap();
     assert_eq!(last["error"], archforge_control::REVOKED);
-    assert!(!listens(port) && !token_file.exists());
+    assert!(!host_listens(&host) && !token_file.exists());
     let pids = std::fs::read_to_string(host.base.join("claude.pids")).unwrap();
     assert_eq!(pids.lines().count(), 2);
     for pid in pids.lines() {
@@ -611,7 +622,7 @@ fn a_read_only_token_only_reads_and_an_ended_conversations_token_is_refused() {
     host.agents.end(&reader).unwrap();
     host.until("the reader's end", |e| matches!(e, HostEvent::Chat { chat, event: ChatEvent::Ended { .. }, .. } if *chat == reader));
     assert!(matches!(Client::with_token(port, read_token).call("document.inspect", json!({})), Err(CallError::Unreachable(_))));
-    assert!(listens(port), "the writer still holds access");
+    assert!(listens(port) && host_listens(&host), "the writer still holds access");
 }
 
 /// A conversation asked to end has its token revoked as the end is asked, before its program has
