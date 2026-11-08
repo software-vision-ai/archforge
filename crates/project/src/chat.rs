@@ -1553,7 +1553,7 @@ impl Project {
             let columns = names.join(", ");
             // A column added after the commit was made is not in it: its rows come back without it.
             // The commit's own columns are read from its table, so any other failure refuses.
-            let had = if def.first < def.columns.len() { Some(columns_at(&mut tx, def.name, from).map_err(&refuse)?) } else { None };
+            let had = if def.first < def.columns.len() { Some(columns_at(&mut tx, def.name, from).map_err(refuse)?) } else { None };
             let mut taken = Vec::new();
             for (n, ((plain, _), name)) in def.columns.iter().zip(names).enumerate() {
                 let there = n < def.first || had.as_ref().is_some_and(|h| h.contains(*plain));
