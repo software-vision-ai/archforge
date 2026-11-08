@@ -325,12 +325,22 @@ fn a_failed_creation_keeps_the_dialog_and_the_name_and_says_why() {
     assert!(h.state().new_project.as_ref().is_some_and(|d| !d.creating()));
 }
 
+/// Where a test answers a save: `Ok(true)` stands for a new version, `Ok(false)` for nothing new.
+struct SaveAnswer(std::sync::mpsc::Sender<Result<crate::Saved, crate::SaveError>>);
+
+impl SaveAnswer {
+    /// Gives the save its answer.
+    fn send(&self, answer: Result<bool, crate::SaveError>) -> Result<(), std::sync::mpsc::SendError<Result<crate::Saved, crate::SaveError>>> {
+        self.0.send(answer.map(|made| if made { crate::Saved::Version { hash: Some("abc".into()) } } else { crate::Saved::NothingNew }))
+    }
+}
+
 /// A host that writes and saves: it keeps every hand-over of rows, and each
 /// save's and opening's sender, so a test answers when it chooses.
 #[derive(Default)]
 struct SavingHost {
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
-    saves: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<bool, crate::SaveError>>>>,
+    saves: std::sync::Mutex<Vec<SaveAnswer>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
     closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
@@ -379,11 +389,11 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Keeps the save's answer and its description for the test.
-    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, crate::SaveError>> {
+    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<crate::Saved, crate::SaveError>> {
         assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
         self.descriptions.lock().unwrap().push(description);
         let (tx, rx) = std::sync::mpsc::channel();
-        self.saves.lock().unwrap().push(tx);
+        self.saves.lock().unwrap().push(SaveAnswer(tx));
         rx
     }
 }
@@ -14832,6 +14842,38 @@ fn a_project_whose_changes_cannot_be_written_closes_only_after_saying_its_change
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
     assert!(h.state().tabs.is_empty());
+}
+
+/// A failed save says whether a version exists, in each of the ways it can stand, and so does
+/// one whose answer was lost; none of them marks the work saved.
+#[test]
+fn a_failed_save_says_whether_a_version_exists() {
+    use crate::VersionAfter::{Made, None as NoVersion, Unknown};
+    let commit = |version| Some(crate::SaveError::Commit { why: "the disk went away".into(), version });
+    let told = [
+        (commit(NoVersion), "No version was made: the disk went away"),
+        (commit(Made("abc".into())), "A version was made, even though saving reported an error: the disk went away"),
+        (commit(Unknown), "Archforge can't tell whether a version was made: the disk went away. It is safe to save again."),
+        (None, "The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again."),
+    ];
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (error, words) in told.clone() {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            add_schema(&mut h, "shop");
+            h.state_mut().save();
+            let answer = host.saves.lock().unwrap().pop().unwrap();
+            // With no answer at all the sender goes away, as when the writer stops.
+            if let Some(e) = error {
+                answer.send(Err(e)).unwrap();
+            } else {
+                drop(answer);
+            }
+            h.run_steps(2);
+            assert_eq!(h.state().save_error.as_deref(), Some(words));
+            assert!(h.state().session.as_ref().unwrap().is_dirty(), "the shell marks nothing saved");
+        }
+    }
 }
 
 /// Save version saves the state reviewed: the host gets its description, a model that moved

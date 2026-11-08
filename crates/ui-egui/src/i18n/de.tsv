@@ -416,7 +416,10 @@ plural		{n} diagram	{n} Diagramm|{n} Diagramme
 plural		{n} skill	{n} Skill|{n} Skills
 str		Not saved	Nicht gesichert
 str		Changes could not be written to the project	Änderungen konnten nicht ins Projekt geschrieben werden
-str		The save stopped without an answer	Das Sichern endete ohne Antwort
+str		No version was made: {why}	Es wurde keine Version erstellt: {why}
+str		A version was made, even though saving reported an error: {why}	Eine Version wurde erstellt, obwohl das Speichern einen Fehler gemeldet hat: {why}
+str		Archforge can't tell whether a version was made: {why}. It is safe to save again.	Archforge kann nicht feststellen, ob eine Version erstellt wurde: {why}. Sie können gefahrlos erneut speichern.
+str		The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.	Das Speichern endete ohne Antwort; Archforge kann daher nicht feststellen, ob eine Version erstellt wurde. Sie können gefahrlos erneut speichern.
 str		A description can't be empty.	Eine Beschreibung darf nicht leer sein.
 str		A description has to fit on one line.	Eine Beschreibung muss in eine Zeile passen.
 str		A description is at most {max} characters; this one has {n}.	Eine Beschreibung hat höchstens {max} Zeichen; diese hat {n}.

@@ -159,13 +159,13 @@ pub trait ProjectHost: Send + Sync {
     /// project). Rows for a project that is no longer open are dropped.
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
-    /// Save: writes what waits, then commits it in the project at `project`; true when there was
-    /// something to commit. The commit carries `description`, or the automatic `Saved <time>`
+    /// Save: writes what waits, then commits it in the project at `project`, and says what that
+    /// did to the history, or, when it failed, whether a version exists. The commit carries `description`, or the automatic `Saved <time>`
     /// when there is none. A description that is empty, more than one line or too long, or that
     /// holds a kept API key, is refused and nothing is committed. A described save commits only
     /// what had been handed over when it was asked: rows handed over before it is carried out
     /// answer [`SaveError::Changed`]. A save for a project that is no longer open fails.
-    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, SaveError>> {
+    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<Saved, SaveError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err(SaveError::Failed("this host saves no projects".into())));
         rx
@@ -235,14 +235,36 @@ impl Tab {
     }
 }
 
-/// Why a save made no version.
+/// A save that finished.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Saved {
+    /// A new version; its hash, unless it could not be read back.
+    Version { hash: Option<String> },
+    /// Nothing had changed, so no version was made. A retry whose version already exists ends here.
+    NothingNew,
+}
+
+/// Whether a version exists after a commit that failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VersionAfter {
+    /// None was made.
+    None,
+    /// One was made, with this hash, though the commit reported a failure.
+    Made(String),
+    /// It cannot be told: the project's history could not be read, or the reply was lost.
+    Unknown,
+}
+
+/// Why a save did not simply finish.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SaveError {
     /// The model moved after the state being saved was reviewed: nothing was saved, and the work
     /// stands as it was.
     Changed,
-    /// Any other failure, in words.
+    /// A failure before any commit was tried, in words: no version was made.
     Failed(String),
+    /// The commit failed, and whether a version exists all the same.
+    Commit { why: String, version: VersionAfter },
 }
 
 impl std::fmt::Display for SaveError {
@@ -250,13 +272,13 @@ impl std::fmt::Display for SaveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SaveError::Changed => f.write_str("the model changed after it was reviewed"),
-            SaveError::Failed(why) => f.write_str(why),
+            SaveError::Failed(why) | SaveError::Commit { why, .. } => f.write_str(why),
         }
     }
 }
 
 /// A save the host works on: its answer, the model's revision it writes, and its ticket.
-type Saving = (std::sync::mpsc::Receiver<Result<bool, SaveError>>, u64, u64);
+type Saving = (std::sync::mpsc::Receiver<Result<Saved, SaveError>>, u64, u64);
 
 /// How many finished saves the shell remembers for the agent asking how its save went.
 const SAVES_KEPT: usize = 16;
@@ -272,6 +294,22 @@ pub enum SaveState {
     Unknown,
     /// No such save is remembered.
     Forgotten,
+}
+
+/// A save's failure in the language shown, saying whether a version exists.
+fn save_error_words(e: SaveError) -> String {
+    use crate::i18n::{fmt, tr};
+    match e {
+        SaveError::Changed => tr("The project changed after you reviewed it, so nothing was saved. Review the changes and save again."),
+        SaveError::Failed(why) => why,
+        SaveError::Commit { why, version: VersionAfter::None } => fmt(&tr("No version was made: {why}"), &[("why", &why)]),
+        SaveError::Commit { why, version: VersionAfter::Made(_) } => {
+            fmt(&tr("A version was made, even though saving reported an error: {why}"), &[("why", &why)])
+        }
+        SaveError::Commit { why, version: VersionAfter::Unknown } => {
+            fmt(&tr("Archforge can't tell whether a version was made: {why}. It is safe to save again."), &[("why", &why)])
+        }
+    }
 }
 
 /// Looks whether the host has answered `saving`; when it has, marks what it wrote saved (or keeps
@@ -294,18 +332,14 @@ fn poll_save(
             SaveState::Saved(revision)
         }
         Ok(Err(e)) => {
-            let e = match e {
-                SaveError::Changed => {
-                    crate::i18n::tr("The project changed after you reviewed it, so nothing was saved. Review the changes and save again.")
-                }
-                SaveError::Failed(why) => why,
-            };
+            let e = save_error_words(e);
             *save_error = Some(e.clone());
             SaveState::Failed(e)
         }
         Err(std::sync::mpsc::TryRecvError::Empty) => return None,
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-            let e = crate::i18n::tr("The save stopped without an answer");
+            let e =
+                crate::i18n::tr("The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.");
             *save_error = Some(e.clone());
             SaveState::Failed(e)
         }

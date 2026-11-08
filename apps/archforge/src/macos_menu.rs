@@ -115,7 +115,7 @@ mod tests {
         }
 
         /// Counts the save and never answers.
-        fn save(&self, _project: &Path, _description: Option<String>) -> Receiver<Result<bool, archforge_ui_egui::SaveError>> {
+        fn save(&self, _project: &Path, _description: Option<String>) -> Receiver<Result<archforge_ui_egui::Saved, archforge_ui_egui::SaveError>> {
             self.0.fetch_add(1, Ordering::SeqCst);
             channel().1
         }

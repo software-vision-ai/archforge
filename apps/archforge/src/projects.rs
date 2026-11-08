@@ -30,7 +30,7 @@ use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::rows::Rows;
 use archforge_project::{DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, check_description};
 use archforge_ui_egui::i18n::{fmt, tr};
-use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Writing};
+use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, VersionAfter, Writing};
 
 /// How long the writer waits after a change for the next one before it writes.
 const SETTLE: Duration = Duration::from_millis(300);
@@ -45,7 +45,7 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// project's rows reached it).
 enum Job {
     Write(PathBuf, Rows),
-    Save(Option<PathBuf>, Option<Described>, Sender<Result<bool, SaveError>>),
+    Save(Option<PathBuf>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
     Drop(PathBuf, Sender<()>),
@@ -233,7 +233,7 @@ impl ProjectHost for Projects {
     /// Save, under `description` when one is given. A description of the wrong shape is refused
     /// here; a good one is checked against the kept API keys first, and only then asked of the
     /// writer, which answers [`SaveError::Changed`] when more rows came in during the check.
-    fn save(&self, project: &Path, description: Option<String>) -> Receiver<Result<bool, SaveError>> {
+    fn save(&self, project: &Path, description: Option<String>) -> Receiver<Result<Saved, SaveError>> {
         let (tx, rx) = channel();
         match description {
             None => send_save(&self.inner, project, None, tx),
@@ -633,10 +633,10 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let answer = match project {
                     // A save needs its own project's rows written; a flush needs all.
                     Some(p) if waiting.contains_key(&p) => Err(SaveError::Failed(unwritten(inner, &p))),
-                    Some(p) => commit(inner, &p, described.map(|d| d.text)).map_err(SaveError::Failed),
+                    Some(p) => commit(inner, &p, described.map(|d| d.text)),
                     None => match waiting.keys().next() {
                         Some(p) => Err(SaveError::Failed(unwritten(inner, p))),
-                        None => Ok(false),
+                        None => Ok(Saved::NothingNew),
                     },
                 };
                 let _ = reply.send(answer);
@@ -721,7 +721,7 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
 }
 
 /// Hands a save to the writer; a writer that has stopped is the save's answer.
-fn send_save(inner: &Arc<Inner>, project: &Path, described: Option<Described>, reply: Sender<Result<bool, SaveError>>) {
+fn send_save(inner: &Arc<Inner>, project: &Path, described: Option<Described>, reply: Sender<Result<Saved, SaveError>>) {
     if let Err(e) = writer(inner).send(Job::Save(Some(project.to_path_buf()), described, reply.clone())) {
         let _ = reply.send(Err(SaveError::Failed(format!("the writer stopped: {e}"))));
     }
@@ -743,7 +743,7 @@ fn refusal(problem: DescriptionProblem) -> String {
 /// to ask the person, so that runs on the agents host's thread and the writer is never held up.
 /// Text that cannot be checked is not saved: it would stay in the project's history. Both refusals
 /// are put in words here, since `tr` reads the language of the thread that calls it.
-fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sender<Result<bool, SaveError>>) {
+fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sender<Result<Saved, SaveError>>) {
     let handed = lock(&inner.handed).get(project).copied().unwrap_or(0);
     let held = tr("This description holds one of your saved API keys, so nothing was saved.");
     let unchecked = tr("This description could not be checked against your saved API keys, so nothing was saved.");
@@ -773,13 +773,27 @@ fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sende
 }
 
 /// Save: a commit of everything written to the project at `target`, under `description` or else
-/// the automatic description, the time it was made.
-fn commit(inner: &Inner, target: &Path, description: Option<String>) -> Result<bool, String> {
+/// the automatic description, the time it was made; it says what that did to the history.
+fn commit(inner: &Inner, target: &Path, description: Option<String>) -> Result<Saved, SaveError> {
     let message = description.unwrap_or_else(|| format!("Saved {}", now()));
     match lock(&inner.open).iter().find(|p| p.path() == target) {
-        Some(project) => project.commit(&message).map_err(|e| e.to_string()),
-        None => Err(format!("{} is no longer open", target.display())),
+        Some(project) => match project.save_version(&message) {
+            Ok(archforge_project::Saved::Version { hash }) => Ok(Saved::Version { hash }),
+            Ok(archforge_project::Saved::NothingNew) => Ok(Saved::NothingNew),
+            Err(failure) => Err(commit_error(failure)),
+        },
+        None => Err(SaveError::Failed(format!("{} is no longer open", target.display()))),
     }
+}
+
+/// A commit's failure in the shell's terms, keeping what is known about a version.
+fn commit_error(failure: archforge_project::SaveFailure) -> SaveError {
+    let version = match failure.version {
+        archforge_project::AfterFailure::NoVersion => VersionAfter::None,
+        archforge_project::AfterFailure::Version(hash) => VersionAfter::Made(hash),
+        archforge_project::AfterFailure::CannotTell => VersionAfter::Unknown,
+    };
+    SaveError::Commit { why: failure.error.to_string(), version }
 }
 
 /// The time now, as the project stores times.
@@ -1322,12 +1336,17 @@ mod tests {
 
     /// A save of `project` without a description, and its answer.
     fn saved(host: &Projects, project: &Path) -> Result<bool, SaveError> {
-        host.save(project, None).recv_timeout(Duration::from_secs(60)).expect("the save answers")
+        made(host.save(project, None).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
+    }
+
+    /// A save's answer as whether it made a version.
+    fn made(answer: Result<Saved, SaveError>) -> Result<bool, SaveError> {
+        answer.map(|saved| matches!(saved, Saved::Version { .. }))
     }
 
     /// A save of `project` under `text`, and its answer.
     fn described(host: &Projects, project: &Path, text: &str) -> Result<bool, SaveError> {
-        host.save(project, Some(text.to_string())).recv_timeout(Duration::from_secs(60)).expect("the save answers")
+        made(host.save(project, Some(text.to_string())).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
     }
 
     /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
@@ -1456,6 +1475,25 @@ mod tests {
         assert!(after.iter().all(|m| !m.contains(KEY)));
     }
 
+    /// A save answers with the new version's hash or nothing new, and a failure keeps what is known.
+    #[test]
+    fn a_save_answers_with_its_hash_and_a_failed_commit_keeps_what_is_known() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        host.write(&path, model("a"));
+        let ask = || host.save(&path, None).recv_timeout(Duration::from_secs(60)).expect("the save answers");
+        let answer = ask();
+        assert!(matches!(&answer, Ok(Saved::Version { hash: Some(h) }) if h.len() == 32), "a version with a hash: {answer:?}");
+        assert_eq!(ask(), Ok(Saved::NothingNew));
+
+        use archforge_project::{AfterFailure as After, Error, SaveFailure};
+        let told = |version| commit_error(SaveFailure { error: Error::Damaged { path: "/p".into(), why: "x".into() }, version });
+        let why = || "the project /p is damaged: x".to_string();
+        assert_eq!(told(After::NoVersion), SaveError::Commit { why: why(), version: VersionAfter::None });
+        assert_eq!(told(After::Version("abc".into())), SaveError::Commit { why: why(), version: VersionAfter::Made("abc".into()) });
+        assert_eq!(told(After::CannotTell), SaveError::Commit { why: why(), version: VersionAfter::Unknown });
+    }
+
     /// A store that is locked: no key can be read from it.
     struct Locked;
 
@@ -1545,7 +1583,7 @@ mod tests {
         let sandbox = Sandbox::new(Some(Box::new(Gated(gate.clone()))));
         let (host, path) = (&sandbox.host, sandbox.project());
         let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
-        let answer = |rx: Receiver<Result<bool, SaveError>>| rx.recv_timeout(Duration::from_secs(60)).expect("the save answers");
+        let answer = |rx: Receiver<Result<Saved, SaveError>>| made(rx.recv_timeout(Duration::from_secs(60)).expect("the save answers"));
 
         host.write(&path, model("a"));
         gate.hold(true);

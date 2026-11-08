@@ -416,7 +416,10 @@ plural		{n} diagram	{n} 個の図
 plural		{n} skill	{n} 個のスキル
 str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
-str		The save stopped without an answer	保存が応答なしで終了しました
+str		No version was made: {why}	バージョンは作成されませんでした: {why}
+str		A version was made, even though saving reported an error: {why}	保存でエラーが報告されましたが、バージョンは作成されました: {why}
+str		Archforge can't tell whether a version was made: {why}. It is safe to save again.	Archforge はバージョンが作成されたかどうかを判断できません: {why}。もう一度保存しても問題ありません。
+str		The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.	保存が応答なしで終了したため、Archforge はバージョンが作成されたかどうかを判断できません。もう一度保存しても問題ありません。
 str		A description can't be empty.	説明は空にできません。
 str		A description has to fit on one line.	説明は1行で入力してください。
 str		A description is at most {max} characters; this one has {n}.	説明は最大 {max} 文字です。この説明は {n} 文字あります。
