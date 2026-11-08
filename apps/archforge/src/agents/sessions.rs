@@ -16,7 +16,8 @@
 //! with the last conversation that held it, and the window is told the conversation ended. The
 //! token goes first: asking a conversation to end ([`command`] with [`Command::End`],
 //! [`Handle::end`]) revokes its token on the asking thread, before the call returns, so no later
-//! request can use it whatever origin it names; its thread then closes the opening, when nothing
+//! request can use it whatever origin it names (a grant being minted at that very moment, not yet
+//! the conversation's, is revoked by its thread before any program has it); its thread then closes the opening, when nothing
 //! else holds it, before the program is shut down, which can take seconds; so does a program that
 //! ends by itself (AR-228). The window also refuses requests in the name of a conversation whose
 //! program is being ended.
@@ -75,8 +76,11 @@ impl Handle {
 
 /// A conversation's token, shared by its thread and its handle, so that asking it to end revokes
 /// the token on the asking thread, before the call returns, and no later call can use it whatever
-/// origin it names (AR-228). `ended` keeps a grant that comes after that from being kept. Locks:
-/// taken under `sessions`, never while `access` is held; a grant is dropped outside it.
+/// origin it names (AR-228). `ended` keeps a grant that comes after that from being kept: one
+/// minted while the end is asked is revoked by the thread before any program has it. Locks:
+/// taken under `sessions`, never while `access` is held; a revoked grant is dropped while it is
+/// held, so a second revoke waits until the first is complete (dropping a grant takes only the
+/// control channel's own locks).
 type Token = Arc<Mutex<Held>>;
 
 /// What [`Token`] holds.
@@ -84,16 +88,26 @@ type Token = Arc<Mutex<Held>>;
 struct Held {
     grant: Option<archforge_control::Grant>,
     ended: bool,
+    /// A test's hold on the next revoke, right after it took the grant: it says it took it, then
+    /// waits to be let go.
+    #[cfg(test)]
+    pause: Option<(Sender<()>, Receiver<()>)>,
 }
 
 /// Revokes the token now and marks it ended: its grant drops, which revokes it (its file removed,
-/// its connections refused); closing the opening is left to the conversation's thread.
+/// its connections refused); closing the opening is left to the conversation's thread. The grant
+/// drops while the token is locked, so whoever revokes it at the same time, the handle asked to end
+/// or the thread itself, returns only once the grant the token held is revoked, never while it is
+/// still live.
 fn revoke_now(token: &Token) {
-    let grant = {
-        let mut held = locked(token);
-        held.ended = true;
-        held.grant.take()
-    };
+    let mut held = locked(token);
+    held.ended = true;
+    let grant = held.grant.take();
+    #[cfg(test)]
+    if let Some((took, go)) = held.pause.take() {
+        let _ = took.send(());
+        let _ = go.recv();
+    }
     drop(grant);
 }
 
@@ -562,6 +576,10 @@ fn begin(
     if inner.quitting() {
         return Err(other("Archforge is closing".into()));
     }
+    // An end asked since the grant was kept: its token is revoked, and no program starts.
+    if locked(&guard.token).ended {
+        return Ok(None);
+    }
     let start = if request.resume { Start::Resume } else { Start::New };
     let program: Box<dyn AgentSession + Send> = match request.provider {
         Provider::Claude => {
@@ -615,4 +633,59 @@ fn chat_event(event: SessionEvent, access: bool) -> Option<ChatEvent> {
         }),
         SessionEvent::Ignored(_) | SessionEvent::Ended { .. } => return None,
     })
+}
+
+#[cfg(all(test, unix))]
+mod revoke_tests {
+    use super::*;
+
+    /// Two revokes of one token at once (AR-228, review): the first holds after it took the grant,
+    /// before the grant drops; the second, as an end asked meanwhile, may not return while the
+    /// token is still live, and returns once the first has revoked it.
+    #[test]
+    fn a_revoke_never_returns_while_another_still_holds_the_grant_live() {
+        let settings = std::env::temp_dir().join(format!("archforge-revoke-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&settings);
+        std::fs::create_dir_all(&settings).unwrap();
+        std::fs::set_permissions(&settings, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        let handler: archforge_control::Handler = Arc::new(|_| Ok(serde_json::Value::Null));
+        let server = archforge_control::Server::open(&settings, handler).unwrap();
+        let grant = server.grant(archforge_control::Role::Full).unwrap();
+        let file = grant.path().to_path_buf();
+        let token = Token::default();
+        let (took_tx, took) = std::sync::mpsc::channel();
+        let (go, go_rx) = std::sync::mpsc::channel();
+        {
+            let mut held = locked(&token);
+            held.grant = Some(grant);
+            held.pause = Some((took_tx, go_rx));
+        }
+        // The first revoke, as the conversation's thread: it takes the grant and holds there.
+        let first = {
+            let token = token.clone();
+            std::thread::spawn(move || revoke_now(&token))
+        };
+        took.recv().unwrap();
+        assert!(file.exists(), "the grant is taken and not yet revoked");
+        // It holds the token's lock while it holds the grant: no timing involved.
+        assert!(token.try_lock().is_err(), "the taken grant is held under the token's lock");
+        // The second, as an end asked now: it says whether the token was gone as it returned.
+        let (done_tx, done) = std::sync::mpsc::channel();
+        let second = {
+            let token = token.clone();
+            let file = file.clone();
+            std::thread::spawn(move || {
+                revoke_now(&token);
+                let _ = done_tx.send(file.exists());
+            })
+        };
+        assert!(done.recv_timeout(Duration::from_millis(500)).is_err(), "the second revoke may not return while the token is live");
+        go.send(()).unwrap();
+        assert!(!done.recv().unwrap(), "it returns once the token is revoked");
+        first.join().unwrap();
+        second.join().unwrap();
+        assert!(!file.exists());
+        drop(server);
+        let _ = std::fs::remove_dir_all(&settings);
+    }
 }
