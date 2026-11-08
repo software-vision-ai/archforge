@@ -28,9 +28,9 @@ use std::time::{Duration, Instant, SystemTime};
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::rows::Rows;
-use archforge_project::{DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, check_description};
+use archforge_project::{Author, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, check_description};
 use archforge_ui_egui::i18n::{fmt, tr};
-use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, VersionAfter, Writing};
+use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, Writing};
 
 /// How long the writer waits after a change for the next one before it writes.
 const SETTLE: Duration = Duration::from_millis(300);
@@ -40,12 +40,12 @@ const FLUSH_BUDGET: Duration = Duration::from_secs(10);
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
-/// project named under the description given or an automatic one, or only write when no project
-/// is named) with its answer; or a flush of one project (write what waits, answer whether that
+/// project named, recorded as who asked, under the description given or an automatic one, or only
+/// write when no project is named) with its answer; or a flush of one project (write what waits, answer whether that
 /// project's rows reached it).
 enum Job {
     Write(PathBuf, Rows),
-    Save(Option<PathBuf>, Option<Described>, Sender<Result<Saved, SaveError>>),
+    Save(Option<(PathBuf, SavedBy)>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
     Drop(PathBuf, Sender<()>),
@@ -233,12 +233,12 @@ impl ProjectHost for Projects {
     /// Save, under `description` when one is given. A description of the wrong shape is refused
     /// here; a good one is checked against the kept API keys first, and only then asked of the
     /// writer, which answers [`SaveError::Changed`] when more rows came in during the check.
-    fn save(&self, project: &Path, description: Option<String>) -> Receiver<Result<Saved, SaveError>> {
+    fn save(&self, project: &Path, description: Option<String>, by: SavedBy) -> Receiver<Result<Saved, SaveError>> {
         let (tx, rx) = channel();
         match description {
-            None => send_save(&self.inner, project, None, tx),
+            None => send_save(&self.inner, project, by, None, tx),
             Some(text) => match check_description(&text) {
-                Ok(()) => save_described(&self.inner, project, text, tx),
+                Ok(()) => save_described(&self.inner, project, by, text, tx),
                 Err(problem) => {
                     let _ = tx.send(Err(SaveError::Failed(refusal(problem))));
                 }
@@ -622,7 +622,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             }
             Some(Job::Save(project, described, reply)) => {
                 // Before anything is written: the rows that came in stay waiting, as any others do.
-                if let (Some(p), Some(d)) = (&project, &described)
+                if let (Some((p, _)), Some(d)) = (&project, &described)
                     && seen.get(p).copied().unwrap_or(0) != d.handed
                 {
                     let _ = reply.send(Err(SaveError::Changed));
@@ -632,8 +632,8 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 failed = !waiting.is_empty();
                 let answer = match project {
                     // A save needs its own project's rows written; a flush needs all.
-                    Some(p) if waiting.contains_key(&p) => Err(SaveError::Failed(unwritten(inner, &p))),
-                    Some(p) => commit(inner, &p, described.map(|d| d.text)),
+                    Some((p, _)) if waiting.contains_key(&p) => Err(SaveError::Failed(unwritten(inner, &p))),
+                    Some((p, by)) => commit(inner, &p, described.map(|d| d.text), &by),
                     None => match waiting.keys().next() {
                         Some(p) => Err(SaveError::Failed(unwritten(inner, p))),
                         None => Ok(Saved::NothingNew),
@@ -721,8 +721,8 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
 }
 
 /// Hands a save to the writer; a writer that has stopped is the save's answer.
-fn send_save(inner: &Arc<Inner>, project: &Path, described: Option<Described>, reply: Sender<Result<Saved, SaveError>>) {
-    if let Err(e) = writer(inner).send(Job::Save(Some(project.to_path_buf()), described, reply.clone())) {
+fn send_save(inner: &Arc<Inner>, project: &Path, by: SavedBy, described: Option<Described>, reply: Sender<Result<Saved, SaveError>>) {
+    if let Err(e) = writer(inner).send(Job::Save(Some((project.to_path_buf(), by)), described, reply.clone())) {
         let _ = reply.send(Err(SaveError::Failed(format!("the writer stopped: {e}"))));
     }
 }
@@ -743,7 +743,7 @@ fn refusal(problem: DescriptionProblem) -> String {
 /// to ask the person, so that runs on the agents host's thread and the writer is never held up.
 /// Text that cannot be checked is not saved: it would stay in the project's history. Both refusals
 /// are put in words here, since `tr` reads the language of the thread that calls it.
-fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sender<Result<Saved, SaveError>>) {
+fn save_described(inner: &Arc<Inner>, project: &Path, by: SavedBy, text: String, reply: Sender<Result<Saved, SaveError>>) {
     let handed = lock(&inner.handed).get(project).copied().unwrap_or(0);
     let held = tr("This description holds one of your saved API keys, so nothing was saved.");
     let unchecked = tr("This description could not be checked against your saved API keys, so nothing was saved.");
@@ -756,7 +756,7 @@ fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sende
     let (inner, path, answer, words) = (inner.clone(), project.to_path_buf(), reply.clone(), unchecked.clone());
     let started = std::thread::Builder::new().name("archforge-save-keys".into()).spawn(move || {
         match checked.recv().unwrap_or_else(|_| Err("the agents host stopped".into())) {
-            Ok(None) => send_save(&inner, &path, Some(Described { text, handed }), answer),
+            Ok(None) => send_save(&inner, &path, by, Some(Described { text, handed }), answer),
             Ok(Some(_)) => {
                 let _ = answer.send(Err(SaveError::Failed(held)));
             }
@@ -773,11 +773,16 @@ fn save_described(inner: &Arc<Inner>, project: &Path, text: String, reply: Sende
 }
 
 /// Save: a commit of everything written to the project at `target`, under `description` or else
-/// the automatic description, the time it was made; it says what that did to the history.
-fn commit(inner: &Inner, target: &Path, description: Option<String>) -> Result<Saved, SaveError> {
+/// the automatic description, the time it was made, recorded as `by`; it says what that did to
+/// the history.
+fn commit(inner: &Inner, target: &Path, description: Option<String>, by: &SavedBy) -> Result<Saved, SaveError> {
+    let author = match by {
+        SavedBy::Person(name) => Author::person(name),
+        SavedBy::Agent(label) => Author::agent(label.as_deref()),
+    };
     let message = description.unwrap_or_else(|| format!("Saved {}", now()));
     match lock(&inner.open).iter().find(|p| p.path() == target) {
-        Some(project) => match project.save_version(&message) {
+        Some(project) => match project.save_version(&message, &author) {
             Ok(archforge_project::Saved::Version { hash }) => Ok(Saved::Version { hash }),
             Ok(archforge_project::Saved::NothingNew) => Ok(Saved::NothingNew),
             Err(failure) => Err(commit_error(failure)),
@@ -1336,7 +1341,12 @@ mod tests {
 
     /// A save of `project` without a description, and its answer.
     fn saved(host: &Projects, project: &Path) -> Result<bool, SaveError> {
-        made(host.save(project, None).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
+        made(host.save(project, None, nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
+    }
+
+    /// A person with no name set, who asks for most of these tests' saves.
+    fn nobody() -> SavedBy {
+        SavedBy::Person(String::new())
     }
 
     /// A save's answer as whether it made a version.
@@ -1346,7 +1356,7 @@ mod tests {
 
     /// A save of `project` under `text`, and its answer.
     fn described(host: &Projects, project: &Path, text: &str) -> Result<bool, SaveError> {
-        made(host.save(project, Some(text.to_string())).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
+        made(host.save(project, Some(text.to_string()), nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
     }
 
     /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
@@ -1481,7 +1491,7 @@ mod tests {
         let sandbox = Sandbox::new(None);
         let (host, path) = (&sandbox.host, sandbox.project());
         host.write(&path, model("a"));
-        let ask = || host.save(&path, None).recv_timeout(Duration::from_secs(60)).expect("the save answers");
+        let ask = || host.save(&path, None, nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers");
         let answer = ask();
         assert!(matches!(&answer, Ok(Saved::Version { hash: Some(h) }) if h.len() == 32), "a version with a hash: {answer:?}");
         assert_eq!(ask(), Ok(Saved::NothingNew));
@@ -1492,6 +1502,26 @@ mod tests {
         assert_eq!(told(After::NoVersion), SaveError::Commit { why: why(), version: VersionAfter::None });
         assert_eq!(told(After::Version("abc".into())), SaveError::Commit { why: why(), version: VersionAfter::Made("abc".into()) });
         assert_eq!(told(After::CannotTell), SaveError::Commit { why: why(), version: VersionAfter::Unknown });
+    }
+
+    /// Who asked for a save reaches the version, whether or not the save is described.
+    #[test]
+    fn a_save_records_who_asked_for_it() {
+        let sandbox = Sandbox::new(Some(store_with_key()));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let author = |by: SavedBy, schema: &str, text: Option<&str>| {
+            host.write(&path, model(schema));
+            let answer = host.save(&path, text.map(str::to_string), by).recv_timeout(Duration::from_secs(60)).expect("the save answers");
+            assert!(matches!(answer, Ok(Saved::Version { .. })), "{answer:?}");
+            lock(&host.inner.open)[0].newest_commit_author().unwrap()
+        };
+        let person = (String::from("Ada Lovelace"), String::from("archforge@localhost"));
+        assert_eq!(author(SavedBy::Person("Ada (Countess) Lovelace".into()), "a", None), (String::from("Ada Countess Lovelace"), person.1.clone()));
+        assert_eq!(author(SavedBy::Person("Ada Lovelace".into()), "b", Some("Described")), person);
+        assert_eq!(author(SavedBy::Person("李雷".into()), "e", None), (String::from("李雷"), person.1.clone()));
+        assert_eq!(author(SavedBy::Person(String::new()), "f", None), (String::from("Archforge"), person.1.clone()));
+        assert_eq!(author(SavedBy::Agent(Some("Chat 3".into())), "c", None), ("Chat 3".to_string(), "agent@localhost".to_string()));
+        assert_eq!(author(SavedBy::Agent(None), "d", None), ("Agent".to_string(), "agent@localhost".to_string()));
     }
 
     /// A store that is locked: no key can be read from it.
@@ -1587,7 +1617,7 @@ mod tests {
 
         host.write(&path, model("a"));
         gate.hold(true);
-        let asked = host.save(&path, Some("Another project moved".into()));
+        let asked = host.save(&path, Some("Another project moved".into()), nobody());
         gate.wait_for_a_read();
         host.write(&other, model("z"));
         gate.hold(false);
@@ -1597,7 +1627,7 @@ mod tests {
         host.write(&path, model("b"));
         let before = sandbox.messages();
         gate.hold(true);
-        let asked = host.save(&path, Some("This project moved".into()));
+        let asked = host.save(&path, Some("This project moved".into()), nobody());
         gate.wait_for_a_read();
         host.write(&path, model("c"));
         gate.hold(false);

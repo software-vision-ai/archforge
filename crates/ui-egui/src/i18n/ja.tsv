@@ -479,7 +479,7 @@ str		The sign-in stopped without an answer	サインインが応答なしで止�
 str		The sign-out stopped without an answer	サインアウトが応答なしで止まりました
 str		Profile	プロフィール
 str		AI Agents	AI エージェント
-str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	名前はバーのアバターにイニシャルで表示されます。 Archforge がコンピューターのアカウントから読み取ることはありません。
+str		Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.	名前はバーのアバターにイニシャルで表示され、各バージョンにも保存されます。プロジェクトのコピーを受け取った人はそれを読むことができます。 Archforge がコンピューターのアカウントから読み取ることはありません。
 str		the macOS Keychain	macOS キーチェーン
 str		the Secret Service	Secret Service
 str		the system's secure store	システムのセキュアストア

@@ -35,7 +35,7 @@ pub use chat::{
 pub use description::{DESCRIPTION_CHARS, DescriptionProblem, check_description};
 pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};
-pub use saving::{AfterFailure, SaveFailure, Saved};
+pub use saving::{AfterFailure, Author, SaveFailure, Saved, is_version, shown_author};
 pub use time::timestamp;
 
 /// The project format this Archforge writes and the newest it reads. Format 3 may hold

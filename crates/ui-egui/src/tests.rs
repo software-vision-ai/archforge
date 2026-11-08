@@ -342,6 +342,7 @@ struct SavingHost {
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
+    saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
     closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each closing's answer, sent by the test.
@@ -389,9 +390,15 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Keeps the save's answer and its description for the test.
-    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<crate::Saved, crate::SaveError>> {
+    fn save(
+        &self,
+        project: &std::path::Path,
+        description: Option<String>,
+        by: crate::SavedBy,
+    ) -> std::sync::mpsc::Receiver<Result<crate::Saved, crate::SaveError>> {
         assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
         self.descriptions.lock().unwrap().push(description);
+        self.saved_by.lock().unwrap().push(by);
         let (tx, rx) = std::sync::mpsc::channel();
         self.saves.lock().unwrap().push(SaveAnswer(tx));
         rx
@@ -14842,6 +14849,48 @@ fn a_project_whose_changes_cannot_be_written_closes_only_after_saying_its_change
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
     assert!(h.state().tabs.is_empty());
+}
+
+/// A save at the window records the name from Settings; one over the control channel records an
+/// agent, by its label or without one, which the path decides, whatever the name says.
+#[test]
+fn a_save_records_whether_the_person_or_an_agent_asked() {
+    use crate::SavedBy::{Agent, Person};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.user_name = "Agent".into();
+        add_schema(&mut h, "shop");
+        let saved = |h: &mut Harness<'static, Shell>, host: &SavingHost| {
+            host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+            h.run_steps(2);
+            host.saved_by.lock().unwrap().pop().unwrap()
+        };
+        h.state_mut().save();
+        assert_eq!(saved(&mut h, &host), Person("Agent".into()));
+
+        add_schema(&mut h, "own");
+        crate::control::answer(h.state_mut(), "app.save", &json!({})).unwrap();
+        assert_eq!(saved(&mut h, &host), Person("Agent".into()), "the window's own side is the person");
+
+        for (at, origin) in [("crm", Some("Chat 3")), ("erp", None)] {
+            add_schema(&mut h, at);
+            let (reply, _answer) = std::sync::mpsc::channel();
+            let request = crate::control::ControlRequest {
+                method: "app.save".into(),
+                params: json!({}),
+                origin: origin.map(str::to_string),
+                conversation: None,
+                reply,
+                state: Default::default(),
+                read_only: false,
+                live: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            };
+            crate::control::answer_request(h.state_mut(), &request).unwrap();
+            assert_eq!(saved(&mut h, &host), Agent(origin.map(str::to_string)));
+        }
+    }
 }
 
 /// A failed save says whether a version exists, in each of the ways it can stand, and so does

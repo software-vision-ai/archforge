@@ -479,7 +479,7 @@ str		The sign-in stopped without an answer	登录未作答便已停止
 str		The sign-out stopped without an answer	退出登录未作答便已停止
 str		Profile	个人资料
 str		AI Agents	AI 智能体
-str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	您的姓名以首字母显示在栏上的头像中。 Archforge 从不从计算机账户读取它。
+str		Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.	您的姓名以首字母显示在栏上的头像中，并随每个版本一起保存，收到项目副本的任何人都能读取。 Archforge 从不从计算机账户读取它。
 str		the macOS Keychain	macOS 钥匙串
 str		the Secret Service	Secret Service
 str		the system's secure store	系统的安全存储
