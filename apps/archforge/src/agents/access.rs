@@ -18,7 +18,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use archforge_control::{Call, Grant, Handler, Role, Server};
+use archforge_control::{Bound, Call, Grant, Handler, Role, Server};
 use archforge_ui_egui::chat::{EventSink, HostEvent};
 use archforge_ui_egui::control::{ControlRequest, WAITING, abandon};
 
@@ -118,9 +118,11 @@ impl Access {
         Access { settings: settings.to_path_buf(), window, on: false, server: None }
     }
 
-    /// A token for one conversation, read-only unless `allow_changes`, the opening made when none
-    /// is open (then the window is told agent access is held). `None` while the opt-in is off.
-    pub fn grant(&mut self, allow_changes: bool, sink: Option<&EventSink>) -> Result<Option<Grant>, String> {
+    /// A token for one conversation, read-only unless `allow_changes`, bound to that conversation
+    /// (`bound`: its key and origin label), so every request on it is that conversation's (AR-230);
+    /// the opening made when none is open (then the window is told agent access is held). `None`
+    /// while the opt-in is off.
+    pub fn grant(&mut self, allow_changes: bool, bound: Bound, sink: Option<&EventSink>) -> Result<Option<Grant>, String> {
         if !self.on {
             return Ok(None);
         }
@@ -129,7 +131,7 @@ impl Access {
             self.server = Some(Server::open(&self.settings, handler(self.window.clone()))?);
         }
         let server = self.server.as_ref().ok_or("the control channel did not open")?;
-        let grant = match server.grant(if allow_changes { Role::Full } else { Role::ReadOnly }) {
+        let grant = match server.grant(if allow_changes { Role::Full } else { Role::ReadOnly }, Some(bound)) {
             Ok(g) => g,
             Err(e) => {
                 // An opening made for this grant alone does not stay open without it.
