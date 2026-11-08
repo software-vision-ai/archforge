@@ -36,7 +36,8 @@ You set them up in **Settings ▸ AI Agents**: click the avatar at the right of 
 
 <!-- picture: settings-ai-agents-ready light | Settings, AI Agents: Claude with a saved API key and its model, Codex signed in with ChatGPT -->
 
-The page has a card for each agent, then **Check connection** and **Send test message**. **Default agent**, at the top, is the agent a new conversation starts with.
+The page has a card for each agent, then **Check connection** and **Send test message**.
+**Default agent**, at the top, is the agent a new conversation starts with.
 
 Opening the page sends nothing over the network. Archforge looked for the programs when it
 started, asking each only for its version. Your keys are read from the secure store the first
@@ -230,10 +231,9 @@ moment.
 The Chat panel is the speech bubble at the top of the right rail. It holds the open project's
 conversations with Claude or Codex.
 
-Until the default agent is ready, a new conversation says
-*No agent set up yet*; **Configure agent** opens **Settings ▸ AI Agents** (see
-[Setting up AI agents for Chat](#setting-up-ai-agents-for-chat)). A key the test message found
-refused counts as not ready.
+Until the default agent is ready, a new conversation says *No agent set up yet*; **Configure
+agent** opens **Settings ▸ AI Agents** (see [Setting up AI agents for
+Chat](#setting-up-ai-agents-for-chat)). A key the test message found refused counts as not ready.
 
 <!-- picture: workspace-chat light | The Chat panel ready: the intro, the context chips, the composer with Claude's badge, Allow changes off -->
 

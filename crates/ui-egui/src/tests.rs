@@ -7247,6 +7247,30 @@ fn without_an_agent_set_up_chat_shows_only_the_setup_prompt() {
     }
 }
 
+/// Chat's readiness is the default agent's alone (AR-237): Claude's key found refused by the test
+/// message shows the setup prompt; Codex signed in with ChatGPT, its sign-in not read yet and its
+/// program found, is ready. In both appearances.
+#[test]
+fn chat_is_ready_exactly_when_the_default_agent_is() {
+    use crate::ai_agents::{CodexSignIn, Provider};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        // Claude is the first of the two agents.
+        h.state_mut().agents.refused[0] = Some("401 invalid x-api-key".into());
+        h.run();
+        assert_eq!(crate::chat_panel::set_up(h.state(), Provider::Claude), Some(false), "{theme:?}: a refused key");
+        assert!(painted_has(&h, "No agent set up yet"), "{theme:?}: {:?}", painted(&h));
+        assert!(!ids(&h).iter().any(|i| i == "workspace.chat.composer"), "{theme:?}");
+        h.state_mut().state.agents.default_agent = Provider::Codex;
+        h.state_mut().state.agents.codex_sign_in = CodexSignIn::ChatGpt;
+        h.run();
+        assert!(h.state().agents.codex.is_none(), "{theme:?}: Codex's sign-in is not read yet");
+        assert_eq!(crate::chat_panel::set_up(h.state(), Provider::Codex), Some(true), "{theme:?}: Codex is ready");
+        assert!(ids(&h).iter().any(|i| i == "workspace.chat.composer"), "{theme:?}");
+        assert_eq!(chat_calls(&rig), (0, 0, 0, 0), "{theme:?}: nothing started");
+    }
+}
+
 /// B1 without an agent (AR-63 rewritten): Configure agent opens Settings; B2 with one: intro, chips, composer, badge, switch.
 #[test]
 fn the_chat_icon_opens_configure_agent_without_an_agent_and_a_ready_conversation_with_one() {
