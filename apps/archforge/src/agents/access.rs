@@ -53,10 +53,11 @@ impl Window {
     }
 }
 
-/// The gated handler of one opening: each request goes to the window with its token's role and
-/// liveness, and its answer is awaited up to the channel's timeout. A request whose token is
-/// revoked, or that the window has not taken in time, is given up and never runs; one already
-/// running gets a few seconds more, then the truth that it may have been applied.
+/// The gated handler of one opening: each request goes to the window with its token's role,
+/// liveness and the conversation the token is bound to (AR-230), and its answer is awaited up to
+/// the channel's timeout. A request whose token is revoked, or that the window has not taken in
+/// time, is given up and never runs; one already running gets a few seconds more, then the truth
+/// that it may have been applied.
 pub fn handler(window: Window) -> Handler {
     Arc::new(move |call: Call<'_>| {
         let (reply, answer) = std::sync::mpsc::channel();
@@ -65,6 +66,7 @@ pub fn handler(window: Window) -> Handler {
             method: call.method.to_string(),
             params: call.params,
             origin: call.origin.map(str::to_string),
+            conversation: call.conversation.map(str::to_string),
             reply,
             state: state.clone(),
             read_only: call.role == Role::ReadOnly,

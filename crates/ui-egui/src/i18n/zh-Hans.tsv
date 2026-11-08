@@ -280,6 +280,11 @@ str		Conversations	对话
 str		New conversation	新对话
 str		Stop the reply first	请先停止回复
 str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	“允许聊天使用模型”已关闭，因此不会发送任何内容。请在“设置 ▸ AI 智能体”中将其打开。
+str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	Archforge 不认识此令牌的对话；标签 {label} 在这里属于另一个对话
+str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	对话 {who} 正在结束；在其程序结束之前，不会再以它的名义运行任何操作
+str		the conversation {who} has no turn running in the project shown in Archforge	对话 {who} 在 Archforge 显示的项目中没有正在进行的轮次
+str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	对话 {who} 只能撤销本轮中它自己的更改，而最上面的步骤不是其中之一
+str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	对话 {who} 只能重做本轮中它自己的更改，而要重做的步骤不是其中之一
 str		No agent set up yet	尚未设置智能体
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	聊天通过这台电脑上安装的程序运行 Claude 或 Codex 来回答。请在设置中选择一个，并允许聊天使用模型。
 str		Configure agent	设置智能体

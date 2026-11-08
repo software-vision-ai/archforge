@@ -37,8 +37,12 @@ use crate::{SaveState, Shell};
 pub struct ControlRequest {
     pub method: String,
     pub params: Value,
-    /// Who sent it, when the sender gave a label (already checked by the channel).
+    /// Who sent it, when the sender gave a label (already checked by the channel); a conversation's
+    /// token carries its own label, and a request on it naming another is refused by the channel.
     pub origin: Option<String>,
+    /// The key of the conversation the token speaks for, fixed by the channel when it granted the
+    /// token, never taken from the request (AR-230); none for the person's own token.
+    pub conversation: Option<String>,
     pub reply: std::sync::mpsc::Sender<Result<Value, String>>,
     pub state: Arc<AtomicU8>,
     /// Whether the token the request came with may only read (a Chat conversation that does not
@@ -164,7 +168,7 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
     }
     // A Chat conversation's request runs only while its turn runs in the project shown, and makes
     // the turn's tool rows from what it is answered.
-    crate::chat_panel::gate(shell, req.origin.as_deref(), &req.method, &req.params)?;
+    crate::chat_panel::gate(shell, req.origin.as_deref(), req.conversation.as_deref(), &req.method, &req.params)?;
     let before = crate::chat_panel::before(shell, &req.method, &req.params, req.origin.as_deref());
     if req.read_only && !only_reads(shell, &req.method, &req.params)? {
         let what = match req.params.get("command").and_then(Value::as_str) {
@@ -448,6 +452,7 @@ mod tests {
             method: method.into(),
             params,
             origin: Some("Chat 1".into()),
+            conversation: None,
             reply,
             state: Arc::new(AtomicU8::new(TAKEN)),
             read_only,

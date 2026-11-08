@@ -7654,8 +7654,10 @@ fn requests_in_the_name_of_a_conversation_whose_program_ends_are_refused() {
         assert!(chat.queued.is_some(), "{theme:?}: the new question waits for the end");
         assert_eq!(chat.turns.last().map(|t| t.state.clone()), Some(crate::chat_panel::TurnState::Running), "{theme:?}: as a running turn");
         let change = json!({ "command": "uml.class.set", "params": {} });
-        let refused = crate::chat_panel::gate(h.state(), Some(&origin), "engine.execute", &change);
-        assert!(refused.is_err(), "{theme:?}: refused while its program ends: {refused:?}");
+        // Its token is known by the key it was granted for (AR-230).
+        let key = crate::chat_fixture::key(h.state());
+        let refused = crate::chat_panel::gate(h.state(), Some(&origin), Some(&key), "engine.execute", &change);
+        assert!(refused.as_ref().unwrap_err().contains("is being ended"), "{theme:?}: refused while its program ends: {refused:?}");
     }
 }
 
@@ -8578,66 +8580,93 @@ fn send_again_keeps_the_context_and_the_composer_never_sticks() {
 }
 
 /// A request on behalf of a conversation acts only while that conversation's turn runs in the
-/// project shown: never for one let go of, nor for the same label still running in another
-/// project; and it never undoes the person's own step.
+/// project shown: never for one let go of, nor for a conversation parked in another project, even
+/// under the same label, as each is known by its key (AR-230); a key the window does not know never
+/// stands in for a label it knows, a conversation's request without a label is still checked, and
+/// the person's own token naming a label keeps the label rules. It never undoes the person's own
+/// step. In both appearances.
 #[test]
 fn a_conversations_origin_never_acts_for_another_and_never_undoes_the_persons_step() {
     use crate::chat_fixture as fx;
-    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
-    let at = rect_of(&h, "workspace.chat.allow-changes").center();
-    click(&mut h, at);
-    ask_in_chat(&mut h, "Describe Order");
-    let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
-    // The person's own edit on top: the conversation may not undo it.
-    h.state_mut()
-        .session
-        .as_mut()
-        .unwrap()
-        .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "Describe Order");
+        let order = fx::element(h.state(), archforge_uml::CLASS, "Order").unwrap();
+        // The person's own edit on top: the conversation may not undo it.
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("element.describe", &serde_json::json!({ "element": order.to_string(), "text": "Mine" }))
+            .unwrap();
+        let undo = fx::call(h.state_mut(), "engine.undo", serde_json::json!({}));
+        assert!(undo.unwrap_err().contains("may undo only its own changes"));
+        let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
+        assert!(undo.unwrap_err().contains("may undo only its own changes"), "the edit.undo command alike");
+        assert_eq!(crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(order).unwrap()), "Mine");
+        // Its own change it may undo.
+        fx::call(
+            h.state_mut(),
+            "engine.execute",
+            serde_json::json!({ "command": "element.describe", "params": { "element": order.to_string(), "text": "Its" } }),
+        )
         .unwrap();
-    let undo = fx::call(h.state_mut(), "engine.undo", serde_json::json!({}));
-    assert!(undo.unwrap_err().contains("may undo only its own changes"));
-    let undo = fx::call(h.state_mut(), "engine.execute", serde_json::json!({ "command": "edit.undo", "params": {} }));
-    assert!(undo.is_err());
-    assert_eq!(crate::panels::description_now(h.state(), h.state().session.as_ref().unwrap().doc().by_uuid(order).unwrap()), "Mine");
-    // Its own change it may undo.
-    fx::call(
-        h.state_mut(),
-        "engine.execute",
-        serde_json::json!({ "command": "element.describe", "params": { "element": order.to_string(), "text": "Its" } }),
-    )
-    .unwrap();
-    assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_ok());
-    // Another project open with its own Chat 1 running, while this one's is still running parked:
-    // the label is refused there.
-    let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
-    let _ = &rig;
-    h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
-    h.run();
-    crate::uml_ui::open_sample(h.state_mut()).unwrap();
-    h.state_mut().state.show_panel(crate::state::Panel::Agent);
-    h.run();
-    ask_in_chat(&mut h, "Here");
-    // Labels are numbered per project: the fake keeps one list for both, so the label is set as
-    // the other project would have given it.
-    h.state_mut().chat_panel.chat.as_mut().unwrap().origin = origin.clone();
-    let refused = fx::call(h.state_mut(), "document.inspect", serde_json::json!({}));
-    assert!(refused.unwrap_err().contains("has no turn running"), "the parked one still runs under the label");
-    // A conversation let go of: its label is refused until its program has ended.
-    let (mut h, rig) = chat_harness(ThemeKind::Light, true);
-    ask_in_chat(&mut h, "One");
-    chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
-    let key = fx::key(h.state());
-    let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
-    let at = rect_of(&h, "workspace.chat.new").center();
-    click(&mut h, at);
-    // The fake's program ends at once; one still ending is held as a slow program's would be.
-    h.state_mut().chats.letting_go.push((key.clone(), origin.clone()));
-    let inspect = serde_json::json!({});
-    assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), "document.inspect", &inspect).is_err(), "refused while it ends");
-    h.run();
-    assert!(h.state().chats.letting_go.is_empty(), "its end taken, it is forgotten");
-    assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), "document.inspect", &inspect).is_ok(), "known no more once ended");
+        assert!(fx::call(h.state_mut(), "engine.undo", serde_json::json!({})).is_ok());
+        // Another project open with its own Chat 1 running, while this one's is still running parked:
+        // each is known by its key (AR-230), so the shown one acts for itself and the parked one,
+        // under the same label, is refused there.
+        let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
+        let parked_key = fx::key(h.state());
+        let _ = &rig;
+        h.state_mut().open_project(crate::Opened { name: "Second".into(), path: "/tmp/Second.archforge".into(), ..Default::default() });
+        h.run();
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Agent);
+        h.run();
+        ask_in_chat(&mut h, "Here");
+        // Labels are numbered per project: the fake keeps one list for both, so the label is set as
+        // the other project would have given it.
+        h.state_mut().chat_panel.chat.as_mut().unwrap().origin = origin.clone();
+        assert!(fx::call(h.state_mut(), "document.inspect", serde_json::json!({})).is_ok(), "the shown one, by its own key");
+        let inspect = serde_json::json!({});
+        let gate = |h: &Harness<'static, Shell>, origin: Option<&str>, key: Option<&str>| {
+            crate::chat_panel::gate(h.state(), origin, key, "document.inspect", &inspect)
+        };
+        let parked = gate(&h, origin.as_deref(), Some(&parked_key));
+        assert!(parked.unwrap_err().contains("has no turn running"), "the parked one, under the same label, is refused here");
+        // The person's own token naming that label keeps the label rules: refused while the parked
+        // one runs under it.
+        assert!(gate(&h, origin.as_deref(), None).unwrap_err().contains("has no turn running"), "the label, unbound");
+        // A key the window does not know may not act under a label it knows.
+        let stranger = "00000000-0000-4000-8000-00000000beef";
+        assert!(gate(&h, origin.as_deref(), Some(stranger)).unwrap_err().contains("is not one Archforge knows"), "an unknown key");
+        // A conversation's request without a label is still checked by its key.
+        let shown_key = fx::key(h.state());
+        chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let no_label = gate(&h, None, Some(&shown_key)).unwrap_err();
+        assert!(
+            no_label.contains("has no turn running") && no_label.contains(origin.as_deref().unwrap()),
+            "no label, no turn running, named by its own: {no_label}"
+        );
+        // A conversation let go of: its label is refused until its program has ended.
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "One");
+        chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let key = fx::key(h.state());
+        let origin = h.state().chat_panel.chat.as_ref().unwrap().origin.clone();
+        let at = rect_of(&h, "workspace.chat.new").center();
+        click(&mut h, at);
+        // The fake's program ends at once; one still ending is held as a slow program's would be.
+        h.state_mut().chats.letting_go.push((key.clone(), origin.clone()));
+        let inspect = serde_json::json!({});
+        let ends = crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect);
+        assert!(ends.as_ref().unwrap_err().contains("is being ended"), "refused while it ends, for that reason: {ends:?}");
+        h.run();
+        assert!(h.state().chats.letting_go.is_empty(), "its end taken, it is forgotten");
+        assert!(crate::chat_panel::gate(h.state(), origin.as_deref(), Some(&key), "document.inspect", &inspect).is_ok(), "known no more once ended");
+    }
 }
 
 /// A Stop the program never answers ends the program and the turn after the grace, so the panel

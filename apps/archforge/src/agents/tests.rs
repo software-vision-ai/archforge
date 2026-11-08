@@ -746,6 +746,29 @@ fn a_conversations_token_speaks_only_for_its_conversation() {
     }
 }
 
+/// The window gets, with each request, the conversation its token is bound to, as the channel says
+/// it, so its gate can know the conversation by key (AR-230).
+#[test]
+fn the_window_gets_the_conversation_a_token_is_bound_to() {
+    let (window, requests) = Window::new();
+    let handler = super::access::handler(window);
+    let call = std::thread::spawn(move || {
+        let live = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        handler(archforge_control::Call {
+            method: "document.inspect",
+            params: json!({}),
+            origin: Some("Chat 1"),
+            conversation: Some(CHAT),
+            role: archforge_control::Role::Full,
+            live: &live,
+        })
+    });
+    let request = requests.recv_timeout(WAIT).unwrap();
+    assert_eq!((request.origin.as_deref(), request.conversation.as_deref()), (Some("Chat 1"), Some(CHAT)));
+    request.reply.send(Ok(json!(null))).unwrap();
+    assert_eq!(call.join().unwrap(), Ok(json!(null)));
+}
+
 /// A request of a token revoked while it waits in the window's queue is given up at once, answered
 /// "revoked", and never runs when the window comes to it.
 #[test]

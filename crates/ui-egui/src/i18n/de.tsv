@@ -280,6 +280,11 @@ str		Conversations	Unterhaltungen
 str		New conversation	Neue Unterhaltung
 str		Stop the reply first	Zuerst die Antwort stoppen
 str		Let Chat use the model is off, so nothing is sent. Turn it on in Settings ▸ AI Agents.	„Chat das Modell nutzen lassen“ ist aus, daher wird nichts gesendet. Schalten Sie es unter Einstellungen ▸ KI-Agenten ein.
+str		this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here	die Unterhaltung dieses Tokens kennt Archforge nicht; die Bezeichnung {label} gehört hier zu einer anderen Unterhaltung
+str		the conversation {who} is being ended; nothing more runs in its name until its program has ended	die Unterhaltung {who} wird gerade beendet; in ihrem Namen läuft nichts mehr, bis ihr Programm beendet ist
+str		the conversation {who} has no turn running in the project shown in Archforge	die Unterhaltung {who} hat im angezeigten Projekt in Archforge keinen laufenden Schritt
+str		the conversation {who} may undo only its own changes in this turn, and the step on top is not one	die Unterhaltung {who} darf nur ihre eigenen Änderungen in diesem Schritt rückgängig machen, und der oberste Schritt ist keiner davon
+str		the conversation {who} may redo only its own changes in this turn, and the step to redo is not one	die Unterhaltung {who} darf nur ihre eigenen Änderungen in diesem Schritt wiederherstellen, und der wiederherzustellende Schritt ist keiner davon
 str		No agent set up yet	Noch kein Agent eingerichtet
 str		Chat answers with Claude or Codex, run by the program installed on this computer. Choose one in Settings and let Chat use the model.	Chat antwortet mit Claude oder Codex, ausgeführt vom Programm, das auf diesem Computer installiert ist. Wählen Sie einen in den Einstellungen und lassen Sie Chat das Modell nutzen.
 str		Configure agent	Agent einrichten

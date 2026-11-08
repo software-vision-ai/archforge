@@ -1078,8 +1078,8 @@ pub(crate) fn retire(shell: &mut Shell) {
 }
 
 /// Ends the program of the conversation `key` when `running`, and keeps taking and dropping its
-/// events until it has ended, whatever becomes of its panel; meanwhile requests on behalf of its
-/// `origin` are refused.
+/// events until it has ended, whatever becomes of its panel; meanwhile its token's requests (known
+/// by `key`, or by `origin` for the person's own token naming it) are refused.
 fn let_go(shell: &mut Shell, key: String, origin: Option<String>, running: bool) {
     let ended = running && crate::chat::end(shell, &key).is_ok();
     if ended || shell.chats.running(&key) {
@@ -1650,42 +1650,85 @@ pub(crate) fn closing(shell: &mut Shell, chat: Option<(String, Option<String>)>)
     }
 }
 
-/// Whether a request of `method` with `params` sent on behalf of `origin` may run. An origin that
-/// is one of this window's conversations may act only while that conversation's turn runs in the
-/// project shown, never while a conversation of the same label still runs or ends elsewhere (labels
-/// are only unique within a project) or while its program is being ended (AR-228), and may undo or
-/// redo only a step of the running turn: never the person's, another conversation's, or one of its
-/// own earlier turns.
-pub(crate) fn gate(shell: &Shell, origin: Option<&str>, method: &str, params: &Value) -> Result<(), String> {
-    let Some(origin) = origin else { return Ok(()) };
-    let mine = |p: &Panel| p.chat.as_ref().is_some_and(|c| c.origin.as_deref() == Some(origin));
+/// Whether a request of `method` with `params` sent on behalf of `origin` may run. A conversation's
+/// token is known by `conversation`, the key the control channel bound to it when it granted it,
+/// never by a label a request names (AR-230); the person's own token, unbound, by the label it
+/// names, if any. A request of one of this window's conversations may act only while that
+/// conversation's turn runs in the project shown, never while it still runs or ends elsewhere or
+/// while its program is being ended (AR-228), and may undo or redo only a step of the running turn: never the person's, another conversation's,
+/// or one of its own earlier turns. A conversation's token the window does not know never stands in
+/// for one it knows under the same label; one whose label it does not know either is let through,
+/// as the person's own token naming an unknown label is (no such token is live: a conversation's
+/// token is revoked before the window forgets it).
+pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&str>, method: &str, params: &Value) -> Result<(), String> {
+    // Only the person's own token may send a request in no one's name; a conversation's is checked
+    // by its key whatever label it carries.
+    if origin.is_none() && conversation.is_none() {
+        return Ok(());
+    }
+    let origin = origin.unwrap_or_default();
+    let is_it = |c: &Chat| match conversation {
+        Some(key) => c.key == key,
+        None => c.origin.as_deref() == Some(origin),
+    };
+    let mine = |p: &Panel| p.chat.as_ref().is_some_and(is_it);
     let parked = shell.tabs.iter().filter_map(|t| t.parked.as_ref()).filter(|p| mine(&p.chat_panel)).collect::<Vec<_>>();
     // A program asked to end (Allow changes or the model changed, AR-228) acts for nothing more:
     // a question asked before its end waits for a new program.
     let program_ends = |p: &Panel| mine(p) && p.chat.as_ref().is_some_and(|c| c.session == Session::Ending);
-    let ending = shell.chats.letting_go.iter().any(|(_, o)| o.as_deref() == Some(origin))
-        || program_ends(&shell.chat_panel)
+    let ending = shell.chats.letting_go.iter().any(|(k, o)| match conversation {
+        Some(key) => k == key,
+        None => o.as_deref() == Some(origin),
+    }) || program_ends(&shell.chat_panel)
         || parked.iter().any(|p| program_ends(&p.chat_panel));
     let known = mine(&shell.chat_panel) || !parked.is_empty() || ending;
     if !known {
+        // A conversation's token the window does not know is nobody's here: it may not act under the
+        // label of one the window knows.
+        let label_known = |p: &Panel| p.chat.as_ref().is_some_and(|c| c.origin.as_deref() == Some(origin));
+        let taken = label_known(&shell.chat_panel)
+            || shell.tabs.iter().filter_map(|t| t.parked.as_ref()).any(|p| label_known(&p.chat_panel))
+            || shell.chats.letting_go.iter().any(|(_, o)| o.as_deref() == Some(origin));
+        if conversation.is_some() && taken {
+            return Err(fmt(
+                &tr("this token's conversation is not one Archforge knows; the label {label} belongs to another conversation here"),
+                &[("label", &format!("{origin:?}"))],
+            ));
+        }
         return Ok(());
     }
-    let running = |p: &Panel| {
-        p.chat.as_ref().is_some_and(|c| c.origin.as_deref() == Some(origin) && c.turns.last().is_some_and(|t| t.state == TurnState::Running))
-    };
-    let elsewhere = ending || parked.iter().any(|p| running(&p.chat_panel));
-    if !running(&shell.chat_panel) || elsewhere {
-        return Err(format!("the conversation {origin:?} has no turn running in the project shown in Archforge"));
+    // The label the checks and the words use: the conversation's own once it is found by its key,
+    // never one the request carried.
+    let found = shell.chat_panel.chat.as_ref().filter(|c| is_it(c)).and_then(|c| c.origin.as_deref());
+    let label = found.unwrap_or(origin);
+    let running = |p: &Panel| p.chat.as_ref().is_some_and(|c| is_it(c) && c.turns.last().is_some_and(|t| t.state == TurnState::Running));
+    let who = if label.is_empty() { conversation.unwrap_or_default() } else { label };
+    // Said apart, so the reason is the one that holds: its program is being ended, or no turn of it
+    // runs in the project shown.
+    if ending {
+        return Err(fmt(
+            &tr("the conversation {who} is being ended; nothing more runs in its name until its program has ended"),
+            &[("who", &format!("{who:?}"))],
+        ));
+    }
+    if !running(&shell.chat_panel) || parked.iter().any(|p| running(&p.chat_panel)) {
+        return Err(fmt(&tr("the conversation {who} has no turn running in the project shown in Archforge"), &[("who", &format!("{who:?}"))]));
     }
     let command = params.get("command").and_then(Value::as_str);
     let undo = method == "engine.undo" || (method == "engine.execute" && command == Some("edit.undo"));
     let redo = method == "engine.redo" || (method == "engine.execute" && command == Some("edit.redo"));
     let session = shell.session.as_ref();
-    if undo && session.is_none_or(|s| !s.undo_in_group(origin)) {
-        return Err(format!("the conversation {origin:?} may undo only its own changes in this turn, and the step on top is not one"));
+    if undo && session.is_none_or(|s| !s.undo_in_group(label)) {
+        return Err(fmt(
+            &tr("the conversation {who} may undo only its own changes in this turn, and the step on top is not one"),
+            &[("who", &format!("{label:?}"))],
+        ));
     }
-    if redo && session.is_none_or(|s| !s.redo_in_group(origin)) {
-        return Err(format!("the conversation {origin:?} may redo only its own changes in this turn, and the step to redo is not one"));
+    if redo && session.is_none_or(|s| !s.redo_in_group(label)) {
+        return Err(fmt(
+            &tr("the conversation {who} may redo only its own changes in this turn, and the step to redo is not one"),
+            &[("who", &format!("{label:?}"))],
+        ));
     }
     Ok(())
 }
