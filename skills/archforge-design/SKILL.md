@@ -308,8 +308,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   dialog and the window behind takes no keys.
 - AI Agents (page 07 of the design, frames A1-A8): the default agent select on top, a card per
   agent (the neutral hexagon agent mark beside its name, never a provider's logo; a status badge
-  at the card's right), then Check connection and Send test message, each
-  with its note beside it, and the status badge under them.
+  at the card's right), then Check connection and Send test message, each with its note beside
+  it, and the status badge under them.
 - Archforge never touches the system's credential store at launch, so it never asks for access
   to it unless agents are used (owner, 2026-11-06): only the programs are looked for when it
   starts. The keys are read, on the host's thread, the first time the AI Agents page (or Chat)
@@ -351,11 +351,16 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - What is kept in the preferences: the default agent, each agent's model and Codex's way of
   signing in. Never a key, nor any part of one. There is no switch for Chat (owner, AR-237): Chat
   is ready when the default agent is; an earlier build's switch is skipped when read.
-- The codex program keeps a ChatGPT sign-in in the system keyring where the secure store opens,
-  and otherwise in its own files in Archforge's private folder (owner, 2026-11-06), so the
-  without-a-store note's "keeps its ChatGPT sign-in in its own files" is exactly what happens.
+- The codex program keeps a ChatGPT sign-in in its own files in Archforge's private `CODEX_HOME`
+  (`agents/codex-home`, mode 0700), on every system, never in the system keychain or Secret
+  Service (owner, 2026-11-08, AR-236; it replaces the 2026-11-06 rule "the keyring where the
+  secure store opens"): the codex program runs with a private `HOME`, where no keychain is
+  found. The note "keeps its ChatGPT sign-in in its own files" shows once Codex is signed in and
+  only where no secure store opened, as there it tells why the sign-in works without one.
 - Agent access for Chat (AR-203) opens only while a conversation holds it, and closes with the
-  last conversation and on quit; asking a conversation to end revokes its token at once. The
+  last conversation and on quit; asking a conversation to end revokes its token at once. With no
+  switch for Chat (AR-237), asking a question is the opt-in: a conversation's program and its
+  token start only when the person sends one in it, read-only unless Allow changes. The
   status bar's Agent item (page 07, the dot and text beside the location) says which: an accent
   dot and "Chat is using the model" while a conversation holds access, a purple dot and
   "Agent access off" otherwise, one at a time. It is a control (pointer, Tab, Enter, its id

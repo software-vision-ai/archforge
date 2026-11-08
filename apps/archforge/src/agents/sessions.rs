@@ -598,7 +598,7 @@ fn begin(
             };
             let auth = match auth {
                 Some(key) => Auth::ApiKey(key),
-                None => Auth::ChatGpt(super::chatgpt_store(inner.store())),
+                None => Auth::ChatGpt,
             };
             Box::new(CodexSession::start(&runtime, &folder, &home, config, auth).map_err(|e| failure(&e))?)
         }

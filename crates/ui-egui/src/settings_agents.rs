@@ -813,8 +813,9 @@ fn codex_sign_in(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, page: &mut P
         y += wrapped(&paint, pos2(x, y), inner, &account_error(e), types::CAPTION, p.danger, 2) + 4.0;
     }
     let help = match &account {
-        // Said only where the host keeps it so, which is where no secure store opened.
-        Some(Ok(CodexAccount::SignedIn { .. })) if shell.agents.look.sign_in_files => tr(OWN_FILES),
+        // The codex program always keeps the sign-in in its own files (AR-236); said where no secure
+        // store opened, as that is where the API key's need for one matters.
+        Some(Ok(CodexAccount::SignedIn { .. })) if shell.agents.look.store.missing() => tr(OWN_FILES),
         Some(Ok(CodexAccount::SignedIn { .. })) => tr("The codex program keeps this sign-in itself."),
         Some(Ok(_)) => tr("Sign in opens your browser; the codex program keeps the sign-in itself."),
         _ => tr("The codex program keeps the sign-in itself."),

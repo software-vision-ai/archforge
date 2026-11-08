@@ -1069,7 +1069,6 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         codex: fake::found(Provider::Codex),
         claude_key: Key::Absent,
         codex_key: Key::Absent,
-        sign_in_files: false,
     };
     let mut account = CodexAccount::NotSignedIn;
     match screen {
@@ -1090,8 +1089,6 @@ fn sample_agents(shell: &mut Shell, screen: Screen) {
         }
         Screen::SettingsAgentsNoStore => {
             look.store = Store::Missing { why: "no Secret Service answers on the session bus".into() };
-            // Without a secure store the host keeps the ChatGPT sign-in in the codex program's files.
-            look.sign_in_files = true;
             account = signed_in.clone();
             shell.state.agents.claude_model = "sonnet".into();
         }

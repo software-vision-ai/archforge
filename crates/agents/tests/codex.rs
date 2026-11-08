@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use archforge_agents::codex::history::{COPY_FILE, Role};
 use archforge_agents::codex::{
-    AccountEvent, Auth, Bridge, CancelStatus, ChatGptStore, CodexAccount, CodexConfig, CodexHome, CodexSession, CredentialStore, LoginOutcome, Start,
+    AccountEvent, Auth, Bridge, CancelStatus, CodexAccount, CodexConfig, CodexHome, CodexSession, CredentialStore, LoginOutcome, Start,
 };
 use archforge_agents::{
     AgentError, AgentSession, ConversationFolder, ConversationId, ErrorKind, HostEnv, Limits, Runtime, RuntimeKind, SessionEvent, Skipped,
@@ -250,9 +250,9 @@ fn config(start: Start, timeout: Duration) -> CodexConfig {
     CodexConfig { start, model: None, bridge: Some(bridge()), instructions: None, limits: Limits::default(), request_timeout: timeout }
 }
 
-/// A ChatGPT sign-in in the keyring: no sign-in request in the handshake.
+/// A ChatGPT sign-in in Codex's own files: no sign-in request in the handshake.
 fn chatgpt() -> Auth {
-    Auth::ChatGpt(ChatGptStore::Keyring)
+    Auth::ChatGpt
 }
 
 /// The canary as a secret.
@@ -680,6 +680,9 @@ fn a_turn_with_a_tool_call_replays_from_the_fixture() {
     let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("Which entities are in Shop?").unwrap();
     let events = events_until(&mut session, 10, turn_end);
+    // A ChatGPT session keeps its sign-in in Codex's own files, never a keychain (AR-236).
+    let args = std::fs::read_to_string(world.base.join("args")).unwrap();
+    assert!(args.contains("cli_auth_credentials_store=\"file\"") && !args.contains("keyring"), "{args}");
     let started = events.iter().find_map(|e| match e {
         SessionEvent::Started { session_id, model, .. } => Some((session_id.clone(), model.clone())),
         _ => None,
@@ -842,11 +845,41 @@ fn an_api_key_signs_in_over_standard_input_only() {
     // A ChatGPT store never takes a key.
     drop(account);
     let world2 = World::new("account-key-store", "hello\ndrain");
-    let mut keyring = world2.account(CredentialStore::Keyring, Duration::from_secs(5));
-    assert!(matches!(keyring.login_api_key(&canary(), Duration::from_secs(1)), Err(AgentError::InvalidSetting { .. })));
-    drop(keyring);
+    // Codex's own files would put the key in `auth.json`: refused before anything is sent.
+    let mut files = world2.account(CredentialStore::File, Duration::from_secs(5));
+    let refused = files.login_api_key(&canary(), Duration::from_secs(1));
+    assert!(matches!(refused, Err(AgentError::InvalidSetting { setting: "credential store", .. })), "{refused:?}");
+    drop(files);
+    let sent = world2.stdin(1);
+    assert!(sent[0].contains("\"initialize\""), "{sent:?}");
+    assert!(!sent.iter().any(|l| l.contains(CANARY) || l.contains("account/login")), "only the handshake: {sent:?}");
     assert!(!LOG.lock().unwrap_or_else(PoisonError::into_inner).iter().any(|l| l.contains(CANARY)), "the key reached the log");
     world2.remove();
+    world.remove();
+}
+
+/// The private `CODEX_HOME`, which holds the ChatGPT sign-in's files, is made with mode 0700; one
+/// others may enter, or a link in its place, is refused and left as it is, never changed (AR-236).
+#[test]
+fn the_private_codex_home_is_0700_and_an_open_one_or_a_link_is_refused() {
+    let world = World::new("codex-home-private", "hello\ndrain");
+    let path = world.home.path().to_path_buf();
+    assert_eq!(path, world.workspace.root().join(archforge_agents::codex::HOME_FOLDER));
+    let mode = |p: &Path| std::fs::symlink_metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&path), 0o700, "made 0700");
+    assert_eq!(CodexHome::open(&world.workspace).unwrap().path(), path, "a private one opens again");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = CodexHome::open(&world.workspace).unwrap_err();
+    assert!(matches!(&error, AgentError::Folder { path: p, .. } if p == &path), "{error:?}");
+    assert_eq!(mode(&path), 0o755, "refused, never changed");
+    std::fs::remove_dir(&path).unwrap();
+    let elsewhere = world.base.join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::fs::set_permissions(&elsewhere, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &path).unwrap();
+    let error = CodexHome::open(&world.workspace).unwrap_err();
+    assert!(matches!(&error, AgentError::Folder { path: p, .. } if p == &path), "{error:?}");
+    assert!(std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink(), "the link is left as it is");
     world.remove();
 }
 
@@ -854,7 +887,7 @@ fn an_api_key_signs_in_over_standard_input_only() {
 #[test]
 fn a_browser_sign_in_returns_its_address() {
     let world = World::new("account-browser", &replay("doc-login-chatgpt-browser.jsonl", "hello"));
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     let login = account.login_chatgpt(Duration::from_secs(5)).unwrap();
     assert_eq!(login.login_id.as_str(), "019a0000-0000-7000-8000-00000000c001");
     assert_eq!(login.auth_url, "https://auth.openai.com/oauth/authorize?PLACEHOLDER");
@@ -912,7 +945,7 @@ fn a_refused_sign_in_is_cancelled_only_with_a_checked_login_id() {
          drain"
     );
     let world = World::new("account-refused", &body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     let error = account.login_chatgpt(Duration::from_secs(5)).unwrap_err();
     assert!(matches!(&error, AgentError::Unreadable { reason, .. } if reason.contains("https")), "{error:?}");
     assert_eq!(world.methods(4), vec!["initialize", "initialized", "account/login/start", "account/login/cancel"]);
@@ -950,7 +983,7 @@ fn a_cancelled_browser_sign_in_reads_as_cancelled() {
          say '{{\"method\":\"account/login/completed\",\"params\":{{\"loginId\":\"{id}\",\"success\":false,\"error\":\"Login server error: port 1455 is busy\"}}}}'\ndrain"
     );
     let world = World::new("account-browser-cancel", &body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     let login = account.login_chatgpt(Duration::from_secs(5)).unwrap();
     assert_eq!(account.cancel_login(&login.login_id, Duration::from_secs(5)).unwrap(), CancelStatus::Canceled);
     assert_eq!(
@@ -1020,7 +1053,7 @@ fn a_late_key_sign_in_sends_no_cancel() {
 fn a_sign_in_that_starts_late_is_cancelled() {
     let body = "hello\nreq\nlate=$id\n/bin/sleep 0.3\nok \"$late\" '{\"type\":\"chatgpt\",\"loginId\":\"019a0000-0000-7000-8000-00000000c003\",\"authUrl\":\"https://auth.openai.com/x\"}'\nreq\ndrain";
     let world = World::new("account-late-login", body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_millis(100));
+    let mut account = world.account(CredentialStore::File, Duration::from_millis(100));
     let error = account.login_chatgpt(Duration::from_secs(5)).unwrap_err();
     assert!(matches!(error, AgentError::TimedOut { request: "account/login/start", .. }), "{error:?}");
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1054,7 +1087,7 @@ fn model_list_follows_cursors_and_refuses_bad_ones() {
     body.push_str(&page(&model("z"), "\"same\""));
     body.push_str("req\nok \"$id\" '{\"data\":[]}'\ndrain");
     let world = World::new("account-models", &body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     let models = account.models(Duration::from_secs(5)).unwrap();
     assert_eq!(models.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), vec!["a", "b", "c"]);
     let lines = world.stdin(5);
@@ -1073,10 +1106,10 @@ fn model_list_follows_cursors_and_refuses_bad_ones() {
 /// the end stays queued as an event, and later calls fail with the same reason.
 #[test]
 fn a_call_codex_never_answers_gets_its_exit_reason() {
-    let world = World::new("account-crash", "hello\nreq\nprintf 'fatal: the keyring is locked\\n' >&2\nexit 3");
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let world = World::new("account-crash", "hello\nreq\nprintf 'fatal: the sign-in file is locked\\n' >&2\nexit 3");
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     let error = account.read(false, Duration::from_secs(5)).unwrap_err();
-    assert!(matches!(&error, AgentError::Exited { code: Some(3), stderr_tail, .. } if stderr_tail.contains("keyring is locked")), "{error:?}");
+    assert!(matches!(&error, AgentError::Exited { code: Some(3), stderr_tail, .. } if stderr_tail.contains("sign-in file is locked")), "{error:?}");
     let event = account.next_event(Duration::ZERO);
     assert!(
         matches!(&event, Some(AccountEvent::Ended { exit: Some(exit), error: Some(AgentError::Exited { .. }) }) if exit.code == Some(3)),
@@ -1095,7 +1128,7 @@ fn an_expired_sign_in_is_read_from_the_exact_sentence() {
     let sentence = archforge_agents::codex::EXPIRED_SIGN_IN_MESSAGES[2];
     let body = format!("hello\nreq\nerr \"$id\" -32603 '{sentence}'\nreq\nerr \"$id\" -32603 'Your refresh token was revoked.'\ndrain");
     let world = World::new("account-expired", &body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     assert_eq!(account.read(true, Duration::from_secs(5)).unwrap_err().kind(), ErrorKind::SignInExpired);
     assert_eq!(account.read(true, Duration::from_secs(5)).unwrap_err().kind(), ErrorKind::Other);
     assert_eq!(serde_json::from_str::<Value>(&world.stdin(3)[2]).unwrap()["params"], json!({"refreshToken": true}));
@@ -1108,7 +1141,7 @@ fn an_expired_sign_in_is_read_from_the_exact_sentence() {
 #[test]
 fn the_account_folder_goes_with_the_account() {
     let world = World::new("account-folder", "hello\ndrain");
-    let account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let account = world.account(CredentialStore::File, Duration::from_secs(5));
     let folder = account.folder().unwrap().path().to_path_buf();
     assert!(folder.starts_with(world.workspace.root()) && folder.file_name().unwrap().to_string_lossy().starts_with("codex-"));
     let env = std::fs::read_to_string(world.base.join("env")).unwrap();
@@ -1122,7 +1155,7 @@ fn the_account_folder_goes_with_the_account() {
         &world.runtime,
         &world.workspace,
         &world.home,
-        CredentialStore::Keyring,
+        CredentialStore::File,
         Limits::default(),
         Duration::from_secs(5),
         Duration::from_secs(5),
@@ -1147,7 +1180,7 @@ fn account_zero_timeout_reads_past_lines_without_events() {
     }
     body.push_str("say '{\"method\":\"account/updated\",\"params\":{\"authMode\":null,\"planType\":null}}'\nhang");
     let world = World::new("account-zero", &body);
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(5));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
     std::thread::sleep(Duration::from_millis(500));
     assert_eq!(account.next_event(Duration::ZERO), Some(AccountEvent::AccountUpdated { auth_mode: None }));
     drop(account);
@@ -1199,7 +1232,7 @@ fn no_call_waits_past_its_deadline() {
     drop(session);
     world.remove();
     let world = World::new("deadline-account", "hello\nhang");
-    let mut account = world.account(CredentialStore::Keyring, Duration::from_secs(60));
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(60));
     let started = Instant::now();
     let error = account.read(false, Duration::from_millis(100)).unwrap_err();
     assert!(matches!(error, AgentError::TimedOut { request: "account/read", .. }), "{error:?}");

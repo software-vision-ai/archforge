@@ -125,13 +125,29 @@ One full round trip per route. Each uses the project of P1.
 
 ### R2. Codex with an API key
 
+Before step 1, make sure `codex-home` holds no ChatGPT sign-in from before the pass, or step 4
+proves nothing. Quit Archforge, run `wait_quit`, then:
+
+```sh
+H="$SETTINGS/agents/codex-home"; KEPT=""
+if [ ! -e "$H/auth.json" ]; then echo "no earlier auth.json"
+elif KEPT="$(mktemp -d "$HOME/archforge-earlier-sign-in.XXXXXX")" && chmod 700 "$KEPT" \
+     && mv "$H/auth.json" "$KEPT/auth.json"; then echo "KEPT an earlier sign-in in $KEPT"
+else echo "KEEP FAILED: stop here and fix the error above (KEPT='$KEPT')"; fi
+```
+
+**Expect:** *no earlier auth.json*, or *KEPT* with its folder: record which, and the folder. A
+kept file is an earlier ChatGPT sign-in, in a private folder of its own outside `$WORK`, so
+nothing in the pass removes it; K5 step 2 says how to put it back. Start Archforge again.
+
 1. On the Codex card choose **API key** under **Sign-in**, paste the OpenAI key and choose
    **Save key**. **Expect:** *API key saved · ends in* its last four characters.
 2. Set **Default agent** to Codex. Choose **Send test message**. **Expect:** *Codex answered the
    test message just now*.
 3. In the Chat panel choose **New conversation** (+). Repeat R1 steps 6 to 11 with Codex; the badge
    reads *Codex*.
-4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there:
+4. Quit Archforge, then check that Codex wrote no key file, in a folder that is there. Codex is
+   not signed in with ChatGPT yet (R3 comes next), so any `auth.json` here came from the API key:
 
    ```sh
    wait_quit
@@ -155,13 +171,18 @@ One full round trip per route. Each uses the project of P1.
    ```sh
    H="$SETTINGS/agents/codex-home"
    if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
-   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
+   elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; ls -l "$H/auth.json"; else echo "no auth.json in $H"; fi
+   ls -ld "$H"
    ```
 
-   **Expect:** *no auth.json* on macOS and on Linux with a Secret Service (the sign-in is in the
-   secure store). On Linux without one, *auth.json EXISTS*, and the card says the codex program
-   keeps the sign-in in its own files.
-6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**.
+   **Expect:** *auth.json EXISTS*, on macOS and Linux alike: the codex program keeps the ChatGPT
+   sign-in in its own files in `codex-home`, never in the Keychain or the Secret Service. `ls -ld`
+   shows `drwx------` (on macOS perhaps with a trailing `@` or `+`) and you as the owner: only you
+   can open the folder. *NO FOLDER* proves nothing: fix `SETTINGS` first. Record the line
+   `ls -l` prints for `auth.json` too; its mode is the codex program's own choice.
+6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**. Run step 5's block again
+   and record what it says: what sign-out removes from `codex-home` is the codex program's own
+   doing. *no auth.json in* the folder makes R4's *auth.json EXISTS* proof that R4 wrote it.
 
 ### R4. Codex with ChatGPT, with a device code
 
@@ -174,7 +195,9 @@ One full round trip per route. Each uses the project of P1.
    address shows it whole. Record its path (it holds no secret) in the notes.
 3. On the second device, open that address (type it, or send it there) and enter the code.
    **Expect:** *Signed in as* your email and plan on the card.
-4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4.
+4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4, and R3
+   step 5's check says *auth.json EXISTS*: the sign-in is kept in `codex-home` as in R3. If R3
+   step 6 still found `auth.json` after signing out, compare the `ls -l` line's time with R3's.
 5. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
    card goes back to *Not signed in*; no error.
 
@@ -214,8 +237,10 @@ This shows Check connection needs no network; it does not by itself prove that n
 
 ### F2. An expired sign-in
 
-1. F1 left the Codex card on **API key**. Switch it to **Sign in with ChatGPT** (sign in as in
-   R3 if it says *Not signed in*), set **Default agent** to Codex, start a new conversation
+1. F1 left the Codex card on **API key**. Switch it to **Sign in with ChatGPT**. **Expect:**
+   still *Signed in as* your email, as before F1 (the API key's runs use the ephemeral store and
+   share `codex-home` with the sign-in); if it says *Not signed in*, record that, then sign in as
+   in R3. Set **Default agent** to Codex, start a new conversation
    (**New conversation**, +) and ask one question. **Expect:** a reply: this conversation runs on
    the ChatGPT sign-in.
 2. End the sign-in from the ChatGPT account: use its security settings to sign out of all
@@ -314,7 +339,8 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 2. Open **Settings ▸ AI Agents**. **Expect:** *No secure store on this system*; **Save key** says
    *Can't be saved: there is no secure store to keep it in.*
 3. Sign Codex in with ChatGPT. **Expect:** signed in; the card says the codex program keeps the
-   sign-in in its own files; R3 step 5 finds `auth.json`.
+   sign-in in its own files, so it works without the secure store; R3 step 5 finds `auth.json`,
+   as on every system.
 
 ### W1. Windows (Windows only)
 
@@ -403,9 +429,12 @@ else KEYS_OK=0; echo "STOP: $(wc -l < "$WORK/keys") of 2 keys read; fix the stor
 4. With Codex the default agent and still on **API key**, start a new conversation and paste the
    first question K1 printed, the one ending in `$MARKER_CODEX_KEY`'s value, whole and unchanged.
    Then switch the card to **Sign in with ChatGPT** (sign in as in R3 if it says *Not signed
-   in*), start another new conversation and paste the second, ending in `$MARKER_CODEX_GPT`'s
-   value. **Expect:** a reply each time, repeating the word. Each Codex route has now sent one question with a marker of its own, for
-   K4 step 8.
+   in*, or with **Sign in again…** if it says the sign-in *has expired*), start another new
+   conversation and paste the second, ending in `$MARKER_CODEX_GPT`'s value. **Expect:** a reply
+   each time, repeating the word. A *Sign-in expired* card instead of the second reply means the
+   sign-in ended since F2: sign in again from **Open Settings**, then paste the question again in
+   another new conversation. Each Codex route has now sent one question with a marker of its
+   own, for K4 step 8.
 5. Make Claude the default agent again, start a new conversation and paste the third question K1
    printed, ending in `$MARKER_DELETED`'s value. **Expect:** a reply. This is the
    conversation K3 step 5 deletes; its title starts with the question.
@@ -504,7 +533,12 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    ```sh
    probe "$MARKER" "$SETTINGS/agents"                   # Claude's transcript of K2 step 1
    search "$WORK/canaries" "$SETTINGS/agents"
+   find "$SETTINGS" -name auth.json -print              # Codex's ChatGPT sign-in, where it is kept
    ```
+
+   **Expect** from `find`: no `auth.json` anywhere but `$SETTINGS/agents/codex-home/auth.json`,
+   which is there while Codex keeps a ChatGPT sign-in (R3 or R4). It holds the ChatGPT
+   sign-in, not an API key: neither real key from K2 is in it.
 
 4. **Everything else in the settings folder** (token files, the Dolt home):
 
@@ -614,7 +648,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
      as the question.
 
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere, each place's probe
-*FOUND*. The secure store itself is the only place that holds a key.
+*FOUND*. The secure store itself is the only place that holds an API key. Codex's ChatGPT
+sign-in is kept apart from them, in `codex-home/auth.json` (step 3).
 
 **Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `$TRY/project-rows.csv`
 and `$TRY/project-history.csv` (the class and the question); this proves the search reads the
@@ -624,16 +659,56 @@ project. Elsewhere, record where it shows: Claude's own transcript in that conve
 ### K5. Put things back
 
 Run this only after every K4 search, step 8 included: it removes `$WORK`, with the markers and the
-key files the searches read.
+key files the searches read. Run every step in the shell from *Before you start*, where `WORK`,
+`SETTINGS`, `wait_quit` and (if R2 kept a sign-in) `KEPT` are set. If that shell was closed, open
+a new one and set them again: `SETTINGS` and `wait_quit` by pasting those lines of the block in
+*Before you start* (not the `mktemp` line, which would make a second, empty work folder), `WORK`
+to the pass's folder (`find "$HOME" -maxdepth 1 -name 'archforge-acceptance.*'` lists it), and
+`KEPT` to the folder R2 printed, if any.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
-2. Remove the pass's files, which hold the real keys and the project's rows:
+2. If R2 kept an earlier sign-in (it printed *KEPT* and a folder): the pass signed Codex in
+   again, and F2's *sign out of all devices* may have ended the earlier sign-in too. Choose, and
+   record your choice: keep the pass's sign-in, or put the earlier one back. Quit Archforge, run
+   `wait_quit`, then run one of the two commands:
 
    ```sh
-   rm -rf "$WORK"
-   unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY
+   # either: keep the pass's sign-in
+   [ -n "$KEPT" ] && rm -rf "$KEPT" && echo "kept the pass's sign-in" || echo "NOT DONE: KEPT is empty, or see the error above"
+   # or: put the earlier sign-in back
+   [ -n "$KEPT" ] && mv "$KEPT/auth.json" "$SETTINGS/agents/codex-home/auth.json" && rmdir "$KEPT" \
+     && echo "put the earlier sign-in back" || echo "NOT DONE: KEPT is empty, or see the error above"
    ```
+
+   Start Archforge and open **Settings ▸ AI Agents**. K3 and step 1 left the Codex card on
+   **API key**, which shows the key, not the account: choose **Sign in with ChatGPT** under
+   **Sign-in**. **Expect:** *Signed in as* your email. That reads only what the codex program
+   keeps; it does not ask OpenAI whether the sign-in still holds, so test it: set **Default
+   agent** to Codex and choose **Send test message**. **Expect:** *Codex answered the test message
+   just now*. If it fails, find out why: open *Chat acceptance*, start a new conversation with
+   Codex and ask one question. The card *Sign-in expired* means F2 ended that sign-in too: choose
+   **Open Settings**, then **Sign in again…**, sign in, and send the test message again. Any other
+   card, or a reply, means the test message failed for another cause: record its text. Then set
+   **Sign-in** and **Default agent** back to how you use them.
+3. Remove the pass's files, which hold the real keys and the project's rows. The command removes
+   nothing unless `WORK` names the pass's folder:
+
+   ```sh
+   if case "$WORK" in "$HOME"/archforge-acceptance.?*) [ -d "$WORK" ] ;; *) false ;; esac; then
+     if rm -rf "$WORK"; then echo "removed $WORK"
+       unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
+         DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY KEPT H
+     else echo "REMOVE FAILED: see the error above, and run this again"; fi
+   else echo "STOP: WORK is not set to the pass's folder; use the first shell"; fi
+   find "$HOME" -maxdepth 1 \( -name 'archforge-acceptance.*' -o -name 'archforge-earlier-sign-in.*' \) \
+     | grep . || echo "nothing of the pass left"
+   ```
+
+   **Expect:** *removed* and the folder, then *nothing of the pass left*. *STOP* removed nothing:
+   set `WORK` as above and run it again. A work folder still listed is one this pass or an
+   earlier one left: remove it the same way, with `WORK` set to it. An `archforge-earlier-sign-in`
+   folder still listed holds a sign-in step 2 did not settle: do step 2 for it, with `KEPT` set to
+   it.
 
 ## Results
 
@@ -674,5 +749,6 @@ Note what the pass shows for these:
 - R1 step 11: Claude resumes a conversation after **Allow changes** was switched.
 - K2: the bridge (`archforge-cli`) never holds Claude's key in its environment.
 - R2 step 4: Codex with an API key writes no `auth.json`.
+- R3 step 6: what signing out removes from `codex-home` (whether `auth.json` is gone).
 - K4 step 8: whether Codex's own databases in `codex-home` hold question text, for each route
   (API key, ChatGPT) on its own, from the marker each sent in K2 step 4.

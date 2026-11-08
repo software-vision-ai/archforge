@@ -251,12 +251,14 @@ The categories in `assistant.error` and `api_retry.error` (doc,
 
 ### Starting it
 
-`cli_auth_credentials_store` is `"keyring"` for a ChatGPT sign-in and `"ephemeral"` for an API key
-(see [Accounts and sign-in](#accounts-and-sign-in)); `CODEX_HOME_DIR` is the private folder.
+`cli_auth_credentials_store` is `"file"` for a ChatGPT sign-in and `"ephemeral"` for an API key
+(see [Accounts and sign-in](#accounts-and-sign-in)); `CODEX_HOME_DIR` is the private folder. The
+spike chose `"keyring"` for the ChatGPT sign-in; inside the private `HOME` Archforge gives Codex,
+macOS finds no default keychain, so the owner chose `"file"` on 2026-11-08 (AR-236).
 
 ```sh
 CODEX_HOME="$CODEX_HOME_DIR" codex app-server --strict-config \
-  -c cli_auth_credentials_store='"keyring"' \
+  -c cli_auth_credentials_store='"file"' \
   -c history.persistence='"none"' -c analytics.enabled=false \
   -c web_search='"disabled"' \
   --disable shell_tool --disable unified_exec --disable apps --disable plugins \
@@ -346,8 +348,9 @@ names the computer's host name and an installation id (sanitised in the fixtures
 - **Credential store** (`cli_auth_credentials_store`, doc,
   [auth](https://learn.chatgpt.com/docs/auth)): `file` (`CODEX_HOME/auth.json`), `keyring` (the
   system store; fails when unavailable), `auto` (keyring, else file), `ephemeral` (in memory for
-  this process only). With a private `CODEX_HOME` and `keyring`, ChatGPT tokens stay in Codex's own
-  keyring entry, as decided. `forced_login_method = "chatgpt" | "api"` pins one mode.
+  this process only). With a private `CODEX_HOME` and `file`, ChatGPT tokens stay in Codex's own
+  `auth.json` in that folder (owner decision 2026-11-08, AR-236; with `keyring`, macOS found no
+  default keychain under Codex's private `HOME`). `forced_login_method = "chatgpt" | "api"` pins one mode.
 - **Rate limits**: `account/rateLimits/read` returns `{ordinaryUsageAllowed, rateLimits{primary,
   secondary{usedPercent, windowDurationMins, resetsAt}, credits, planType, rateLimitReachedType},
   rateLimitsByLimitId}`; `account/rateLimits/updated` sends sparse updates to merge (schema).
@@ -414,8 +417,8 @@ After one ephemeral thread the private folder held `config.toml`, `installation_
 `state_5.sqlite`, `logs_2.sqlite`, `memories_1.sqlite`, `goals_1.sqlite`, `queue_1.sqlite`,
 `shell_snapshots/`, `skills/.system/`, `.tmp/plugins*` (a plugin catalogue sync, which is network
 traffic; `--disable plugins` should stop it) and `tmp/arg0-macos/` with `apply_patch` helpers.
-Keep one private `CODEX_HOME` per person (it holds the keyring reference and logs), not per
-conversation.
+Keep one private `CODEX_HOME` per person (it holds the ChatGPT sign-in's `auth.json` and logs), not
+per conversation.
 
 ### The schema
 
@@ -580,8 +583,9 @@ Each needs a real key or sign-in and costs a little.
 5. Claude: `--resume` of a conversation that had tool calls, with a different `--mcp-config`
    (for switching "Allow changes" on).
 6. Codex: API-key sign-in with `cli_auth_credentials_store="ephemeral"`, then a turn; whether
-   `auth.json` stays absent.
-7. Codex: ChatGPT sign-in (browser and device code) with `keyring` in a private `CODEX_HOME`, sign
+   the key stays out of `codex-home` (no `auth.json` appears while Codex is not signed in with
+   ChatGPT).
+7. Codex: ChatGPT sign-in (browser and device code) with `file` in a private `CODEX_HOME`, sign
    out, and what an expired sign-in looks like.
 8. Codex: a turn with the bridge: `mcpToolCall` items, whether MCP tool calls raise an elicitation
    under `on-request`, and what `default_tools_approval_mode` changes.
