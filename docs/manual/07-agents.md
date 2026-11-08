@@ -407,9 +407,10 @@ the box empty, comes back into the box. What the card's **Send again** and Enter
   back in the box counts as in the conversation: the first two rows. The box keeps its text when
   you switch conversations, so an edited question still in it goes with Enter as a new question,
   with the chips shown now, including any you had removed (the chips come back on reopening).
-- The card offers **Send again** only as the [table above](#when-something-goes-wrong) says: not
-  on a card that sends you to Settings, and on *Model not available* only after another model was
-  chosen.
+- The card offers **Send again** only on the conversation's last turn, and only as the
+  [table above](#when-something-goes-wrong) says: not on a card that sends you to Settings, and on
+  *Model not available* only after another model was chosen. Once you ask another question, the
+  earlier card no longer offers it: ask that question again as a new turn.
 
 To send only the chips shown now, ask a new question. The earlier question, with its chips' line,
 stays part of the conversation so far, so it may still reach the provider.
