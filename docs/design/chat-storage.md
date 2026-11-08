@@ -117,15 +117,16 @@ CREATE TABLE chat (
 - **`removed_chips`** (AR-227, added after the sign-off) keeps the context chips the person removed
   from the conversation, so a conversation opened again from the history never sends a chip removed
   earlier. It holds a comma-separated subset of `project`, `diagram` and `selection`, each once
-  (written in that order); null (or empty) means none removed. It is written whenever a chip is
-  removed or put back, the whole set each time, and when chips were removed before the first
-  question, once the conversation is made; it leaves `updated_at` alone, waits for the next chat
-  commit, and a code outside the list makes the conversation unreadable. It cannot be derived from
-  the anchors: a question without a `diagram` anchor cannot tell a removed chip from no diagram
-  open. It joins chat shape 1 and format 3 with no format bump, as no release has written chat
-  tables (0.13 is unreleased; the latest release is 0.12.0): a `chat` table made before the column
-  lacks it, its rows read as none removed, and the first write of chips adds the column at the end
-  (a conversation brought back from a commit before the column comes back with none removed).
+  (written in that order); null (or empty) means none removed. It is written whenever the set
+  changes, the whole set each time (the panel only removes chips; it has no control that puts one
+  back), and when chips were removed before the first question, once the conversation is made; it
+  leaves `updated_at` alone, waits for the next chat commit, and a code outside the list makes the
+  conversation unreadable. It cannot be derived from the anchors: a question without a `diagram`
+  anchor cannot tell a removed chip from no diagram open. It joins chat shape 1 and format 3 with no
+  format bump, as no release has written chat tables (0.13 is unreleased; the latest release is
+  0.12.0): a `chat` table made before the column lacks it, its rows read as none removed, and the
+  first write of chips adds the column at the end (a conversation brought back from a commit before
+  the column comes back with none removed).
 - **Message count** in the history ("6 messages") is counted, not stored:
   `SELECT chat, COUNT(*) FROM chat_message WHERE role IN ('user','assistant') GROUP BY chat`.
 - **"Allow changes to the model"** is not a column here: it is recorded on each turn

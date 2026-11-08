@@ -271,7 +271,9 @@ project that cannot be written.
 
 - **The chips** above the box are sent with your question: the project, the open diagram and what
   is selected, by name. Remove one with its ×; it stays removed for this conversation, also when
-  you open it again from **Conversations**. Which chips **Send again** sends is in [What Send again and Enter send](#what-send-again-and-enter-send). The line under
+  you open it again from **Conversations**. A removed chip cannot be put back in that conversation:
+  start a new conversation to have every chip again. Which chips **Send again** sends is in
+  [What Send again and Enter send](#what-send-again-and-enter-send). The line under
   them is a reminder: they, and everything the agent reads, go to the agent's provider.
 - **What the agent does** shows as it happens, under its name: a row such as *Read diagram
   Commerce* with *8 classes* beside it, or *Changed Customer* with *description*. Each row is what
