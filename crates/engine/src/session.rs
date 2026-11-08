@@ -6,7 +6,8 @@
 //! deltas backwards and forwards. If a rollback itself fails the session is poisoned: every edit is
 //! refused from then on, and the project has to be opened again. The document's states carry ids: a
 //! change takes a fresh one, undo and redo restore the one stored with the step, and the project is
-//! unsaved exactly when the current id is not the saved one.
+//! unsaved exactly when the current id is not the saved one. A session may be made read-only for a
+//! while: undoable commands, undo, redo and gestures are refused, view commands and queries run.
 
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -173,6 +174,8 @@ pub struct Session<D: Document, V> {
     groups: Vec<Group<D::Delta>>,
     /// Why the session can no longer be trusted, once a rollback failed.
     poisoned: Option<String>,
+    /// Whether every change of the document is refused ([`Session::set_read_only`]).
+    read_only: bool,
 }
 
 /// Runs `f`, turning a panic into an error that names the command; on wasm32 a panic aborts, so
@@ -230,6 +233,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             interaction: None,
             groups: Vec::new(),
             poisoned: None,
+            read_only: false,
         }
     }
 
@@ -434,6 +438,25 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.poisoned.as_deref()
     }
 
+    /// Whether the document can't be changed now ([`Session::set_read_only`]).
+    pub fn read_only(&self) -> bool {
+        self.read_only
+    }
+
+    /// Makes the session read-only, or lets it change again. While it is read-only, undoable
+    /// commands, undo, redo and starting a gesture are refused with [`EngineError::ReadOnly`] and
+    /// leave the document and its history as they were; view commands and queries still run. The
+    /// flag belongs to this session and nothing else clears it. Refused with
+    /// [`EngineError::InteractionRunning`] while a gesture runs, which would otherwise still end
+    /// in a change.
+    pub fn set_read_only(&mut self, read_only: bool) -> Result<(), EngineError> {
+        if read_only {
+            self.no_interaction()?;
+        }
+        self.read_only = read_only;
+        Ok(())
+    }
+
     /// The journal, oldest first: a tail log once its caps have dropped old entries.
     pub fn journal(&self) -> impl Iterator<Item = &JournalEntry> {
         self.journal.iter().map(|(e, _, _)| e)
@@ -487,6 +510,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
             Some(message) => Err(EngineError::Poisoned { message: message.clone() }),
             None => Ok(()),
         }
+    }
+
+    /// Refused while the session is read-only.
+    fn writable(&self) -> Result<(), EngineError> {
+        if self.read_only { Err(EngineError::ReadOnly) } else { Ok(()) }
     }
 
     fn fresh_id(&mut self) -> u64 {
@@ -602,6 +630,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
         if !is_query {
             self.healthy()?;
         }
+        // Every command that can change the document is undoable or is undo or redo: a change made
+        // by any other is refused below, so view commands run.
+        if spec.undoable || !matches!(spec.handler, Handler::Run(_)) {
+            self.writable()?;
+        }
         self.check_enabled(&spec)?;
         let params = params::validate(&docs, params, spec.undoable)?;
         let run = match spec.handler {
@@ -711,9 +744,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.step(false)
     }
 
+    /// Undoes the last step, or with `undo` false applies the last undone one again; gives its label.
+    /// Refused during a gesture, on a poisoned session and on a read-only one.
     fn step(&mut self, undo: bool) -> Result<String, EngineError> {
         self.no_interaction()?;
         self.healthy()?;
+        self.writable()?;
         let (from, id) = if undo { (&self.undo, "edit.undo") } else { (&self.redo, "edit.redo") };
         let reason = if undo { crate::cmd::edit::NOTHING_TO_UNDO } else { crate::cmd::edit::NOTHING_TO_REDO };
         let s = from.last().ok_or_else(|| disabled(id, reason))?;
@@ -851,6 +887,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
     pub fn begin_interaction(&mut self, id: &str) -> Result<(), EngineError> {
         self.no_interaction()?;
         self.healthy()?;
+        self.writable()?;
         let (spec, _) = self.spec(id)?;
         if !spec.undoable || !matches!(spec.handler, Handler::Run(_)) {
             return Err(failed(spec.id, NOT_A_GESTURE));
@@ -1028,6 +1065,9 @@ impl<D: Document, V: View<D>> Batch<'_, D, V> {
             return Err(failed("a batch", BATCH_TOO_LONG));
         }
         let (spec, docs) = self.session.spec(id)?;
+        if spec.undoable {
+            self.session.writable()?;
+        }
         let facts = self.session.facts();
         (spec.enabled)(&facts).map_err(|reason| disabled(spec.id, reason))?;
         let params = params::validate(&docs, params, spec.undoable)?;
