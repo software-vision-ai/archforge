@@ -353,7 +353,7 @@ follows one order. Stepping between versions and returning have nothing to prote
 | Steps 1 to 6 | Nothing is written; the hold ends and the session is as it was |
 | A commit or branch operation gives no clear answer | `HEAD` or the branch list is read, and what it shows is what happened: the step counts as finished or failed by that |
 | Those cannot be read either | Archforge says it could not tell. Nothing is written back, and the project stays held until it is closed; reopening reads what is stored |
-| Archforge stops partway | Reopening reads what is stored. A Restore before its commit shows the restored rows as unsaved, with earlier work in its `Before restoring` version; a switch reopens where it was; a new branch that did not finish is removed on reopening, and its source is unchanged |
+| Archforge stops partway | Reopening reads what is stored. A Restore before its commit shows the restored rows as unsaved, with earlier work in its `Before restoring` version; a switch reopens where it was; a new branch that did not finish is removed on reopening (section 8), and its source is unchanged; a rename may leave both names, with the work still on the old one |
 
 A control request can wait its turn after it is accepted: `control::drain` takes 32 a frame
 (`control.rs:126`, `:149-160`). So each request carries the window's session generation, taken when the
@@ -468,16 +468,25 @@ All run on the writer, in order with every model and conversation write.
 
 | Operation | Where | What happens | On failure |
 |---|---|---|---|
-| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; switches. The source branch keeps its unsaved work as well | The new branch is deleted; you stay where you were. If that fails too it stays listed, and the message says so |
-| **Create from a version** | **Start a branch here…** in details and the viewing banner | `DOLT_BRANCH` at that hash; removes inherited conversations; switches. Viewing ends | The same. Not offered on a version that cannot be read |
+| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; checks the name is free and writes the creation record (below); `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; removes the record; switches. The source branch keeps its unsaved work as well | The new branch is deleted, then the record is removed; you stay where you were. If the deletion fails too, the record stays: the branch stays out of the list, and the next opening removes it |
+| **Create from a version** | **Start a branch here…** in details and the viewing banner | The creation record; `DOLT_BRANCH` at that hash; removes inherited conversations; removes the record; switches. Viewing ends | The same. Not offered on a version that cannot be read |
 | **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
 | **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
 
-A new branch is made under a reserved name (`archforge-creating/…`, which the name encoding cannot
-produce and the branch list leaves out). It gets its real name last, once its conversations are removed
-and its rows copied; a rename keeps the uncommitted rows (measured). Opening a project removes any branch
-left under that name.
+Creating a branch keeps a record in the project folder, beside the `.creating` marker: the branch being
+made and the branch it was made from. The record is written atomically and flushed to disk once the name
+is checked as free, before `DOLT_BRANCH`, and removed last. An older Archforge ignores the file. While a
+record names a branch, the branch list leaves it out. Opening a project deals with the record before
+anything lists or reads branches:
+
+| On opening | Result |
+|---|---|
+| A record names a branch that exists | That branch is deleted, then the record is removed. Never `main`, the record's source branch, or the branch the project opens on: for those only the record goes, and the status bar says so |
+| A record names a branch that does not exist (stopped before `DOLT_BRANCH`) | The record is removed |
+| A record cannot be read, or names something outside the safe set of names | Nothing is deleted. It is set aside under a new name, as a damaged preferences file is, and the status bar says so. Archforge cannot tell which branch it meant, so that branch stays listed |
+| Archforge stops during this cleanup | The next opening repeats it; a branch already gone is the second row |
+| No record | No cleanup, so a branch made outside Archforge is never touched |
 
 A delete cannot be undone in 0.14.0. The confirmation says the branch leaves the project's list and
 that its contents may remain in the
