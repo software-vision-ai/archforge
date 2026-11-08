@@ -148,7 +148,7 @@ pub const METHODS: [(&str, &[&str]); 10] = [
     ("engine.redo", &[]),
     ("document.inspect", &[]),
     ("ui.inspect", &[]),
-    ("app.save", &[]),
+    ("app.save", &["description"]),
     ("app.saved", &["ticket"]),
 ];
 
@@ -233,7 +233,7 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
     }
     match method {
         "document.inspect" => Ok(inspect(shell)),
-        "app.save" => save(shell, agent.then_some(origin)),
+        "app.save" => save(shell, params, agent.then_some(origin)),
         "app.saved" => saved(shell, params),
         "ui.inspect" => {
             Ok(json!({ "controls": shell.widgets().iter().map(|w| json!({ "id": w.id, "kind": w.kind, "rect": w.rect })).collect::<Vec<_>>() }))
@@ -269,21 +269,31 @@ fn inspect(shell: &Shell) -> Value {
 /// Saves the open project as the Save button does: its changes are written, then the host makes a
 /// version. Answers the save's ticket for `app.saved`, or why none could start, a description
 /// being typed that the model refused among the reasons (AR-186). `agent` holds an agent's label
-/// (or none) when an agent asked; the version then records that.
-fn save(shell: &mut Shell, agent: Option<Option<&str>>) -> Result<Value, String> {
+/// (or none) when an agent asked; the version then records that. `description` in `params`, when
+/// given, describes the version; what a save refuses about it comes back through `app.saved`.
+fn save(shell: &mut Shell, params: &Value, agent: Option<Option<&str>>) -> Result<Value, String> {
+    let description = match params.get("description") {
+        None => None,
+        Some(Value::String(text)) => Some(text.clone()),
+        Some(_) => return Err(crate::i18n::tr("A description has to be text, so nothing was saved.")),
+    };
     if shell.session.is_none() {
         return Err("no project is open in Archforge; open one first".into());
     }
     if shell.services.projects.is_none() || shell.project.is_none() {
         return Err("this window saves no projects".into());
     }
-    // One save at a time: a second request follows the one under way.
+    // One save at a time: a second request follows the one under way, unless it would lose its text.
+    if shell.is_saving() && description.is_some() {
+        return Err(crate::i18n::tr("A save is under way, so this description was not used. Try again when it has finished."));
+    }
     if !shell.is_saving() {
         let revision = shell.session.as_ref().map(|s| s.revision());
-        match agent {
-            Some(origin) => shell.save_for_agent(origin),
-            None => shell.save(),
-        }
+        let by = match agent {
+            Some(origin) => crate::SavedBy::Agent(origin.map(str::to_string)),
+            None => crate::SavedBy::Person(shell.state.user_name.clone()),
+        };
+        shell.save_as(by, description);
         if !shell.is_saving() {
             // A description being typed that the model refused stops the save: never reported saved.
             if crate::panels::refused_description(&shell.panels) {

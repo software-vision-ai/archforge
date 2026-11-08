@@ -477,6 +477,17 @@ fn save_project_follows_its_save_by_the_ticket_until_it_is_done() {
     assert_eq!(serde_json::from_str::<Value>(save(&script)["content"][0]["text"].as_str().unwrap()).unwrap()["saved"], true);
 }
 
+/// The description given to the tool is the one the save is asked with.
+#[test]
+fn save_project_carries_a_description() {
+    let call =
+        |arguments: Value| json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "save_project", "arguments": arguments } });
+    let described = json!({ "description": "Renamed Customer" });
+    let script = Script(RefCell::new(vec![("app.save", described.clone(), Ok(json!({ "saving": false, "saved": true, "unsaved": false })))]));
+    assert_eq!(ask(&script, call(described))["result"]["isError"], false);
+    assert!(script.0.borrow().is_empty(), "the save was asked with the description");
+}
+
 /// A tools/call message.
 fn tool_call(name: &str, args: Value) -> Vec<u8> {
     json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": { "name": name, "arguments": args } }).to_string().into_bytes()

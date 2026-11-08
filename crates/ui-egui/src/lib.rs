@@ -1171,20 +1171,22 @@ impl Shell {
         self.start_save(None, SavedBy::Person(self.state.user_name.clone()));
     }
 
-    /// Save, asked for by an agent over the control channel: `origin` is its label when it has one.
-    pub fn save_for_agent(&mut self, origin: Option<&str>) {
-        self.start_save(None, SavedBy::Agent(origin.map(str::to_string)));
+    /// Save, asked for over the control channel and recorded as `by`, under `description` when one
+    /// is given. Nobody reviewed anything first, so only the host's own check can answer "changed".
+    pub fn save_as(&mut self, by: SavedBy, description: Option<String>) {
+        self.start_save(description.map(|text| (text, None)), by);
     }
 
     /// Save version: a save under `description` of the state reviewed at session revision
     /// `reviewed`. When the model has moved since, the host is not asked and the save answers
     /// [`SaveError::Changed`], so nothing unreviewed becomes a version.
     pub fn save_reviewed(&mut self, description: String, reviewed: u64) {
-        self.start_save(Some((description, reviewed)), SavedBy::Person(self.state.user_name.clone()));
+        self.start_save(Some((description, Some(reviewed))), SavedBy::Person(self.state.user_name.clone()));
     }
 
-    /// Starts a save recorded as `by`, of the reviewed state with its description when `review` is given.
-    fn start_save(&mut self, review: Option<(String, u64)>, by: SavedBy) {
+    /// Starts a save recorded as `by`: under the description in `review` when there is one, and
+    /// only if the model still stands at the revision `review` names when it names one.
+    fn start_save(&mut self, review: Option<(String, Option<u64>)>, by: SavedBy) {
         if self.saving.is_some() || self.session.is_none() || self.is_held() {
             return;
         }
@@ -1201,7 +1203,7 @@ impl Shell {
         }
         let Some(revision) = self.written else { return };
         // After the writes above: text still being typed counts as a move, since it was not reviewed.
-        let moved = review.as_ref().is_some_and(|(_, reviewed)| current != Some(*reviewed) || revision != *reviewed);
+        let moved = review.as_ref().and_then(|(_, reviewed)| *reviewed).is_some_and(|reviewed| current != Some(reviewed) || revision != reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
             self.save_ticket += 1;
             let answer = if moved {

@@ -133,8 +133,8 @@ const TOOLS: [Tool; 9] = [
     },
     Tool {
         name: "save_project",
-        description: "Save the open project, as the Save button does: its changes become a version in the project's history. Waits until the save is done (up to 30 seconds) and gives the project and the revision saved.",
-        schema: || object(json!({}), &[]),
+        description: "Save the open project, as the Save button does: its changes become a version in the project's history. Waits until the save is done (up to 30 seconds) and gives the project and the revision saved. Give description to say what changed, one line of at most 200 characters; without it the version is described by its time.",
+        schema: || object(json!({ "description": { "type": "string", "description": "What changed, for the version's entry in the history" } }), &[]),
         method: Some("app.save"),
         read_only: false,
         destructive: false,

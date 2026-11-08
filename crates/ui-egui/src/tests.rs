@@ -15276,6 +15276,68 @@ fn a_project_whose_changes_cannot_be_written_closes_only_after_saying_its_change
     assert!(h.state().tabs.is_empty());
 }
 
+/// An `app.save` as the control channel brings it.
+fn channel_save(h: &mut Harness<'static, Shell>, origin: Option<&str>, params: serde_json::Value) -> Result<serde_json::Value, String> {
+    let (reply, _answer) = std::sync::mpsc::channel();
+    let request = crate::control::ControlRequest {
+        method: "app.save".into(),
+        params,
+        origin: origin.map(str::to_string),
+        conversation: None,
+        reply,
+        state: Default::default(),
+        read_only: false,
+        live: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        generation: h.state().session_generation(),
+    };
+    crate::control::answer_request(h.state_mut(), &request)
+}
+
+/// An agent's save carries its description to the host; only text is taken, and text that a save
+/// under way could not use is refused rather than lost. The revision is not checked, as nobody reviewed.
+#[test]
+fn an_agents_save_carries_its_description_and_never_loses_it() {
+    use crate::SavedBy::Agent;
+    use serde_json::json;
+    let agent = || Agent(Some("Chat 3".to_string()));
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        add_schema(&mut h, "shop");
+
+        let refused = channel_save(&mut h, Some("Chat 3"), json!({ "description": 3 })).unwrap_err();
+        assert_eq!(refused, "A description has to be text, so nothing was saved.");
+        assert!(host.saves.lock().unwrap().is_empty(), "the host is not asked");
+
+        let begun = channel_save(&mut h, Some("Chat 3"), json!({ "description": "Added the shop" })).unwrap();
+        assert_eq!(*host.descriptions.lock().unwrap(), [Some("Added the shop".to_string())]);
+        assert_eq!(*host.saved_by.lock().unwrap(), [agent()]);
+
+        let busy = channel_save(&mut h, Some("Chat 3"), json!({ "description": "A second one" })).unwrap_err();
+        assert_eq!(busy, "A save is under way, so this description was not used. Try again when it has finished.");
+        assert_eq!(channel_save(&mut h, Some("Chat 3"), json!({})).unwrap()["ticket"], begun["ticket"], "without text it follows the save");
+        assert_eq!(host.descriptions.lock().unwrap().len(), 1, "the host was asked once");
+    }
+}
+
+/// The close question's Save goes through the same save as the key: no description, the person's name.
+#[test]
+fn the_close_questions_save_is_the_persons_save() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.user_name = "Ada".into();
+        add_schema(&mut h, "shop");
+        h.state_mut().close_tab(0);
+        h.run_steps(2);
+        let at = rect_of(&h, "close-ask.save").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        assert_eq!(*host.descriptions.lock().unwrap(), [None]);
+        assert_eq!(*host.saved_by.lock().unwrap(), [crate::SavedBy::Person("Ada".into())]);
+    }
+}
+
 /// A save at the window records the name from Settings; one over the control channel records an
 /// agent, by its label or without one, which the path decides, whatever the name says.
 #[test]
@@ -15301,19 +15363,7 @@ fn a_save_records_whether_the_person_or_an_agent_asked() {
 
         for (at, origin) in [("crm", Some("Chat 3")), ("erp", None)] {
             add_schema(&mut h, at);
-            let (reply, _answer) = std::sync::mpsc::channel();
-            let request = crate::control::ControlRequest {
-                method: "app.save".into(),
-                params: json!({}),
-                origin: origin.map(str::to_string),
-                conversation: None,
-                reply,
-                state: Default::default(),
-                read_only: false,
-                live: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
-                generation: h.state().session_generation(),
-            };
-            crate::control::answer_request(h.state_mut(), &request).unwrap();
+            channel_save(&mut h, origin, json!({})).unwrap();
             assert_eq!(saved(&mut h, &host), Agent(origin.map(str::to_string)));
         }
     }
