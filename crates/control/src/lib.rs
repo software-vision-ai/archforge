@@ -11,7 +11,9 @@
 //! and any request may carry `origin`, the label of who sent it (a chat, say), which the
 //! application puts on the undo steps the request makes; a reply is `{id, ok: true, result}` or
 //! `{id, ok: false, error}`. The origin is a key of the request, never of its parameters, so the
-//! one who chooses the parameters (an agent through `call_app`) cannot choose it. A first line that is not a
+//! one who chooses the parameters (an agent through `call_app`) cannot choose it; and on a token
+//! granted for one conversation ([`Bound`]) the server decides it: a request naming none speaks for
+//! that conversation, one naming another is refused (AR-230). The wire is unchanged. A first line that is not a
 //! well-formed request with the right token closes the connection without a word, so a web page
 //! cannot drive the port (CS-6). Lines, requests, replies, connections and waits are capped (CS-7).
 //!
@@ -276,9 +278,24 @@ pub enum Role {
 pub struct Call<'a> {
     pub method: &'a str,
     pub params: Value,
+    /// The label its undo steps carry: a bound token's own ([`Bound::origin`]), whatever the
+    /// request names; else the request's, when it names one.
     pub origin: Option<&'a str>,
+    /// The key of the conversation a bound token speaks for ([`Bound::key`]), fixed by the
+    /// server when the token was granted, never taken from the request; none for an unbound token.
+    pub conversation: Option<&'a str>,
     pub role: Role,
     pub live: &'a Arc<AtomicBool>,
+}
+
+/// Who a granted token speaks for, fixed when it is granted (AR-230): the key the application
+/// knows the conversation by, and the origin label its undo steps carry. Every request on the
+/// token is that conversation's: one naming no origin takes this one, one naming another is
+/// refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bound {
+    pub key: String,
+    pub origin: String,
 }
 
 /// What answers a request: a [`Call`] in, the result or why not out. It may block until the
@@ -365,6 +382,8 @@ struct Granted {
     role: Role,
     live: Arc<AtomicBool>,
     file: Option<(PathBuf, FileId)>,
+    /// The conversation it speaks for, when it is bound to one.
+    bound: Option<Arc<Bound>>,
 }
 
 /// A connection the server serves: the grant it authenticated with (0 before it has), a handle to
@@ -439,7 +458,7 @@ impl Server {
         let token = mint_token()?;
         let path = token_path(settings, server.port);
         let file = write_token(&path, &token)?;
-        server.add(token, Role::Full, Some((path, file)));
+        server.add(token, Role::Full, Some((path, file)), None);
         log::info!("agent access is on: the control channel listens on 127.0.0.1:{}", server.port);
         Ok(server)
     }
@@ -455,19 +474,27 @@ impl Server {
 
     /// Grants a new token with `role`, written to a new file of its own,
     /// `control-<port>-<16 hex>.token` in the settings folder, created exclusively and readable by
-    /// its owner alone; a name already taken is never replaced, another is tried. Dropping the
-    /// [`Grant`] revokes it.
-    pub fn grant(&self, role: Role) -> Result<Grant, String> {
+    /// its owner alone; a name already taken is never replaced, another is tried. With `bound`,
+    /// every request on it speaks for that conversation (AR-230); its origin must pass
+    /// [`check_origin`]. Dropping the [`Grant`] revokes it.
+    pub fn grant(&self, role: Role, bound: Option<Bound>) -> Result<Grant, String> {
         if !self.shared.open.load(Ordering::SeqCst) {
             return Err("the control channel is closed".into());
         }
+        if let Some(b) = &bound {
+            check_origin(&b.origin).map_err(|e| format!("the bound origin: {e}"))?;
+            if b.key.is_empty() {
+                return Err("the bound conversation key is empty".into());
+            }
+        }
+        let bound = bound.map(Arc::new);
         let token = mint_token()?;
         let mut last = String::new();
         for _ in 0..16 {
             let path = self.settings.join(format!("control-{}-{}.token", self.port, name_suffix()?));
             match create_token_file(&path, &token) {
                 Ok(file) => {
-                    let (id, live) = self.add(token, role, Some((path.clone(), file)));
+                    let (id, live) = self.add(token, role, Some((path.clone(), file)), bound);
                     return Ok(Grant { id, path, port: self.port, live, shared: self.shared.clone() });
                 }
                 Err(Created::Taken) => last = format!("{} is taken", path.display()),
@@ -488,10 +515,10 @@ impl Server {
     }
 
     /// Records a token and gives its grant's id and liveness.
-    fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>) -> (u64, Arc<AtomicBool>) {
+    fn add(&self, token: String, role: Role, file: Option<(PathBuf, FileId)>, bound: Option<Arc<Bound>>) -> (u64, Arc<AtomicBool>) {
         let id = self.shared.next_grant.fetch_add(1, Ordering::SeqCst).saturating_add(1);
         let live = Arc::new(AtomicBool::new(true));
-        locked(&self.shared.grants).push(Granted { id, token, role, live: live.clone(), file });
+        locked(&self.shared.grants).push(Granted { id, token, role, live: live.clone(), file, bound });
         (id, live)
     }
 
@@ -737,7 +764,7 @@ const REQUEST_KEYS: [&str; 5] = ["id", "method", "params", "token", "origin"];
 /// The grant whose token `shown` is, compared with every grant in constant time each, and bound to
 /// the connection under the grants' lock, so a revocation either sees the binding or the token is
 /// already gone.
-fn authorise(shared: &Shared, shown: &str, bound: &AtomicU64) -> Option<(Role, Arc<AtomicBool>)> {
+fn authorise(shared: &Shared, shown: &str, bound: &AtomicU64) -> Option<Access> {
     let grants = locked(&shared.grants);
     if !shared.open.load(Ordering::SeqCst) {
         return None;
@@ -750,8 +777,11 @@ fn authorise(shared: &Shared, shown: &str, bound: &AtomicU64) -> Option<(Role, A
     }
     let g = found?;
     bound.store(g.id, Ordering::SeqCst);
-    Some((g.role, g.live.clone()))
+    Some((g.role, g.live.clone(), g.bound.clone()))
 }
+
+/// What a connection's token gives it: its role, its liveness and who it speaks for.
+type Access = (Role, Arc<AtomicBool>, Option<Arc<Bound>>);
 
 /// Serves one connection until it closes, an unauthorised or malformed first line, a failure, or
 /// its token's revocation, which is answered [`REVOKED`] before the connection closes. At the end
@@ -776,7 +806,7 @@ fn serve(stream: TcpStream, shared: &Shared, bound: &AtomicU64, handler: &Handle
     let (Ok(write), Ok(timer)) = (stream.try_clone(), stream.try_clone()) else { return };
     let mut writer = std::io::BufWriter::new(write);
     let mut reader = BufReader::new(stream);
-    let mut access: Option<(Role, Arc<AtomicBool>)> = None;
+    let mut access: Option<Access> = None;
     loop {
         let first = access.is_none();
         // A whole line has a deadline, however slowly its bytes arrive: the first a short one and
@@ -793,7 +823,7 @@ fn serve(stream: TcpStream, shared: &Shared, bound: &AtomicU64, handler: &Handle
             Ok(Some(line)) => line,
             _ => {
                 // Shut by a revocation or the close: the peer is told before the connection ends.
-                if let Some((_, live)) = &access
+                if let Some((_, live, _)) = &access
                     && !(live.load(Ordering::SeqCst) && shared.open.load(Ordering::SeqCst))
                 {
                     let _ = timer.set_write_timeout(Some(Duration::from_secs(1)));
@@ -815,14 +845,14 @@ fn serve(stream: TcpStream, shared: &Shared, bound: &AtomicU64, handler: &Handle
                 None => return,
             }
         }
-        let Some((role, live)) = access.clone() else { return };
+        let Some((role, live, speaks_for)) = access.clone() else { return };
         let id = request.as_ref().and_then(|r| r.get("id")).cloned().unwrap_or(Value::Null);
         if !(live.load(Ordering::SeqCst) && shared.open.load(Ordering::SeqCst)) {
             let _ = send(&mut writer, &fail(id, REVOKED));
             return;
         }
         let reply = match request {
-            Some(r) if well_formed => answer(&r, line.len(), role, &live, handler),
+            Some(r) if well_formed => answer(&r, line.len(), role, &live, speaks_for.as_deref(), handler),
             Some(_) => fail(id, "a request needs a method"),
             None => fail(Value::Null, "the line is not a JSON object"),
         };
@@ -849,8 +879,9 @@ fn send(writer: &mut impl Write, reply: &Value) -> std::io::Result<()> {
 
 /// Answers one well-formed request through `handler`, with the role and liveness of the token the
 /// connection showed; a request past the size cap, with an unknown key, params that are not an
-/// object or a bad origin is refused first.
-fn answer(r: &Value, size: usize, role: Role, live: &Arc<AtomicBool>, handler: &Handler) -> Value {
+/// object or a bad origin is refused first. A bound token's request speaks for its conversation
+/// (`speaks_for`): naming no origin it takes the bound one, naming another it is refused (AR-230).
+fn answer(r: &Value, size: usize, role: Role, live: &Arc<AtomicBool>, speaks_for: Option<&Bound>, handler: &Handler) -> Value {
     let id = r.get("id").cloned().unwrap_or(Value::Null);
     if size > MAX_REQUEST {
         return fail(id, &format!("the request is larger than {MAX_REQUEST} bytes"));
@@ -871,8 +902,17 @@ fn answer(r: &Value, size: usize, role: Role, live: &Arc<AtomicBool>, handler: &
         },
         Some(_) => return fail(id, "origin must be a string"),
     };
+    // The server decides who a bound token's request comes from, never the request.
+    let origin = match (speaks_for, origin) {
+        (Some(b), Some(o)) if o != b.origin => {
+            return fail(id, &format!("this token speaks for {:?}; a request on it may not name the origin {o:?}", b.origin));
+        }
+        (Some(b), _) => Some(b.origin.as_str()),
+        (None, o) => o,
+    };
+    let conversation = speaks_for.map(|b| b.key.as_str());
     // A handler that panics answers with an error; the connection and the application go on.
-    let call = Call { method, params, origin, role, live };
+    let call = Call { method, params, origin, conversation, role, live };
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(call))) {
         Ok(Ok(result)) => json!({ "id": id, "ok": true, "result": result }),
         Ok(Err(e)) => fail(id, &e),
