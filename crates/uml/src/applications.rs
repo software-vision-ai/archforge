@@ -578,13 +578,19 @@ fn texts_param(p: &Params) -> Result<Vec<String>, CommandError> {
 }
 
 /// `uml.stereotype.set-value`: the values of one of a stereotype's properties on an element it is
-/// applied to, read by the property's type; an empty list clears them, so the default shows.
+/// applied to, read by the property's type; an empty list clears them, so the default shows. The
+/// element's cards on the diagrams that show values grow to show its rows (AR-241).
 fn set_value_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let (element, stereotype, instance) = application_param(ctx.doc, p)?;
     let property = property_param(ctx.doc, p, "property", stereotype)?;
     let texts = texts_param(p)?;
     let values = read_values(ctx.doc, property, &texts).map_err(|e| refuse("values", e.said(ctx.doc, property)))?;
     set_values(ctx.doc, instance, property, &values)?;
+    for n in archforge_diagram::views_of(ctx.doc, element).2 {
+        if archforge_diagram::diagram_of(ctx.doc, n).is_some_and(|d| values_shown(ctx.doc, d)) {
+            crate::figures::grow_node(ctx.doc, element, n).map_err(fail)?;
+        }
+    }
     Ok(json!({ "id": uuid_of(ctx.doc, element)?, "values": value_texts(ctx.doc, instance, property) }))
 }
 
@@ -651,7 +657,8 @@ fn applicable_cmd(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// `uml.stereotype.show-values`: whether a class diagram shows its cards' stereotype values, each in
-/// a compartment of its own under the members.
+/// a compartment of its own under the members. Turned on, every card of the diagram with values set
+/// grows to show them (AR-241); a card without values is left as it is.
 fn show_values_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let d = element_param(ctx.doc, p, "diagram")?;
     let kind = ctx.doc.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
@@ -660,6 +667,18 @@ fn show_values_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let on = p.bool("show").unwrap_or(false);
     show_values(ctx.doc, d, on)?;
+    if on {
+        let store: &Store = ctx.doc;
+        let valued: Vec<(Obj, Obj)> = store
+            .alive()
+            .filter(|n| store.class_of(*n).ok() == Some(archforge_diagram::NODE) && archforge_diagram::diagram_of(store, *n) == Some(d))
+            .filter_map(|n| Some((n, one(store, n, archforge_diagram::node::ELEMENT)?)))
+            .filter(|(_, e)| !value_rows(store, *e).is_empty())
+            .collect();
+        for (n, e) in valued {
+            crate::figures::grow_node(ctx.doc, e, n).map_err(fail)?;
+        }
+    }
     Ok(json!({ "id": uuid_of(ctx.doc, d)?, "show": values_shown(ctx.doc, d) }))
 }
 

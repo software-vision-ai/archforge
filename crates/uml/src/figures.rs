@@ -241,6 +241,31 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
     })
 }
 
+/// Grows every node of `element`, on every diagram, too short for the rows of the card it draws
+/// there, to the card's height (AR-241): its width is kept and no node is ever made shorter, so a
+/// card made taller by hand keeps its height. The commands that add or edit a member call it, so
+/// the window, the control channel and Chat grow a card alike, in the command's own undo step.
+pub fn grow_cards(store: &mut Store, element: Obj) -> Result<(), archforge_mof::Invalid> {
+    for n in archforge_diagram::views_of(store, element).2 {
+        grow_node(store, element, n)?;
+    }
+    Ok(())
+}
+
+/// Grows node `n`, which shows `element`, to the height of the card it draws on its diagram when
+/// it is shorter, its width kept; leaves it as it is otherwise. Only a plain card, a classifier's,
+/// which lists rows, ever grows: a package's folder, a note and an n-ary association's diamond keep
+/// their size, as does a node that draws no card.
+pub fn grow_node(store: &mut Store, element: Obj, n: Obj) -> Result<(), archforge_mof::Invalid> {
+    let Some(d) = archforge_diagram::diagram_of(store, n) else { return Ok(()) };
+    let Some(card) = card(store, element, d).filter(|c| c.tone == Tone::Plain) else { return Ok(()) };
+    let needed = f64::from(card.height()).min(archforge_diagram::rules::MAX_SIZE);
+    if archforge_diagram::grid::bounds_of(store, n).height < needed {
+        store.set(n, archforge_diagram::node::HEIGHT, Value::Real(needed))?;
+    }
+    Ok(())
+}
+
 /// A member's row as a card or Properties lists it: its stereotypes, then its text, `«Id» + id :
 /// Integer` (AR-135, F3).
 pub fn member_text(store: &Store, m: Obj) -> String {

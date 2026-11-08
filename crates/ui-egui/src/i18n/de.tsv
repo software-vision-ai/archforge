@@ -943,8 +943,6 @@ str		No value	Kein Wert
 str		Values you set are stored on {name}; a default shows the tag until you change it. Remove takes «{stereotype}» off {name} and keeps its definition.	Gesetzte Werte werden an {name} gespeichert; ein Standardwert zeigt die Markierung, bis Sie ihn ändern. Entfernen nimmt «{stereotype}» von {name} und behält seine Definition.
 str		None applied yet. + offers the stereotypes of the profiles applied to {package} or a package around it.	Noch keiner angewendet. + bietet die Stereotypen der Profile an, die auf {package} oder ein Paket darum herum angewendet sind.
 str		Show stereotype values on this diagram	Stereotyp-Werte in diesem Diagramm zeigen
-str		Show stereotype values	Stereotyp-Werte zeigen
-str		Set stereotype value	Stereotyp-Wert setzen
 str		Filter: {text}	Filter: {text}
 str		No stereotype matches.	Kein Stereotyp passt.
 str		No stereotype yet. Make one in a profile from Models ▸ New ▸ Stereotype.	Noch kein Stereotyp. Legen Sie einen in einem Profil an, über Modelle ▸ Neu ▸ Stereotyp.
