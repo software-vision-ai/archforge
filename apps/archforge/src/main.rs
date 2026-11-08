@@ -368,7 +368,7 @@ mod tests {
         let mut shell = Shell::new(archforge_ui_egui::Services::default());
         let refused = archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({})).unwrap_err();
         assert!(refused.contains("no project is open"), "{refused}");
-        assert!(archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({ "path": "x" })).is_err(), "it takes no keys");
+        assert!(archforge_ui_egui::control::answer(&mut shell, "app.save", &serde_json::json!({ "path": "x" })).is_err(), "it takes no such key");
     }
 
     #[test]

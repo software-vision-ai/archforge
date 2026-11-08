@@ -424,8 +424,13 @@ str		A description has to fit on one line.	A description has to fit on one line.
 str		A description is at most {max} characters; this one has {n}.	A description is at most {max} characters; this one has {n}.
 str		This description holds one of your saved API keys, so nothing was saved.	This description holds one of your saved API keys, so nothing was saved.
 str		This description could not be checked against your saved API keys, so nothing was saved.	This description could not be checked against your saved API keys, so nothing was saved.
+str		A description has to be text, so nothing was saved.	A description has to be text, so nothing was saved.
+str		A save is under way, so this description was not used. Try again when it has finished.	A save is under way, so this description was not used. Try again when it has finished.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	The project changed after you reviewed it, so nothing was saved. Review the changes and save again.
 str		The opening stopped without an answer	The opening stopped without an answer
+str		Chat did not finish in time, so nothing was changed.	Chat did not finish in time, so nothing was changed.
+str		The reading stopped without an answer, so nothing was changed.	The reading stopped without an answer, so nothing was changed.
+str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		Close a project to open another	Close a project to open another

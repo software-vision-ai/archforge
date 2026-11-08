@@ -479,6 +479,11 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
         || !shell.chats.forgetting.is_empty()
 }
 
+/// Whether a deletion or a restoration in the project at `project` has not been answered yet.
+pub(crate) fn under_way(shell: &Shell, project: &Path) -> bool {
+    shell.chats.deletions.iter().any(|d| d.project == project && !matches!(d.stage, Stage::Deleted { .. }))
+}
+
 /// The project at `project` closes, or Archforge quits (`project` none): their toasts close at
 /// once, and their folders are settled without waiting here. A deletion that has finished lets its
 /// folder go; one still under way hands its answer to the host, which removes the folder once it
