@@ -639,15 +639,38 @@ fn chat_event(event: SessionEvent, access: bool) -> Option<ChatEvent> {
 mod revoke_tests {
     use super::*;
 
+    /// A folder of this test's own, made new (never one found there) and private to this user,
+    /// removed on every way out of the test, a failing assertion included.
+    struct OwnFolder(std::path::PathBuf);
+
+    impl OwnFolder {
+        /// Makes a new folder under the temporary directory, named for `name`, this process and a
+        /// count, trying the next count while a name is taken.
+        fn new(name: &str) -> std::io::Result<OwnFolder> {
+            let path = |n: u32| std::env::temp_dir().join(format!("archforge-{name}-{}-{n}", std::process::id()));
+            let n = (0u32..1000)
+                .find(|n| std::fs::create_dir(path(*n)).is_ok())
+                .ok_or_else(|| std::io::Error::other(format!("no free folder name for {name}")))?;
+            let folder = OwnFolder(path(n));
+            std::fs::set_permissions(&folder.0, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+            Ok(folder)
+        }
+    }
+
+    impl Drop for OwnFolder {
+        /// Removes the folder and what is in it.
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// Two revokes of one token at once (AR-228, review): the first holds after it took the grant,
     /// before the grant drops; the second, as an end asked meanwhile, may not return while the
     /// token is still live, and returns once the first has revoked it.
     #[test]
     fn a_revoke_never_returns_while_another_still_holds_the_grant_live() {
-        let settings = std::env::temp_dir().join(format!("archforge-revoke-race-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&settings);
-        std::fs::create_dir_all(&settings).unwrap();
-        std::fs::set_permissions(&settings, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        let folder = OwnFolder::new("revoke-race").unwrap();
+        let settings = folder.0.clone();
         let handler: archforge_control::Handler = Arc::new(|_| Ok(serde_json::Value::Null));
         let server = archforge_control::Server::open(&settings, handler).unwrap();
         let grant = server.grant(archforge_control::Role::Full).unwrap();
@@ -686,6 +709,5 @@ mod revoke_tests {
         second.join().unwrap();
         assert!(!file.exists());
         drop(server);
-        let _ = std::fs::remove_dir_all(&settings);
     }
 }
