@@ -330,7 +330,8 @@ fn a_failed_creation_keeps_the_dialog_and_the_name_and_says_why() {
 #[derive(Default)]
 struct SavingHost {
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
-    saves: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<bool, String>>>>,
+    saves: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<bool, crate::SaveError>>>>,
+    descriptions: std::sync::Mutex<Vec<Option<String>>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
     closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each closing's answer, sent by the test.
@@ -377,10 +378,10 @@ impl crate::ProjectHost for SavingHost {
         rx
     }
 
-    /// Keeps the save's answer for the test; the shell's Save carries no description.
-    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, String>> {
+    /// Keeps the save's answer and its description for the test.
+    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, crate::SaveError>> {
         assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
-        assert_eq!(description, None, "the shell's Save stays one key, described by its time");
+        self.descriptions.lock().unwrap().push(description);
         let (tx, rx) = std::sync::mpsc::channel();
         self.saves.lock().unwrap().push(tx);
         rx
@@ -461,7 +462,7 @@ fn every_edit_is_handed_to_the_host_and_save_marks_only_what_it_wrote_saved() {
     // A failed save says why and leaves the changes unsaved.
     add_schema(&mut h, "billing");
     h.state_mut().save();
-    host.saves.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("the disk is full".into()))).unwrap();
     h.run_steps(2);
     assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
     assert!(dirty(&h));
@@ -636,7 +637,7 @@ fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
     // A failed save says why; an unknown ticket is refused.
     add_schema(&mut h, "crm");
     let ticket = answer(h.state_mut(), "app.save", &none).unwrap()["ticket"].clone();
-    host.saves.lock().unwrap().pop().unwrap().send(Err("the disk is full".into())).unwrap();
+    host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("the disk is full".into()))).unwrap();
     h.run_steps(2);
     let failed = answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket })).unwrap_err();
     assert!(failed.contains("the disk is full"), "{failed}");
@@ -14831,6 +14832,39 @@ fn a_project_whose_changes_cannot_be_written_closes_only_after_saying_its_change
     host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
     h.run_steps(2);
     assert!(h.state().tabs.is_empty());
+}
+
+/// Save version saves the state reviewed: the host gets its description, a model that moved
+/// never reaches the host, and the host's own "changed" reads the same; plain Save has none.
+#[test]
+fn a_reviewed_save_reaches_the_host_only_while_the_model_stands_where_it_was_reviewed() {
+    let changed = "The project changed after you reviewed it, so nothing was saved. Review the changes and save again.";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        add_schema(&mut h, "shop");
+        let reviewed = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().save_reviewed("Added the shop".into(), reviewed);
+        assert_eq!(*host.descriptions.lock().unwrap(), [Some("Added the shop".to_string())]);
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(2);
+
+        add_schema(&mut h, "crm");
+        h.state_mut().save_reviewed("Reviewed before crm".into(), reviewed);
+        h.run_steps(2);
+        assert_eq!(host.descriptions.lock().unwrap().len(), 1, "the host is not asked");
+        assert_eq!(h.state().save_error.as_deref(), Some(changed));
+
+        let moved_on = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().save_reviewed("Host saw more".into(), moved_on);
+        host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Changed)).unwrap();
+        h.run_steps(2);
+        assert_eq!(h.state().save_error.as_deref(), Some(changed));
+        assert!(h.state().session.as_ref().unwrap().is_dirty(), "a save answered changed marks nothing saved");
+
+        h.state_mut().save();
+        assert_eq!(host.descriptions.lock().unwrap().last(), Some(&None), "Save stays one key, described by its time");
+    }
 }
 
 #[test]
