@@ -156,11 +156,14 @@ One full round trip per route. Each uses the project of P1.
    H="$SETTINGS/agents/codex-home"
    if [ ! -d "$H" ]; then echo "NO FOLDER $H: check SETTINGS"
    elif [ -e "$H/auth.json" ]; then echo "auth.json EXISTS"; else echo "no auth.json in $H"; fi
+   ls -ld "$H"
    ```
 
-   **Expect:** *no auth.json* on macOS and on Linux with a Secret Service (the sign-in is in the
-   secure store). On Linux without one, *auth.json EXISTS*, and the card says the codex program
-   keeps the sign-in in its own files.
+   **Expect:** *auth.json EXISTS*, on every system: the codex program keeps the ChatGPT sign-in in
+   its own files in `codex-home`, never in the Keychain or the Secret Service. `ls -ld` shows
+   `drwx------` and you as the owner: only you can open the folder. *NO FOLDER* proves nothing:
+   fix `SETTINGS` first. Record the line `ls -l "$H/auth.json"` prints too; its mode is the codex
+   program's own choice.
 6. Choose **Sign out**. **Expect:** *Not signed in*, with **Sign in…**.
 
 ### R4. Codex with ChatGPT, with a device code
@@ -174,7 +177,8 @@ One full round trip per route. Each uses the project of P1.
    address shows it whole. Record its path (it holds no secret) in the notes.
 3. On the second device, open that address (type it, or send it there) and enter the code.
    **Expect:** *Signed in as* your email and plan on the card.
-4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4.
+4. Choose **Send test message**, then ask one question. **Expect:** as in R3 steps 3 and 4, and R3
+   step 5's check says *auth.json EXISTS*: the sign-in is kept in `codex-home` as in R3.
 5. Start another device-code sign-in after signing out, and choose **Cancel**. **Expect:** the
    card goes back to *Not signed in*; no error.
 
@@ -314,7 +318,8 @@ CLAUDE_AT="$(command -v claude)"; echo "$CLAUDE_AT"
 2. Open **Settings ▸ AI Agents**. **Expect:** *No secure store on this system*; **Save key** says
    *Can't be saved: there is no secure store to keep it in.*
 3. Sign Codex in with ChatGPT. **Expect:** signed in; the card says the codex program keeps the
-   sign-in in its own files; R3 step 5 finds `auth.json`.
+   sign-in in its own files, so it works without the secure store; R3 step 5 finds `auth.json`,
+   as on every system.
 
 ### F6. Let Chat use the model turned off
 
@@ -538,7 +543,12 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    ```sh
    probe "$MARKER" "$SETTINGS/agents"                   # Claude's transcript of K2 step 1
    search "$WORK/canaries" "$SETTINGS/agents"
+   find "$SETTINGS" -name auth.json -print              # Codex's ChatGPT sign-in, where it is kept
    ```
+
+   **Expect** from `find`, while Codex is signed in with ChatGPT (R3 or R4): exactly
+   `$SETTINGS/agents/codex-home/auth.json`, and no other `auth.json`. It holds the ChatGPT
+   sign-in, not an API key: neither real key from K2 is in it.
 
 4. **Everything else in the settings folder** (token files, the Dolt home):
 
@@ -648,7 +658,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
      as the question.
 
 **Expect** for `$WORK/canaries` and `$WORK/keys`: *none found* everywhere, each place's probe
-*FOUND*. The secure store itself is the only place that holds a key.
+*FOUND*. The secure store itself is the only place that holds an API key. Codex's ChatGPT
+sign-in is kept apart from them, in `codex-home/auth.json` (step 3).
 
 **Expect** for `$WORK/marker` (`$MARKER`, the class of K2 step 1): found in `$TRY/project-rows.csv`
 and `$TRY/project-history.csv` (the class and the question); this proves the search reads the

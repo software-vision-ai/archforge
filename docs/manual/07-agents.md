@@ -169,20 +169,22 @@ Codex's **Model** stays **The program's default**: the codex program chooses.
 Archforge keeps API keys in the system's secure store and nowhere else: never in the project, never
 in the preferences, never in a file of its own. A key reaches the agent's program only while Chat
 runs it or sends the test message: Claude's through the program's environment, Codex's through its
-input, never on a command line. A ChatGPT sign-in is kept by the codex program itself; Archforge
-reads only who is signed in, never the sign-in's tokens.
+input, never on a command line. A ChatGPT sign-in is kept by the codex program itself, in its own
+files in Archforge's private settings folder (`agents/codex-home`, which only you can open), on
+every system; it never goes in the system's Keychain or Secret Service. Archforge reads only who is
+signed in, never the sign-in's tokens.
 
 | System | API keys (Claude, Codex) | Codex's sign-in with ChatGPT |
 |---|---|---|
-| macOS | The macOS Keychain, under *Archforge* | The macOS Keychain, kept by the codex program |
-| Linux with a Secret Service | The Secret Service | The Secret Service, kept by the codex program |
-| Linux without a Secret Service | Cannot be saved | The codex program's own files, in Archforge's private settings folder, readable by you alone |
+| macOS | The macOS Keychain, under *Archforge* | The codex program's own files, in `agents/codex-home` |
+| Linux with a Secret Service | The Secret Service | The codex program's own files, in `agents/codex-home` |
+| Linux without a Secret Service | Cannot be saved | The codex program's own files, in `agents/codex-home` |
 | Windows | Not available yet | Not available yet |
 
 On Linux without a running Secret Service, the page says *No secure store on this system*, and
 **Save key** says *Can't be saved: there is no secure store to keep it in.* Start one and restart
-Archforge to save keys. When the codex program keeps the sign-in in its own files, the Codex card
-says so.
+Archforge to save keys. The Codex card then says that the codex program keeps its ChatGPT sign-in
+in its own files, so that sign-in works without the secure store.
 
 Archforge's private settings folder is `~/Library/Application Support/Archforge` on macOS and
 `~/.config/archforge` on Linux (`$XDG_CONFIG_HOME/archforge` where that is set). The agents' working

@@ -4,8 +4,9 @@
 //!
 //! The test message runs without agent access: no tool server at all, in a scratch conversation
 //! folder (`test-<16 hex>` in the private workspace) removed when it ends. The account calls each
-//! start a short-lived `codex app-server` with the ChatGPT sign-in's store
-//! ([`super::chatgpt_store`]), in a scratch folder the adapter removes.
+//! start a short-lived `codex app-server` with the ChatGPT sign-in's store, Codex's own files in
+//! the private `CODEX_HOME` ([`archforge_agents::codex::CredentialStore::File`]), in a scratch
+//! folder the adapter removes.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use archforge_agents::claude::{ClaudeConfig, ClaudeSession, Model, SessionId, Start};
 use archforge_agents::codex::account::Account;
-use archforge_agents::codex::{AccountEvent, Auth, CodexAccount as Program, CodexConfig, CodexHome, CodexSession, CredentialStore, LoginOutcome};
+use archforge_agents::codex::{AccountEvent, Auth, CodexAccount as Program, CodexConfig, CodexHome, CodexSession, LoginOutcome};
 use archforge_agents::{AgentError, AgentSession, ConversationId, ErrorKind, Limits, RuntimeKind, SessionEvent, TurnOutcome, Workspace};
 use archforge_ui_egui::ai_agents::{AccountError, CodexAccount, CodexSignIn, LoginEvent, LoginWay, Provider};
 
@@ -116,7 +117,7 @@ pub fn test_message(inner: &Arc<Inner>, provider: Provider, model: &str, sign_in
             let home = CodexHome::open(&scratch.workspace).map_err(failed)?;
             let auth = match sign_in {
                 CodexSignIn::ApiKey => Auth::ApiKey(key(provider)?),
-                CodexSignIn::ChatGpt => Auth::ChatGpt(super::chatgpt_store(inner.store())),
+                CodexSignIn::ChatGpt => Auth::ChatGpt,
             };
             let config = CodexConfig {
                 start: Start::New,
@@ -165,8 +166,9 @@ fn turn(inner: &Inner, program: &mut dyn AgentSession) -> Result<(), AccountErro
     Err(AccountError::Failed { detail: format!("no answer within {} seconds", TEST_BUDGET.as_secs()) })
 }
 
-/// A short-lived codex program for the account, with the ChatGPT sign-in's store; none once
-/// Archforge quits.
+/// A short-lived codex program for the account, with the ChatGPT sign-in's store (Codex's own files
+/// in the private `CODEX_HOME`, never the secure store, which is not opened); none once Archforge
+/// quits.
 fn account_program(inner: &Inner) -> Result<Program, AccountError> {
     if inner.quitting() {
         return Err(AccountError::Failed { detail: "Archforge is closing".into() });
@@ -175,15 +177,7 @@ fn account_program(inner: &Inner) -> Result<Program, AccountError> {
     let runtime = inner.runtime(RuntimeKind::Codex).map_err(failed)?;
     let workspace = Workspace::open(&inner.workspace).map_err(failed)?;
     let home = CodexHome::open(&workspace).map_err(failed)?;
-    let store = match super::chatgpt_store(inner.store()) {
-        archforge_agents::codex::ChatGptStore::Keyring => CredentialStore::Keyring,
-        archforge_agents::codex::ChatGptStore::File => CredentialStore::File,
-    };
-    // The store's read may have waited on its prompt past a quit: no program starts then.
-    if inner.quitting() {
-        return Err(AccountError::Failed { detail: "Archforge is closing".into() });
-    }
-    Program::start(&runtime, &workspace, &home, store, Limits::default(), REQUEST, REQUEST).map_err(failed)
+    Program::start(&runtime, &workspace, &home, Auth::ChatGpt.store(), Limits::default(), REQUEST, REQUEST).map_err(failed)
 }
 
 /// Ends a short-lived codex program.

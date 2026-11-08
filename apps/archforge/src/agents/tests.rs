@@ -827,7 +827,8 @@ fn a_conversation_whose_events_wait_is_capped_and_its_end_still_comes() {
 
 /// The test message runs with no tool server, in a scratch folder removed afterwards; the Codex
 /// account is read, signed in with a device code and in the browser, and signed out, each through a
-/// short-lived codex program, with the ChatGPT sign-in in the keyring where the store opens.
+/// short-lived codex program, with the ChatGPT sign-in in Codex's own files although the secure
+/// store opens (AR-236).
 #[test]
 fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     let host =
@@ -848,7 +849,8 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     // Codex's account.
     let account = host.agents.codex_account_read().recv_timeout(WAIT).unwrap();
     assert_eq!(account, Ok(CodexAccount::SignedIn { email: "person@example.com".into(), plan: Some("plus".into()) }));
-    assert!(std::fs::read_to_string(host.base.join("codex.args")).unwrap().contains("cli_auth_credentials_store=\"keyring\""));
+    assert!(host.agents.inner.store().is_ok(), "the secure store opens");
+    assert_eq!(codex_store(&host), "\"file\"", "the account read");
     // A device-code sign-in: the code, then who is signed in.
     let events: Vec<LoginEvent> = host.agents.codex_login_start(LoginWay::DeviceCode).iter().collect();
     assert_eq!(
@@ -858,6 +860,7 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
             LoginEvent::Done(CodexAccount::SignedIn { email: "person@example.com".into(), plan: Some("plus".into()) }),
         ]
     );
+    assert_eq!(codex_store(&host), "\"file\"", "the device-code sign-in");
     // In the browser: the page to open, then who is signed in.
     let events: Vec<LoginEvent> = host.agents.codex_login_start(LoginWay::Browser).iter().collect();
     assert!(
@@ -865,7 +868,9 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
         "{events:?}"
     );
     assert!(archforge_ui_egui::ai_agents::approved_browser_page("https://auth.openai.com/oauth/authorize?PLACEHOLDER").is_some());
+    assert_eq!(codex_store(&host), "\"file\"", "the browser sign-in");
     assert_eq!(host.agents.codex_logout().recv_timeout(WAIT).unwrap(), Ok(()));
+    assert_eq!(codex_store(&host), "\"file\"", "the sign-out");
     assert!(!logged("person@example.com") && !logged("ABCD-EFGH"), "no sign-in value reached the log");
     assert!(!format!("{events:?}").contains("person@example.com"), "Debug shows no email");
 }
@@ -952,20 +957,46 @@ fn a_test_message_without_a_key_needs_one() {
     assert!(!host.log("claude").iter().any(|l| l != "--version"), "nothing was started");
 }
 
-/// The ChatGPT sign-in is kept in the system keyring where the secure store opens, and in the codex
-/// program's own files in Archforge's private `CODEX_HOME` where it does not.
+/// The `cli_auth_credentials_store` value the codex program's latest start was given.
+fn codex_store(host: &Host) -> String {
+    let args = std::fs::read_to_string(host.base.join("codex.args")).unwrap();
+    let values: Vec<&str> = args.lines().filter_map(|l| l.strip_prefix("cli_auth_credentials_store=")).collect();
+    assert_eq!(values.len(), 1, "one store: {args}");
+    values[0].to_owned()
+}
+
+/// A codex body that makes the handshake and ends, so a start is recorded and nothing waits.
+const CODEX_HELLO_ENDS: &str = "hello\nexit 0\n";
+
+/// Every Codex start with a ChatGPT sign-in (the account, a conversation, the test message) keeps
+/// the sign-in in Codex's own files in the private `CODEX_HOME` (mode 0700), also where the secure
+/// store opens: the codex program runs with a private `HOME`, where no keychain is found (AR-236).
+/// An API key still goes with the ephemeral store.
 #[test]
-fn the_chatgpt_sign_in_store_follows_whether_the_secure_store_opens() {
-    for (opens, store) in [(true, "keyring"), (false, "file")] {
-        let host = Host::new(&format!("store-{store}"), Setup { codex: CODEX_ACCOUNT, store: opens, ..Setup::default() });
-        assert!(host.agents.codex_account_read().recv_timeout(WAIT).unwrap().is_ok());
-        let args = std::fs::read_to_string(host.base.join("codex.args")).unwrap();
-        assert!(args.contains(&format!("cli_auth_credentials_store=\"{store}\"")), "{opens}: {args}");
+fn a_codex_chatgpt_start_keeps_the_sign_in_in_codex_files_even_where_the_secure_store_opens() {
+    for opens in [true, false] {
+        let host = Host::new(&format!("chatgpt-files-{opens}"), Setup { codex: CODEX_HELLO_ENDS, store: opens, ..Setup::default() });
+        assert_eq!(host.agents.inner.store().is_ok(), opens, "the secure store opens: {opens}");
+        let _ = host.agents.codex_account_read().recv_timeout(WAIT).unwrap();
+        assert_eq!(codex_store(&host), "\"file\"", "the account, store {opens}");
+        let _ = host.agents.test_message(Provider::Codex, "default", CodexSignIn::ChatGpt).recv_timeout(WAIT).unwrap();
+        assert_eq!(codex_store(&host), "\"file\"", "the test message, store {opens}");
+        let chat = ChatStart { provider: Provider::Codex, model: "default".into(), ..claude(CHAT, "Chat 1", false) };
+        host.agents.start(chat).unwrap();
+        host.until("the conversation's end", |e| matches!(e, HostEvent::Chat { event: ChatEvent::Ended { .. }, .. }));
+        assert_eq!(codex_store(&host), "\"file\"", "the conversation, store {opens}");
         let env = std::fs::read_to_string(host.base.join("codex.env")).unwrap();
-        assert!(env.contains(&format!("CODEX_HOME={}", host.settings.join("agents").join("codex-home").display())), "the private CODEX_HOME: {env}");
+        let home = host.settings.join("agents").join("codex-home");
+        assert!(env.contains(&format!("CODEX_HOME={}\n", home.display())), "the private CODEX_HOME: {env}");
+        let private = format!("HOME={}/", host.settings.join("agents").display());
+        assert!(env.lines().any(|l| l.starts_with(&private)), "Codex keeps its private HOME: {env}");
+        let meta = std::fs::symlink_metadata(&home).unwrap();
+        assert!(meta.is_dir() && meta.permissions().mode() & 0o777 == 0o700, "CODEX_HOME is 0700: {:o}", meta.permissions().mode());
     }
-    assert_eq!(super::chatgpt_store(&Ok(Box::new(MemoryStore::new()))), archforge_agents::codex::ChatGptStore::Keyring);
-    assert_eq!(super::chatgpt_store(&Err(SecretError::NoSecureStore { reason: "none".into() })), archforge_agents::codex::ChatGptStore::File);
+    // An API key goes with the ephemeral store, never into Codex's files.
+    let host = Host::new("chatgpt-files-key", Setup { codex: CODEX_HELLO_ENDS, ..Setup::default() });
+    let _ = host.agents.test_message(Provider::Codex, "default", CodexSignIn::ApiKey).recv_timeout(WAIT).unwrap();
+    assert_eq!(codex_store(&host), "\"ephemeral\"", "the API key's test message");
 }
 
 /// At most eight conversations run at once, and an id that is not a conversation's UUID is refused

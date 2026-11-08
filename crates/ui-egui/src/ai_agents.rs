@@ -193,9 +193,6 @@ pub struct Look {
     pub codex: Program,
     pub claude_key: Key,
     pub codex_key: Key,
-    /// Whether the codex program keeps a ChatGPT sign-in in its own files (no secure store opened)
-    /// rather than the system keyring, as the host chose with the store's read.
-    pub sign_in_files: bool,
 }
 
 impl Look {
@@ -227,8 +224,6 @@ pub struct Keys {
     pub store: Store,
     pub claude_key: Key,
     pub codex_key: Key,
-    /// Whether a ChatGPT sign-in is kept in the codex program's own files rather than the keyring.
-    pub sign_in_files: bool,
 }
 
 /// The most bytes a key may have, as the secure store takes it.
@@ -954,12 +949,7 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
             Err(TryRecvError::Empty) => None,
             Err(TryRecvError::Disconnected) => {
                 let why = tr("The secure store stopped without an answer");
-                Some(Keys {
-                    store: Store::NotLooked,
-                    claude_key: Key::Unreadable { why: why.clone() },
-                    codex_key: Key::Unreadable { why },
-                    sign_in_files: false,
-                })
+                Some(Keys { store: Store::NotLooked, claude_key: Key::Unreadable { why: why.clone() }, codex_key: Key::Unreadable { why } })
             }
         };
         if let Some(keys) = answer {
@@ -967,7 +957,6 @@ pub(crate) fn poll(shell: &mut crate::Shell, ctx: &egui::Context) {
             shell.agents.keys_known = true;
             let look = &mut shell.agents.look;
             look.store = keys.store;
-            look.sign_in_files = keys.sign_in_files;
             for (p, key) in [(Provider::Claude, keys.claude_key), (Provider::Codex, keys.codex_key)] {
                 // A key saved or removed while the read ran is newer than what the read found.
                 if std::mem::take(&mut shell.agents.changed_while_reading[p.index()]) {
@@ -1267,12 +1256,7 @@ pub mod fake {
         fn read_keys(&self) -> Receiver<Keys> {
             self.calls.keys.fetch_add(1, Ordering::Relaxed);
             let look = lock(&self.look);
-            let keys = Keys {
-                store: look.store.clone(),
-                claude_key: look.claude_key.clone(),
-                codex_key: look.codex_key.clone(),
-                sign_in_files: look.sign_in_files,
-            };
+            let keys = Keys { store: look.store.clone(), claude_key: look.claude_key.clone(), codex_key: look.codex_key.clone() };
             if self.hold_keys {
                 let (tx, rx) = std::sync::mpsc::channel();
                 lock(&self.held).push((tx, keys));

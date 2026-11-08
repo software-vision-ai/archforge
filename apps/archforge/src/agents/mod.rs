@@ -11,9 +11,10 @@
 //!   Agents page, or a Codex conversation): reading it starts `codex app-server`.
 //! - Keys come from `archforge_secrets` as `Secret` alone, and go to a program only through its
 //!   adapter; they are never logged, and nothing here shows them in a `Debug`.
-//! - A ChatGPT sign-in is kept by the codex program in the system keyring when the secure store
-//!   opens (the check `KeyringStore::open` makes), and otherwise in its own files in Archforge's
-//!   private `CODEX_HOME` ([`chatgpt_store`]).
+//! - A ChatGPT sign-in is kept by the codex program in its own files in Archforge's private
+//!   `CODEX_HOME` (`codex-home` in the workspace, mode 0700), on every system and whatever the
+//!   secure store answers (owner decision, AR-236): the codex program runs with a private `HOME`,
+//!   where no system keychain can be reached. The secure store holds the API keys alone.
 //! - Conversations ([`sessions`]) and agent access ([`access`]) are described in their modules.
 
 mod access;
@@ -28,7 +29,6 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use archforge_agents::codex::ChatGptStore;
 use archforge_agents::{Discovery, HostEnv, RuntimeKind, Workspace};
 use archforge_secrets::{KeyringStore, Secret, SecretError, SecretName, SecretStore};
 use archforge_ui_egui::ai_agents::{
@@ -152,13 +152,6 @@ impl Inner {
     fn key(&self, provider: Provider) -> Result<Secret, SecretError> {
         self.store().as_ref().map_err(Clone::clone)?.get(&secret_name(provider))
     }
-}
-
-/// Where the codex program keeps a ChatGPT sign-in (owner decision): the system keyring when the
-/// secure store opens, the same check `KeyringStore::open` makes; otherwise its own files in
-/// Archforge's private `CODEX_HOME`.
-fn chatgpt_store(opened: &Opened) -> ChatGptStore {
-    if opened.is_ok() { ChatGptStore::Keyring } else { ChatGptStore::File }
 }
 
 /// The agent programs, keys, accounts and conversations of this computer.
@@ -379,7 +372,6 @@ impl AgentHost for Agents {
                 },
                 claude_key,
                 codex_key,
-                sign_in_files: chatgpt_store(store) == ChatGptStore::File,
             };
             // The store's state and whether each key is saved; never a key, nor its last four.
             log::info!("secure store {:?}; keys saved: claude {}, codex {}", keys.store, keys.claude_key.saved(), keys.codex_key.saved());
