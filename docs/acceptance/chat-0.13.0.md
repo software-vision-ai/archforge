@@ -129,14 +129,16 @@ Before step 1, make sure `codex-home` holds no ChatGPT sign-in from before the p
 proves nothing. Quit Archforge, run `wait_quit`, then:
 
 ```sh
-H="$SETTINGS/agents/codex-home"
+H="$SETTINGS/agents/codex-home"; KEPT=""
 if [ ! -e "$H/auth.json" ]; then echo "no earlier auth.json"
-elif mv "$H/auth.json" "$WORK/earlier-auth.json"; then echo "MOVED an earlier sign-in to $WORK"
-else echo "MOVE FAILED: stop here and fix the error above"; fi
+elif KEPT="$(mktemp -d "$HOME/archforge-earlier-sign-in.XXXXXX")" && chmod 700 "$KEPT" \
+     && mv "$H/auth.json" "$KEPT/auth.json"; then echo "KEPT an earlier sign-in in $KEPT"
+else echo "KEEP FAILED: stop here and fix the error above (KEPT='$KEPT')"; fi
 ```
 
-**Expect:** *no earlier auth.json*, or *MOVED*: record which. A moved file is an earlier ChatGPT
-sign-in; R3 signs in again, and K5 removes it with the rest of `$WORK`. Start Archforge again.
+**Expect:** *no earlier auth.json*, or *KEPT* with its folder: record which, and the folder. A
+kept file is an earlier ChatGPT sign-in, in a private folder of its own outside `$WORK`, so
+nothing in the pass removes it; K5 step 2 says how to put it back. Start Archforge again.
 
 1. On the Codex card choose **API key** under **Sign-in**, paste the OpenAI key and choose
    **Save key**. **Expect:** *API key saved · ends in* its last four characters.
@@ -691,12 +693,27 @@ Run this only after every K4 search, step 8 included: it removes `$WORK`, with t
 key files the searches read.
 
 1. Start Archforge. Replace both keys with the real ones, or **Remove** them.
-2. Remove the pass's files, which hold the real keys and the project's rows:
+2. If R2 kept an earlier sign-in (`$KEPT` is set): the pass signed Codex in again, and F2's
+   *sign out of all devices* may have ended the earlier sign-in too. Choose, and record your
+   choice: keep the pass's sign-in, or put the earlier one back. Quit Archforge, run `wait_quit`,
+   then run one of the two commands:
+
+   ```sh
+   # either: keep the pass's sign-in
+   [ -n "$KEPT" ] && rm -rf "$KEPT" && echo "kept the pass's sign-in" || echo "NOT DONE: KEPT is empty, or see the error above"
+   # or: put the earlier sign-in back
+   [ -n "$KEPT" ] && mv "$KEPT/auth.json" "$SETTINGS/agents/codex-home/auth.json" && rmdir "$KEPT" \
+     && echo "put the earlier sign-in back" || echo "NOT DONE: KEPT is empty, or see the error above"
+   ```
+
+   Start Archforge. **Expect:** the Codex card says *Signed in as* your email. *has expired*
+   after putting the earlier one back means F2 ended it too: sign in again (R3 steps 1 and 2).
+3. Remove the pass's files, which hold the real keys and the project's rows:
 
    ```sh
    rm -rf "$WORK"
    unset WORK CANARY_CLAUDE CANARY_CODEX MARKER MARKER_CODEX_KEY MARKER_CODEX_GPT MARKER_DELETED \
-     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY
+     DELETED_DIR ASK PROBE_FILE CLAUDE_AT CODEX_AT APP KEYS_OK TRY COPY KEPT H
    ```
 
 ## Results
