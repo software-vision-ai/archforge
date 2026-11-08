@@ -125,6 +125,19 @@ One full round trip per route. Each uses the project of P1.
 
 ### R2. Codex with an API key
 
+Before step 1, make sure `codex-home` holds no ChatGPT sign-in from before the pass, or step 4
+proves nothing. Quit Archforge, run `wait_quit`, then:
+
+```sh
+H="$SETTINGS/agents/codex-home"
+if [ ! -e "$H/auth.json" ]; then echo "no earlier auth.json"
+elif mv "$H/auth.json" "$WORK/earlier-auth.json"; then echo "MOVED an earlier sign-in to $WORK"
+else echo "MOVE FAILED: stop here and fix the error above"; fi
+```
+
+**Expect:** *no earlier auth.json*, or *MOVED*: record which. A moved file is an earlier ChatGPT
+sign-in; R3 signs in again, and K5 removes it with the rest of `$WORK`. Start Archforge again.
+
 1. On the Codex card choose **API key** under **Sign-in**, paste the OpenAI key and choose
    **Save key**. **Expect:** *API key saved · ends in* its last four characters.
 2. Set **Default agent** to Codex. Choose **Send test message**. **Expect:** *Codex answered the
@@ -552,8 +565,8 @@ probe() { printf '%s\n' "$1" > "$WORK/probe"; search "$WORK/probe" "${@:2}"; }
    find "$SETTINGS" -name auth.json -print              # Codex's ChatGPT sign-in, where it is kept
    ```
 
-   **Expect** from `find`, while Codex is signed in with ChatGPT (R3 or R4): exactly
-   `$SETTINGS/agents/codex-home/auth.json`, and no other `auth.json`. It holds the ChatGPT
+   **Expect** from `find`: no `auth.json` anywhere but `$SETTINGS/agents/codex-home/auth.json`,
+   which is there while Codex keeps a ChatGPT sign-in (R3 or R4). It holds the ChatGPT
    sign-in, not an API key: neither real key from K2 is in it.
 
 4. **Everything else in the settings folder** (token files, the Dolt home):

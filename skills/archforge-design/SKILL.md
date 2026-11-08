@@ -354,8 +354,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   (`agents/codex-home`, mode 0700), on every system, never in the system keychain or Secret
   Service (owner, 2026-11-08, AR-236; it replaces the 2026-11-06 rule "the keyring where the
   secure store opens"): the codex program runs with a private `HOME`, where no keychain is
-  found. The note "keeps its ChatGPT sign-in in its own files" shows where no secure store
-  opened, as there it tells why the sign-in works without one.
+  found. The note "keeps its ChatGPT sign-in in its own files" shows once Codex is signed in and
+  only where no secure store opened, as there it tells why the sign-in works without one.
 - Agent access for Chat (AR-203) opens only while a conversation holds it and Let Chat use the
   model is on, and closes with the last conversation, at once when the opt-in turns off, and on
   quit. The status bar's Agent item (page 07, the dot and text beside the location) says which:

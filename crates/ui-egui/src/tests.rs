@@ -16014,6 +16014,7 @@ fn the_own_files_note_shows_where_no_secure_store_opened() {
             (Store::MacKeychain, false),
             (Store::SecretService, false),
             (Store::NotLooked, false),
+            (Store::Other, false),
         ] {
             let (mut h, _) = agents_harness(theme, |f| {
                 f.look.lock().unwrap().store = store.clone();
