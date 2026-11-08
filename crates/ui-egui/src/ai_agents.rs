@@ -4,8 +4,8 @@
 //! The shell never touches a program, a key or the system's secure store: the host does, through
 //! one service, [`AgentHost`]. It looks for the programs and keeps the API keys (local work that
 //! sends nothing); it sends the test message and runs Codex's ChatGPT sign-in with its device
-//! code; and it starts, drives, stops and ends Chat's conversations ([`crate::chat`]), giving them
-//! agent access while Let Chat use the model is on. Every call returns at once, with a channel the
+//! code; and it starts, drives, stops and ends Chat's conversations ([`crate::chat`]), giving each
+//! agent access while it runs. Every call returns at once, with a channel the
 //! host answers on from its own thread, or with the conversation's events on the one channel
 //! [`AgentHost::connect`] gave it, so the window never waits.
 //!
@@ -378,9 +378,8 @@ impl std::fmt::Debug for LoginEvent {
 /// Local work that sends nothing: finding the programs and keeping the keys in the system's secure
 /// store. Work that talks to a provider or runs the codex program: the test message and Codex's
 /// account. Chat's conversations: each runs its program on a thread of its own, its events reach
-/// the window through the sink [`AgentHost::connect`] gave, and while Let Chat use the model is on
-/// ([`AgentHost::set_model_access`]) each gets agent access, its own token on a loopback control
-/// channel that is open only while a conversation holds it.
+/// the window through the sink [`AgentHost::connect`] gave, and each gets agent access, its own token
+/// on a loopback control channel that is open only while a conversation holds it.
 pub trait AgentHost: Send + Sync {
     /// Whether this system runs agents; answered at once, without looking at anything.
     fn system(&self) -> System {
@@ -411,9 +410,6 @@ pub trait AgentHost: Send + Sync {
     fn codex_logout(&self) -> Receiver<Result<(), AccountError>>;
     /// Where the conversations' events and agent access's changes go from now on.
     fn connect(&self, sink: crate::chat::EventSink);
-    /// Let Chat use the model, on or off. Off closes agent access at once: every conversation's
-    /// token is revoked and the control channel closes; the conversations go on without it.
-    fn set_model_access(&self, on: bool);
     /// Starts a conversation, answering at once: refused for a bad id, one already running, one
     /// whose private folder is being removed ([`AgentHost::forget`]), or past
     /// [`crate::chat::MAX_RUNNING`]; the rest (the program found, the key read, the start) comes
@@ -1191,8 +1187,6 @@ pub mod fake {
         pub(crate) held: Mutex<Vec<(std::sync::mpsc::Sender<Keys>, Keys)>>,
         /// Where the shell takes the events, once it connected.
         pub sink: Mutex<Option<crate::chat::EventSink>>,
-        /// Let Chat use the model, as each call told it.
-        pub model_access: Mutex<Vec<bool>>,
         /// The conversations started, in order, and the ones running.
         pub started: Mutex<Vec<crate::chat::ChatStart>>,
         pub running: Mutex<Vec<String>>,
@@ -1230,7 +1224,6 @@ pub mod fake {
                 hold_keys: false,
                 held: Mutex::new(Vec::new()),
                 sink: Mutex::new(None),
-                model_access: Mutex::new(Vec::new()),
                 started: Mutex::new(Vec::new()),
                 running: Mutex::new(Vec::new()),
                 sent: Mutex::new(Vec::new()),
@@ -1300,10 +1293,6 @@ pub mod fake {
         fn connect(&self, sink: crate::chat::EventSink) {
             self.calls.connect.fetch_add(1, Ordering::Relaxed);
             *lock(&self.sink) = Some(sink);
-        }
-        /// Records the opt-in as told.
-        fn set_model_access(&self, on: bool) {
-            lock(&self.model_access).push(on);
         }
         /// Starts a conversation as the host does: a bad id, one running, one whose folder is
         /// being removed, or past the cap refused.

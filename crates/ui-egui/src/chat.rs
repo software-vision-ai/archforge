@@ -2,9 +2,9 @@
 //! and what the host answers on one channel, with a repaint, while the conversations run.
 //!
 //! The shell runs no program and opens no port: the host does ([`crate::ai_agents::AgentHost`]),
-//! starting each conversation's agent program on a thread of its own and, while Let Chat use the
-//! model is on, giving it agent access through a loopback control channel that is open only while a
-//! conversation holds it. The host says when access opens and closes ([`HostEvent::Access`]), and
+//! starting each conversation's agent program on a thread of its own and giving it agent access
+//! through a loopback control channel that is open only while a conversation holds it. Conversations
+//! run only while Let Chat use the model is on. The host says when access opens and closes ([`HostEvent::Access`]), and
 //! the status bar shows it.
 //!
 //! Everything here is bounded: at most [`MAX_SESSIONS`] conversations are kept, each with at most
@@ -286,8 +286,8 @@ pub struct State {
     kept: Vec<Kept>,
     /// Whether a conversation holds agent access now, as the host last said.
     access: bool,
-    /// The opt-in last told to the host.
-    told: Option<bool>,
+    /// Let Chat use the model as last seen.
+    seen: Option<bool>,
     /// The Chat conversations let go of (a new one started, another opened, their project closed),
     /// with their labels: their events are taken and dropped until each has ended, and requests on
     /// behalf of their labels are refused meanwhile.
@@ -327,7 +327,7 @@ fn host(shell: &crate::Shell) -> Option<Arc<dyn crate::ai_agents::AgentHost>> {
 }
 
 /// Once per frame: connects the host's events to this window the first time (their wake repaints
-/// it), tells the host the opt-in whenever it changed, and takes in what the host sent.
+/// it), follows Let Chat use the model ([`follow_switch`]), and takes in what the host sent.
 pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
     let Some(host) = host(shell) else { return };
     if shell.chats.rx.is_none() {
@@ -336,21 +336,20 @@ pub(crate) fn frame(shell: &mut crate::Shell, ctx: &egui::Context) {
         host.connect(EventSink::new(tx, Arc::new(move || window.request_repaint())));
         shell.chats.rx = Some(rx);
     }
-    tell_access(shell);
+    follow_switch(shell);
     poll(shell);
 }
 
-/// Tells the host the opt-in, Let Chat use the model, when it differs from what it was told last:
-/// turning it off closes agent access at once and ends every conversation that runs, so none sends
-/// anything more (AR-221); the panel says so.
-pub(crate) fn tell_access(shell: &mut crate::Shell) {
+/// Follows Let Chat use the model when it differs from what was seen last: turning it off ends
+/// every conversation that runs, each end revoking its token at once and agent access closing with
+/// the last, so none sends anything more (AR-221); the panel says so.
+pub(crate) fn follow_switch(shell: &mut crate::Shell) {
     let on = shell.state.agents.chat_uses_model;
-    if shell.chats.told == Some(on) {
+    if shell.chats.seen == Some(on) {
         return;
     }
     if let Some(host) = host(shell) {
-        host.set_model_access(on);
-        shell.chats.told = Some(on);
+        shell.chats.seen = Some(on);
         let mut ended = Vec::new();
         if !on {
             for kept in shell.chats.kept.iter().filter(|k| k.running) {

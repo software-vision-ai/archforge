@@ -16613,31 +16613,6 @@ fn a_conversations_waiting_events_are_capped_by_their_bytes_too() {
     assert!(crate::chat::Ticket::take(&waiting, MAX_WAITING_BYTES / 2).is_some(), "given back");
 }
 
-/// Let Chat use the model is told to the host when it changes, off in the frame of the click.
-#[test]
-fn the_opt_in_is_told_to_the_host_and_turning_it_off_is_told_in_the_same_frame() {
-    let (mut h, f) = agents_harness(ThemeKind::Light, |_| {});
-    assert_eq!(*f.model_access.lock().unwrap(), vec![false], "told once at the start: off");
-    open_agents(&mut h);
-    let at = rect_of(&h, "settings.agents.chat-uses-model").center();
-    // One frame: the click is handled and the host told in it.
-    h.event(egui::Event::PointerMoved(at));
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
-    }
-    h.step();
-    assert_eq!(*f.model_access.lock().unwrap(), vec![false, true]);
-    h.run();
-    h.event(egui::Event::PointerMoved(at));
-    for pressed in [true, false] {
-        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
-    }
-    h.step();
-    assert_eq!(*f.model_access.lock().unwrap(), vec![false, true, false], "off is told at once");
-    h.run();
-    assert_eq!(f.model_access.lock().unwrap().len(), 3, "and only when it changes");
-}
-
 /// Order and OrderLine joined by `contains`, its OrderLine end `line` at 0..1, on two class
 /// diagrams of the package Shop, the first open and the association selected with Properties
 /// shown (AR-127). Gives the ids by name: Order, OrderLine, contains, diagram, second.

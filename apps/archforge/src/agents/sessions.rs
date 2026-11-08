@@ -5,9 +5,9 @@
 //! one whose private folder is being removed ([`forget`]), and more than [`MAX_RUNNING`] at once;
 //! the thread does the rest. The thread finds the program,
 //! takes the key from the secure store (or Codex's ChatGPT sign-in), takes a token for agent access
-//! when Let Chat use the model is on (read-only unless the conversation allows changes), starts the
-//! adapter with the bridge (`archforge-cli mcp --bridge <port> --token-file <file> [--read-only]
-//! --origin <label>`) or with no tool server at all, and then passes the person's messages in and
+//! (read-only unless the conversation allows changes), starts the adapter with the bridge
+//! (`archforge-cli mcp --bridge <port> --token-file <file> [--read-only] --origin <label>`), and
+//! then passes the person's messages in and
 //! the program's events out, each with its place among the waiting ones ([`Ticket`]), until the
 //! conversation ends.
 //!
@@ -505,7 +505,7 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
             guard.failure = error.as_ref().map(failure);
             break;
         }
-        // Whether the conversation holds access now: the opt-in may have closed it since the start.
+        // Whether the conversation holds access now: an end asked revokes it before the program ends.
         let access = locked(&guard.token).grant.as_ref().is_some_and(archforge_control::Grant::live);
         if let Some(event) = chat_event(event, access) {
             guard.emit(event);
@@ -521,8 +521,8 @@ fn run(inner: &Arc<Inner>, request: ChatStart, id: ConversationId, session: Sess
     }
 }
 
-/// The program of the conversation, started: found, its key or sign-in, its token and bridge when
-/// agent access is on, its folder. The token goes into the guard first, so a failure after it
+/// The program of the conversation, started: found, its key or sign-in, its token and bridge, its
+/// folder. The token goes into the guard first, so a failure after it
 /// still revokes it. None, with nothing started, when the conversation was asked to end before
 /// its program started (AR-228).
 fn begin(
@@ -548,14 +548,14 @@ fn begin(
     // Bound to this conversation: the server, not a request, says whose a request is (AR-230).
     let bound = archforge_control::Bound { key: request.chat.clone(), origin: request.origin.clone() };
     let grant = locked(&inner.access).grant(request.allow_changes, bound, sink.as_ref()).map_err(other)?;
-    guard.granted = grant.is_some();
-    let place = grant.as_ref().map(|g| (g.port(), g.path().to_path_buf()));
+    guard.granted = true;
+    let (port, token_file) = (grant.port(), grant.path().to_path_buf());
     let late = {
         let mut held = locked(&guard.token);
         if held.ended {
-            grant
+            Some(grant)
         } else {
-            held.grant = grant;
+            held.grant = Some(grant);
             None
         }
     };
@@ -565,16 +565,13 @@ fn begin(
         drop(late);
         return Ok(None);
     }
-    let bridge = match place {
-        Some((port, token_file)) => Some(Bridge {
-            cli: (inner.cli)().map_err(other)?,
-            port,
-            token_file,
-            origin: request.origin.clone(),
-            allow_changes: request.allow_changes,
-        }),
-        None => None,
-    };
+    let bridge = Some(Bridge {
+        cli: (inner.cli)().map_err(other)?,
+        port,
+        token_file,
+        origin: request.origin.clone(),
+        allow_changes: request.allow_changes,
+    });
     if inner.quitting() {
         return Err(other("Archforge is closing".into()));
     }
