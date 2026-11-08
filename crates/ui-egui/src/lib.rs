@@ -522,6 +522,8 @@ pub struct Shell {
     quit_requested: bool,
     /// The control channel's requests, from every opening of agent access.
     pub(crate) control: Option<std::sync::mpsc::Receiver<control::ControlRequest>>,
+    /// The session generation, shared with the channel ([`Shell::attach_control`]).
+    generation: control::SessionGeneration,
     /// Whether the person turned agent access on for this start. The queue above says nothing about
     /// it: the app attaches that on every start, for Chat's access too.
     pub(crate) own_agent_access: bool,
@@ -581,6 +583,7 @@ impl Shell {
             problems: Default::default(),
             quit_requested: false,
             control: None,
+            generation: control::SessionGeneration::default(),
             own_agent_access: false,
         }
     }
@@ -620,6 +623,7 @@ impl Shell {
             let p = *parked;
             self.project = Some(p.project);
             self.session = p.session;
+            self.session_replaced();
             self.session_error = p.session_error;
             self.adopted = p.adopted;
             self.written = p.written;
@@ -956,6 +960,7 @@ impl Shell {
             tab.parked = Some(Box::new(parked));
         }
         self.active = None;
+        self.session_replaced();
     }
 
     /// Empties the fields of the project shown.
@@ -1046,6 +1051,7 @@ impl Shell {
                     log::warn!("the model's packages could not be put under its root package: {e}");
                 }
                 self.session = Some(s);
+                self.session_replaced();
                 self.resume_view();
             }
             Err(e) => {
@@ -1420,8 +1426,20 @@ impl Shell {
     /// Gives the shell the control channel's requests, from every opening (the person's own access
     /// and Chat's): it answers what `requests` brings once per frame, as each request's token
     /// allows.
-    pub fn attach_control(&mut self, requests: std::sync::mpsc::Receiver<control::ControlRequest>) {
+    pub fn attach_control(&mut self, requests: std::sync::mpsc::Receiver<control::ControlRequest>, generation: control::SessionGeneration) {
         self.control = Some(requests);
+        self.generation = generation;
+    }
+
+    /// The session generation the channel's requests are checked against.
+    pub fn session_generation(&self) -> u64 {
+        self.generation.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Another session takes the place of the one shown, or none does: a control request accepted
+    /// before this is refused, so it cannot land on a session it was not sent to.
+    pub fn session_replaced(&mut self) {
+        self.generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Tells the shell whether the person turned agent access on for this start (its port is

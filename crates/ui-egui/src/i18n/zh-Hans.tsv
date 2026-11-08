@@ -427,6 +427,8 @@ str		This description holds one of your saved API keys, so nothing was saved.	�
 str		This description could not be checked against your saved API keys, so nothing was saved.	无法将此描述与你已保存的 API 密钥进行核对，因此未保存任何内容。
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	项目在你审阅后发生了更改，因此未保存任何内容。请审阅更改后再次保存。
 str		The opening stopped without an answer	打开未返回结果即已停止
+str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
+str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		Close a project to open another	请先关闭一个项目再打开另一个
 str		The closing stopped without an answer	关闭未返回结果即已停止
 str		The project could not be opened: {why}	无法打开项目：{why}

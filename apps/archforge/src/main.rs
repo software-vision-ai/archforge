@@ -211,7 +211,7 @@ fn run() -> i32 {
                 let mut shell = Shell::new(services::native(projects.clone(), agents.clone()));
                 prefs::apply(&stored, &mut shell);
                 if let Some(rx) = requests.borrow_mut().take() {
-                    shell.attach_control(rx);
+                    shell.attach_control(rx, window.generation());
                 }
                 shell.set_own_agent_access(server.borrow().is_some());
                 window.attach(cc.egui_ctx.clone());
