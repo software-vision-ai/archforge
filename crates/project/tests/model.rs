@@ -3,7 +3,7 @@
 //! made for other tables is refused. Needs dolt 2.6 or later, as the project tests do.
 #![cfg(unix)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -15,29 +15,61 @@ use archforge_project::{EARLIER_MODELS, Error, ModelSchema, Project, timestamp};
 use mysql::prelude::Queryable;
 use serde_json::{Value as Json, json};
 
+/// A folder of its own in the temporary directory, removed when dropped, so on every path. It is
+/// made with `create_dir`, which fails for a name already there: no two runs ever share one.
+struct Folder(PathBuf);
+
+impl Folder {
+    /// Makes a folder whose name starts with `prefix`, under the first number still free.
+    fn new(prefix: &str) -> Folder {
+        for n in 0..100_000 {
+            let path = std::env::temp_dir().join(format!("{prefix}-{n}"));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Folder(path),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => panic!("{} cannot be made: {e}", path.display()),
+            }
+        }
+        panic!("no free folder name starts with {prefix}");
+    }
+}
+
+impl std::ops::Deref for Folder {
+    type Target = Path;
+
+    /// The folder's path.
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Folder {
+    /// Removes the folder and what it holds.
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 struct Env {
-    base: PathBuf,
-    run_root: PathBuf,
+    base: Folder,
+    run_root: Folder,
     dolt: Dolt,
 }
 
 impl Env {
+    /// Folders of its own for the test called `name`, and the dolt the tests run against.
     fn new(name: &str) -> Env {
-        let tag = std::process::id();
-        let base = std::env::temp_dir().join(format!("af-pm-{name}-{tag}"));
-        let run_root = std::env::temp_dir().join(format!("afm-{name}-{tag}"));
-        for d in [&base, &run_root] {
-            let _ = std::fs::remove_dir_all(d);
-            std::fs::create_dir_all(d).unwrap();
-        }
+        let base = Folder::new(&format!("af-pm-{name}"));
+        let run_root = Folder::new(&format!("afm-{name}"));
         let home = Home::prepare(&base.join("home")).unwrap();
         let dolt = Dolt::find(&home).unwrap_or_else(|e| panic!("these tests need dolt 2.6 or later on the PATH or in ARCHFORGE_DOLT: {e}"));
         Env { base, run_root, dolt }
     }
 
+    /// Server options that keep everything in this test's folders.
     fn opts(&self) -> ServerOptions {
         ServerOptions {
-            run_root: Some(self.run_root.clone()),
+            run_root: Some(self.run_root.0.clone()),
             ready_budget: Duration::from_secs(20),
             ..ServerOptions::new(self.base.join("records"))
         }
@@ -45,10 +77,9 @@ impl Env {
 }
 
 impl Drop for Env {
+    /// Stops what still runs from the run root; the folders go once the fields are dropped.
     fn drop(&mut self) {
-        let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root).stderr(Stdio::null()).status();
-        let _ = std::fs::remove_dir_all(&self.base);
-        let _ = std::fs::remove_dir_all(&self.run_root);
+        let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root.0).stderr(Stdio::null()).status();
     }
 }
 
@@ -139,6 +170,124 @@ fn a_saved_model_opens_again_identical_and_the_unsaved_state_follows() {
     assert_eq!(packet, archforge_dolt::MAX_PACKET as u64);
     drop(c);
     again.close().unwrap();
+}
+
+/// A connection to the project's working set.
+fn working(project: &Project) -> mysql::Conn {
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    c
+}
+
+/// The hash of the project's last commit.
+fn head_of(project: &Project) -> String {
+    working(project).query_first("SELECT HASHOF('HEAD')").unwrap().unwrap()
+}
+
+/// What reading a version must leave alone: the working set's hash, the head, how many commits
+/// and how many branches there are.
+fn untouched(project: &Project) -> (String, String, i64, i64) {
+    let mut c = working(project);
+    let unsaved: String = c.query_first("SELECT DOLT_HASHOF_DB('WORKING')").unwrap().unwrap();
+    let commits: i64 = c.query_first("SELECT COUNT(*) FROM dolt_log").unwrap().unwrap();
+    let branches: i64 = c.query_first("SELECT COUNT(*) FROM dolt_branches").unwrap().unwrap();
+    (unsaved, head_of(project), commits, branches)
+}
+
+/// Rows read back, in the order a snapshot gives them, so they compare with rows written.
+fn restored(read: &rows::Rows, schema: &ModelSchema) -> rows::Rows {
+    let mut back = archforge_notations::store(ids(1 << 40)).unwrap();
+    rows::restore(&mut back, read, schema.tables(), &schema.junctions()).unwrap();
+    rows_of(&back, schema)
+}
+
+/// Each version reads back as saved, while unsaved work, the head and the history stay as they were.
+#[test]
+fn a_version_reads_as_it_was_saved_and_reading_it_changes_nothing() {
+    let env = Env::new("version");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Versions", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = model();
+    let first = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &first).unwrap();
+    assert!(project.commit("First").unwrap());
+    let first_hash = head_of(&project);
+    run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    let second = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &second).unwrap();
+    assert!(project.commit("Second").unwrap());
+    let second_hash = head_of(&project);
+    run(&mut s, "er.schema.add", json!({ "name": "unsaved" }));
+    let current = rows_of(s.doc(), &schema);
+    project.write_model(&schema, &current).unwrap();
+    // Three different states, so only the one asked for can match.
+    assert_ne!(first, second);
+    assert_ne!(second, current);
+
+    let before = untouched(&project);
+    assert_eq!(restored(&project.read_model_at(&schema, &first_hash).unwrap(), &schema), first, "the first version");
+    assert_eq!(restored(&project.read_model_at(&schema, &second_hash).unwrap(), &schema), second, "the second version");
+    assert_eq!(untouched(&project), before, "reading a version leaves the working set, the head and the history alone");
+    assert!(project.has_unsaved().unwrap(), "the unsaved work is still unsaved");
+    assert_eq!(restored(&project.read_model(&schema).unwrap(), &schema), current, "and is still what the project holds");
+
+    // The server itself refuses a write over a version.
+    let mut c = project.server().connect().unwrap();
+    c.query_drop(format!("USE `project/{first_hash}`")).unwrap();
+    assert!(c.query_drop("DELETE FROM settings").is_err(), "a version takes no writes");
+    drop(c);
+    assert_eq!(untouched(&project), before);
+    project.close().unwrap();
+}
+
+/// A version's shapes come from that commit: a working set of another shape does not refuse it.
+#[test]
+fn a_version_is_checked_against_its_own_table_shapes() {
+    let env = Env::new("shapes");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Shapes", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let written = rows_of(model().doc(), &schema);
+    project.write_model(&schema, &written).unwrap();
+    project.commit("Saved").unwrap();
+    let hash = head_of(&project);
+    // Only the working set takes another shape: the commit keeps the one it was saved with.
+    working(&project).query_drop("ALTER TABLE diagram_style DROP COLUMN `avoid`").unwrap();
+    let refused = project.read_model(&schema).err();
+    assert!(matches!(&refused, Some(Error::Damaged { why, .. }) if why.contains("diagram_style")), "the working set is checked: {refused:?}");
+    assert_eq!(restored(&project.read_model_at(&schema, &hash).unwrap(), &schema), written, "and the version against its own shapes");
+    project.close().unwrap();
+}
+
+/// Text that is no hash, a hash Dolt does not know and another branch's commit are all refused.
+#[test]
+fn only_a_commit_on_the_projects_own_line_is_a_version() {
+    let env = Env::new("notversion");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Refusals", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    project.write_model(&schema, &rows_of(model().doc(), &schema)).unwrap();
+    project.commit("Saved").unwrap();
+    // A real commit, well shaped and known to Dolt, on another line.
+    let mut c = working(&project);
+    c.query_drop("CALL DOLT_BRANCH('side')").unwrap();
+    c.query_drop("USE `project/side`").unwrap();
+    c.query_drop("INSERT INTO settings (`key`, `value`) VALUES ('elsewhere', 'x')").unwrap();
+    c.query_drop("CALL DOLT_COMMIT('-Am', 'Elsewhere', '--author', 'Test <test@localhost>')").unwrap();
+    let side: String = c.query_first("SELECT HASHOF('HEAD')").unwrap().unwrap();
+    drop(c);
+    let before = untouched(&project);
+    let unknown = "0123456789abcdefghijklmnopqrstuv".to_string();
+    let injected = "abc`; CALL DOLT_RESET('--hard'); -- ".to_string();
+    for wrong in [String::new(), "HEAD".into(), "main".into(), "side".into(), injected, unknown, side, "x".repeat(50)] {
+        let Some(Error::NotAVersion { commit }) = project.read_model_at(&schema, &wrong).err() else {
+            panic!("{wrong:?} is not a version");
+        };
+        assert_eq!(commit, wrong.chars().take(40).collect::<String>(), "the refusal names what was asked for, within bounds");
+    }
+    assert_eq!(untouched(&project), before, "a refusal changes nothing");
+    project.close().unwrap();
 }
 
 #[test]
