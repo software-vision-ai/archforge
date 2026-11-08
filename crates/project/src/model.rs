@@ -465,6 +465,23 @@ impl Project {
         Ok(true)
     }
 
+    /// The messages of the newest `limit` commits of the project, newest first.
+    pub fn newest_commit_messages(&self, limit: u32) -> Result<Vec<String>, Error> {
+        let mut c = self.model_connection()?;
+        // In the log's own order: commits made within the same instant have no order by date.
+        let query = format!("SELECT message FROM dolt_log LIMIT {limit}");
+        let rows: Vec<mysql::Row> = c.query(query).map_err(sql("cannot read the project's history"))?;
+        rows.iter()
+            .map(|r| match r.as_ref(0) {
+                Some(mysql::Value::Bytes(b)) => std::str::from_utf8(b).ok().map(str::to_string),
+                _ => None,
+            })
+            .map(|m| {
+                m.ok_or_else(|| Error::Damaged { path: self.path().to_path_buf(), why: "a commit in its history has no readable message".into() })
+            })
+            .collect()
+    }
+
     /// Don't save: puts the model back to its last save, throwing away every change written since
     /// (owner decision): the tables it had are reset, and those made since (a notation's table first
     /// used after the save) are removed. A project never saved goes back to how it was created; its

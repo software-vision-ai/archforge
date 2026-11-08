@@ -416,6 +416,11 @@ plural		{n} skill	{n} skill|{n} skills
 str		Not saved	Not saved
 str		Changes could not be written to the project	Changes could not be written to the project
 str		The save stopped without an answer	The save stopped without an answer
+str		A description can't be empty.	A description can't be empty.
+str		A description has to fit on one line.	A description has to fit on one line.
+str		A description is at most {max} characters; this one has {n}.	A description is at most {max} characters; this one has {n}.
+str		This description holds one of your saved API keys, so nothing was saved.	This description holds one of your saved API keys, so nothing was saved.
+str		This description could not be checked against your saved API keys, so nothing was saved.	This description could not be checked against your saved API keys, so nothing was saved.
 str		The opening stopped without an answer	The opening stopped without an answer
 str		Close a project to open another	Close a project to open another
 str		The closing stopped without an answer	The closing stopped without an answer

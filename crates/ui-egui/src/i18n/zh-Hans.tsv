@@ -417,6 +417,11 @@ plural		{n} skill	{n} 个技能
 str		Not saved	未保存
 str		Changes could not be written to the project	无法将更改写入项目
 str		The save stopped without an answer	保存未返回结果即已停止
+str		A description can't be empty.	描述不能为空。
+str		A description has to fit on one line.	描述必须写在一行内。
+str		A description is at most {max} characters; this one has {n}.	描述最多 {max} 个字符，当前有 {n} 个。
+str		This description holds one of your saved API keys, so nothing was saved.	此描述包含你已保存的 API 密钥，因此未保存任何内容。
+str		This description could not be checked against your saved API keys, so nothing was saved.	无法将此描述与你已保存的 API 密钥进行核对，因此未保存任何内容。
 str		The opening stopped without an answer	打开未返回结果即已停止
 str		Close a project to open another	请先关闭一个项目再打开另一个
 str		The closing stopped without an answer	关闭未返回结果即已停止

@@ -14,6 +14,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod chat;
+mod description;
 mod error;
 mod model;
 mod time;
@@ -30,6 +31,7 @@ pub use chat::{
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
     Turn, TurnChanges, TurnEnd, TurnError, TurnOutcome, TurnRecord, TurnSpan, limits,
 };
+pub use description::{DESCRIPTION_CHARS, DescriptionProblem, check_description};
 pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};
 pub use time::timestamp;

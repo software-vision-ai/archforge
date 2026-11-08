@@ -377,8 +377,10 @@ impl crate::ProjectHost for SavingHost {
         rx
     }
 
-    fn save(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<bool, String>> {
+    /// Keeps the save's answer for the test; the shell's Save carries no description.
+    fn save(&self, project: &std::path::Path, description: Option<String>) -> std::sync::mpsc::Receiver<Result<bool, String>> {
         assert_eq!(project, std::path::Path::new("/tmp/Commerce platform.archforge"), "the save names the open project");
+        assert_eq!(description, None, "the shell's Save stays one key, described by its time");
         let (tx, rx) = std::sync::mpsc::channel();
         self.saves.lock().unwrap().push(tx);
         rx

@@ -417,6 +417,11 @@ plural		{n} skill	{n} skill|{n} skills
 str		Not saved	Não guardado
 str		Changes could not be written to the project	Não foi possível escrever as alterações no projeto
 str		The save stopped without an answer	A gravação terminou sem resposta
+str		A description can't be empty.	Uma descrição não pode estar vazia.
+str		A description has to fit on one line.	Uma descrição tem de caber numa só linha.
+str		A description is at most {max} characters; this one has {n}.	Uma descrição tem no máximo {max} caracteres; esta tem {n}.
+str		This description holds one of your saved API keys, so nothing was saved.	Esta descrição contém uma das suas chaves de API guardadas, por isso nada foi guardado.
+str		This description could not be checked against your saved API keys, so nothing was saved.	Não foi possível verificar esta descrição com as suas chaves de API guardadas, por isso nada foi guardado.
 str		The opening stopped without an answer	A abertura terminou sem resposta
 str		Close a project to open another	Feche um projeto para abrir outro
 str		The closing stopped without an answer	O fecho terminou sem resposta

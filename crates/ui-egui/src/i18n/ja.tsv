@@ -417,6 +417,11 @@ plural		{n} skill	{n} 個のスキル
 str		Not saved	保存されていません
 str		Changes could not be written to the project	変更をプロジェクトに書き込めませんでした
 str		The save stopped without an answer	保存が応答なしで終了しました
+str		A description can't be empty.	説明は空にできません。
+str		A description has to fit on one line.	説明は1行で入力してください。
+str		A description is at most {max} characters; this one has {n}.	説明は最大 {max} 文字です。この説明は {n} 文字あります。
+str		This description holds one of your saved API keys, so nothing was saved.	この説明には保存済みの API キーが含まれているため、何も保存されませんでした。
+str		This description could not be checked against your saved API keys, so nothing was saved.	この説明を保存済みの API キーと照合できなかったため、何も保存されませんでした。
 str		The opening stopped without an answer	開く処理が応答なしで終了しました
 str		Close a project to open another	別のプロジェクトを開くには、プロジェクトを閉じてください
 str		The closing stopped without an answer	閉じる処理が応答なしで終了しました
