@@ -8065,6 +8065,82 @@ fn a_refused_chip_removal_is_kept_again_with_the_next_question() {
     }
 }
 
+/// Answers every write the fake store holds back with a refusal, `why`.
+fn refuse_held(rig: &crate::chat_fixture::Rig, why: &str) {
+    for (_, tx) in rig.store.held.lock().unwrap().drain(..) {
+        let _ = tx.send(Err(crate::chat_store::Refusal::Failed(why.into())));
+    }
+}
+
+/// A question asked while a chip removal is still unanswered waits for the set to be kept
+/// (AR-227): it is not written or sent first, and when the project refuses the set the question
+/// stays in the box with the reason; asked again once the project takes writes, the set is kept
+/// first. In both appearances.
+#[test]
+fn a_question_waits_for_an_unanswered_chip_removal_and_stays_when_it_is_refused() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::Chip;
+    use std::sync::atomic::Ordering::SeqCst;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        let first = h.state().chat_panel.chat.as_ref().unwrap().id;
+        let sent = sent_texts(&rig).len();
+        let asks = |rig: &crate::chat_fixture::Rig| rig.store.log.lock().unwrap().iter().filter(|k| **k == "ask").count();
+        let asked = asks(&rig);
+        rig.store.hold.store(true, SeqCst);
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "And Payment?");
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "chips"], "{theme:?}: the set is kept again first, the question waits: {log:?}");
+        assert_eq!(sent_texts(&rig).len(), sent, "{theme:?}: nothing sent yet");
+        // The project refuses: the question stays in the box with the reason, nothing asked.
+        refuse_held(&rig, "the disk is full");
+        rig.store.hold.store(false, SeqCst);
+        h.run();
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(h.state().chat_panel.draft, "And Payment?", "{theme:?}");
+        assert_eq!(asks(&rig), asked, "{theme:?}: the question was not written");
+        assert_eq!(sent_texts(&rig).len(), sent, "{theme:?}: not sent");
+        assert!(rig.store.kept(first).unwrap().row.removed.is_empty(), "{theme:?}");
+        // Sent again: the set is kept, then the question goes without the diagram. Each answer is
+        // taken on a frame of its own (the window looks again every 100 ms while it waits).
+        crate::chat_panel::send(h.state_mut());
+        for _ in 0..3 {
+            h.run();
+        }
+        let log = rig.store.log.lock().unwrap().clone();
+        assert_eq!(log[log.len() - 2..], ["chips", "ask"], "{theme:?}: {log:?}");
+        assert_eq!(rig.store.kept(first).unwrap().row.removed, std::collections::BTreeSet::from([Chip::Diagram]), "{theme:?}");
+        let last = sent_texts(&rig).last().cloned().unwrap_or_default();
+        assert!(last.starts_with("And Payment?") && !last.contains("open diagram"), "{theme:?}: {last}");
+    }
+}
+
+/// A chip removal the project refuses after the removal was drawn is said without other input
+/// (AR-227): the panel keeps looking while the write is unanswered. In both appearances.
+#[test]
+fn a_late_refused_chip_removal_is_said_without_other_input() {
+    use crate::chat::ChatEvent;
+    use std::sync::atomic::Ordering::SeqCst;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        ask_in_chat(&mut h, "Describe Order.");
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        rig.store.hold.store(true, SeqCst);
+        let at = rect_of(&h, "workspace.chat.chip.diagram.remove").center();
+        click(&mut h, at);
+        assert!(crate::chat_panel::waiting(h.state()), "{theme:?}: the panel keeps looking while the removal is unanswered");
+        refuse_held(&rig, "the disk is full");
+        rig.store.hold.store(false, SeqCst);
+        h.run();
+        assert!(painted_has(&h, "This conversation could not be saved: the disk is full"), "{theme:?}: {:?}", painted(&h));
+        assert!(!crate::chat_panel::waiting(h.state()), "{theme:?}: answered");
+    }
+}
+
 /// The Chat panel's history of page 07 (B7): five conversations kept, the first open, the history
 /// shown; their ids in the list's order.
 fn chat_history(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig, Vec<archforge_mof::Uuid>) {
