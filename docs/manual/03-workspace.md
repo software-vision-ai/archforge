@@ -5,7 +5,8 @@ An open project fills the window with its workspace.
 <!-- picture: workspace-diagram light | The workspace: Models on the left, a diagram in the centre, Properties on the right -->
 
 - **The bar at the top** holds Home, the open projects' tabs, the search field, Help and your
-  avatar (which opens Settings, where you enter your name).
+  avatar (which opens Settings, where you enter your name; it is saved with each version, so
+  anyone given a copy of the project can read it).
 - **The left rail** switches the left column between **Diagrams**, at the top, and **Models**. (Source Control
   is planned and not available yet.)
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the

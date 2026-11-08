@@ -19,8 +19,8 @@ use std::collections::BTreeMap;
 use mysql::prelude::Queryable;
 
 use crate::chat::{head, is_chat_table, is_commit};
-use crate::saving::{AfterFailure, SaveFailure, Saved, after_failed_commit, reply_lost};
-use crate::{AUTHOR, DATABASE, Error, Project};
+use crate::saving::{AfterFailure, Author, SaveFailure, Saved, after_failed_commit, reply_lost};
+use crate::{DATABASE, Error, Project};
 
 /// The most rows a table of the model may hold when read back: the store's own limit.
 const MAX_TABLE_ROWS: usize = archforge_mof::store::MAX_OBJECTS;
@@ -501,14 +501,23 @@ impl Project {
     /// name, never with `-A`, so a turn still running is never committed half-way by a Save: its rows
     /// wait for the turn's own chat commit.
     pub fn commit(&self, message: &str) -> Result<bool, Error> {
-        self.save_version(message).map(|saved| matches!(saved, Saved::Version { .. })).map_err(|failure| failure.error)
+        self.save_version(message, &Author::person("")).map(|saved| matches!(saved, Saved::Version { .. })).map_err(|failure| failure.error)
     }
 
     /// [`Project::commit`], saying what it did: the new version's hash, or, when it failed, whether
     /// a version exists all the same, told by the head before and after the commit.
-    pub fn save_version(&self, message: &str) -> Result<Saved, SaveFailure> {
+    pub fn save_version(&self, message: &str, author: &Author) -> Result<Saved, SaveFailure> {
         // The commit's reply is not read: converting a row that is not one string would panic.
-        self.save_with(|c| c.exec_drop("CALL DOLT_COMMIT('-m', ?, '--author', ?)", (message, AUTHOR)))
+        self.save_with(|c| author.commit_as(|line| c.exec_drop("CALL DOLT_COMMIT('-m', ?, '--author', ?)", (message, line))))
+    }
+
+    /// The name and email the newest commit is recorded under.
+    pub fn newest_commit_author(&self) -> Result<(String, String), Error> {
+        let mut c = self.model_connection()?;
+        let row: Option<mysql::Row> =
+            c.query_first("SELECT committer, email FROM dolt_log LIMIT 1").map_err(sql("cannot read the project's history"))?;
+        let text = |i: usize| row.as_ref().and_then(|r| r.get_opt::<String, usize>(i)).and_then(Result::ok);
+        text(0).zip(text(1)).ok_or_else(|| Error::Damaged { path: self.path().to_path_buf(), why: "its newest commit has no author".into() })
     }
 
     /// [`Project::save_version`] with its commit step given, so a test can lose the reply.

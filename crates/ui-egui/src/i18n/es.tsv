@@ -479,7 +479,7 @@ str		The sign-in stopped without an answer	El inicio de sesión terminó sin res
 str		The sign-out stopped without an answer	El cierre de sesión terminó sin respuesta
 str		Profile	Perfil
 str		AI Agents	Agentes de IA
-str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	Tu nombre aparece como iniciales en el avatar de la barra. Archforge nunca lo lee de la cuenta del ordenador.
+str		Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.	Tu nombre aparece como iniciales en el avatar de la barra y se guarda con cada versión, donde cualquiera que reciba una copia del proyecto puede leerlo. Archforge nunca lo lee de la cuenta del ordenador.
 str		the macOS Keychain	el llavero de macOS
 str		the Secret Service	el Secret Service
 str		the system's secure store	el almacén seguro del sistema

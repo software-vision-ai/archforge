@@ -478,7 +478,7 @@ str		The sign-in stopped without an answer	The sign-in stopped without an answer
 str		The sign-out stopped without an answer	The sign-out stopped without an answer
 str		Profile	Profile
 str		AI Agents	AI Agents
-str		Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.	Your name shows as initials in the bar's avatar. Archforge never reads it from the computer's account.
+str		Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.	Your name shows as initials in the bar's avatar and is saved with each version, where anyone given a copy of the project can read it. Archforge never reads it from the computer's account.
 str		the macOS Keychain	the macOS Keychain
 str		the Secret Service	the Secret Service
 str		the system's secure store	the system's secure store

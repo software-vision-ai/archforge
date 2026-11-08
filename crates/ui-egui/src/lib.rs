@@ -166,7 +166,7 @@ pub trait ProjectHost: Send + Sync {
     /// holds a kept API key, is refused and nothing is committed. A described save commits only
     /// what had been handed over when it was asked: rows handed over before it is carried out
     /// answer [`SaveError::Changed`]. A save for a project that is no longer open fails.
-    fn save(&self, _project: &std::path::Path, _description: Option<String>) -> std::sync::mpsc::Receiver<Result<Saved, SaveError>> {
+    fn save(&self, _project: &std::path::Path, _description: Option<String>, _by: SavedBy) -> std::sync::mpsc::Receiver<Result<Saved, SaveError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err(SaveError::Failed("this host saves no projects".into())));
         rx
@@ -234,6 +234,15 @@ impl Tab {
     pub fn closing(&self) -> bool {
         self.closing.is_some()
     }
+}
+
+/// Who asked for a save, recorded with its version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SavedBy {
+    /// The person at the window, by the name from Settings (empty when none is set).
+    Person(String),
+    /// An agent over the control channel, by its origin label when the request gave one.
+    Agent(Option<String>),
 }
 
 /// A save that finished.
@@ -1127,18 +1136,23 @@ impl Shell {
     /// typed included. A description whose write is refused stops the save before the host is
     /// asked: it stays in its field with the refusal, and the project stays unsaved.
     pub fn save(&mut self) {
-        self.start_save(None);
+        self.start_save(None, SavedBy::Person(self.state.user_name.clone()));
+    }
+
+    /// Save, asked for by an agent over the control channel: `origin` is its label when it has one.
+    pub fn save_for_agent(&mut self, origin: Option<&str>) {
+        self.start_save(None, SavedBy::Agent(origin.map(str::to_string)));
     }
 
     /// Save version: a save under `description` of the state reviewed at session revision
     /// `reviewed`. When the model has moved since, the host is not asked and the save answers
     /// [`SaveError::Changed`], so nothing unreviewed becomes a version.
     pub fn save_reviewed(&mut self, description: String, reviewed: u64) {
-        self.start_save(Some((description, reviewed)));
+        self.start_save(Some((description, reviewed)), SavedBy::Person(self.state.user_name.clone()));
     }
 
-    /// Starts a save, of the reviewed state with its description when `review` is given.
-    fn start_save(&mut self, review: Option<(String, u64)>) {
+    /// Starts a save recorded as `by`, of the reviewed state with its description when `review` is given.
+    fn start_save(&mut self, review: Option<(String, u64)>, by: SavedBy) {
         if self.saving.is_some() || self.session.is_none() || self.is_held() {
             return;
         }
@@ -1163,7 +1177,7 @@ impl Shell {
                 let _ = tx.send(Err(SaveError::Changed));
                 rx
             } else {
-                host.save(&project.path, review.map(|(description, _)| description))
+                host.save(&project.path, review.map(|(description, _)| description), by)
             };
             self.saving = Some((answer, revision, self.save_ticket));
             self.save_error = None;
