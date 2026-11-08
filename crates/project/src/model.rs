@@ -2,7 +2,8 @@
 //! project holds, each made when rows first go there, so a project holds the tables of the
 //! notations it uses and a table it lacks holds nothing; the model's rows written as one transaction that replaces
 //! what the tables held, as the user works (owner decision); read back only from
-//! tables of exactly the generated shape, row by row within budgets of rows, cells and bytes, never
+//! tables of exactly the generated shape, or, for a version saved before an upgrade, of an earlier
+//! shape of it, row by row within budgets of rows, cells and bytes, never
 //! sizing an allocation from what is read; and Save, a Dolt commit of everything written.
 //!
 //! The tables are described by the metamodels' generated code (`Table`, `Junction`); a project
@@ -210,24 +211,26 @@ impl Project {
         Ok(c)
     }
 
+    /// The model tables' fingerprint the database `c` is using records, if it records one.
+    fn held_fingerprint(&self, c: &mut mysql::Conn) -> Result<Option<String>, Error> {
+        let held: Option<mysql::Row> = c
+            .exec_first("SELECT LEFT(CAST(`value` AS CHAR), 64) FROM settings WHERE `key` = ?", (SCHEMA_KEY,))
+            .map_err(sql("cannot read the model's fingerprint"))?;
+        // Read as a row, not a string: a value that is not text is refused, not a panic.
+        held.map(|row| {
+            row.get_opt::<String, usize>(0)
+                .and_then(Result::ok)
+                .ok_or_else(|| Error::Damaged { path: self.path().to_path_buf(), why: "the model's fingerprint is not text".into() })
+        })
+        .transpose()
+    }
+
     /// Records the model tables' fingerprint, bringing a project made by an earlier Archforge up to
     /// date; a project made for other tables is refused. The tables themselves are made as rows go
     /// there.
     pub fn prepare_model(&self, schema: &ModelSchema) -> Result<(), Error> {
         let mut c = self.model_connection()?;
-        let held: Option<mysql::Row> = c
-            .exec_first("SELECT LEFT(CAST(`value` AS CHAR), 64) FROM settings WHERE `key` = ?", (SCHEMA_KEY,))
-            .map_err(sql("cannot read the model's fingerprint"))?;
-        // Read as a row, not a string: a value that is not text is refused, not a panic.
-        let held = match held {
-            None => None,
-            Some(row) => Some(
-                row.get_opt::<String, usize>(0)
-                    .and_then(Result::ok)
-                    .ok_or_else(|| Error::Damaged { path: self.path().to_path_buf(), why: "the model's fingerprint is not text".into() })?,
-            ),
-        };
-        match held {
+        match self.held_fingerprint(&mut c)? {
             Some(f) if f != schema.fingerprint => {
                 // Made by an earlier Archforge, as its fingerprint says: the columns added since come
                 // last and are empty or hold what a new object holds, so adding them keeps every row
@@ -345,27 +348,58 @@ impl Project {
     /// than its type allows), and a table it lacks holds nothing; the rows are read one at a time
     /// within the budgets of rows per table and of cells and bytes for the whole model.
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
-        self.read_rows(&mut self.model_connection()?, schema)
+        self.read_rows(&mut self.model_connection()?, schema, None)
     }
 
     /// The model's rows as the version `commit` holds them, read as [`Project::read_model`] reads
     /// the working set, under the same budgets and from that commit's own table shapes. Nothing is
-    /// written and nothing moves: unsaved work, the head and the branch stay as they were. Refused
-    /// with [`Error::NotAVersion`] when `commit` is not a commit on the project's line of work, and
-    /// as [`Error::Damaged`] when that commit's tables are not exactly the generated shape or it
-    /// holds no list of the tables in use, which the commit that created the project does not.
+    /// written and nothing moves: unsaved work, the head and the branch stay as they were, and a
+    /// version from before an upgrade stays as it was saved.
+    ///
+    /// | The commit's fingerprint | What is read |
+    /// |---|---|
+    /// | This Archforge's | Exactly the generated shape, as in the working set; any other is [`Error::Damaged`] |
+    /// | One of [`EARLIER_MODELS`] | The earlier shape an upgrade accepts: a later column reads as a new object holds it or empty, a table it lacks holds nothing, and the list of tables in use may be missing. Any other shape is [`Error::VersionShape`] with its reason |
+    /// | Another, or none (the commit that created the project records none) | [`Error::VersionShape`] with its reason |
+    ///
+    /// Refused with [`Error::NotAVersion`] when `commit` is not a commit on the project's line of
+    /// work. Dolt's own first commit holds no settings to read, which is an [`Error::Sql`].
     pub fn read_model_at(&self, schema: &ModelSchema, commit: &str) -> Result<Rows, Error> {
-        self.read_rows(&mut self.revision_connection(commit)?, schema)
+        let mut c = self.revision_connection(commit)?;
+        let refused = |why: String| Error::VersionShape { commit: commit.to_string(), why };
+        let earlier = match self.held_fingerprint(&mut c)? {
+            Some(held) if held == schema.fingerprint => None,
+            Some(held) if EARLIER_MODELS.contains(&held.as_str()) => Some(commit),
+            Some(held) => return Err(refused(format!("its model tables are {held:?} where this Archforge has {:?}", schema.fingerprint))),
+            None => return Err(refused("it records no fingerprint of its model tables".into())),
+        };
+        self.read_rows(&mut c, schema, earlier)
     }
 
     /// The model's rows as the database `c` is using holds them: the reading behind
-    /// [`Project::read_model`] and [`Project::read_model_at`].
-    fn read_rows(&self, c: &mut mysql::Conn, schema: &ModelSchema) -> Result<Rows, Error> {
+    /// [`Project::read_model`] and [`Project::read_model_at`]. `earlier` names the commit when its
+    /// tables are of an earlier shape, which is then accepted as [`earlier_columns`] says; without
+    /// it only exactly the generated shape is.
+    fn read_rows(&self, c: &mut mysql::Conn, schema: &ModelSchema, earlier: Option<&str>) -> Result<Rows, Error> {
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
+        // A shape refused is another Archforge's work in a commit read as earlier, damage otherwise.
+        let refused = |why: String| match earlier {
+            Some(commit) => Error::VersionShape { commit: commit.to_string(), why },
+            None => damaged(why),
+        };
         let shapes = shapes(c, schema).map_err(damaged)?;
-        for name in in_use(c, &shapes).map_err(damaged)? {
+        if earlier.is_some() {
+            foreign_table(&shapes).map_err(refused)?;
+        }
+        // An earlier Archforge may have kept no list: the tables it left are the ones in use.
+        let recorded = if earlier.is_some() && !shapes.contains_key(IN_USE) {
+            std::collections::BTreeSet::new()
+        } else {
+            in_use(c, &shapes).map_err(refused)?
+        };
+        for name in recorded {
             if !schema.is_model_table(&name) {
-                return Err(damaged(format!("the model uses the table {name:?}, which this Archforge does not know")));
+                return Err(refused(format!("the model uses the table {name:?}, which this Archforge does not know")));
             }
             if !shapes.contains_key(&name) {
                 return Err(damaged(format!("the table {name:?}, which the model uses, is missing")));
@@ -374,12 +408,24 @@ impl Project {
         let mut budget = Budget::default();
         let mut rows = Rows::default();
         for t in &schema.tables {
-            let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
-            if !check_shape(&shapes, t.name, &expected).map_err(damaged)? {
+            let held = if earlier.is_some() {
+                earlier_columns(schema, &shapes, t).map_err(refused)?
+            } else {
+                let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
+                check_shape(&shapes, t.name, &expected).map_err(damaged)?.then_some(t.columns.len())
+            };
+            let Some(held) = held else {
                 rows.tables.push(Vec::new());
                 continue;
+            };
+            let names: Vec<String> = t.columns.iter().take(held).map(|col| format!("`{}`", col.name)).collect();
+            // What the columns the table lacks read as, the same in every row.
+            let mut filled = Vec::new();
+            for col in t.columns.iter().skip(held) {
+                let v = schema.fill(t.name, col.name).map_or(mysql::Value::NULL, |fill| mysql::Value::Bytes(fill.as_bytes().to_vec()));
+                let cell = from_sql(&v, col.sql).map_err(|why| damaged(format!("{}.{}: {why}", t.name, col.name)))?;
+                filled.push((v, cell));
             }
-            let names: Vec<String> = t.columns.iter().map(|col| format!("`{}`", col.name)).collect();
             let mut out = Vec::new();
             let read = c
                 .query_iter(format!("SELECT {} FROM `{}` LIMIT {}", names.join(", "), t.name, MAX_TABLE_ROWS + 1))
@@ -391,10 +437,14 @@ impl Project {
                 }
                 budget.row().map_err(damaged)?;
                 let mut cells = Vec::with_capacity(t.columns.len());
-                for (i, col) in t.columns.iter().enumerate() {
+                for (i, col) in t.columns.iter().take(held).enumerate() {
                     let v = row.as_ref(i).cloned().unwrap_or(mysql::Value::NULL);
                     budget.take(&v).map_err(damaged)?;
                     cells.push(from_sql(&v, col.sql).map_err(|why| damaged(format!("{}.{}: {why}", t.name, col.name)))?);
+                }
+                for (v, cell) in &filled {
+                    budget.take(v).map_err(damaged)?;
+                    cells.push(cell.clone());
                 }
                 out.push(cells);
             }
@@ -402,7 +452,7 @@ impl Project {
         }
         for (j, value_sql) in &schema.junctions {
             if !check_shape(&shapes, j.name, &[("owner", "BINARY(16) NOT NULL"), ("position", "INT NOT NULL"), ("value", value_sql)])
-                .map_err(damaged)?
+                .map_err(refused)?
             {
                 rows.junctions.push(Vec::new());
                 continue;
@@ -613,36 +663,53 @@ impl Budget {
 /// model, or of a later Archforge.
 fn upgrade(c: &mut mysql::Conn, schema: &ModelSchema) -> Result<Vec<String>, Refusal> {
     let shapes = shapes(c, schema).map_err(Refusal::Read)?;
-    if let Some(name) = shapes.iter().find_map(|(name, shape)| matches!(shape, Shape::Unknown).then_some(name)) {
-        return Err(Refusal::Shape(format!("it holds the table {name:?}, which this Archforge does not know")));
-    }
+    foreign_table(&shapes).map_err(Refusal::Shape)?;
     let mut added = Vec::new();
     for t in &schema.tables {
-        let found = match shapes.get(t.name) {
-            None => continue,
-            Some(Shape::Columns(found)) => found,
-            Some(_) => return Err(Refusal::Shape(format!("{} is not a table", t.name))),
-        };
-        let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
-        if found.len() > expected.len() || !found.iter().zip(&expected).all(|(f, e)| same_column(f, e)) {
-            return Err(Refusal::Shape(format!("the table {} has columns this Archforge does not write", t.name)));
-        }
-        for (name, sql) in &expected[found.len()..] {
-            if !sql.contains("NOT NULL") {
-                added.push(format!("ALTER TABLE `{}` ADD COLUMN `{name}` {sql}", t.name));
-                continue;
-            }
+        let Some(held) = earlier_columns(schema, &shapes, t).map_err(Refusal::Shape)? else { continue };
+        for col in t.columns.iter().skip(held) {
             // The rows already there take what a new object holds.
-            let Some((_, _, fill)) = schema.fills.iter().find(|(table, column, _)| *table == t.name && column == name) else {
-                return Err(Refusal::Shape(format!("the table {} lacks the column {name}, which has no value to give the rows it holds", t.name)));
-            };
-            added.push(format!("ALTER TABLE `{}` ADD COLUMN `{name}` {sql} DEFAULT {fill}", t.name));
+            added.push(match schema.fill(t.name, col.name) {
+                Some(fill) => format!("ALTER TABLE `{}` ADD COLUMN `{}` {} DEFAULT {fill}", t.name, col.name, col.sql),
+                None => format!("ALTER TABLE `{}` ADD COLUMN `{}` {}", t.name, col.name, col.sql),
+            });
         }
     }
     for (j, value) in &schema.junctions {
         check_shape(&shapes, j.name, &[("owner", "BINARY(16) NOT NULL"), ("position", "INT NOT NULL"), ("value", value)]).map_err(Refusal::Shape)?;
     }
     Ok(added)
+}
+
+/// Refused when the project holds a table Archforge does not know: another model's, or a later
+/// Archforge's.
+fn foreign_table(shapes: &BTreeMap<String, Shape>) -> Result<(), String> {
+    match shapes.iter().find(|(_, shape)| matches!(shape, Shape::Unknown)) {
+        Some((name, _)) => Err(format!("it holds the table {name:?}, which this Archforge does not know")),
+        None => Ok(()),
+    }
+}
+
+/// How many of `t`'s generated columns, from the first, the project's table holds under an earlier
+/// shape: `None` when it lacks the table. Refused unless what it holds are the first columns of the
+/// generated shape and every one it lacks may be empty or has a value for the rows it holds. The
+/// one rule for upgrading a project and for reading a version from before an upgrade.
+fn earlier_columns(schema: &ModelSchema, shapes: &BTreeMap<String, Shape>, t: &Table) -> Result<Option<usize>, String> {
+    let found = match shapes.get(t.name) {
+        None => return Ok(None),
+        Some(Shape::Columns(found)) => found,
+        Some(_) => return Err(format!("{} is not a table", t.name)),
+    };
+    let expected: Vec<(&str, &str)> = t.columns.iter().map(|col| (col.name, col.sql)).collect();
+    if found.len() > expected.len() || !found.iter().zip(&expected).all(|(f, e)| same_column(f, e)) {
+        return Err(format!("the table {} has columns this Archforge does not write", t.name));
+    }
+    for col in t.columns.iter().skip(found.len()) {
+        if col.sql.contains("NOT NULL") && schema.fill(t.name, col.name).is_none() {
+            return Err(format!("the table {} lacks the column {}, which has no value to give the rows it holds", t.name, col.name));
+        }
+    }
+    Ok(Some(found.len()))
 }
 
 /// Why a project is not upgraded: its tables are not an earlier shape of the model's, or they
@@ -669,6 +736,11 @@ pub(crate) fn same_column((name, ty, length, plain, nullable): &Found, (want_nam
 }
 
 impl ModelSchema {
+    /// What a new object holds in a column that may not be empty, as SQL, if it holds a fixed value.
+    fn fill(&self, table: &str, column: &str) -> Option<&str> {
+        self.fills.iter().find(|(t, c, _)| *t == table && *c == column).map(|(_, _, fill)| fill.as_str())
+    }
+
     /// Whether `name` is one of the model's tables or list tables.
     fn is_model_table(&self, name: &str) -> bool {
         self.tables.iter().any(|t| t.name == name) || self.junctions.iter().any(|(j, _)| j.name == name)

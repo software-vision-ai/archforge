@@ -290,6 +290,94 @@ fn only_a_commit_on_the_projects_own_line_is_a_version() {
     project.close().unwrap();
 }
 
+/// Commits everything the working set of `c` holds and gives the new commit's hash.
+fn commit_all(c: &mut mysql::Conn, message: &str) -> String {
+    c.exec_drop("CALL DOLT_COMMIT('-Am', ?, '--author', 'Test <test@localhost>')", (message,)).unwrap();
+    c.query_first("SELECT HASHOF('HEAD')").unwrap().unwrap()
+}
+
+/// A project with the test model saved in it, its tables prepared.
+fn saved_project(env: &Env, schema: &ModelSchema) -> Project {
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "History", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(schema).unwrap();
+    project.write_model(schema, &rows_of(model().doc(), schema)).unwrap();
+    assert!(project.commit("Saved").unwrap());
+    project
+}
+
+/// A version saved by an earlier Archforge reads as the real upgrade leaves those rows, column for
+/// column, while the commit and the working set stay as they were.
+#[test]
+fn a_version_from_before_an_upgrade_reads_as_the_upgrade_leaves_it() {
+    let env = Env::new("earlier");
+    let schema = schema();
+    let project = saved_project(&env, &schema);
+    // As an earlier Archforge saved it: later columns (one optional, two that a new object fills),
+    // a list table and the list of the tables in use all missing, and a row the fills must reach.
+    let mut c = working(&project);
+    c.query_drop("ALTER TABLE diagram_diagram DROP COLUMN `style`").unwrap();
+    c.query_drop("ALTER TABLE diagram_style DROP COLUMN `avoid`").unwrap();
+    c.query_drop("ALTER TABLE diagram_style DROP COLUMN `routing`").unwrap();
+    c.query_drop("INSERT INTO diagram_style (id, name, fill, stroke, `text`, line) VALUES (UNHEX('00000000000000000000000000000abc'), NULL, '#FFFFFF', NULL, NULL, 2)").unwrap();
+    c.query_drop("DROP TABLE core_model_skill").unwrap();
+    c.query_drop("DROP TABLE model_tables").unwrap();
+    c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (EARLIER_MODELS[EARLIER_MODELS.len() - 1],)).unwrap();
+    let saved = commit_all(&mut c, "Saved by an earlier Archforge");
+    drop(c);
+    // The real upgrade of those same rows, in the working set, is what the version must read as.
+    project.prepare_model(&schema).unwrap();
+    let upgraded = project.read_model(&schema).unwrap();
+    let before = untouched(&project);
+    assert_eq!(project.read_model_at(&schema, &saved).unwrap(), upgraded, "the later columns read as the upgrade fills them");
+    assert_eq!(untouched(&project), before, "and reading it upgrades nothing");
+    project.close().unwrap();
+}
+
+/// Each commit Archforge cannot read names its own reason, and which commit it was about.
+#[test]
+fn a_version_of_a_shape_this_archforge_cannot_read_is_refused_with_its_reason() {
+    let env = Env::new("foreign");
+    let schema = schema();
+    let project = saved_project(&env, &schema);
+    let mut c = working(&project);
+    let created: String = c.query_first("SELECT commit_hash FROM dolt_log WHERE message = 'Create the project'").unwrap().unwrap();
+    c.query_drop("UPDATE settings SET `value` = '0123456789abcdef' WHERE `key` = 'model_schema'").unwrap();
+    let other_model = commit_all(&mut c, "Another model's tables");
+    c.exec_drop("UPDATE settings SET `value` = ? WHERE `key` = 'model_schema'", (EARLIER_MODELS[0],)).unwrap();
+    c.query_drop("CREATE TABLE library_book (id BINARY(16) NOT NULL PRIMARY KEY, title MEDIUMTEXT NULL)").unwrap();
+    let unknown_table = commit_all(&mut c, "A table Archforge does not know");
+    c.query_drop("DROP TABLE library_book").unwrap();
+    c.query_drop("ALTER TABLE diagram_style ADD COLUMN z DOUBLE NULL").unwrap();
+    let later_column = commit_all(&mut c, "A column Archforge does not write");
+    drop(c);
+    for (commit, reason) in
+        [(&created, "no fingerprint"), (&other_model, "0123456789abcdef"), (&unknown_table, "library_book"), (&later_column, "diagram_style")]
+    {
+        let Some(Error::VersionShape { commit: named, why }) = project.read_model_at(&schema, commit).err() else {
+            panic!("{reason}: not refused as a shape");
+        };
+        assert_eq!(&named, commit);
+        assert!(why.contains(reason), "{reason}: {why}");
+    }
+    project.close().unwrap();
+}
+
+/// The fingerprint decides, not the columns: under this Archforge's own, an earlier shape is
+/// damage, though the same columns under an earlier fingerprint would read.
+#[test]
+fn a_version_of_this_archforges_fingerprint_must_have_exactly_its_shape() {
+    let env = Env::new("exact");
+    let schema = schema();
+    let project = saved_project(&env, &schema);
+    let mut c = working(&project);
+    c.query_drop("ALTER TABLE diagram_style DROP COLUMN `avoid`").unwrap();
+    let saved = commit_all(&mut c, "Current fingerprint, earlier columns");
+    drop(c);
+    let refused = project.read_model_at(&schema, &saved).err();
+    assert!(matches!(&refused, Some(Error::Damaged { why, .. }) if why.contains("diagram_style")), "{refused:?}");
+    project.close().unwrap();
+}
+
 #[test]
 fn a_project_made_for_other_tables_is_refused() {
     let env = Env::new("other");
