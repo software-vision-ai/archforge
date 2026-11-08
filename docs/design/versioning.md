@@ -113,12 +113,13 @@ back a deleted conversation (`chat.rs:1535-1570`). What Dolt gives us, measured:
 | Unsaved work on a branch | Kept per branch, and survives a server restart |
 | `DOLT_RESET('--hard')` | Affects only the branch of that connection |
 | `dolt_log` on a branch | That branch's own line. 1,500 commits filtered and paged: about 48 ms including client start-up |
-| `dolt_branches` | Names, heads and a `dirty` column saying whether a branch has unsaved work |
+| `dolt_branches` | Names, heads and a `dirty` column, which counts any uncommitted table, a chat table included |
 | `dolt_diff` on a list table | Inserting at the front reports every later position as modified |
 | `dolt_diff` after a column was added | Every row reports modified, changed or not |
 | `DOLT_BRANCH('-m')` and `'-D'` on `main` | Refused: it is the default branch |
 | `DOLT_BRANCH('-d', name)` | Refused unless merged, so a branch that cannot be merged needs `-D` |
 | Trigger on a branch | Not visible from `main`'s `information_schema` |
+| A new branch at `HEAD` before the first Save | Holds only what the creation commit holds: no `model_tables`, no fingerprint |
 
 What `read_model` (`model.rs:318-394`) must change to read history:
 
@@ -254,7 +255,8 @@ decides, not the name, because a person's Settings name could be anything. The *
 is the nearest
 earlier version in that list, not the Dolt parent, which is often a chat commit. For "changes since
 the last version",
-`HEAD` is the right baseline: a chat commit's model tables equal those of the last Save.
+`HEAD` is the right baseline: a chat commit's model tables equal those of the last Save. Before the
+first Save there is no version and no model at `HEAD`, so the Before side is empty (section 10).
 
 **Save version…** ties its review to `session.revision()`. If that moves, the dialog refreshes and
 says so before Save
@@ -285,7 +287,7 @@ the names in it.
 | Model elements, relationships, members, ownership, every notation | Conversations: their own commits (section 9) |
 | Diagrams, layout, routing, style (`diagram_*` tables) | Undo history |
 | Skills | Pan, zoom, open tabs, selection, panel widths (`prefs.json`) |
-| Project name and settings | Theme, language, your name, agent setup and keys |
+| Project settings (`format`, `name`, the model's fingerprint), kept with the commit; Restore does not bring them back (section 7) | Theme, language, your name, agent setup and keys |
 
 Pan and zoom are not in the project (`crates/diagram/src/generated/schema.rs:10-50`,
 `crates/ui-egui/src/state.rs:121-150`), so they cannot look like a model change.
@@ -348,20 +350,29 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 
 ## 7. Restore
 
-Restore makes a new version whose content equals an old one, on the current branch. Offered in
-version details and in the viewing
-banner, after a confirmation that names the version.
+Restore makes a new version whose content equals an old one, on the current branch. It is offered in
+version details and in the viewing banner, after a confirmation that names the version. Section 6's
+rules for leaving current work apply, since the session is replaced. Viewing ends.
+
+It is compared first, with the same repair on both sides (section 6). A version whose model is the
+same as current work is not offered. If that is only found when it runs, it says "This version is the
+same as your current work." and makes no version, an empty commit included.
 
 1. Any unsaved changes are saved as a version first, `Before restoring <date>`.
-2. The version's rows are read, the session is rebuilt from them, and they are written to the
-   working set.
-3. They are committed as `Restored the version of <date>`.
+2. The version's model rows are read, in today's table shape, and written to the working set.
+3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
+   nothing differed, and is reported as above.
+4. The session is rebuilt from those rows, only once the commit has succeeded.
 
 | Question | Decision |
 |---|---|
+| What comes back? | The model tables: elements, relationships, diagrams, skills, and the root element's name |
+| What stays as it is? | The `settings` table: `format`, `model_schema`, `name`, `created_by`, `created_at`. None is a setting a person changes. Keeping `format` and `model_schema` means an older version cannot lower the format of a branch that holds conversations |
 | Why forward-only? | Rewinding would drop later chat commits, and deleted-conversation Undo needs its commit to stay an ancestor of `HEAD` |
 | Undo across a Restore? | No: undo starts fresh. Chat cards say the undo history no longer holds their change, wording that exists |
-| Failure after step 1? | The extra version stays, the message says so, and current work is unchanged |
+| Reading or step 1 fails | Nothing has changed |
+| Writing the rows fails | The write is one transaction, so the working set is unchanged. A version from step 1 stays, and the message says so |
+| The commit fails | The session was not rebuilt. Its rows are written back as autosave writes them, tried again with the next change if that fails too, and the message says so |
 | Restoring from another branch? | Not offered: History lists only the current branch |
 
 ---
@@ -387,7 +398,8 @@ conversations." Each Dolt branch has its own working set, so unsaved work needs 
   upgrade, and refusal of triggers,
   procedures and events. These checks today see only `main`, and a trigger on another branch is
   invisible from it (measured), so a
-  foreign project must be checked per branch.
+  foreign project must be checked per branch. Reopening on a stored branch runs them too. Arriving on a
+  branch whose tables are upgraded reads as unsaved, as opening such a project does today.
 
 ### Names
 
@@ -407,11 +419,11 @@ All run on the writer, in order with every model and conversation write.
 
 | Operation | Where | What happens | On failure |
 |---|---|---|---|
-| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; copies the current working rows to it; switches. The source branch keeps its unsaved work as well | The new branch is deleted; you stay where you were |
+| **Create from current work** | Versions panel `+`, chip list, Versions menu | Writes what waits; `DOLT_BRANCH` at `HEAD`; removes inherited conversations on the new branch; prepares its model tables (`prepare_model`, since `HEAD` may be the creation commit, which has none); copies the current working rows to it; switches. The source branch keeps its unsaved work as well | The new branch is deleted; you stay where you were |
 | **Create from a version** | **Start a branch here…** in details and the viewing banner | `DOLT_BRANCH` at that hash; removes inherited conversations; switches. Viewing ends | The same. Not offered on a version that cannot be read |
-| **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target, moves the connection, reloads | Connection and session stay on the current branch |
+| **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
-| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work; then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
+| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
 
 A delete cannot be undone in 0.14.0. The confirmation says the branch leaves the project's list and
 that its contents may remain in the
@@ -422,12 +434,16 @@ handed over during the switch would
 reach the new branch. The target is read and checked over its own connection first; only then does
 the current branch change.
 
+Every job handed to the writer names the switch generation it was made under, a counter a switch moves
+and a rename does not. The generation is taken when the job is asked for, before any key check. A job
+of another generation is refused with an error saying so, and is not applied to the branch now shown.
+
 ### Switching
 
 | Situation | What you see |
 |---|---|
 | No unsaved changes | Switches at once |
-| Unsaved changes | "{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps." **Save version and switch** / **Switch** / **Cancel** |
+| Unsaved changes (the model's, as `has_unsaved` counts them) | "{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps." **Save version and switch** (the save finishes first) / **Switch** / **Cancel** |
 | Editor open, turn running, description refused | Section 6 |
 | Viewing a version | Back to current work first, then the above |
 
@@ -449,7 +465,7 @@ commit, so it is not a version.
 |---|---|
 | Chip | Section 2: the name appears once a second branch exists, so a one-branch project never sees the word |
 | Versions panel | Sections **Branches**, **Working changes**, **History**. Branches is folded while there is only `main` |
-| Branch row | Name, current mark, unsaved dot from `dolt_branches.dirty`, date of last change; Enter switches; menu has Switch, Rename, Delete |
+| Branch row | Name, current mark, unsaved dot, date of last change. The dot counts only the model's changes: `dirty` is a quick first look, and where it is set, that branch's `dolt_status` is read without the chat tables, as `has_unsaved` does; Enter switches; menu has Switch, Rename, Delete |
 | Status bar | "On {branch}" beside the save state, once a second branch exists |
 | Tab and title dot | The current branch's unsaved state |
 | Merging | One line under Branches: "Branches can't be merged yet." Compare shows how two branches differ |
@@ -473,7 +489,7 @@ the inherited rows on the new branch only, in one chat commit. No table or colum
 |---|---|
 | A conversation is started | Its rows and chat commits are on the current branch |
 | New branch | Starts with none: "No conversations on this branch yet." The source branch keeps its own |
-| Switch | The running turn ends as closing a tab ends it (`lib.rs:758-765`), its reply so far kept and written before the switch; the program is let go of; the panel reloads from the new branch |
+| Switch | The running turn ends as closing a tab ends it (`lib.rs:758-765`), its reply so far kept and written before the switch; the requests still on their way are settled first (below); the program is let go of; the panel reloads from the new branch |
 | Numbering | `Chat N` is per branch, so a new branch starts at Chat 1 |
 | Rename a branch | Conversations unaffected |
 | Delete a branch | Its conversations go with it; the confirmation counts them; their private folders are let go |
@@ -489,7 +505,8 @@ Checks against what exists:
 | A conversation's rows at a branch point | The removed rows remain in the new branch's ancestor commits, the same statement as for a deleted conversation |
 | Restore | Touches no chat table, and forward-only keeps every chat commit an ancestor |
 | Save and Don't save | Work per connection, so per branch (measured for `DOLT_RESET`); chat commits come first as today |
-| Writes arriving after a switch | A chat write names only the project path, so one queued after a switch would reach the new branch. The turn is therefore ended and written before the switch is sent, as closing does |
+| Requests still on their way | A question in `Step::Creating`, `Asking`, `Rerunning` or `Keeping` waits on a key check off the writer (`apps/archforge/src/chats.rs:505-530`), and writes, chip writes, deletions and restorations may still be queued. The switch is sent only once `chat_panel::waiting` and `chat_delete::waiting` have cleared for this project, within a time limit; past it the switch is refused with "Chat is still saving" |
+| Writes arriving after a switch | A chat write names only the project path, so without more one arriving late would reach the new branch. Each carries the switch generation (section 8) and is refused on any other |
 | `format` raised on a branch | Per branch, and checked on switching. `main` can stay at an older format |
 
 ---
@@ -503,6 +520,7 @@ Checks against what exists:
 | First version | Details, Compare | "First version: there is nothing earlier to compare it with." Before shows the absent state |
 | No changes | Working changes | "No changes since the last version." Save version… disabled, with the reason in its tooltip |
 | Identical pair | Compare | "These two versions are the same." |
+| Restoring a version equal to current work | Details, banner | Not offered; found only when it runs: "This version is the same as your current work." No version is made |
 | Loading | Chip, list, centre | Skeleton rows; the previous state stays usable |
 | Version unavailable | Row | "This version can't be shown", with the reason on request. Stays listed; stepping skips it and says so |
 | Newer or foreign model shape | Row | "Made with a newer Archforge." |
@@ -516,6 +534,7 @@ Checks against what exists:
 | Branch can't be opened | Row | Damaged, newer format, or holds scripts: the reason, and you stay on the current branch |
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
+| Stored branch can't be opened on reopening | Status bar | Opens `main` and gives the reason |
 | Switch failed | Branch list | The reason; current branch and work unchanged |
 | Delete refused | Dialog | The reason; the branch stays |
 
