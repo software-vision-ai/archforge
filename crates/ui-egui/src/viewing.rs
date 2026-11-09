@@ -94,10 +94,8 @@ impl Shell {
         if self.viewing.is_none() {
             return false;
         }
-        // A turn started on the version ends here, without waiting for its program to answer the
-        // stop: its agent never read the work it would otherwise reach until then.
-        chat_panel::leaving(self);
-        chat_panel::end_here(self, chat_panel::TurnState::Stopped);
+        // Before the work comes back, so that a turn started on the version never reaches it.
+        chat_panel::version_left(self);
         let Some(v) = self.viewing.take() else { return false };
         let v = *v;
         self.session = Some(v.session);

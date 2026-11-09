@@ -210,6 +210,9 @@ pub struct Turn {
     /// Stop was asked and not yet answered, and since when (seconds since 1970).
     pub stopping: bool,
     pub stopping_since: Option<u64>,
+    /// The person went back from the version this turn was started on: while it stops nothing more
+    /// runs in its name, and no question follows it until its program has stopped or ended.
+    pub left_behind: bool,
     /// Text the agent wrote past what the conversation may hold was not kept.
     pub cut: bool,
     /// Tool rows past [`MAX_ROWS`], counted.
@@ -300,7 +303,10 @@ impl Chat {
     /// Whether a turn runs, or a question is on its way: Enter, the badge, the switch, New
     /// conversation and the history wait for it.
     pub fn busy(&self) -> bool {
-        self.step.busy() || self.turns.last().is_some_and(|t| t.state == TurnState::Running)
+        // A turn left behind on a version whose program is being ended still counts: what the
+        // program sends before it has ended would land on a question asked now.
+        let left_ending = |t: &Turn| self.session == Session::Ending && t.left_behind;
+        self.step.busy() || self.turns.last().is_some_and(|t| t.state == TurnState::Running || left_ending(t))
     }
 
     /// The running turn.
@@ -795,6 +801,7 @@ fn asked(shell: &mut Shell, answer: Result<Answer, Refusal>, pending: Pending, r
                     change: None,
                     stopping: false,
                     stopping_since: None,
+                    left_behind: false,
                     cut: false,
                     rows_dropped: 0,
                     laid: None,
@@ -1156,6 +1163,7 @@ fn from_stored(stored: Stored, spans: &BTreeMap<Uuid, Span>) -> Chat {
             change,
             stopping: false,
             stopping_since: None,
+            left_behind: false,
             cut: false,
             rows_dropped: 0,
             laid: None,
@@ -1700,6 +1708,17 @@ pub(crate) fn leaving(shell: &mut Shell) {
     }
 }
 
+/// The person went back from the version a running turn was started on: the turn is asked to
+/// stop, and is refused by its conversation's key from now on, as its agent never read the work it
+/// could now reach. It is not over until its program has stopped or the stop's grace has ended it:
+/// until then no question follows it, so nothing the program still sends lands on a later turn.
+pub(crate) fn version_left(shell: &mut Shell) {
+    leaving(shell);
+    if let Some(turn) = shell.chat_panel.chat.as_mut().and_then(Chat::running) {
+        turn.left_behind = true;
+    }
+}
+
 /// A project closes: its conversation's program ends, and the panel's conversation is let go of.
 pub(crate) fn closing(shell: &mut Shell, chat: Option<(String, Option<String>)>) {
     if let Some((key, origin)) = chat {
@@ -1763,7 +1782,8 @@ pub(crate) fn gate(shell: &Shell, origin: Option<&str>, conversation: Option<&st
     let who = if label.is_empty() { conversation.unwrap_or_default() } else { label };
     // Said apart, so the reason is the one that holds: its program is being ended, or no turn of it
     // runs in the project shown.
-    if ending {
+    let left_behind = shell.chat_panel.chat.as_ref().filter(|c| is_it(c)).and_then(|c| c.turns.last());
+    if ending || left_behind.is_some_and(|t| t.stopping && t.left_behind) {
         return Err(fmt(
             &tr("the conversation {who} is being ended; nothing more runs in its name until its program has ended"),
             &[("who", &format!("{who:?}"))],

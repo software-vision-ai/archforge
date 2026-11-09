@@ -9,8 +9,9 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
-/// A refusal as the window words it while a version is in view, in Japanese.
-const REFUSED_WHILE_VIEWING: &str = "viewing: Archforge はこのプロジェクトの以前のバージョンを表示しているため、このリクエストは実行しませんでした。";
+/// A refusal in the shape the window gives one while a version is in view: its stable word, then
+/// a translated sentence. The sentence is this test's own, not the catalogue's.
+const REFUSED_WHILE_VIEWING: &str = "viewing: 翻訳された文";
 
 /// A fresh home folder for the child, and the settings folder it will look in.
 fn home(name: &str) -> (PathBuf, PathBuf) {

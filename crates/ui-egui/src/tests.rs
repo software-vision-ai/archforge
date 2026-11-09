@@ -1408,9 +1408,20 @@ fn closing_without_asking_stops_on_the_works_refused_write() {
     assert!(host.closed.lock().unwrap().is_empty());
 }
 
-/// The refusal while a version is in view, in English.
-const VIEWING_REFUSED: &str =
-    "viewing: Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.";
+/// What a refusal while a version is in view starts with, whatever language the sentence is in.
+fn viewing_word() -> String {
+    format!("{}: ", crate::control::VIEWING)
+}
+
+/// Asserts that `answer` is the refusal while a version is in view: its word tells it from the
+/// hold's, a read-only token's and every other refusal, whatever the sentence after it says.
+#[track_caller]
+fn refused_for_viewing(answer: Result<serde_json::Value, String>, what: &str) {
+    match answer {
+        Err(refused) => assert!(refused.starts_with(&viewing_word()), "{what}: {refused}"),
+        Ok(value) => panic!("{what} ran: {value}"),
+    }
+}
 
 /// A request as the channel brings it, accepted now.
 fn accepted(h: &Harness<'static, Shell>, method: &str, params: serde_json::Value, read_only: bool) -> crate::control::ControlRequest {
@@ -1449,9 +1460,9 @@ fn every_change_is_refused(h: &mut Harness<'static, Shell>) {
     for (method, params) in changing_requests() {
         for read_only in [false, true] {
             let request = accepted(h, method, params.clone(), read_only);
-            assert_eq!(crate::control::answer_request(h.state_mut(), &request), Err(VIEWING_REFUSED.to_string()), "{method}");
+            refused_for_viewing(crate::control::answer_request(h.state_mut(), &request), method);
         }
-        assert_eq!(crate::control::answer(h.state_mut(), method, &params), Err(VIEWING_REFUSED.to_string()), "{method}");
+        refused_for_viewing(crate::control::answer(h.state_mut(), method, &params), method);
     }
     assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
 }
@@ -1524,7 +1535,7 @@ fn a_version_still_being_read_counts_as_viewing() {
 /// version nor the work when the other has taken its place, whatever it asks.
 #[test]
 fn a_request_accepted_before_a_change_of_session_runs_on_neither() {
-    const CHANGED: &str = "The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.";
+    let from_another_session = |answer: Result<serde_json::Value, String>| answer.is_err_and(|why| why.contains("after this request was sent"));
     let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
     let (mut h, host, earlier) = work_and_earlier();
     let before_viewing = accepted(&h, "engine.execute", add.clone(), false);
@@ -1532,68 +1543,154 @@ fn a_request_accepted_before_a_change_of_session_runs_on_neither() {
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
     for request in [&before_viewing, &reading_before] {
-        assert_eq!(crate::control::answer_request(h.state_mut(), request), Err(CHANGED.to_string()));
+        assert!(from_another_session(crate::control::answer_request(h.state_mut(), request)));
     }
     let while_viewing = accepted(&h, "engine.execute", add, false);
     let revision = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().revision();
     assert!(h.state_mut().back_to_current_work());
     h.run_steps(3);
     let work = revision(&h);
-    assert_eq!(crate::control::answer_request(h.state_mut(), &while_viewing), Err(CHANGED.to_string()));
+    assert!(from_another_session(crate::control::answer_request(h.state_mut(), &while_viewing)));
     assert_eq!(revision(&h), work);
 }
 
-/// The sentence is translated and the word before it is not, so that an agent can rely on it.
+/// The word stays the same in every language and the sentence after it is translated; the
+/// sentence says how to return.
 #[test]
-fn the_refusal_keeps_its_word_in_every_language() {
+fn the_refusal_keeps_its_word_and_translates_its_sentence() {
+    assert_eq!(crate::control::VIEWING, "viewing", "agents rely on the word");
     let (mut h, host, earlier) = work_and_earlier();
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
-    crate::i18n::set_language("de");
-    let refused = crate::control::answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap_err();
-    crate::i18n::set_language("en");
-    assert_eq!(
-        refused,
-        "viewing: Archforge zeigt eine frühere Version dieses Projekts, daher wurde diese Anfrage nicht ausgeführt. Kehren Sie zur aktuellen Arbeit zurück und senden Sie sie erneut."
-    );
+    let mut sentence_in = |language: &str| {
+        crate::i18n::set_language(language);
+        let refused = crate::control::answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap_err();
+        crate::i18n::set_language("en");
+        refused.strip_prefix(&viewing_word()).unwrap_or_else(|| panic!("the word stays as it is: {refused}")).to_string()
+    };
+    let (english, german) = (sentence_in("en"), sentence_in("de"));
+    assert!(english.contains("current work"), "it says how to return: {english}");
+    assert!(!german.is_empty());
+    assert_ne!(german, english, "the sentence is translated");
 }
 
-/// A Chat turn started on a version is refused like any agent, and ends when the person goes back,
-/// so that it cannot reach the work it never read.
+/// A running Chat turn started on a version, in a conversation that may change the model.
+fn chat_turn_on_a_version(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+    let (mut h, rig) = chat_harness(theme, true);
+    let host = std::sync::Arc::new(SavingHost::default());
+    h.state_mut().services.projects = Some(host.clone());
+    let earlier = rows_now(&h);
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    h.state_mut().chat_panel.chat.as_mut().unwrap().allow_changes = true;
+    ask_in_chat(&mut h, "What did this version hold?");
+    (h, rig)
+}
+
+/// The turns of the conversation shown.
+fn chat_turns<'a>(h: &'a Harness<'static, Shell>) -> &'a [crate::chat_panel::Turn] {
+    &h.state().chat_panel.chat.as_ref().unwrap().turns
+}
+
+/// What a turn wrote, in order.
+fn turn_text(turn: &crate::chat_panel::Turn) -> Vec<&str> {
+    turn.items.iter().filter_map(|i| if let crate::chat_panel::Item::Text { text, .. } = i { Some(text.as_str()) } else { None }).collect()
+}
+
+/// Asserts that a request in the conversation's name is refused because it is being ended, and
+/// that the model did not move.
+#[track_caller]
+fn the_conversation_is_refused_by_key(h: &mut Harness<'static, Shell>) {
+    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+    let revision = h.state().session.as_ref().unwrap().revision();
+    let refused = crate::chat_fixture::call(h.state_mut(), "engine.execute", add).unwrap_err();
+    assert!(refused.contains("is being ended"), "{refused}");
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+}
+
+/// Asks a follow-up through the composer, as the person does.
+fn follow_up(h: &mut Harness<'static, Shell>) {
+    h.state_mut().chat_panel.draft = "And now?".into();
+    crate::chat_panel::send(h.state_mut());
+    h.run();
+}
+
+/// A turn on a version is refused like any agent. Going back stops it without ending it: until its
+/// program answers it shows as stopping, nothing runs in its name and no question follows it, so
+/// what the program still sends stays with it. After that a follow-up works and has its own reply.
 #[test]
-fn a_chat_turn_on_a_version_changes_nothing_and_stops_on_going_back() {
+fn a_chat_turn_on_a_version_stays_stopping_until_its_program_answers() {
+    use crate::chat::{ChatEvent, TurnEnd};
+    use crate::chat_panel::TurnState;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, rig) = chat_harness(theme, true);
-        let host = std::sync::Arc::new(SavingHost::default());
-        h.state_mut().services.projects = Some(host.clone());
-        let earlier = rows_now(&h);
-        start_viewing(&mut h, "c1");
-        answer_read(&mut h, &host, Ok(earlier));
-        h.state_mut().chat_panel.chat.as_mut().unwrap().allow_changes = true;
-        ask_in_chat(&mut h, "What did this version hold?");
+        let (mut h, rig) = chat_turn_on_a_version(theme);
         let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
-        assert_eq!(crate::chat_fixture::call(h.state_mut(), "engine.execute", add.clone()), Err(VIEWING_REFUSED.to_string()));
-        assert_eq!(crate::chat_fixture::call(h.state_mut(), "app.save", serde_json::json!({})), Err(VIEWING_REFUSED.to_string()));
+        refused_for_viewing(crate::chat_fixture::call(h.state_mut(), "engine.execute", add), "the turn's change");
+        refused_for_viewing(crate::chat_fixture::call(h.state_mut(), "app.save", serde_json::json!({})), "the turn's save");
         assert!(crate::chat_fixture::call(h.state_mut(), "document.inspect", serde_json::json!({})).unwrap()["viewing"]["version"] == "c1");
         let tool_rows = |h: &Harness<'static, Shell>| {
-            let turns = &h.state().chat_panel.chat.as_ref().unwrap().turns;
-            let rows =
-                turns.last().unwrap().items.iter().filter_map(|i| if let crate::chat_panel::Item::Tool(t) = i { Some(t.status) } else { None });
-            rows.collect::<Vec<_>>()
+            let rows = chat_turns(h).last().unwrap().items.iter();
+            rows.filter_map(|i| if let crate::chat_panel::Item::Tool(t) = i { Some(t.status) } else { None }).collect::<Vec<_>>()
         };
         let refused = crate::chat_store::ToolStatus::Refused;
         assert_eq!(tool_rows(&h)[..2], [refused, refused], "the turn's rows say it was refused");
         assert_eq!(chat_calls(&rig).2, 0);
+
         assert!(h.state_mut().back_to_current_work());
         h.run();
-        assert_eq!(chat_calls(&rig).2, 1, "going back stopped the turn");
-        let late = crate::chat_fixture::call(h.state_mut(), "engine.execute", add).unwrap_err();
-        assert!(late.contains("has no turn running"), "the turn reaches nothing before its program answers: {late}");
-        let key = crate::chat_fixture::key(h.state());
-        assert!(rig.agents.emit(&key, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Stopped)));
+        let turn = chat_turns(&h).last().unwrap();
+        assert_eq!((&turn.state, turn.stopping, chat_calls(&rig).2), (&TurnState::Running, true, 1), "asked to stop and shown as stopping");
+        the_conversation_is_refused_by_key(&mut h);
+        let (turns, sent) = (chat_turns(&h).len(), chat_calls(&rig).1);
+        follow_up(&mut h);
+        assert_eq!((chat_turns(&h).len(), chat_calls(&rig).1), (turns, sent), "no question follows it yet");
+
+        chat_event(&mut h, &rig, ChatEvent::Text { delta: "late from the old turn".into() });
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(TurnEnd::Stopped));
         h.run();
-        assert_eq!(h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap().state, crate::chat_panel::TurnState::Stopped);
+        let old = chat_turns(&h).last().unwrap();
+        assert_eq!(old.state, TurnState::Stopped);
+        assert_eq!(turn_text(old), ["late from the old turn"]);
+
+        follow_up(&mut h);
+        assert_eq!((chat_turns(&h).len(), chat_calls(&rig).1), (turns + 1, sent + 1), "the stop was answered");
+        chat_event(&mut h, &rig, ChatEvent::Text { delta: "its own reply".into() });
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(TurnEnd::Completed));
+        h.run();
+        let all = chat_turns(&h);
+        assert_eq!(turn_text(&all[turns - 1]), ["late from the old turn"]);
+        assert_eq!(turn_text(&all[turns]), ["its own reply"]);
     }
+}
+
+/// A program that never answers the stop is ended when the grace has passed, so the conversation
+/// is not stuck: it stays refused until the program has ended, and then takes a new question.
+#[test]
+fn a_chat_turn_on_a_version_whose_program_never_answers_is_ended() {
+    use crate::chat::ChatEvent;
+    use crate::chat_panel::TurnState;
+    let (mut h, rig) = chat_turn_on_a_version(ThemeKind::Light);
+    rig.agents.hold_ends.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(h.state_mut().back_to_current_work());
+    h.run();
+    rig.now.fetch_add(crate::chat_panel::STOP_GRACE - 1, std::sync::atomic::Ordering::Relaxed);
+    h.run();
+    assert_eq!((chat_calls(&rig).3, &chat_turns(&h).last().unwrap().state), (0, &TurnState::Running), "not before the grace");
+    rig.now.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    h.run();
+    assert_eq!((chat_calls(&rig).3, &chat_turns(&h).last().unwrap().state), (1, &TurnState::Stopped), "its program was ended");
+    the_conversation_is_refused_by_key(&mut h);
+    let (turns, started) = (chat_turns(&h).len(), chat_calls(&rig).0);
+    follow_up(&mut h);
+    assert_eq!(chat_turns(&h).len(), turns, "no question follows it until its program has ended");
+    chat_event(&mut h, &rig, ChatEvent::Text { delta: "late from the old program".into() });
+    chat_event(&mut h, &rig, ChatEvent::Ended { failure: None });
+    h.run();
+    follow_up(&mut h);
+    h.run();
+    let all = chat_turns(&h);
+    assert_eq!((all.len(), chat_calls(&rig).0), (turns + 1, started + 1), "a new question starts a new program");
+    assert!(all[turns].streaming.is_none() && turn_text(&all[turns]).is_empty(), "nothing late is on it");
 }
 
 /// A refused view starts no read: the hold comes before the first step.
