@@ -1190,6 +1190,224 @@ fn nothing_is_written_saved_or_kept_while_a_version_shows() {
     assert_eq!(host.written.lock().unwrap().len(), written, "the work counts as handed over still");
 }
 
+/// Every way of leaving the project acts on the real work, not on the version shown.
+#[test]
+fn every_way_out_returns_to_the_work_first() {
+    type Check = fn(&mut Harness<'static, Shell>, &SavingHost);
+    let asked: Check = |h, _| assert_eq!(h.state().ask, asked_unsaved(COMMERCE));
+    let parked: Check = |h, _| {
+        h.state_mut().activate(0);
+        h.run_steps(3);
+        the_work_shows(h);
+        assert!(dirty(h));
+    };
+    let routes: [(fn(&mut Shell), Check); 6] = [
+        (Shell::go_home, parked),
+        (|s| s.activate(1), parked),
+        (|s| s.close_tab(0), asked),
+        (Shell::request_quit, asked),
+        (|s| s.save_and_close(0), |_, host| assert_eq!(host.saved_by.lock().unwrap().len(), 1)),
+        (|s| s.discard_tab(0, true), |_, host| assert_eq!(*host.discarded.lock().unwrap(), vec![std::path::PathBuf::from(COMMERCE)])),
+    ];
+    for (route, check) in routes {
+        let (mut h, host, earlier) = work_and_earlier();
+        h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
+        h.run_steps(3);
+        h.state_mut().activate(0);
+        h.run_steps(3);
+        start_viewing(&mut h, "c1");
+        answer_read(&mut h, &host, Ok(earlier));
+        assert_eq!(h.state().viewing(), Some("c1"));
+        route(h.state_mut());
+        h.run_steps(3);
+        assert_eq!(h.state().viewing(), None);
+        check(&mut h, &host);
+    }
+}
+
+/// A read that fails, is refused or stops ends the hold, says why and changes nothing.
+#[test]
+fn a_read_that_fails_leaves_the_work_and_says_why() {
+    for refused in [true, false] {
+        let (mut h, host, _) = work_and_earlier();
+        start_viewing(&mut h, "c1");
+        if refused {
+            answer_read(&mut h, &host, Err("Too many versions".into()));
+        } else {
+            host.reads.lock().unwrap().clear();
+            h.run_steps(4);
+        }
+        the_work_shows(&h);
+        let said = h.state().save_error.clone().unwrap();
+        assert_eq!(said.contains("Too many"), refused, "{said}");
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "after" })).unwrap();
+    }
+}
+
+/// Going back during the read drops it, so that its answer cannot replace anything later.
+#[test]
+fn going_back_during_the_read_lets_no_late_answer_land() {
+    let (mut h, host, earlier) = work_and_earlier();
+    start_viewing(&mut h, "c1");
+    let (_, late) = host.reads.lock().unwrap().remove(0);
+    assert!(h.state_mut().back_to_current_work());
+    h.run_steps(3);
+    the_work_shows(&h);
+    assert!(late.send(Ok(earlier.clone())).is_err(), "nothing listens for the first read any more");
+    start_viewing(&mut h, "c2");
+    answer_read(&mut h, &host, Ok(earlier));
+    assert_eq!(h.state().viewing(), Some("c2"));
+}
+
+/// A close or a quit asked for during the read waits for it, then asks about the real work.
+#[test]
+fn closing_or_quitting_during_the_read_asks_about_the_work() {
+    let routes: [fn(&mut Shell); 2] = [|s| s.close_tab(0), Shell::request_quit];
+    for route in routes {
+        let (mut h, host, earlier) = work_and_earlier();
+        start_viewing(&mut h, "c1");
+        route(h.state_mut());
+        h.run_steps(2);
+        assert_eq!(h.state().ask, None, "it waits for the read");
+        answer_read(&mut h, &host, Ok(earlier));
+        h.run_steps(3);
+        the_work_shows(&h);
+        assert_eq!(h.state().ask, asked_unsaved(COMMERCE));
+    }
+}
+
+const OTHER: &str = "/tmp/Other.archforge";
+
+/// A project opened at `/tmp/{name}.archforge`.
+fn project_named(name: &str) -> crate::Opened {
+    crate::Opened { name: name.into(), path: format!("/tmp/{name}.archforge").into(), ..Default::default() }
+}
+
+/// The path of the project shown.
+fn shown_project(h: &Harness<'static, Shell>) -> Option<std::path::PathBuf> {
+    h.state().project.as_ref().map(|p| p.path.clone())
+}
+
+/// Commerce platform with `shop` unsaved, shown, and a project at `OTHER` holding `till` in the
+/// tab before or after it. Gives both tabs and the rows Commerce platform held before `shop`.
+fn beside_another(
+    other_first: bool,
+) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, usize, usize, std::sync::Arc<archforge_mof::rows::Rows>) {
+    let [first, second] = if other_first { ["Other", "Commerce platform"] } else { ["Commerce platform", "Other"] };
+    let (own, other) = if other_first { (1, 0) } else { (0, 1) };
+    let (mut h, host) = saving_harness(Some(project_named(first)), None);
+    h.state_mut().open_project(project_named(second));
+    h.run_steps(3);
+    h.state_mut().activate(other);
+    h.run_steps(3);
+    add_schema(&mut h, "till");
+    h.state_mut().activate(own);
+    h.run_steps(3);
+    let earlier = rows_now(&h);
+    add_schema(&mut h, "shop");
+    (h, host, own, other, earlier)
+}
+
+/// Asserts that the project at `OTHER` shows, with its own work and editable.
+fn the_other_shows(h: &Harness<'static, Shell>) {
+    assert_eq!(shown_project(h).as_deref(), Some(std::path::Path::new(OTHER)));
+    let names = schema_names(h);
+    assert!(names.contains(&"till".to_string()) && !names.contains(&"shop".to_string()), "{names:?}");
+    assert!(!h.state().session.as_ref().unwrap().read_only());
+}
+
+/// Whichever project shows next, the work set aside goes back to the project it came from.
+#[test]
+fn the_work_goes_back_to_its_own_project_on_every_path() {
+    let routes: [(fn(&mut Shell, usize), Option<&str>); 4] = [
+        (|s, other| s.activate(other), Some(OTHER)),
+        (|s, _| s.go_home(), None),
+        (|s, _| s.open_project(project_named("Third")), Some("/tmp/Third.archforge")),
+        (|s, _| s.open_project(project_named("Other")), Some(OTHER)),
+    ];
+    for other_first in [false, true] {
+        for (route, shows) in routes {
+            let (mut h, host, own, other, earlier) = beside_another(other_first);
+            start_viewing(&mut h, "c1");
+            answer_read(&mut h, &host, Ok(earlier));
+            route(h.state_mut(), other);
+            h.run_steps(3);
+            assert_eq!(h.state().viewing(), None);
+            assert_eq!(shown_project(&h).as_deref(), shows.map(std::path::Path::new));
+            if shows == Some(OTHER) {
+                the_other_shows(&h);
+            }
+            assert!(!h.state_mut().back_to_current_work(), "nothing went along to the project shown");
+            h.state_mut().activate(own);
+            h.run_steps(3);
+            assert_eq!(shown_project(&h).as_deref(), Some(std::path::Path::new(COMMERCE)));
+            the_work_shows(&h);
+            assert!(dirty(&h));
+        }
+    }
+}
+
+/// A project that closes takes what was set aside with it: the next one shown cannot get it back.
+#[test]
+fn clearing_the_workspace_leaves_nothing_for_the_next_project() {
+    for other_first in [false, true] {
+        let (mut h, host, own, _, earlier) = beside_another(other_first);
+        start_viewing(&mut h, "c1");
+        answer_read(&mut h, &host, Ok(earlier));
+        h.state_mut().closed(own);
+        h.run_steps(3);
+        assert_eq!(h.state().viewing(), None);
+        assert!(!h.state_mut().back_to_current_work());
+        the_other_shows(&h);
+    }
+}
+
+/// What is asked for during the read acts on the tab it named, not on the project being read.
+#[test]
+fn a_tab_named_during_the_read_is_the_one_acted_on() {
+    for other_first in [false, true] {
+        let (mut h, host, own, other, earlier) = beside_another(other_first);
+        start_viewing(&mut h, "c1");
+        h.state_mut().activate(other);
+        answer_read(&mut h, &host, Ok(earlier));
+        h.run_steps(3);
+        assert_eq!(h.state().viewing(), None);
+        the_other_shows(&h);
+        h.state_mut().activate(own);
+        h.run_steps(3);
+        the_work_shows(&h);
+
+        // A tab not shown goes without touching the version, which keeps its own project.
+        let (mut h, host, _, other, earlier) = beside_another(other_first);
+        start_viewing(&mut h, "c1");
+        h.state_mut().discard_tab(other, true);
+        answer_read(&mut h, &host, Ok(earlier));
+        h.run_steps(3);
+        assert_eq!(*host.discarded.lock().unwrap(), vec![std::path::PathBuf::from(OTHER)]);
+        assert_eq!(h.state().viewing(), Some("c1"));
+        assert!(h.state_mut().back_to_current_work());
+        h.run_steps(3);
+        assert_eq!(shown_project(&h).as_deref(), Some(std::path::Path::new(COMMERCE)));
+        the_work_shows(&h);
+    }
+}
+
+/// Closing without asking answers for the work: its refused write stops it, not the version's.
+#[test]
+fn closing_without_asking_stops_on_the_works_refused_write() {
+    let (mut h, host, earlier) = work_and_earlier();
+    let shell = h.state_mut();
+    shell.refused = Some(shell.session.as_ref().unwrap().revision());
+    shell.save_error = Some("could not write".into());
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    h.state_mut().close_tab_now(0);
+    h.run_steps(2);
+    assert_eq!(h.state().viewing(), None);
+    assert_eq!(h.state().tabs[0].close_error.as_deref(), Some("could not write"));
+    assert!(host.closed.lock().unwrap().is_empty());
+}
+
 /// A refused view starts no read: the hold comes before the first step.
 #[test]
 fn a_version_is_not_read_over_another_hold_or_without_a_project() {

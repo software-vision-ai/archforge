@@ -1,8 +1,9 @@
 //! Viewing an earlier version, without a screen (`docs/design/versioning.md`, sections 3 and 6): the
 //! version is read and built under the hold, the real session and its view are set aside untouched,
 //! and the version shows read-only in their place until the person goes back. While a version shows
-//! the model is not handed to the host and Save is refused. Leaving the project while one shows is
-//! not handled yet (AR-316), see [`Shell::view_version`].
+//! the model is not handed to the host and Save is refused. Showing another tab or Home, opening a
+//! project, closing the project shown and quitting all return to current work first, so the work
+//! set aside goes back to its own project.
 
 use archforge_notations::Session;
 
@@ -38,9 +39,6 @@ impl Shell {
     /// Starts viewing the version `commit`: the project is held while it is read and built, and it
     /// shows once it has been. Refused while a version shows or another hold runs, and without a
     /// model or a host. A read that fails ends the hold and says why, with the real work as it was.
-    ///
-    /// Nothing may call this until AR-316 lands: the ways of leaving a project do not return to
-    /// current work yet, so parking or closing while a version shows would lose the real session.
     pub fn view_version(&mut self, commit: &str) -> Result<(), HoldRefused> {
         if self.viewing.is_some() {
             return Err(HoldRefused::Another);
@@ -78,9 +76,15 @@ impl Shell {
         self.session_replaced();
     }
 
-    /// Back to current work: what was set aside returns as it was. False when no version shows,
-    /// which includes one still being read (AR-316 handles going back from those).
+    /// Back to current work: what was set aside returns as it was. A version still being read is
+    /// dropped instead, and with its channel its answer, which can then replace nothing. False when
+    /// neither applies.
     pub fn back_to_current_work(&mut self) -> bool {
+        if self.reading_a_version() {
+            self.replacing = None;
+            self.end_hold();
+            return true;
+        }
         let Some(v) = self.viewing.take() else { return false };
         let v = *v;
         self.session = Some(v.session);
@@ -93,5 +97,12 @@ impl Shell {
         self.panels = v.panels;
         self.session_replaced();
         true
+    }
+
+    /// Leaves a version that shows, before anything acts on the real project.
+    pub(crate) fn leave_version(&mut self) {
+        if self.viewing.is_some() {
+            self.back_to_current_work();
+        }
     }
 }
