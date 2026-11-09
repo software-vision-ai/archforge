@@ -344,6 +344,8 @@ struct SavingHost {
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
+    /// The branch each opening was asked to open on.
+    opened_on: std::sync::Mutex<Vec<Option<String>>>,
     closed: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each closing's answer, sent by the test.
     closings: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<(), String>>>>,
@@ -435,6 +437,12 @@ impl crate::ProjectHost for SavingHost {
         let (tx, rx) = std::sync::mpsc::channel();
         self.opens.lock().unwrap().push((path.to_path_buf(), tx));
         rx
+    }
+
+    /// Records the stored branch it was asked for, then opens as `open` does.
+    fn open_on(&self, path: &std::path::Path, branch: Option<&str>) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
+        self.opened_on.lock().unwrap().push(branch.map(str::to_string));
+        self.open(path)
     }
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
@@ -2541,7 +2549,7 @@ fn open_project_asks_the_picker_and_the_host_and_shows_the_model_it_read() {
     h.run_steps(2);
     let (path, tx) = host.opens.lock().unwrap().pop().expect("the host was asked to open");
     assert_eq!(path, std::path::PathBuf::from("/Users/robin/Documents/Archforge/Shop.archforge"));
-    let opened = crate::Opened { name: "Shop".into(), path, model: Some(std::sync::Arc::new(rows)), unsaved: true };
+    let opened = crate::Opened { name: "Shop".into(), path, model: Some(std::sync::Arc::new(rows)), unsaved: true, notice: None };
     tx.send(Ok(opened)).unwrap();
     h.run_steps(4);
     let shell = h.state();
@@ -2768,7 +2776,7 @@ fn the_recent_list_keeps_each_project_once_newest_first_and_drops_what_it_cannot
     assert_eq!(state.recent.iter().filter(|r| r.name == "P15").count(), 1, "once");
     // A preferences file may hold anything: what the window does not take is dropped.
     let at = |file: &str| std::env::temp_dir().join(file);
-    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1, view: None };
+    let entry = |name: &str, path: std::path::PathBuf| crate::state::RecentProject { name: name.into(), path, opened: 1, view: None, branch: None };
     let long = "x".repeat(230);
     state.recent = vec![
         entry("Good", at("Good.archforge")),
@@ -11297,6 +11305,49 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
     }
 }
 
+/// The branch a project was left on goes with its opening, stays through being opened again, and
+/// reads as none from a file from before branches or when it is planted and too long.
+#[test]
+fn the_branch_a_project_was_left_on_is_kept_with_it() {
+    let (mut h, host) = saving_harness(None, None);
+    let path = std::path::PathBuf::from("/tmp/Commerce platform.archforge");
+    let state = &mut h.state_mut().state;
+    state.remember("Commerce platform", &path, 1);
+    state.keep_branch(&path, Some("elsewhere".into()));
+    state.remember("Commerce platform", &path, 2);
+    assert_eq!(state.branch_of(&path), Some("elsewhere"), "opened again, it keeps it");
+    h.state_mut().open_path(&path);
+    assert_eq!(host.opened_on.lock().unwrap().as_slice(), [Some("elsewhere".to_string())]);
+    let old: crate::state::RecentProject = serde_json::from_str(r#"{ "name": "Old", "path": "/tmp/Old.archforge", "opened": 1 }"#).unwrap();
+    assert_eq!(old.branch, None, "from before branches");
+    let mut planted = crate::UiState::default();
+    planted.remember("Planted", std::path::Path::new("/tmp/Planted.archforge"), 1);
+    planted.keep_branch(std::path::Path::new("/tmp/Planted.archforge"), Some("x".repeat(2048)));
+    planted.sanitize();
+    assert_eq!(planted.branch_of(std::path::Path::new("/tmp/Planted.archforge")), None);
+}
+
+/// A project that could not open on its branch says so in the status bar, in both appearances, and
+/// opens on `main` from then on.
+#[test]
+fn the_status_bar_says_why_a_project_is_not_on_its_branch() {
+    use crate::BranchNotice::{CannotOpen, Gone};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for notice in [Gone { name: "topic".into() }, CannotOpen { name: "topic".into(), why: "it holds triggers".into() }] {
+            let (mut h, _host) = saving_harness(Some(commerce()), None);
+            h.state_mut().state.theme = theme;
+            let path = commerce().path;
+            h.state_mut().state.keep_branch(&path, Some("topic".into()));
+            h.state_mut().tabs.clear();
+            h.state_mut().active = None;
+            h.state_mut().open_project(crate::Opened { notice: Some(notice.clone()), ..commerce() });
+            h.run_steps(3);
+            assert!(painted_has(&h, &notice.words()), "{theme:?}: {:?}", painted(&h));
+            assert_eq!(h.state().state.branch_of(&path), None, "{theme:?}: it is on main now");
+        }
+    }
+}
+
 /// A turn's change that cleared the whole history, merged into the turn's step, is still the
 /// turn's: counted with the change before it, with nothing left to undo.
 #[test]
@@ -11872,7 +11923,13 @@ fn a_project_opened_again_resumes_its_tabs_the_diagram_it_showed_and_its_view() 
     let reopen = |state: crate::state::UiState| {
         let mut shell = Shell::new(Services { ids: Some(test_ids()), ..Services::default() });
         shell.state = state;
-        shell.open_project(crate::Opened { name: "Commerce platform".into(), path: path.clone(), model: Some(rows.clone()), unsaved: false });
+        shell.open_project(crate::Opened {
+            name: "Commerce platform".into(),
+            path: path.clone(),
+            model: Some(rows.clone()),
+            unsaved: false,
+            notice: None,
+        });
         harness_over(shell)
     };
     let back = reopen(h.state().state.clone());

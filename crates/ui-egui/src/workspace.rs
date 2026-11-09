@@ -516,6 +516,8 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
         Some(_) => (p.green, tr("Saved")),
     };
+    // Beside the status, not in its place: it stays true however the status changes.
+    let detail = detail.or_else(|| shell.project.as_ref().and_then(|o| o.notice.as_ref()).map(crate::BranchNotice::words));
     paint.circle_filled(pos2(r.left() + 24.0, r.center().y), 3.0, dot);
     let y = r.center().y - 8.0;
     // The location first, right-aligned, then Chat's agent access beside it; the status and its

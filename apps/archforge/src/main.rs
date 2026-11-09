@@ -611,6 +611,7 @@ mod tests {
                     path: std::env::temp_dir().join("Commerce platform.archforge"),
                     opened: 1_761_670_800,
                     view: None,
+                    branch: Some("topic".into()),
                 }],
                 ..archforge_ui_egui::UiState::default()
             },
@@ -625,6 +626,7 @@ mod tests {
             path: "../elsewhere".into(),
             opened: 1,
             view: None,
+            branch: None,
         });
         prefs::apply(&planted, &mut shell);
         assert_eq!(prefs::capture(&shell), stored);

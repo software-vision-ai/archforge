@@ -32,7 +32,9 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBranch};
-pub use branches::{BranchCreated, BranchCreationError, Branches, CreationStep, DeleteBranchError, ListedBranch, MAX_BRANCHES, RenameBranchError};
+pub use branches::{
+    BranchCreated, BranchCreationError, Branches, CreationStep, DeleteBranchError, ListedBranch, MAX_BRANCHES, RenameBranchError, StoredBranch,
+};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,

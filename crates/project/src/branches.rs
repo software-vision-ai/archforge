@@ -189,6 +189,27 @@ impl fmt::Display for DeleteBranchError {
 
 impl std::error::Error for DeleteBranchError {}
 
+/// Why a project did not open on the branch it was left on; it is on `main`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoredBranch {
+    /// The project no longer has it.
+    Gone,
+    /// Its name is not safe to use, or it did not pass what an opening checks.
+    CannotOpen(String),
+}
+
+impl fmt::Display for StoredBranch {
+    /// The reason in English, for logs; the status bar words its own.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StoredBranch::Gone => f.write_str("the branch is no longer in this project"),
+            StoredBranch::CannotOpen(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for StoredBranch {}
+
 /// A step that did not go on: `clean` is false when a test stops as a crash would.
 struct Halted {
     step: CreationStep,
@@ -609,10 +630,35 @@ impl Project {
         }
     }
 
+    /// Puts a project just opened on the branch it was left on, `stored`, or on `main` when it
+    /// cannot be, saying why. It goes through what an opening checks. A name that differs only in
+    /// case is that branch, as Dolt treats such names as one, and is taken as Dolt has it.
+    pub fn open_on_stored(&self, stored: &str, schema: &ModelSchema) -> Result<(), StoredBranch> {
+        let found = self.stored_branch(stored, schema);
+        self.set_current_branch(found.clone().unwrap_or_default());
+        found.map(|_| ())
+    }
+
+    /// The branch `stored` names, once it has passed what an opening checks.
+    fn stored_branch(&self, stored: &str, schema: &ModelSchema) -> Result<SafeBranch, StoredBranch> {
+        let cannot = |e: &dyn fmt::Display| StoredBranch::CannotOpen(e.to_string());
+        let asked = SafeBranch::found(stored).map_err(|e| cannot(&e))?;
+        let mut c = database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| cannot(&e))?;
+        let row: Option<mysql::Row> = c
+            .exec_first(format!("SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}) FROM dolt_branches WHERE LOWER(name) = LOWER(?)"), (asked.stored(),))
+            .map_err(|e| cannot(&e))?;
+        let Some(row) = row else { return Err(StoredBranch::Gone) };
+        let name = row.get_opt::<String, usize>(0).and_then(Result::ok).unwrap_or_default();
+        let branch = SafeBranch::found(&name).map_err(|e| cannot(&e))?;
+        self.check_branch(&branch, schema).map_err(|e| cannot(&e))?;
+        Ok(branch)
+    }
+
     /// Cleans up after a branch creation that stopped, and logs what it did. For an opening, before
     /// anything lists or reads branches; see the `creation` module for why this is safe.
     pub fn recover_creation(&self) -> CreationRecovery {
-        let mut store = OpenBranches(self.model_connection().map_err(|e| e.to_string()));
+        // Over `main`: the branch it is about to open on may be the one that has gone.
+        let mut store = OpenBranches(self.connection_to(&SafeBranch::default()).map_err(|e| e.to_string()));
         let outcome = creation::recover(self.path(), &self.current_branch(), &mut store);
         if outcome != CreationRecovery::NoRecord {
             log::warn!("the unfinished branch creation of {}: {outcome:?}", self.path().display());

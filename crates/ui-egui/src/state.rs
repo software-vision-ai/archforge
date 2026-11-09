@@ -125,6 +125,9 @@ pub struct RecentProject {
     pub path: std::path::PathBuf,
     pub opened: u64,
     pub view: Option<SavedView>,
+    /// The branch it was left on, as Dolt stores the name; none for `main`, or a file from before
+    /// branches, which opens `main` all the same.
+    pub branch: Option<String>,
 }
 
 /// The working view a project was left in: its diagram and skill tabs in order, the one
@@ -141,6 +144,9 @@ pub struct SavedView {
     pub label: String,
 }
 
+/// The most bytes of a stored branch name kept: more than any branch name can have, so that a
+/// planted one goes no further than here.
+const MAX_BRANCH_BYTES: usize = 1024;
 /// The most tabs a saved view keeps.
 pub const MAX_VIEW_TABS: usize = 64;
 /// The farthest a saved view's pan reaches, in logical pixels.
@@ -191,9 +197,9 @@ impl UiState {
             return;
         }
         // Opened again, it keeps the view it was left in.
-        let view = self.recent.iter().find(|r| r.path == path).and_then(|r| r.view.clone());
+        let (view, branch) = self.recent.iter().find(|r| r.path == path).map(|r| (r.view.clone(), r.branch.clone())).unwrap_or_default();
         self.recent.retain(|r| r.path != path);
-        self.recent.insert(0, RecentProject { name: name.to_string(), path: path.to_path_buf(), opened: now, view });
+        self.recent.insert(0, RecentProject { name: name.to_string(), path: path.to_path_buf(), opened: now, view, branch });
         self.recent.truncate(MAX_RECENT);
     }
 
@@ -210,6 +216,18 @@ impl UiState {
     /// The view the recent project at `path` was left in, when one was kept.
     pub fn view_of(&self, path: &std::path::Path) -> Option<&SavedView> {
         self.recent.iter().find(|r| r.path == path).and_then(|r| r.view.as_ref())
+    }
+
+    /// Keeps `branch` as the one the recent project at `path` was left on, none being `main`.
+    pub fn keep_branch(&mut self, path: &std::path::Path, branch: Option<String>) {
+        if let Some(r) = self.recent.iter_mut().find(|r| r.path == path) {
+            r.branch = branch;
+        }
+    }
+
+    /// The branch the recent project at `path` was left on, when one was kept.
+    pub fn branch_of(&self, path: &std::path::Path) -> Option<&str> {
+        self.recent.iter().find(|r| r.path == path).and_then(|r| r.branch.as_deref())
     }
 
     /// Takes the project at `path` off the recent list; the project itself stays where it is.
@@ -268,6 +286,7 @@ impl UiState {
             if let Some(v) = r.view.as_mut() {
                 v.label = crate::settings::clean(&v.label);
             }
+            r.branch.take_if(|b| b.len() > MAX_BRANCH_BYTES);
         }
     }
 
