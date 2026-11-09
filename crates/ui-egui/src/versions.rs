@@ -3,14 +3,16 @@
 //! writer a page at a time. A read keeps what was shown until its answer comes, and one for
 //! another project or session is dropped by the next. Nothing here opens a version yet.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use egui::{Rect, Vec2, pos2, vec2};
 
+use crate::chat_words::{Clock, date_and_time, seconds_of};
 use crate::explorer::{TreeScroll, scroll_tree};
-use crate::i18n::tr;
-use crate::settings::{Look, button, control};
+use crate::i18n::{fmt, tr, trn};
+use crate::settings::{Look, button, control, focus_ring};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, VersionEntry, VersionsPage};
 
@@ -36,6 +38,12 @@ pub struct State {
     failed: Option<String>,
     /// A save made a version since the read.
     pub(crate) stale: bool,
+    /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
+    pub(crate) working: usize,
+    /// Why a version cannot be shown, by its hash; AR-266 fills it in.
+    pub(crate) unavailable: BTreeMap<String, String>,
+    working_folded: bool,
+    history_folded: bool,
     scroll: TreeScroll,
 }
 
@@ -48,6 +56,8 @@ fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     if about != v.about {
         (v.about, v.page, v.failed, v.reading, v.asked) = (about, None, None, None, false);
         v.scroll = TreeScroll::default();
+        // Both were about what the panel has just left.
+        (v.working, v.unavailable) = (0, BTreeMap::new());
     }
     let answer = match v.reading.as_ref().map(Receiver::try_recv) {
         Some(Ok(answer)) => Some(answer),
@@ -75,30 +85,39 @@ fn read(shell: &mut Shell) {
     v.reading = Some(host.versions(&path, None, PAGE));
 }
 
-/// What Working changes says, when what is known allows it. Until AR-269 counts the changes,
-/// "No changes" is said only of a project with no unsaved work.
+/// What Working changes says, when what is known allows it. "No changes" is never said beside a
+/// count, and until AR-269 fills that in, only of a project with no unsaved work.
 fn working_words(shell: &Shell) -> Option<String> {
     let page = shell.versions.page.as_ref()?;
     let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !crate::panels::description_pending(&shell.panels);
     if page.versions.is_empty() {
         Some(tr("No versions yet. Save version records your first one."))
-    } else if untouched {
+    } else if untouched && shell.versions.working == 0 {
         Some(tr("No changes since the last version."))
     } else {
         None
     }
 }
 
-/// Draws a section's header at `y`, from its id, label and count. AR-338 makes sections fold.
-fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, (id, label, count): (&str, &str, Option<usize>)) {
-    let row = Rect::from_min_max(pos2(r.left(), y), pos2(r.right(), y + HEADER));
-    let _ = control(shell, ui, &format!("workspace.versions.{id}"), "heading", row, false).accessible_name(label);
+/// Draws a section's header at `y`, from its id, label, whether it is open (none when it cannot
+/// fold, which draws no chevron) and count, and gives whether it was toggled.
+fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, section: (&str, &str, Option<bool>, Option<usize>)) -> bool {
+    let (id, label, open, count) = section;
+    let row = Rect::from_min_max(pos2(r.left() + 12.0, y + 6.0), pos2(r.right() - 12.0, y + HEADER - 6.0));
+    let resp = control(shell, ui, &format!("workspace.versions.{id}"), "button", row, open.is_some());
+    let _ = resp.clone().accessible_name(label);
     let paint = ui.painter();
-    ux::text(paint, pos2(r.left() + 20.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - 60.0).max(0.0)));
+    focus_ring(paint, p, row, 6.0, &resp);
+    if let Some(open) = open {
+        let chevron = Rect::from_center_size(pos2(r.left() + 24.0, row.center().y), Vec2::splat(12.0));
+        ux::icon_in(paint, chevron, if open { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT }, p.text_secondary);
+    }
+    ux::text(paint, pos2(r.left() + 38.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - 80.0).max(0.0)));
     if let Some(n) = count {
         let g = ux::galley(paint, &n.to_string(), types::CAPTION, p.text_muted, None);
         paint.galley(pos2(r.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_muted);
     }
+    resp.clicked() && open.is_some()
 }
 
 /// A line across the column at `y`.
@@ -113,7 +132,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let mut y = r.top() + 56.0;
     rule(ui, p, r, y);
     // A header only, while the project has only `main`; AR-292 adds its list and +.
-    header(shell, ui, p, r, y, ("branches", &tr("Branches"), None));
+    header(shell, ui, p, r, y, ("branches", &tr("Branches"), None, None));
     y += HEADER;
     rule(ui, p, r, y);
     y = working(shell, ui, p, r, y);
@@ -124,9 +143,12 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 /// Working changes from `y`: its header and what can be said so far. Gives where the next
 /// section starts.
 fn working(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
-    header(shell, ui, p, r, y, ("working", &tr("Working changes"), None));
+    let open = !shell.versions.working_folded;
+    if header(shell, ui, p, r, y, ("working", &tr("Working changes"), Some(open), None)) {
+        shell.versions.working_folded = open;
+    }
     let next = y + HEADER;
-    let Some(words) = working_words(shell) else { return next };
+    let Some(words) = working_words(shell).filter(|_| open) else { return next };
     let g = ux::galley_rows(ui.painter(), &words, types::SMALL, p.text_secondary, Some((r.width() - 40.0).max(1.0)), 3);
     let h = g.size().y;
     ui.painter().galley(pos2(r.left() + 20.0, next), g, p.text_secondary);
@@ -136,7 +158,13 @@ fn working(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) -> f3
 /// History from `y`: its header, the banner of a failed read, and the bars, the words or the rows.
 fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     let count = shell.versions.page.as_ref().map(|page| page.versions.len()).filter(|n| *n > 0);
-    header(shell, ui, p, r, y, ("history", &tr("History"), count));
+    let open = !shell.versions.history_folded;
+    if header(shell, ui, p, r, y, ("history", &tr("History"), Some(open), count)) {
+        shell.versions.history_folded = open;
+    }
+    if !open {
+        return;
+    }
     let mut top = y + HEADER;
     if let Some(why) = shell.versions.failed.clone() {
         top = banner(shell, ui, p, r, top, &why);
@@ -189,21 +217,91 @@ fn skeleton(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
     }
 }
 
-/// The versions, newest first, scrolling under the headers. A row is its description, or its date
-/// when it has none, until AR-338 gives it its two lines.
+/// The versions, newest first, scrolling under the headers.
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, rows: &[VersionEntry]) {
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom()));
     let offset = scroll_tree(ui, p, tree, top, rows.len(), PITCH, 8.0, true, None, &mut shell.versions.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
+    let clock = crate::chat_panel::clock(shell);
     for (i, v) in rows.iter().enumerate() {
         let y = top + i as f32 * PITCH - offset;
-        if y + ROW < tree.top() || y > tree.bottom() {
-            continue;
+        if y + ROW >= tree.top() && y <= tree.bottom() {
+            row(shell, &clip, p, (r, y), v, clock);
         }
-        let area = Rect::from_min_max(pos2(r.left() + 8.0, y), pos2(r.right() - 8.0, y + ROW));
-        let title = v.description.as_deref().filter(|d| !d.trim().is_empty()).unwrap_or(&v.date);
-        let _ = control(shell, &clip, &format!("workspace.versions.row.{}", v.hash), "row", area, false).accessible_name(title);
-        ux::text(clip.painter(), pos2(area.left() + 10.0, y + 14.0), title, types::UI, p.text, Some((area.width() - 20.0).max(0.0)));
     }
+}
+
+/// When `date`, as the project stores it, was, in the language shown; never the stored text.
+fn when(date: &str, clock: Clock) -> String {
+    seconds_of(date).map_or_else(|| tr("Date not known"), |secs| date_and_time(secs, clock))
+}
+
+/// A version's two lines: its description and when and by whom, or without a description its date
+/// and who asked when an agent did, else "No description".
+fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
+    let date = when(&v.date, clock);
+    let who = if v.by_agent { Some(tr("Saved by an agent")) } else { v.author.clone().filter(|a| !a.is_empty()) };
+    match v.description.as_deref().filter(|d| !d.trim().is_empty()) {
+        Some(d) => (d.to_string(), who.map_or(date.clone(), |w| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &w)]))),
+        None if v.by_agent => (date, tr("Saved by an agent")),
+        None => (date, tr("No description")),
+    }
+}
+
+/// One version at `y`: its two lines, or for one that cannot be shown that it cannot, with its
+/// reason behind "Why?", a warning at the right, and the reason in what a screen reader says.
+fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &VersionEntry, clock: Clock) {
+    let area = Rect::from_min_max(pos2(r.left() + 8.0, y), pos2(r.right() - 8.0, y + ROW));
+    let why = shell.versions.unavailable.get(&v.hash).cloned();
+    let (title, meta) = match &why {
+        Some(_) => {
+            (tr("This version can't be shown"), fmt(&tr("{when} · {who}"), &[("when", &when(&v.date, clock)), ("who", "")]).trim_end().to_string())
+        }
+        None => lines(v, clock),
+    };
+    let room = (area.width() - 20.0 - if why.is_some() { 26.0 } else { 0.0 }).max(0.0);
+    let name = why.as_ref().map_or_else(|| format!("{title}, {meta}"), |why| format!("{title}, {meta} {why}"));
+    let id = format!("workspace.versions.row.{}", v.hash);
+    let _ = control(shell, ui, &id, "row", area, false).accessible_name(name);
+    let paint = ui.painter();
+    ux::text(paint, pos2(area.left() + 10.0, y + 7.0), &title, types::UI, if why.is_some() { p.text_muted } else { p.text }, Some(room));
+    let g = ux::galley(paint, &meta, types::CAPTION, p.text_muted, Some(room));
+    let after = pos2(area.left() + 10.0 + g.size().x, y + 25.0);
+    paint.galley(pos2(area.left() + 10.0, y + 25.0), g, p.text_muted);
+    let Some(why) = why else { return };
+    ux::icon_in(paint, Rect::from_center_size(pos2(area.right() - 18.0, area.center().y), Vec2::splat(14.0)), &icons::WARNING, p.text_secondary);
+    let word = tr("Why?");
+    let g = ux::galley(paint, &word, types::CAPTION, p.text_secondary, None);
+    let hit = Rect::from_min_size(after + vec2(4.0, 0.0), g.size());
+    let resp = control(shell, ui, &format!("{id}.why"), "button", hit, true).on_hover_text(&why);
+    let _ = resp.clone().accessible_name(format!("{word} {why}"));
+    if resp.has_focus() {
+        resp.show_tooltip_text(&why);
+    }
+    focus_ring(ui.painter(), p, hit, 3.0, &resp);
+    ui.painter().galley(hit.min, g, p.text_secondary);
+}
+
+/// What the rail's entry says: its name, and how many changes there are when there are any.
+pub(crate) fn rail_words(working: usize) -> String {
+    match working {
+        0 => tr("Versions"),
+        n => trn("Versions · {n} change", "Versions · {n} changes", n as u64),
+    }
+}
+
+/// Draws the count on the rail's button `button`, when there is one.
+pub(crate) fn rail_badge(shell: &mut Shell, ui: &egui::Ui, p: &Palette, button: Rect) {
+    let n = shell.versions.working;
+    if n == 0 {
+        return;
+    }
+    let text = if n > 99 { "99+".to_string() } else { n.to_string() };
+    let paint = ui.painter();
+    let g = ux::galley(paint, &text, types::CAPTION_STRONG, p.on_accent, None);
+    let badge = Rect::from_center_size(pos2(button.right() - 8.0, button.top() + 6.0), vec2((g.size().x + 8.0).max(16.0), 16.0));
+    paint.rect_filled(badge, 8.0, p.accent_fill);
+    paint.galley(badge.center() - g.size() / 2.0, g, p.on_accent);
+    crate::widgets::record_visible(ui, &mut shell.registry, "workspace.explorers.source-control.badge", "badge", badge);
 }

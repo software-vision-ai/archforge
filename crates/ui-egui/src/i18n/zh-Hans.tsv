@@ -475,6 +475,14 @@ str		No changes since the last version.	自上一版本以来没有更改。
 str		No versions yet.	还没有版本。
 str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
 str		Loading	正在加载
+str		No description	无描述
+str		Saved by an agent	由代理保存
+str		This version can't be shown	无法显示此版本
+str		Why?	原因
+str		Date not known	日期未知
+plural		Versions · {n} change	版本 · {n} 处更改
+str		{date} {time}	{date} {time}
+str		{when} · {who}	{when} · {who}
 str		The versions couldn't be read.	无法读取版本。
 str		Chat	聊天
 str		Appearance	外观

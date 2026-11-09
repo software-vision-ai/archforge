@@ -80,6 +80,11 @@ pub fn when(then: u64, clock: Clock) -> String {
     if that.saturating_add(1) == today {
         return tr("Yesterday");
     }
+    date_on(that, today)
+}
+
+/// The day `that` as a date, in the language shown, with the year when it is not `today`'s.
+fn date_on(that: i64, today: i64) -> String {
     let (y, m, d) = civil(that);
     let (this_year, _, _) = civil(today);
     if y == this_year {
@@ -87,6 +92,29 @@ pub fn when(then: u64, clock: Clock) -> String {
     } else {
         fmt(&tr("{day} {month} {year}"), &[("day", &d.to_string()), ("month", &month(m)), ("year", &y.to_string())])
     }
+}
+
+/// When a version was saved, as History says it: "8 Nov 15:30", local, with the year when it is
+/// not this one.
+pub fn date_and_time(then: u64, clock: Clock) -> String {
+    let day = |s: u64| local(s, clock.offset).div_euclid(86_400);
+    fmt(&tr("{date} {time}"), &[("date", &date_on(day(then), day(clock.now))), ("time", &clock_time(then, clock.offset))])
+}
+
+/// The seconds since 1970 of a time as [`rfc3339`] writes it, none for anything else.
+pub fn seconds_of(date: &str) -> Option<u64> {
+    let digits = |from: usize, to: usize| date.get(from..to)?.parse::<i64>().ok();
+    let (y, m, d) = (digits(0, 4)?, digits(5, 7)?, digits(8, 10)?);
+    let (hour, minute, second) = (digits(11, 13)?, digits(14, 16)?, digits(17, 19)?);
+    if date.len() != 20 || !(1..=12).contains(&m) || !(1..=31).contains(&d) || hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let of_era = y.rem_euclid(400);
+    let of_year = (153 * ((m + 9) % 12) + 2) / 5 + d - 1;
+    let days = era * 146_097 + of_era * 365 + of_era / 4 - of_era / 100 + of_year - 719_468;
+    u64::try_from(days * 86_400 + hour * 3_600 + minute * 60 + second).ok()
 }
 
 /// A time as the project stores times: RFC 3339 in UTC to the second.
@@ -315,6 +343,12 @@ mod tests {
         let now = 1_794_060_120;
         let clock = Clock { now, offset: Some(3_600) };
         assert_eq!(rfc3339(now), "2026-11-07T14:02:00Z");
+        assert_eq!(seconds_of("2026-11-07T14:02:00Z"), Some(now), "read back as it was written");
+        for not_a_time in
+            ["2026-13-07T14:02:00Z", "2026-00-07T14:02:00Z", "2026-11-32T14:02:00Z", "2026-11-07T24:02:00Z", "2026-11-07 14:02", "yesterday"]
+        {
+            assert_eq!(seconds_of(not_a_time), None, "{not_a_time}");
+        }
         assert_eq!(civil(0), (1970, 1, 1));
         assert_eq!(when(now, clock), "Today 15:02", "the local offset moves the clock");
         assert_eq!(when(now - 86_400, clock), "Yesterday");

@@ -342,8 +342,15 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             paint.rect_filled(Rect::from_min_size(pos2(r.left(), button.top() + 8.0), vec2(2.0, 20.0)), 1.0, p.accent);
         }
         ux::icon_in(paint, Rect::from_center_size(button.center(), Vec2::splat(18.0)), icon, if on { p.accent } else { p.text_secondary });
-        if control(shell, ui, &format!("workspace.explorers.{id}"), "tab", button, true).on_hover_text(tr(title)).clicked() {
+        // Versions says how many working changes there are, in its tooltip and its badge.
+        let words = if *which == Explorer::SourceControl { crate::versions::rail_words(shell.versions.working) } else { tr(title) };
+        let resp = control(shell, ui, &format!("workspace.explorers.{id}"), "tab", button, true).on_hover_text(&words);
+        let _ = resp.clone().accessible_name(&words);
+        if resp.clicked() {
             shell.state.rail_explorer(*which);
+        }
+        if *which == Explorer::SourceControl {
+            crate::versions::rail_badge(shell, ui, p, button);
         }
     }
 }
