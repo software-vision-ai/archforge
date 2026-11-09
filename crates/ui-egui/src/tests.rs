@@ -1943,6 +1943,85 @@ fn a_finished_switch_installs_the_branch_and_undo_starts_fresh() {
     }
 }
 
+/// What the next opening of the project at `path` asks for, once its tab has closed.
+fn reopens_on(h: &mut Harness<'static, Shell>, host: &SavingHost, path: &std::path::Path) -> Option<String> {
+    h.state_mut().close_tab_now(0);
+    h.run_steps(2);
+    host.closings.lock().unwrap().pop().expect("the closing").send(Ok(())).unwrap();
+    h.run_steps(2);
+    h.state_mut().open_path(path);
+    host.opened_on.lock().unwrap().pop().expect("opened")
+}
+
+/// A finished switch is what the project reopens on, a switch to `main` being no name at all, and
+/// the status bar's reason about the branch left goes; not before the move has finished.
+#[test]
+fn a_finished_switch_is_remembered_and_its_notice_goes() {
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        let path = h.state().project.as_ref().unwrap().path.clone();
+        h.state_mut().project.as_mut().unwrap().notice = Some(crate::BranchNotice::Gone { name: "old".into() });
+        let ends = switch_asked(&mut h, &host);
+        switch_checked(&mut h, &ends, earlier.clone());
+        assert_eq!(h.state().state.branch_of(&path), None, "not before the move");
+        assert!(h.state().project.as_ref().unwrap().notice.is_some());
+        switch_moved(&mut h, &ends);
+        assert_eq!(h.state().state.branch_of(&path), Some("elsewhere"));
+        assert_eq!(h.state().project.as_ref().unwrap().notice, None);
+        h.state_mut().state.keep_branch(&path, Some("MAIN".to_string()));
+        assert_eq!(h.state().state.branch_of(&path), None, "main is no name");
+        h.state_mut().state.keep_branch(&path, Some("elsewhere".to_string()));
+        assert_eq!(reopens_on(&mut h, &host, &path).as_deref(), Some("elsewhere"));
+    });
+}
+
+/// A switch that failed, stayed or cannot be told leaves what is stored and the reason shown.
+#[test]
+fn a_switch_that_did_not_arrive_is_not_remembered() {
+    type Then = fn(&SwitchEnds);
+    let ways: [Then; 3] = [
+        |e| e.moved.0.send(Err(crate::replace::JobFailure::Failed("no".to_string()))).unwrap(),
+        |e| {
+            e.moved.0.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
+            e.moved.1.send(Ok(false)).unwrap();
+        },
+        |e| {
+            e.moved.0.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
+            e.moved.1.send(Err("no".to_string())).unwrap();
+        },
+    ];
+    for then in ways {
+        in_both(work_and_earlier, |mut h, host, earlier| {
+            let path = h.state().project.as_ref().unwrap().path.clone();
+            h.state_mut().state.keep_branch(&path, Some("before".to_string()));
+            h.state_mut().project.as_mut().unwrap().notice = Some(crate::BranchNotice::Gone { name: "old".into() });
+            let ends = switch_asked(&mut h, &host);
+            switch_checked(&mut h, &ends, earlier);
+            then(&ends);
+            h.run_steps(10);
+            assert_eq!(h.state().state.branch_of(&path), Some("before"));
+            assert!(h.state().project.as_ref().unwrap().notice.is_some());
+            if !h.state().is_held() {
+                assert_eq!(reopens_on(&mut h, &host, &path).as_deref(), Some("before"));
+            }
+        });
+    }
+}
+
+/// A rename follows the branch in use, in any case of its name, and leaves another's alone.
+#[test]
+fn a_rename_is_remembered_only_for_the_branch_in_use() {
+    in_both(work_and_earlier, |mut h, host, _| {
+        let path = h.state().project.as_ref().unwrap().path.clone();
+        h.state_mut().state.keep_branch(&path, Some("topic".to_string()));
+        h.state_mut().branch_renamed(&path, "other", "new");
+        assert_eq!(h.state().state.branch_of(&path), Some("topic"), "another branch");
+        h.state_mut().branch_renamed(&path, "TOPIC", "renamed");
+        assert_eq!(h.state().state.branch_of(&path), Some("renamed"));
+        h.state_mut().branch_renamed(std::path::Path::new("/tmp/Other.archforge"), "renamed", "x");
+        assert_eq!(reopens_on(&mut h, &host, &path).as_deref(), Some("renamed"), "another project");
+    });
+}
+
 /// The check is not asked for until a save under way has answered and the latest rows are over.
 #[test]
 fn a_switch_asks_for_its_check_only_after_the_latest_rows_have_gone_over() {

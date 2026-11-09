@@ -4,6 +4,7 @@
 //! session's place. A job with no clear answer is read back; when that cannot be read either,
 //! Archforge says so, writes nothing back, and the project stays held until it is closed.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
@@ -79,6 +80,8 @@ pub(crate) struct Replacing {
     switch: Option<Box<dyn FnOnce() -> Result<BranchSwitch, String>>>,
     /// Asked of the host: whether the branch arrived on holds unsaved work.
     arrives_unsaved: Option<Arc<AtomicBool>>,
+    /// The project and branch a switch moves to, kept once it has arrived.
+    switching_to: Option<(PathBuf, String)>,
 }
 
 impl Replacing {
@@ -123,9 +126,18 @@ impl Shell {
         self.begin_hold()?;
         self.start_replacing(channel().1, None, None);
         if let Some(r) = self.replacing.as_mut() {
+            r.switching_to = Some((path.clone(), branch.clone()));
             r.switch = Some(Box::new(move || host.begin_branch_switch(&path, branch)));
         }
         Ok(())
+    }
+
+    /// The branch `from` of the project at `path` is now `to`: the project reopens on it when it was
+    /// the one in use, and only then. For the screen that asks for a rename, once it is seen done.
+    pub fn branch_renamed(&mut self, path: &Path, from: &str, to: &str) {
+        if self.state.branch_of(path).is_some_and(|b| b.eq_ignore_ascii_case(from)) {
+            self.state.keep_branch(path, Some(to.to_string()));
+        }
     }
 
     /// Holds the project and starts replacing its session with the model `read` answers, running
@@ -149,6 +161,7 @@ impl Shell {
             repaired: false,
             switch: None,
             arrives_unsaved: None,
+            switching_to: None,
         });
     }
 
@@ -227,8 +240,15 @@ impl Shell {
                         None => self.install(*session, r.repaired),
                     }
                     if let Some(unsaved) = r.arrives_unsaved {
-                        // On another branch: the status bar's reason about the branch left goes.
+                        // On another branch: the status bar's reasons about the branch left go, and
+                        // the project reopens here.
                         self.save_error = None;
+                        if let Some(o) = self.project.as_mut() {
+                            o.notice = None;
+                        }
+                        if let Some((path, branch)) = r.switching_to.take() {
+                            self.state.keep_branch(&path, Some(branch));
+                        }
                         if unsaved.load(Ordering::SeqCst)
                             && let Some(session) = self.session.as_mut()
                         {
