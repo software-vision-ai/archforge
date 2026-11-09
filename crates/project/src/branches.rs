@@ -57,6 +57,21 @@ impl Project {
         *self.branch.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = branch;
     }
 
+    /// Moves this project to `branch`, which has passed [`Project::check_branch`]: connections
+    /// follow it, and the change ledger starts again, as on opening.
+    pub fn move_to_branch(&self, branch: SafeBranch) {
+        self.set_current_branch(branch);
+        self.forget_changes();
+    }
+
+    /// Runs `statement` on `branch`, for a test to shape a branch with.
+    #[cfg(feature = "testing")]
+    pub fn run_on_branch(&self, branch: &str, statement: &str) -> Result<(), String> {
+        let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
+        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        c.query_drop(statement).map_err(|e| e.to_string())
+    }
+
     /// The project's branches, at most `max` of them. A name that cannot be used is listed with
     /// its reason rather than left out. Refused when `max` is over [`MAX_BRANCHES`], before
     /// anything is read: a dirty branch costs its own statements.

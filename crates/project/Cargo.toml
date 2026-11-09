@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# A way for the tests of other crates to shape a branch.
+testing = []
+
 [dependencies]
 archforge-dolt.workspace = true
 archforge-mof.workspace = true
