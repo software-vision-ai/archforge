@@ -438,6 +438,7 @@ str		The change did not finish, so the project is as it was.	The change did not 
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
+str		Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.	Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.
 str		Close a project to open another	Close a project to open another
 str		The closing stopped without an answer	The closing stopped without an answer
 str		The project could not be opened: {why}	The project could not be opened: {why}

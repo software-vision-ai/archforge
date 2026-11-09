@@ -79,9 +79,9 @@ impl Shell {
         self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false, viewing });
     }
 
-    /// Whether a version is being read to be shown.
-    pub(crate) fn reading_a_version(&self) -> bool {
-        self.replacing.as_ref().is_some_and(|r| r.viewing.is_some())
+    /// The version being read to be shown.
+    pub(crate) fn version_being_read(&self) -> Option<&str> {
+        self.replacing.as_ref()?.viewing.as_deref()
     }
 
     /// One frame of the replacement under way.

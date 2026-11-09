@@ -36,6 +36,12 @@ impl Shell {
         self.viewing.as_ref().map(|v| v.commit.as_str())
     }
 
+    /// The version shown or being read to be shown: while there is one, what may change anything
+    /// is refused on the control channel.
+    pub(crate) fn version_in_view(&self) -> Option<&str> {
+        self.viewing().or_else(|| self.version_being_read())
+    }
+
     /// Starts viewing the version `commit`: the project is held while it is read and built, and it
     /// shows once it has been. Refused while a version shows or another hold runs, and without a
     /// model or a host. A read that fails ends the hold and says why, with the real work as it was.
@@ -80,7 +86,7 @@ impl Shell {
     /// dropped instead, and with its channel its answer, which can then replace nothing. False when
     /// neither applies.
     pub fn back_to_current_work(&mut self) -> bool {
-        if self.reading_a_version() {
+        if self.version_being_read().is_some() {
             self.replacing = None;
             self.end_hold();
             return true;

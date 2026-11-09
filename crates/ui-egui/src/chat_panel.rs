@@ -586,11 +586,18 @@ pub fn refusal_text(r: &Refusal) -> String {
 
 // Asking.
 
+/// Whether no question can go now: while the project is held, as it is while a version is being
+/// read, and while a version is shown, as Chat stays with the live work. The text stays in the
+/// composer. A question already on its way holds the version back until it is answered.
+fn composer_off(shell: &Shell) -> bool {
+    shell.is_held() || shell.viewing().is_some()
+}
+
 /// Sends the composer's text: a new turn, or the failed turn run again when its question went back
-/// to the composer. Refused while a turn runs, while the project is held, for an empty or too long
+/// to the composer. Refused while a turn runs, while the composer is off, for an empty or too long
 /// question, or without a project.
 pub fn send(shell: &mut Shell) {
-    if shell.is_held() {
+    if composer_off(shell) {
         return;
     }
     let text = shell.chat_panel.draft.trim().to_string();
@@ -693,6 +700,9 @@ fn ask_write(chat: &Chat, pending: &Pending, now: u64) -> Write {
 /// the kept keys again and the agent gets its context line again; the chips removed shown are kept
 /// first when the project does not hold them yet.
 pub fn retry(shell: &mut Shell, edited: Option<String>) {
+    if composer_off(shell) {
+        return;
+    }
     let removed = shell.chat_panel.chat.as_ref().map(|c| c.removed.clone()).unwrap_or_default();
     let chips_now: Vec<Anchor> = chips(shell).into_iter().filter(|c| !removed.contains(&c.chip)).flat_map(|c| c.anchors).collect();
     let store = store_of(shell);

@@ -27,6 +27,10 @@
 //! A request can wait its turn after it is accepted, so it carries the window's session generation
 //! from that moment: one from an earlier generation is refused and cannot land on a session it was
 //! not sent to. While the project is held still, a request that may change anything is refused.
+//!
+//! While a version is shown or being read, whatever may change anything is refused the same way,
+//! starting with [`VIEWING`]; what only reads is answered about what is shown, and
+//! `document.inspect` names the version. Nothing is queued for later.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
@@ -67,6 +71,10 @@ pub type SessionGeneration = Arc<AtomicU64>;
 /// The answer to a request whose token was revoked before the window took it: the control
 /// channel's own words.
 pub const REVOKED: &str = "revoked: the access this token gave has ended";
+
+/// The word a refusal while a version is in view starts with, the same in every language, so that
+/// an agent can tell the reason without reading the sentence after it.
+pub const VIEWING: &str = "viewing";
 
 /// What a method may do: only read, change something, or run commands, which reads only when every
 /// command it runs is a query.
@@ -184,6 +192,14 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
     // the turn's tool rows from what it is answered.
     crate::chat_panel::gate(shell, req.origin.as_deref(), req.conversation.as_deref(), &req.method, &req.params)?;
     let before = crate::chat_panel::before(shell, &req.method, &req.params, req.origin.as_deref());
+    // Before the hold's own refusal: a version being read holds the project too.
+    if let Some(why) = viewing_refusal(shell, &req.method, &req.params) {
+        let refused = Err(why);
+        if let Some(b) = before {
+            crate::chat_panel::after(shell, &req.method, b, &refused, true);
+        }
+        return refused;
+    }
     if shell.is_held() && !only_reads(shell, &req.method, &req.params)? {
         let refused = Err(tr("The project is held still while it is being replaced, so this request was not run. Try again when that has finished."));
         if let Some(b) = before {
@@ -211,6 +227,20 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
     answer
 }
 
+/// Why `method` with `params` may not run while a version is in view, naming that state and the way
+/// back: none when no version is, or when it only reads. A batch over the cap keeps its own reason.
+fn viewing_refusal(shell: &Shell, method: &str, params: &Value) -> Option<String> {
+    shell.version_in_view()?;
+    match only_reads(shell, method, params) {
+        Ok(true) => None,
+        Ok(false) => Some(format!(
+            "{VIEWING}: {}",
+            tr("Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.")
+        )),
+        Err(why) => Some(why),
+    }
+}
+
 /// Answers one request from the user's own side: its changes have no origin.
 pub fn answer(shell: &mut Shell, method: &str, params: &Value) -> Result<Value, String> {
     answer_from(shell, method, params, None, false)
@@ -231,6 +261,9 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
             format!("{method} has no parameter {key:?}; it takes {}", keys.join(", "))
         });
     }
+    if let Some(why) = viewing_refusal(shell, method, params) {
+        return Err(why);
+    }
     match method {
         "document.inspect" => Ok(inspect(shell)),
         "app.save" => save(shell, params, agent.then_some(origin)),
@@ -242,7 +275,9 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
     }
 }
 
-/// The open project, its history and what is selected and shown.
+/// The open project, its history and what is selected and shown; `viewing` names the version in
+/// view, whether it is still being read (the work still shows then), and whether the work has
+/// unsaved changes, which the rest of the answer does not describe once the version shows.
 fn inspect(shell: &Shell) -> Value {
     let Some(session) = shell.session.as_ref() else {
         return json!({ "open": false, "projects": shell.tabs.iter().map(|t| t.name.clone()).collect::<Vec<_>>() });
@@ -251,6 +286,11 @@ fn inspect(shell: &Shell) -> Value {
     let ids = |objs: &[archforge_mof::Obj]| objs.iter().filter_map(|o| store.uuid(*o).ok()).map(|u| u.to_string()).collect::<Vec<_>>();
     json!({
         "open": true,
+        "viewing": shell.version_in_view().map(|version| json!({
+            "version": version,
+            "reading": shell.viewing().is_none(),
+            "work_unsaved": shell.active.is_some_and(|i| shell.tab_unsaved(i)),
+        })),
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "revision": session.revision(),
         "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),

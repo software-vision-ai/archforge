@@ -9,6 +9,10 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
+/// A refusal in the shape the window gives one while a version is in view: its stable word, then
+/// a translated sentence. The sentence is this test's own, not the catalogue's.
+const REFUSED_WHILE_VIEWING: &str = "viewing: 翻訳された文";
+
 /// A fresh home folder for the child, and the settings folder it will look in.
 fn home(name: &str) -> (PathBuf, PathBuf) {
     let home = std::env::temp_dir().join(format!("archforge-cli-{name}-{}", std::process::id()));
@@ -40,6 +44,7 @@ fn an_agent_drives_the_application_through_the_real_binary() {
         match method {
             "engine.execute" => Ok(json!({ "result": { "id": "e1" }, "undo": "Add entity" })),
             "document.inspect" => Ok(json!({ "open": true })),
+            "app.save" => Err(REFUSED_WHILE_VIEWING.to_string()),
             _ => Err(format!("unknown method {method:?}")),
         }
     });
@@ -73,6 +78,10 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     assert_eq!(ok.status.code(), Some(0));
     assert_eq!(serde_json::from_slice::<Value>(&ok.stdout).unwrap(), json!({ "open": true }));
     assert_eq!(cli(&home).args(["app", "engine.nope", "--port", &port]).output().unwrap().status.code(), Some(1));
+    // A refusal shows as the window words it, translated text included.
+    let refused = cli(&home).args(["app", "app.save", "--port", &port]).output().unwrap();
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains(REFUSED_WHILE_VIEWING), "{refused:?}");
     drop(server);
     let gone = cli(&home).args(["app", "document.inspect", "--port", &port]).output().unwrap();
     assert_eq!(gone.status.code(), Some(3));
