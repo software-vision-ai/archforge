@@ -2,6 +2,8 @@
 //! of characters and treats names that differ in case as one. So a name is stored through a
 //! reversible encoding, and every stored name passes one check before it can reach a ``USE `…` ``.
 
+use std::fmt;
+
 use crate::chat::is_commit;
 use crate::description::breaks_the_line;
 
@@ -37,9 +39,41 @@ pub enum UnsafeBranch {
     Character(char),
     /// It has the shape of a commit hash, which a `USE` would read as that commit.
     LooksLikeCommit,
-    /// Dolt makes no branch of this shape: dots in the wrong places, a leading `-`, or `head`.
+    /// Dolt refuses this shape (dots in the wrong places, or `head`), or it starts with `-`, which
+    /// `dolt branch -a` shows Dolt reads as an option.
     NotABranchName,
 }
+
+impl fmt::Display for BranchNameProblem {
+    /// The reason in English, as the crate's [`crate::Error`] gives it, for logs and messages to
+    /// agents; the dialog that shows a person this reason words it through `tr`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BranchNameProblem::Empty => f.write_str("a branch name cannot be empty"),
+            BranchNameProblem::NotOneLine => f.write_str("a branch name has to be one line"),
+            BranchNameProblem::EdgeSpace => f.write_str("a branch name cannot start or end with white space"),
+            BranchNameProblem::TooLong { chars } => write!(f, "a branch name of {chars} characters is longer than the {BRANCH_NAME_CHARS} allowed"),
+        }
+    }
+}
+
+impl std::error::Error for BranchNameProblem {}
+
+impl fmt::Display for UnsafeBranch {
+    /// The reason in English, as the crate's [`crate::Error`] gives it, for logs and messages to
+    /// agents; the list that shows a person this reason words it through `tr`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnsafeBranch::Empty => f.write_str("the branch has no name"),
+            UnsafeBranch::TooLong { bytes } => write!(f, "a branch name of {bytes} bytes is longer than the {STORED_BYTES} allowed"),
+            UnsafeBranch::Character(c) => write!(f, "a branch name cannot hold the character {c:?}"),
+            UnsafeBranch::LooksLikeCommit => f.write_str("a branch name cannot have the shape of a commit hash"),
+            UnsafeBranch::NotABranchName => f.write_str("a branch name cannot have dots in these places, start with `-`, or be `head`"),
+        }
+    }
+}
+
+impl std::error::Error for UnsafeBranch {}
 
 /// A branch name that is safe to put in a statement: only [`SafeBranch::typed`] and
 /// [`SafeBranch::found`] make one.
@@ -237,6 +271,38 @@ mod tests {
         stored.sort();
         stored.dedup();
         assert_eq!(stored.len(), texts.len(), "{stored:?}");
+    }
+
+    /// Both refusals pass through `?` as standard errors, each with its own words.
+    #[test]
+    fn a_refused_name_is_a_standard_error_with_its_own_words() {
+        let typed = |text: &str| -> Result<(), Box<dyn std::error::Error>> {
+            SafeBranch::typed(text)?;
+            Ok(())
+        };
+        let found = |name: &str| -> Result<(), Box<dyn std::error::Error>> {
+            SafeBranch::found(name)?;
+            Ok(())
+        };
+        let long = "a".repeat(BRANCH_NAME_CHARS + 1);
+        let huge = "a".repeat(STORED_BYTES + 1);
+        for (text, words) in [
+            ("", "a branch name cannot be empty"),
+            ("a\nb", "a branch name has to be one line"),
+            (" a", "a branch name cannot start or end with white space"),
+            (long.as_str(), "a branch name of 61 characters is longer than the 60 allowed"),
+        ] {
+            assert_eq!(typed(text).unwrap_err().to_string(), words);
+        }
+        for (name, words) in [
+            ("", "the branch has no name"),
+            (huge.as_str(), "a branch name of 513 bytes is longer than the 512 allowed"),
+            ("a`b", "a branch name cannot hold the character '`'"),
+            ("0123456789abcdefghijklmnopqrstuv", "a branch name cannot have the shape of a commit hash"),
+            ("-D", "a branch name cannot have dots in these places, start with `-`, or be `head`"),
+        ] {
+            assert_eq!(found(name).unwrap_err().to_string(), words);
+        }
     }
 
     /// What only looks encoded is shown as it is.
