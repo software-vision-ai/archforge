@@ -11,6 +11,7 @@ use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
 use crate::{DATABASE, Error, Project};
+use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
 
 /// The most branches listed.
@@ -91,7 +92,7 @@ pub enum BranchCreated {
 pub enum BranchCreationError {
     /// A record from an earlier creation remains, until the next opening clears it.
     RecordRemains,
-    /// A branch of that name exists, in any case.
+    /// A branch of that name exists, in any case, or may still, as a delete of it is unsettled.
     NameTaken,
     /// The start is not a commit hash.
     NotACommit,
@@ -152,6 +153,41 @@ impl fmt::Display for RenameBranchError {
 }
 
 impl std::error::Error for RenameBranchError {}
+
+/// Why a branch was not deleted, or whether it was cannot be said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeleteBranchError {
+    /// `main` stays, in any case.
+    Main,
+    /// The branch in use stays, in any case.
+    Current,
+    /// A creation record names it: the next opening deals with it.
+    RecordRemains,
+    /// No branch has exactly this name.
+    NoSuchBranch,
+    /// An unclear rename holds the project until it is settled or closes.
+    Held,
+    /// It is still there, or what it held could not be read; nothing was deleted.
+    Failed(String),
+    /// Whether it went cannot be told. Asking for the same delete again settles it.
+    CannotTell(String),
+}
+
+impl fmt::Display for DeleteBranchError {
+    /// The reason in English, for logs; the dialog words its own.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeleteBranchError::Main => f.write_str("main cannot be deleted"),
+            DeleteBranchError::Current => f.write_str("the branch in use cannot be deleted"),
+            DeleteBranchError::RecordRemains => f.write_str("the last new branch is not cleaned up yet"),
+            DeleteBranchError::NoSuchBranch => f.write_str("there is no such branch"),
+            DeleteBranchError::Held => f.write_str("whether a branch was renamed cannot be told"),
+            DeleteBranchError::Failed(why) | DeleteBranchError::CannotTell(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for DeleteBranchError {}
 
 /// A step that did not go on: `clean` is false when a test stops as a crash would.
 struct Halted {
@@ -320,6 +356,9 @@ impl Project {
         if from.same_branch(&SafeBranch::default()) {
             return Err(RenameBranchError::Main);
         }
+        if self.names_unclear_delete(from) || self.names_unclear_delete(to) {
+            return Err(RenameBranchError::CannotTell("an earlier delete of this branch is not settled".into()));
+        }
         if self.unclear().as_ref().is_some_and(|(was, then)| was == from && then == to) {
             match read() {
                 Ok((true, false)) => *self.unclear() = None,
@@ -360,6 +399,104 @@ impl Project {
             _ => {
                 *self.unclear() = Some((from.clone(), to.clone()));
                 Err(RenameBranchError::CannotTell(why))
+            }
+        }
+    }
+
+    /// [`Project::delete_branch`] shaped by a test: whether the delete lands, whether where the
+    /// branch is can be read, and `asked` set if the delete was asked for at all.
+    #[cfg(feature = "testing")]
+    pub fn delete_branch_faulted(
+        &self,
+        branch: &SafeBranch,
+        lands: bool,
+        readable: bool,
+        asked: &std::cell::Cell<bool>,
+    ) -> Result<Vec<Uuid>, DeleteBranchError> {
+        let ask = |store: &mut OpenBranches| {
+            asked.set(true);
+            if lands { store.delete(branch) } else { Err("the reply was lost".to_string()) }
+        };
+        self.delete_steps(branch, ask, |name| if readable { self.branch_is_there(name) } else { Err("it cannot be read".to_string()) })
+    }
+
+    /// Deletes the branch for good, on the writer only, and answers the conversations that held
+    /// only there, for their private folders to be let go: none unless the branch is seen gone.
+    /// A read on the branch at that moment fails; it never answers for something else. No reader
+    /// starts on it, as readers follow the current branch, which this refuses.
+    pub fn delete_branch(&self, branch: &SafeBranch) -> Result<Vec<Uuid>, DeleteBranchError> {
+        self.delete_steps(branch, |store| store.delete(branch), |name| self.branch_is_there(name))
+    }
+
+    /// Whether `branch` exists, over a connection of its own on `main`.
+    fn branch_is_there(&self, branch: &SafeBranch) -> Result<bool, String> {
+        let mut store = OpenBranches(database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| e.to_string()));
+        Ok(store.head(branch)?.is_some())
+    }
+
+    /// The delete whose outcome is unknown.
+    fn unclear_delete(&self) -> std::sync::MutexGuard<'_, Option<(SafeBranch, Vec<Uuid>)>> {
+        self.unclear_delete.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Whether `name` is that of a delete whose outcome is unknown: until that is settled nothing
+    /// may change what the name means, or asking again would answer for another branch.
+    fn names_unclear_delete(&self, name: &SafeBranch) -> bool {
+        self.unclear_delete().as_ref().is_some_and(|(was, _)| was.same_branch(name))
+    }
+
+    /// [`Project::delete_branch`], `ask` deleting and `read` saying whether a branch exists. The
+    /// read decides, whatever the answer was. Not being able to tell keeps what it held, so
+    /// that asking again answers as the first would have.
+    fn delete_steps(
+        &self,
+        branch: &SafeBranch,
+        ask: impl FnOnce(&mut OpenBranches) -> Result<(), String>,
+        read: impl Fn(&SafeBranch) -> Result<bool, String>,
+    ) -> Result<Vec<Uuid>, DeleteBranchError> {
+        let failed = |why: String| DeleteBranchError::Failed(why);
+        if branch.same_branch(&SafeBranch::default()) {
+            return Err(DeleteBranchError::Main);
+        }
+        // An earlier try is settled first: its branch may be the one in use by now.
+        let earlier = self.unclear_delete().clone().filter(|(was, _)| was.same_branch(branch));
+        if let Some((was, chats)) = earlier {
+            match read(&was) {
+                Ok(false) => {
+                    *self.unclear_delete() = None;
+                    return Ok(chats);
+                }
+                Ok(true) => *self.unclear_delete() = None,
+                Err(why) => return Err(DeleteBranchError::CannotTell(why)),
+            }
+        }
+        if branch.same_branch(&self.current_branch()) {
+            return Err(DeleteBranchError::Current);
+        }
+        if let Found::Good(record) = creation::read(self.path())
+            && record.branch.same_branch(branch)
+        {
+            return Err(DeleteBranchError::RecordRemains);
+        }
+        if self.unclear_delete().is_some() {
+            return Err(DeleteBranchError::CannotTell("another delete is not settled".into()));
+        }
+        let connected = self.connection_to(&SafeBranch::default());
+        if matches!(connected, Err(Error::BranchUnclear { .. })) {
+            return Err(DeleteBranchError::Held);
+        }
+        let mut store = OpenBranches(connected.map_err(|e| e.to_string()));
+        if store.head(branch).map_err(failed)?.is_none() {
+            return Err(DeleteBranchError::NoSuchBranch);
+        }
+        let chats = self.version_reader().chats_only_on(branch).map_err(|e| failed(e.to_string()))?;
+        let asked = ask(&mut store);
+        match read(branch) {
+            Ok(false) => Ok(chats),
+            Ok(true) => Err(failed(asked.err().unwrap_or_else(|| "the branch is still there".into()))),
+            Err(why) => {
+                *self.unclear_delete() = Some((branch.clone(), chats));
+                Err(DeleteBranchError::CannotTell(why))
             }
         }
     }
@@ -412,7 +549,7 @@ impl Project {
             return Err(BranchCreationError::RecordRemains);
         }
         let record = CreationRecord::new(name.clone(), self.current_branch(), start).ok_or(BranchCreationError::NotACommit)?;
-        if self.branch_name_taken(name).map_err(|e| refused(CreationStep::CheckName, e))? {
+        if self.names_unclear_delete(name) || self.branch_name_taken(name).map_err(|e| refused(CreationStep::CheckName, e))? {
             return Err(BranchCreationError::NameTaken);
         }
         // As an opening checks a branch, and of the commit itself: only looking, so nothing is written

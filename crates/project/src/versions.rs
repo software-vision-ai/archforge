@@ -3,11 +3,13 @@
 
 use std::collections::{BTreeSet, VecDeque};
 
+use archforge_mof::Uuid;
 use mysql::prelude::Queryable;
 
+use crate::DATABASE;
 use crate::branch_name::SafeBranch;
 use crate::branches::{CurrentBranch, branch_now};
-use crate::chat::is_commit;
+use crate::chat::{id_at, is_commit, limits};
 use crate::model::{database_connection, sql, unsaved_tables};
 use crate::saving::{is_agent, is_version, shown_author};
 use crate::{Error, Project};
@@ -136,7 +138,56 @@ fn text_at(row: &mysql::Row, i: usize) -> Option<String> {
 impl VersionReader {
     /// What deleting `branch` would take with it, read for that branch whichever one is current.
     pub fn branch_counts(&self, branch: &SafeBranch) -> Result<BranchCounts, Error> {
+        self.branch_counts_after(branch, || ())
+    }
+
+    /// [`VersionReader::branch_counts`], with `meanwhile` run once its connection is on the branch.
+    /// A branch deleted from under it makes the read fail; it never answers for something else.
+    #[cfg(feature = "testing")]
+    pub fn branch_counts_interrupted(&self, branch: &SafeBranch, meanwhile: impl FnOnce()) -> Result<BranchCounts, Error> {
+        self.branch_counts_after(branch, meanwhile)
+    }
+
+    /// The conversations on `branch`, committed or not, that are on the head of no other branch.
+    /// A conversation can reach another branch only through shared history, as a branch made
+    /// outside Archforge keeps its source's, so the heads are enough, and an unsafe name no bar.
+    pub(crate) fn chats_only_on(&self, branch: &SafeBranch) -> Result<Vec<Uuid>, Error> {
         let mut c = database_connection(&self.connector, branch)?;
+        let others = self.other_heads(&mut c, branch)?;
+        let mut only = self.chat_ids(&mut c)?;
+        for head in others {
+            c.query_drop(format!("USE `{DATABASE}/{head}`")).map_err(sql("cannot read another branch's conversations"))?;
+            let there = self.chat_ids(&mut c)?;
+            only.retain(|id| !there.contains(id));
+        }
+        Ok(only.into_iter().collect())
+    }
+
+    /// The conversations of the database `c` is on.
+    fn chat_ids(&self, c: &mut mysql::Conn) -> Result<BTreeSet<Uuid>, Error> {
+        if !self.holds_chats(c)? {
+            return Ok(BTreeSet::new());
+        }
+        let most = limits::CHATS_PER_PROJECT + 1;
+        let rows: Vec<mysql::Row> = c.query(format!("SELECT `id` FROM `chat` LIMIT {most}")).map_err(sql("cannot read the conversations"))?;
+        if rows.len() == most {
+            return Err(Error::Damaged { path: self.path.clone(), why: "it holds too many conversations to tell which go with a branch".into() });
+        }
+        rows.iter().map(|r| id_at(r, 0).map_err(|why| Error::Damaged { path: self.path.clone(), why })).collect()
+    }
+
+    /// Whether the database `c` is on holds the conversations' table: an early one does not.
+    fn holds_chats(&self, c: &mut mysql::Conn) -> Result<bool, Error> {
+        let held: Option<mysql::Row> = c
+            .query_first("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'chat'")
+            .map_err(sql("cannot list the branch's tables"))?;
+        Ok(held.is_some())
+    }
+
+    /// [`VersionReader::branch_counts`], with `meanwhile` run once its connection is on the branch.
+    fn branch_counts_after(&self, branch: &SafeBranch, meanwhile: impl FnOnce()) -> Result<BranchCounts, Error> {
+        let mut c = database_connection(&self.connector, branch)?;
+        meanwhile();
         let others = self.other_heads(&mut c, branch)?;
         let versions_only_here = self.versions_only_on(&mut c, branch, &others)?;
         let conversations = self.conversations_held(&mut c)?;
@@ -179,10 +230,7 @@ impl VersionReader {
 
     /// The conversations on the branch `c` is on; a version from before the first holds no table.
     fn conversations_held(&self, c: &mut mysql::Conn) -> Result<u64, Error> {
-        let held: Option<mysql::Row> = c
-            .query_first("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'chat'")
-            .map_err(sql("cannot list the branch's tables"))?;
-        if held.is_none() {
+        if !self.holds_chats(c)? {
             return Ok(0);
         }
         let row: Option<mysql::Row> = c.query_first("SELECT CAST(COUNT(*) AS CHAR) FROM `chat`").map_err(sql("cannot count the conversations"))?;

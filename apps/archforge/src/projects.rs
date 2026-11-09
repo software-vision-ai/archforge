@@ -2117,6 +2117,9 @@ fn kind(e: archforge_project::Error) -> CreateError {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
+    use archforge_mof::Uuid;
+    use archforge_project::DeleteBranchError;
+
     use super::*;
 
     fn wait(rx: &Receiver<Result<Opened, CreateError>>) -> Result<Opened, CreateError> {
@@ -4519,6 +4522,166 @@ mod tests {
         assert_eq!(saved(&sandbox.host, &path), Ok(true));
         let counts = sandbox.host.branch_counts(&path, branch("main")).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!(counts, BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false });
+    }
+
+    /// A chat seeded on `name`, a branch of its own, with the project back on `main`.
+    fn chat_on(host: &Projects, path: &Path, name: &str) -> Uuid {
+        switch_to(host, path, name).unwrap();
+        let (chat, _) = undone_since_the_save(host, path);
+        assert_eq!(host.flush_for_test(path), Ok(()));
+        switch_to(host, path, "main").unwrap();
+        chat
+    }
+
+    /// The branch goes and its own conversations are answered; one shared with a branch made
+    /// outside Archforge is not, until the last branch holding it goes.
+    #[test]
+    fn a_deleted_branch_answers_only_the_conversations_no_other_branch_holds() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let chat = chat_on(host, &path, "elsewhere");
+        let on_main = |statement: &str| lock(&host.inner.open)[0].run_on_branch("main", statement).unwrap();
+        on_main("CALL DOLT_BRANCH('outside', 'elsewhere')");
+        let delete = |name: &str| lock(&host.inner.open)[0].delete_branch(&branch(name));
+        assert_eq!(delete("elsewhere"), Ok(Vec::new()), "the branch made outside still holds it");
+        assert!(!has_branch(&lock(&host.inner.open)[0], "elsewhere"));
+        // A name outside the safe set holds it just as well, and the last holder answers it.
+        on_main("CALL DOLT_BRANCH('odd+name', 'outside')");
+        on_main("CALL DOLT_BRANCH('last', 'outside')");
+        assert_eq!(delete("outside"), Ok(Vec::new()));
+        on_main("CALL DOLT_BRANCH('-D', 'odd+name')");
+        assert_eq!(delete("last"), Ok(vec![chat]));
+    }
+
+    /// Each refusal by its own reason, in each case, and no delete is asked for.
+    #[test]
+    fn a_delete_is_refused_by_its_own_reason_and_asks_nothing() {
+        use archforge_project::DeleteBranchError::{Current, Held, Main, NoSuchBranch, RecordRemains};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        switch_to(host, &path, "elsewhere").unwrap();
+        let open = lock(&host.inner.open);
+        let project = &open[0];
+        let asked = std::cell::Cell::new(false);
+        let delete = |name: &str| project.delete_branch_faulted(&branch(name), true, true, &asked);
+        let start = project.head_of("main").unwrap();
+        for (name, why) in [
+            ("main", Main),
+            ("MAIN", Main),
+            ("Main", Main),
+            ("elsewhere", Current),
+            ("ELSEWHERE", Current),
+            ("Scripted", NoSuchBranch),
+            ("nowhere", NoSuchBranch),
+        ] {
+            assert_eq!(delete(name), Err(why), "{name}");
+        }
+        for recorded in ["scripted", "SCRIPTED"] {
+            stopped_creation(&path, recorded, "main", &start);
+            assert_eq!(delete("scripted"), Err(RecordRemains), "{recorded}");
+        }
+        std::fs::remove_file(path.join(".creating-branch")).unwrap();
+        assert!(!asked.get() && has_branch(project, "scripted"), "no delete was asked for");
+        assert!(project.rename_branch_faulted(&branch("elsewhere"), &branch("moved"), false, false, false).is_err());
+        assert_eq!(delete("scripted"), Err(Held));
+        assert!(!asked.get());
+    }
+
+    /// The read decides. Still there is a failure with no ids; gone answers them; and what cannot
+    /// be told answers none, until the same delete asked again says, whichever way it went.
+    #[test]
+    fn a_delete_is_read_back_and_a_second_try_is_safe() {
+        for (lands, then_there) in [(true, false), (false, true)] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let chat = chat_on(host, &path, "elsewhere");
+            let open = lock(&host.inner.open);
+            let project = &open[0];
+            let (target, asked) = (branch("elsewhere"), std::cell::Cell::new(false));
+            let answer = project.delete_branch_faulted(&target, false, true, &asked);
+            assert!(matches!(answer, Err(DeleteBranchError::Failed(_))) && has_branch(project, "elsewhere"), "not landed: {answer:?}");
+            let answer = project.delete_branch_faulted(&target, lands, false, &asked);
+            assert!(matches!(answer, Err(DeleteBranchError::CannotTell(_))), "{answer:?}");
+            assert_eq!(has_branch(project, "elsewhere"), then_there);
+            assert!(
+                matches!(project.delete_branch_faulted(&target, true, false, &asked), Err(DeleteBranchError::CannotTell(_))),
+                "still cannot tell"
+            );
+            assert_eq!(project.delete_branch(&target), Ok(vec![chat]), "the ids, whichever way it went");
+            assert!(!has_branch(project, "elsewhere"));
+            assert_eq!(project.delete_branch(&target), Err(DeleteBranchError::NoSuchBranch));
+        }
+    }
+
+    /// While a delete is unclear nothing may change what its name means, and nothing else is held;
+    /// once it is settled all of that is allowed again. Asked in another case, it reads the branch
+    /// it recorded, so a name that merely differs in case does not read as the branch being gone.
+    #[test]
+    fn an_unclear_delete_keeps_its_name_from_changing_meaning() {
+        use archforge_project::BranchCreationError::NameTaken;
+        use archforge_project::RenameBranchError::CannotTell as Unsettled;
+        for lands in [false, true] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let chat = chat_on(host, &path, "elsewhere");
+            let schema = schema(&host.inner).unwrap();
+            let open = lock(&host.inner.open);
+            let project = &open[0];
+            let (target, other, asked) = (branch("elsewhere"), branch("scripted"), std::cell::Cell::new(false));
+            let start = project.head_of("main").unwrap();
+            assert!(matches!(project.delete_branch_faulted(&target, lands, false, &asked), Err(DeleteBranchError::CannotTell(_))));
+            for from in ["elsewhere", "ELSEWHERE"] {
+                assert!(matches!(project.rename_branch(&branch(from), &branch("moved")), Err(Unsettled(_))), "{from}");
+            }
+            for to in ["elsewhere", "Elsewhere"] {
+                assert!(matches!(project.rename_branch(&other, &branch(to)), Err(Unsettled(_))), "{to}");
+                assert_eq!(project.create_branch(&branch(to), &start, &schema), Err(NameTaken), "{to}");
+            }
+            assert!(matches!(project.delete_branch(&other), Err(DeleteBranchError::CannotTell(_))), "not recorded over it");
+            assert!(has_branch(project, "scripted"));
+            assert!(project.write_model(&schema, &model("saved on")).is_ok(), "autosave is not held");
+            // Settled, the first delete answers its own ids, and in another case reads what it recorded.
+            let variant = project.delete_branch(&branch("ELSEWHERE"));
+            if lands {
+                assert_eq!(variant, Ok(vec![chat]));
+            } else {
+                assert_eq!(variant, Err(DeleteBranchError::NoSuchBranch), "still there, under its exact name");
+                assert_eq!(project.delete_branch(&target), Ok(vec![chat]));
+            }
+            assert_eq!(project.create_branch(&target, &start, &schema), Ok(BranchCreated::Listed));
+            assert_eq!(project.rename_branch(&target, &branch("moved")), Ok(()));
+            assert_eq!(project.rename_branch(&other, &target), Ok(()));
+            assert_eq!(project.delete_branch(&branch("moved")), Ok(Vec::new()));
+        }
+    }
+
+    /// Asked again once its branch is the one in use, an unclear delete is settled all the same,
+    /// so that the name is free to change again, and it still deletes nothing there.
+    #[test]
+    fn an_unclear_delete_is_settled_even_on_the_branch_now_in_use() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (target, asked) = (branch("elsewhere"), std::cell::Cell::new(false));
+        let unclear = lock(&host.inner.open)[0].delete_branch_faulted(&target, false, false, &asked);
+        assert!(matches!(unclear, Err(DeleteBranchError::CannotTell(_))), "{unclear:?}");
+        asked.set(false);
+        switch_to(host, &path, "elsewhere").unwrap();
+        let open = lock(&host.inner.open);
+        let still = open[0].delete_branch_faulted(&target, true, false, &asked);
+        assert!(matches!(still, Err(DeleteBranchError::CannotTell(_))), "not settled yet: {still:?}");
+        assert_eq!(open[0].delete_branch_faulted(&target, true, true, &asked), Err(DeleteBranchError::Current));
+        assert!(!asked.get() && has_branch(&open[0], "elsewhere"), "no delete was asked for");
+        assert_eq!(open[0].rename_branch(&target, &branch("moved")), Ok(()), "settled, so the name may change");
+    }
+
+    /// A read on the branch when it goes fails; it does not answer for anything else.
+    #[test]
+    fn a_read_in_flight_on_a_deleted_branch_only_fails() {
+        let (sandbox, _path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let target = branch("elsewhere");
+        let read = open[0].version_reader().branch_counts_interrupted(&target, || assert_eq!(open[0].delete_branch(&target), Ok(Vec::new())));
+        assert!(read.is_err(), "{read:?}");
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.

@@ -1965,7 +1965,8 @@ fn cell(row: &mysql::Row, i: usize) -> &mysql::Value {
     row.as_ref(i).unwrap_or(&mysql::Value::NULL)
 }
 
-fn id_at(row: &mysql::Row, i: usize) -> Result<Uuid, String> {
+/// The id in cell `i` of `row`; anything but sixteen bytes is an error.
+pub(crate) fn id_at(row: &mysql::Row, i: usize) -> Result<Uuid, String> {
     match cell(row, i) {
         mysql::Value::Bytes(b) => <[u8; 16]>::try_from(b.as_slice()).map(Uuid).map_err(|_| "an id is not 16 bytes".to_string()),
         _ => Err("an id is missing".into()),
