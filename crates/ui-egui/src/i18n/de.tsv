@@ -312,6 +312,7 @@ str		The undo history ends when the project closes, so these changes can no long
 str		The model changed after this turn, so its changes can no longer be undone on their own.	Das Modell wurde nach dieser Runde geändert; ihre Änderungen lassen sich daher nicht mehr für sich rückgängig machen.
 str		The model changed during this turn, so its changes can no longer be undone on their own.	Das Modell wurde während dieser Runde geändert; ihre Änderungen lassen sich daher nicht mehr für sich rückgängig machen.
 str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	Der Rückgängig-Verlauf enthält die Änderungen dieser Runde nicht mehr; sie lassen sich hier daher nicht mehr rückgängig machen.
+str		Back to current work to undo these changes.	Zurück zur aktuellen Arbeit, um diese Änderungen rückgängig zu machen.
 str		Interrupted: Archforge closed while this turn ran.	Unterbrochen: Archforge wurde während dieser Runde geschlossen.
 str		Stopped.	Gestoppt.
 str		Stopped. Nothing was changed.	Gestoppt. Nichts wurde geändert.

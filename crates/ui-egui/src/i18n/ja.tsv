@@ -312,6 +312,7 @@ str		The undo history ends when the project closes, so these changes can no long
 str		The model changed after this turn, so its changes can no longer be undone on their own.	このターンの後にモデルが変更されたため、その変更だけを取り消すことはできなくなりました。
 str		The model changed during this turn, so its changes can no longer be undone on their own.	このターンの間にモデルが変更されたため、その変更だけを取り消すことはできなくなりました。
 str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	取り消し履歴にこのターンの変更が残っていないため、ここではもう取り消せません。
+str		Back to current work to undo these changes.	これらの変更を元に戻すには、現在の作業に戻ってください。
 str		Interrupted: Archforge closed while this turn ran.	中断: このターンの実行中に Archforge が終了しました。
 str		Stopped.	停止しました。
 str		Stopped. Nothing was changed.	停止しました。何も変更されていません。

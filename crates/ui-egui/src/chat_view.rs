@@ -576,7 +576,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
         let count = turn.items.len();
         // The turn's changes follow its last tool row, before the reply that sums them up.
         let card_at = turn.items.iter().rposition(|i| matches!(i, Item::Tool(_)));
-        let refusal = crate::chat_panel::undo_refusal(shell, origin.as_deref(), turn);
+        let refusal = crate::chat_panel::undo_refusal(shell, origin.as_deref(), turn).map(crate::chat_panel::UndoRefusal::words);
         let mut card_drawn = false;
         for i in 0..=count {
             if !card_drawn

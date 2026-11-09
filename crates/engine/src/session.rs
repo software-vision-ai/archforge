@@ -12,6 +12,7 @@
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -148,11 +149,16 @@ struct Ran<X> {
     next_changed: bool,
 }
 
+/// The number the next session's undo history gets.
+static NEXT_HISTORY: AtomicU64 = AtomicU64::new(1);
+
 pub struct Session<D: Document, V> {
     registry: Arc<Registry<D, V>>,
     options: Options,
     doc: D,
     view: V,
+    /// Which undo history this is: a revision means something only within its own.
+    history: u64,
     /// The counter new ids come from: outside the document, never undone.
     counter: u64,
     id: u64,
@@ -219,6 +225,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
             options,
             doc,
             view,
+            history: NEXT_HISTORY.fetch_add(1, Ordering::Relaxed),
             counter,
             id: 0,
             next_id: 1,
@@ -418,6 +425,12 @@ impl<D: Document, V: View<D>> Session<D, V> {
 
     /// The document's state: it changes with every change, and undo and redo bring an earlier
     /// state's back, so a host can tell when there is something new to write.
+    /// Which undo history this session has: every session's is its own, so a revision means
+    /// something only alongside this number.
+    pub fn history(&self) -> u64 {
+        self.history
+    }
+
     pub fn revision(&self) -> u64 {
         self.id
     }

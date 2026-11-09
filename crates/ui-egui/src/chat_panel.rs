@@ -153,6 +153,8 @@ pub enum TurnState {
 /// and after its last, and the undo steps it took.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
+    /// The session's undo history these revisions belong to: another session's mean nothing here.
+    pub history: u64,
     pub before: u64,
     pub after: u64,
     pub steps: u32,
@@ -914,7 +916,7 @@ pub(crate) fn finish(chat: &mut Chat, session: Option<&mut archforge_notations::
         turn.change = Some(Change {
             changes: group.changes,
             state: ChangeState::Applied,
-            span: Some(Span { before: group.before, after: group.after, steps: group.steps }),
+            span: Some(Span { history: s.history(), before: group.before, after: group.after, steps: group.steps }),
         });
     }
     let (outcome, error) = match &state {
@@ -1598,13 +1600,13 @@ fn answers(shell: &mut Shell) {
 /// Moves turns' changes between applied and undone as undo and redo bring the model of the project
 /// shown before a turn's first change or back after its last, and writes the moves.
 fn track_undo(shell: &mut Shell) {
-    let Some(revision) = shell.session.as_ref().map(|s| s.revision()) else { return };
+    let Some((history, revision)) = shell.session.as_ref().map(|s| (s.history(), s.revision())) else { return };
     let out = Out::shown(shell);
     let Some(chat) = shell.chat_panel.chat.as_mut() else { return };
     let mut moves = Vec::new();
     for turn in chat.turns.iter_mut() {
         let Some(change) = turn.change.as_mut() else { continue };
-        let Some(span) = change.span.filter(|s| s.before != s.after) else { continue };
+        let Some(span) = change.span.filter(|s| s.history == history && s.before != s.after) else { continue };
         let to = match change.state {
             ChangeState::Applied if revision == span.before => ChangeState::Undone,
             ChangeState::Undone if revision == span.after => ChangeState::Applied,
@@ -1623,32 +1625,62 @@ fn track_undo(shell: &mut Shell) {
     }
 }
 
+/// Why a turn's changes cannot be undone from its card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UndoRefusal {
+    /// They are not applied, which the card says itself.
+    NotApplied,
+    /// The conversation was read back after the project closed.
+    ProjectClosed,
+    /// A version is in view; the history comes back with current work.
+    Viewing,
+    /// The undo history no longer holds them, or is another: a Restore starts a new one.
+    HistoryGone,
+    /// The model changed during the turn, so its changes are several steps.
+    ChangedDuring,
+    /// The model is no longer at the turn's end.
+    ChangedAfter,
+}
+
+impl UndoRefusal {
+    /// What the card says.
+    pub fn words(self) -> String {
+        match self {
+            UndoRefusal::NotApplied => String::new(),
+            UndoRefusal::ProjectClosed => tr("The undo history ends when the project closes, so these changes can no longer be undone here."),
+            UndoRefusal::Viewing => tr("Back to current work to undo these changes."),
+            UndoRefusal::HistoryGone => tr("The undo history no longer holds this turn's changes, so they can no longer be undone here."),
+            UndoRefusal::ChangedDuring => tr("The model changed during this turn, so its changes can no longer be undone on their own."),
+            UndoRefusal::ChangedAfter => tr("The model changed after this turn, so its changes can no longer be undone on their own."),
+        }
+    }
+}
+
 /// Why "Undo this turn's changes" cannot run on `turn` of the conversation labelled `origin` now,
-/// or none when it can: its changes must be the step on top of the project's undo history, made in
-/// this window, in one step. Empty when the changes are not applied (the card says so itself). The
-/// reason names what happened: the model changed during the turn (its changes are several steps),
-/// after it (the model is no longer at the turn's end), or the history no longer holds its step.
-pub fn undo_refusal(shell: &Shell, origin: Option<&str>, turn: &Turn) -> Option<String> {
+/// or none when it can: its changes must be the step on top of the undo history they were made
+/// in, made in this window, in one step.
+pub fn undo_refusal(shell: &Shell, origin: Option<&str>, turn: &Turn) -> Option<UndoRefusal> {
     let change = turn.change.as_ref()?;
     if change.state != ChangeState::Applied {
-        return Some(String::new());
+        return Some(UndoRefusal::NotApplied);
     }
-    let Some(span) = change.span else {
-        return Some(tr("The undo history ends when the project closes, so these changes can no longer be undone here."));
-    };
-    let gone = || Some(tr("The undo history no longer holds this turn's changes, so they can no longer be undone here."));
-    let Some(s) = shell.session.as_ref() else { return gone() };
+    let Some(span) = change.span else { return Some(UndoRefusal::ProjectClosed) };
+    if shell.viewing().is_some() {
+        return Some(UndoRefusal::Viewing);
+    }
+    // A session with another history is one a Restore put in place, whatever its revision.
+    let Some(s) = shell.session.as_ref().filter(|s| s.history() == span.history) else { return Some(UndoRefusal::HistoryGone) };
     let at_end = s.revision() == span.after;
     if span.steps == 1 && at_end && s.undo_revision() == Some(span.before) && origin.is_some() && s.undo_origin() == origin {
         return None;
     }
-    if span.steps > 1 {
-        Some(tr("The model changed during this turn, so its changes can no longer be undone on their own."))
+    Some(if span.steps > 1 {
+        UndoRefusal::ChangedDuring
     } else if !at_end {
-        Some(tr("The model changed after this turn, so its changes can no longer be undone on their own."))
+        UndoRefusal::ChangedAfter
     } else {
-        gone()
-    }
+        UndoRefusal::HistoryGone
+    })
 }
 
 /// Undoes `turn`'s changes: the one step of the undo history they are, while it is on top.

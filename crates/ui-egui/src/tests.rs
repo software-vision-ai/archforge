@@ -10935,6 +10935,75 @@ fn the_changes_card_says_during_and_one_step_only_when_true() {
     assert!(painted_has(&h, "Taken back in one step of the project's undo history."), "{:?}", painted(&h));
 }
 
+/// A card says why its turn cannot be undone: a version in view is only for now, and a Restore
+/// ends that history for good, however the new session's revisions happen to fall. Never by the
+/// numbers of another session: a card does not move to undone because a revision matches.
+#[test]
+fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
+    use crate::chat::ChatEvent;
+    use crate::chat_fixture as fx;
+    use crate::chat_panel::{UndoRefusal, undo_refusal};
+    let refusal = |h: &Harness<'static, Shell>| {
+        let chat = h.state().chat_panel.chat.as_ref().unwrap();
+        undo_refusal(h.state(), chat.origin.as_deref(), chat.turns.last().unwrap())
+    };
+    let state = |h: &Harness<'static, Shell>| h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap().change.clone().unwrap();
+    let another = |h: &mut Harness<'static, Shell>| {
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = archforge_mof::rows::snapshot(h.state().session.as_ref().unwrap().doc(), &tables, &junctions).unwrap();
+        let mut n = 0u64;
+        let mint = move || {
+            n += 1;
+            let mut r = [0u8; 10];
+            r[2..].copy_from_slice(&n.to_be_bytes());
+            archforge_mof::Uuid::v7(1_761_670_900_000, r)
+        };
+        archforge_notations::session_from_rows_repaired(&rows, Box::new(mint), |_| {}).unwrap()
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let undo = "workspace.chat.turn.1.undo";
+        let at = rect_of(&h, "workspace.chat.allow-changes").center();
+        click(&mut h, at);
+        ask_in_chat(&mut h, "Describe Customer.");
+        let id = fx::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+        let params = serde_json::json!({ "command": "element.describe", "params": { "element": id.to_string(), "text": "A buyer" } });
+        fx::call(h.state_mut(), "engine.execute", params).unwrap();
+        h.run();
+        chat_event(&mut h, &rig, ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        assert_eq!(refusal(&h), None, "{theme:?}");
+        assert!(ids(&h).iter().any(|i| i == undo));
+        // A version in view: the history is only set aside, and comes back with current work.
+        let preview = another(&mut h);
+        h.state_mut().show_version(preview, "c1".into());
+        h.run();
+        assert_eq!(refusal(&h), Some(UndoRefusal::Viewing), "{theme:?}");
+        assert!(painted_has(&h, &UndoRefusal::Viewing.words()), "{theme:?}: {:?}", painted(&h));
+        assert!(!ids(&h).iter().any(|i| i == undo));
+        assert!(h.state_mut().back_to_current_work());
+        h.run();
+        assert_eq!(refusal(&h), None, "{theme:?}: as it was");
+        assert!(ids(&h).iter().any(|i| i == undo));
+        // A Restore: a new session and a new history, whichever revision it is at.
+        let restored = another(&mut h);
+        h.state_mut().install(restored, false);
+        h.run();
+        assert_eq!(refusal(&h), Some(UndoRefusal::HistoryGone), "{theme:?}");
+        assert!(painted_has(&h, &UndoRefusal::HistoryGone.words()), "{theme:?}: {:?}", painted(&h));
+        assert_ne!(UndoRefusal::HistoryGone.words(), UndoRefusal::ChangedAfter.words(), "the card names the real reason");
+        assert!(!ids(&h).iter().any(|i| i == undo));
+        let span = state(&h).span.unwrap();
+        while h.state().session.as_ref().unwrap().revision() < span.before {
+            let name = format!("later{}", h.state().session.as_ref().unwrap().revision());
+            h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+        }
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), span.before, "the same number, in another history");
+        h.run();
+        assert_eq!(state(&h).state, crate::chat_store::ChangeState::Applied, "{theme:?}: not read as undone");
+        assert_eq!(refusal(&h), Some(UndoRefusal::HistoryGone), "{theme:?}");
+    }
+}
+
 /// A turn's change that cleared the whole history, merged into the turn's step, is still the
 /// turn's: counted with the change before it, with nothing left to undo.
 #[test]
