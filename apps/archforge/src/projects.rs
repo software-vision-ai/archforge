@@ -103,8 +103,28 @@ pub enum RestoreError {
     Unwritten(String),
     /// The version could not be read.
     Version(archforge_project::Error),
-    /// A later step failed.
+    /// It could not start: nothing changed.
     Failed(String),
+    /// The unsaved work could not be kept as a version: no version was made and nothing changed.
+    WorkNotKept(String),
+    /// Whether the unsaved work was kept as a version cannot be told. The model did not change.
+    WorkUnknown(String),
+    /// The version was not restored and no version of it was made. `kept_work` says whether the
+    /// unsaved work was kept as a version first. The work's rows were written back, or, when
+    /// `written_back` is false, they wait to be written with the next change.
+    NotRestored {
+        why: String,
+        kept_work: bool,
+        written_back: bool,
+    },
+    /// Whether the version was committed cannot be told, so nothing was written over it. Further
+    /// restores of this project are refused until it has been closed.
+    CannotTell {
+        why: String,
+        kept_work: bool,
+    },
+    /// An earlier restore of this project ended in [`RestoreError::CannotTell`].
+    OutcomeUnknown,
 }
 
 impl std::fmt::Display for RestoreError {
@@ -114,12 +134,24 @@ impl std::fmt::Display for RestoreError {
             RestoreError::BranchChanged => f.write_str("a switch moved the project first"),
             RestoreError::NotOpen => f.write_str("the project is no longer open"),
             RestoreError::Unwritten(why) | RestoreError::Failed(why) => f.write_str(why),
+            RestoreError::WorkNotKept(why) | RestoreError::WorkUnknown(why) => f.write_str(why),
+            RestoreError::NotRestored { why, kept_work, written_back } => {
+                let waits = if *written_back { "" } else { "; the work's rows wait to be written" };
+                write!(f, "{why}{}{waits}", kept_note(*kept_work))
+            }
+            RestoreError::CannotTell { why, kept_work } => write!(f, "{why}{}", kept_note(*kept_work)),
+            RestoreError::OutcomeUnknown => f.write_str("whether an earlier restore finished could not be told"),
             RestoreError::Version(e) => e.fmt(f),
         }
     }
 }
 
 impl std::error::Error for RestoreError {}
+
+/// What a failed restore's reason adds about the version of the unsaved work.
+fn kept_note(kept_work: bool) -> &'static str {
+    if kept_work { "; the unsaved work was kept as a version" } else { "" }
+}
 
 /// How a switch of branch went.
 #[derive(Debug, Clone, PartialEq)]
@@ -206,9 +238,14 @@ struct Inner {
     readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
     /// Each project's switch generation: absent is 0, and nothing has moved it yet.
     generations: Mutex<BTreeMap<PathBuf, u64>>,
+    /// The projects a restore of which ended with its outcome unknown, until they are closed.
+    restores_unknown: Mutex<std::collections::BTreeSet<PathBuf>>,
     /// Runs just before a switch moves, for a test to ask for a job between the steps.
     #[cfg(test)]
     before_move: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// What is to go wrong in a restore, for a test: each fault is used once.
+    #[cfg(test)]
+    restore_faults: Mutex<Vec<Fault>>,
     /// Makes committing the waiting conversations fail, for a test.
     #[cfg(test)]
     fail_chats: AtomicBool,
@@ -263,6 +300,9 @@ impl Projects {
                 #[cfg(test)]
                 before_move: Mutex::new(None),
                 #[cfg(test)]
+                restore_faults: Mutex::new(Vec::new()),
+                restores_unknown: Mutex::new(std::collections::BTreeSet::new()),
+                #[cfg(test)]
                 fail_chats: AtomicBool::new(false),
                 #[cfg(test)]
                 fail_schema: AtomicBool::new(false),
@@ -315,8 +355,8 @@ impl Projects {
     }
 
     /// Starts restoring a version of `project` on the writer, and returns at once; see [`restore`].
-    /// Nothing may call this until AR-322 and AR-323 land: what a failed step leaves and how long
-    /// the job may take are theirs. The window calls it from AR-324.
+    /// Nothing may call this until AR-323 lands: how long the job may take is its concern. The
+    /// window calls it from AR-324.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn restore_version(&self, project: &Path, request: RestoreRequest) -> Receiver<Result<Restored, RestoreError>> {
         let (tx, rx) = channel();
@@ -733,6 +773,7 @@ fn close_job(inner: &Arc<Inner>, path: &Path, reply: &Sender<Result<(), String>>
     };
     settle_reads(inner, path, FLUSH_BUDGET);
     lock(&inner.writing).remove(path);
+    lock(&inner.restores_unknown).remove(path);
     if let Some(project) = project {
         log::info!("closed the project {}", path.display());
         if let Err(e) = project.close() {
@@ -791,6 +832,7 @@ fn discard_job(inner: &Arc<Inner>, path: &Path, reset: bool, reply: &Sender<Resu
     };
     settle_reads(inner, path, FLUSH_BUDGET);
     lock(&inner.writing).remove(path);
+    lock(&inner.restores_unknown).remove(path);
     if let Some(project) = project
         && let Err(e) = project.close()
     {
@@ -1000,7 +1042,15 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             continue;
         };
         let Some(rows) = waiting.get(&target) else { continue };
-        let result = schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()));
+        #[cfg(test)]
+        let refused = take_fault(inner, |f| matches!(f, Fault::WriteBack)).is_some();
+        #[cfg(not(test))]
+        let refused = false;
+        let result = if refused {
+            Err("a test refused".to_string())
+        } else {
+            schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()))
+        };
         drop(open);
         let mut states = lock(&inner.writing);
         match result {
@@ -1084,8 +1134,16 @@ fn differs(found: Result<Vec<Difference>, ClassifyError>) -> Result<bool, Restor
 /// The comparison is here, not in the window as step 6 of the design's order has it: this spares
 /// the frame and compares what is really stored, and nothing has been written at this point.
 ///
-/// A step that fails stops here and says why. What it leaves behind is not dealt with yet: that is
-/// AR-322, and nothing may call this until it has landed.
+/// | Fails at | Versions made | The working set | The answer |
+/// |---|---|---|---|
+/// | Keeping the work: no version | None | Unchanged | [`RestoreError::WorkNotKept`] |
+/// | Keeping the work: cannot tell | Perhaps that one | Unchanged | [`RestoreError::WorkUnknown`] |
+/// | Writing the rows, however it failed | Any of the work | The work's rows are written back | [`RestoreError::NotRestored`] |
+/// | The commit: no version | Any of the work | The work's rows are written back | [`RestoreError::NotRestored`] |
+/// | The commit: cannot tell | Any of the work, perhaps the restore | Left alone: nothing is written over it | [`RestoreError::CannotTell`] |
+///
+/// A commit that reported a failure but moved `HEAD` has finished. Rows written back are written as
+/// autosave writes them, and wait for the next change if that fails too.
 fn restore(
     inner: &Inner,
     path: &Path,
@@ -1096,6 +1154,9 @@ fn restore(
 ) -> Result<Restored, RestoreError> {
     if generation != generation_of(inner, path) {
         return Err(RestoreError::BranchChanged);
+    }
+    if lock(&inner.restores_unknown).contains(path) {
+        return Err(RestoreError::OutcomeUnknown);
     }
     let schema = schema(inner).map_err(|e| RestoreError::Failed(format!("{e:?}")))?;
     write_waiting(inner, waiting);
@@ -1110,11 +1171,133 @@ fn restore(
     if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
         return Ok(Restored::Same { kept_work: false });
     }
+    let replaced = replace(inner, project, &schema, &request, &version);
+    drop(open);
+    match replaced {
+        Ok(done) => Ok(done),
+        Err(Stop::Unchanged(error)) => Err(error),
+        Err(Stop::WriteBack { why, kept_work }) => {
+            waiting.insert(path.to_path_buf(), current);
+            write_waiting(inner, waiting);
+            *failed = !waiting.is_empty();
+            Err(RestoreError::NotRestored { why, kept_work, written_back: !waiting.contains_key(path) })
+        }
+        Err(Stop::CannotTell { why, kept_work }) => {
+            lock(&inner.restores_unknown).insert(path.to_path_buf());
+            Err(RestoreError::CannotTell { why, kept_work })
+        }
+    }
+}
+
+/// How a restore's writing stopped, and what is left to do about it.
+enum Stop {
+    /// The model did not change.
+    Unchanged(RestoreError),
+    /// The version's rows may be in the working set and are not committed: the work's go back.
+    WriteBack { why: String, kept_work: bool },
+    /// The commit's outcome cannot be told.
+    CannotTell { why: String, kept_work: bool },
+}
+
+/// Keeps the unsaved work as a version, writes the version's rows and commits them.
+fn replace(inner: &Inner, project: &Project, schema: &ModelSchema, request: &RestoreRequest, version: &Rows) -> Result<Restored, Stop> {
+    use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
-    let save = |message: String| project.save_version(&message, &author).map_err(|f| RestoreError::Failed(f.error.to_string()));
-    let kept_work = matches!(save(format!("Before restoring {}", now()))?, archforge_project::Saved::Version { .. });
-    project.write_model(&schema, &version).map_err(|e| RestoreError::Failed(e.to_string()))?;
-    Ok(restored(save(format!("Restored the version of {}", request.saved_at))?, kept_work))
+    let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
+        Ok(saved) => matches!(saved, archforge_project::Saved::Version { .. }),
+        Err(f) => match f.version {
+            Version(_) => true,
+            NoVersion => return Err(Stop::Unchanged(RestoreError::WorkNotKept(f.error.to_string()))),
+            CannotTell => return Err(Stop::Unchanged(RestoreError::WorkUnknown(f.error.to_string()))),
+        },
+    };
+    if let Err(e) = write_step(inner, project, schema, version) {
+        return Err(Stop::WriteBack { why: e.to_string(), kept_work });
+    }
+    match save_step(inner, project, &format!("Restored the version of {}", request.saved_at), &author) {
+        Ok(saved) => Ok(restored(saved, kept_work)),
+        Err(f) => match f.version {
+            Version(_) => Ok(Restored::Version { kept_work }),
+            NoVersion => Err(Stop::WriteBack { why: f.error.to_string(), kept_work }),
+            CannotTell => Err(Stop::CannotTell { why: f.error.to_string(), kept_work }),
+        },
+    }
+}
+
+/// A save of a restore, and what a test made of it.
+fn save_step(inner: &Inner, project: &Project, message: &str, author: &Author) -> Result<archforge_project::Saved, archforge_project::SaveFailure> {
+    #[cfg(test)]
+    if let Some(Fault::Commit(_, told, lands)) = take_fault(inner, |f| matches!(f, Fault::Commit(start, ..) if message.starts_with(start))) {
+        let hash = if lands {
+            project.save_version(message, author).map_err(|f| format!("{f:?}")).unwrap();
+            "landed"
+        } else {
+            ""
+        };
+        let version = told.after(hash);
+        return Err(archforge_project::SaveFailure { error: refused_by_test(project), version });
+    }
+    let _ = inner;
+    project.save_version(message, author)
+}
+
+/// A write of a restore's rows, and what a test made of it.
+fn write_step(inner: &Inner, project: &Project, schema: &ModelSchema, rows: &Rows) -> Result<(), archforge_project::Error> {
+    #[cfg(test)]
+    if let Some(Fault::Write { lands }) = take_fault(inner, |f| matches!(f, Fault::Write { .. })) {
+        if lands {
+            project.write_model(schema, rows)?;
+        }
+        return Err(refused_by_test(project));
+    }
+    let _ = inner;
+    project.write_model(schema, rows)
+}
+
+/// What goes wrong in a restore, for a test.
+#[cfg(test)]
+enum Fault {
+    /// The commit whose message starts so reports a failure, having landed or not.
+    Commit(&'static str, Told, bool),
+    /// Writing the version's rows fails, having landed or not.
+    Write { lands: bool },
+    /// The next writing of what waits fails.
+    WriteBack,
+}
+
+/// What a failed commit is judged to have left, for a test.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum Told {
+    NoVersion,
+    Landed,
+    CannotTell,
+}
+
+#[cfg(test)]
+impl Told {
+    /// As the judgment of a commit whose new head is `hash`.
+    fn after(self, hash: &str) -> archforge_project::AfterFailure {
+        match self {
+            Told::NoVersion => archforge_project::AfterFailure::NoVersion,
+            Told::Landed => archforge_project::AfterFailure::Version(hash.to_string()),
+            Told::CannotTell => archforge_project::AfterFailure::CannotTell,
+        }
+    }
+}
+
+/// Takes the first fault `wanted` accepts, using it up.
+#[cfg(test)]
+fn take_fault(inner: &Inner, wanted: impl Fn(&Fault) -> bool) -> Option<Fault> {
+    let mut faults = lock(&inner.restore_faults);
+    let at = faults.iter().position(wanted)?;
+    Some(faults.remove(at))
+}
+
+/// The error a test's fault gives.
+#[cfg(test)]
+fn refused_by_test(project: &Project) -> archforge_project::Error {
+    archforge_project::Error::Damaged { path: project.path().to_path_buf(), why: "a test refused".into() }
 }
 
 /// What a restore's commit says: no version when nothing differed after all, which a comparison
@@ -2525,6 +2708,116 @@ mod tests {
         let unreadable = ClassifyError::Unreadable { side: "before", why: "x".into() };
         assert!(matches!(differs(Err(unreadable)), Err(RestoreError::Failed(_))));
         assert_eq!(restored(archforge_project::Saved::NothingNew, true), Restored::Same { kept_work: true });
+    }
+
+    /// A project with unsaved work, restored with `faults` waiting; the commits it held before.
+    fn restored_with(faults: Vec<Fault>) -> (Sandbox, PathBuf, Vec<String>, Result<Restored, RestoreError>) {
+        let (sandbox, path) = branched();
+        let host = sandbox.host.clone();
+        host.write(&path, model("c"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        let (old, messages) = (version(&host, 1), sandbox.messages());
+        *lock(&host.inner.restore_faults) = faults;
+        let answer = restore_of(&host, &path, &old);
+        (sandbox, path, messages, answer)
+    }
+
+    /// Asserts that the work is what the working set holds, and whether it is saved.
+    #[track_caller]
+    fn the_work_is_back(host: &Projects, saved_first: bool) {
+        assert_eq!(work(host), model("c"));
+        assert_eq!(unsaved(host), !saved_first);
+    }
+
+    /// Whether the newest commit is a `Before restoring` version.
+    fn before_on_top(messages: &[String]) -> bool {
+        messages[0].starts_with("Before restoring ")
+    }
+
+    /// Keeping the work fails: nothing moves, and the answer says whether a version exists.
+    #[test]
+    fn when_the_work_cannot_be_kept_nothing_is_restored() {
+        let before = "Before restoring";
+        let (sandbox, _path, messages, answer) = restored_with(vec![Fault::Commit(before, Told::NoVersion, false)]);
+        assert!(matches!(answer, Err(RestoreError::WorkNotKept(_))), "{answer:?}");
+        assert_eq!(sandbox.messages(), messages);
+        the_work_is_back(&sandbox.host, false);
+        for lands in [false, true] {
+            let (sandbox, _path, messages, answer) = restored_with(vec![Fault::Commit(before, Told::CannotTell, lands)]);
+            assert!(matches!(answer, Err(RestoreError::WorkUnknown(_))), "{answer:?}");
+            assert_eq!(sandbox.messages().len(), messages.len() + usize::from(lands));
+            the_work_is_back(&sandbox.host, lands);
+        }
+        // A commit that reported a failure and moved the head has finished.
+        let (sandbox, .., answer) = restored_with(vec![Fault::Commit(before, Told::Landed, true)]);
+        assert_eq!(answer.unwrap(), Restored::Version { kept_work: true });
+        assert_eq!(work(&sandbox.host), model("a"));
+    }
+
+    /// Writing the rows fails, whether or not they landed: the work's go back and its version stays.
+    #[test]
+    fn when_the_rows_cannot_be_written_the_work_goes_back() {
+        for lands in [false, true] {
+            let (sandbox, _path, _messages, answer) = restored_with(vec![Fault::Write { lands }]);
+            assert!(matches!(answer, Err(RestoreError::NotRestored { kept_work: true, written_back: true, .. })), "{answer:?}");
+            assert!(before_on_top(&sandbox.messages()));
+            the_work_is_back(&sandbox.host, true);
+        }
+    }
+
+    /// When the work's rows cannot go back either, they wait for the next write.
+    #[test]
+    fn rows_that_cannot_go_back_wait_for_the_next_write() {
+        let (sandbox, path, _messages, answer) = restored_with(vec![Fault::Write { lands: true }, Fault::WriteBack]);
+        assert!(matches!(answer, Err(RestoreError::NotRestored { kept_work: true, written_back: false, .. })), "{answer:?}");
+        let said = answer.unwrap_err().to_string();
+        assert!(said.contains("kept as a version") && said.contains("wait to be written"), "the reason says what exists: {said}");
+        let host = &sandbox.host;
+        // Not tried again on a timer: as after any failed write, the next change or flush tries it.
+        std::thread::sleep(SETTLE * 3);
+        assert_eq!((host.writing(&path).pending, work(host)), (true, model("a")), "still the version's rows");
+        assert!(host.writing(&path).error.is_some());
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        the_work_is_back(host, true);
+    }
+
+    /// The final commit fails: the work goes back and a retry still makes the restore's version, so
+    /// the history cannot be left without it behind an answer of "the same".
+    #[test]
+    fn a_failed_commit_writes_the_work_back_and_a_retry_makes_the_version() {
+        let restoring = "Restored the version";
+        let (sandbox, path, _messages, answer) = restored_with(vec![Fault::Commit(restoring, Told::NoVersion, false)]);
+        assert!(matches!(answer, Err(RestoreError::NotRestored { kept_work: true, written_back: true, .. })), "{answer:?}");
+        let host = &sandbox.host;
+        assert!(before_on_top(&sandbox.messages()));
+        the_work_is_back(host, true);
+        let old = version(host, 2);
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+        assert_eq!((sandbox.messages()[0].as_str(), work(host)), (format!("Restored the version of {SAVED_AT}").as_str(), model("a")));
+        // A commit that reported a failure and moved the head has finished.
+        let (sandbox, .., answer) = restored_with(vec![Fault::Commit(restoring, Told::Landed, true)]);
+        assert_eq!(answer.unwrap(), Restored::Version { kept_work: true });
+        assert_eq!(work(&sandbox.host), model("a"));
+    }
+
+    /// A commit whose outcome cannot be read is never written over, and until the project closes
+    /// a retry is refused rather than answering "the same" about a restore that may not exist.
+    #[test]
+    fn a_commit_that_cannot_be_told_is_not_written_over_and_stops_a_retry() {
+        for lands in [false, true] {
+            let (sandbox, path, _messages, answer) = restored_with(vec![Fault::Commit("Restored the version", Told::CannotTell, lands)]);
+            assert!(matches!(answer, Err(RestoreError::CannotTell { kept_work: true, .. })), "{answer:?}");
+            let host = &sandbox.host;
+            assert_eq!(work(host), model("a"), "nothing was written over it");
+            assert_eq!(unsaved(host), !lands);
+            assert_eq!(sandbox.messages()[0].starts_with("Restored the version"), lands);
+            let old = version(host, if lands { 3 } else { 2 });
+            assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)));
+            let closing = if lands { host.close_without_writing(&path) } else { host.close(&path) };
+            assert_eq!(closing.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Same { kept_work: false }, "reopened, it reads what is stored");
+        }
     }
 
     /// A switch that stopped before it tried to write leaves the writer's timer running: rows queued
