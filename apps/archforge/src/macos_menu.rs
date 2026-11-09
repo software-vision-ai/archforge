@@ -10,13 +10,8 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
+use archforge_ui_egui::actions::{self, ABOUT, GENERATE, OPEN, QUIT, SAVE};
 use archforge_ui_egui::i18n::tr;
-
-const ABOUT: &str = "app.about";
-const QUIT: &str = "app.quit";
-const OPEN: &str = "file.open";
-const SAVE: &str = "file.save";
-const GENERATE: &str = "file.generate";
 
 pub struct NativeMenu {
     _menu: Menu,
@@ -31,14 +26,14 @@ pub fn build(ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
     let app = Submenu::new("Archforge", true);
-    let quit = MenuItem::with_id(QUIT, tr("Quit Archforge"), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
-    let about = MenuItem::with_id(ABOUT, tr("About Archforge…"), true, None);
+    let quit = MenuItem::with_id(QUIT, actions::label(QUIT), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
+    let about = MenuItem::with_id(ABOUT, actions::label(ABOUT), true, None);
     app.append_items(&[&about, &PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])
         .map_err(err)?;
     let file = Submenu::new(tr("File"), true);
-    let open = MenuItem::with_id(OPEN, tr("Open…"), false, Accelerator::from_str("CmdOrCtrl+O").ok());
-    let save = MenuItem::with_id(SAVE, tr("Save"), false, Accelerator::from_str("CmdOrCtrl+S").ok());
-    let generate = MenuItem::with_id(GENERATE, tr("Generate…"), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
+    let open = MenuItem::with_id(OPEN, actions::label(OPEN), false, Accelerator::from_str("CmdOrCtrl+O").ok());
+    let save = MenuItem::with_id(SAVE, actions::label(SAVE), false, Accelerator::from_str("CmdOrCtrl+S").ok());
+    let generate = MenuItem::with_id(GENERATE, actions::label(GENERATE), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
     file.append_items(&[&open, &PredefinedMenuItem::separator(), &save, &PredefinedMenuItem::separator(), &generate]).map_err(err)?;
     menu.append_items(&[&app, &file]).map_err(err)?;
     let (sender, chosen) = channel();
@@ -63,14 +58,7 @@ fn forward(sender: Sender<MenuEvent>, ctx: egui::Context) -> impl Fn(MenuEvent) 
 /// Runs every item waiting in `chosen`, in the order they were chosen.
 fn run_chosen(chosen: &Receiver<MenuEvent>, shell: &mut Shell) {
     while let Ok(event) = chosen.try_recv() {
-        match event.id().0.as_str() {
-            ABOUT => shell.open_about(),
-            QUIT => shell.request_quit(),
-            OPEN => shell.open_from_picker(),
-            SAVE => shell.save(),
-            GENERATE => shell.open_generate(),
-            _ => {}
-        }
+        actions::run(shell, event.id().0.as_str());
     }
 }
 
@@ -78,9 +66,9 @@ impl NativeMenu {
     /// Runs the items chosen since the last frame, then enables each for what the shell can do now.
     pub fn frame(&self, shell: &mut Shell) {
         run_chosen(&self.chosen, shell);
-        self.open.set_enabled(shell.can_open_project());
-        self.save.set_enabled(shell.can_save());
-        self.generate.set_enabled(shell.can_generate());
+        self.open.set_enabled(actions::available(shell, OPEN));
+        self.save.set_enabled(actions::available(shell, SAVE));
+        self.generate.set_enabled(actions::available(shell, GENERATE));
     }
 }
 

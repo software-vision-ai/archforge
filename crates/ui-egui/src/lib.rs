@@ -6,6 +6,7 @@
 //! supplies `Services`.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod actions;
 pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
@@ -1662,19 +1663,7 @@ impl Shell {
         // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
         // bar takes both first.
         let now = ctx.input(|i| i.time);
-        // File → Generate…'s keys, on every platform.
-        if self.can_generate()
-            && self.ask.is_none()
-            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::G))
-        {
-            self.open_generate();
-        }
-        if self.can_save() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
-            self.save();
-        }
-        if self.about.is_none() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::O)) {
-            self.open_from_picker();
-        }
+        actions::run_shortcuts(self, ctx);
         // A skill's text is kept once its typing pauses, and all of it before quitting.
         skill_tab::sync(self, now, self.quit_requested, None);
         if skill_tab::waiting(self) {
