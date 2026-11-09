@@ -474,6 +474,13 @@ str		No changes since the last version.	No changes since the last version.
 str		No versions yet.	No versions yet.
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
+str		Filter changes…	Filter changes…
+str		Model elements	Model elements
+str		Unnamed	Unnamed
+str		Added	Added
+str		Changed	Changed
+str		Removed	Removed
+str		The changes couldn't be compared.	The changes couldn't be compared.
 str		All	All
 str		With a description	With a description
 str		Show more	Show more

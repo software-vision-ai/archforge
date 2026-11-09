@@ -8079,6 +8079,8 @@ fn versions_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
     let (mut h, host) = saving_harness(Some(commerce()), None);
     h.state_mut().state.theme = theme;
     h.state_mut().services.projects = None;
+    h.state_mut().versions = Default::default();
+    host.version_reads.lock().unwrap().clear();
     let at = rect_of(&h, "workspace.explorers.source-control").center();
     click(&mut h, at);
     h.state_mut().services.projects = Some(host.clone());
@@ -8138,13 +8140,10 @@ fn the_versions_panel_lists_keeps_and_reads_again() {
     in_both_appearances(|theme| {
         let (mut h, host) = versions_panel(theme);
         let (first, second) = ("workspace.versions.row.aa", "workspace.versions.row.bb");
-        let no_changes = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t == "No changes since the last version.");
         versions_answer(&mut h, &host, Ok(two_versions()));
         assert!(has_id(&h, first) && has_id(&h, second), "{theme:?}");
         assert!(painted(&h).iter().any(|t| t == "Add order status") && painted(&h).iter().any(|t| t == "2"), "{:?}", painted(&h));
-        assert!(no_changes(&h), "{theme:?}: nothing unsaved");
         add_schema(&mut h, "crm");
-        assert!(!no_changes(&h), "{theme:?}: unsaved work");
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         versions_answer(&mut h, &host, Err("the server stopped".into()));
@@ -8208,6 +8207,11 @@ fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Har
     let now = crate::chat_words::seconds_of("2026-11-09T12:00:00Z").unwrap();
     h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now, offset: Some(3600) }));
     versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions, more: false }));
+    h.run_steps(2);
+    assert!(h.ctx.has_requested_repaint(), "{theme:?}: the window looks again for the last version's rows");
+    let rows = rows_now(&h);
+    answer_read(&mut h, &host, Ok(rows));
+    compared(&mut h);
     (h, host)
 }
 
@@ -8344,6 +8348,152 @@ fn the_rail_counts_changes_sections_fold_and_rows_fit() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(!has_id(&h, badge), "{theme:?}: the count ended with the session");
+    });
+}
+
+/// Frames until the comparison on another thread has answered, at most a few seconds.
+fn compared(h: &mut Harness<'static, Shell>) {
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    h.run_steps(2);
+    while h.state().versions.comparing.is_some() {
+        assert!(std::time::Instant::now() < until, "the comparison answered");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+}
+
+/// A project with one version, the rows of now, its panel read and compared: no changes yet.
+fn changes_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    versions_listed(theme, vec![version_row("c1", Some("First"), (None, false), "2026-11-08T15:30:00Z")])
+}
+
+/// Whether the panel says nothing has changed.
+fn no_changes_said(h: &Harness<'static, Shell>) -> bool {
+    painted(h).iter().any(|t| t == "No changes since the last version.")
+}
+
+/// What differs from the last version lists by group with a count and fills the rail's badge; a
+/// save's own tables list nothing and are not called no changes; a change the model undoes is.
+#[test]
+fn working_changes_list_what_a_save_would_write() {
+    let row_count = |h: &Harness<'static, Shell>| ids(h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        assert!(no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let key = h.state().versions.compared.clone().unwrap();
+        h.state_mut().versions.comparing = Some((key, rx));
+        h.run_steps(2);
+        assert!(!crate::versions::settled(h.state()) && !no_changes_said(&h), "{theme:?}: not before it has said");
+        h.state_mut().versions.comparing = None;
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        assert_eq!((row_count(&h), h.state().versions.working), (1, 1), "{theme:?}");
+        let texts = painted(&h);
+        assert!(!no_changes_said(&h) && ["MODEL ELEMENTS", "crm", "A", "1"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
+        assert!(h.state_mut().session.as_mut().unwrap().execute("edit.undo", &serde_json::Value::Null).is_ok());
+        compared(&mut h);
+        assert_eq!(row_count(&h), 0, "{theme:?}: undone");
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
+        h.run_steps(2);
+        assert!(!no_changes_said(&h) && row_count(&h) == 0, "{theme:?}: only a save's own tables differ");
+    });
+}
+
+/// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
+#[test]
+fn working_changes_filter_a_long_list() {
+    use egui_kittest::kittest::Queryable;
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        (0..13).for_each(|i| add_schema(&mut h, &format!("schema{i}")));
+        compared(&mut h);
+        assert!(has_id(&h, "workspace.versions.filter") && h.state().versions.working == 13, "{theme:?}");
+        h.state_mut().versions.filter = "schema7".to_string();
+        h.run_steps(2);
+        let shown = ids(&h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
+        assert_eq!((shown, h.state().versions.working), (1, 13), "{theme:?}");
+        use archforge_notations::differences::{Area, ChangeKind, Difference};
+        let item = |n: u8, area, kind| Difference {
+            id: archforge_mof::Uuid([n; 16]),
+            class: archforge_core::SKILL,
+            area,
+            kind,
+            name: Some(format!("item{n}")),
+            path: vec![],
+        };
+        let found = vec![item(1, Area::Model, ChangeKind::Changed), item(2, Area::Diagram, ChangeKind::Removed)];
+        let (current, (tx, rx)) = (h.state().versions.compared.clone().expect("compared"), std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some((current, rx));
+        tx.send(Ok(found)).unwrap();
+        h.run_steps(1);
+        assert!(h.query_by_label("Versions · 2 changes").is_some() && painted(&h).iter().any(|t| t == "2"), "{theme:?}");
+        h.run_steps(1);
+        let texts = painted(&h);
+        assert!(["MODEL ELEMENTS", "DIAGRAMS", "item1", "item2", "C", "R"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
+        h.state_mut().versions.filter = "nothing has this".to_string();
+        h.run_steps(2);
+        let rows = ids(&h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
+        assert_eq!(rows, 2, "{theme:?}: a filter left from a longer list hides nothing, as nothing could clear it");
+        h.state_mut().versions.filter = "gone with the session".to_string();
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(h.state().versions.filter.is_empty(), "{theme:?}");
+    });
+}
+
+/// An answer for rows that have moved on is dropped, a version in view is not compared, a change
+/// of session lets go of what was found, and rows that cannot be read say so, not "no changes".
+#[test]
+fn working_changes_belong_to_the_rows_compared() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        let revision = h.state().session.as_ref().unwrap().revision();
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        let (tx, rx) = std::sync::mpsc::channel();
+        h.state_mut().versions.comparing = Some(((Some("c1".to_string()), revision), rx));
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "more" })).unwrap();
+        h.run_steps(2);
+        assert_eq!(h.state().versions.comparing.as_ref().map(|(key, _)| key.1), Some(revision), "{theme:?}: one at a time");
+        tx.send(Ok(Vec::new())).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.state().versions.working, 1, "{theme:?}: the old answer is dropped");
+        compared(&mut h);
+        assert_eq!(h.state().versions.working, 2, "{theme:?}: the old answer is dropped, the newest rows compared");
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().versions.compared = Some((Some("older".to_string()), 0));
+        h.run_steps(2);
+        assert!(h.state().versions.comparing.is_none() && !crate::versions::settled(h.state()), "{theme:?}: not during a gesture");
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        start_viewing(&mut h, "c1");
+        let earlier = rows_now(&h);
+        answer_read(&mut h, &host, Ok(earlier));
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        let v = &h.state().versions;
+        assert!(v.comparing.is_none() && v.working == 0 && host.reads.lock().unwrap().is_empty(), "{theme:?}: a version in view is not current work");
+        assert!(!painted(&h).iter().any(|t| t == "Loading"), "{theme:?}: nor waited for");
+        let (mut h, host) = versions_panel(theme);
+        let last = version_row("c1", None, (None, false), "2026-11-08T15:30:00Z");
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![last], more: false }));
+        h.run_steps(2);
+        answer_read(&mut h, &host, Err("unreadable".to_string()));
+        h.run_steps(2);
+        assert!(has_id(&h, "workspace.versions.changes.failed") && !no_changes_said(&h), "{theme:?}");
+        assert!(host.reads.lock().unwrap().is_empty(), "{theme:?}: not asked again every frame");
+    });
+}
+
+/// Before any version everything is added but the project's own root.
+#[test]
+fn before_the_first_version_everything_is_added_but_the_root() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        add_schema(&mut h, "crm");
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        compared(&mut h);
+        assert_eq!(h.state().versions.working, 1, "{theme:?}: the schema");
     });
 }
 

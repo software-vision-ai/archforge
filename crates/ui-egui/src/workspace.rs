@@ -332,6 +332,8 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.right() - 1.0, r.top()), r.max), 0.0, p.border);
+    // Before the rail says the count, so its words and its badge are of one frame.
+    crate::versions::refresh(shell, ui.ctx());
     let active = shell.state.explorer;
     for (i, (id, which, icon, title)) in EXPLORERS.iter().enumerate() {
         let button = Rect::from_min_size(pos2(r.left() + 10.0, r.top() + 8.0 + i as f32 * RAIL_PITCH), RAIL_BUTTON);

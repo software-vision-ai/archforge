@@ -475,6 +475,13 @@ str		No changes since the last version.	自上一版本以来没有更改。
 str		No versions yet.	还没有版本。
 str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
 str		Loading	正在加载
+str		Filter changes…	筛选更改…
+str		Model elements	模型元素
+str		Unnamed	未命名
+str		Added	已添加
+str		Changed	已更改
+str		Removed	已移除
+str		The changes couldn't be compared.	无法比较这些更改。
 str		All	全部
 str		With a description	有描述
 str		Show more	显示更多

@@ -475,6 +475,13 @@ str		No changes since the last version.	前のバージョンから変更はあ�
 str		No versions yet.	バージョンはまだありません。
 str		No versions yet. Save version records your first one.	バージョンはまだありません。「バージョンを保存」で最初のバージョンを記録します。
 str		Loading	読み込み中
+str		Filter changes…	変更を絞り込む…
+str		Model elements	モデル要素
+str		Unnamed	名前なし
+str		Added	追加
+str		Changed	変更
+str		Removed	削除
+str		The changes couldn't be compared.	変更を比較できませんでした。
 str		All	すべて
 str		With a description	説明あり
 str		Show more	さらに表示

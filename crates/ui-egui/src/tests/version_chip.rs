@@ -10,6 +10,7 @@ fn in_both(test: impl Fn(Harness<'static, Shell>, std::sync::Arc<SavingHost>)) {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, host) = saving_harness(Some(commerce()), None);
         h.state_mut().state.theme = theme;
+        host.version_reads.lock().unwrap().clear();
         test(h, host);
     }
 }
@@ -26,7 +27,7 @@ fn opened_list(h: &mut Harness<'static, Shell>, host: &SavingHost) {
         ..Default::default()
     };
     let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, None, false)];
-    host.version_reads.lock().unwrap().remove(0).send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
+    host.version_reads.lock().unwrap().pop().unwrap().send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
     h.run_steps(3);
 }
 
@@ -44,7 +45,7 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
-        assert_eq!(host.version_limits.lock().unwrap()[0], 7, "the newest versions, each one in reach");
+        assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 7, "the newest versions, each one in reach");
         host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
         assert!(["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)));
