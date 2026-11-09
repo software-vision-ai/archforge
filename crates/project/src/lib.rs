@@ -16,6 +16,9 @@
 mod branch_name;
 mod branches;
 mod chat;
+// Nothing calls this until the recovery on opening (AR-320).
+#[cfg_attr(not(test), allow(dead_code))]
+mod creation;
 mod description;
 mod error;
 mod model;
