@@ -77,9 +77,9 @@ enum Job {
     /// own channel.
     Chat(PathBuf, u64, ChatJob),
     /// Move a project to another branch; the generation is the project's when it was asked for.
-    Switch(PathBuf, SafeBranch, (u64, u64), Arc<()>, Sender<Result<Switched, SwitchError>>),
+    Switch(PathBuf, SafeBranch, (u64, u64), Arc<JobWatch>, Sender<Result<Switched, SwitchError>>),
     /// The first step of a switch: everything but the move. Generation and open instance as for
-    /// [`Job::Switch`], whose token keeps the switch under way until the writer is done with it.
+    /// [`Job::Switch`], whose watch keeps the switch under way until the writer is done with it.
     CheckSwitch(PathBuf, SafeBranch, (u64, u64), Sender<Result<CheckedBranch, SwitchError>>),
     /// Make a branch at a version, or from current work when none is named; the generation and the
     /// open instance are the project's when it was asked for.
@@ -90,20 +90,22 @@ enum Job {
     /// project's when it was asked for.
     RenameBranch(PathBuf, SafeBranch, SafeBranch, u64, u64, Sender<Result<(), RenameJobError>>),
     /// Restore a version of a project, the open instance and generation it was asked for with it;
-    /// see [`RestoreWatch`] for what it shares with those waiting.
-    Restore(PathBuf, RestoreRequest, u64, u64, Arc<RestoreWatch>, Sender<Result<Restored, RestoreError>>),
+    /// see [`JobWatch`] for what it shares with those waiting.
+    Restore(PathBuf, RestoreRequest, u64, u64, Arc<JobWatch>, Sender<Result<Restored, RestoreError>>),
 }
 
-/// What a restore shares with the wait for it and with its read-back; held in the mark of a
-/// restore whose outcome is unknown, it also says which restore set that mark.
+/// What a job on the writer shares with the wait for it and with its read-back; held in the mark
+/// of a restore whose outcome is unknown, it also says which restore set that mark.
 #[derive(Default)]
-struct RestoreWatch {
+struct JobWatch {
     /// The claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the job or the
     /// wait that gave up on it, decides, so a job given up on is never run late.
     claim: AtomicBool,
     /// The newest version just before the job's commit, and the branch the job ran on; none until
     /// the job has got that far.
     before_commit: Mutex<Option<(String, SafeBranch)>>,
+    /// A switch only: the writer has finished the job, however it went.
+    finished: AtomicBool,
     /// The read-back found this restore's version. Set and read under the lock on the marks, so
     /// that it and the writer's mark decide in either order.
     confirmed: AtomicBool,
@@ -210,8 +212,7 @@ pub struct CheckedBranch {
     pub unsaved: bool,
 }
 
-/// The two steps of a switch: the check, already asked of the writer, and the move. There is no
-/// limit on either and no reading back of a lost answer until AR-334.
+/// The two steps of a switch: the check, already asked of the writer, and the move.
 #[cfg_attr(not(test), allow(dead_code))]
 pub struct SwitchSteps {
     pub check: Receiver<Result<CheckedBranch, SwitchError>>,
@@ -225,12 +226,26 @@ pub struct SwitchMove {
     path: PathBuf,
     target: SafeBranch,
     asked: (u64, u64),
-    under_way: Arc<()>,
+    under_way: Arc<JobWatch>,
+    limit: Duration,
 }
 
 impl SwitchMove {
-    /// Hands the move to the writer and returns at once.
+    /// The move as the window runs it (AR-289): it hands the move to the writer within the limit
+    /// and reads back an answer that did not come.
     #[cfg_attr(not(test), allow(dead_code))]
+    pub fn into_job(self) -> ReplacementJob {
+        let SwitchMove { inner, path, target, asked, under_way, limit } = self;
+        let run = {
+            let (inner, path, target, under_way) = (inner.clone(), path.clone(), target.clone(), under_way.clone());
+            move || start_move(inner, path, target, asked, under_way, limit)
+        };
+        let read_back = move || Projects { inner }.read_back_switch(&path, target, under_way);
+        ReplacementJob { run: Box::new(run), read_back: Box::new(read_back) }
+    }
+
+    /// Hands the move to the writer and returns at once, its answer with its exact reason.
+    #[cfg(test)]
     pub fn run(self) -> Receiver<Result<Switched, SwitchError>> {
         let (tx, rx) = channel();
         if let Err(e) = writer(&self.inner).send(Job::Switch(self.path, self.target, self.asked, self.under_way, tx.clone())) {
@@ -251,6 +266,8 @@ pub enum SwitchError {
     AlreadyOnIt,
     /// Another switch of this project is under way.
     UnderWay,
+    /// The step gave no answer in time; a move that had not started never will.
+    NoAnswer,
     NotOpen,
     /// What waits could not be written: the rows are kept for the next write.
     Unwritten(String),
@@ -268,6 +285,7 @@ impl std::fmt::Display for SwitchError {
             SwitchError::Reopened => f.write_str("the project was closed after this was asked for"),
             SwitchError::AlreadyOnIt => f.write_str("the project is on that branch already"),
             SwitchError::UnderWay => f.write_str("another switch of this project is under way"),
+            SwitchError::NoAnswer => f.write_str("the switch gave no answer in time"),
             SwitchError::NotOpen => f.write_str("the project is no longer open"),
             SwitchError::Unwritten(why) | SwitchError::Failed(why) => f.write_str(why),
             SwitchError::Checks(e) => e.fmt(f),
@@ -276,6 +294,22 @@ impl std::fmt::Display for SwitchError {
 }
 
 impl std::error::Error for SwitchError {}
+
+impl SwitchError {
+    /// What a person is told. The project stayed on its branch in every case, and nothing more is
+    /// claimed, as the check may have upgraded the target's tables.
+    pub fn words(&self) -> String {
+        match self {
+            SwitchError::AlreadyOnIt => tr("You are already on this branch."),
+            SwitchError::BranchChanged | SwitchError::Reopened | SwitchError::UnderWay | SwitchError::NotOpen | SwitchError::NoAnswer => {
+                tr("The project stayed on its branch because it changed or was busy.")
+            }
+            SwitchError::Unwritten(_) => tr("Your latest changes could not be written, so the project stayed on its branch."),
+            SwitchError::Checks(e) => fmt(&tr("The project stayed on its branch: {why}"), &[("why", &e.to_string())]),
+            SwitchError::Failed(why) => fmt(&tr("The project stayed on its branch: {why}"), &[("why", why)]),
+        }
+    }
+}
 
 /// Why the writer made no branch.
 #[derive(Debug, PartialEq, Eq)]
@@ -416,14 +450,14 @@ struct Inner {
     /// Each project's switch generation: absent is 0, and nothing has moved it yet.
     generations: Mutex<BTreeMap<PathBuf, u64>>,
     /// The switch asked for on each project, under way for as long as anything still holds it.
-    switches: Mutex<BTreeMap<PathBuf, std::sync::Weak<()>>>,
+    switches: Mutex<BTreeMap<PathBuf, std::sync::Weak<JobWatch>>>,
     /// The projects a restore of which ended with its outcome unknown, each with that restore,
     /// until they are closed or that restore's read-back finds it finished.
-    restores_unknown: Mutex<BTreeMap<PathBuf, Arc<RestoreWatch>>>,
+    restores_unknown: Mutex<BTreeMap<PathBuf, Arc<JobWatch>>>,
     /// How many times each project has closed, as the instance a job names: absent is 0.
     instances: Mutex<BTreeMap<PathBuf, u64>>,
     /// Runs in both steps of a switch, once the target is checked, for a test to act just before
-    /// the move or its first step's end.
+    /// the move or its first step's end; and in a switch's read-back between its two reads.
     #[cfg(test)]
     before_move: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// What is to go wrong in a restore, for a test: each fault is used once.
@@ -523,7 +557,7 @@ impl Projects {
     pub fn switch_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<Switched, SwitchError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
-        if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, asked, Arc::new(()), tx.clone())) {
+        if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, asked, Arc::new(JobWatch::default()), tx.clone())) {
             let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
@@ -586,13 +620,18 @@ impl Projects {
         rx
     }
 
-    /// Asks for a switch of `project` to `target` in two steps: the check goes to the writer now,
-    /// and the move runs once the window has built the branch's model (AR-289). Refused while
-    /// another switch of the project is under way, which holds from here until its move has ended
-    /// or been dropped.
+    /// Asks for a switch of `project` to `target` in two steps, each within the limit of a job on
+    /// the writer: the check goes to the writer now, and the move runs once the window has built
+    /// the branch's model (AR-289). See [`Projects::start_switch_within`].
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn start_switch(&self, project: &Path, target: SafeBranch) -> Result<SwitchSteps, SwitchError> {
-        let under_way = Arc::new(());
+        self.start_switch_within(project, target, RESTORE_LIMIT)
+    }
+
+    /// [`Projects::start_switch`] within `limit` for each step. Refused while another switch of the
+    /// project is under way, which holds from here until its move has ended or been dropped.
+    fn start_switch_within(&self, project: &Path, target: SafeBranch, limit: Duration) -> Result<SwitchSteps, SwitchError> {
+        let under_way = Arc::new(JobWatch::default());
         {
             let mut switches = lock(&self.inner.switches);
             if switches.get(project).is_some_and(|held| held.strong_count() > 0) {
@@ -601,12 +640,28 @@ impl Projects {
             switches.insert(project.to_path_buf(), Arc::downgrade(&under_way));
         }
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
-        let (tx, check) = channel();
-        if let Err(e) = writer(&self.inner).send(Job::CheckSwitch(project.to_path_buf(), target.clone(), asked, tx.clone())) {
-            let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
-        }
-        let moving = SwitchMove { inner: self.inner.clone(), path: project.to_path_buf(), target, asked, under_way };
+        let check = ask_for_check(self.inner.clone(), project.to_path_buf(), target.clone(), asked, limit);
+        let moving = SwitchMove { inner: self.inner.clone(), path: project.to_path_buf(), target, asked, under_way, limit };
         Ok(SwitchSteps { check, moving })
+    }
+
+    /// Reads back, off the writer, whether a switch moved the project. It cannot be told until the
+    /// writer has finished the job, as one still running may yet move it; whether it has is read
+    /// before the branch, so that the branch is the one the job left.
+    fn read_back_switch(&self, project: &Path, target: SafeBranch, watch: Arc<JobWatch>) -> Receiver<Result<bool, String>> {
+        #[cfg(test)]
+        let inner = self.inner.clone();
+        self.on_a_reader(project, move |reader| {
+            if !watch.finished.load(Ordering::SeqCst) {
+                return Err("whether the switch finished could not be told".to_string());
+            }
+            #[cfg(test)]
+            if let Some(step) = lock(&inner.before_move).take() {
+                step();
+            }
+            let name = reader.active_branch().map_err(|e| e.to_string())?;
+            Ok(SafeBranch::found(&name).map_err(|e| e.to_string())?.same_branch(&target))
+        })
     }
 
     /// Reads back, off the writer, whether `project` is on `target`, for when a switch's answer was
@@ -624,7 +679,7 @@ impl Projects {
     pub fn restore_version(&self, project: &Path, request: RestoreRequest) -> Receiver<Result<Restored, RestoreError>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
-        let (instance, watch) = (instance_of(&self.inner, project), Arc::new(RestoreWatch::default()));
+        let (instance, watch) = (instance_of(&self.inner, project), Arc::new(JobWatch::default()));
         if let Err(e) = writer(&self.inner).send(Job::Restore(project.to_path_buf(), request, generation, instance, watch, tx.clone())) {
             let _ = tx.send(Err(RestoreError::Failed(format!("the writer stopped: {e}"))));
         }
@@ -719,7 +774,7 @@ impl Projects {
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
         let message = restored_message(&request.saved_at);
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
-        let watch = Arc::new(RestoreWatch::default());
+        let watch = Arc::new(JobWatch::default());
         let run = {
             let (inner, path, watch) = (inner.clone(), path.clone(), watch.clone());
             move || start_restore(inner, path, request, asked, watch, limit)
@@ -734,7 +789,7 @@ impl Projects {
     /// and may still be the newest. Anything else cannot be told, never that it did not finish, as
     /// a commit whose reply was lost may still be running; so too once the project has closed or
     /// its branch moved, the switch's own first step included. A restore found finished clears its own mark, never another restore's.
-    fn read_back_restore(&self, project: &Path, message: String, asked: (u64, u64), watch: Arc<RestoreWatch>) -> Receiver<Result<bool, String>> {
+    fn read_back_restore(&self, project: &Path, message: String, asked: (u64, u64), watch: Arc<JobWatch>) -> Receiver<Result<bool, String>> {
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
         self.on_a_reader(project, move |reader| {
             #[cfg(test)]
@@ -1337,7 +1392,12 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let _ = reply.send(check_switch(inner, &project, &target, asked, &mut waiting, &mut failed));
             }
             Some(Job::Switch(project, target, asked, under_way, reply)) => {
+                if under_way.claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                    // The wait gave up on it before it started: it must not run late.
+                    continue;
+                }
                 let answer = switch(inner, &project, target, asked, &mut waiting, &mut failed);
+                under_way.finished.store(true, Ordering::SeqCst);
                 // Released before the answer, so whoever has the answer can ask again at once.
                 drop(under_way);
                 let _ = reply.send(answer);
@@ -1528,7 +1588,7 @@ fn restore(
     path: &Path,
     request: RestoreRequest,
     (generation, instance): (u64, u64),
-    watch: &Arc<RestoreWatch>,
+    watch: &Arc<JobWatch>,
     waiting: &mut BTreeMap<PathBuf, Rows>,
     failed: &mut bool,
 ) -> Result<Restored, RestoreError> {
@@ -1588,7 +1648,7 @@ fn start_restore(
     path: PathBuf,
     request: RestoreRequest,
     (generation, instance): (u64, u64),
-    watch: Arc<RestoreWatch>,
+    watch: Arc<JobWatch>,
     limit: Duration,
 ) -> JobAnswer {
     let deadline = Instant::now() + limit;
@@ -1602,44 +1662,115 @@ fn start_restore(
             let _ = answer.send(forwarded(&from_writer, &watch.claim, deadline, &inner.cancel));
         }
     };
-    match std::thread::Builder::new().name("archforge-restore".into()).spawn(wait) {
-        Ok(handle) => {
-            let mut closers = lock(&inner.closers);
-            closers.retain(|c| !c.is_finished());
-            closers.push(handle);
-        }
-        Err(e) => {
-            let _ = answer.send(Err(JobFailure::Failed(format!("the restore could not start: {e}"))));
-            return gives;
-        }
+    if let Err(e) = spawn_wait(&inner, wait) {
+        let _ = answer.send(Err(JobFailure::Failed(format!("the restore could not start: {e}"))));
+        return gives;
     }
     // Should the writer have stopped, the reply's sender goes with the job, and the wait ends.
     let _ = writer(&inner).send(Job::Restore(path, request, generation, instance, watch, reply));
     gives
 }
 
-/// Waits for the writer's reply until `deadline` or until Archforge exits, and gives the job's
-/// answer. With no reply the claim decides, in one step: a job not started never will be, which is
-/// a plain failure; one that has started has an outcome nobody can tell yet.
+/// Waits for a restore's reply within `deadline` and gives the job's answer.
 fn forwarded(
     from_writer: &Receiver<Result<Restored, RestoreError>>,
     claim: &AtomicBool,
     deadline: Instant,
     cancel: &AtomicBool,
 ) -> Result<(), JobFailure> {
+    answered(waited(from_writer, deadline, cancel), claim, job_answer, not_going_ahead)
+}
+
+/// Waits for the writer's reply until `deadline` or until Archforge exits; none if neither brought
+/// one, or the reply was lost.
+fn waited<T>(from_writer: &Receiver<T>, deadline: Instant, cancel: &AtomicBool) -> Option<T> {
     loop {
         let left = deadline.saturating_duration_since(Instant::now());
         match from_writer.recv_timeout(left.min(RESTORE_WAIT_STEP)) {
-            Ok(answer) => return job_answer(answer),
+            Ok(answer) => return Some(answer),
             Err(RecvTimeoutError::Timeout) if !left.is_zero() && !cancel.load(Ordering::SeqCst) => {}
-            Err(_) => break,
+            Err(_) => return None,
         }
     }
-    if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-        Err(JobFailure::Failed(not_going_ahead()))
-    } else {
-        Err(JobFailure::Unclear)
+}
+
+/// A job's answer once [`waited`] has ended. With no reply the claim decides, in one step: a job
+/// not started never will be, which is a plain failure; one that has started has an outcome nobody
+/// can tell yet.
+fn answered<T>(reply: Option<T>, claim: &AtomicBool, answer: fn(T) -> Result<(), JobFailure>, not_started: fn() -> String) -> Result<(), JobFailure> {
+    match reply {
+        Some(reply) => answer(reply),
+        None if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() => Err(JobFailure::Failed(not_started())),
+        None => Err(JobFailure::Unclear),
     }
+}
+
+/// Runs `wait` on a thread of its own that a closing or an exit can wait for.
+fn spawn_wait(inner: &Inner, wait: impl FnOnce() + Send + 'static) -> std::io::Result<()> {
+    let handle = std::thread::Builder::new().name("archforge-job-wait".into()).spawn(wait)?;
+    let mut closers = lock(&inner.closers);
+    closers.retain(|c| !c.is_finished());
+    closers.push(handle);
+    Ok(())
+}
+
+/// Asks the writer for the first step of a switch and returns its answer's channel at once. An
+/// answer that does not come is [`SwitchError::NoAnswer`]: a check that still runs moves nothing.
+fn ask_for_check(
+    inner: Arc<Inner>,
+    path: PathBuf,
+    target: SafeBranch,
+    asked: (u64, u64),
+    limit: Duration,
+) -> Receiver<Result<CheckedBranch, SwitchError>> {
+    let deadline = Instant::now() + limit;
+    let (told, check) = channel();
+    let (reply, from_writer) = channel();
+    let (waiting, telling) = (inner.clone(), told.clone());
+    let wait = move || {
+        let _ = telling.send(waited(&from_writer, deadline, &waiting.cancel).unwrap_or(Err(SwitchError::NoAnswer)));
+    };
+    if let Err(e) = spawn_wait(&inner, wait) {
+        let _ = told.send(Err(SwitchError::Failed(format!("the switch could not start: {e}"))));
+        return check;
+    }
+    // Should the writer have stopped, the reply's sender goes with the job, and the wait ends.
+    let _ = writer(&inner).send(Job::CheckSwitch(path, target, asked, reply));
+    check
+}
+
+/// Hands the move of a switch to the writer and returns its answer's channel at once, as a
+/// [`ReplacementJob`]'s callback must. The limit's clock starts first.
+fn start_move(inner: Arc<Inner>, path: PathBuf, target: SafeBranch, asked: (u64, u64), under_way: Arc<JobWatch>, limit: Duration) -> JobAnswer {
+    let deadline = Instant::now() + limit;
+    let language = archforge_ui_egui::i18n::language();
+    let (answer, gives) = channel();
+    let (reply, from_writer) = channel();
+    let wait = {
+        let (inner, under_way, answer) = (inner.clone(), under_way.clone(), answer.clone());
+        move || {
+            archforge_ui_egui::i18n::set_language(language);
+            let reply = waited(&from_writer, deadline, &inner.cancel);
+            let outcome = answered(reply, &under_way.claim, switch_answer, || SwitchError::NoAnswer.words());
+            // Released before the answer, as the writer does.
+            drop(under_way);
+            let _ = answer.send(outcome);
+        }
+    };
+    if let Err(e) = spawn_wait(&inner, wait) {
+        let _ = answer.send(Err(JobFailure::Failed(SwitchError::Failed(format!("the switch could not start: {e}")).words())));
+        return gives;
+    }
+    let _ = writer(&inner).send(Job::Switch(path, target, asked, under_way, reply));
+    gives
+}
+
+/// A switch's answer as a [`ReplacementJob`] gives it, in the language of the thread it is made on.
+fn switch_answer(answer: Result<Switched, SwitchError>) -> Result<(), JobFailure> {
+    answer.map(|_| ()).map_err(|error| {
+        log::warn!("a switch stopped: {error}");
+        JobFailure::Failed(error.words())
+    })
 }
 
 /// What the log says of a restore that stopped: the exact reason, which the person's message may
@@ -1728,7 +1859,7 @@ fn replace(
     schema: &ModelSchema,
     request: &RestoreRequest,
     version: &Rows,
-    watch: &RestoreWatch,
+    watch: &JobWatch,
 ) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
@@ -3828,7 +3959,7 @@ mod tests {
     /// Asks the writer for a restore of the project at `path`, naming the open instance `instance`.
     fn restore_of_instance(host: &Projects, path: &Path, commit: &str, instance: u64) -> Result<Restored, RestoreError> {
         let (reply, answer) = channel();
-        let watch = Arc::new(RestoreWatch::default());
+        let watch = Arc::new(JobWatch::default());
         writer(&host.inner)
             .send(Job::Restore(path.to_path_buf(), restoring(commit), generation_of(&host.inner, path), instance, watch, reply))
             .unwrap();
@@ -3952,6 +4083,7 @@ mod tests {
         let before = host.generation_of(&path);
         host.write(&path, model("c"));
         let (check, moving) = checked(host, &path, "elsewhere");
+        assert_eq!(moving.limit, Duration::from_secs(5 * 60));
         assert_eq!(check.unwrap(), CheckedBranch { rows: Arc::new(model("a")), unsaved: false });
         still_on_main(host, &path, before);
         assert_eq!(work(host), model("c"), "what waited was written, on the branch left");
@@ -3996,6 +4128,8 @@ mod tests {
         let before = host.generation_of(&path);
         let (check, moving) = checked(host, &path, "scripted");
         assert!(matches!(check, Err(SwitchError::Checks(Error::Scripted { .. }))), "{check:?}");
+        let why = check.unwrap_err();
+        assert!(why.words().contains(&why.to_string()), "the words carry the reason: {why}");
         still_on_main(host, &path, before);
         drop(moving);
         let (check, _moving) = checked(host, &path, "elsewhere");
@@ -4069,6 +4203,121 @@ mod tests {
         let both =
             check_switch(&host.inner, &path, &branch("elsewhere"), (generation.wrapping_sub(1), instance.wrapping_sub(1)), &mut waiting, &mut failed);
         assert!(matches!(both, Err(SwitchError::Reopened)), "a close is the reason that outlasts the rest: {both:?}");
+    }
+
+    /// A switch within `limit`, its check answered.
+    fn checked_within(host: &Projects, path: &Path, limit: Duration) -> SwitchMove {
+        let SwitchSteps { check, moving } = host.start_switch_within(path, branch("elsewhere"), limit).unwrap();
+        check.recv_timeout(Duration::from_secs(60)).expect("the check answers").expect("the check passes");
+        moving
+    }
+
+    /// A check that gets no answer in time says so by its reason, and the project stays.
+    #[test]
+    fn a_check_with_no_answer_in_time_says_so() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let before = host.generation_of(&path);
+        let release = hold_the_writer(host, &path);
+        let SwitchSteps { check, moving } = host.start_switch_within(&path, branch("elsewhere"), Duration::from_millis(20)).unwrap();
+        let check = check.recv_timeout(Duration::from_secs(60)).expect("the wait answers");
+        assert!(matches!(check, Err(SwitchError::NoAnswer)), "{check:?}");
+        drop((moving, release));
+        no_thread_left(host);
+        still_on_main(host, &path, before);
+    }
+
+    /// A move not started when the limit passes never runs: the wait's claim stops the writer, the
+    /// answer is a plain failure in words, and the switch can be asked for again.
+    #[test]
+    fn a_move_given_up_on_before_it_starts_never_runs() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let before = host.generation_of(&path);
+        let moving = checked_within(host, &path, Duration::from_millis(20));
+        let release = hold_the_writer(host, &path);
+        let ReplacementJob { run, read_back } = moving.into_job();
+        let answer = run().recv_timeout(Duration::from_secs(60)).expect("the wait answers");
+        assert!(matches!(answer, Err(JobFailure::Failed(_))), "a plain failure");
+        drop((release, read_back));
+        assert_eq!(host.on_writer(&path, |_| Ok(())).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()), "the writer went past the job");
+        still_on_main(host, &path, before);
+        assert!(checked(host, &path, "elsewhere").0.is_ok(), "the claim was released");
+    }
+
+    /// A move that started and outlasts the limit cannot be told: its answer is unclear, the
+    /// read-back says it cannot tell until the writer has finished, and then finds where it went.
+    #[test]
+    fn a_move_past_its_limit_is_read_back_only_once_the_writer_has_finished() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let moving = checked_within(host, &path, Duration::from_millis(50));
+        let (running, started) = channel();
+        let (go_on, hold) = channel::<()>();
+        *lock(&host.inner.before_move) = Some(Box::new(move || {
+            let _ = running.send(());
+            let _ = hold.recv_timeout(Duration::from_secs(30));
+        }));
+        let ReplacementJob { run, read_back } = moving.into_job();
+        let answer = run();
+        started.recv_timeout(Duration::from_secs(60)).expect("the move is under way");
+        let answer = answer.recv_timeout(Duration::from_secs(60)).expect("the wait answers");
+        assert!(matches!(answer, Err(JobFailure::Unclear)), "unclear");
+        let watch = lock(&host.inner.switches).get(&path).and_then(std::sync::Weak::upgrade).expect("still under way");
+        let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60)).unwrap();
+        assert!(told.is_err(), "not while the writer still runs it: {told:?}");
+        drop(go_on);
+        // Refused by the generation the move changed, which is the writer having got past it.
+        host.on_writer(&path, |_| Ok(())).recv_timeout(Duration::from_secs(60)).expect("the writer finished the move").unwrap_err();
+        assert_eq!(on(host), "elsewhere");
+        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true));
+    }
+
+    /// A finished move that stayed reads back as not moved; and the branch is read after the job is
+    /// known finished, so one finishing during the read-back is not mistaken for one that stayed.
+    #[test]
+    fn a_switch_read_back_reads_whether_it_finished_first() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let target = branch("elsewhere");
+        let finished = Arc::new(JobWatch::default());
+        finished.finished.store(true, Ordering::SeqCst);
+        assert_eq!(host.read_back_switch(&path, target.clone(), finished).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(false));
+        let unfinished = Arc::new(JobWatch::default());
+        let late = unfinished.clone();
+        *lock(&host.inner.before_move) = Some(Box::new(move || late.finished.store(true, Ordering::SeqCst)));
+        let told = host.read_back_switch(&path, target, unfinished).recv_timeout(Duration::from_secs(60)).unwrap();
+        assert!(told.is_err(), "unfinished when first looked at: {told:?}");
+    }
+
+    /// Each reason is worded through the catalogue and only a switch that happened is no failure.
+    #[test]
+    fn a_switchs_reasons_are_worded() {
+        use archforge_ui_egui::i18n::set_language;
+        let reasons = || {
+            let words = |e: SwitchError| e.words();
+            [
+                words(SwitchError::AlreadyOnIt),
+                words(SwitchError::NoAnswer),
+                words(SwitchError::BranchChanged),
+                words(SwitchError::Reopened),
+                words(SwitchError::UnderWay),
+                words(SwitchError::NotOpen),
+                words(SwitchError::Unwritten("w".to_string())),
+                words(SwitchError::Failed("reason".to_string())),
+            ]
+        };
+        let english = reasons();
+        set_language("de");
+        let german = reasons();
+        set_language("en");
+        assert!(english.iter().zip(&german).all(|(en, de)| en != de && !de.is_empty()), "{german:?}");
+        assert!(german[7].contains("reason"), "the reason is told");
+        assert_eq!(english[2], english[5], "one wording for changed or busy");
+        assert_ne!(english[0], english[1]);
+        assert_ne!(english[6], english[1]);
+        assert!(matches!(switch_answer(Ok(Switched::AlreadyThere)), Ok(())));
+        assert!(matches!(switch_answer(Err(SwitchError::NoAnswer)), Err(JobFailure::Failed(_))));
     }
 
     /// A close asked for while either step runs on the writer waits for it: the step ends as it

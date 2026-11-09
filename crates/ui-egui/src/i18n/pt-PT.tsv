@@ -442,6 +442,10 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	O projeto está retido enquanto é substituído, por isso este pedido não foi executado. Tente novamente quando terminar.
 str		This version is the same as your current work.	Esta versão é igual ao seu trabalho atual.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	O restauro não pôde avançar porque o projeto mudou ou estava ocupado, por isso nada foi restaurado.
+str		You are already on this branch.	Já está neste ramo.
+str		The project stayed on its branch because it changed or was busy.	O projeto ficou no seu ramo porque mudou ou estava ocupado.
+str		Your latest changes could not be written, so the project stayed on its branch.	Não foi possível escrever as suas últimas alterações, por isso o projeto ficou no seu ramo.
+str		The project stayed on its branch: {why}	O projeto ficou no seu ramo: {why}
 str		The version could not be restored: {why}	Não foi possível restaurar a versão: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Esta versão é igual ao seu trabalho atual. O seu trabalho não guardado foi mantido como uma versão.
 str		The version could not be restored: {why}. Your work will be written with your next change.	Não foi possível restaurar a versão: {why}. O seu trabalho será escrito com a sua próxima alteração.
