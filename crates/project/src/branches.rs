@@ -7,10 +7,11 @@ use std::sync::{Arc, Mutex};
 use mysql::prelude::Queryable;
 
 use crate::branch_name::{SafeBranch, UnsafeBranch};
-use crate::chat::is_commit;
+use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_name, sql, unsaved_tables};
 use crate::{DATABASE, Error, Project};
+use archforge_mof::rows::Rows;
 
 /// The most branches listed.
 pub const MAX_BRANCHES: usize = 200;
@@ -58,6 +59,10 @@ pub enum CreationStep {
     WriteRecord,
     MakeBranch,
     PrepareModel,
+    /// Reading the source's unsaved rows and its head.
+    ReadWork,
+    /// Writing those rows to the new branch.
+    CopyWork,
     RemoveConversations,
     ChatCommit,
     RemoveRecord,
@@ -193,13 +198,16 @@ impl Project {
     pub fn create_branch_halted(
         &self,
         name: &SafeBranch,
-        start: &str,
+        start: Option<&str>,
         schema: &ModelSchema,
         halt: (CreationStep, bool),
     ) -> Result<BranchCreated, BranchCreationError> {
         let (step, clean) = halt;
         let mut watch = |s: CreationStep| if s == step { Err(Halted { step, why: "halted".into(), clean }) } else { Ok(()) };
-        self.create_branch_watched(name, start, schema, &mut watch)
+        match start {
+            Some(start) => self.create_branch_watched(name, start, None, schema, &mut watch),
+            None => self.create_branch_from_work_watched(name, schema, &mut watch),
+        }
     }
 
     /// Makes the branch `name` at the version `start`, with no conversations. On the writer only.
@@ -211,7 +219,28 @@ impl Project {
     ///
     /// The screen that asks for this comes with AR-292.
     pub fn create_branch(&self, name: &SafeBranch, start: &str, schema: &ModelSchema) -> Result<BranchCreated, BranchCreationError> {
-        self.create_branch_watched(name, start, schema, &mut |_| Ok(()))
+        self.create_branch_watched(name, start, None, schema, &mut |_| Ok(()))
+    }
+
+    /// Makes the branch `name` at the head, with the source's unsaved rows and no conversations,
+    /// as [`Project::create_branch`] does, and the rows copied once its model tables are prepared.
+    /// On the writer only, once what waits is written. The source keeps its own unsaved work and
+    /// its conversations, committed or not: only the model's rows are read from it.
+    pub fn create_branch_from_work(&self, name: &SafeBranch, schema: &ModelSchema) -> Result<BranchCreated, BranchCreationError> {
+        self.create_branch_from_work_watched(name, schema, &mut |_| Ok(()))
+    }
+
+    /// [`Project::create_branch_from_work`], telling `watch` of each step.
+    fn create_branch_from_work_watched(
+        &self,
+        name: &SafeBranch,
+        schema: &ModelSchema,
+        watch: StepWatch,
+    ) -> Result<BranchCreated, BranchCreationError> {
+        let refused = |why: String| BranchCreationError::Failed { step: CreationStep::ReadWork, why };
+        let start = self.model_connection().map_err(|e| e.to_string()).and_then(|mut c| head(&mut c)).map_err(refused)?;
+        let work = self.read_model(schema).map_err(|e| refused(e.to_string()))?;
+        self.create_branch_watched(name, &start, Some(&work), schema, watch)
     }
 
     /// [`Project::create_branch`], telling `watch` of each step. A record that remains goes first,
@@ -220,6 +249,7 @@ impl Project {
         &self,
         name: &SafeBranch,
         start: &str,
+        work: Option<&Rows>,
         schema: &ModelSchema,
         watch: StepWatch,
     ) -> Result<BranchCreated, BranchCreationError> {
@@ -241,7 +271,7 @@ impl Project {
         if !creation::write(self.path(), &record).map_err(|e| refused(CreationStep::WriteRecord, e))? {
             return Err(BranchCreationError::RecordRemains);
         }
-        match self.build_branch(&record, schema, watch) {
+        match self.build_branch(&record, work, schema, watch) {
             Ok(()) => Ok(BranchCreated::Listed),
             Err(Halted { step, why, clean: false }) => Err(BranchCreationError::Failed { step, why }),
             Err(Halted { step: CreationStep::RemoveRecord, why, .. }) => Ok(BranchCreated::RecordStays { why }),
@@ -258,7 +288,7 @@ impl Project {
     }
 
     /// The steps after the record is written.
-    fn build_branch(&self, record: &CreationRecord, schema: &ModelSchema, watch: StepWatch) -> Result<(), Halted> {
+    fn build_branch(&self, record: &CreationRecord, work: Option<&Rows>, schema: &ModelSchema, watch: StepWatch) -> Result<(), Halted> {
         let name = &record.branch;
         watch(CreationStep::MakeBranch)?;
         let made = self
@@ -267,6 +297,10 @@ impl Project {
         made.map_err(failed(CreationStep::MakeBranch))?;
         watch(CreationStep::PrepareModel)?;
         let mut c = self.connection_to(name).and_then(|c| self.prepare_on(c, schema)).map_err(failed(CreationStep::PrepareModel))?;
+        if let Some(work) = work {
+            watch(CreationStep::CopyWork)?;
+            self.write_model_on(&mut c, schema, work).map_err(failed(CreationStep::CopyWork))?;
+        }
         watch(CreationStep::RemoveConversations)?;
         self.empty_chats(&mut c).map_err(failed(CreationStep::RemoveConversations))?;
         watch(CreationStep::ChatCommit)?;

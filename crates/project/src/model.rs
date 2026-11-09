@@ -313,13 +313,17 @@ impl Project {
 
     /// Replaces the model's rows with `rows`, all of them or none.
     pub fn write_model(&self, schema: &ModelSchema, rows: &Rows) -> Result<(), Error> {
+        self.write_model_on(&mut self.model_connection()?, schema, rows)
+    }
+
+    /// [`Project::write_model`] over `c`, so to the branch `c` is on.
+    pub(crate) fn write_model_on(&self, c: &mut mysql::Conn, schema: &ModelSchema, rows: &Rows) -> Result<(), Error> {
         if rows.tables.len() != schema.tables.len() || rows.junctions.len() != schema.junctions.len() {
             return Err(Error::Damaged { path: self.path().to_path_buf(), why: "the rows do not match the model's tables".into() });
         }
-        let mut c = self.model_connection()?;
         let damaged = |why: String| Error::Damaged { path: self.path().to_path_buf(), why };
-        let mut held = shapes(&mut c, schema).map_err(damaged)?;
-        let recorded = in_use(&mut c, &held).map_err(damaged)?;
+        let mut held = shapes(c, schema).map_err(damaged)?;
+        let recorded = in_use(c, &held).map_err(damaged)?;
         // The tables rows go to for the first time are made first: made and left empty, should the
         // writing fail, they hold what a table the project lacks holds.
         for (t, table_rows) in schema.tables.iter().zip(&rows.tables) {

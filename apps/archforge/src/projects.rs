@@ -72,8 +72,9 @@ enum Job {
     Chat(PathBuf, u64, ChatJob),
     /// Move a project to another branch; the generation is the project's when it was asked for.
     Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
-    /// Make a branch at a version; the generation is the project's when it was asked for.
-    CreateBranch(PathBuf, SafeBranch, String, u64, Sender<Result<BranchCreated, CreateBranchError>>),
+    /// Make a branch at a version, or from current work when none is named; the generation is the
+    /// project's when it was asked for.
+    CreateBranch(PathBuf, SafeBranch, Option<String>, u64, Sender<Result<BranchCreated, CreateBranchError>>),
     /// Restore a version of a project; the generation is the project's when it was asked for.
     Restore(PathBuf, RestoreRequest, u64, Sender<Result<Restored, RestoreError>>),
 }
@@ -201,6 +202,8 @@ pub enum CreateBranchError {
     /// A switch moved the project after this was asked for.
     BranchChanged,
     NotOpen,
+    /// What waits could not be written: the rows are kept for the next write.
+    Unwritten(String),
     /// The project's own refusal or failure.
     Creation(BranchCreationError),
     /// The model's tables could not be described, or the writer has stopped.
@@ -214,7 +217,7 @@ impl std::fmt::Display for CreateBranchError {
             CreateBranchError::BranchChanged => f.write_str("another switch moved the project first"),
             CreateBranchError::NotOpen => f.write_str("the project is no longer open"),
             CreateBranchError::Creation(e) => e.fmt(f),
-            CreateBranchError::Failed(why) => f.write_str(why),
+            CreateBranchError::Unwritten(why) | CreateBranchError::Failed(why) => f.write_str(why),
         }
     }
 }
@@ -379,6 +382,18 @@ impl Projects {
     /// see [`create_branch`]. The screen that asks for this comes with AR-292.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
+        self.ask_for_branch(project, name, Some(start))
+    }
+
+    /// Starts making the branch `name` from current work on the writer, and returns at once. The
+    /// screen that asks for this comes with AR-292.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn create_branch_from_work(&self, project: &Path, name: SafeBranch) -> Receiver<Result<BranchCreated, CreateBranchError>> {
+        self.ask_for_branch(project, name, None)
+    }
+
+    /// Hands the making of a branch to the writer, under the project's generation now.
+    fn ask_for_branch(&self, project: &Path, name: SafeBranch, start: Option<String>) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
         if let Err(e) = writer(&self.inner).send(Job::CreateBranch(project.to_path_buf(), name, start, generation, tx.clone())) {
@@ -1056,7 +1071,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let _ = reply.send(answer);
             }
             Some(Job::CreateBranch(project, name, start, generation, reply)) => {
-                let _ = reply.send(create_branch(inner, &project, &name, &start, generation));
+                let _ = reply.send(create_branch(inner, &project, &name, start.as_deref(), generation, &mut waiting, &mut failed));
             }
             Some(Job::Restore(project, request, generation, reply)) => {
                 let answer = restore(inner, &project, request, generation, &mut waiting, &mut failed);
@@ -1358,15 +1373,36 @@ fn restored(saved: archforge_project::Saved, kept_work: bool) -> Restored {
 }
 
 /// Makes the branch `name` of the project at `path`, on the writer, unless a switch has moved the
-/// project since this was asked for. What waits is left waiting: it does not reach a version.
-fn create_branch(inner: &Inner, path: &Path, name: &SafeBranch, start: &str, generation: u64) -> Result<BranchCreated, CreateBranchError> {
+/// project since this was asked for. From a version, what waits is left waiting, as it does not
+/// reach a version; from current work (no `start`), it is written first, and rows that cannot be
+/// written refuse it.
+fn create_branch(
+    inner: &Inner,
+    path: &Path,
+    name: &SafeBranch,
+    start: Option<&str>,
+    generation: u64,
+    waiting: &mut BTreeMap<PathBuf, Rows>,
+    failed: &mut bool,
+) -> Result<BranchCreated, CreateBranchError> {
     if generation != generation_of(inner, path) {
         return Err(CreateBranchError::BranchChanged);
     }
     let schema = schema(inner).map_err(|e| CreateBranchError::Failed(format!("{e:?}")))?;
+    if start.is_none() {
+        write_waiting(inner, waiting);
+        *failed = !waiting.is_empty();
+        if waiting.contains_key(path) {
+            return Err(CreateBranchError::Unwritten(unwritten(inner, path)));
+        }
+    }
     let open = lock(&inner.open);
     let project = open.iter().find(|p| p.path() == path).ok_or(CreateBranchError::NotOpen)?;
-    project.create_branch(name, start, &schema).map_err(CreateBranchError::Creation)
+    match start {
+        Some(start) => project.create_branch(name, start, &schema),
+        None => project.create_branch_from_work(name, &schema),
+    }
+    .map_err(CreateBranchError::Creation)
 }
 
 /// Commits what of the conversations waits.
@@ -3068,7 +3104,7 @@ mod tests {
             {
                 let open = lock(&host.inner.open);
                 let start = open[0].head_of("main").unwrap();
-                assert!(open[0].create_branch_halted(&branch(&name(n)), &start, &schema(&host.inner).unwrap(), (step, false)).is_err());
+                assert!(open[0].create_branch_halted(&branch(&name(n)), Some(&start), &schema(&host.inner).unwrap(), (step, false)).is_err());
                 assert!(path.join(".creating-branch").exists(), "{step:?}: a stop leaves the record");
             }
             reopened();
@@ -3118,7 +3154,7 @@ mod tests {
         {
             let open = lock(&host.inner.open);
             let start = open[0].head_of("main").unwrap();
-            let answer = open[0].create_branch_halted(&branch("kept"), &start, &schema(&host.inner).unwrap(), (RemoveRecord, true));
+            let answer = open[0].create_branch_halted(&branch("kept"), Some(&start), &schema(&host.inner).unwrap(), (RemoveRecord, true));
             assert!(matches!(answer, Ok(BranchCreated::RecordStays { .. })), "{answer:?}");
             assert_ne!(open[0].head_of("kept").unwrap(), start, "it was not undone");
             assert!(path.join(".creating-branch").exists() && !has_branch(&open[0], "kept"), "hidden while the record stays");
@@ -3172,6 +3208,148 @@ mod tests {
         assert!(!path.join(".creating-branch").exists());
     }
 
+    /// A saved model and unsaved work on the source that differ in the rows and diagrams.
+    fn saved_then_work(host: &Projects, path: &Path, saved_rows: Rows, work: Rows) {
+        host.write(path, saved_rows);
+        assert_eq!(saved(host, path), Ok(true));
+        host.write(path, work);
+        assert_eq!(host.flush_for_test(path), Ok(()));
+    }
+
+    /// The unsaved rows reach the new branch, those that were removed and the diagrams too, in
+    /// both directions, and stay unsaved there; the source keeps its work and its head.
+    #[test]
+    fn a_branch_from_current_work_holds_what_is_unsaved() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let schema = schema(&host.inner).unwrap();
+        let (with_diagram, _) = short_and_fitted_box();
+        let without = model("without");
+        let listed = |project: &Project, name: &str| project.branches(50).unwrap().listed.into_iter().find(|b| b.name == name).unwrap().unsaved;
+        for (name, saved_rows, work) in [("removes", &with_diagram, &without), ("adds", &without, &with_diagram)] {
+            saved_then_work(host, &path, saved_rows.clone(), work.clone());
+            let open = lock(&host.inner.open);
+            let project = &open[0];
+            let start = project.head_of("main").unwrap();
+            assert_eq!(project.create_branch_from_work(&branch(name), &schema), Ok(BranchCreated::Listed));
+            assert_eq!(&project.check_branch(&branch(name), &schema).unwrap(), work, "{name}: the work was copied");
+            assert_eq!(&project.read_model_at(&schema, &start).unwrap(), saved_rows, "{name}: the start is the save");
+            assert_eq!(
+                project
+                    .first_on_branch(name, "SELECT CAST(parent_hash AS CHAR) FROM dolt_commit_ancestors WHERE commit_hash = HASHOF('HEAD')")
+                    .unwrap(),
+                start
+            );
+            assert_eq!(listed(project, name), Some(true), "{name}: unsaved there, as Save would commit it");
+            assert_eq!((&project.read_model(&schema).unwrap(), project.head_of("main").unwrap()), (work, start), "{name}: the source");
+            assert!(project.has_unsaved().unwrap(), "{name}: the source keeps its unsaved work");
+        }
+        // With nothing unsaved, the new branch has nothing unsaved either.
+        assert_eq!(saved(host, &path), Ok(true));
+        let open = lock(&host.inner.open);
+        assert_eq!(open[0].create_branch_from_work(&branch("clean"), &schema), Ok(BranchCreated::Listed));
+        assert_eq!(listed(&open[0], "clean"), Some(false));
+        drop(open);
+        // At the creation commit, which has no model tables to copy to until they are prepared.
+        let fresh = Sandbox::new(None);
+        let path = fresh.project();
+        fresh.host.write(&path, model("first"));
+        assert_eq!(fresh.host.flush_for_test(&path), Ok(()));
+        let open = lock(&fresh.host.inner.open);
+        assert_eq!(open[0].create_branch_from_work(&branch("early"), &schema), Ok(BranchCreated::Listed));
+        assert_eq!(open[0].check_branch(&branch("early"), &schema).unwrap(), model("first"));
+    }
+
+    /// A stop before or after the copy leaves an unfinished branch for the real recovery, a failed
+    /// step undoes it (by a test hook: the failing statement is not real), and the source's unsaved
+    /// work is as it was each time.
+    #[test]
+    fn a_branch_from_current_work_that_stops_or_fails_leaves_the_source_as_it_was() {
+        use archforge_project::CreationStep::{ChatCommit, CopyWork, RemoveConversations};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let schema = schema(&host.inner).unwrap();
+        saved_then_work(host, &path, model("saved"), model("work"));
+        let source_kept = |what: String| {
+            let open = lock(&host.inner.open);
+            assert_eq!(open[0].read_model(&schema).unwrap(), model("work"), "{what}");
+            assert!(open[0].has_unsaved().unwrap(), "{what}");
+        };
+        for (n, step) in [CopyWork, RemoveConversations, ChatCommit].into_iter().enumerate() {
+            let (stopped, broke) = (format!("stop{n}"), format!("fail{n}"));
+            let answer = lock(&host.inner.open)[0].create_branch_halted(&branch(&stopped), None, &schema, (step, false));
+            assert!(answer.is_err() && path.join(".creating-branch").exists(), "{step:?}");
+            source_kept(format!("stopped at {step:?}"));
+            close(host, &path).unwrap();
+            wait(&host.open(&path)).unwrap();
+            assert!(!has_branch(&lock(&host.inner.open)[0], &stopped), "{step:?}: recovery removed it");
+            source_kept(format!("reopened after {step:?}"));
+            let answer = lock(&host.inner.open)[0].create_branch_halted(&branch(&broke), None, &schema, (step, true));
+            assert!(matches!(answer, Err(BranchCreationError::Failed { step: s, .. }) if s == step), "{step:?}: {answer:?}");
+            assert!(!has_branch(&lock(&host.inner.open)[0], &broke) && !path.join(".creating-branch").exists(), "{step:?}");
+            source_kept(format!("failed at {step:?}"));
+        }
+    }
+
+    /// No conversation reaches the new branch, and rows of one not yet committed stay on the source.
+    #[test]
+    fn a_branch_from_current_work_takes_no_conversations() {
+        let (sandbox, path) = branched();
+        undone_since_the_save(&sandbox.host, &path);
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        project.run_on_branch("main", "UPDATE chat SET title = 'not committed'").unwrap();
+        assert_eq!(project.create_branch_from_work(&branch("clear"), &schema), Ok(BranchCreated::Listed));
+        for table in archforge_project::CHAT_TABLES {
+            assert_eq!(rows_on(project, "clear", table), 0, "{table}");
+        }
+        assert_eq!(project.first_on_branch("main", "SELECT CAST(title AS CHAR) FROM chat").unwrap(), "not committed");
+        let email = project.first_on_branch("clear", "SELECT CAST(email AS CHAR) FROM dolt_log LIMIT 1").unwrap();
+        assert!(!archforge_project::is_version(&email));
+        // The head is checked for scripts as any version is.
+        project.run_on_branch("main", "CALL DOLT_BRANCH('guarded')").unwrap();
+        project.run_on_branch("guarded", "CREATE PROCEDURE p() SELECT 1").unwrap();
+        project.run_on_branch("guarded", "CALL DOLT_COMMIT('-A', '-m', 'x', '--author', 'A Person <a@person>')").unwrap();
+        project.set_current_branch(branch("guarded"));
+        assert_eq!(project.create_branch_from_work(&branch("scriptless"), &schema), Err(BranchCreationError::Scripted { what: "stored procedures" }));
+        project.set_current_branch(branch("main"));
+    }
+
+    /// The writer writes what waits first, and rows it cannot write refuse the branch and keep waiting.
+    #[test]
+    fn the_writer_writes_what_waits_before_a_branch_from_current_work() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let schema = schema(&host.inner).unwrap();
+        let answer =
+            |asked: Receiver<Result<BranchCreated, CreateBranchError>>| asked.recv_timeout(Duration::from_secs(60)).expect("the job answers");
+        let release = hold_the_writer(host, &path);
+        host.write(&path, model("waited"));
+        let asked = host.create_branch_from_work(&path, branch("fromwork"));
+        drop(release);
+        assert_eq!(answer(asked), Ok(BranchCreated::Listed));
+        assert_eq!(lock(&host.inner.open)[0].check_branch(&branch("fromwork"), &schema).unwrap(), model("waited"));
+        let mut broken = model("c");
+        broken.tables.iter_mut().find(|t| !t.is_empty()).unwrap()[0].clear();
+        let release = hold_the_writer(host, &path);
+        host.write(&path, broken);
+        let asked = host.create_branch_from_work(&path, branch("refused"));
+        drop(release);
+        assert!(matches!(answer(asked), Err(CreateBranchError::Unwritten(_))));
+        assert!(host.writing(&path).pending, "the rows are still waiting");
+        assert!(!has_branch(&lock(&host.inner.open)[0], "refused"));
+        // That write failed, so the timer stops, as after any failed write (a retry would say so).
+        lock(&host.inner.writing).get_mut(&path).unwrap().error = None;
+        std::thread::sleep(SETTLE * 4);
+        assert_eq!(host.writing(&path).error, None, "no timer after a failed write");
+        // A branch from a version does not depend on what waits, which does not reach it.
+        let start = lock(&host.inner.open)[0].head_of("main").unwrap();
+        assert_eq!(answer(host.create_branch(&path, branch("fromversion"), start)), Ok(BranchCreated::Listed));
+        host.write(&path, model("b"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+    }
+
     /// A failure at any step deletes the branch and then the record, and refusals change nothing.
     #[test]
     fn a_creation_that_fails_leaves_the_project_as_it_was() {
@@ -3188,7 +3366,7 @@ mod tests {
         // By a test hook just before each step: the failure path is real, the failing statement is not.
         for (n, step) in [MakeBranch, PrepareModel, RemoveConversations, ChatCommit].into_iter().enumerate() {
             let name = format!("fail{n}");
-            let answer = project.create_branch_halted(&branch(&name), &start, &schema, (step, true));
+            let answer = project.create_branch_halted(&branch(&name), Some(&start), &schema, (step, true));
             assert!(matches!(answer, Err(Failed { step: s, .. }) if s == step), "{step:?}: {answer:?}");
             assert!(as_it_was(&name), "{step:?}");
         }
