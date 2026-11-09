@@ -198,6 +198,9 @@ impl Project {
 
     /// A connection to `branch` of this project, whichever branch is current by then.
     pub(crate) fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+        if self.branch_is_unclear() {
+            return Err(Error::BranchUnclear { path: self.path().to_path_buf() });
+        }
         database_connection(&self.server().connector(), branch)
     }
 }
