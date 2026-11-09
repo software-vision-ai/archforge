@@ -8,7 +8,7 @@
 use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
-use crate::{Shell, canvas, chat_panel, diagrams, explorer, panels};
+use crate::{Shell, canvas, diagrams, explorer, panels};
 
 /// The version being viewed and everything set aside for going back.
 pub(crate) struct Viewing {
@@ -91,11 +91,6 @@ impl Shell {
             self.end_hold();
             return true;
         }
-        if self.viewing.is_none() {
-            return false;
-        }
-        // Before the work comes back, so that a turn started on the version never reaches it.
-        chat_panel::version_left(self);
         let Some(v) = self.viewing.take() else { return false };
         let v = *v;
         self.session = Some(v.session);
