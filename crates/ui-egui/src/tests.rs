@@ -7452,7 +7452,7 @@ impl archforge_diagram::Notation for Sketch {
             dashed: false,
             status: None,
             note: None,
-            badge: false,
+            badge: true,
             resolvable: false,
             keyword: None,
         })
@@ -7494,7 +7494,8 @@ fn texts_in(h: &Harness<'static, Shell>, r: egui::Rect) -> Vec<(String, usize)> 
     out
 }
 
-fn painted(h: &Harness<'static, Shell>) -> Vec<String> {
+/// Every text painted in the last frame, in the order it was painted.
+fn painted<S>(h: &Harness<'_, S>) -> Vec<String> {
     fn walk(s: &egui::Shape, out: &mut Vec<String>) {
         match s {
             egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
@@ -7573,6 +7574,89 @@ fn sketch_harness() -> (Harness<'static, Shell>, String, String, String, String)
     crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
     h.run();
     (h, d, a, b, e)
+}
+
+/// What drawing the diagram `d` of `session` paints and records, with no shell anywhere, over the
+/// area `width` wide and with `overrides` as a drag's preview.
+fn drawn_alone(
+    session: &archforge_notations::Session,
+    d: &str,
+    dark: bool,
+    width: f32,
+    overrides: &std::collections::BTreeMap<archforge_mof::Uuid, egui::Rect>,
+    problems: &std::collections::BTreeMap<archforge_mof::Obj, Vec<String>>,
+) -> (Vec<String>, Vec<String>, usize) {
+    let store = session.doc();
+    let diagram = store.by_uuid(archforge_mof::Uuid::parse(d).unwrap()).unwrap();
+    let grid = archforge_diagram::Grid::build(store, diagram);
+    let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 700.0));
+    let view = crate::canvas::View { origin: area.min, pan: egui::Vec2::ZERO, zoom: 1.0 };
+    let badges = std::cell::Cell::new(0);
+    let recorded = std::cell::RefCell::new(crate::widgets::Registry::default());
+    let mut h = Harness::builder().with_size(egui::vec2(1000.0, 700.0)).build_ui(|ui| {
+        // The window's fonts are the context's, in place a pass later; nothing else is shared.
+        if !ui.ctx().fonts(|f| f.definitions().families.contains_key(&egui::FontFamily::Name("ux-regular".into()))) {
+            ui.ctx().set_fonts(crate::fonts::definitions());
+            return;
+        }
+        let scene = crate::canvas::Scene { p: crate::ux::palette(dark), store, notations: session.view(), diagram, view: &view, grid: &grid, area };
+        let live = crate::canvas::Live {
+            selection: &[],
+            overrides,
+            key_status: false,
+            renaming: None,
+            problems,
+            hovered: None,
+            end_drag: None,
+            segment_drag: None,
+            draft: None,
+            rename_text: None,
+            set_drag: None,
+        };
+        recorded.borrow_mut().begin_frame();
+        let drawn = crate::canvas::draw_scene(ui, &ui.painter().with_clip_rect(area), &scene, live, &mut recorded.borrow_mut());
+        badges.set(drawn.badges.len());
+    });
+    h.run();
+    let texts = painted(&h);
+    drop(h);
+    let ids = recorded.borrow().entries().iter().map(|e| e.id.clone()).collect();
+    (texts, ids, badges.get())
+}
+
+/// A store's diagram draws with no shell at all, lines under cards, as it does on the canvas, in
+/// both appearances; only what is in view draws, and what a drag has brought into it. A line
+/// whose element has a problem gives its badge back to whoever draws it.
+#[test]
+fn a_stores_diagram_draws_with_no_shell() {
+    let (mut h, d, a, b, e) = sketch_harness();
+    let session = h.state_mut().session.take().unwrap();
+    drop(h);
+    let none = std::collections::BTreeMap::new();
+    let clean = std::collections::BTreeMap::new();
+    let store = session.doc();
+    let line = store.by_uuid(archforge_mof::Uuid::parse(&e).unwrap()).unwrap();
+    let element = crate::canvas::element_of(store, line, archforge_diagram::edge::ELEMENT).unwrap();
+    let flagged = [(element, vec!["A problem".to_string()])].into_iter().collect();
+    for dark in [false, true] {
+        let (texts, ids, badges) = drawn_alone(&session, &d, dark, 1000.0, &none, &clean);
+        assert_eq!(badges, 0);
+        for t in ["CLASS", "Party", "partyId", "rename", "Customer", "since", "specific"] {
+            assert!(texts.iter().any(|x| x == t), "{t} is drawn: {texts:?}");
+        }
+        let at = |t: &str| texts.iter().position(|x| x == t).unwrap();
+        assert!(at("specific") < at("Party") && at("specific") < at("Customer"), "the line is under the cards: {texts:?}");
+        for id in [format!("workspace.canvas.node.{a}"), format!("workspace.canvas.node.{b}"), format!("workspace.canvas.edge.{e}")] {
+            assert!(ids.contains(&id), "{id}: {ids:?}");
+        }
+        let (.., badges) = drawn_alone(&session, &d, dark, 1000.0, &none, &flagged);
+        assert_eq!(badges, 1, "the line's badge");
+        let (texts, ..) = drawn_alone(&session, &d, dark, 400.0, &none, &clean);
+        assert!(texts.iter().any(|x| x == "Party") && !texts.iter().any(|x| x == "Customer"), "out of view: {texts:?}");
+        let dragged = [(archforge_mof::Uuid::parse(&b).unwrap(), egui::Rect::from_min_size(egui::pos2(20.0, 300.0), egui::vec2(240.0, 166.0)))];
+        let (texts, ..) = drawn_alone(&session, &d, dark, 400.0, &dragged.into_iter().collect(), &clean);
+        assert!(texts.iter().any(|x| x == "Customer"), "a drag brought it into view: {texts:?}");
+    }
 }
 
 #[test]
@@ -18899,6 +18983,7 @@ fn qualifiers_are_added_moved_and_removed_in_properties_and_boxed_on_the_line() 
         click(&mut h, at);
         assert!(h.state().panels.qualifier.is_none(), "applied, the editor closes");
         assert_eq!(qualifier_rows(&h, &a), [vec!["lineNo : Integer".to_string()], Vec::new()]);
+        assert_eq!(h.state().canvas.qualified_ends.len(), 1, "its end moved out to the box, for the next frame's handle");
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add qualifier"));
         h.run();
         let shown = painted(&h);

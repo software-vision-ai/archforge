@@ -362,7 +362,8 @@ pub(crate) fn look_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Loo
     Look { fill: c(style::FILL), stroke: c(style::STROKE), text: c(style::TEXT), width: (width > 0.0 && width.is_finite()).then_some(width) }
 }
 
-fn element_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
+/// The element the node or line `o` shows, through its property `prop`, when it has one.
+pub(crate) fn element_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
     store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|e| store.is_alive(*e))
 }
 
@@ -605,29 +606,12 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let mut pending_badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
-        let (x0, y0) = view.to_canvas(r.min);
-        let (x1, y1) = view.to_canvas(r.max);
-        let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
-        // Nodes dragged into view draw too.
-        for n in refs(store, d, diagram::NODE) {
-            if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
-                visible.nodes.push(n);
-            }
-        }
-        let mut badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
-        let draw = Drawing {
-            p,
-            store,
-            view: &view,
+        let live = Live {
             selection: &selection,
             overrides: &overrides,
             key_status: shell.canvas.key_status,
             renaming,
             problems: &shell.problems,
-            diagram: d,
-            notations: session.view(),
-            boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, &view, &overrides, n))).collect(),
-            spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, &view, &overrides, n)),
             // A line under the pointer, while no gesture runs and the pointer is on the canvas.
             hovered: ui
                 .input(|i| i.pointer.hover_pos())
@@ -641,24 +625,16 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
                 }),
             end_drag: crate::editing::end_preview(shell, pointer),
             segment_drag: crate::editing::segment_preview(shell, view, pointer),
-            ends: std::cell::RefCell::new(Vec::new()),
-            qualified_ends: std::cell::RefCell::new(Vec::new()),
             draft: crate::uml_inline::draft(shell, store),
             rename_text: shell.canvas.rename.as_ref().map(|rn| rn.text.as_str()),
-            tabs: std::cell::RefCell::new(Vec::new()),
-            led: std::cell::OnceCell::new(),
             set_drag: crate::editing::set_label_preview(shell, pointer),
         };
-        for e in &visible.edges {
-            if let Some(badge) = draw_edge(&clip, &draw, *e, &mut shell.registry, ui) {
-                badges.push(badge);
-            }
-        }
-        shell.canvas.ends = draw.ends.take();
-        shell.canvas.qualified_ends = draw.qualified_ends.take();
-        draw_constraint_links(&clip, &draw);
-        draw_nesting_lines(&clip, &draw);
-        shell.canvas.set_labels = draw_sets(&clip, &draw, &mut shell.registry, ui);
+        let scene = Scene { p, store, notations: session.view(), diagram: d, view: &view, grid, area: r };
+        let drawn = draw_scene(ui, &clip, &scene, live, &mut shell.registry);
+        shell.canvas.ends = drawn.ends;
+        shell.canvas.qualified_ends = drawn.qualified_ends;
+        shell.canvas.set_labels = drawn.set_labels;
+        shell.canvas.package_tabs = drawn.package_tabs;
         // A set's label says its whole text while the pointer is on it.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && shell.canvas.gesture.is_none()
@@ -666,19 +642,13 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         {
             let _ = resp.clone().on_hover_text_at_pointer(fmt(&tr("Generalization set {label}"), &[("label", &l.text)]));
         }
-        for n in &visible.nodes {
-            if let Some(badge) = draw_node(&clip, &draw, *n, &mut shell.registry, ui) {
-                badges.push(badge);
-            }
-        }
-        shell.canvas.package_tabs = draw.tabs.take();
         // A name its tab shows cut is shown whole while the pointer is on the tab.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && let Some(name) = shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| t.cut.clone())
         {
             let _ = resp.clone().on_hover_text_at_pointer(name);
         }
-        pending_badges = badges;
+        pending_badges = drawn.badges;
     }
     for (at, control_id, element, element_obj, many) in pending_badges {
         let texts = shell.problems.get(&element_obj).cloned().unwrap_or_default();
@@ -713,6 +683,96 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if let Some(notice) = shell.canvas.notice.clone() {
         ux::text(&paint, r.min + vec2(16.0, 12.0 + below_path), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
     }
+}
+
+/// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
+#[derive(Clone, Copy)]
+pub(crate) struct Scene<'a> {
+    pub(crate) p: &'a Palette,
+    pub(crate) store: &'a Store,
+    pub(crate) notations: &'a archforge_diagram::ProjectView,
+    pub(crate) diagram: Obj,
+    pub(crate) view: &'a View,
+    pub(crate) grid: &'a Grid,
+    pub(crate) area: Rect,
+}
+
+/// What a diagram shows beyond its store: the selection, a gesture under way, what is being typed
+/// and what the rules found. Everything is handed in, none of it read from elsewhere.
+pub(crate) struct Live<'a> {
+    pub(crate) selection: &'a [Obj],
+    pub(crate) overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
+    pub(crate) key_status: bool,
+    pub(crate) renaming: Option<Uuid>,
+    pub(crate) problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
+    pub(crate) hovered: Option<Obj>,
+    pub(crate) end_drag: Option<(Uuid, u8, Pos2)>,
+    pub(crate) segment_drag: Option<(Uuid, Vec<(f64, f64)>)>,
+    pub(crate) draft: Option<(Obj, usize, Option<usize>)>,
+    pub(crate) rename_text: Option<&'a str>,
+    pub(crate) set_drag: Option<(Uuid, Vec2)>,
+}
+
+/// What drawing a diagram leaves behind: the places the next frame's press looks at, and the
+/// problem badges to draw over everything (their place, ids, element and whether there are many).
+pub(crate) struct Drawn {
+    pub(crate) ends: Vec<EndText>,
+    pub(crate) qualified_ends: Vec<(Pos2, Pos2)>,
+    pub(crate) set_labels: Vec<SetLabel>,
+    pub(crate) package_tabs: Vec<PackageTab>,
+    pub(crate) badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)>,
+}
+
+/// Draws the part of the diagram in view, lines under cards, from what it is handed: no window
+/// state is read, so any store can be drawn, in a context that has the window's fonts. Each thing
+/// drawn is recorded in `registry`.
+pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>, live: Live<'_>, registry: &mut widgets::Registry) -> Drawn {
+    let Scene { p, store, notations, diagram: d, view, grid, area: r } = *scene;
+    let overrides = live.overrides;
+    let (x0, y0) = view.to_canvas(r.min);
+    let (x1, y1) = view.to_canvas(r.max);
+    let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
+    // Nodes dragged into view draw too.
+    for n in refs(store, d, diagram::NODE) {
+        if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
+            visible.nodes.push(n);
+        }
+    }
+    let draw = Drawing {
+        p,
+        store,
+        view,
+        selection: live.selection,
+        overrides,
+        key_status: live.key_status,
+        renaming: live.renaming,
+        problems: live.problems,
+        diagram: d,
+        notations,
+        boxes: refs(store, d, diagram::NODE).into_iter().map(|n| (n, model_rect(store, view, overrides, n))).collect(),
+        spreads: archforge_diagram::route::spreads(store, d, |n| model_rect(store, view, overrides, n)),
+        hovered: live.hovered,
+        end_drag: live.end_drag,
+        segment_drag: live.segment_drag,
+        ends: std::cell::RefCell::new(Vec::new()),
+        qualified_ends: std::cell::RefCell::new(Vec::new()),
+        draft: live.draft,
+        rename_text: live.rename_text,
+        tabs: std::cell::RefCell::new(Vec::new()),
+        led: std::cell::OnceCell::new(),
+        set_drag: live.set_drag,
+    };
+    let mut badges = Vec::new();
+    for e in &visible.edges {
+        badges.extend(draw_edge(clip, &draw, *e, registry, ui));
+    }
+    draw_constraint_links(clip, &draw);
+    draw_nesting_lines(clip, &draw);
+    let set_labels = draw_sets(clip, &draw, registry, ui);
+    for n in &visible.nodes {
+        badges.extend(draw_node(clip, &draw, *n, registry, ui));
+    }
+    Drawn { ends: draw.ends.take(), qualified_ends: draw.qualified_ends.take(), set_labels, package_tabs: draw.tabs.take(), badges }
 }
 
 /// The grid: a dot every `GRID_STEP` units, doubled until the dots are at least `GRID_MIN` px
