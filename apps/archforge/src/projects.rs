@@ -549,8 +549,14 @@ impl Projects {
     fn read_back_restore(&self, project: &Path, message: String, asked: (u64, u64), watch: Arc<RestoreWatch>) -> Receiver<Result<bool, String>> {
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
         self.on_a_reader(project, move |reader| {
-            let page = reader.versions(None, 1).map_err(|e| e.to_string())?;
+            #[cfg(test)]
+            hold_reading(&inner, false);
+            // The baseline first: read after the page, it could be newer than the page, which
+            // would then look like a new version though nothing has happened since.
             let before = lock(&watch.before_commit).clone();
+            #[cfg(test)]
+            hold_reading(&inner, true);
+            let page = reader.versions(None, 1).map_err(|e| e.to_string())?;
             let newest = page.versions.first();
             let made = newest.is_some_and(|v| before.as_deref().is_some_and(|b| b != v.hash) && v.description.as_deref() == Some(message.as_str()));
             // Under the writer's lock, so that this and its mark decide in either order.
@@ -1496,6 +1502,8 @@ enum Fault {
     WriteBack,
     /// Runs when the restore has started, or, when true, after a commit with a fault has landed.
     Hold(bool, Box<dyn FnOnce() + Send>),
+    /// Runs as a read-back starts, or, when true, once it has taken its baseline.
+    Reading(bool, Box<dyn FnOnce() + Send>),
 }
 
 /// What a failed commit is judged to have left, for a test.
@@ -1516,6 +1524,14 @@ impl Told {
             Told::Landed => archforge_project::AfterFailure::Version(hash.to_string()),
             Told::CannotTell => archforge_project::AfterFailure::CannotTell,
         }
+    }
+}
+
+/// Runs the step a test has put at this point of a read-back.
+#[cfg(test)]
+fn hold_reading(inner: &Inner, after_baseline: bool) {
+    if let Some(Fault::Reading(_, step)) = take_fault(inner, |f| matches!(f, Fault::Reading(at, _) if *at == after_baseline)) {
+        step();
     }
 }
 
@@ -3272,6 +3288,36 @@ mod tests {
         switched(&host.inner, &path);
         assert!((job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap().is_err());
         assert!(matches!(restore_of(host, &path, &version(host, 1)), Err(RestoreError::OutcomeUnknown)));
+    }
+
+    /// The writer records its baseline while a read-back is under way, the read-back having taken
+    /// the baseline or not yet. An earlier restore with the same message is the newest until then,
+    /// and no commit of this one lands unless asked. Neither is taken for this restore finishing,
+    /// and a baseline read as none says nothing even when the commit has landed since.
+    #[test]
+    fn a_read_back_is_not_fooled_while_the_writer_records_its_baseline() {
+        for (after_baseline, lands) in [(false, false), (true, false), (true, true)] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let old = version(host, 1);
+            assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+            host.write(&path, model("c"));
+            let ReplacementJob { run, read_back } = job_of(host, &path, &old);
+            let (reached, reading) = channel();
+            let (go_on, hold) = channel::<()>();
+            let step = move || {
+                let _ = reached.send(());
+                let _ = hold.recv_timeout(Duration::from_secs(30));
+            };
+            *lock(&host.inner.restore_faults) =
+                vec![Fault::Commit("Restored the version", Told::CannotTell, lands), Fault::Reading(after_baseline, Box::new(step))];
+            let read = read_back();
+            reading.recv_timeout(Duration::from_secs(60)).expect("the read-back is under way");
+            assert!(matches!(ran(&run()), Err(JobFailure::Unclear)));
+            drop(go_on);
+            assert!(read.recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "after_baseline {after_baseline}, lands {lands}");
+            assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)), "the mark stays");
+        }
     }
 
     /// A restore that finishes late confirms itself and nothing else: another's mark stays.
