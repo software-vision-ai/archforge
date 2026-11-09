@@ -651,7 +651,6 @@ pub struct Shell {
     pub ask: Option<close_ask::Ask>,
     /// File → Generate…'s handoff to an agent, while it is open.
     pub generate: Option<generate::Generate>,
-    /// The version chip's list.
     pub version_list: version_chip::List,
     quitting: Option<Vec<std::path::PathBuf>>,
     close_after_save: Vec<(std::path::PathBuf, u64)>,
@@ -1724,6 +1723,7 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
+        version_chip::keep_valid(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);

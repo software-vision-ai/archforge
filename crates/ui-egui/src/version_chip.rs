@@ -23,7 +23,6 @@ const ID: &str = "workspace.header.version";
 /// The list's state between frames.
 #[derive(Default)]
 pub struct List {
-    /// The project it was opened on; none while closed.
     project: Option<PathBuf>,
     highlight: usize,
     versions: Vec<VersionEntry>,
@@ -49,6 +48,13 @@ pub(crate) fn open(shell: &mut Shell) {
         if let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.version_list.project.clone()) {
             shell.version_list.reading = Some(host.versions(&path, None, PAGE));
         }
+    }
+}
+
+/// Once a frame: a list whose project is no longer shown, or that a hold or dialog now bars, closes.
+pub(crate) fn keep_valid(shell: &mut Shell) {
+    if shell.version_list.project.is_some() && (shell.version_list.project != shell.project.as_ref().map(|o| o.path.clone()) || !available(shell)) {
+        close(shell);
     }
 }
 
@@ -124,9 +130,6 @@ fn chip_words(shell: &Shell) -> (String, String) {
 /// The chip left of search, its width fixed until AR-339, and its list; gives where search starts.
 pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start: f32, end: f32) -> f32 {
     take_page(shell);
-    if shell.version_list.project.is_some() && (shell.version_list.project != shell.project.as_ref().map(|o| o.path.clone()) || !available(shell)) {
-        close(shell);
-    }
     let search = (end - 300.0).max(start + 159.0);
     let width = if shell.shown_unsaved() && shell.version_in_view().is_none() { 147.0 } else { 135.0 };
     let r = Rect::from_min_size(pos2(search - 12.0 - width, mid - 16.0), vec2(width, 32.0));

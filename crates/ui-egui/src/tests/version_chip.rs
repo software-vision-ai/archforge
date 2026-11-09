@@ -39,19 +39,17 @@ fn list_shows(h: &Harness<'static, Shell>) -> bool {
 #[test]
 fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
     in_both(|mut h, host| {
+        let at = rect_of(&h, "workspace.header.version").center();
         for open in [true, false] {
-            let at = rect_of(&h, "workspace.header.version").center();
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
         assert_eq!(host.version_limits.lock().unwrap()[0], 7, "the newest versions, each one in reach");
         host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
-        assert!(
-            ["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "Add status")
-        );
+        assert!(["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)));
+        assert!(!painted_has(&h, "Add status"));
         add_schema(&mut h, "shop");
-        h.run_steps(2);
         assert!(painted_has(&h, "Unsaved changes") && painted_has(&h, "Add status") && h.query_by_label("Current work · unsaved changes").is_some());
     });
 }
@@ -89,19 +87,10 @@ fn the_keys_move_view_and_close() {
         assert!(h.query_by_label("Viewing a version").is_some(), "no other version's date");
         h.state_mut().back_to_current_work();
         opened_list(&mut h, &host);
-        h.state_mut().begin_hold().unwrap();
-        h.run_steps(2);
-        assert!(!list_shows(&h), "a hold closes it");
-        h.state_mut().end_hold();
-        opened_list(&mut h, &host);
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("no".into()))).unwrap();
         h.run_steps(3);
         assert!(!list_shows(&h), "a finished save closes it, even a failed one");
-        opened_list(&mut h, &host);
-        h.state_mut().project.as_mut().unwrap().path = "/another".into();
-        h.run_steps(2);
-        assert!(!list_shows(&h));
         assert_eq!(crate::version_chip::when("2026-11-08T23:30:00Z", crate::chat_words::Clock { now: 0, offset: Some(3_600) }), "9 Nov 00:30");
     });
 }
@@ -109,10 +98,8 @@ fn the_keys_move_view_and_close() {
 /// The keys and the action wait while a hold or any dialog is up.
 #[test]
 fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
-    use crate::{
-        chat_delete::Ask,
-        diagrams::{NewDiagram, Step},
-    };
+    use crate::chat_delete::Ask;
+    use crate::diagrams::{NewDiagram, Step};
     let blocks: [&dyn Fn(&mut Shell); 10] = [
         &|s| s.begin_hold().unwrap(),
         &|s| s.session = None,
@@ -129,11 +116,29 @@ fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
     ];
     for block in blocks {
         in_both(|mut h, host| {
-            assert!(actions::available(h.state(), VERSIONS));
             block(h.state_mut());
             assert!(!actions::available(h.state(), VERSIONS), "all of them");
             actions::run(h.state_mut(), VERSIONS);
             assert!(host.version_reads.lock().unwrap().is_empty(), "nothing is read");
+        });
+    }
+}
+
+/// However the project goes, or is held, the list closes with no read left waiting and stays closed.
+#[test]
+fn the_list_closes_on_every_way_the_project_goes() {
+    let other = || crate::Opened { path: "/other".into(), ..Default::default() };
+    let routes: [&dyn Fn(&mut Shell); 4] = [&|s| s.begin_hold().unwrap(), &Shell::go_home, &Shell::close_project, &|s| s.open_project(other())];
+    for route in routes {
+        in_both(|mut h, host| {
+            key(&mut h, egui::Key::H, MOVE[1]);
+            route(h.state_mut());
+            h.run_steps(2);
+            assert!(h.state().version_list.reading.is_none(), "no read left waiting");
+            host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+            h.state_mut().open_project(commerce());
+            h.run_steps(4);
+            assert!(!list_shows(&h), "it does not come back");
         });
     }
 }
