@@ -318,3 +318,149 @@ fn a_refused_view_says_why() {
         assert_eq!(h.state().canvas.notice.as_deref(), Some("Wait for the change under way to finish."));
     });
 }
+
+/// Adds a diagram named `name` of a schema of its own, and gives its id.
+fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
+    let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
+    let made = crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": name })).unwrap();
+    made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap()
+}
+
+/// Opens `id` in the centre and lets it draw.
+fn show_diagram(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid) {
+    crate::canvas::open(h.state_mut(), id);
+    h.run_steps(3);
+}
+
+/// Shows the version `commit`, which reads as `rows`.
+fn enter(h: &mut Harness<'static, Shell>, host: &SavingHost, rows: std::sync::Arc<archforge_mof::rows::Rows>, commit: &str) {
+    start_viewing(h, commit);
+    answer_read(h, host, Ok(rows));
+    assert_eq!(h.state().viewing(), Some(commit));
+}
+
+/// What the centre shows: the tabs and the active one.
+fn centre(h: &Harness<'static, Shell>) -> (Vec<archforge_mof::Uuid>, Option<archforge_mof::Uuid>) {
+    (h.state().canvas.tabs.clone(), h.state().canvas.active)
+}
+
+/// A version that has the diagram showing opens on it, in a tab of its own and fitted, and going
+/// back brings the tabs, the selection, the pan and the zoom as they were.
+#[test]
+fn a_version_opens_on_the_diagram_showing_and_going_back_restores_the_work() {
+    in_both(|mut h, host| {
+        let (a, b) = (add_diagram(&mut h, "Alpha"), add_diagram(&mut h, "Beta"));
+        let earlier = rows_now(&h);
+        show_diagram(&mut h, a);
+        show_diagram(&mut h, b);
+        h.state_mut().canvas.pan = egui::vec2(123.0, 45.0);
+        h.state_mut().canvas.zoom = 1.75;
+        h.run_steps(2);
+        let (before, selected) = (centre(&h), crate::panels::selected_id(h.state()));
+        enter(&mut h, &host, earlier, "c1");
+        assert_eq!(centre(&h), (vec![b], Some(b)));
+        assert!(painted_has(&h, "Beta") && !h.state().canvas.fit_pending, "drawn and fitted: {:?}", painted(&h));
+        assert!(h.state().canvas.pan != egui::vec2(123.0, 45.0) || h.state().canvas.zoom != 1.75, "the work's view stays with it");
+        assert!(h.state_mut().back_to_current_work());
+        h.run_steps(3);
+        assert_eq!((centre(&h), crate::panels::selected_id(h.state())), (before, selected));
+        assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), (egui::vec2(123.0, 45.0), 1.75));
+    });
+}
+
+/// Entering opens what shows when the version arrives: a tab changed while it is read counts.
+#[test]
+fn a_version_opens_on_what_shows_when_it_arrives() {
+    in_both(|mut h, host| {
+        let (a, b) = (add_diagram(&mut h, "Alpha"), add_diagram(&mut h, "Beta"));
+        let rows = rows_now(&h);
+        show_diagram(&mut h, a);
+        start_viewing(&mut h, "c1");
+        show_diagram(&mut h, b);
+        answer_read(&mut h, &host, Ok(rows));
+        assert_eq!(centre(&h), (vec![b], Some(b)));
+    });
+}
+
+/// Where the version lacks what shows, or what shows is no diagram, its first diagram opens: the
+/// first in the list, not the latest made. With no diagram at all the canvas stays empty.
+#[test]
+fn a_version_without_what_shows_opens_its_first_diagram_or_nothing() {
+    in_both(|mut h, host| {
+        let none = rows_now(&h);
+        let first = add_diagram(&mut h, "Alpha");
+        add_diagram(&mut h, "Beta");
+        let two = rows_now(&h);
+        let gone = add_diagram(&mut h, "Gamma");
+        show_diagram(&mut h, gone);
+        enter(&mut h, &host, two.clone(), "c1");
+        assert_eq!(centre(&h), (vec![first], Some(first)), "a stale id opens nothing");
+        h.state_mut().back_to_current_work();
+        h.run_steps(2);
+        enter(&mut h, &host, none, "c2");
+        assert_eq!(centre(&h), (vec![], None), "the empty state");
+        assert_eq!(h.state().canvas.notice, None);
+        h.state_mut().back_to_current_work();
+        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
+        show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
+        let with_skill = rows_now(&h);
+        enter(&mut h, &host, with_skill, "c3");
+        assert_eq!(h.state().canvas.active, Some(first), "a skill's tab is no diagram");
+    });
+}
+
+/// The step keys, the viewing chip's steps and the list each stay on the diagram in view in the
+/// version left, whatever current work has open.
+#[test]
+fn every_way_between_versions_stays_on_the_diagram_in_view() {
+    in_both(|mut h, host| {
+        let (a, b) = (add_diagram(&mut h, "Alpha"), add_diagram(&mut h, "Beta"));
+        show_diagram(&mut h, a);
+        press(&mut h, egui::Key::OpenBracket);
+        answer_versions(&host);
+        h.run_steps(3);
+        shown(&mut h, &host, "h3");
+        assert_eq!(centre(&h), (vec![a], Some(a)));
+        show_diagram(&mut h, b);
+        press(&mut h, egui::Key::OpenBracket);
+        shown(&mut h, &host, "h2");
+        assert_eq!(centre(&h), (vec![b], Some(b)), "the step key");
+        let at = rect_of(&h, "workspace.header.version.older").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        shown(&mut h, &host, "h1");
+        assert_eq!(centre(&h), (vec![b], Some(b)), "the chip's step");
+        opened_list(&mut h, &host);
+        key(&mut h, egui::Key::ArrowDown, MOVE[0]);
+        key(&mut h, egui::Key::Enter, MOVE[0]);
+        h.run_steps(3);
+        shown(&mut h, &host, "h3");
+        assert_eq!(centre(&h), (vec![b], Some(b)), "the list");
+    });
+}
+
+/// A version with nothing in view carries nothing: the next opens its first diagram, not the one
+/// current work has open. A read dropped on the way carries nothing into the next either.
+#[test]
+fn nothing_is_carried_past_an_empty_view_or_a_dropped_read() {
+    in_both(|mut h, host| {
+        let none = rows_now(&h);
+        let (a, b) = (add_diagram(&mut h, "Alpha"), add_diagram(&mut h, "Beta"));
+        let two = rows_now(&h);
+        show_diagram(&mut h, b);
+        enter(&mut h, &host, none, "c1");
+        assert_eq!(centre(&h), (vec![], None));
+        h.state_mut().move_to_version("c2").unwrap();
+        h.run_steps(3);
+        answer_read(&mut h, &host, Ok(two.clone()));
+        assert_eq!((h.state().viewing(), centre(&h)), (Some("c2"), (vec![a], Some(a))), "the version's first, not the work's");
+        h.state_mut().move_to_version("c3").unwrap();
+        h.run_steps(3);
+        assert!(h.state_mut().back_to_current_work(), "the read is dropped");
+        host.reads.lock().unwrap().clear();
+        assert_eq!(centre(&h).1, Some(b), "current work's own");
+        enter(&mut h, &host, two, "c4");
+        assert_eq!(centre(&h), (vec![b], Some(b)), "what the dropped read carried is gone");
+    });
+}

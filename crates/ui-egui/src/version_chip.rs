@@ -169,11 +169,11 @@ fn step(shell: &mut Shell, older: bool) {
     }
 }
 
-/// Shows the version `hash`, read `label`; a refusal is said at the top of the canvas.
+/// Shows the version `hash`, read `label`, from current work or from the version in view, staying
+/// on the diagram in view there; a refusal is said at the top of the canvas.
 pub(crate) fn view(shell: &mut Shell, hash: String, label: String) {
-    shell.leave_version();
     shell.version_list.shown = Some((hash.clone(), label));
-    if let Err(why) = shell.view_version(&hash) {
+    if let Err(why) = shell.move_to_version(&hash) {
         shell.canvas.notice = Some(refused_words(&why));
     }
 }
