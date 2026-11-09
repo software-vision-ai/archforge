@@ -81,10 +81,23 @@ enum Job {
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
     /// Restore a version of a project; the generation is the project's when it was asked for.
-    /// Restore a version of a project, the open instance and generation it was asked for with it.
-    /// The flag is the claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the
-    /// job or the wait that gave up on it, decides, so a job given up on is never run late.
-    Restore(PathBuf, RestoreRequest, u64, u64, Arc<AtomicBool>, Sender<Result<Restored, RestoreError>>),
+    /// Restore a version of a project, the open instance and generation it was asked for with it;
+    /// see [`RestoreWatch`] for what it shares with those waiting.
+    Restore(PathBuf, RestoreRequest, u64, u64, Arc<RestoreWatch>, Sender<Result<Restored, RestoreError>>),
+}
+
+/// What a restore shares with the wait for it and with its read-back; held in the mark of a
+/// restore whose outcome is unknown, it also says which restore set that mark.
+#[derive(Default)]
+struct RestoreWatch {
+    /// The claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the job or the
+    /// wait that gave up on it, decides, so a job given up on is never run late.
+    claim: AtomicBool,
+    /// The newest version just before the job's commit; none until the job has got that far.
+    before_commit: Mutex<Option<String>>,
+    /// The read-back found this restore's version. Set and read under the lock on the marks, so
+    /// that it and the writer's mark decide in either order.
+    confirmed: AtomicBool,
 }
 
 /// A version to restore, and who asks.
@@ -134,7 +147,8 @@ pub enum RestoreError {
         written_back: bool,
     },
     /// Whether the version was committed cannot be told, so nothing was written over it. Further
-    /// restores of this project are refused until it has been closed.
+    /// restores of this project are refused until it has been closed or this restore's read-back
+    /// has found it finished.
     CannotTell {
         why: String,
         kept_work: bool,
@@ -286,8 +300,9 @@ struct Inner {
     readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
     /// Each project's switch generation: absent is 0, and nothing has moved it yet.
     generations: Mutex<BTreeMap<PathBuf, u64>>,
-    /// The projects a restore of which ended with its outcome unknown, until they are closed.
-    restores_unknown: Mutex<std::collections::BTreeSet<PathBuf>>,
+    /// The projects a restore of which ended with its outcome unknown, each with that restore,
+    /// until they are closed or that restore's read-back finds it finished.
+    restores_unknown: Mutex<BTreeMap<PathBuf, Arc<RestoreWatch>>>,
     /// How many times each project has closed, as the instance a job names: absent is 0.
     instances: Mutex<BTreeMap<PathBuf, u64>>,
     /// Runs just before a switch moves, for a test to ask for a job between the steps.
@@ -351,7 +366,7 @@ impl Projects {
                 before_move: Mutex::new(None),
                 #[cfg(test)]
                 restore_faults: Mutex::new(Vec::new()),
-                restores_unknown: Mutex::new(std::collections::BTreeSet::new()),
+                restores_unknown: Mutex::new(BTreeMap::new()),
                 instances: Mutex::new(BTreeMap::new()),
                 #[cfg(test)]
                 fail_chats: AtomicBool::new(false),
@@ -431,13 +446,13 @@ impl Projects {
     }
 
     /// Starts restoring a version of `project` on the writer, and returns at once; see [`restore`].
-    /// Nothing may call this until AR-324, which depends on AR-327.
+    /// Nothing may call this until AR-324.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn restore_version(&self, project: &Path, request: RestoreRequest) -> Receiver<Result<Restored, RestoreError>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
-        let (instance, claim) = (instance_of(&self.inner, project), Arc::new(AtomicBool::new(false)));
-        if let Err(e) = writer(&self.inner).send(Job::Restore(project.to_path_buf(), request, generation, instance, claim, tx.clone())) {
+        let (instance, watch) = (instance_of(&self.inner, project), Arc::new(RestoreWatch::default()));
+        if let Err(e) = writer(&self.inner).send(Job::Restore(project.to_path_buf(), request, generation, instance, watch, tx.clone())) {
             let _ = tx.send(Err(RestoreError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
@@ -526,17 +541,50 @@ impl Projects {
     }
 
     /// The job that restores a version within `limit`, the project's open instance and generation
-    /// now, before the version is read. Its read-back can only say that it could not tell, as what
-    /// settles an unclear restore is AR-327: until then one holds the project until it is closed.
+    /// now, before the version is read.
     fn restore_job_within(&self, project: &Path, request: RestoreRequest, limit: Duration) -> ReplacementJob {
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
+        let message = restored_message(&request.saved_at);
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
-        let read_back = || {
-            let (told, answer) = channel();
-            let _ = told.send(Err("whether the restore finished could not be told".to_string()));
-            answer
+        let watch = Arc::new(RestoreWatch::default());
+        let run = {
+            let (inner, path, watch) = (inner.clone(), path.clone(), watch.clone());
+            move || start_restore(inner, path, request, asked, watch, limit)
         };
-        ReplacementJob { run: Box::new(move || start_restore(inner, path, request, asked, limit)), read_back: Box::new(read_back) }
+        let read_back = move || Projects { inner }.read_back_restore(&path, message, asked, watch);
+        ReplacementJob { run: Box::new(run), read_back: Box::new(read_back) }
+    }
+
+    /// Reads back, off the writer, whether this restore finished: the job got to its commit and the
+    /// newest version is a new one, not the one before that commit, carrying `message`. The message
+    /// alone would not do: an earlier restore of a version saved at the same time has the same text
+    /// and may still be the newest. Anything else cannot be told, never that it did not finish, as
+    /// a commit whose reply was lost may still be running; so too once the project has closed or
+    /// its branch moved. A restore found finished clears its own mark, never another restore's.
+    fn read_back_restore(&self, project: &Path, message: String, asked: (u64, u64), watch: Arc<RestoreWatch>) -> Receiver<Result<bool, String>> {
+        let (inner, path) = (self.inner.clone(), project.to_path_buf());
+        self.on_a_reader(project, move |reader| {
+            #[cfg(test)]
+            hold_reading(&inner, false);
+            // The baseline first: read after the page, it could be newer than the page, which
+            // would then look like a new version though nothing has happened since.
+            let before = lock(&watch.before_commit).clone();
+            #[cfg(test)]
+            hold_reading(&inner, true);
+            let page = reader.versions(None, 1).map_err(|e| e.to_string())?;
+            let newest = page.versions.first();
+            let made = newest.is_some_and(|v| before.as_deref().is_some_and(|b| b != v.hash) && v.description.as_deref() == Some(message.as_str()));
+            // Under the writer's lock, so that this and its mark decide in either order.
+            let mut unknown = lock(&inner.restores_unknown);
+            if !made || asked != (generation_of(&inner, &path), instance_of(&inner, &path)) {
+                return Err("whether the restore finished could not be told".to_string());
+            }
+            watch.confirmed.store(true, Ordering::SeqCst);
+            if unknown.get(&path).is_some_and(|mark| Arc::ptr_eq(mark, &watch)) {
+                unknown.remove(&path);
+            }
+            Ok(true)
+        })
     }
 
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
@@ -584,8 +632,8 @@ impl Projects {
 }
 
 impl ProjectHost for Projects {
-    /// Nothing may call this until AR-324, which depends on AR-327. Its reasons are in English, as
-    /// the project's own errors are; AR-324 words them for the person.
+    /// Nothing may call this until AR-324. Its reasons are in English, as the project's own errors
+    /// are; AR-324 words them for the person.
     fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
     }
@@ -1113,12 +1161,12 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             Some(Job::CreateBranch(project, name, start, generation, instance, reply)) => {
                 let _ = reply.send(create_branch(inner, &project, &name, start.as_deref(), generation, instance, &mut waiting, &mut failed));
             }
-            Some(Job::Restore(project, request, generation, instance, claim, reply)) => {
-                if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            Some(Job::Restore(project, request, generation, instance, watch, reply)) => {
+                if watch.claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
                     // The wait gave up on it before it started: it must not run late.
                     continue;
                 }
-                let answer = restore(inner, &project, request, generation, instance, &mut waiting, &mut failed);
+                let answer = restore(inner, &project, request, (generation, instance), &watch, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
             }
             Some(Job::Flush(project, reply)) => {
@@ -1255,8 +1303,8 @@ fn restore(
     inner: &Inner,
     path: &Path,
     request: RestoreRequest,
-    generation: u64,
-    instance: u64,
+    (generation, instance): (u64, u64),
+    watch: &Arc<RestoreWatch>,
     waiting: &mut BTreeMap<PathBuf, Rows>,
     failed: &mut bool,
 ) -> Result<Restored, RestoreError> {
@@ -1267,10 +1315,10 @@ fn restore(
         return Err(RestoreError::BranchChanged);
     }
     #[cfg(test)]
-    if let Some(Fault::Hold(step)) = take_fault(inner, |f| matches!(f, Fault::Hold(_))) {
+    if let Some(Fault::Hold(_, step)) = take_fault(inner, |f| matches!(f, Fault::Hold(false, _))) {
         step();
     }
-    if lock(&inner.restores_unknown).contains(path) {
+    if lock(&inner.restores_unknown).contains_key(path) {
         return Err(RestoreError::OutcomeUnknown);
     }
     let schema = schema(inner).map_err(|e| RestoreError::Failed(format!("{e:?}")))?;
@@ -1286,10 +1334,13 @@ fn restore(
     if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
         return Ok(Restored::Same { kept_work: false });
     }
-    let replaced = replace(inner, project, &schema, &request, &version);
+    let replaced = replace(inner, project, &schema, &request, &version, watch);
     // While the project is still open: its closing, which forgets this, comes after.
     if matches!(replaced, Err(Stop::CannotTell { .. })) {
-        lock(&inner.restores_unknown).insert(path.to_path_buf());
+        let mut unknown = lock(&inner.restores_unknown);
+        if !watch.confirmed.load(Ordering::SeqCst) {
+            unknown.insert(path.to_path_buf(), watch.clone());
+        }
     }
     drop(open);
     match replaced {
@@ -1307,15 +1358,21 @@ fn restore(
 
 /// Hands a restore to the writer and returns its answer's channel at once, as a [`Job`]'s callback
 /// must. The limit's clock starts first, and a thread of its own waits for the writer within it.
-fn start_restore(inner: Arc<Inner>, path: PathBuf, request: RestoreRequest, (generation, instance): (u64, u64), limit: Duration) -> JobAnswer {
+fn start_restore(
+    inner: Arc<Inner>,
+    path: PathBuf,
+    request: RestoreRequest,
+    (generation, instance): (u64, u64),
+    watch: Arc<RestoreWatch>,
+    limit: Duration,
+) -> JobAnswer {
     let deadline = Instant::now() + limit;
     let (answer, gives) = channel();
     let (reply, from_writer) = channel();
-    let claim = Arc::new(AtomicBool::new(false));
     let wait = {
-        let (inner, claim, answer) = (inner.clone(), claim.clone(), answer.clone());
+        let (inner, watch, answer) = (inner.clone(), watch.clone(), answer.clone());
         move || {
-            let _ = answer.send(forwarded(&from_writer, &claim, deadline, &inner.cancel));
+            let _ = answer.send(forwarded(&from_writer, &watch.claim, deadline, &inner.cancel));
         }
     };
     match std::thread::Builder::new().name("archforge-restore".into()).spawn(wait) {
@@ -1330,7 +1387,7 @@ fn start_restore(inner: Arc<Inner>, path: PathBuf, request: RestoreRequest, (gen
         }
     }
     // Should the writer have stopped, the reply's sender goes with the job, and the wait ends.
-    let _ = writer(&inner).send(Job::Restore(path, request, generation, instance, claim, reply));
+    let _ = writer(&inner).send(Job::Restore(path, request, generation, instance, watch, reply));
     gives
 }
 
@@ -1368,6 +1425,11 @@ fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> 
     }
 }
 
+/// The message of the version a restore makes of the version saved at `saved_at`.
+fn restored_message(saved_at: &str) -> String {
+    format!("Restored the version of {saved_at}")
+}
+
 /// How a restore's writing stopped, and what is left to do about it.
 enum Stop {
     /// The model did not change.
@@ -1379,7 +1441,14 @@ enum Stop {
 }
 
 /// Keeps the unsaved work as a version, writes the version's rows and commits them.
-fn replace(inner: &Inner, project: &Project, schema: &ModelSchema, request: &RestoreRequest, version: &Rows) -> Result<Restored, Stop> {
+fn replace(
+    inner: &Inner,
+    project: &Project,
+    schema: &ModelSchema,
+    request: &RestoreRequest,
+    version: &Rows,
+    watch: &RestoreWatch,
+) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
     let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
@@ -1393,7 +1462,8 @@ fn replace(inner: &Inner, project: &Project, schema: &ModelSchema, request: &Res
     if let Err(e) = write_step(inner, project, schema, version) {
         return Err(Stop::WriteBack { why: e.to_string(), kept_work });
     }
-    match save_step(inner, project, &format!("Restored the version of {}", request.saved_at), &author) {
+    *lock(&watch.before_commit) = project.versions(None, 1).ok().and_then(|page| page.versions.first().map(|v| v.hash.clone()));
+    match save_step(inner, project, &restored_message(&request.saved_at), &author) {
         Ok(saved) => Ok(restored(saved, kept_work)),
         Err(f) => match f.version {
             Version(_) => Ok(Restored::Version { kept_work }),
@@ -1413,6 +1483,9 @@ fn save_step(inner: &Inner, project: &Project, message: &str, author: &Author) -
         } else {
             ""
         };
+        if let Some(Fault::Hold(_, step)) = take_fault(inner, |f| matches!(f, Fault::Hold(true, _))) {
+            step();
+        }
         let version = told.after(hash);
         return Err(archforge_project::SaveFailure { error: refused_by_test(project), version });
     }
@@ -1442,8 +1515,10 @@ enum Fault {
     Write { lands: bool },
     /// The next writing of what waits fails.
     WriteBack,
-    /// Runs when the restore has started.
-    Hold(Box<dyn FnOnce() + Send>),
+    /// Runs when the restore has started, or, when true, after a commit with a fault has landed.
+    Hold(bool, Box<dyn FnOnce() + Send>),
+    /// Runs as a read-back starts, or, when true, once it has taken its baseline.
+    Reading(bool, Box<dyn FnOnce() + Send>),
 }
 
 /// What a failed commit is judged to have left, for a test.
@@ -1464,6 +1539,14 @@ impl Told {
             Told::Landed => archforge_project::AfterFailure::Version(hash.to_string()),
             Told::CannotTell => archforge_project::AfterFailure::CannotTell,
         }
+    }
+}
+
+/// Runs the step a test has put at this point of a read-back.
+#[cfg(test)]
+fn hold_reading(inner: &Inner, after_baseline: bool) {
+    if let Some(Fault::Reading(_, step)) = take_fault(inner, |f| matches!(f, Fault::Reading(at, _) if *at == after_baseline)) {
+        step();
     }
 }
 
@@ -3053,16 +3136,17 @@ mod tests {
         host.restore_job_within(path, restoring(commit), RESTORE_LIMIT)
     }
 
-    /// Holds a restore at its start and takes the same way out of the wait as its limit, with no
-    /// clock to wait for: its answer is unclear. Dropping what this gives lets it go on.
-    fn started_then_unclear(host: &Projects, run: Box<dyn FnOnce() -> JobAnswer>) -> Sender<()> {
+    /// Holds a restore at its start, or after its faulted commit has landed, and takes the same way
+    /// out of the wait as its limit, with no clock to wait for: its answer is unclear. Dropping
+    /// what this gives lets it go on.
+    fn started_then_unclear(host: &Projects, run: Box<dyn FnOnce() -> JobAnswer>, after_commit: bool) -> Sender<()> {
         let (running, started) = channel();
         let (finish, hold) = channel::<()>();
         let step = move || {
             let _ = running.send(());
             let _ = hold.recv_timeout(Duration::from_secs(30));
         };
-        lock(&host.inner.restore_faults).push(Fault::Hold(Box::new(step)));
+        lock(&host.inner.restore_faults).push(Fault::Hold(after_commit, Box::new(step)));
         let answer = run();
         started.recv_timeout(Duration::from_secs(60)).expect("the job started");
         host.inner.cancel.store(true, Ordering::SeqCst);
@@ -3146,35 +3230,166 @@ mod tests {
         no_thread_left(host);
     }
 
-    /// A job that has started and passes its limit is unclear, and goes on to finish.
+    /// A job that has started and passes its limit is unclear; when it finishes late the read-back
+    /// finds its version.
     #[test]
-    fn a_restore_started_but_late_is_unclear() {
+    fn a_restore_started_but_late_is_unclear_and_read_back_when_it_lands() {
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let job = job_of(host, &path, &version(host, 1));
-        drop(started_then_unclear(host, job.run));
+        let ReplacementJob { run, read_back } = job_of(host, &path, &version(host, 1));
+        drop(started_then_unclear(host, run, false));
         assert_eq!(host.flush_for_test(&path), Ok(()));
         assert_eq!(work(host), model("a"));
+        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true));
         no_thread_left(host);
     }
 
-    /// Here a read-back can only say it could not tell, even for a restore that finished.
+    /// An earlier restore of a version saved at the same time is still the newest version and has
+    /// the same message: that is no sign this one finished, however far this one got.
     #[test]
-    fn a_read_back_never_reports_finished() {
+    fn a_read_back_is_not_fooled_by_an_earlier_restore_with_the_same_message() {
+        let (sandbox, path) = branched();
+        let host = sandbox.host.clone();
+        let (old, other) = (version(&host, 1), version(&host, 0));
+        assert_eq!(restore_of(&host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+        // It reached its commit, which did not land. Only the head can tell the two apart.
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, false)];
+        let job = job_of(&host, &path, &other);
+        assert!(matches!(ran(&(job.run)()), Err(JobFailure::Unclear)));
+        assert_eq!(sandbox.messages()[0], restored_message(SAVED_AT), "the earlier one is still on top");
+        assert!((job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap().is_err());
+
+        // Another that has only started, its limit passed, has reached no commit at all.
+        let (sandbox, path) = branched();
+        let host = sandbox.host.clone();
+        let old = version(&host, 1);
+        assert_eq!(restore_of(&host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+        host.write(&path, model("c"));
+        let ReplacementJob { run, read_back } = job_of(&host, &path, &old);
+        let finish = started_then_unclear(&host, run, false);
+        assert!(read_back().recv_timeout(Duration::from_secs(60)).unwrap().is_err());
+        drop(finish);
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+    }
+
+    /// A read-back that confirms the restore before the writer has finished saying it cannot tell:
+    /// its mark must not refuse later restores. The test below has the mark come first.
+    #[test]
+    fn a_read_back_that_confirms_first_stops_the_writers_mark() {
         let (sandbox, path) = branched();
         let host = &sandbox.host;
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, true)];
+        let old = version(host, 1);
+        let ReplacementJob { run, read_back } = job_of(host, &path, &old);
+        let finish = started_then_unclear(host, run, true);
+        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true));
+        drop(finish);
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Same { kept_work: false });
+    }
+
+    /// A commit that cannot be told is unclear, and the writer marks it so. Read back afterwards, a
+    /// version found finishes it and lets restores through again; none found keeps them refused.
+    #[test]
+    fn a_read_back_settles_an_unknown_restore_only_when_it_landed() {
+        for lands in [false, true] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, lands)];
+            let old = version(host, 1);
+            let job = job_of(host, &path, &old);
+            assert!(matches!(ran(&(job.run)()), Err(JobFailure::Unclear)));
+            if !lands {
+                // A newer version that is not this restore's says nothing about it.
+                host.write(&path, model("z"));
+                assert_eq!(saved(host, &path), Ok(true));
+            }
+            let read = (job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap();
+            assert_eq!(read.is_ok(), lands, "{read:?}");
+            let again = restore_of(host, &path, &version(host, usize::from(lands)));
+            assert_eq!(matches!(again, Err(RestoreError::OutcomeUnknown)), !lands, "{again:?}");
+        }
+        // Read back after the branch moved, it says nothing about the project as it is now.
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, true)];
         let job = job_of(host, &path, &version(host, 1));
-        assert!(matches!(ran(&(job.run)()), Ok(())));
-        assert_eq!(work(host), model("a"));
+        assert!(matches!(ran(&(job.run)()), Err(JobFailure::Unclear)));
+        switched(&host.inner, &path);
         assert!((job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap().is_err());
+        assert!(matches!(restore_of(host, &path, &version(host, 1)), Err(RestoreError::OutcomeUnknown)));
+    }
+
+    /// The writer records its baseline while a read-back is under way, the read-back having taken
+    /// the baseline or not yet. An earlier restore with the same message is the newest until then,
+    /// and no commit of this one lands unless asked. Neither is taken for this restore finishing,
+    /// and a baseline read as none says nothing even when the commit has landed since.
+    #[test]
+    fn a_read_back_is_not_fooled_while_the_writer_records_its_baseline() {
+        for (after_baseline, lands) in [(false, false), (true, false), (true, true)] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let old = version(host, 1);
+            assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+            host.write(&path, model("c"));
+            let ReplacementJob { run, read_back } = job_of(host, &path, &old);
+            let (reached, reading) = channel();
+            let (go_on, hold) = channel::<()>();
+            let step = move || {
+                let _ = reached.send(());
+                let _ = hold.recv_timeout(Duration::from_secs(30));
+            };
+            *lock(&host.inner.restore_faults) =
+                vec![Fault::Commit("Restored the version", Told::CannotTell, lands), Fault::Reading(after_baseline, Box::new(step))];
+            let read = read_back();
+            reading.recv_timeout(Duration::from_secs(60)).expect("the read-back is under way");
+            assert!(matches!(ran(&run()), Err(JobFailure::Unclear)));
+            drop(go_on);
+            assert!(read.recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "after_baseline {after_baseline}, lands {lands}");
+            assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)), "the mark stays");
+        }
+    }
+
+    /// A restore that finishes late confirms itself and nothing else: another's mark stays.
+    #[test]
+    fn a_late_read_back_leaves_another_restores_mark() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (old, other) = (version(host, 1), version(host, 0));
+        let ReplacementJob { run, read_back } = job_of(host, &path, &old);
+        drop(started_then_unclear(host, run, false));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, false)];
+        let another = job_of(host, &path, &other);
+        assert!(matches!(ran(&(another.run)()), Err(JobFailure::Unclear)));
+        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true), "its own version is there");
+        assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)));
+    }
+
+    /// A read-back from before a close and reopen settles nothing about the project opened since.
+    #[test]
+    fn a_read_back_from_before_a_reopen_settles_nothing() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (old, other) = (version(host, 1), version(host, 0));
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, true)];
+        let job = job_of(host, &path, &old);
+        assert!(matches!(ran(&(job.run)()), Err(JobFailure::Unclear)));
+        assert_eq!(close(host, &path), Ok(()));
+        wait(&host.open(&path)).unwrap();
+        *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, false)];
+        let reopened = job_of(host, &path, &other);
+        assert!(matches!(ran(&(reopened.run)()), Err(JobFailure::Unclear)));
+        assert!((job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap().is_err());
+        assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)));
     }
 
     /// Asks the writer for a restore of the project at `path`, naming the open instance `instance`.
     fn restore_of_instance(host: &Projects, path: &Path, commit: &str, instance: u64) -> Result<Restored, RestoreError> {
         let (reply, answer) = channel();
-        let claim = Arc::new(AtomicBool::new(false));
+        let watch = Arc::new(RestoreWatch::default());
         writer(&host.inner)
-            .send(Job::Restore(path.to_path_buf(), restoring(commit), generation_of(&host.inner, path), instance, claim, reply))
+            .send(Job::Restore(path.to_path_buf(), restoring(commit), generation_of(&host.inner, path), instance, watch, reply))
             .unwrap();
         answer.recv_timeout(Duration::from_secs(60)).expect("the restore answers")
     }
