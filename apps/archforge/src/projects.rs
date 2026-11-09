@@ -27,7 +27,9 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
+use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
+use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{Author, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, SafeBranch, VersionReader, check_description};
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing};
@@ -67,7 +69,57 @@ enum Job {
     Chat(PathBuf, u64, ChatJob),
     /// Move a project to another branch; the generation is the project's when it was asked for.
     Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
+    /// Restore a version of a project; the generation is the project's when it was asked for.
+    Restore(PathBuf, RestoreRequest, u64, Sender<Result<Restored, RestoreError>>),
 }
+
+/// A version to restore, and who asks.
+pub struct RestoreRequest {
+    /// The version's commit.
+    pub commit: String,
+    /// When the version was saved, RFC 3339 in UTC, for the new version's message.
+    pub saved_at: String,
+    pub by: SavedBy,
+    /// What an opening does to a model, applied to both sides of the comparison.
+    pub repair: fn(&mut archforge_mof::Store),
+}
+
+/// How a restore that did not fail went.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Restored {
+    /// A new version holds the old model; `kept_work` says unsaved work was saved first.
+    Version { kept_work: bool },
+    /// Nothing differed from the version, so no version of it was made.
+    Same { kept_work: bool },
+}
+
+/// Why a restore stopped.
+#[derive(Debug)]
+pub enum RestoreError {
+    /// A switch moved the project after this restore was asked for.
+    BranchChanged,
+    NotOpen,
+    /// What waits could not be written: the rows are kept for the next write.
+    Unwritten(String),
+    /// The version could not be read.
+    Version(archforge_project::Error),
+    /// A later step failed.
+    Failed(String),
+}
+
+impl std::fmt::Display for RestoreError {
+    /// The reason in English, as the project's own errors give it; a screen words it through `tr`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RestoreError::BranchChanged => f.write_str("a switch moved the project first"),
+            RestoreError::NotOpen => f.write_str("the project is no longer open"),
+            RestoreError::Unwritten(why) | RestoreError::Failed(why) => f.write_str(why),
+            RestoreError::Version(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for RestoreError {}
 
 /// How a switch of branch went.
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +312,19 @@ impl Projects {
             let name = reader.active_branch().map_err(|e| e.to_string())?;
             Ok(SafeBranch::found(&name).map_err(|e| e.to_string())?.same_branch(&target))
         })
+    }
+
+    /// Starts restoring a version of `project` on the writer, and returns at once; see [`restore`].
+    /// Nothing may call this until AR-322 and AR-323 land: what a failed step leaves and how long
+    /// the job may take are theirs. The window calls it from AR-324.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn restore_version(&self, project: &Path, request: RestoreRequest) -> Receiver<Result<Restored, RestoreError>> {
+        let (tx, rx) = channel();
+        let generation = generation_of(&self.inner, project);
+        if let Err(e) = writer(&self.inner).send(Job::Restore(project.to_path_buf(), request, generation, tx.clone())) {
+            let _ = tx.send(Err(RestoreError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
     }
 
     /// The project's switch generation now, to take when a job is asked for.
@@ -903,6 +968,10 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let answer = switch(inner, &project, target, generation, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
             }
+            Some(Job::Restore(project, request, generation, reply)) => {
+                let answer = restore(inner, &project, request, generation, &mut waiting, &mut failed);
+                let _ = reply.send(answer);
+            }
             Some(Job::Flush(project, reply)) => {
                 write_waiting(inner, &mut waiting);
                 failed = !waiting.is_empty();
@@ -996,6 +1065,67 @@ fn switch(
     Ok(Switched::Moved(Arc::new(rows)))
 }
 
+/// Whether what `classified` found means the restore goes on. A comparison too large to finish
+/// goes on, as the commit still finds out when nothing differs, at the cost of a possibly needless
+/// version of the unsaved work.
+fn differs(found: Result<Vec<Difference>, ClassifyError>) -> Result<bool, RestoreError> {
+    match found {
+        Ok(differences) => Ok(!differences.is_empty()),
+        Err(ClassifyError::Compare(CompareError::TooLarge { .. })) => Ok(true),
+        Err(e) => Err(RestoreError::Failed(e.to_string())),
+    }
+}
+
+/// Restores a version of `path` as a new version, on the writer. In this order: what waits is
+/// written; the version is compared with what is stored, and when nothing differs nothing more is
+/// written or made; unsaved work is kept as a version; the version's rows are written in today's
+/// table shape, which leaves `settings` and the conversations as they are; and they are committed.
+///
+/// The comparison is here, not in the window as step 6 of the design's order has it: this spares
+/// the frame and compares what is really stored, and nothing has been written at this point.
+///
+/// A step that fails stops here and says why. What it leaves behind is not dealt with yet: that is
+/// AR-322, and nothing may call this until it has landed.
+fn restore(
+    inner: &Inner,
+    path: &Path,
+    request: RestoreRequest,
+    generation: u64,
+    waiting: &mut BTreeMap<PathBuf, Rows>,
+    failed: &mut bool,
+) -> Result<Restored, RestoreError> {
+    if generation != generation_of(inner, path) {
+        return Err(RestoreError::BranchChanged);
+    }
+    let schema = schema(inner).map_err(|e| RestoreError::Failed(format!("{e:?}")))?;
+    write_waiting(inner, waiting);
+    *failed = !waiting.is_empty();
+    if waiting.contains_key(path) {
+        return Err(RestoreError::Unwritten(unwritten(inner, path)));
+    }
+    let open = lock(&inner.open);
+    let project = open.iter().find(|p| p.path() == path).ok_or(RestoreError::NotOpen)?;
+    let version = project.read_model_at(&schema, &request.commit).map_err(RestoreError::Version)?;
+    let current = project.read_model(&schema).map_err(|e| RestoreError::Failed(e.to_string()))?;
+    if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
+        return Ok(Restored::Same { kept_work: false });
+    }
+    let author = author_of(&request.by);
+    let save = |message: String| project.save_version(&message, &author).map_err(|f| RestoreError::Failed(f.error.to_string()));
+    let kept_work = matches!(save(format!("Before restoring {}", now()))?, archforge_project::Saved::Version { .. });
+    project.write_model(&schema, &version).map_err(|e| RestoreError::Failed(e.to_string()))?;
+    Ok(restored(save(format!("Restored the version of {}", request.saved_at))?, kept_work))
+}
+
+/// What a restore's commit says: no version when nothing differed after all, which a comparison
+/// too large to finish leaves to it.
+fn restored(saved: archforge_project::Saved, kept_work: bool) -> Restored {
+    match saved {
+        archforge_project::Saved::Version { .. } => Restored::Version { kept_work },
+        archforge_project::Saved::NothingNew => Restored::Same { kept_work },
+    }
+}
+
 /// Commits what of the conversations waits.
 fn keep_conversations(inner: &Inner, project: &Project) -> Result<bool, archforge_project::Error> {
     #[cfg(test)]
@@ -1069,10 +1199,7 @@ fn save_described(inner: &Arc<Inner>, project: &Path, by: SavedBy, generation: u
 /// the automatic description, the time it was made, recorded as `by`; it says what that did to
 /// the history.
 fn commit(inner: &Inner, target: &Path, description: Option<String>, by: &SavedBy) -> Result<Saved, SaveError> {
-    let author = match by {
-        SavedBy::Person(name) => Author::person(name),
-        SavedBy::Agent(label) => Author::agent(label.as_deref()),
-    };
+    let author = author_of(by);
     let message = description.unwrap_or_else(|| format!("Saved {}", now()));
     match lock(&inner.open).iter().find(|p| p.path() == target) {
         Some(project) => match project.save_version(&message, &author) {
@@ -1121,6 +1248,14 @@ fn commit_error(failure: archforge_project::SaveFailure) -> SaveError {
         archforge_project::AfterFailure::CannotTell => VersionAfter::Unknown,
     };
     SaveError::Commit { why: failure.error.to_string(), version }
+}
+
+/// Who a version is recorded as saved by.
+fn author_of(by: &SavedBy) -> Author {
+    match by {
+        SavedBy::Person(name) => Author::person(name),
+        SavedBy::Agent(label) => Author::agent(label.as_deref()),
+    }
 }
 
 /// The time now, as the project stores times.
@@ -1677,16 +1812,20 @@ mod tests {
         })
     }
 
-    /// A model's rows: a project with one schema of the given name.
-    fn model(schema: &str) -> Rows {
+    /// Ids counted from one, so that the same steps make the same ids.
+    fn counted_ids() -> Box<dyn FnMut() -> archforge_mof::Uuid + Send> {
         let mut n = 0u64;
-        let ids = Box::new(move || {
+        Box::new(move || {
             n += 1;
             let mut r = [0u8; 10];
             r[2..].copy_from_slice(&n.to_be_bytes());
             archforge_mof::Uuid::v7(1_761_670_800_000, r)
-        });
-        let mut s = archforge_notations::new_project_session("Commerce platform", ids).unwrap();
+        })
+    }
+
+    /// A model's rows: a project with one schema of the given name.
+    fn model(schema: &str) -> Rows {
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
         s.execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
         let (tables, junctions) = archforge_notations::storage();
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
@@ -2179,6 +2318,213 @@ mod tests {
             Ok(p.load_chat(chat).map_err(|e| e.to_string())?.turns[0].change.as_ref().map(|c| c.state))
         });
         read.recv_timeout(Duration::from_secs(60)).unwrap().unwrap()
+    }
+
+    /// The time the versions restored in these tests were saved at.
+    const SAVED_AT: &str = "2026-11-08T14:02:11Z";
+
+    /// Restores `commit` and gives the answer.
+    fn restore_of(host: &Projects, path: &Path, commit: &str) -> Result<Restored, RestoreError> {
+        host.restore_version(path, restoring(commit)).recv_timeout(Duration::from_secs(60)).expect("the restore answers")
+    }
+
+    /// A restore of `commit`, repaired as an opening repairs a model.
+    fn restoring(commit: &str) -> RestoreRequest {
+        RestoreRequest { commit: commit.into(), saved_at: SAVED_AT.into(), by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
+    }
+
+    /// The commit of the `n`th newest version of the open project.
+    fn version(host: &Projects, n: usize) -> String {
+        lock(&host.inner.open)[0].versions(None, 50).unwrap().versions[n].hash.clone()
+    }
+
+    /// The model the open project's working set holds.
+    fn work(host: &Projects) -> Rows {
+        lock(&host.inner.open)[0].read_model(&schema(&host.inner).unwrap()).unwrap()
+    }
+
+    /// Whether the open project reads as unsaved.
+    fn unsaved(host: &Projects) -> bool {
+        lock(&host.inner.open)[0].has_unsaved().unwrap()
+    }
+
+    /// With unsaved work, a restore keeps it as a version, then makes the new version of the old
+    /// model; the project's settings, changed since that version, stay as they are now.
+    #[test]
+    fn a_restore_keeps_unsaved_work_then_makes_a_version_of_the_old_model() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        lock(&host.inner.open)[0].run_on_branch("main", "UPDATE settings SET `value` = 'Renamed' WHERE `key` = 'name'").unwrap();
+        // Handed over just before: the restore writes it first, and keeps it.
+        host.write(&path, model("c"));
+        let old = version(host, 1);
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: true });
+        let messages = sandbox.messages();
+        assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
+        assert!(messages[1].starts_with("Before restoring 20"), "{messages:?}");
+        assert_eq!(work(host), model("a"));
+        assert!(!unsaved(host));
+        let before = version(host, 1);
+        assert_eq!(lock(&host.inner.open)[0].read_model_at(&schema(&host.inner).unwrap(), &before).unwrap(), model("c"));
+        assert_eq!(close(host, &path), Ok(()));
+        wait(&host.open(&path)).unwrap();
+        assert_eq!(lock(&host.inner.open)[0].settings().name, "Renamed");
+    }
+
+    /// With only a conversation's rows uncommitted, the restore makes its own version alone and
+    /// leaves those rows uncommitted.
+    #[test]
+    fn a_restore_with_nothing_unsaved_makes_only_its_own_version_and_leaves_chats_alone() {
+        use archforge_project::{NewChat, NewQuestion, NewTurn, Provider};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        let new = NewChat {
+            id: id(1),
+            origin: "Chat 1".into(),
+            title: "T".into(),
+            provider: Provider::Codex,
+            model: "m".into(),
+            created_by: "t".into(),
+            now: now(),
+        };
+        let turn = NewTurn { id: id(2), chat: id(1), model: "m".into(), allow_changes: true, now: now() };
+        let created = on_writer(&host.inner, &path, move |p| {
+            let keys = archforge_secrets::MemoryStore::new();
+            p.create_chat(&new, &keys).map_err(|e| e.to_string())?;
+            p.start_turn(&turn, &NewQuestion { id: id(3), body: "Q".into(), anchors: Vec::new() }, &keys).map(|_| ()).map_err(|e| e.to_string())
+        });
+        assert_eq!(created.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+        let (old, count) = (version(host, 1), sandbox.messages().len());
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: false });
+        let messages = sandbox.messages();
+        assert_eq!(messages.len(), count + 1, "one version: {messages:?}");
+        assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
+        let chats = on_writer(&host.inner, &path, |p| p.commit_chats().map_err(|e| e.to_string()));
+        assert_eq!(chats.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true), "the conversation's rows were not committed");
+    }
+
+    /// A version that holds what the work holds makes no version and writes nothing, unsaved or not.
+    #[test]
+    fn a_version_the_same_as_the_work_makes_no_version_and_writes_nothing() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        host.write(&path, model("a"));
+        let (old, messages) = (version(host, 1), sandbox.messages());
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Same { kept_work: false });
+        assert_eq!(sandbox.messages(), messages);
+        assert!(unsaved(host), "the unsaved work is as it was");
+    }
+
+    /// A table box too short for its columns, as an earlier version left it, and the same box as
+    /// an opening fits it: the two differ only by that repair.
+    fn short_and_fitted_box() -> (Rows, Rows) {
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let shop = id(s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap().value);
+        let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": shop, "name": "customer" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
+        let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Shop" })).unwrap().value);
+        s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 })).unwrap();
+        let (tables, junctions) = archforge_notations::storage();
+        let short = archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+        let fitted = archforge_notations::session_from_rows_repaired(&short, counted_ids(), archforge_ui_egui::editing::fit_tables).unwrap();
+        let fitted = archforge_mof::rows::snapshot(fitted.doc(), &tables, &junctions).unwrap();
+        assert_ne!(short, fitted, "the repair changes the box");
+        (short, fitted)
+    }
+
+    /// A layout only the repair changes is no difference: it makes no false new version.
+    #[test]
+    fn a_layout_only_the_repair_changes_makes_no_version() {
+        let sandbox = Sandbox::new(None);
+        let path = sandbox.project();
+        let host = &sandbox.host;
+        let (short, fitted) = short_and_fitted_box();
+        host.write(&path, short);
+        assert_eq!(saved(host, &path), Ok(true));
+        host.write(&path, fitted.clone());
+        assert_eq!(saved(host, &path), Ok(true));
+        let (old, messages) = (version(host, 1), sandbox.messages());
+        assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Same { kept_work: false });
+        assert_eq!((sandbox.messages(), work(host)), (messages, fitted));
+    }
+
+    /// A restore asked for before the project's branch moved is refused and touches nothing, moved
+    /// by hand while it waits or by a switch in flight when it was asked for.
+    #[test]
+    fn a_restore_from_before_a_switch_is_refused_by_its_reason() {
+        let (sandbox, path) = branched();
+        let host = sandbox.host.clone();
+        let old = version(&host, 1);
+        let (messages, unmoved) = (sandbox.messages(), work(&host));
+        let release = hold_the_writer(&host, &path);
+        let waiting = host.restore_version(&path, restoring(&old));
+        switched(&host.inner, &path);
+        drop(release);
+        assert!(matches!(waiting.recv_timeout(Duration::from_secs(60)).unwrap(), Err(RestoreError::BranchChanged)));
+        assert_eq!((sandbox.messages(), work(&host)), (messages.clone(), unmoved.clone()));
+
+        let (late, late_path, commit) = (host.clone(), path.clone(), old.clone());
+        let (asked, answer) = channel();
+        *lock(&host.inner.before_move) = Some(Box::new(move || {
+            let _ = asked.send(late.restore_version(&late_path, restoring(&commit)));
+        }));
+        assert!(matches!(switch_to(&host, &path, "elsewhere"), Ok(Switched::Moved(_))));
+        let queued = answer.recv_timeout(Duration::from_secs(60)).unwrap();
+        assert!(matches!(queued.recv_timeout(Duration::from_secs(60)).unwrap(), Err(RestoreError::BranchChanged)));
+        assert_eq!(switch_to(&host, &path, "main").map(|_| sandbox.messages()).unwrap(), messages, "the branch left has no new version");
+    }
+
+    /// A commit that is no version, a project not open and rows that cannot be written each stop
+    /// it, with no version made; rows that cannot be written stay waiting.
+    #[test]
+    fn a_restore_is_refused_by_its_reason() {
+        use archforge_project::Error;
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (old, messages) = (version(host, 1), sandbox.messages());
+        assert!(matches!(restore_of(host, &path, &"0".repeat(32)), Err(RestoreError::Version(Error::NotAVersion { .. }))));
+        assert!(matches!(restore_of(host, &sandbox.base.join("nowhere"), &old), Err(RestoreError::NotOpen)));
+        let mut broken = model("c");
+        broken.tables.iter_mut().find(|t| !t.is_empty()).unwrap()[0].clear();
+        host.write(&path, broken);
+        assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::Unwritten(_))));
+        assert!(host.writing(&path).pending, "the rows are still waiting");
+        assert_eq!(sandbox.messages(), messages);
+    }
+
+    /// A restore that stops before it tried to write leaves the writer's timer running.
+    #[test]
+    fn a_restore_that_wrote_nothing_leaves_the_rows_to_the_timer() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let old = version(host, 1);
+        let release = hold_the_writer(host, &path);
+        host.write(&path, model("c"));
+        let nowhere = sandbox.base.join("nowhere");
+        let asked = host.restore_version(&nowhere, restoring(&old));
+        switched(&host.inner, &nowhere);
+        drop(release);
+        assert!(matches!(asked.recv_timeout(Duration::from_secs(60)).unwrap(), Err(RestoreError::BranchChanged)));
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while host.writing(&path).pending {
+            assert!(Instant::now() < deadline, "the rows are still waiting");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(work(host), model("c"));
+    }
+
+    /// Nothing found stops a restore, anything found goes on, too large to tell goes on, and a side
+    /// that cannot be read is refused.
+    #[test]
+    fn a_comparison_decides_whether_a_restore_goes_on() {
+        let too_large = ClassifyError::Compare(CompareError::TooLarge { work: 2, max: 1 });
+        assert!(!differs(Ok(Vec::new())).unwrap());
+        assert!(differs(Err(too_large)).unwrap());
+        let unreadable = ClassifyError::Unreadable { side: "before", why: "x".into() };
+        assert!(matches!(differs(Err(unreadable)), Err(RestoreError::Failed(_))));
+        assert_eq!(restored(archforge_project::Saved::NothingNew, true), Restored::Same { kept_work: true });
     }
 
     /// A switch that stopped before it tried to write leaves the writer's timer running: rows queued

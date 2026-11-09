@@ -1351,7 +1351,7 @@ pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json
 /// Grows every table box of the model read that is too short for its columns, before the project's
 /// session starts: a box an earlier version left short (its key columns hidden below its edge)
 /// shows them all when the project opens, without an undo step.
-pub(crate) fn fit_tables(store: &mut Store) {
+pub fn fit_tables(store: &mut Store) {
     let mut grow: Vec<(Obj, f64)> = Vec::new();
     for e in store.alive().filter(|o| store.class_of(*o).ok() == Some(archforge_er::ENTITY)) {
         let columns = store
