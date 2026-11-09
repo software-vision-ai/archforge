@@ -14,6 +14,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod branch_name;
+mod branches;
 mod chat;
 mod description;
 mod error;
@@ -30,6 +31,7 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBranch};
+pub use branches::{Branches, ListedBranch, MAX_BRANCHES};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
@@ -93,6 +95,8 @@ pub struct Project {
     /// The state of each change link of this session's turns, now and at the last save, for Don't
     /// save to put back.
     changes: std::sync::Mutex<chat::Ledger>,
+    /// The branch every connection uses, shared with the project's readers.
+    branch: branches::CurrentBranch,
 }
 
 impl Project {
@@ -136,7 +140,7 @@ impl Project {
         let mut server = None;
         match build(dolt, opts, &target, name, created_by, now, hooks, &mut server) {
             Ok(settings) => match (std::fs::remove_file(target.join(MARKER)), server) {
-                (Ok(()), Some(server)) => Ok(Project { server, path: target, settings, changes: Default::default() }),
+                (Ok(()), Some(server)) => Ok(Project { server, path: target, settings, changes: Default::default(), branch: Default::default() }),
                 (Err(e), server) => Err(undo(server, &made, Error::io("cannot remove the marker from", &target, e))),
                 (Ok(()), None) => Err(undo(None, &made, Error::Damaged { path: target.clone(), why: "no server ran".into() })),
             },
@@ -168,7 +172,7 @@ impl Project {
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
         match read_settings(&server, &path).and_then(|settings| unscripted(&server, &path, settings)) {
-            Ok(settings) => Ok(Project { server, path, settings, changes: Default::default() }),
+            Ok(settings) => Ok(Project { server, path, settings, changes: Default::default(), branch: Default::default() }),
             Err(e) => {
                 if let Err(stop) = server.stop() {
                     log::warn!("the server of the refused project {} did not stop: {stop}", path.display());

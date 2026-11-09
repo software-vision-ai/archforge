@@ -391,6 +391,23 @@ fn a_format_2_project_becomes_format_3_with_its_first_conversation_and_never_wit
     assert_eq!(env.open(&path, &schema).settings().format, 3);
 }
 
+/// The format raise looks for the conversations on the branch in use, where main has none.
+#[test]
+fn the_format_is_raised_on_the_branch_in_use() {
+    let env = Env::new("raise-branch");
+    let p = env.create("Earlier", &schema());
+    let mut other = sql(&p);
+    other.query_drop("CALL DOLT_BRANCH('other')").unwrap();
+    other.query_drop("USE `project/other`").unwrap();
+    other.query_drop("UPDATE settings SET `value` = '2' WHERE `key` = 'format'").unwrap();
+    other.query_drop("CALL DOLT_COMMIT('-am', 'format 2')").unwrap();
+    p.set_current_branch(archforge_project::SafeBranch::found("other").unwrap());
+    one_turn(&p, 1, "Chat 1", 0);
+    let raised: String = other.query_first("SELECT `value` FROM settings WHERE `key` = 'format'").unwrap().unwrap();
+    assert_eq!(raised, "3");
+    p.close().unwrap();
+}
+
 #[test]
 fn a_format_2_project_without_conversations_stays_format_2() {
     let env = Env::new("stay");

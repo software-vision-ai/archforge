@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 use mysql::prelude::Queryable;
 
 use crate::VersionReader;
+use crate::branch_name::SafeBranch;
 use crate::chat::{head, is_chat_table, is_commit};
 use crate::saving::{AfterFailure, Author, SaveFailure, Saved, after_failed_commit, reply_lost};
 use crate::{DATABASE, Error, Project};
@@ -177,17 +178,22 @@ pub(crate) fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
     move |source| Error::Sql { what, source }
 }
 
-/// A connection through `connector`, using the project's database.
-pub(crate) fn database_connection(connector: &archforge_dolt::Connector) -> Result<mysql::Conn, Error> {
+/// A connection through `connector`, using `branch` of the project's database.
+pub(crate) fn database_connection(connector: &archforge_dolt::Connector, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
     let mut c = connector.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
+    c.query_drop(format!("USE `{}`", database_name(branch))).map_err(sql("cannot use the project database"))?;
     Ok(c)
+}
+
+/// The database that is `branch` of the project. Only a [`SafeBranch`] reaches a statement.
+pub(crate) fn database_name(branch: &SafeBranch) -> String {
+    format!("{DATABASE}/{}", branch.stored())
 }
 
 impl Project {
     /// A connection to this project's server, using its database.
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        database_connection(&self.server().connector())
+        database_connection(&self.server().connector(), &self.current_branch())
     }
 }
 
@@ -638,7 +644,7 @@ pub(crate) fn changed_tables(c: &mut impl Queryable, path: &std::path::Path) -> 
 }
 
 /// The changed tables a Save commits: every one but the conversations'.
-fn unsaved_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<Vec<String>, Error> {
+pub(crate) fn unsaved_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<Vec<String>, Error> {
     Ok(changed_tables(c, path)?.into_iter().filter(|name| !is_chat_table(name)).collect())
 }
 
