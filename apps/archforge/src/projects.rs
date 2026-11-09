@@ -658,6 +658,8 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
     let result = dolt(inner).and_then(|dolt| {
         let opts = ServerOptions::new(inner.settings.join("servers"));
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
+        // Before anything lists or reads branches. The status bar's words come with AR-293.
+        project.recover_creation();
         let read = schema(inner).and_then(|s| {
             project.prepare_model(&s).map_err(kind)?;
             let rows = project.read_model(&s).map_err(kind)?;
@@ -2580,6 +2582,76 @@ mod tests {
         assert_eq!(host.writing(&path).error, None, "no timer after a failed write");
         host.write(&path, model("b"));
         assert_eq!(host.flush_for_test(&path), Ok(()));
+    }
+
+    /// Leaves a creation record in the project folder, as a stop would.
+    fn stopped_creation(path: &Path, branch: &str, source: &str, start: &str) {
+        std::fs::write(path.join(".creating-branch"), format!("archforge branch creation 1\nbranch {branch}\nsource {source}\nstart {start}\n"))
+            .unwrap();
+    }
+
+    /// Whether the project has a branch of exactly this name.
+    fn has_branch(project: &Project, name: &str) -> bool {
+        project.branches(50).unwrap().listed.iter().any(|b| b.name == name)
+    }
+
+    /// Opening cleans up after a creation that stopped, before the project is used.
+    #[test]
+    fn opening_cleans_up_a_creation_that_stopped() {
+        let (sandbox, path) = branched();
+        let start = lock(&sandbox.host.inner.open)[0].head_of("main").unwrap();
+        lock(&sandbox.host.inner.open)[0].run_on_branch("main", "CALL DOLT_BRANCH('halfway')").unwrap();
+        stopped_creation(&path, "halfway", "main", &start);
+        close(&sandbox.host, &path).unwrap();
+        wait(&sandbox.host.open(&path)).unwrap();
+        assert!(!has_branch(&lock(&sandbox.host.inner.open)[0], "halfway"));
+        assert!(!path.join(".creating-branch").exists());
+    }
+
+    /// On a real server, with the head and the delete real: only a branch still at its start goes.
+    #[test]
+    fn recovery_deletes_only_a_branch_still_at_its_start() {
+        use archforge_project::CreationRecovery::{Deleted, Finished, NoBranch, NoRecord, Protected};
+        let (sandbox, path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let start = project.head_of("main").unwrap();
+        let on_branch = |name: &str, statement: &str| project.run_on_branch(name, statement).unwrap();
+        let made = |name: &str| on_branch("main", &format!("CALL DOLT_BRANCH('{name}')"));
+        let recover = |name: &str, source: &str| {
+            stopped_creation(&path, name, source, &start);
+            project.recover_creation()
+        };
+        // Stopped before the branch was made, and after it, with rows the delete does not warn of.
+        assert_eq!(recover("notmade", "main"), NoBranch(branch("notmade")));
+        made("halfway");
+        on_branch("halfway", "CREATE TABLE unsaved (a INT PRIMARY KEY)");
+        assert_eq!(recover("halfway", "main"), Deleted(branch("halfway")));
+        assert!(!has_branch(project, "halfway"));
+        assert_eq!(project.recover_creation(), NoRecord, "the record went");
+        // Made from a branch that is not merged anywhere, which only a forced delete can remove.
+        made("topic");
+        on_branch("topic", "CALL DOLT_COMMIT('--allow-empty', '-m', 't', '--author', 'A Person <a@person>')");
+        on_branch("topic", "CALL DOLT_BRANCH('fromtopic')");
+        stopped_creation(&path, "fromtopic", "topic", &project.head_of("topic").unwrap());
+        assert_eq!(project.recover_creation(), Deleted(branch("fromtopic")));
+        // A record that came back: a later Save or the chat commit that finishes a creation.
+        for (name, author) in [("saved", "A Person <a@person>"), ("chatted", archforge_project::CHAT_AUTHOR)] {
+            made(name);
+            on_branch(name, &format!("CALL DOLT_COMMIT('--allow-empty', '-m', 'm', '--author', '{author}')"));
+            assert_eq!(recover(name, "main"), Finished(branch(name)));
+            assert!(has_branch(project, name));
+        }
+        // A name that differs only in case reaches no branch; protected names stay in any case.
+        made("cased");
+        assert_eq!(recover("CASED", "main"), NoBranch(branch("CASED")));
+        assert!(has_branch(project, "cased"));
+        assert_eq!(recover("MAIN", "main"), Protected(branch("MAIN")));
+        made("opening");
+        project.set_current_branch(branch("OPENING"));
+        assert_eq!(recover("opening", "main"), Protected(branch("opening")));
+        project.set_current_branch(branch("main"));
+        assert!(has_branch(project, "opening") && has_branch(project, "main"));
     }
 
     /// The whole of a switch: what waits is written first, the target's rows come back, and the

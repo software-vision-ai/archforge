@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use mysql::prelude::Queryable;
 
 use crate::branch_name::{SafeBranch, UnsafeBranch};
+use crate::chat::is_commit;
+use crate::creation::{self, BranchStore, CreationRecovery};
 use crate::model::{database_name, sql, unsaved_tables};
 use crate::{Error, Project};
 
@@ -21,6 +23,30 @@ pub(crate) type CurrentBranch = Arc<Mutex<SafeBranch>>;
 /// The branch `current` holds now.
 pub(crate) fn branch_now(current: &CurrentBranch) -> SafeBranch {
     current.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone()
+}
+
+/// The branches over one connection, as recovery asks of them.
+struct OpenBranches(Result<mysql::Conn, String>);
+
+impl BranchStore for OpenBranches {
+    /// Reads the head. Only a byte-exact name counts: `DOLT_BRANCH('-D')` is exact, and a record
+    /// naming `FOO` must not reach a branch `foo`.
+    fn head(&mut self, branch: &SafeBranch) -> Result<Option<String>, String> {
+        let c = self.0.as_mut().map_err(|e| e.clone())?;
+        let query =
+            format!("SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}), LEFT(CAST(hash AS CHAR), 64) FROM dolt_branches WHERE LOWER(name) = LOWER(?)");
+        let rows: Vec<mysql::Row> = c.exec(query, (branch.stored(),)).map_err(|e| e.to_string())?;
+        let exact = |row: &&mysql::Row| row.get_opt::<String, usize>(0).and_then(Result::ok).as_deref() == Some(branch.stored());
+        let Some(row) = rows.iter().find(exact) else { return Ok(None) };
+        let hash = row.get_opt::<String, usize>(1).and_then(Result::ok).unwrap_or_default();
+        if is_commit(&hash) { Ok(Some(hash)) } else { Err("its head does not read as a commit".into()) }
+    }
+
+    /// Deletes the branch, whatever it holds.
+    fn delete(&mut self, branch: &SafeBranch) -> Result<(), String> {
+        let c = self.0.as_mut().map_err(|e| e.clone())?;
+        c.exec_drop("CALL DOLT_BRANCH('-D', ?)", (branch.stored(),)).map_err(|e| e.to_string())
+    }
 }
 
 /// One branch of the project.
@@ -70,6 +96,25 @@ impl Project {
         let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
         c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
         c.query_drop(statement).map_err(|e| e.to_string())
+    }
+
+    /// The head of `branch`, for a test to record as a start.
+    #[cfg(feature = "testing")]
+    pub fn head_of(&self, branch: &str) -> Result<String, String> {
+        let mut c = self.server().connector().connect().map_err(|e| e.to_string())?;
+        c.query_drop(format!("USE `project/{branch}`")).map_err(|e| e.to_string())?;
+        crate::chat::head(&mut c)
+    }
+
+    /// Cleans up after a branch creation that stopped, and logs what it did. For an opening, before
+    /// anything lists or reads branches; see the `creation` module for why this is safe.
+    pub fn recover_creation(&self) -> CreationRecovery {
+        let mut store = OpenBranches(self.model_connection().map_err(|e| e.to_string()));
+        let outcome = creation::recover(self.path(), &self.current_branch(), &mut store);
+        if outcome != CreationRecovery::NoRecord {
+            log::warn!("the unfinished branch creation of {}: {outcome:?}", self.path().display());
+        }
+        outcome
     }
 
     /// The project's branches, at most `max` of them. A name that cannot be used is listed with

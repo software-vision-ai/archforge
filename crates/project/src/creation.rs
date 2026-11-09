@@ -1,6 +1,7 @@
 //! The branch creation record: a file in the project folder, beside the [`crate::MARKER`], naming
 //! the branch being made, the branch it is made from and the commit it starts at. This module
-//! writes, reads and removes such a file and sets a damaged one aside. Nothing calls it yet.
+//! writes, reads and removes such a file, sets a damaged one aside, and on opening cleans up after
+//! a creation that stopped. Nothing writes a record yet (AR-287).
 //!
 //! The file is a claim, read as one. Only the exact shape, with every name passing
 //! [`SafeBranch::found`], counts as a record; anything else is damaged, and is not to be acted on.
@@ -15,7 +16,23 @@
 //! Writing and removing flush what they do, the folder included. The tests show those calls are
 //! made and in which order; no test can show that a flush reached the disk, or that the disk kept
 //! it through a power cut. For that this rests on the operating system and the disk.
+//!
+//! Recovery deletes a branch only while its head is the recorded start commit. That is safe because
+//! a creation (AR-287) is to end with a chat commit, always made, and only then remove the record:
+//! a finished branch is never at its start. So a record that comes back cannot cost a finished
+//! branch, which is why it does not matter that a folder flush does nothing outside Unix and a
+//! removed record can return after a power cut there; only the record goes. What remains: a branch
+//! at exactly the recorded start under that name is deleted, which only a stop or someone editing
+//! the folder can produce, and this relies on Dolt keeping its commit (if the same power cut loses
+//! that, the branch really is unfinished). `DOLT_BRANCH('-D')` gives no warning about uncommitted
+//! changes (measured, Dolt 2.7.2): a dirty branch at its start is an unfinished creation, and what
+//! it holds goes with it.
+//!
+//! Records are used one at a time. Opening runs under the host's job lock, before the project joins
+//! the open ones, so no writer job can reach it, and with the server's lock on the folder held
+//! against a second Archforge. A project already open never comes this way.
 
+use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
@@ -44,7 +61,7 @@ pub(crate) struct CreationRecord {
 
 /// Why a record cannot be used.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum RecordDamage {
+pub enum RecordDamage {
     /// A link, a folder or anything else that is not a regular file.
     NotAFile,
     TooLong,
@@ -59,12 +76,122 @@ pub(crate) enum RecordDamage {
     Unreadable(ErrorKind),
 }
 
+impl fmt::Display for RecordDamage {
+    /// The reason in English, for logs; the status bar words its own (AR-293).
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RecordDamage::NotAFile => f.write_str("it is not a regular file"),
+            RecordDamage::TooLong => write!(f, "it is longer than the {MAX_BYTES} bytes a record may have"),
+            RecordDamage::NotText => f.write_str("it is not text"),
+            RecordDamage::Shape => f.write_str("it does not have the lines of a record"),
+            RecordDamage::Branch(why) => write!(f, "its branch: {why}"),
+            RecordDamage::Source(why) => write!(f, "its source: {why}"),
+            RecordDamage::Start => f.write_str("its start is not a commit hash"),
+            RecordDamage::Unreadable(kind) => write!(f, "it cannot be read: {kind}"),
+        }
+    }
+}
+
+impl std::error::Error for RecordDamage {}
+
 /// What the project folder holds.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Found {
     None,
     Good(CreationRecord),
     Damaged(RecordDamage),
+}
+
+/// What opening did about a creation record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CreationRecovery {
+    NoRecord,
+    /// The unfinished branch was deleted and the record removed.
+    Deleted(SafeBranch),
+    /// No branch has exactly the recorded name; only the record went.
+    NoBranch(SafeBranch),
+    /// The record named `main`, its source or the opening branch; only the record went.
+    Protected(SafeBranch),
+    /// The branch has moved past its start, so it is no unfinished creation; only the record went.
+    Finished(SafeBranch),
+    /// The record was damaged and was set aside at `to`; nothing was deleted.
+    SetAside {
+        damage: RecordDamage,
+        to: PathBuf,
+    },
+    /// `step` failed. The record stays, so the next opening tries again; the project still opens.
+    Unsettled {
+        step: RecoveryStep,
+        why: String,
+    },
+}
+
+/// The step of a recovery that failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryStep {
+    SetAside,
+    ReadBranch,
+    Delete,
+    RemoveRecord,
+}
+
+/// The branches of the project, as recovery asks of them.
+pub(crate) trait BranchStore {
+    /// The head of the branch of byte for byte this name; `None` if there is no such branch.
+    fn head(&mut self, branch: &SafeBranch) -> Result<Option<String>, String>;
+    /// Deletes the branch.
+    fn delete(&mut self, branch: &SafeBranch) -> Result<(), String>;
+}
+
+/// What `record` leaves to do when only the record goes; `None` when the branch is to be deleted.
+/// `head` is that of the branch of exactly its name. Protection ignores case, as Dolt treats names
+/// that differ only in case as one.
+fn only_the_record(record: &CreationRecord, head: Option<&str>, opening: &SafeBranch) -> Option<CreationRecovery> {
+    let name = record.branch.clone();
+    if [&SafeBranch::default(), &record.source, opening].iter().any(|kept| record.branch.same_branch(kept)) {
+        return Some(CreationRecovery::Protected(name));
+    }
+    match head {
+        None => Some(CreationRecovery::NoBranch(name)),
+        Some(head) if head == record.start => None,
+        Some(_) => Some(CreationRecovery::Finished(name)),
+    }
+}
+
+/// Deals with the record in `folder`, if any. After a delete the branch is looked for again, as
+/// the reply can be lost either way, and only a branch seen gone lets the record go. A stop at any
+/// point repeats safely: a branch already gone only removes the record.
+pub(crate) fn recover(folder: &Path, opening: &SafeBranch, store: &mut dyn BranchStore) -> CreationRecovery {
+    let unsettled = |step: RecoveryStep, why: String| CreationRecovery::Unsettled { step, why };
+    let record = match read(folder) {
+        Found::None => return CreationRecovery::NoRecord,
+        Found::Good(record) => record,
+        Found::Damaged(damage) => {
+            return match set_aside(folder) {
+                Ok(to) => CreationRecovery::SetAside { damage, to },
+                Err(e) => unsettled(RecoveryStep::SetAside, e.to_string()),
+            };
+        }
+    };
+    let head = match store.head(&record.branch) {
+        Ok(head) => head,
+        Err(why) => return unsettled(RecoveryStep::ReadBranch, why),
+    };
+    let outcome = match only_the_record(&record, head.as_deref(), opening) {
+        Some(outcome) => outcome,
+        None => {
+            let deleted = store.delete(&record.branch);
+            match store.head(&record.branch) {
+                Ok(None) => CreationRecovery::Deleted(record.branch.clone()),
+                Ok(Some(_)) => return unsettled(RecoveryStep::Delete, deleted.err().unwrap_or_else(|| "the branch is still there".into())),
+                Err(why) => return unsettled(RecoveryStep::Delete, why),
+            }
+        }
+    };
+    match remove(folder) {
+        Ok(()) => outcome,
+        Err(e) => unsettled(RecoveryStep::RemoveRecord, e.to_string()),
+    }
 }
 
 /// A step whose order makes a record safe, so that tests can watch and fail it.
@@ -142,6 +269,8 @@ pub(crate) fn read(folder: &Path) -> Found {
 /// name, linked to its own name, which fails if it is taken, and the folder flushed. Answers whether
 /// it was written; something already there is left as it was. An error means no creation may go on:
 /// a record linked but not flushed is removed, and if even that fails it stays, naming no branch yet.
+/// Nothing calls this until the creation itself (AR-287).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn write(folder: &Path, record: &CreationRecord) -> Result<bool, Error> {
     write_watched(folder, record, &mut |_| Ok(()))
 }
@@ -269,8 +398,11 @@ mod tests {
     }
 
     impl Drop for Folder {
-        /// Removes the folder and all in it.
+        /// Removes the folder and all in it, on every path.
         fn drop(&mut self) {
+            // A test that made the folder read-only may have failed before putting that right.
+            #[cfg(unix)]
+            let _ = fs::set_permissions(&self.0, std::os::unix::fs::PermissionsExt::from_mode(0o700));
             let _ = fs::remove_dir_all(&self.0);
         }
     }
@@ -474,6 +606,145 @@ mod tests {
         }
         assert_eq!(steps, [Step::Remove, Step::FlushFolder, Step::Remove, Step::FlushFolder]);
         assert!(remove_watched(&folder.0, &mut refuse(Step::FlushFolder)).is_err(), "an unflushed removal is a failed one");
+    }
+
+    /// A store of byte-exact branches, each answer settable, that remembers what it was asked.
+    #[derive(Default)]
+    struct Fake {
+        branches: Vec<(String, String)>,
+        read_fails: bool,
+        read_back_fails: bool,
+        delete_refused: bool,
+        delete_does_nothing: bool,
+        deletes: usize,
+        reads: usize,
+    }
+
+    impl BranchStore for Fake {
+        /// The head of the branch of exactly this name.
+        fn head(&mut self, branch: &SafeBranch) -> Result<Option<String>, String> {
+            self.reads += 1;
+            if self.read_fails || (self.read_back_fails && self.deletes > 0) {
+                return Err("cannot read".into());
+            }
+            Ok(self.branches.iter().find(|(n, _)| n == branch.stored()).map(|(_, h)| h.clone()))
+        }
+
+        /// Deletes the branch, as told to.
+        fn delete(&mut self, branch: &SafeBranch) -> Result<(), String> {
+            self.deletes += 1;
+            if !self.delete_does_nothing {
+                self.branches.retain(|(n, _)| n != branch.stored());
+            }
+            if self.delete_refused { Err("refused".into()) } else { Ok(()) }
+        }
+    }
+
+    /// A fake holding `name` at `head`.
+    fn at(name: &str, head: &str) -> Fake {
+        Fake { branches: vec![(name.to_string(), head.to_string())], ..Fake::default() }
+    }
+
+    const LATER: &str = "vutsrqponmlkjihgfedcba9876543210";
+
+    /// Every row of the decision, by its typed outcome: only an unprotected branch of exactly the
+    /// recorded name, still at the recorded start, is deleted, and the record goes in every row.
+    #[test]
+    fn a_good_record_decides_by_name_and_head() {
+        use CreationRecovery::{Deleted, Finished, NoBranch, Protected};
+        type Outcome = fn(SafeBranch) -> CreationRecovery;
+        let rows: [(&str, &str, &str, (&str, &str), Outcome, bool); 12] = [
+            ("made", "from", "main", ("made", HASH), Deleted, true),
+            ("made", "from", "main", ("other", HASH), NoBranch, false),
+            ("made", "from", "main", ("made", LATER), Finished, false),
+            ("CASED", "from", "main", ("cased", HASH), NoBranch, false),
+            ("main", "from", "main", ("main", HASH), Protected, false),
+            ("MAIN", "from", "main", ("MAIN", HASH), Protected, false),
+            ("Main", "from", "elsewhere", ("Main", HASH), Protected, false),
+            ("from", "from", "main", ("from", HASH), Protected, false),
+            ("FROM", "from", "main", ("FROM", HASH), Protected, false),
+            ("from", "FROM", "main", ("from", HASH), Protected, false),
+            ("opening", "from", "opening", ("opening", HASH), Protected, false),
+            ("OPENING", "from", "opening", ("OPENING", HASH), Protected, false),
+        ];
+        for (name, source, opening, (held, head), outcome, deleted) in rows {
+            let folder = Folder::new();
+            fs::write(folder.record(), text(name, source, HASH)).unwrap();
+            let mut store = at(held, head);
+            assert_eq!(recover(&folder.0, &branch(opening), &mut store), outcome(branch(name)), "{name} from {source}");
+            assert_eq!(store.deletes, usize::from(deleted), "{name}");
+            assert_eq!(read(&folder.0), Found::None, "{name}: the record goes");
+        }
+    }
+
+    /// No record asks nothing of the branches, and a damaged one deletes nothing and is set aside.
+    #[test]
+    fn a_damaged_record_is_set_aside_and_deletes_nothing() {
+        use RecordDamage::{Branch, Shape, Start};
+        let folder = Folder::new();
+        let mut store = at("made", HASH);
+        assert_eq!(recover(&folder.0, &branch("main"), &mut store), CreationRecovery::NoRecord);
+        let rows = [
+            (text("made", "from", "not a hash").into_bytes(), Start),
+            (text("../main", "from", HASH).into_bytes(), Branch(UnsafeBranch::Character('/'))),
+            (b"branch made\n".to_vec(), Shape),
+        ];
+        for (n, (bytes, damage)) in rows.into_iter().enumerate() {
+            fs::write(folder.record(), &bytes).unwrap();
+            let to = folder.0.join(format!("{RECORD}.damaged-{}", n + 1));
+            assert_eq!(recover(&folder.0, &branch("main"), &mut store), CreationRecovery::SetAside { damage, to: to.clone() });
+            assert_eq!(fs::read(to).unwrap(), bytes);
+        }
+        assert_eq!((store.reads, store.deletes), (0, 0), "nothing was asked of the branches");
+    }
+
+    /// The record goes only once the branch is seen gone, however the delete answered.
+    #[test]
+    fn the_record_goes_only_once_the_branch_is_seen_gone() {
+        use RecoveryStep::{Delete, ReadBranch};
+        let rows: [(fn(&mut Fake), Option<RecoveryStep>); 5] = [
+            (|f| f.read_fails = true, Some(ReadBranch)),
+            (|f| (f.delete_refused, f.delete_does_nothing) = (true, true), Some(Delete)),
+            (|f| f.delete_does_nothing = true, Some(Delete)),
+            (|f| f.read_back_fails = true, Some(Delete)),
+            (|f| f.delete_refused = true, None),
+        ];
+        for (n, (shape, failed)) in rows.into_iter().enumerate() {
+            let folder = Folder::new();
+            fs::write(folder.record(), text("made", "from", HASH)).unwrap();
+            let mut store = at("made", HASH);
+            shape(&mut store);
+            match (recover(&folder.0, &branch("main"), &mut store), failed) {
+                (CreationRecovery::Deleted(_), None) => {}
+                (CreationRecovery::Unsettled { step, .. }, Some(failed)) => assert_eq!(step, failed, "{n}"),
+                (other, _) => panic!("{n}: {other:?}"),
+            }
+            assert_eq!(folder.record().exists(), failed.is_some(), "{n}");
+        }
+    }
+
+    /// A record that cannot be removed or set aside stays, and the next opening finishes the job.
+    #[cfg(unix)]
+    #[test]
+    fn a_stop_or_a_refused_removal_repeats_safely() {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = Folder::new();
+        let lock = |mode: u32| fs::set_permissions(&folder.0, fs::Permissions::from_mode(mode)).unwrap();
+        fs::write(folder.record(), text("made", "from", HASH)).unwrap();
+        let mut store = at("made", HASH);
+        lock(0o500);
+        // The superuser writes all the same, so there is nothing to show.
+        if File::create_new(folder.0.join("probe")).is_err() {
+            let outcome = recover(&folder.0, &branch("main"), &mut store);
+            assert!(matches!(outcome, CreationRecovery::Unsettled { step: RecoveryStep::RemoveRecord, .. }), "{outcome:?}");
+            lock(0o700);
+            assert_eq!(recover(&folder.0, &branch("main"), &mut store), CreationRecovery::NoBranch(branch("made")));
+            fs::write(folder.record(), b"broken").unwrap();
+            lock(0o500);
+            let outcome = recover(&folder.0, &branch("main"), &mut store);
+            assert!(matches!(outcome, CreationRecovery::Unsettled { step: RecoveryStep::SetAside, .. }), "{outcome:?}");
+        }
+        lock(0o700);
     }
 
     /// Set aside whole under a free name; an earlier one is never replaced.

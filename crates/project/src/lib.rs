@@ -16,8 +16,6 @@
 mod branch_name;
 mod branches;
 mod chat;
-// Nothing calls this until the recovery on opening (AR-320).
-#[cfg_attr(not(test), allow(dead_code))]
 mod creation;
 mod description;
 mod error;
@@ -40,6 +38,7 @@ pub use chat::{
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
     Turn, TurnChanges, TurnEnd, TurnError, TurnOutcome, TurnRecord, TurnSpan, limits,
 };
+pub use creation::{CreationRecovery, RecordDamage, RecoveryStep};
 pub use description::{DESCRIPTION_CHARS, DescriptionProblem, check_description};
 pub use error::Error;
 pub use model::{EARLIER_MODELS, ModelSchema};
