@@ -252,7 +252,11 @@ impl Project {
     /// date; a project made for other tables is refused. The tables themselves are made as rows go
     /// there.
     pub fn prepare_model(&self, schema: &ModelSchema) -> Result<(), Error> {
-        let mut c = self.model_connection()?;
+        self.prepare_on(self.model_connection()?, schema).map(|_| ())
+    }
+
+    /// [`Project::prepare_model`] over `c`, which is given back for the read that follows.
+    fn prepare_on(&self, mut c: mysql::Conn, schema: &ModelSchema) -> Result<mysql::Conn, Error> {
         match self.version_reader().held_fingerprint(&mut c)? {
             Some(f) if f != schema.fingerprint => {
                 // Made by an earlier Archforge, as its fingerprint says: the columns added since come
@@ -295,7 +299,16 @@ impl Project {
                     .map_err(sql("cannot record the model's fingerprint"))?;
             }
         }
-        Ok(())
+        Ok(c)
+    }
+
+    /// Runs on `branch` what an opening runs (its format, no triggers, procedures or events, its
+    /// model's fingerprint and upgrade), and builds its model, all over connections of their own.
+    /// The current branch and every connection to it stay as they were, whatever the outcome.
+    pub fn check_branch(&self, branch: &SafeBranch, schema: &ModelSchema) -> Result<Rows, Error> {
+        crate::checked_settings(self.server(), self.path(), branch)?;
+        let mut c = self.prepare_on(self.connection_to(branch)?, schema)?;
+        self.version_reader().read_rows(&mut c, schema, None)
     }
 
     /// Replaces the model's rows with `rows`, all of them or none.

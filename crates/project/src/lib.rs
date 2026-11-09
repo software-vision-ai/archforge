@@ -171,7 +171,7 @@ impl Project {
         private(&path)?;
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
-        match read_settings(&server, &path).and_then(|settings| unscripted(&server, &path, settings)) {
+        match checked_settings(&server, &path, &SafeBranch::default()) {
             Ok(settings) => Ok(Project { server, path, settings, changes: Default::default(), branch: Default::default() }),
             Err(e) => {
                 if let Err(stop) = server.stop() {
@@ -388,21 +388,27 @@ fn build(
     c.query_drop(format!("CALL DOLT_COMMIT('-Am', 'Create the project', '--author', '{AUTHOR}')")).map_err(sql("cannot commit the project"))?;
     hooks.cancelled()?;
     drop(c);
-    let settings = read_settings(s, target)?;
+    let settings = read_settings(s, target, &SafeBranch::default())?;
     if settings.name != name {
         return Err(Error::Damaged { path: target.to_path_buf(), why: "the name read back differs".into() });
     }
     Ok(settings)
 }
 
+/// The settings of `branch`, once they are readable and it runs no scripts: what an opening checks.
+pub(crate) fn checked_settings(server: &Server, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
+    read_settings(server, path, branch).and_then(|settings| unscripted(server, path, branch, settings))
+}
+
 /// The settings, read with a cap on rows, keys and values; anything that does not read cleanly is
 /// a damaged project, never a panic.
-fn read_settings(server: &Server, path: &Path) -> Result<Settings, Error> {
+fn read_settings(server: &Server, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
     let damaged = |why: String| Error::Damaged { path: path.to_path_buf(), why };
+    let database = model::database_name(branch);
     let mut c = server.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{DATABASE}`")).map_err(|e| damaged(format!("its {DATABASE} database cannot be used: {e}")))?;
+    c.query_drop(format!("USE `{database}`")).map_err(|e| damaged(format!("its {database} database cannot be used: {e}")))?;
     let kind: Option<mysql::Row> = c
-        .exec_first("SELECT table_type FROM information_schema.tables WHERE table_schema = ? AND table_name = 'settings'", (DATABASE,))
+        .query_first("SELECT table_type FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'settings'")
         .map_err(|e| damaged(format!("its tables cannot be listed: {e}")))?;
     let kind: Option<String> = kind.and_then(|r| r.get_opt::<String, usize>(0)).and_then(Result::ok);
     if kind.as_deref() != Some("BASE TABLE") {
@@ -448,14 +454,14 @@ fn readable(format: u32, supported: u32) -> Result<(), Error> {
 
 /// Refuses a project whose database holds triggers, stored procedures or events: Archforge's own
 /// writes would set them off, and they could change what it stores or what Save commits.
-fn unscripted(server: &Server, path: &Path, settings: Settings) -> Result<Settings, Error> {
+fn unscripted(server: &Server, path: &Path, branch: &SafeBranch, settings: Settings) -> Result<Settings, Error> {
     let mut c = server.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{DATABASE}`")).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
+    c.query_drop(format!("USE `{}`", model::database_name(branch))).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
     for (what, table, column) in
         [("triggers", "triggers", "trigger_schema"), ("stored procedures", "routines", "routine_schema"), ("events", "events", "event_schema")]
     {
         let any: Option<mysql::Row> = c
-            .exec_first(format!("SELECT 1 FROM information_schema.{table} WHERE {column} = ? LIMIT 1"), (DATABASE,))
+            .query_first(format!("SELECT 1 FROM information_schema.{table} WHERE {column} = DATABASE() LIMIT 1"))
             .map_err(|e| Error::Sql { what: "cannot list the project's scripts", source: e })?;
         if any.is_some() {
             return Err(Error::Scripted { path: path.to_path_buf(), what });
