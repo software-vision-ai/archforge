@@ -1217,3 +1217,100 @@ fn a_lost_reply_is_read_back_from_the_branch_the_save_started_on() {
     assert_eq!(unknown.version, AfterFailure::CannotTell);
     project.close().unwrap();
 }
+
+/// A project with its model saved and the branches named made from it.
+fn with_branches(env: &Env, schema: &ModelSchema, branches: &[&str]) -> Project {
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(schema).unwrap();
+    project.write_model(schema, &rows_of(model().doc(), schema)).unwrap();
+    project.commit("Saved").unwrap();
+    let mut main = on_branch(&project, "main");
+    for branch in branches {
+        main.exec_drop("CALL DOLT_BRANCH(?)", (branch,)).unwrap();
+    }
+    project
+}
+
+/// Each hazard refuses the branch that has it, by its own reason and only that branch.
+#[test]
+fn a_branch_is_checked_for_itself_and_the_current_one_decides_nothing() {
+    use archforge_project::{FORMAT, SafeBranch};
+    let env = Env::new("checks");
+    let schema = schema();
+    let names = ["newer", "trigger", "procedure", "event", "other", "clean", "bare"];
+    let project = with_branches(&env, &schema, &names);
+    let found = |name: &str| SafeBranch::found(name).unwrap();
+    let newer = FORMAT + 1;
+    let format = format!("UPDATE settings SET `value` = '{newer}' WHERE `key` = 'format'");
+    let trigger = "CREATE TRIGGER t BEFORE UPDATE ON settings FOR EACH ROW SET NEW.`value` = NEW.`value`";
+    let procedure = "CREATE PROCEDURE p() SELECT 1";
+    let event = "CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO SELECT 1";
+    let other = "UPDATE settings SET `value` = 'not this model' WHERE `key` = 'model_schema'";
+    for (name, statement) in [
+        ("newer", format.as_str()),
+        ("trigger", trigger),
+        ("procedure", procedure),
+        ("event", event),
+        ("other", other),
+        ("bare", "DROP TABLE settings"),
+    ] {
+        on_branch(&project, name).query_drop(statement).unwrap();
+    }
+    let on_main = project.read_model(&schema).unwrap();
+    let unmoved = |p: &Project| {
+        assert_eq!(p.current_branch(), found("main"));
+        assert_eq!(p.read_model(&schema).unwrap(), on_main, "the current branch reads as before");
+    };
+
+    assert_eq!(project.check_branch(&found("clean"), &schema).unwrap(), on_main);
+    unmoved(&project);
+    assert!(
+        matches!(project.check_branch(&found("newer"), &schema), Err(Error::NewerFormat { found, supported }) if found == newer && supported == FORMAT)
+    );
+    unmoved(&project);
+    for (name, reason) in [("trigger", "triggers"), ("procedure", "stored procedures"), ("event", "events")] {
+        assert!(matches!(project.check_branch(&found(name), &schema), Err(Error::Scripted { what, .. }) if what == reason), "{name}");
+        unmoved(&project);
+    }
+    assert!(matches!(project.check_branch(&found("other"), &schema), Err(Error::OtherModel { .. })));
+    unmoved(&project);
+    assert!(matches!(project.check_branch(&found("bare"), &schema), Err(Error::Damaged { why, .. }) if why == "it has no settings table"));
+    unmoved(&project);
+    let missing = project.check_branch(&found("nosuchbranch"), &schema).unwrap_err().to_string();
+    assert!(missing.contains("its project/nosuchbranch database cannot be used"), "{missing}");
+    unmoved(&project);
+
+    // The other way round: from a current branch with each hazard, a clean target passes.
+    for name in ["newer", "trigger", "procedure", "event"] {
+        project.set_current_branch(found(name));
+        assert_eq!(project.check_branch(&found("clean"), &schema).unwrap(), on_main, "seen from {name}");
+        assert_eq!(project.current_branch(), found(name));
+    }
+    project.close().unwrap();
+}
+
+/// A branch that has not had its model prepared gets it there and nowhere else, its own rows are
+/// what comes back, and conversation tables waiting on it are no part of the check.
+#[test]
+fn a_branch_is_prepared_and_read_on_its_own() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("own");
+    let schema = schema();
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let found = |name: &str| SafeBranch::found(name).unwrap();
+    // Made before the model was: this branch has no fingerprint yet.
+    on_branch(&project, "main").query_drop("CALL DOLT_BRANCH('fresh')").unwrap();
+    project.prepare_model(&schema).unwrap();
+    project.write_model(&schema, &rows_of(model().doc(), &schema)).unwrap();
+    on_branch(&project, "fresh").query_drop("CREATE TABLE chat_turn (id INT PRIMARY KEY)").unwrap();
+    let on_main = project.read_model(&schema).unwrap();
+    let fresh = project.check_branch(&found("fresh"), &schema).unwrap();
+    assert_ne!(fresh, on_main, "the branch's own rows, not the current branch's");
+    assert_eq!((project.current_branch(), project.read_model(&schema).unwrap()), (found("main"), on_main));
+    let mut c = on_branch(&project, "fresh");
+    let kept: Option<String> = c.query_first("SELECT `value` FROM settings WHERE `key` = 'model_schema'").unwrap();
+    assert!(kept.is_some(), "the fingerprint went to the branch checked");
+    project.close().unwrap();
+}
