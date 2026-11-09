@@ -1431,17 +1431,16 @@ fn stop_note(error: &RestoreError) -> String {
     format!("a restore stopped: {error}")
 }
 
-/// `text` as a failure, saying that the unsaved work was kept when it was.
-fn failure(text: String, kept_work: bool) -> JobFailure {
-    if kept_work { JobFailure::WorkSaved(format!("{text} {}", tr("Your unsaved work was kept as a version."))) } else { JobFailure::Failed(text) }
-}
-
 /// A restore's answer as a [`Job`] gives it, in the language of the thread it is made on. Only a
-/// commit that cannot be told is unclear.
+/// commit that cannot be told is unclear. Each message is one whole sentence for its translator; a
+/// `{why}` in one is the project's own reason, in English, as its errors are wherever they show.
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
     let error = match answer {
         Ok(Restored::Version { .. }) => return Ok(()),
-        Ok(Restored::Same { kept_work }) => return Err(failure(tr("This version is the same as your current work."), kept_work)),
+        Ok(Restored::Same { kept_work: false }) => return Err(JobFailure::Failed(tr("This version is the same as your current work."))),
+        Ok(Restored::Same { kept_work: true }) => {
+            return Err(JobFailure::WorkSaved(tr("This version is the same as your current work. Your unsaved work was kept as a version.")));
+        }
         Err(error) => error,
     };
     log::warn!("{}", stop_note(&error));
@@ -1459,11 +1458,25 @@ fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> 
         RestoreError::Version(e) => JobFailure::Failed(not_restored(&e.to_string())),
         RestoreError::Failed(why) => JobFailure::Failed(not_restored(&why)),
         RestoreError::NotRestored { why, kept_work, written_back } => {
-            let text = not_restored(&why);
-            let text = if written_back { text } else { format!("{text} {}", tr("Your work will be written with your next change.")) };
-            failure(text, kept_work)
+            let text = fmt(&not_restored_template(kept_work, written_back), &[("why", &why)]);
+            if kept_work { JobFailure::WorkSaved(text) } else { JobFailure::Failed(text) }
         }
     })
+}
+
+/// The sentence for a restore that wrote its rows and could not finish, by what became of the work.
+fn not_restored_template(kept_work: bool, written_back: bool) -> String {
+    match (kept_work, written_back) {
+        (false, true) => tr("The version could not be restored: {why}"),
+        (false, false) => tr("The version could not be restored: {why}. Your work will be written with your next change."),
+        (true, true) => tr("The version could not be restored: {why}. Your unsaved work was kept as a version."),
+        (true, false) => kept_and_waiting(),
+    }
+}
+
+/// The sentence for a restore whose work was kept and whose rows wait for the next change.
+fn kept_and_waiting() -> String {
+    tr("The version could not be restored: {why}. Your unsaved work was kept as a version, and it will be written with your next change.")
 }
 
 /// The message of a restore refused as an earlier one's outcome could not be told.
@@ -3270,15 +3283,31 @@ mod tests {
             let said = format!("{error:?}");
             assert!(matches!(job_answer(Err(error)), Err(JobFailure::Failed(text)) if !text.is_empty()), "{said}");
         }
-        // Rows that wait say so, which the rows written back do not.
-        let text = |answer| match answer {
-            Err(JobFailure::WorkSaved(text) | JobFailure::Failed(text)) => text,
-            _ => panic!("a failure"),
-        };
-        assert!(text(job_answer(Err(not_restored(false, false)))).len() > text(job_answer(Err(not_restored(false, true)))).len());
+        assert!(matches!(job_answer(Err(not_restored(true, false))), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Err(not_restored(false, false))), Err(JobFailure::Failed(_))));
         // Merged for the person, the three reasons stay apart in the log.
         let notes = [RestoreError::BranchChanged, RestoreError::Reopened, RestoreError::NotOpen].map(|e| stop_note(&e));
         assert!(notes[0] != notes[1] && notes[1] != notes[2] && notes[0] != notes[2], "{notes:?}");
+    }
+
+    /// In every language each outcome of a restore that could not finish has a sentence of its
+    /// own, with the reason in its place and nothing left to fill in.
+    #[test]
+    fn each_way_a_restore_stops_has_a_whole_sentence_in_every_language() {
+        use archforge_ui_egui::i18n::set_language;
+        for language in ["en", "de", "es", "fr", "ja", "pt-PT", "zh-Hans"] {
+            set_language(language);
+            let said = [(false, true), (false, false), (true, true), (true, false)].map(|(kept_work, written_back)| {
+                let answer = job_answer(Err(RestoreError::NotRestored { why: "reason-x".into(), kept_work, written_back }));
+                let (Err(JobFailure::Failed(text)) | Err(JobFailure::WorkSaved(text))) = answer else { panic!("a failure") };
+                text
+            });
+            set_language("en");
+            assert!(said.iter().all(|text| text.contains("reason-x") && !text.contains("{why}")), "{language}: {said:?}");
+            for (n, text) in said.iter().enumerate() {
+                assert!(said[n + 1..].iter().all(|other| other != text), "{language}: {said:?}");
+            }
+        }
     }
 
     /// The words are made on the wait's own thread in the language the job was run under, not that

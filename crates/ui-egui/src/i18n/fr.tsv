@@ -440,12 +440,14 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Le projet affiché a changé après l'envoi de cette requête ; elle n'a donc pas été exécutée. Vérifiez ce qui est affiché et renvoyez-la.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Le projet est figé pendant son remplacement ; cette requête n'a donc pas été exécutée. Réessayez une fois l'opération terminée.
 str		This version is the same as your current work.	Cette version est identique à votre travail en cours.
-str		Your unsaved work was kept as a version.	Votre travail non enregistré a été conservé comme version.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauration n'a pas pu avoir lieu car le projet a changé ou était occupé ; rien n'a donc été restauré.
 str		The version could not be restored: {why}	La version n'a pas pu être restaurée : {why}
+str		This version is the same as your current work. Your unsaved work was kept as a version.	Cette version est identique à votre travail en cours. Votre travail non enregistré a été conservé comme version.
+str		The version could not be restored: {why}. Your work will be written with your next change.	La version n'a pas pu être restaurée : {why}. Votre travail sera écrit avec votre prochaine modification.
+str		The version could not be restored: {why}. Your unsaved work was kept as a version.	La version n'a pas pu être restaurée : {why}. Votre travail non enregistré a été conservé comme version.
+str		The version could not be restored: {why}. Your unsaved work was kept as a version, and it will be written with your next change.	La version n'a pas pu être restaurée : {why}. Votre travail non enregistré a été conservé comme version et sera écrit avec votre prochaine modification.
 str		Your unsaved work could not be kept, so nothing was restored.	Votre travail non enregistré n'a pas pu être conservé ; rien n'a donc été restauré.
 str		Archforge could not tell whether your unsaved work was kept as a version, so nothing was restored.	Archforge n'a pas pu déterminer si votre travail non enregistré a été conservé comme version ; rien n'a donc été restauré.
-str		Your work will be written with your next change.	Votre travail sera écrit avec votre prochaine modification.
 str		Archforge could not tell whether an earlier restore finished. Close the project and open it again before restoring.	Archforge n'a pas pu déterminer si une restauration précédente s'est terminée. Fermez le projet et rouvrez-le avant de restaurer.
 str		Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.	Archforge affiche une version antérieure de ce projet ; cette requête n'a donc pas été exécutée. Revenez au travail en cours, puis renvoyez-la.
 str		Close a project to open another	Fermez un projet pour en ouvrir un autre
