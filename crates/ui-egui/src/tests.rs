@@ -341,7 +341,7 @@ impl SaveAnswer {
 /// save's and opening's sender, so a test answers when it chooses.
 #[derive(Default)]
 struct SavingHost {
-    pages: std::sync::Mutex<Vec<(Option<String>, std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>)>>,
+    pages: std::sync::Mutex<Vec<(Option<String>, usize, std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>)>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
@@ -387,10 +387,10 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         after: Option<String>,
-        _limit: usize,
+        limit: usize,
     ) -> std::sync::mpsc::Receiver<Result<crate::VersionsPage, String>> {
         let (tx, rx) = std::sync::mpsc::channel();
-        self.pages.lock().unwrap().push((after, tx));
+        self.pages.lock().unwrap().push((after, limit, tx));
         rx
     }
 

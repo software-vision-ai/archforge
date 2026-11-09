@@ -14,9 +14,8 @@ use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 use crate::{Shell, VersionEntry, VersionsPage};
 
-/// The versions the list reads (AR-339 pages past them), the rows shown at once, a row, the list.
-const PAGE: usize = 50;
-const MAX_ROWS: usize = 8;
+/// The versions read: with Current work, eight rows, all in reach until AR-339 pages; a row; the list.
+const PAGE: usize = 7;
 const ROW: f32 = 30.0;
 const WIDTH: f32 = 360.0;
 const ID: &str = "workspace.header.version";
@@ -28,9 +27,9 @@ pub struct List {
     project: Option<PathBuf>,
     highlight: usize,
     versions: Vec<VersionEntry>,
-    reading: Option<Receiver<Result<VersionsPage, String>>>,
-    /// The version last picked, as the chip says it.
-    shown: String,
+    pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
+    /// The version last picked, and how the chip says it.
+    shown: Option<(String, String)>,
 }
 
 /// A row of the list: the version it views, none for current work; its name; the words beside it.
@@ -106,19 +105,20 @@ fn pick(shell: &mut Shell, (hash, label, _): Row) {
         return;
     };
     shell.leave_version();
-    shell.version_list.shown = label;
+    shell.version_list.shown = Some((hash.clone(), label));
     if let Err(e) = shell.view_version(&hash) {
         log::warn!("viewing {hash} was refused: {e:?}");
     }
 }
 
-/// What the chip says, whole: its name and, narrowed to an icon, its tooltip.
-fn chip_label(shell: &Shell) -> String {
-    match shell.version_in_view() {
-        Some(_) if !shell.version_list.shown.is_empty() => fmt(&tr("Viewing the version of {date}"), &[("date", &shell.version_list.shown)]),
-        Some(_) => tr("Viewing a version"),
-        None if shell.shown_unsaved() => tr("Current work · unsaved changes"),
-        None => tr("Current work"),
+/// What the chip says, whole and on its face; a date only for the version it was picked with.
+fn chip_words(shell: &Shell) -> (String, String) {
+    let date = shell.version_list.shown.as_ref().filter(|(commit, _)| shell.version_in_view() == Some(commit.as_str()));
+    match (shell.version_in_view(), date) {
+        (Some(_), Some((_, date))) => (fmt(&tr("Viewing the version of {date}"), &[("date", date)]), date.clone()),
+        (Some(_), None) => (tr("Viewing a version"), tr("Viewing a version")),
+        (None, _) if shell.shown_unsaved() => (tr("Current work · unsaved changes"), tr("Current work")),
+        (None, _) => (tr("Current work"), tr("Current work")),
     }
 }
 
@@ -140,13 +140,12 @@ pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start
 
 /// The chip: what shows, a dot for unsaved work. Viewing, tinted with the date until AR-339.
 fn chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
-    let (label, viewing, mid, paint) = (chip_label(shell), shell.version_in_view().is_some(), r.center().y, ui.painter().clone());
+    let ((label, text), viewing, mid, paint) = (chip_words(shell), shell.version_in_view().is_some(), r.center().y, ui.painter().clone());
     paint.rect_filled(r, 8.0, if viewing { p.accent_tint } else { p.surface });
     paint.rect_stroke(r, 8.0, Stroke::new(1.0, if viewing { p.accent } else { p.border }), StrokeKind::Inside);
     let resp = control(shell, ui, ID, "button", r, true).on_hover_text(&label);
     let _ = resp.clone().accessible_name(&label);
     ux::icon_mid(&paint, pos2(r.left() + 16.0, mid), &icons::HISTORY, if viewing { p.accent } else { p.text_secondary });
-    let text = if viewing { shell.version_list.shown.clone() } else { tr("Current work") };
     let name = ux::text_mid(&paint, r.left() + 30.0, mid, &text, types::UI, if viewing { p.accent } else { p.text }, Some(84.0));
     if shell.shown_unsaved() && !viewing {
         paint.circle_filled(pos2(name.right() + 9.0, mid), 3.0, p.amber);
@@ -175,15 +174,15 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row]) -> bool {
     enter
 }
 
-/// The list under the chip: a window of [`MAX_ROWS`] rows that follows the highlight.
+/// The list under the chip.
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
     let rows = rows(shell);
-    let height = 12.0 + rows.len().min(MAX_ROWS) as f32 * ROW;
+    let height = 12.0 + rows.len() as f32 * ROW;
     let r = Rect::from_min_size(pos2(chip.right() - WIDTH, chip.bottom() + 4.0), vec2(WIDTH, height));
     if keys(shell, ui, &rows) {
         return;
     }
-    let (highlight, first) = (shell.version_list.highlight, shell.version_list.highlight.saturating_sub(MAX_ROWS - 1));
+    let highlight = shell.version_list.highlight;
     let picked = ux::overlay(ui, widgets::egui_id(&format!("{ID}.list")), r, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, r, 10.0, p.shadow);
@@ -191,7 +190,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
         paint.rect_stroke(r, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         let mut picked = None;
         let mut y = r.top() + 6.0;
-        for (n, row @ (_, label, detail)) in rows.iter().enumerate().skip(first).take(MAX_ROWS) {
+        for (n, row @ (_, label, detail)) in rows.iter().enumerate() {
             let at = Rect::from_min_size(pos2(r.left() + 6.0, y), vec2(WIDTH - 12.0, ROW));
             let resp = control(shell, ui, &format!("{ID}.row.{n}"), "menu-item", at, true);
             let _ = resp.clone().accessible_name(format!("{label}, {detail}"));

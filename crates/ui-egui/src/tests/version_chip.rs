@@ -17,6 +17,7 @@ fn in_both(test: impl Fn(Harness<'static, Shell>, std::sync::Arc<SavingHost>)) {
 /// Opens the list with the keys and answers its read with three versions, newest first.
 fn opened_list(h: &mut Harness<'static, Shell>, host: &SavingHost) {
     key(h, egui::Key::H, MOVE[1]);
+    assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "a read waited for wakes the window");
     let v = |n: usize, description: Option<&str>, by_agent| crate::VersionEntry {
         hash: format!("h{n}"),
         date: format!("2026-11-08T14:{n:02}:00Z"),
@@ -25,7 +26,7 @@ fn opened_list(h: &mut Harness<'static, Shell>, host: &SavingHost) {
         ..Default::default()
     };
     let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, None, false)];
-    host.pages.lock().unwrap().remove(0).1.send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
+    host.pages.lock().unwrap().remove(0).2.send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
     h.run_steps(3);
 }
 
@@ -44,7 +45,8 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
-        assert_eq!(host.pages.lock().unwrap().remove(0).0, None, "the newest versions");
+        let (after, limit, _) = host.pages.lock().unwrap().remove(0);
+        assert_eq!((after, limit), (None, 7), "the newest versions, each one in reach");
         opened_list(&mut h, &host);
         assert!(
             ["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "Add status")
@@ -85,6 +87,10 @@ fn the_keys_move_view_and_close() {
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::Enter, MOVE[0]);
         assert_eq!(h.state().viewing(), None);
+        h.state_mut().view_version("h9").unwrap();
+        h.run_steps(3);
+        assert!(h.query_by_label("Viewing a version").is_some(), "no other version's date");
+        h.state_mut().back_to_current_work();
         opened_list(&mut h, &host);
         h.state_mut().begin_hold().unwrap();
         h.run_steps(2);
@@ -101,6 +107,10 @@ fn the_keys_move_view_and_close() {
 /// The keys and the action wait while a hold or any dialog is up.
 #[test]
 fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
+    use crate::{
+        chat_delete::Ask,
+        diagrams::{NewDiagram, Step},
+    };
     let blocks: [&dyn Fn(&mut Shell); 10] = [
         &|s| s.begin_hold().unwrap(),
         &|s| s.session = None,
@@ -111,20 +121,9 @@ fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
         &crate::settings::open,
         &|s| s.explorer.delete = Some(Default::default()),
         &|s| {
-            s.diagrams.new = Some(crate::diagrams::NewDiagram {
-                step: crate::diagrams::Step::Kind,
-                name: String::new(),
-                kind: "",
-                schema: None,
-                menu: None,
-                refused: None,
-                opened: false,
-            })
+            s.diagrams.new = Some(NewDiagram { step: Step::Kind, name: "".into(), kind: "", schema: None, menu: None, refused: None, opened: false })
         },
-        &|s| {
-            s.chat_panel.ask =
-                Some(crate::chat_delete::Ask { chat: archforge_mof::Uuid([0; 16]), row: 0, summary: String::new(), running: false, focused: false })
-        },
+        &|s| s.chat_panel.ask = Some(Ask { chat: archforge_mof::Uuid([0; 16]), row: 0, summary: "".into(), running: false, focused: false }),
     ];
     for block in blocks {
         in_both(|mut h, host| {

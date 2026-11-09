@@ -1748,6 +1748,7 @@ impl Shell {
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
+            || self.version_list.reading.is_some()
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
