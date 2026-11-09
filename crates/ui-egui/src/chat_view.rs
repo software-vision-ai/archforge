@@ -392,8 +392,14 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
     let text_rect = Rect::from_min_max(pos2(r.left() + 10.0, r.top() + 10.0), pos2(r.right() - 8.0, r.bottom() - 8.0 - 28.0 - 6.0));
     crate::widgets::record_visible(ui, &mut shell.registry, id, "field", text_rect);
     let agent = chat.provider.name();
-    let hint =
-        if running { fmt(&tr("{agent} is replying… you can type the next message"), &[("agent", agent)]) } else { tr("Ask about this model…") };
+    let viewing = shell.looking_only();
+    let hint = if viewing {
+        tr("Back to current work to chat")
+    } else if running {
+        fmt(&tr("{agent} is replying… you can type the next message"), &[("agent", agent)])
+    } else {
+        tr("Ask about this model…")
+    };
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_rect));
     child.set_clip_rect(text_rect.intersect(ui.clip_rect()));
     // The question's lines at the design's 19-point pitch.
@@ -414,6 +420,7 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
             .margin(egui::Margin::ZERO)
             .font(types::UI.font())
             .text_color(p.text)
+            .interactive(!viewing)
             .hint_text(egui::RichText::new(hint).color(p.text_muted).font(types::UI.font()))
             .desired_rows(MIN_LINES)
             // Shift+Enter starts a new line; Enter alone sends, taken above.
@@ -463,8 +470,8 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
         }
     } else {
         // Drawn ready, as the design has it; with nothing typed it sends nothing.
-        let ready = !busy && !panel.draft.trim().is_empty();
-        let resp = control(shell, ui, "workspace.chat.send", "button", b, !busy).on_hover_text(if busy { tr(WAIT) } else { tr("Send") });
+        let ready = !busy && !viewing && !panel.draft.trim().is_empty();
+        let resp = control(shell, ui, "workspace.chat.send", "button", b, !busy && !viewing).on_hover_text(if busy { tr(WAIT) } else { tr("Send") });
         let _ = resp.clone().accessible_name(tr("Send"));
         let fill = if busy { p.accent_fill.gamma_multiply(0.45) } else { p.accent_fill };
         paint.rect_filled(b, 6.0, if resp.hovered() && ready { fill.gamma_multiply(0.9) } else { fill });

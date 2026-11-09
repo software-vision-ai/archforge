@@ -116,11 +116,24 @@ fn pick(shell: &mut Shell, (hash, label, _): Row) {
     }
 }
 
+/// The date of the version in view, when it is the one it was picked with.
+fn shown(shell: &Shell) -> Option<&String> {
+    let (commit, date) = shell.version_list.shown.as_ref()?;
+    (shell.version_in_view() == Some(commit.as_str())).then_some(date)
+}
+
+/// What the banner and the status bar say while a version shows.
+pub(crate) fn read_only_words(shell: &Shell) -> String {
+    match shown(shell) {
+        Some(date) => fmt(&tr("Viewing the version of {date} · Read only"), &[("date", date)]),
+        None => tr("Viewing an earlier version · Read only"),
+    }
+}
+
 /// What the chip says, whole and on its face; a date only for the version it was picked with.
 fn chip_words(shell: &Shell) -> (String, String) {
-    let date = shell.version_list.shown.as_ref().filter(|(commit, _)| shell.version_in_view() == Some(commit.as_str()));
-    match (shell.version_in_view(), date) {
-        (Some(_), Some((_, date))) => (fmt(&tr("Viewing the version of {date}"), &[("date", date)]), date.clone()),
+    match (shell.version_in_view(), shown(shell)) {
+        (Some(_), Some(date)) => (fmt(&tr("Viewing the version of {date}"), &[("date", date)]), date.clone()),
         (Some(_), None) => (tr("Viewing a version"), tr("Viewing a version")),
         (None, _) if shell.shown_unsaved() => (tr("Current work · unsaved changes"), tr("Current work")),
         (None, _) => (tr("Current work"), tr("Current work")),

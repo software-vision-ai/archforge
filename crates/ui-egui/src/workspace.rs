@@ -388,7 +388,27 @@ fn resize(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, body: Rect, id:
 
 /// The centre: the diagram tabs over the canvas, drawn by the canvas module.
 fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
+    let r = if shell.looking_only() { banner(shell, ui, p, r) } else { r };
     crate::canvas::centre(shell, ui, p, r);
+}
+
+/// The banner over the centre while a version shows, with the way back; gives the room left below.
+fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
+    let band = Rect::from_min_size(r.min, vec2(r.width(), 44.0));
+    let paint = ui.painter();
+    paint.rect_filled(band, 0.0, p.accent_tint);
+    ux::icon_mid(paint, pos2(band.left() + 20.0, band.center().y), &icons::HISTORY, p.accent);
+    let words = crate::version_chip::read_only_words(shell);
+    let back = tr("Back to current work");
+    let g = ux::galley(paint, &back, types::UI, p.on_accent, None);
+    let button = Rect::from_min_size(pos2(band.right() - 12.0 - g.size().x - 20.0, band.top() + 8.0), vec2(g.size().x + 20.0, 28.0));
+    ux::text_mid(paint, band.left() + 36.0, band.center().y, &words, types::UI, p.accent, room(button.left() - band.left() - 48.0));
+    paint.rect_filled(button, 6.0, p.accent_fill);
+    paint.galley(button.center() - g.size() / 2.0, g, p.on_accent);
+    if control(shell, ui, "workspace.banner.back", "button", button, true).accessible_name(&back).clicked() {
+        shell.back_to_current_work();
+    }
+    Rect::from_min_max(pos2(r.left(), band.bottom()), r.max)
 }
 
 /// The right rail: the four panels, the active one marked.
@@ -433,7 +453,21 @@ fn panel(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, name: &str)
     if which == Panel::Agent {
         crate::chat_view::header(shell, ui, p, r);
     }
-    crate::panels::draw(shell, ui, p, r, 58.0, which, name);
+    if shell.looking_only() && which != Panel::Agent {
+        read_only_badge(ui, p, r);
+    }
+    let editable = which == Panel::Agent || !shell.looking_only();
+    ui.add_enabled_ui(editable, |ui| crate::panels::draw(shell, ui, p, r, 58.0, which, name));
+}
+
+/// The badge at the head of Properties while a version shows.
+fn read_only_badge(ui: &egui::Ui, p: &Palette, r: Rect) {
+    let paint = ui.painter();
+    let g = ux::galley(paint, &tr("Read only"), types::CAPTION, p.accent, None);
+    let pill = Rect::from_min_size(pos2(r.right() - 48.0 - g.size().x - 34.0, r.top() + 10.0), vec2(g.size().x + 34.0, 24.0));
+    paint.rect_filled(pill, 12.0, p.accent_tint);
+    ux::icon_in(paint, Rect::from_center_size(pos2(pill.left() + 16.0, pill.center().y), Vec2::splat(12.0)), &icons::LOCK, p.accent);
+    paint.galley(pos2(pill.left() + 26.0, pill.center().y - g.size().y / 2.0), g, p.accent);
 }
 
 /// Chat's agent access in the status bar (the design's "Agent" item), its right edge at `right`:
@@ -476,6 +510,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let mut detail: Option<String> = None;
     let (dot, text) = match &shell.session {
         None => (p.text_muted, tr("The model could not be opened")),
+        Some(_) if shell.looking_only() => (p.accent, crate::version_chip::read_only_words(shell)),
         Some(_) if shell.is_saving() => (p.accent, tr("Saving…")),
         // Open works from the workspace too (Cmd+O, File ▸ Open…): its wait and its failure show
         // here, and the project stays open.

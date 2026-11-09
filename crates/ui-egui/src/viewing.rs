@@ -36,6 +36,11 @@ impl Shell {
         self.viewing.as_ref().map(|v| v.commit.as_str())
     }
 
+    /// Whether a version shows, so that looking at it is all that is on.
+    pub(crate) fn looking_only(&self) -> bool {
+        self.viewing.is_some()
+    }
+
     /// The version shown or being read to be shown: while there is one, what may change anything
     /// is refused on the control channel.
     pub(crate) fn version_in_view(&self) -> Option<&str> {

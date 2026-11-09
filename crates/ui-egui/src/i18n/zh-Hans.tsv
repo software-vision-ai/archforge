@@ -1447,13 +1447,16 @@ str		The changes since the last write are lost.	上次写入以来的更改将�
 str		The changes to {name} cannot be written	无法写入对 {name} 的更改
 # Linux 文件夹选择器
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	无法打开文件夹选择器：请为你的桌面安装 xdg-desktop-portal 和一个后端。
-str		Versions	版本
 str		{day} {month} {time}	{month}{day}日 {time}
 str		Unsaved changes	未保存的更改
 str		No unsaved changes	没有未保存的更改
 str		Same as current work	与当前工作相同
-str		Saved by an agent	由代理保存
 str		Current work	当前工作
 str		Current work · unsaved changes	当前工作 · 未保存的更改
 str		Viewing the version of {date}	正在查看 {date} 的版本
 str		Viewing a version	正在查看一个版本
+str		Viewing an earlier version · Read only	正在查看较早的版本 · 只读
+str		Read only while viewing a version	查看版本时为只读
+str		Back to current work	返回当前工作
+str		Back to current work to chat	返回当前工作以进行聊天
+str		Viewing the version of {date} · Read only	正在查看 {date} 的版本 · 只读

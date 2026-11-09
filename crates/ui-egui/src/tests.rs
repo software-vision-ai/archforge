@@ -6,6 +6,7 @@ use egui_kittest::Harness;
 use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
+mod read_only;
 /// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
 

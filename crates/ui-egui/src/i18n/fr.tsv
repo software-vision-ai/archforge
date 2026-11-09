@@ -1447,13 +1447,16 @@ str		The changes since the last write are lost.	Les modifications depuis la dern
 str		The changes to {name} cannot be written	Les modifications de {name} ne peuvent pas être écrites
 # Sélecteur de dossier sous Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Aucun sélecteur de dossier n'a pu s'ouvrir : installez xdg-desktop-portal et un backend pour votre bureau.
-str		Versions	Versions
 str		{day} {month} {time}	{day} {month} {time}
 str		Unsaved changes	Modifications non enregistrées
 str		No unsaved changes	Aucune modification non enregistrée
 str		Same as current work	Identique au travail en cours
-str		Saved by an agent	Enregistré par un agent
 str		Current work	Travail en cours
 str		Current work · unsaved changes	Travail en cours · modifications non enregistrées
 str		Viewing the version of {date}	Affichage de la version du {date}
 str		Viewing a version	Affichage d'une version
+str		Viewing an earlier version · Read only	Affichage d'une version antérieure · Lecture seule
+str		Read only while viewing a version	Lecture seule pendant l'affichage d'une version
+str		Back to current work	Revenir au travail en cours
+str		Back to current work to chat	Revenez au travail en cours pour discuter
+str		Viewing the version of {date} · Read only	Affichage de la version du {date} · Lecture seule

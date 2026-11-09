@@ -126,7 +126,7 @@ pub(crate) fn hit(store: &Store, grid: &Grid, x: f64, y: f64) -> Option<Hit> {
 }
 
 /// What the pointer asked for this frame, decided over the store and applied after.
-enum Action {
+pub(crate) enum Action {
     Nothing,
     Select(Vec<Uuid>),
     Toggle(Uuid),
@@ -154,6 +154,11 @@ enum Action {
     NaryAddEnd(Uuid),
     /// The context menu of an n-ary association, from its diamond or a leg (AR-128).
     NaryMenu(Pos2, Uuid),
+}
+
+/// Whether a canvas action changes nothing, so that it stays on while a version shows.
+pub(crate) fn only_looks(action: &Action) -> bool {
+    matches!(action, Action::Nothing | Action::Select(_) | Action::Toggle(_) | Action::Start(Gesture::Marquee { .. }, _) | Action::Commit)
 }
 
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
@@ -686,7 +691,7 @@ pub(crate) fn pointer(shell: &mut Shell, ui: &egui::Ui, resp: &egui::Response, v
         shell.canvas.line_menu = None;
         shell.canvas.nary_menu = None;
     }
-    match action {
+    match if shell.looking_only() && !only_looks(&action) { Action::Nothing } else { action } {
         Action::Nothing => {}
         Action::NaryEnd(node, double) => crate::uml_nary::click(shell, d, node, double),
         Action::NaryCancel => crate::uml_nary::cancel(shell),
@@ -1674,6 +1679,9 @@ fn selected_line(
 /// whole, on the end itself where it has none, the two kept apart on screen
 /// ([`crate::canvas::end_handles_at`]): each drags onto another element to move that end there.
 fn line_ends(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: View, d: Obj) {
+    if shell.looking_only() {
+        return;
+    }
     let Some((element, route, marks)) = shell.session.as_ref().and_then(|s| selected_line(s.doc(), s.view(), d, &s.view().selection)) else {
         return;
     };
@@ -1724,6 +1732,9 @@ fn adorners(
     node: Uuid,
     entity: Uuid,
 ) {
+    if shell.looking_only() {
+        return;
+    }
     let paint = ui.painter().with_clip_rect(r);
     let connect = kind.tools().iter().find(|t| t.use_ == crate::kinds::ToolUse::Connect).map(|t| t.key);
     // The second adorner is the element's own: a class's attribute, an enumeration's literal.
@@ -1779,6 +1790,9 @@ fn adorners(
 /// A selected note's link handle at its top right: dragged onto a table or a relationship's line,
 /// it links the note to it (owner decision).
 fn link_handle(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, rect: Rect, note: Uuid) {
+    if shell.looking_only() {
+        return;
+    }
     let paint = ui.painter().with_clip_rect(r);
     let b = Rect::from_min_size(pos2(rect.right() + ADORNER_GAP, rect.top() - ADORNER - 6.0), Vec2::splat(ADORNER));
     if !r.intersects(b) {
@@ -2079,6 +2093,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
             !menu && i.key_pressed(egui::Key::ArrowDown),
         )
     });
+    if shell.looking_only() && !escape {
+        return;
+    }
     // Escape in the classifier's menu of kinds closes the menu alone; the armed tool stays.
     if escape && shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys) {
         shell.canvas.popover = None;
