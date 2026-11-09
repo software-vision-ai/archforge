@@ -43,8 +43,9 @@ pub struct Versions {
     pub more: bool,
 }
 
-/// Reads a project's versions over a connection of its own, holding nothing of the open project,
-/// so a long read never stands in the way of a write. It fails once the project has closed.
+/// Reads a project's versions, and the model each holds, over connections of its own, holding
+/// nothing of the open project, so a long read never stands in the way of a write. It fails once
+/// the project has closed.
 #[derive(Debug, Clone)]
 pub struct VersionReader {
     connector: archforge_dolt::Connector,
@@ -100,7 +101,7 @@ impl Gathering<'_> {
 }
 
 impl Project {
-    /// A reader of this project's versions, for a thread of its own.
+    /// A reader of this project's versions and their models, for a thread of its own.
     pub fn version_reader(&self) -> VersionReader {
         VersionReader { connector: self.server().connector(), path: self.path().to_path_buf() }
     }
@@ -112,6 +113,16 @@ impl Project {
 }
 
 impl VersionReader {
+    /// The project this reader reads.
+    pub(crate) fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+
+    /// A connection of this reader's own, using the project's database.
+    pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
+        database_connection(&self.connector)
+    }
+
     /// The current branch's versions, newest first: at most `limit`, starting after the version
     /// `after`, so a save made meanwhile does not shift a later page. Refused when the page asked
     /// for is too large, when `after` is not a version of this line, or when the line is too long

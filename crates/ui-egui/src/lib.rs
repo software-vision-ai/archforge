@@ -182,6 +182,19 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
+    /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
+    /// Like [`ProjectHost::versions`], the read holds up neither the writing of any project nor the
+    /// interface, and a project that is not open fails.
+    fn read_version(
+        &self,
+        _project: &std::path::Path,
+        _commit: String,
+    ) -> std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err("this host keeps no versions".into()));
+        rx
+    }
+
     /// How writing the project at `project` stands now.
     fn writing(&self, _project: &std::path::Path) -> Writing {
         Writing::default()
