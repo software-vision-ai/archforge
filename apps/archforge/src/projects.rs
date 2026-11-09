@@ -83,6 +83,9 @@ enum Job {
     /// Make a branch at a version, or from current work when none is named; the generation and the
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
+    /// Tells a test whether the writer takes the last write to have left rows behind.
+    #[cfg(test)]
+    Peek(Sender<bool>),
     /// Rename a branch, from the name to the name; the generation and the open instance are the
     /// project's when it was asked for.
     RenameBranch(PathBuf, SafeBranch, SafeBranch, u64, u64, Sender<Result<(), RenameJobError>>),
@@ -1193,6 +1196,10 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
     let mut waiting: BTreeMap<PathBuf, Rows> = BTreeMap::new();
     // How many sets of rows each project's queue has delivered, to hold against `Described::handed`.
     let mut seen: BTreeMap<PathBuf, u64> = BTreeMap::new();
+    // Whether the last write left rows behind, which then wait for the next change or Save. It
+    // changes only when a write was tried, or new rows come in, which any write needs first: so
+    // forgetting one project's rows says nothing of another's, and a value left over with nothing
+    // waiting is cleared before it can matter.
     let mut failed = false;
     loop {
         let job = if !waiting.is_empty() && !failed {
@@ -1255,9 +1262,12 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 };
                 let _ = reply.send(answer);
             }
+            #[cfg(test)]
+            Some(Job::Peek(reply)) => {
+                let _ = reply.send(failed);
+            }
             Some(Job::Drop(project, reply)) => {
                 waiting.remove(&project);
-                failed = false;
                 let _ = reply.send(());
             }
             Some(Job::Discard(project, claim, reply)) => {
@@ -1273,7 +1283,6 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 // Don't save keeps the project open with every change it shows.
                 if answer.is_ok() {
                     waiting.remove(&project);
-                    failed = !waiting.is_empty();
                 }
                 let _ = reply.send(answer);
             }
@@ -4682,6 +4691,78 @@ mod tests {
         let target = branch("elsewhere");
         let read = open[0].version_reader().branch_counts_interrupted(&target, || assert_eq!(open[0].delete_branch(&target), Ok(Vec::new())));
         assert!(read.is_err(), "{read:?}");
+    }
+
+    /// Forgetting one project's rows, by Close without writing or by Don't save, leaves alone what
+    /// the writer knows of another's. With nothing left waiting, new rows are written on the timer.
+    #[test]
+    fn forgetting_one_projects_rows_says_nothing_of_anothers() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
+        host.write(&path, model("a"));
+        assert_eq!(saved(host, &path), Ok(true));
+        let mut broken = model("c");
+        broken.tables.iter_mut().find(|t| !t.is_empty()).unwrap()[0].clear();
+        let send = |job: Job| writer(&host.inner).send(job).unwrap();
+        let peek = || {
+            let (reply, answer) = channel();
+            send(Job::Peek(reply));
+            answer.recv_timeout(Duration::from_secs(60)).unwrap()
+        };
+        type Done = Box<dyn FnOnce()>;
+        let forget: [&dyn Fn() -> Done; 2] = [
+            &|| {
+                let (reply, answer) = channel();
+                send(Job::Drop(path.clone(), reply));
+                Box::new(move || answer.recv_timeout(Duration::from_secs(60)).unwrap())
+            },
+            &|| {
+                let (reply, answer) = channel();
+                send(Job::Discard(path.clone(), Arc::new(AtomicBool::new(false)), reply));
+                Box::new(move || assert_eq!(answer.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(())))
+            },
+        ];
+        for job in forget {
+            // Queued behind a held writer, so that no timer runs between these jobs.
+            let release = hold_the_writer(host, &path);
+            host.write(&other, model("waits"));
+            let done = job();
+            let not_failed = peek_queued(host);
+            drop(release);
+            done();
+            assert!(!not_failed.recv_timeout(Duration::from_secs(60)).unwrap(), "no write was tried, so none failed");
+            assert_eq!(host.flush_for_test(&other), Ok(()));
+            // Another project's rows that could not be written: they wait for the next change.
+            let release = hold_the_writer(host, &path);
+            host.write(&other, broken.clone());
+            let (reply, flushed) = channel();
+            send(Job::Flush(other.clone(), reply));
+            let done = job();
+            let still_failed = peek_queued(host);
+            drop(release);
+            done();
+            assert!(flushed.recv_timeout(Duration::from_secs(60)).unwrap().is_err());
+            assert!(still_failed.recv_timeout(Duration::from_secs(60)).unwrap(), "their write failed, and no other was tried");
+            // Those rows forgotten as well, nothing waits; what comes next is written on the timer.
+            let (reply, gone) = channel();
+            send(Job::Drop(other.clone(), reply));
+            gone.recv_timeout(Duration::from_secs(60)).unwrap();
+            assert!(peek(), "left as it was, with nothing waiting");
+            let release = hold_the_writer(host, &path);
+            host.write(&path, model("next"));
+            let next = peek_queued(host);
+            drop(release);
+            assert!(!next.recv_timeout(Duration::from_secs(60)).unwrap(), "the value left over does not hold back the next rows");
+            assert_eq!(host.flush_for_test(&path), Ok(()));
+        }
+    }
+
+    /// Asks the writer, behind whatever is queued, whether it takes the last write to have failed.
+    fn peek_queued(host: &Projects) -> Receiver<bool> {
+        let (reply, answer) = channel();
+        writer(&host.inner).send(Job::Peek(reply)).unwrap();
+        answer
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
