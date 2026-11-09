@@ -86,6 +86,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |
 | `panels::{State, draw, retain_valid, ColumnEdit, SkillEdit, Applies, Menu}` | the right panels' state and body; every change goes through `er.*` and `skill.*` commands; the Properties and Skills bodies scroll under the pinned heading and description, an editor that opens is brought into view, and a thin thumb shows while the content overflows (`widgets::Registry::reach` measures how far the controls go) |
 | `diagrams::{State, rows, open_new, retain_valid, diagram_name, schema_of}` | the Diagrams explorer's state, its rows and the New diagram dialog |
+| `versions::State` | the Versions explorer's state: what it has read and how its sections are folded |
 | `canvas::{State, Tool, open, close_tab, retain_valid}` | the centre's state: the tabs, the view (pan, zoom), the tool, the toggles and the editing state; `open` shows a diagram through `view.open-diagram` |
 | `editing::{add_entity, run_growing, content_height, fit_tables, diagrams_showing, NodeRename, Gesture, EntityMenu}` | canvas editing: a table added (and placed on an open diagram) as one step, a column command that grows the table's nodes with it, the gesture and menu state |
 | `connect::{RelKind, MappingOffer, Toast, connect, offer_mapping, has_foreign_key, remove_selected_relationship}` | relationships drawn on the canvas: the ends a new line gets, the mapping table offer, the toast |
@@ -101,7 +102,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
-**Non-goals.** The screens behind Home's other controls, the Source Control explorer's contents,
+**Non-goals.** The screens behind Home's other controls, opening a version from the Versions explorer,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond
 key editing past name, columns and Nulls distinct, the drawing
 tools' menus, folders and renaming in the Diagrams tree: their own rows.

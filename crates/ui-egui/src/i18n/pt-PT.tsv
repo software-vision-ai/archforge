@@ -466,14 +466,22 @@ str		Model · the project's root	Modelo · a raiz do projeto
 str		Model	Modelo
 str		Name	Nome
 str		Models	Modelos
-str		Source Control	Controlo de versões
+str		Versions	Versões
+str		Branches	Ramos
+str		Working changes	Alterações em curso
+str		History	Histórico
+str		Retry	Tentar novamente
+str		No changes since the last version.	Sem alterações desde a última versão.
+str		No versions yet.	Ainda não há versões.
+str		No versions yet. Save version records your first one.	Ainda não há versões. Guardar versão regista a primeira.
+str		Loading	A carregar
+str		The versions couldn't be read.	Não foi possível ler as versões.
 str		Chat	Conversa
 str		Appearance	Aparência
 str		Properties	Propriedades
 str		Skills	Competências
 str		Filter models…	Filtrar modelos…
 str		Filter diagrams…	Filtrar diagramas…
-str		Filter changes…	Filtrar alterações…
 str		No diagrams yet	Ainda sem diagramas
 str		Other diagrams	Outros diagramas
 str		Select	Selecionar
@@ -664,7 +672,6 @@ str		{n} %	{n} %
 str		Empty diagram	Diagrama vazio
 str		Unnamed diagram	Diagrama sem nome
 str		Model behind this diagram	Modelo por trás deste diagrama
-str		No changes yet	Ainda sem alterações
 str		Style	Estilo
 str		Fill	Preenchimento
 str		Border	Contorno

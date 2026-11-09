@@ -26,7 +26,7 @@ fn opened_list(h: &mut Harness<'static, Shell>, host: &SavingHost) {
         ..Default::default()
     };
     let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, None, false)];
-    host.pages.lock().unwrap().remove(0).2.send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
+    host.version_reads.lock().unwrap().remove(0).send(Ok(crate::VersionsPage { versions, more: false })).unwrap();
     h.run_steps(3);
 }
 
@@ -44,7 +44,8 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
-        assert_eq!(host.pages.lock().unwrap().remove(0).1, 7, "the newest versions, each one in reach");
+        assert_eq!(host.version_limits.lock().unwrap()[0], 7, "the newest versions, each one in reach");
+        host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
         assert!(
             ["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "Add status")
@@ -61,7 +62,7 @@ fn the_keys_move_view_and_close() {
     in_both(|mut h, host| {
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::H, egui::Modifiers::COMMAND);
-        assert!(host.pages.lock().unwrap().is_empty(), "the shift is part of the keys");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "the shift is part of the keys");
         for arrow in [egui::Key::ArrowDown; 5].into_iter().chain([egui::Key::ArrowUp, egui::Key::ArrowUp, egui::Key::Enter]) {
             key(&mut h, arrow, MOVE[0]);
         }
@@ -132,7 +133,7 @@ fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
             block(h.state_mut());
             assert!(!actions::available(h.state(), VERSIONS), "all of them");
             actions::run(h.state_mut(), VERSIONS);
-            assert!(host.pages.lock().unwrap().is_empty(), "nothing is read");
+            assert!(host.version_reads.lock().unwrap().is_empty(), "nothing is read");
         });
     }
 }

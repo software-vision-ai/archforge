@@ -218,10 +218,11 @@ impl UiState {
         self.recent.iter().find(|r| r.path == path).and_then(|r| r.view.as_ref())
     }
 
-    /// Keeps `branch` as the one the recent project at `path` was left on, none being `main`.
+    /// Keeps `branch` as the one the recent project at `path` was left on, none being `main`, as
+    /// `main` named in any case is.
     pub fn keep_branch(&mut self, path: &std::path::Path, branch: Option<String>) {
         if let Some(r) = self.recent.iter_mut().find(|r| r.path == path) {
-            r.branch = branch;
+            r.branch = branch.filter(|b| !b.eq_ignore_ascii_case("main"));
         }
     }
 
