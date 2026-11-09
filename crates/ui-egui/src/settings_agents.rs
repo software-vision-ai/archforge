@@ -1069,7 +1069,7 @@ fn menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: &mut Page, anchor: 
 }
 
 /// The design's segmented control: two choices, the chosen one raised; gives the one clicked.
-fn segmented(
+pub(crate) fn segmented(
     shell: &mut Shell,
     ui: &egui::Ui,
     p: &Palette,

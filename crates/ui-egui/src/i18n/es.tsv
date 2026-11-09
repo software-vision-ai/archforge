@@ -482,6 +482,12 @@ str		Added	Añadido
 str		Changed	Cambiado
 str		Removed	Eliminado
 str		The changes couldn't be compared.	No se pudieron comparar los cambios.
+str		All	Todas
+str		With a description	Con descripción
+str		Show more	Mostrar más
+str		None of these versions has a description.	Ninguna de estas versiones tiene descripción.
+str		The next versions couldn't be read.	No se pudieron leer las siguientes versiones.
+str		{name}, selected	{name}, seleccionada
 str		No description	Sin descripción
 str		Saved by an agent	Guardado por un agente
 str		This version can't be shown	Esta versión no se puede mostrar
@@ -1448,3 +1454,13 @@ str		The changes since the last write are lost.	Se pierden los cambios desde la 
 str		The changes to {name} cannot be written	No se pueden escribir los cambios en {name}
 # Selector de carpetas en Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No se pudo abrir ningún selector de carpetas: instale xdg-desktop-portal y un backend para su escritorio.
+str		Versions	Versiones
+str		{day} {month} {time}	{day} {month} {time}
+str		Unsaved changes	Cambios sin guardar
+str		No unsaved changes	Sin cambios sin guardar
+str		Same as current work	Igual que el trabajo actual
+str		Saved by an agent	Guardado por un agente
+str		Current work	Trabajo actual
+str		Current work · unsaved changes	Trabajo actual · cambios sin guardar
+str		Viewing the version of {date}	Viendo la versión del {date}
+str		Viewing a version	Viendo una versión

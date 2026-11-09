@@ -36,7 +36,7 @@ pub fn civil(days: i64) -> (i64, u32, u32) {
 }
 
 /// `secs` as local seconds: shifted by the offset, which is clamped to a real zone's range.
-fn local(secs: u64, offset: Option<i32>) -> i64 {
+pub(crate) fn local(secs: u64, offset: Option<i32>) -> i64 {
     let secs = i64::try_from(secs).unwrap_or(i64::MAX);
     secs.saturating_add(i64::from(offset.unwrap_or(0).clamp(-14 * 3_600, 14 * 3_600)))
 }
