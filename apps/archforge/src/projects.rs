@@ -30,7 +30,10 @@ use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
-use archforge_project::{Author, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, SafeBranch, VersionReader, check_description};
+use archforge_project::{
+    Author, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, SafeBranch, VersionReader,
+    check_description,
+};
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing};
 
@@ -69,6 +72,8 @@ enum Job {
     Chat(PathBuf, u64, ChatJob),
     /// Move a project to another branch; the generation is the project's when it was asked for.
     Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
+    /// Make a branch at a version; the generation is the project's when it was asked for.
+    CreateBranch(PathBuf, SafeBranch, String, u64, Sender<Result<BranchCreated, CreateBranchError>>),
     /// Restore a version of a project; the generation is the project's when it was asked for.
     Restore(PathBuf, RestoreRequest, u64, Sender<Result<Restored, RestoreError>>),
 }
@@ -189,6 +194,32 @@ impl std::fmt::Display for SwitchError {
 }
 
 impl std::error::Error for SwitchError {}
+
+/// Why the writer made no branch.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CreateBranchError {
+    /// A switch moved the project after this was asked for.
+    BranchChanged,
+    NotOpen,
+    /// The project's own refusal or failure.
+    Creation(BranchCreationError),
+    /// The model's tables could not be described, or the writer has stopped.
+    Failed(String),
+}
+
+impl std::fmt::Display for CreateBranchError {
+    /// The reason in English, as the project's own errors give it; a screen words it through `tr`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CreateBranchError::BranchChanged => f.write_str("another switch moved the project first"),
+            CreateBranchError::NotOpen => f.write_str("the project is no longer open"),
+            CreateBranchError::Creation(e) => e.fmt(f),
+            CreateBranchError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for CreateBranchError {}
 
 /// Why a job on the conversations has no project to run against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -340,6 +371,18 @@ impl Projects {
         let generation = generation_of(&self.inner, project);
         if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, generation, tx.clone())) {
             let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
+    }
+
+    /// Starts making the branch `name` at the version `start` on the writer, and returns at once;
+    /// see [`create_branch`]. The screen that asks for this comes with AR-292.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
+        let (tx, rx) = channel();
+        let generation = generation_of(&self.inner, project);
+        if let Err(e) = writer(&self.inner).send(Job::CreateBranch(project.to_path_buf(), name, start, generation, tx.clone())) {
+            let _ = tx.send(Err(CreateBranchError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
     }
@@ -1012,6 +1055,9 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let answer = switch(inner, &project, target, generation, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
             }
+            Some(Job::CreateBranch(project, name, start, generation, reply)) => {
+                let _ = reply.send(create_branch(inner, &project, &name, &start, generation));
+            }
             Some(Job::Restore(project, request, generation, reply)) => {
                 let answer = restore(inner, &project, request, generation, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
@@ -1309,6 +1355,18 @@ fn restored(saved: archforge_project::Saved, kept_work: bool) -> Restored {
         archforge_project::Saved::Version { .. } => Restored::Version { kept_work },
         archforge_project::Saved::NothingNew => Restored::Same { kept_work },
     }
+}
+
+/// Makes the branch `name` of the project at `path`, on the writer, unless a switch has moved the
+/// project since this was asked for. What waits is left waiting: it does not reach a version.
+fn create_branch(inner: &Inner, path: &Path, name: &SafeBranch, start: &str, generation: u64) -> Result<BranchCreated, CreateBranchError> {
+    if generation != generation_of(inner, path) {
+        return Err(CreateBranchError::BranchChanged);
+    }
+    let schema = schema(inner).map_err(|e| CreateBranchError::Failed(format!("{e:?}")))?;
+    let open = lock(&inner.open);
+    let project = open.iter().find(|p| p.path() == path).ok_or(CreateBranchError::NotOpen)?;
+    project.create_branch(name, start, &schema).map_err(CreateBranchError::Creation)
 }
 
 /// Commits what of the conversations waits.
@@ -3050,11 +3108,75 @@ mod tests {
         }
     }
 
+    /// After the chat commit the branch is finished: a record that stays hides it until the next
+    /// opening, which removes the record and leaves the branch.
+    #[test]
+    fn a_record_that_cannot_be_removed_leaves_a_finished_branch() {
+        use archforge_project::CreationStep::RemoveRecord;
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        {
+            let open = lock(&host.inner.open);
+            let start = open[0].head_of("main").unwrap();
+            let answer = open[0].create_branch_halted(&branch("kept"), &start, &schema(&host.inner).unwrap(), (RemoveRecord, true));
+            assert!(matches!(answer, Ok(BranchCreated::RecordStays { .. })), "{answer:?}");
+            assert_ne!(open[0].head_of("kept").unwrap(), start, "it was not undone");
+            assert!(path.join(".creating-branch").exists() && !has_branch(&open[0], "kept"), "hidden while the record stays");
+        }
+        close(host, &path).unwrap();
+        wait(&host.open(&path)).unwrap();
+        assert!(has_branch(&lock(&host.inner.open)[0], "kept") && !path.join(".creating-branch").exists());
+    }
+
+    /// The list leaves out what a good record names, before the cap, so `cut` counts only what
+    /// could be listed; a damaged record says nothing, and the branch in use always shows.
+    #[test]
+    fn the_list_leaves_out_a_recorded_branch_before_the_cap() {
+        let (sandbox, path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let start = project.head_of("main").unwrap();
+        let names = |max: usize| {
+            let list = project.branches(max).unwrap();
+            (list.listed.iter().map(|b| b.name.clone()).collect::<Vec<_>>(), list.cut)
+        };
+        let cut = |names: &[&str], cut: bool| (names.iter().map(ToString::to_string).collect::<Vec<_>>(), cut);
+        assert_eq!(names(2), cut(&["elsewhere", "main"], true));
+        stopped_creation(&path, "ELSEWHERE", "main", &start);
+        assert_eq!(names(2), cut(&["main", "scripted"], false), "left out in any case, and not counted");
+        stopped_creation(&path, "MAIN", "elsewhere", &start);
+        assert_eq!(names(3), cut(&["elsewhere", "main", "scripted"], false), "the branch in use");
+        std::fs::write(path.join(".creating-branch"), b"broken").unwrap();
+        assert_eq!(names(3), cut(&["elsewhere", "main", "scripted"], false), "a damaged record names nothing");
+        std::fs::remove_file(path.join(".creating-branch")).unwrap();
+    }
+
+    /// The writer makes the branch, and refuses a job from before a switch or for no open project.
+    #[test]
+    fn the_writer_makes_a_branch_and_refuses_a_stale_job() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let start = lock(&host.inner.open)[0].head_of("main").unwrap();
+        let ask = |at: &Path, name: &str| host.create_branch(at, branch(name), start.clone());
+        let answer = |asked: Receiver<_>| asked.recv_timeout(Duration::from_secs(60)).expect("the job answers");
+        assert_eq!(answer(ask(&path, "fresh")), Ok(BranchCreated::Listed));
+        assert!(has_branch(&lock(&host.inner.open)[0], "fresh"));
+        assert_eq!(answer(ask(&path, "FRESH")), Err(CreateBranchError::Creation(BranchCreationError::NameTaken)));
+        assert_eq!(answer(ask(&sandbox.base.join("nowhere"), "lost")), Err(CreateBranchError::NotOpen));
+        let release = hold_the_writer(host, &path);
+        let asked = ask(&path, "stale");
+        switched(&host.inner, &path);
+        drop(release);
+        assert_eq!(answer(asked), Err(CreateBranchError::BranchChanged));
+        assert!(!has_branch(&lock(&host.inner.open)[0], "stale"));
+        assert!(!path.join(".creating-branch").exists());
+    }
+
     /// A failure at any step deletes the branch and then the record, and refusals change nothing.
     #[test]
     fn a_creation_that_fails_leaves_the_project_as_it_was() {
         use archforge_project::BranchCreationError::{Failed, NameTaken, NotACommit, RecordRemains};
-        use archforge_project::CreationStep::{ChatCommit, CheckVersion, MakeBranch, PrepareModel, RemoveConversations, RemoveRecord};
+        use archforge_project::CreationStep::{ChatCommit, CheckVersion, MakeBranch, PrepareModel, RemoveConversations};
         let (sandbox, path) = branched();
         undone_since_the_save(&sandbox.host, &path);
         let schema = schema(&sandbox.host.inner).unwrap();
@@ -3064,7 +3186,7 @@ mod tests {
         let as_it_was =
             |name: &str| !has_branch(project, name) && !path.join(".creating-branch").exists() && project.head_of("main").unwrap() == start;
         // By a test hook just before each step: the failure path is real, the failing statement is not.
-        for (n, step) in [MakeBranch, PrepareModel, RemoveConversations, ChatCommit, RemoveRecord].into_iter().enumerate() {
+        for (n, step) in [MakeBranch, PrepareModel, RemoveConversations, ChatCommit].into_iter().enumerate() {
             let name = format!("fail{n}");
             let answer = project.create_branch_halted(&branch(&name), &start, &schema, (step, true));
             assert!(matches!(answer, Err(Failed { step: s, .. }) if s == step), "{step:?}: {answer:?}");
