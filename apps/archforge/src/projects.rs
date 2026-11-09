@@ -1037,8 +1037,10 @@ fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Res
     let result = dolt(inner).and_then(|dolt| {
         let opts = ServerOptions::new(inner.settings.join("servers"));
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
-        // Told first which branch it will open on, so that recovery keeps it, and before anything
-        // lists or reads branches.
+        // Provisional, for recovery alone: told which branch it may open on, so that recovery keeps
+        // it, before anything lists or reads branches. `open_on_stored` below settles the branch.
+        // A record naming a stored branch that has gone is logged as protected, not as no branch;
+        // the record is removed all the same.
         if let Some(wanted) = stored.and_then(|name| SafeBranch::found(name).ok()) {
             project.set_current_branch(wanted);
         }
