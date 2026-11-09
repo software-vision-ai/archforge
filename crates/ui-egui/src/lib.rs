@@ -227,6 +227,12 @@ pub trait ProjectHost: Send + Sync {
         replace::Job { run: Box::new(move || answer), read_back: Box::new(move || read) }
     }
 
+    /// The branch the project at `project` is on, as Dolt stores the name; none when it is not open
+    /// or the host keeps no branches. Taken from what the project holds now: it waits for no write.
+    fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
+        None
+    }
+
     /// Starts a switch of the project at `project` to `branch`, and returns at once; an error says
     /// why it could not be asked for, in words for a person.
     fn begin_branch_switch(&self, _project: &std::path::Path, _branch: String) -> Result<BranchSwitch, String> {

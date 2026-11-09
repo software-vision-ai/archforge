@@ -254,6 +254,11 @@ impl VersionReader {
         database_connection(&self.connector, &branch_now(&self.branch))
     }
 
+    /// The branch the project is on now.
+    pub fn current_branch(&self) -> SafeBranch {
+        branch_now(&self.branch)
+    }
+
     /// The current branch's versions, newest first: at most `limit`, starting after the version
     /// `after`, so a save made meanwhile does not shift a later page. Refused when the page asked
     /// for is too large, when `after` is not a version of this line, or when the line is too long

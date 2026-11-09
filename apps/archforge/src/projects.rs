@@ -990,6 +990,11 @@ impl ProjectHost for Projects {
         })
     }
 
+    /// The branch the project is on, from its reader: it waits for no write.
+    fn current_branch(&self, project: &Path) -> Option<String> {
+        lock(&self.inner.readers).get(project).map(|open| open.reader.current_branch().stored().to_string())
+    }
+
     fn writing(&self, project: &Path) -> Writing {
         lock(&self.inner.writing).get(project).cloned().unwrap_or_default()
     }
@@ -5305,6 +5310,28 @@ mod tests {
     /// Switches to `to` and waits for the answer.
     fn wait_for_switch(host: &Projects, path: &Path, to: &str) -> Result<Switched, SwitchError> {
         host.switch_branch(path, branch(to)).recv_timeout(Duration::from_secs(60)).expect("the switch answers")
+    }
+
+    /// What an agent saves lands on the branch in use and only there, and the window can tell which
+    /// that is while a write holds the open projects; a closed project is on none.
+    #[test]
+    fn a_save_lands_on_the_branch_in_use_and_the_window_can_tell_which() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let on = |host: &Projects| ProjectHost::current_branch(host, &path);
+        assert_eq!(on(host).as_deref(), Some("main"));
+        let head = |name: &str| lock(&host.inner.open)[0].head_of(name).unwrap();
+        let main = head("main");
+        assert!(matches!(host.switch_branch(&path, branch("elsewhere")).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Switched::Moved(_))));
+        assert_eq!(with_open_lock_held(host, || on(host)).as_deref(), Some("elsewhere"));
+        let before = head("elsewhere");
+        host.write(&path, model("on the branch"));
+        let answer = host.save(&path, None, SavedBy::Agent(None)).recv_timeout(Duration::from_secs(60)).expect("the save answers");
+        assert!(matches!(answer, Ok(Saved::Version { .. })), "{answer:?}");
+        assert_ne!(head("elsewhere"), before);
+        assert_eq!(head("main"), main, "main is as it was");
+        close(host, &path).unwrap();
+        assert_eq!(on(host), None);
     }
 
     /// Has the project close and open again just before the next job picks it, as a closing does

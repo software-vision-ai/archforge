@@ -76,6 +76,12 @@ pub const REVOKED: &str = "revoked: the access this token gave has ended";
 /// an agent can tell the reason without reading the sentence after it.
 pub const VIEWING: &str = "viewing";
 
+/// The word a refusal of a request from an earlier session generation starts with.
+pub const CHANGED: &str = "changed";
+
+/// The word a refusal while the project is held still starts with.
+pub const HELD: &str = "held";
+
 /// What a method may do: only read, change something, or run commands, which reads only when every
 /// command it runs is a query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,7 +192,8 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
         return Err(REVOKED.to_string());
     }
     if req.generation != shell.session_generation() {
-        return Err(tr("The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again."));
+        let words = tr("The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.");
+        return Err(format!("{CHANGED}: {words}"));
     }
     // A Chat conversation's request runs only while its turn runs in the project shown, and makes
     // the turn's tool rows from what it is answered.
@@ -201,7 +208,8 @@ pub fn answer_request(shell: &mut Shell, req: &ControlRequest) -> Result<Value, 
         return refused;
     }
     if shell.is_held() && !only_reads(shell, &req.method, &req.params)? {
-        let refused = Err(tr("The project is held still while it is being replaced, so this request was not run. Try again when that has finished."));
+        let words = tr("The project is held still while it is being replaced, so this request was not run. Try again when that has finished.");
+        let refused = Err(format!("{HELD}: {words}"));
         if let Some(b) = before {
             crate::chat_panel::after(shell, &req.method, b, &refused, true);
         }
@@ -280,7 +288,7 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
 /// unsaved changes, which the rest of the answer does not describe once the version shows.
 fn inspect(shell: &Shell) -> Value {
     let Some(session) = shell.session.as_ref() else {
-        return json!({ "open": false, "projects": shell.tabs.iter().map(|t| t.name.clone()).collect::<Vec<_>>() });
+        return json!({ "open": false, "branch": null, "projects": shell.tabs.iter().map(|t| t.name.clone()).collect::<Vec<_>>() });
     };
     let store = session.doc();
     let ids = |objs: &[archforge_mof::Obj]| objs.iter().filter_map(|o| store.uuid(*o).ok()).map(|u| u.to_string()).collect::<Vec<_>>();
@@ -292,6 +300,7 @@ fn inspect(shell: &Shell) -> Value {
             "work_unsaved": shell.active.is_some_and(|i| shell.tab_unsaved(i)),
         })),
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
+        "branch": shell.project.as_ref().and_then(|p| shell.services.projects.as_ref()?.current_branch(&p.path)),
         "revision": session.revision(),
         "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),
         "saving": shell.is_saving(),
@@ -625,7 +634,7 @@ mod tests {
             ("app.save", json!({})),
         ] {
             let refused = answer_request(&mut shell, &request(method, params, false, true)).unwrap_err();
-            assert!(refused.contains("held still"), "{method}: {refused}");
+            assert!(refused.starts_with("held: "), "{method}: {refused}");
         }
         assert_eq!(shell.session.as_ref().unwrap().revision(), before);
         for (method, params) in [("document.inspect", json!({})), ("engine.execute", json!({ "command": "er.schema.list" }))] {
@@ -649,7 +658,7 @@ mod tests {
         shell.session_replaced();
         for req in [&earlier, &reading] {
             let refused = answer_request(&mut shell, req).unwrap_err();
-            assert!(refused.contains("after this request was sent"), "{refused}");
+            assert!(refused.starts_with("changed: "), "{refused}");
         }
         assert_eq!(shell.session.as_ref().unwrap().revision(), before, "nothing ran");
         let mut later = request("engine.execute", add, false, true);

@@ -359,6 +359,8 @@ struct SavingHost {
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Each read of the versions waiting for the answer the test sends.
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
+    /// The branch the project is on.
+    branch_now: std::sync::Mutex<Option<String>>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
     /// Each branch switch asked for, and what the next one is refused with.
@@ -394,6 +396,11 @@ impl crate::ProjectHost for SavingHost {
         let (reading, readings) = std::sync::mpsc::channel();
         self.restores.lock().unwrap().push((answer, reading));
         crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
+    }
+
+    /// The branch the test says the project is on.
+    fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
+        self.branch_now.lock().unwrap().clone()
     }
 
     /// A switch the test answers through what is kept in `switches`.
@@ -2033,6 +2040,69 @@ fn a_rename_is_remembered_only_for_the_branch_in_use() {
         assert_eq!(h.state().state.branch_of(&path), Some("renamed"));
         h.state_mut().branch_renamed(std::path::Path::new("/tmp/Other.archforge"), "renamed", "x");
         assert_eq!(reopens_on(&mut h, &host, &path).as_deref(), Some("renamed"), "another project");
+    });
+}
+
+/// A request accepted before anything that puts another session in its place is refused by its
+/// word, and one accepted after it runs: viewing, returning, a branch change, Restore, another tab.
+#[test]
+fn a_request_from_before_any_change_of_session_is_refused_by_its_word() {
+    type Rows = std::sync::Arc<archforge_mof::rows::Rows>;
+    type Step = fn(&mut Harness<'static, Shell>, &SavingHost, Rows);
+    let ready: Step = |_, _, _| {};
+    let view: Step = |h, host, earlier| {
+        start_viewing(h, "c1");
+        answer_read(h, host, Ok(earlier));
+    };
+    let ways: [(&str, Step, Step); 5] = [
+        ("viewing", ready, view),
+        ("returning", view, |h, _, _| assert!(h.state_mut().back_to_current_work())),
+        ("a branch change", ready, |h, host, earlier| {
+            let ends = switch_asked(h, host);
+            switch_checked(h, &ends, earlier);
+            switch_moved(h, &ends);
+        }),
+        ("Restore", ready, |h, host, earlier| {
+            restore_under_way(h, host, earlier).0.send(Ok(())).unwrap();
+            h.run_steps(8);
+        }),
+        (
+            "another tab",
+            |h, _, _| {
+                h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() })
+            },
+            |h, _, _| h.state_mut().activate(0),
+        ),
+    ];
+    for (what, first, moving) in ways {
+        in_both(work_and_earlier, |mut h, host, earlier| {
+            first(&mut h, &host, earlier.clone());
+            h.run_steps(3);
+            let inspect = |h: &Harness<'static, Shell>| accepted(h, "document.inspect", serde_json::json!({}), false);
+            let stale = inspect(&h);
+            moving(&mut h, &host, earlier);
+            h.run_steps(3);
+            let refused = crate::control::answer_request(h.state_mut(), &stale).unwrap_err();
+            assert!(refused.starts_with(&format!("{}: ", crate::control::CHANGED)), "{what}: {refused}");
+            let fresh = inspect(&h);
+            assert!(crate::control::answer_request(h.state_mut(), &fresh).is_ok(), "{what}");
+        });
+    }
+}
+
+/// An agent is told the branch the host says the project is on, none without a host that keeps
+/// branches, and no method changes one.
+#[test]
+fn an_agent_is_told_the_branch_and_has_no_way_to_change_it() {
+    in_both(work_and_earlier, |mut h, host, _| {
+        *host.branch_now.lock().unwrap() = Some("topic".to_string());
+        let inspected = |h: &mut Harness<'static, Shell>| crate::control::answer(h.state_mut(), "document.inspect", &serde_json::json!({})).unwrap();
+        assert_eq!(inspected(&mut h)["branch"], "topic");
+        *host.branch_now.lock().unwrap() = None;
+        assert_eq!(inspected(&mut h)["branch"], serde_json::Value::Null);
+        h.state_mut().session = None;
+        assert_eq!(inspected(&mut h).get("branch"), Some(&serde_json::Value::Null), "the field is there with nothing open");
+        assert!(crate::control::METHODS.iter().all(|(m, _)| !m.contains("branch")));
     });
 }
 
