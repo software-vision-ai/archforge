@@ -1,0 +1,282 @@
+//! The application's own actions in one table: Open, Save, Generate and the like, beside the
+//! engine's commands. Menus and shortcuts read a row for its name, ask it whether it can act and
+//! run it. Availability is a function asked each time; nothing here keeps its answer.
+
+use egui::{Key, Modifiers};
+
+use crate::Shell;
+use crate::i18n::tr;
+
+pub const ABOUT: &str = "app.about";
+pub const QUIT: &str = "app.quit";
+pub const GENERATE: &str = "file.generate";
+pub const SAVE: &str = "file.save";
+pub const OPEN: &str = "file.open";
+
+/// One application action.
+pub struct Action {
+    /// What a menu item names it by, never shown.
+    pub id: &'static str,
+    /// Its name, in the language in use when asked.
+    pub label: fn() -> String,
+    /// Whether it can act now.
+    pub available: fn(&Shell) -> bool,
+    pub run: fn(&mut Shell),
+    pub keys: Option<Keys>,
+}
+
+/// An action's keyboard shortcut.
+pub struct Keys {
+    pub modifiers: Modifiers,
+    pub key: Key,
+    /// Whether the keys are taken now. This differs from the action's availability on purpose: the
+    /// table moved each rule as it was (Open's keys are taken behind a dialog that keeps Open off,
+    /// and do nothing), and making them one rule is a change of its own (AR-154).
+    pub when: fn(&Shell) -> bool,
+}
+
+/// Every action. Keys are looked at in this order.
+pub static ACTIONS: &[Action] = &[
+    Action { id: ABOUT, label: || tr("About Archforge…"), available: |_| true, run: Shell::open_about, keys: None },
+    Action { id: QUIT, label: || tr("Quit Archforge"), available: |_| true, run: Shell::request_quit, keys: None },
+    Action {
+        id: GENERATE,
+        label: || tr("Generate…"),
+        available: Shell::can_generate,
+        run: Shell::open_generate,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::G, when: |s| s.can_generate() && s.ask.is_none() }),
+    },
+    Action {
+        id: SAVE,
+        label: || tr("Save"),
+        available: Shell::can_save,
+        run: Shell::save,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::S, when: Shell::can_save }),
+    },
+    // Available as its row in Home's search shows it (that row moves here with AR-335).
+    Action {
+        id: "file.new",
+        label: || tr("New project"),
+        available: |s| s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
+        run: crate::new_project::open,
+        keys: None,
+    },
+    Action {
+        id: OPEN,
+        label: || tr("Open…"),
+        available: Shell::can_open_project,
+        run: Shell::open_from_picker,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O, when: |s| s.about.is_none() }),
+    },
+];
+
+/// The action `id`.
+fn find(id: &str) -> Option<&'static Action> {
+    ACTIONS.iter().find(|a| a.id == id)
+}
+
+/// The name of the action `id`; empty when the table has none.
+pub fn label(id: &str) -> String {
+    find(id).map(|a| (a.label)()).unwrap_or_default()
+}
+
+/// Whether the action `id` can act now; an action the table lacks cannot.
+pub fn available(shell: &Shell, id: &str) -> bool {
+    find(id).is_some_and(|a| (a.available)(shell))
+}
+
+/// Runs the action `id`; an id the table lacks does nothing. Asks nothing first: what offers an
+/// action shows whether it can act, and each handler keeps its own guards.
+pub fn run(shell: &mut Shell, id: &str) {
+    if let Some(action) = find(id) {
+        (action.run)(shell);
+    }
+}
+
+/// Runs the actions whose keys were pressed in this frame, on every platform.
+pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
+    for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
+        if (keys.when)(shell) && ctx.input_mut(|i| i.consume_key(keys.modifiers, keys.key)) {
+            (action.run)(shell);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc::{Receiver, channel};
+
+    use super::*;
+    use crate::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services, Tab};
+
+    const NEW: &str = "file.new";
+    const ALL: [&str; 6] = [ABOUT, QUIT, GENERATE, SAVE, NEW, OPEN];
+    const WITH_KEYS: [&str; 3] = [GENERATE, SAVE, OPEN];
+
+    /// A host that counts the saves asked of it; the saves never finish.
+    #[derive(Default)]
+    struct CountingHost(AtomicUsize);
+
+    impl ProjectHost for CountingHost {
+        /// Never answers: no test here creates a project.
+        fn create(&self, _folder: &Path, _name: &str) -> Receiver<Result<Opened, CreateError>> {
+            channel().1
+        }
+
+        /// Counts the save and never answers.
+        fn save(&self, _project: &Path, _description: Option<String>, _by: SavedBy) -> Receiver<Result<Saved, SaveError>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            channel().1
+        }
+    }
+
+    /// A new model named Shop, as a project holds one.
+    fn session() -> archforge_notations::Session {
+        let mut n: u128 = 0;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        });
+        archforge_notations::new_project_session("Shop", ids).unwrap()
+    }
+
+    /// A shell with a project open, a host and a project picker, none of them asked yet; and the
+    /// counts of the saves and the picks asked of them.
+    fn shell() -> (Shell, Arc<CountingHost>, Arc<AtomicUsize>) {
+        let host = Arc::new(CountingHost::default());
+        let picks = Arc::new(AtomicUsize::new(0));
+        let counted = picks.clone();
+        let pick_project = Some(Arc::new(move |_: Option<&Path>| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            None
+        }) as _);
+        let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, ..Default::default() });
+        shell.session = Some(session());
+        shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false });
+        (shell, host, picks)
+    }
+
+    /// A question about the open project, which keeps Generate's keys off.
+    fn question() -> crate::close_ask::Ask {
+        crate::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }
+    }
+
+    /// A tab, to take up one of the places.
+    fn tab() -> Tab {
+        Tab { path: "/shop.archforge".into(), name: "Shop".to_string(), parked: None, closing: None, close_error: None }
+    }
+
+    /// `all` less what is `off`.
+    fn without(all: &[&'static str], off: &[&str]) -> Vec<&'static str> {
+        all.iter().copied().filter(|id| !off.contains(id)).collect()
+    }
+
+    /// The ids of the rows of the table `on` answers yes for.
+    fn answering(on: impl Fn(&Action) -> bool) -> Vec<&'static str> {
+        ACTIONS.iter().filter(|a| on(a)).map(|a| a.id).collect()
+    }
+
+    /// The whole table, state by state, written out by hand from what each menu item and key did
+    /// before there was a table: which actions are off and which keys are left alone.
+    #[test]
+    fn every_action_is_available_when_it_was() {
+        type Setup = fn(&mut Shell);
+        let states: [(&str, Setup, &[&str], &[&str]); 13] = [
+            ("a project", |_| {}, &[], &[]),
+            ("saving", |s| s.save(), &[SAVE], &[SAVE]),
+            ("held", |s| s.begin_hold().unwrap(), &[SAVE], &[SAVE]),
+            ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE], &[SAVE]),
+            ("About open", crate::support::open, &[GENERATE, OPEN], &[GENERATE, OPEN]),
+            ("Generate open", Shell::open_generate, &[GENERATE], &[GENERATE]),
+            ("New project open", crate::new_project::open, &[OPEN], &[]),
+            ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN], &[]),
+            ("a question open", |s| s.ask = Some(question()), &[], &[GENERATE]),
+            ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN], &[]),
+            ("no model", |s| s.session = None, &[GENERATE, SAVE], &[GENERATE, SAVE]),
+            ("no host", |s| s.services.projects = None, &[NEW, OPEN], &[]),
+            ("no project picker", |s| s.services.pick_project = None, &[OPEN], &[]),
+        ];
+        for (name, setup, off, keys_off) in states {
+            let (mut shell, ..) = shell();
+            setup(&mut shell);
+            let shell = &shell;
+            assert_eq!(answering(|a| (a.available)(shell)), without(&ALL, off), "available, {name}");
+            assert_eq!(answering(|a| a.keys.as_ref().is_some_and(|k| (k.when)(shell))), without(&WITH_KEYS, keys_off), "keys, {name}");
+        }
+    }
+
+    /// Availability is asked each time: the same row answers differently once the shell has changed.
+    #[test]
+    fn availability_is_asked_each_time() {
+        let (mut shell, ..) = shell();
+        assert!(available(&shell, OPEN));
+        crate::support::open(&mut shell);
+        assert!(!available(&shell, OPEN));
+        shell.about = None;
+        assert!(available(&shell, OPEN));
+    }
+
+    /// Which actions' effects show in `shell`, in the table's order.
+    fn effects(shell: &Shell, saves: &CountingHost, picks: &AtomicUsize) -> Vec<&'static str> {
+        let shown = [
+            (ABOUT, shell.about.is_some()),
+            (QUIT, shell.quit_requested),
+            (GENERATE, shell.generate.is_some()),
+            (SAVE, saves.0.load(Ordering::SeqCst) == 1),
+            (NEW, shell.new_project.is_some()),
+            (OPEN, picks.load(Ordering::SeqCst) == 1),
+        ];
+        shown.iter().filter(|(_, on)| *on).map(|(id, _)| *id).collect()
+    }
+
+    /// Each row runs what its menu item or key ran, and nothing else; the table has exactly these
+    /// rows, each once, and an id it lacks runs nothing, has no name and is never available.
+    #[test]
+    fn every_action_runs_its_handler_and_only_that() {
+        assert_eq!(ACTIONS.iter().map(|a| a.id).collect::<Vec<_>>(), ALL);
+        for id in ALL {
+            let (mut shell, saves, picks) = shell();
+            run(&mut shell, id);
+            assert_eq!(effects(&shell, &saves, &picks), [id]);
+        }
+        let (mut shell, saves, picks) = shell();
+        run(&mut shell, "no.such.action");
+        assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new());
+        assert!(!available(&shell, "no.such.action") && label("no.such.action").is_empty());
+    }
+
+    /// Each row keeps its name: the catalogue's own key.
+    #[test]
+    fn every_action_keeps_its_name() {
+        let names = ["About Archforge…", "Quit Archforge", "Generate…", "Save", "New project", "Open…"];
+        assert_eq!(ALL.map(label), names);
+    }
+
+    /// A shortcut pressed runs its own action, and a key left alone runs nothing.
+    #[test]
+    fn every_shortcut_runs_its_action() {
+        let press = |shell: &mut Shell, modifiers, key| {
+            let event = egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+            let input = egui::RawInput { events: vec![event], ..Default::default() };
+            let mut output = egui::Context::default().run_ui(input, |ui| run_shortcuts(shell, ui.ctx()));
+            output.textures_delta.clear();
+        };
+        for (id, modifiers, key) in
+            [(GENERATE, Modifiers::COMMAND | Modifiers::SHIFT, Key::G), (SAVE, Modifiers::COMMAND, Key::S), (OPEN, Modifiers::COMMAND, Key::O)]
+        {
+            let (mut shell, saves, picks) = shell();
+            press(&mut shell, modifiers, key);
+            assert_eq!(effects(&shell, &saves, &picks), [id]);
+        }
+        let (mut shell, saves, picks) = shell();
+        shell.ask = Some(question());
+        press(&mut shell, Modifiers::COMMAND | Modifiers::SHIFT, Key::G);
+        shell.ask = None;
+        press(&mut shell, Modifiers::COMMAND, Key::G);
+        press(&mut shell, Modifiers::NONE, Key::S);
+        assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "not behind a question, nor with the wrong modifiers");
+    }
+}
