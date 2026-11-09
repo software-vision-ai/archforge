@@ -38,7 +38,8 @@ use archforge_project::{
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
 use archforge_ui_egui::{
-    BranchNotDeleted, BranchNotice, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing,
+    BranchNotDeleted, BranchNotice, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry,
+    VersionsPage, Writing,
 };
 
 /// How long the writer waits after a change for the next one before it writes.
@@ -218,14 +219,12 @@ pub struct CheckedBranch {
 }
 
 /// The two steps of a switch: the check, already asked of the writer, and the move.
-#[cfg_attr(not(test), allow(dead_code))]
 pub struct SwitchSteps {
     pub check: Receiver<Result<CheckedBranch, SwitchError>>,
     pub moving: SwitchMove,
 }
 
 /// The second step of a switch, to run once the window has built the branch's model.
-#[cfg_attr(not(test), allow(dead_code))]
 pub struct SwitchMove {
     inner: Arc<Inner>,
     path: PathBuf,
@@ -236,9 +235,8 @@ pub struct SwitchMove {
 }
 
 impl SwitchMove {
-    /// The move as the window runs it (AR-289): it hands the move to the writer within the limit
-    /// and reads back an answer that did not come.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// The move as the window runs it: it hands the move to the writer within the limit and reads
+    /// back an answer that did not come.
     pub fn into_job(self) -> ReplacementJob {
         let SwitchMove { inner, path, target, asked, under_way, limit } = self;
         let run = {
@@ -558,7 +556,7 @@ impl Projects {
 
     /// Starts moving `project` to `target` on the writer, and returns at once; see [`switch`]. The
     /// window calls this and the read-back below once it has its hold (AR-289).
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn switch_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<Switched, SwitchError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
@@ -626,8 +624,7 @@ impl Projects {
 
     /// Asks for a switch of `project` to `target` in two steps, each within the limit of a job on
     /// the writer: the check goes to the writer now, and the move runs once the window has built
-    /// the branch's model (AR-289). See [`Projects::start_switch_within`].
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// the branch's model. See [`Projects::start_switch_within`].
     pub fn start_switch(&self, project: &Path, target: SafeBranch) -> Result<SwitchSteps, SwitchError> {
         self.start_switch_within(project, target, RESTORE_LIMIT)
     }
@@ -670,7 +667,7 @@ impl Projects {
 
     /// Reads back, off the writer, whether `project` is on `target`, for when a switch's answer was
     /// lost; an error says it cannot be told, and no answer at all means the same.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn read_back_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<bool, String>> {
         self.on_a_reader(project, move |reader| {
             let name = reader.active_branch().map_err(|e| e.to_string())?;
@@ -871,6 +868,32 @@ impl Projects {
 }
 
 impl ProjectHost for Projects {
+    /// The check's answer goes to the window from a thread of its own, worded in the language shown
+    /// when the switch was asked for; the unsaved mark is set before the model goes.
+    fn begin_branch_switch(&self, project: &Path, branch: String) -> Result<BranchSwitch, String> {
+        let target = SafeBranch::found(&branch).map_err(|e| SwitchError::Failed(e.to_string()).words())?;
+        let SwitchSteps { check, moving } = self.start_switch(project, target).map_err(|e| e.words())?;
+        let language = archforge_ui_egui::i18n::language();
+        let unsaved = Arc::new(AtomicBool::new(false));
+        let (send, read) = channel();
+        let marked = unsaved.clone();
+        let forward = move || {
+            archforge_ui_egui::i18n::set_language(language);
+            let _ = send.send(match check.recv().unwrap_or(Err(SwitchError::NoAnswer)) {
+                Ok(checked) => {
+                    marked.store(checked.unsaved, Ordering::SeqCst);
+                    Ok(checked.rows)
+                }
+                Err(error) => {
+                    log::warn!("a branch check stopped: {error}");
+                    Err(error.words())
+                }
+            });
+        };
+        spawn_wait(&self.inner, forward).map_err(|e| SwitchError::Failed(format!("the switch could not start: {e}")).words())?;
+        Ok(BranchSwitch { read, unsaved, job: moving.into_job() })
+    }
+
     /// Worded on the wait's own thread in the language shown when the job runs.
     fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
@@ -4397,6 +4420,29 @@ mod tests {
         assert_ne!(english[6], english[1]);
         assert!(matches!(switch_answer(Ok(Switched::AlreadyThere)), Ok(())));
         assert!(matches!(switch_answer(Err(SwitchError::NoAnswer)), Err(JobFailure::Failed(_))));
+    }
+
+    /// What the window starts, on the real writer: the check, the move, and refusals in words.
+    #[test]
+    fn the_windows_switch_forwards_the_check_and_moves() {
+        let wait = Duration::from_secs(60);
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let there = |name: &str| host.begin_branch_switch(&path, name.to_string());
+        host.write(&path, model("c"));
+        let BranchSwitch { read, unsaved, job } = there("elsewhere").unwrap();
+        assert_eq!(read.recv_timeout(wait).unwrap(), Ok(Arc::new(model("a"))));
+        assert!(!unsaved.load(Ordering::SeqCst));
+        let ReplacementJob { run, read_back } = job;
+        assert!(matches!(run().recv_timeout(wait).unwrap(), Ok(())));
+        drop(read_back);
+        assert_eq!(on(host), "elsewhere");
+        let same = there("ELSEWHERE").unwrap();
+        assert_eq!(same.read.recv_timeout(wait).unwrap(), Err(SwitchError::AlreadyOnIt.words()));
+        drop(same);
+        let back = there("main").unwrap();
+        assert!(back.read.recv_timeout(wait).unwrap().is_ok() && back.unsaved.load(Ordering::SeqCst), "main holds unsaved work");
+        assert_eq!(there("scripted").err(), Some(SwitchError::UnderWay.words()));
     }
 
     /// A close asked for while either step runs on the writer waits for it: the step ends as it

@@ -446,6 +446,7 @@ str		You are already on this branch.	您已在此分支上。
 str		The project stayed on its branch because it changed or was busy.	由于项目已更改或正忙，项目仍停留在其分支上。
 str		Your latest changes could not be written, so the project stayed on its branch.	无法写入您最近的更改，因此项目仍停留在其分支上。
 str		The project stayed on its branch: {why}	项目仍停留在其分支上：{why}
+str		The switch did not finish, so the project stayed on its branch.	切换未完成，因此项目仍停留在其分支上。
 str		The version could not be restored: {why}	无法恢复该版本：{why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	此版本与您当前的工作相同。未保存的工作已保留为一个版本。
 str		The version could not be restored: {why}. Your work will be written with your next change.	无法恢复该版本：{why}。您的工作将在下次更改时写入。

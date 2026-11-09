@@ -145,6 +145,15 @@ pub struct Writing {
 
 /// The host's part in making projects. The shell never touches a project's files or its database:
 /// it asks, and draws the answer.
+/// A branch switch the host has started: its check under way, and its move still to run.
+pub struct BranchSwitch {
+    /// The target's model, once checked; or, in words for a person, why the project stayed.
+    pub read: std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>,
+    /// Set before `read` answers: the target holds work not saved as a version.
+    pub unsaved: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub job: replace::Job,
+}
+
 pub trait ProjectHost: Send + Sync {
     /// Starts creating the project `name` in `folder` and returns at once; the host works on its
     /// own thread and sends one answer. The project created is open afterwards.
@@ -215,6 +224,12 @@ pub trait ProjectHost: Send + Sync {
         let (unread, read) = std::sync::mpsc::channel();
         let _ = unread.send(Err("this host keeps no versions".to_string()));
         replace::Job { run: Box::new(move || answer), read_back: Box::new(move || read) }
+    }
+
+    /// Starts a switch of the project at `project` to `branch`, and returns at once; an error says
+    /// why it could not be asked for, in words for a person.
+    fn begin_branch_switch(&self, _project: &std::path::Path, _branch: String) -> Result<BranchSwitch, String> {
+        Err("this host keeps no branches".to_string())
     }
 
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
