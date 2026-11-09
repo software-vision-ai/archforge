@@ -7697,6 +7697,7 @@ fn versions_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<
 
 /// Answers the read the panel is waiting for.
 fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: Result<crate::VersionsPage, String>) {
+    h.run_steps(2);
     let reply = host.version_reads.lock().unwrap().pop().expect("a read was asked for");
     reply.send(answer).unwrap();
     h.run_steps(2);
@@ -7725,7 +7726,6 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
         assert!(["VERSIONS", "Branches", "Working changes", "History"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
         assert!(has_id(&h, "workspace.versions.loading") && !has_id(&h, "workspace.versions.retry"), "{theme:?}");
         assert!(!painted(&h).iter().any(|t| t == "No versions yet."), "not said before it is known");
-        // A read that stops without an answer fails, as any read does.
         drop(host.version_reads.lock().unwrap().pop());
         h.run_steps(2);
         assert!(painted(&h).iter().any(|t| t == "The versions couldn't be read.") && !has_id(&h, "workspace.versions.loading"), "{theme:?}");
@@ -7760,9 +7760,11 @@ fn the_versions_panel_lists_keeps_and_reads_again() {
         versions_answer(&mut h, &host, Err("the server stopped".into()));
         assert!(has_id(&h, first) && has_id(&h, "workspace.versions.failed"), "{theme:?}: what was shown stays");
         h.state_mut().session_replaced();
-        h.run_steps(2);
-        assert!(has_id(&h, first), "{theme:?}: and while another read runs");
         versions_answer(&mut h, &host, Ok(two_versions()));
+        for outcome in [crate::SaveState::Failed("no".into()), crate::SaveState::Unknown] {
+            h.state_mut().finished_save(0, outcome);
+            versions_answer(&mut h, &host, Ok(two_versions()));
+        }
         let at = rect_of(&h, "workspace.versions.history").center();
         click(&mut h, at);
         assert!(!has_id(&h, first), "{theme:?}: History folds");

@@ -44,7 +44,6 @@ pub struct State {
 fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     let asked = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
     if asked != shell.versions.asked || shell.versions.stale {
-        // Another project's versions are not this one's, even for a moment.
         if shell.versions.asked.as_ref().map(|a| &a.0) != asked.as_ref().map(|a| &a.0) {
             shell.versions.page = None;
             shell.versions.scroll = TreeScroll::default();

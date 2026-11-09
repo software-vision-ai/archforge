@@ -1592,8 +1592,8 @@ impl Shell {
 
     /// Keeps how a save went, the latest few, for the agent that asked for it.
     fn finished_save(&mut self, ticket: u64, outcome: SaveState) {
-        // A version may have been made: History reads again when it is next drawn.
-        self.versions.stale |= matches!(outcome, SaveState::Saved(_));
+        // Any ending may have made a version, one that failed or went unanswered too: History reads again.
+        self.versions.stale = true;
         // A closing that waited for this save goes on, asks again when edits came in meanwhile,
         // or stops with the save's error.
         let waiting: Vec<std::path::PathBuf> = self.close_after_save.iter().filter(|(_, t)| *t == ticket).map(|(p, _)| p.clone()).collect();
