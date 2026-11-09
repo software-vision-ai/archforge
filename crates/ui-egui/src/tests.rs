@@ -353,12 +353,32 @@ struct SavingHost {
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
+    /// Where the answers of each restore's job go, sent by the test.
+    restores: std::sync::Mutex<Vec<RestoreEnds>>,
 }
+
+/// Where a restore's job is answered, and where its reading back is.
+type RestoreEnds = (std::sync::mpsc::Sender<Result<(), crate::replace::JobFailure>>, std::sync::mpsc::Sender<Result<bool, String>>);
 
 /// Where the answer to a read of a version goes.
 type ReadAnswer = std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>;
 
 impl crate::ProjectHost for SavingHost {
+    /// A job the test answers through what is kept in `restores`.
+    fn restore_job(
+        &self,
+        _project: &std::path::Path,
+        _commit: String,
+        _saved_at: String,
+        _by: crate::SavedBy,
+        _repair: fn(&mut archforge_mof::Store),
+    ) -> crate::replace::Job {
+        let (answer, answers) = std::sync::mpsc::channel();
+        let (reading, readings) = std::sync::mpsc::channel();
+        self.restores.lock().unwrap().push((answer, reading));
+        crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
+    }
+
     /// Answers nothing yet: the test answers later, through what is kept in `reads`.
     fn read_version(
         &self,
@@ -1698,6 +1718,177 @@ fn a_refused_change_shows_as_refused_on_the_turns_rows() {
     let rows = chat_turns(&h).last().unwrap().items.iter();
     let rows: Vec<_> = rows.filter_map(|i| if let crate::chat_panel::Item::Tool(t) = i { Some(t.status) } else { None }).collect();
     assert_eq!(rows, [crate::chat_store::ToolStatus::Refused]);
+}
+
+/// Starts restoring a version holding `rows`, and has it built and handed to its job.
+fn restore_under_way(h: &mut Harness<'static, Shell>, host: &SavingHost, rows: std::sync::Arc<archforge_mof::rows::Rows>) -> RestoreEnds {
+    h.state_mut().restore_version("c1", "2026-11-08T14:02:11Z").unwrap();
+    h.run_steps(3);
+    answer_read(h, host, Ok(rows));
+    host.restores.lock().unwrap().remove(0)
+}
+
+/// Asserts that the session is the version: the work gone, its history with it, nothing unsaved.
+#[track_caller]
+fn the_version_is_installed(h: &Harness<'static, Shell>) {
+    assert!(!h.state().is_held());
+    assert!(!schema_names(h).contains(&"shop".to_string()));
+    let session = h.state().session.as_ref().unwrap();
+    assert_eq!((session.undo_label(), session.is_dirty(), session.read_only()), (None, false, false), "undo starts fresh");
+}
+
+/// A restore that finishes puts the version in place of the work, with nothing more to write.
+#[test]
+fn a_finished_restore_installs_the_version_and_undo_starts_fresh() {
+    use crate::replace::JobFailure;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host, earlier) = work_and_earlier();
+        h.state_mut().state.theme = theme;
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        assert!(h.state().is_held(), "held while the job runs");
+        let written = host.written.lock().unwrap().len();
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.run_steps(4);
+        the_version_is_installed(&h);
+        assert_eq!(host.written.lock().unwrap().len(), written);
+    }
+}
+
+/// A refused restore changes nothing and starts nothing, the version in view included.
+#[test]
+fn a_refused_restore_starts_nothing_and_keeps_the_version_in_view() {
+    use crate::hold::HoldRefused::{Another, Gesture, NoProject};
+    let (mut h, host) = saving_harness(None, None);
+    assert_eq!(h.state_mut().restore_version("c1", "d"), Err(NoProject));
+    assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty());
+    let (mut h, host, _) = work_and_earlier();
+    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    assert_eq!(h.state_mut().restore_version("c1", "d"), Err(Gesture));
+    assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty(), "a gesture under way stops it before the read");
+    let (mut h, host, earlier) = work_and_earlier();
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    h.state_mut().begin_hold().unwrap();
+    assert_eq!(h.state_mut().restore_version("c2", "d"), Err(Another));
+    assert_eq!(h.state().viewing(), Some("c1"));
+    assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty(), "no read and no job");
+}
+
+/// A restore from a version in view goes back to the work first, and a failure leaves that as it was.
+#[test]
+fn a_failed_restore_from_a_version_in_view_leaves_the_work_as_it_was() {
+    use crate::replace::JobFailure;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, host, earlier) = work_and_earlier();
+        h.state_mut().state.theme = theme;
+        let s = h.state_mut().session.as_mut().unwrap();
+        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].clone();
+        s.execute("view.select", &serde_json::json!({ "ids": [shop] })).unwrap();
+        let selection = s.view().selection.clone();
+        start_viewing(&mut h, "c1");
+        answer_read(&mut h, &host, Ok(earlier.clone()));
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        assert_eq!(h.state().viewing(), None, "current work first");
+        answer.send(Err(JobFailure::Failed("told".into()))).unwrap();
+        h.run_steps(4);
+        the_work_shows(&h);
+        assert_eq!(h.state().save_error.as_deref(), Some("told"));
+        let session = h.state().session.as_ref().unwrap();
+        assert!(session.is_dirty(), "still unsaved");
+        assert_eq!(session.view().selection, selection);
+        assert!(session.undo_label().is_some(), "undo is as it was");
+    }
+}
+
+/// A failure after the unsaved work became a version leaves the work, read as saved; a plain one
+/// does not.
+#[test]
+fn only_a_failure_that_saved_the_work_marks_it_saved() {
+    use crate::replace::JobFailure;
+    let failures: [(fn() -> JobFailure, bool); 2] = [(|| JobFailure::WorkSaved("told".into()), false), (|| JobFailure::Failed("told".into()), true)];
+    for (failure, unsaved) in failures {
+        let (mut h, host, earlier) = work_and_earlier();
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        answer.send(Err(failure())).unwrap();
+        h.run_steps(4);
+        the_work_shows(&h);
+        assert_eq!((dirty(&h), h.state().save_error.as_deref()), (unsaved, Some("told")));
+    }
+}
+
+/// An unclear job is read back: found finished, the version goes in; otherwise the work stays and
+/// the project is held until it is closed, by an answer that cannot be read or by none at all.
+#[test]
+fn an_unclear_restore_installs_only_when_read_back_as_finished() {
+    use crate::replace::JobFailure;
+    let reads: [Option<Result<bool, String>>; 3] = [Some(Ok(true)), Some(Err("could not".into())), None];
+    for read in reads {
+        let (mut h, host, earlier) = work_and_earlier();
+        let (answer, reading) = restore_under_way(&mut h, &host, earlier);
+        answer.send(Err(JobFailure::Unclear)).unwrap();
+        h.run_steps(2);
+        let finished = read == Some(Ok(true));
+        match read {
+            Some(said) => reading.send(said).unwrap(),
+            None => drop(reading),
+        }
+        h.run_steps(4);
+        if finished {
+            the_version_is_installed(&h);
+        } else {
+            assert!(h.state().is_held() && schema_names(&h).contains(&"shop".to_string()), "held, with the work");
+        }
+    }
+}
+
+/// A close and a quit asked for during a restore wait for it, and then go ahead.
+#[test]
+fn closing_or_quitting_during_a_restore_waits_for_it() {
+    use crate::replace::JobFailure;
+    let routes: [fn(&mut Shell); 2] = [|s| s.close_tab(0), Shell::request_quit];
+    for (n, route) in routes.into_iter().enumerate() {
+        let (mut h, host, earlier) = work_and_earlier();
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        route(h.state_mut());
+        h.run_steps(3);
+        assert!(!h.state().quit_confirmed() && host.closings.lock().unwrap().is_empty() && h.state().is_held(), "it waits");
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.run_steps(6);
+        assert!(if n == 0 { !host.closings.lock().unwrap().is_empty() } else { h.state().quit_confirmed() }, "then goes ahead");
+    }
+}
+
+/// A version whose box an opening fits holds what the store does not: it reads as unsaved and the
+/// repair is written. The same rows in another order are no difference.
+#[test]
+fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one() {
+    use crate::replace::JobFailure;
+    for reordered in [false, true] {
+        let (mut h, host, _) = work_and_earlier();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let id = |v: serde_json::Value| v["id"].as_str().unwrap().to_string();
+        let shop = id(s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value);
+        let table = id(s.execute("er.entity.add", &serde_json::json!({ "schema": shop, "name": "customer" })).unwrap().value);
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT", "primary_key": true })).unwrap();
+        s.execute("er.attribute.add", &serde_json::json!({ "entity": table, "name": "code", "type": "BIGINT" })).unwrap();
+        if !reordered {
+            let diagram = id(s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Shop" })).unwrap().value);
+            s.execute("diagram.place", &serde_json::json!({ "diagram": diagram, "element": table, "x": 0, "y": 0, "width": 240, "height": 20 }))
+                .unwrap();
+        }
+        let mut rows = (*rows_now(&h)).clone();
+        if reordered {
+            rows.tables.iter_mut().for_each(|t| t.reverse());
+            rows.junctions.iter_mut().for_each(|j| j.reverse());
+            assert!(rows.junctions.iter().any(|j| j.len() > 1), "a list to read in another order");
+        }
+        h.run_steps(2);
+        let (answer, _reading) = restore_under_way(&mut h, &host, std::sync::Arc::new(rows));
+        let written = host.written.lock().unwrap().len();
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.run_steps(5);
+        assert_eq!((dirty(&h), host.written.lock().unwrap().len()), (!reordered, written + usize::from(!reordered)));
+    }
 }
 
 /// A refused view starts no read: the hold comes before the first step.

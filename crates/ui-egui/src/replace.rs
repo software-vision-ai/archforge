@@ -12,10 +12,18 @@ use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
-use crate::{Shell, chat_panel, editing};
+use crate::{SavedBy, Shell, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
+
+/// Whether the session built from `rows` holds anything else, row order aside: a comparison that
+/// cannot finish counts as a difference.
+fn differs_from(session: &Session, rows: &Rows) -> bool {
+    let (tables, junctions) = archforge_notations::storage();
+    let Ok(built) = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) else { return true };
+    archforge_mof::compare::compare(rows, &built, &tables, &junctions, archforge_mof::compare::MAX_COMPARED).map_or(true, |found| !found.is_empty())
+}
 
 /// How a job that did not plainly finish went.
 pub enum JobFailure {
@@ -64,9 +72,29 @@ pub(crate) struct Replacing {
     wrote: bool,
     /// The version to show in place of the session, set aside rather than replaced.
     viewing: Option<String>,
+    /// The session built differs from the rows read: a repair made while building it.
+    repaired: bool,
 }
 
 impl Shell {
+    /// Restores the version `commit`, saved at `saved_at`, as a new version: the version in view
+    /// gives way to current work first, and the project is held before the version is read. Refused
+    /// while another hold runs, or without a model or a host, with nothing changed.
+    pub fn restore_version(&mut self, commit: &str, saved_at: &str) -> Result<(), HoldRefused> {
+        if self.holding.pending() {
+            return Err(HoldRefused::Another);
+        }
+        let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
+            return Err(HoldRefused::NoProject);
+        };
+        self.leave_version();
+        self.begin_hold()?;
+        let by = SavedBy::Person(self.state.user_name.clone());
+        let job = host.restore_job(&path, commit.to_string(), saved_at.to_string(), by, editing::fit_tables);
+        self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None);
+        Ok(())
+    }
+
     /// Holds the project and starts replacing its session with the model `read` answers, running
     /// `job` once it is built. What happens is driven frame by frame.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
@@ -78,7 +106,7 @@ impl Shell {
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside.
     pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<String>) {
-        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false, viewing });
+        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false, viewing, repaired: false });
     }
 
     /// The version being read to be shown.
@@ -117,7 +145,10 @@ impl Shell {
                 Err(TryRecvError::Disconnected) => return self.give_up(Some(tr("The reading stopped without an answer, so nothing was changed."))),
                 Ok(Err(why)) => return self.give_up(Some(why)),
                 Ok(Ok(rows)) => match self.build(&rows) {
-                    Ok(session) => Stage::Ready(Box::new(session), None),
+                    Ok(session) => {
+                        r.repaired = r.viewing.is_none() && differs_from(&session, &rows);
+                        Stage::Ready(Box::new(session), None)
+                    }
                     Err(why) => return self.give_up(Some(why)),
                 },
             },
@@ -138,7 +169,7 @@ impl Shell {
                 } else {
                     match r.viewing.take() {
                         Some(commit) => self.show_version(*session, commit),
-                        None => self.install(*session),
+                        None => self.install(*session, r.repaired),
                     }
                     return None;
                 }
@@ -149,7 +180,11 @@ impl Shell {
                     r.wrote = true;
                     Stage::Ready(session, None)
                 }
-                Ok(Err(JobFailure::Failed(why) | JobFailure::WorkSaved(why))) => return self.give_up(Some(why)),
+                Ok(Err(JobFailure::Failed(why))) => return self.give_up(Some(why)),
+                Ok(Err(JobFailure::WorkSaved(why))) => {
+                    self.mark_work_saved();
+                    return self.give_up(Some(why));
+                }
                 // A lost reply says nothing about what happened: it is read back, never guessed.
                 Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
                     Some(read) => {
@@ -204,10 +239,24 @@ impl Shell {
         Stage::Unknown
     }
 
+    /// The job saved the unsaved work as a version before it failed: what had been handed over is
+    /// saved now, and anything since would stay unsaved.
+    fn mark_work_saved(&mut self) {
+        if let (Some(session), Some(written)) = (self.session.as_mut(), self.written)
+            && let Err(e) = session.mark_saved_at(written)
+        {
+            log::warn!("the work kept as a version could not be marked saved: {e}");
+        }
+    }
+
     /// The replacement takes the session's place, and the hold ends. What was read is what the
-    /// project holds, so nothing is handed over for it.
-    fn install(&mut self, session: Session) {
-        self.written = Some(session.revision());
+    /// project holds, so nothing is handed over for it, unless a repair changed it while it was
+    /// built: then the project reads as unsaved and the repair is written like any change.
+    fn install(&mut self, mut session: Session, repaired: bool) {
+        self.written = Some(session.revision()).filter(|_| !repaired);
+        if repaired {
+            session.mark_unsaved();
+        }
         self.refused = None;
         self.session = Some(session);
         self.session_replaced();
