@@ -160,6 +160,9 @@ struct Inner {
     /// Makes committing the waiting conversations fail, for a test.
     #[cfg(test)]
     fail_chats: AtomicBool,
+    /// Makes the next description of the model's tables fail, once.
+    #[cfg(test)]
+    fail_schema: AtomicBool,
     /// How many sets of rows each project has been handed, counted as each goes to the writer.
     handed: Mutex<BTreeMap<PathBuf, u64>>,
     /// Who checks a description against the kept API keys; while nobody does, a description is refused.
@@ -209,6 +212,8 @@ impl Projects {
                 before_move: Mutex::new(None),
                 #[cfg(test)]
                 fail_chats: AtomicBool::new(false),
+                #[cfg(test)]
+                fail_schema: AtomicBool::new(false),
                 handed: Mutex::new(BTreeMap::new()),
                 keys: OnceLock::new(),
             }),
@@ -761,6 +766,10 @@ impl Projects {
 
 /// The model's tables, described once from every notation's storage.
 fn schema(inner: &Inner) -> Result<Arc<ModelSchema>, CreateError> {
+    #[cfg(test)]
+    if inner.fail_schema.swap(false, Ordering::SeqCst) {
+        return Err(CreateError::Failed { detail: "a test refused".into() });
+    }
     let mut held = lock(&inner.schema);
     if let Some(s) = held.as_ref() {
         return Ok(s.clone());
@@ -891,8 +900,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 }
             }
             Some(Job::Switch(project, target, generation, reply)) => {
-                let answer = switch(inner, &project, target, generation, &mut waiting);
-                failed = !waiting.is_empty();
+                let answer = switch(inner, &project, target, generation, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
             }
             Some(Job::Flush(project, reply)) => {
@@ -946,12 +954,20 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
 
 /// Moves `path` to `target`, on the writer. In this order, so that nothing moves until the target
 /// has passed everything an opening checks: what waits is written; the waiting conversations are
-/// committed, which does not stop the switch when it fails, as their rows stay in this branch's
-/// working set for the next chat commit; the target is checked and its model built; and only then
-/// do the connections move, the change ledger start again and, last, the generation move. A job
-/// asked for before that last step has the old generation and is refused when the writer reaches
-/// it. A branch the project is on already, in any case, moves nothing.
-fn switch(inner: &Inner, path: &Path, target: SafeBranch, generation: u64, waiting: &mut BTreeMap<PathBuf, Rows>) -> Result<Switched, SwitchError> {
+/// committed, which does not stop the switch when it fails, as their rows stay uncommitted on the
+/// branch left; the target is checked and its model built; and only then do the connections move,
+/// the change ledger start again and, last, the generation move. A job asked for before that last
+/// step has the old generation and is refused when the writer reaches it. A branch the project is
+/// on already, in any case, moves nothing. `failed` changes only once the write has been tried: a
+/// switch that stops before it says nothing about how writing stands.
+fn switch(
+    inner: &Inner,
+    path: &Path,
+    target: SafeBranch,
+    generation: u64,
+    waiting: &mut BTreeMap<PathBuf, Rows>,
+    failed: &mut bool,
+) -> Result<Switched, SwitchError> {
     if generation != generation_of(inner, path) {
         return Err(SwitchError::BranchChanged);
     }
@@ -961,6 +977,7 @@ fn switch(inner: &Inner, path: &Path, target: SafeBranch, generation: u64, waiti
     }
     let schema = schema(inner).map_err(|e| SwitchError::Failed(format!("{e:?}")))?;
     write_waiting(inner, waiting);
+    *failed = !waiting.is_empty();
     if waiting.contains_key(path) {
         return Err(SwitchError::Unwritten(unwritten(inner, path)));
     }
@@ -2162,6 +2179,61 @@ mod tests {
             Ok(p.load_chat(chat).map_err(|e| e.to_string())?.turns[0].change.as_ref().map(|c| c.state))
         });
         read.recv_timeout(Duration::from_secs(60)).unwrap().unwrap()
+    }
+
+    /// A switch that stopped before it tried to write leaves the writer's timer running: rows queued
+    /// just ahead of it, so no timer got to them first, are written with no further job.
+    #[test]
+    fn a_switch_that_wrote_nothing_leaves_the_rows_to_the_timer() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let nowhere = sandbox.base.join("nowhere");
+        let timed_after = |name: &str, ask: &dyn Fn() -> Receiver<Result<Switched, SwitchError>>| {
+            let release = hold_the_writer(host, &path);
+            host.write(&path, model(name));
+            let asked = ask();
+            drop(release);
+            let answer = asked.recv_timeout(Duration::from_secs(60)).expect("the switch answers");
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while host.writing(&path).pending {
+                assert!(Instant::now() < deadline, "{name}: the rows are still waiting after {answer:?}");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert_eq!(lock(&host.inner.open)[0].check_branch(&branch("main"), &schema(&host.inner).unwrap()).unwrap(), model(name));
+            answer
+        };
+        assert!(matches!(timed_after("c", &|| host.switch_branch(&path, branch("MAIN"))), Ok(Switched::AlreadyThere)));
+        assert!(matches!(timed_after("d", &|| host.switch_branch(&nowhere, branch("elsewhere"))), Err(SwitchError::NotOpen)));
+        let stale = || {
+            let asked = host.switch_branch(&nowhere, branch("elsewhere"));
+            switched(&host.inner, &nowhere);
+            asked
+        };
+        assert!(matches!(timed_after("e", &stale), Err(SwitchError::BranchChanged)));
+        host.inner.fail_schema.store(true, Ordering::SeqCst);
+        assert!(matches!(timed_after("f", &|| host.switch_branch(&path, branch("elsewhere"))), Err(SwitchError::Failed(_))));
+        assert_eq!(on(host), "main");
+    }
+
+    /// A switch whose write failed leaves the writer waiting for the next change, as any failed
+    /// write does (each retry would record its error again), and a later early stop leaves that.
+    #[test]
+    fn a_switch_whose_write_failed_stops_the_timer() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let mut broken = model("c");
+        broken.tables.iter_mut().find(|t| !t.is_empty()).unwrap()[0].clear();
+        let release = hold_the_writer(host, &path);
+        host.write(&path, broken);
+        let asked = host.switch_branch(&path, branch("elsewhere"));
+        drop(release);
+        assert!(matches!(asked.recv_timeout(Duration::from_secs(60)).unwrap(), Err(SwitchError::Unwritten(_))));
+        assert_eq!(switch_to(host, &path, "main").unwrap(), Switched::AlreadyThere);
+        lock(&host.inner.writing).get_mut(&path).unwrap().error = None;
+        std::thread::sleep(SETTLE * 4);
+        assert_eq!(host.writing(&path).error, None, "no timer after a failed write");
+        host.write(&path, model("b"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
     }
 
     /// The whole of a switch: what waits is written first, the target's rows come back, and the
