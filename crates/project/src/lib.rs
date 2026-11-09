@@ -32,7 +32,7 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBranch};
-pub use branches::{BranchCreated, BranchCreationError, Branches, CreationStep, ListedBranch, MAX_BRANCHES, RenameBranchError};
+pub use branches::{BranchCreated, BranchCreationError, Branches, CreationStep, DeleteBranchError, ListedBranch, MAX_BRANCHES, RenameBranchError};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
@@ -101,12 +101,22 @@ pub struct Project {
     branch: branches::CurrentBranch,
     /// A rename, from and to, whose outcome could not be told, until it is settled or this closes.
     unclear_rename: std::sync::Mutex<Option<(SafeBranch, SafeBranch)>>,
+    /// A delete whose outcome could not be told, with the conversations only that branch held.
+    unclear_delete: std::sync::Mutex<Option<(SafeBranch, Vec<archforge_mof::Uuid>)>>,
 }
 
 impl Project {
     /// A project open on `server`, on the branch every project opens on.
     fn assembled(server: Server, path: PathBuf, settings: Settings) -> Project {
-        Project { server, path, settings, changes: Default::default(), branch: Default::default(), unclear_rename: Default::default() }
+        Project {
+            server,
+            path,
+            settings,
+            changes: Default::default(),
+            branch: Default::default(),
+            unclear_rename: Default::default(),
+            unclear_delete: Default::default(),
+        }
     }
 
     /// Creates the project `name` in `folder` and leaves it open.
