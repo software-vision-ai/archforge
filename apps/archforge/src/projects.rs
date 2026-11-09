@@ -3207,6 +3207,38 @@ mod tests {
         }
     }
 
+    /// A branch from current work asked for before a close and reopen makes nothing and leaves the
+    /// source's unsaved work alone, by either closing route; one asked for now is made.
+    #[test]
+    fn a_branch_job_from_current_work_from_before_a_reopen_is_refused() {
+        for closing in closing_routes() {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let schema = schema(&host.inner).unwrap();
+            host.write(&path, model("work"));
+            assert_eq!(host.flush_for_test(&path), Ok(()));
+            let stale = instance_of(&host.inner, &path);
+            assert_eq!(closing(host, &path).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            let (reply, refused) = channel();
+            writer(&host.inner)
+                .send(Job::CreateBranch(path.clone(), branch("stale"), None, generation_of(&host.inner, &path), stale, reply))
+                .unwrap();
+            assert_eq!(refused.recv_timeout(Duration::from_secs(60)).unwrap(), Err(CreateBranchError::Reopened));
+            {
+                let open = lock(&host.inner.open);
+                assert!(!has_branch(&open[0], "stale") && !path.join(".creating-branch").exists(), "nothing was made");
+                assert_eq!(open[0].read_model(&schema).unwrap(), model("work"));
+                assert!(open[0].has_unsaved().unwrap(), "the unsaved work is untouched");
+            }
+            assert_eq!(
+                host.create_branch_from_work(&path, branch("fresh")).recv_timeout(Duration::from_secs(60)).unwrap(),
+                Ok(BranchCreated::Listed)
+            );
+            assert_eq!(lock(&host.inner.open)[0].check_branch(&branch("fresh"), &schema).unwrap(), model("work"));
+        }
+    }
+
     /// A job from before a close and reopen is refused and writes nothing, by either closing route;
     /// one from the instance open now runs.
     #[test]
