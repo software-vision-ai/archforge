@@ -715,6 +715,7 @@ impl Shell {
             return;
         }
         if self.active == Some(i) {
+            self.leave_version();
             panels::commit_description(self);
         }
         let path = self.tabs[i].path.clone();
@@ -756,6 +757,7 @@ impl Shell {
         if self.remember(hold::Waiting::SaveAndClose(self.tabs[i].path.clone())) {
             return;
         }
+        self.leave_version();
         if self.active != Some(i) {
             self.activate(i);
         }
@@ -787,6 +789,9 @@ impl Shell {
         if self.remember(hold::Waiting::Discard(self.tabs[i].path.clone(), reset)) {
             return;
         }
+        if self.active == Some(i) {
+            self.leave_version();
+        }
         self.tabs[i].close_error = None;
         self.end_chats(i);
         let path = &self.tabs[i].path;
@@ -816,6 +821,7 @@ impl Shell {
             }
             return;
         }
+        self.leave_version();
         if self.active.is_some() {
             panels::commit_description(self);
         }
@@ -878,6 +884,9 @@ impl Shell {
             return;
         }
         self.tabs[i].close_error = None;
+        if self.active == Some(i) {
+            self.leave_version();
+        }
         let handed = if self.active == Some(i) {
             // The skill text still being typed goes with the last changes, before the host closes;
             // a text the store refused keeps the project open on its tab, which says why.
@@ -1014,6 +1023,7 @@ impl Shell {
         if self.active.is_none() {
             return;
         }
+        self.leave_version();
         // A turn running in Chat is stopped: its agent access would reach the next project shown.
         chat_panel::leaving(self);
         skill_tab::sync(self, 0.0, true, None);
@@ -1055,6 +1065,8 @@ impl Shell {
 
     /// Empties the fields of the project shown.
     fn clear_workspace(&mut self) {
+        // What was set aside belongs to the project going, and never passes to the next one shown.
+        self.viewing = None;
         self.session = None;
         self.session_error = None;
         self.adopted = None;
