@@ -498,8 +498,7 @@ impl Projects {
     }
 
     /// Starts restoring a version of `project` on the writer, and returns at once; see [`restore`].
-    /// Nothing may call this until AR-324.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub fn restore_version(&self, project: &Path, request: RestoreRequest) -> Receiver<Result<Restored, RestoreError>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
@@ -691,8 +690,7 @@ impl Projects {
 }
 
 impl ProjectHost for Projects {
-    /// Nothing may call this until AR-324. Its reasons are in English, as the project's own errors
-    /// are; AR-324 words them for the person.
+    /// Worded on the wait's own thread in the language shown when the job runs.
     fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
     }
@@ -3413,7 +3411,7 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = job_of(host, &path, &old);
+        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), SAVED_AT.into(), nobody(), archforge_ui_egui::editing::fit_tables);
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));
