@@ -1449,7 +1449,6 @@ mod tests {
         archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap()
     }
 
-    /// A model's rows: a project with one schema of the given name.
     /// Runs `read` while another thread holds the open-projects lock, which also stops the writer.
     /// The holder lets go when told or after a bounded wait, so a read that waits for the lock
     /// fails here instead of hanging the test.
@@ -1470,6 +1469,7 @@ mod tests {
         })
     }
 
+    /// A model's rows: a project with one schema of the given name.
     fn model(schema: &str) -> Rows {
         let mut n = 0u64;
         let ids = Box::new(move || {
