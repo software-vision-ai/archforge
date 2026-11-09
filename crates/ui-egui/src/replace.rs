@@ -60,6 +60,8 @@ pub(crate) struct Replacing {
     read_back: Option<Box<dyn FnOnce() -> ReadBack>>,
     /// Whether the job has written, after which the operation can no longer simply stop.
     wrote: bool,
+    /// The version to show in place of the session, set aside rather than replaced.
+    viewing: Option<String>,
 }
 
 impl Shell {
@@ -67,8 +69,14 @@ impl Shell {
     /// `job` once it is built. What happens is driven frame by frame.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
         self.begin_hold()?;
-        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false });
+        self.start_replacing(read, job, None);
         Ok(())
+    }
+
+    /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
+    /// as that version and the session is set aside.
+    pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<String>) {
+        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false, viewing });
     }
 
     /// One frame of the replacement under way.
@@ -121,7 +129,10 @@ impl Shell {
                     r.read_back = Some(job.read_back);
                     Stage::Writing(session, (job.run)())
                 } else {
-                    self.install(*session);
+                    match r.viewing.take() {
+                        Some(commit) => self.show_version(*session, commit),
+                        None => self.install(*session),
+                    }
                     return None;
                 }
             }
@@ -166,7 +177,7 @@ impl Shell {
     }
 
     /// Ends the operation with the session as it was, saying `why` when given.
-    fn give_up(&mut self, why: Option<String>) -> Option<Replacing> {
+    pub(crate) fn give_up(&mut self, why: Option<String>) -> Option<Replacing> {
         if why.is_some() {
             self.save_error = why;
         }

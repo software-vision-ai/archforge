@@ -71,6 +71,7 @@ mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
 pub mod ux;
+mod viewing;
 pub mod widgets;
 pub mod workspace;
 
@@ -529,6 +530,8 @@ pub struct Shell {
     saves: std::collections::VecDeque<(u64, SaveState)>,
     /// The replacement of the session under way, if any.
     replacing: Option<replace::Replacing>,
+    /// The version shown read-only, and the real work set aside for going back.
+    viewing: Option<Box<viewing::Viewing>>,
     /// The hold under way, and what waits for it to end.
     holding: hold::Holding,
     /// An opening the host works on.
@@ -611,6 +614,7 @@ impl Shell {
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
             replacing: None,
+            viewing: None,
             holding: hold::Holding::default(),
             opening: None,
             dolt_check: None,
@@ -727,6 +731,9 @@ impl Shell {
     /// written, or refused, among them (AR-186).
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
+            if let Some(viewing) = &self.viewing {
+                return viewing.unsaved();
+            }
             return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
         }
         self.tabs
@@ -1170,7 +1177,7 @@ impl Shell {
     /// settled (a diagram just opened is fitted first).
     fn keep_view(&mut self) {
         let Some(project) = &self.project else { return };
-        if self.session.is_none() || self.adopted.as_ref() != Some(&project.path) || self.canvas.fit_pending {
+        if self.session.is_none() || self.adopted.as_ref() != Some(&project.path) || self.canvas.fit_pending || self.viewing.is_some() {
             return;
         }
         let label = self
@@ -1194,7 +1201,12 @@ impl Shell {
     fn write_changes(&mut self) {
         let (Some(session), Some(host), Some(project)) = (&self.session, &self.services.projects, &self.project) else { return };
         let revision = session.revision();
-        if self.written == Some(revision) || self.refused == Some(revision) || session.interacting() || self.holding.writes_stopped() {
+        if self.written == Some(revision)
+            || self.refused == Some(revision)
+            || session.interacting()
+            || self.holding.writes_stopped()
+            || self.viewing.is_some()
+        {
             return;
         }
         let (tables, junctions) = archforge_notations::storage();
@@ -1244,7 +1256,7 @@ impl Shell {
     /// Starts a save recorded as `by`: under the description in `review` when there is one, and
     /// only if the model still stands at the revision `review` names when it names one.
     fn start_save(&mut self, review: Option<(String, Option<u64>)>, by: SavedBy) {
-        if self.saving.is_some() || self.session.is_none() || self.is_held() {
+        if self.saving.is_some() || self.session.is_none() || self.is_held() || self.viewing.is_some() {
             return;
         }
         skill_tab::sync(self, 0.0, true, None);
@@ -1422,9 +1434,9 @@ impl Shell {
         self.dolt_check.is_some()
     }
 
-    /// Whether Save can act now: a model is open, no save is under way and it is not held.
+    /// Whether Save can act now: a model is open, no save is under way, it is not held and no version shows.
     pub fn can_save(&self) -> bool {
-        self.session.is_some() && self.saving.is_none() && !self.is_held()
+        self.session.is_some() && self.saving.is_none() && !self.is_held() && self.viewing.is_none()
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.

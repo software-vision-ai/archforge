@@ -351,9 +351,25 @@ struct SavingHost {
     /// writing what waited (Close without writing).
     discarded: std::sync::Mutex<Vec<std::path::PathBuf>>,
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Each read of a version waiting for the answer the test sends.
+    reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
 }
 
+/// Where the answer to a read of a version goes.
+type ReadAnswer = std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>;
+
 impl crate::ProjectHost for SavingHost {
+    /// Answers nothing yet: the test answers later, through what is kept in `reads`.
+    fn read_version(
+        &self,
+        _project: &std::path::Path,
+        commit: String,
+    ) -> std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.reads.lock().unwrap().push((commit, tx));
+        rx
+    }
+
     fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         std::sync::mpsc::channel().1
     }
@@ -1059,6 +1075,136 @@ fn start_replacing(
     h.state_mut().begin_replacement(answer, job).unwrap();
     h.run_steps(4);
     read
+}
+
+/// A project with unsaved work, and the rows it held before that work: the earlier version.
+fn work_and_earlier() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    let earlier = rows_now(&h);
+    add_schema(&mut h, "shop");
+    (h, host, earlier)
+}
+
+/// Starts viewing `commit`, its read not answered yet.
+fn start_viewing(h: &mut Harness<'static, Shell>, commit: &str) {
+    h.state_mut().view_version(commit).unwrap();
+    h.run_steps(3);
+}
+
+/// Answers the oldest read waiting.
+fn answer_read(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: Result<std::sync::Arc<archforge_mof::rows::Rows>, String>) {
+    host.reads.lock().unwrap().remove(0).1.send(answer).unwrap();
+    h.run_steps(4);
+}
+
+/// Asserts that the real work shows, editable, and that no version does.
+fn the_work_shows(h: &Harness<'static, Shell>) {
+    assert_eq!(h.state().viewing(), None);
+    assert!(!h.state().is_held());
+    assert!(schema_names(h).contains(&"shop".to_string()));
+    assert!(!h.state().session.as_ref().unwrap().read_only());
+}
+
+/// The version takes the session's place read-only; going back brings every part of the work back.
+#[test]
+fn a_version_shows_read_only_and_going_back_restores_the_work() {
+    let (mut h, host, earlier) = work_and_earlier();
+    let (diagram, shop) = {
+        let s = h.state_mut().session.as_mut().unwrap();
+        let shop = s.execute("er.schema.add", &serde_json::json!({ "name": "till" })).unwrap().value["id"].as_str().unwrap().to_string();
+        let d = s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": shop, "name": "Till" })).unwrap().value;
+        (archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap(), shop)
+    };
+    crate::canvas::open(h.state_mut(), diagram);
+    h.run_steps(3);
+    h.state_mut().canvas.pan = egui::vec2(31.0, 47.0);
+    h.state_mut().canvas.zoom = 1.5;
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": [shop] })).unwrap();
+    let selection = s.view().selection.clone();
+    let generation = h.state().session_generation();
+    let shell = h.state_mut();
+    (shell.save_error, shell.refused) = (Some("kept".into()), Some(u64::MAX));
+    (shell.explorer.filter, shell.diagrams.filter) = ("in tree".into(), "in list".into());
+    shell.panels.menu_scroll = Some(("menu".into(), 9.0));
+
+    start_viewing(&mut h, "c1");
+    assert_eq!(h.state().viewing(), None, "nothing shows before the read answers");
+    answer_read(&mut h, &host, Ok(earlier));
+    assert_eq!(h.state().viewing(), Some("c1"));
+    assert!(!schema_names(&h).contains(&"shop".to_string()));
+    assert!(!h.state().is_held());
+    assert!(h.state().session.as_ref().unwrap().read_only());
+    assert!(h.state().canvas.tabs.is_empty(), "the version starts with its own view");
+    assert_eq!(h.state().session_generation(), generation + 1);
+    // No `retain_valid` guard is needed: these frames prune the version's own view, which holds
+    // nothing of the work, while the tabs and selection of the work, absent from it, stay aside.
+    h.run_steps(3);
+
+    assert!(h.state_mut().back_to_current_work());
+    h.run_steps(3);
+    the_work_shows(&h);
+    assert_eq!(h.state().session_generation(), generation + 2);
+    let canvas = &h.state().canvas;
+    assert_eq!((canvas.tabs.clone(), canvas.active, canvas.pan, canvas.zoom), (vec![diagram], Some(diagram), egui::vec2(31.0, 47.0), 1.5));
+    assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection);
+    assert!(h.state().session.as_ref().unwrap().is_dirty());
+    let shell = h.state();
+    assert_eq!((shell.save_error.as_deref(), shell.refused), (Some("kept"), Some(u64::MAX)));
+    assert_eq!((shell.explorer.filter.as_str(), shell.diagrams.filter.as_str()), ("in tree", "in list"));
+    assert_eq!(shell.panels.menu_scroll, Some(("menu".into(), 9.0)));
+    let s = h.state_mut().session.as_mut().unwrap();
+    s.undo().unwrap();
+    s.undo().unwrap();
+    assert!(
+        !h.state().session.as_ref().unwrap().doc().alive().any(|o| archforge_core::name_of(h.state().session.as_ref().unwrap().doc(), o) == "till")
+    );
+    assert!(!h.state_mut().back_to_current_work(), "nothing to go back from");
+}
+
+/// A version writes nothing, repairs included, and the real work's answers stay the real work's.
+#[test]
+fn nothing_is_written_saved_or_kept_while_a_version_shows() {
+    let (mut h, host, earlier) = work_and_earlier();
+    h.state_mut().canvas.zoom = 2.0;
+    h.run_steps(2);
+    let path = std::path::PathBuf::from(COMMERCE);
+    let view = h.state().state.view_of(&path).cloned().unwrap();
+    assert_eq!(view.zoom, 2.0);
+    let written = host.written.lock().unwrap().len();
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    assert!(!h.state().session.as_ref().unwrap().is_dirty());
+    h.run_steps(4);
+    assert_eq!(host.written.lock().unwrap().len(), written);
+    assert_eq!(h.state().state.view_of(&path), Some(&view));
+    assert!(h.state().tab_unsaved(0), "the set-aside work is what is unsaved");
+    assert!(!h.state().can_save());
+    // With something handed over, so that only viewing stands in the way.
+    h.state_mut().written = Some(h.state().session.as_ref().unwrap().revision());
+    h.state_mut().start_save(None, crate::SavedBy::Person("Ada".into()));
+    h.state_mut().written = None;
+    assert!(host.saved_by.lock().unwrap().is_empty());
+    assert!(h.state_mut().back_to_current_work());
+    h.run_steps(3);
+    assert_eq!(host.written.lock().unwrap().len(), written, "the work counts as handed over still");
+}
+
+/// A refused view starts no read: the hold comes before the first step.
+#[test]
+fn a_version_is_not_read_over_another_hold_or_without_a_project() {
+    let (mut h, host) = saving_harness(None, None);
+    assert!(matches!(h.state_mut().view_version("c1"), Err(crate::hold::HoldRefused::NoProject)));
+    let (mut h2, host2, earlier) = work_and_earlier();
+    h2.state_mut().begin_hold().unwrap();
+    assert!(matches!(h2.state_mut().view_version("c1"), Err(crate::hold::HoldRefused::Another)));
+    h2.state_mut().end_hold();
+    h2.run_steps(2);
+    assert!(host.reads.lock().unwrap().is_empty() && host2.reads.lock().unwrap().is_empty());
+    start_viewing(&mut h2, "c1");
+    answer_read(&mut h2, &host2, Ok(earlier));
+    assert!(matches!(h2.state_mut().view_version("c2"), Err(crate::hold::HoldRefused::Another)));
+    assert!(host2.reads.lock().unwrap().is_empty());
 }
 
 /// A save under way answers first; the latest rows go over, and the replacement then takes over.
