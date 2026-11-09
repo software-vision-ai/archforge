@@ -1019,3 +1019,43 @@ fn the_versions_are_saves_only_newest_first_and_a_page_starts_after_a_version() 
     assert!(matches!(project.versions(None, 201), Err(Error::TooLarge { size: 201, .. })));
     project.close().unwrap();
 }
+
+/// Dolt takes every stored name as a branch, keeps names apart that differ only in case as typed,
+/// and a `USE` of each reaches that branch.
+#[test]
+fn every_typed_name_is_a_branch_dolt_takes_and_a_use_reaches() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("branches");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let mut c = project.server().connect().unwrap();
+    c.query_drop("USE project").unwrap();
+    let emoji = "😀".repeat(60);
+    let hash = "0123456789abcdefghijklmnopqrstuv";
+    for text in [
+        "plain-1_x",
+        "Foo",
+        "foo",
+        "FOO",
+        "Release 1",
+        "李雷 Ü",
+        "a'b`c;d/e",
+        "a.b",
+        "a.lock",
+        "..",
+        "-D",
+        "--amend",
+        "head",
+        "HEAD",
+        hash,
+        emoji.as_str(),
+    ] {
+        let name = SafeBranch::typed(text).unwrap();
+        c.exec_drop("CALL DOLT_BRANCH(?)", (name.stored(),)).unwrap_or_else(|e| panic!("{text:?} as {}: {e}", name.stored()));
+        c.query_drop(format!("USE `project/{}`", name.stored())).unwrap();
+        let active: String = c.query_first("SELECT active_branch()").unwrap().unwrap();
+        assert_eq!(active, name.stored(), "{text:?}");
+        c.query_drop("USE project").unwrap();
+    }
+    project.close().unwrap();
+}
