@@ -524,6 +524,12 @@ impl Project {
         Ok(!unsaved_tables(c, self.path())?.is_empty())
     }
 
+    /// Whether `branch` holds model changes not saved as a version.
+    pub fn branch_has_unsaved(&self, branch: &SafeBranch) -> Result<bool, Error> {
+        let mut c = self.connection_to(branch)?;
+        Ok(!unsaved_tables(&mut c, self.path())?.is_empty())
+    }
+
     /// A row of `dolt_branches` as its name and whether anything on it is uncommitted.
     fn branch_row(&self, row: &mysql::Row) -> Result<(String, bool), Error> {
         let damaged = || Error::Damaged { path: self.path().to_path_buf(), why: "a branch in its list cannot be read".into() };
