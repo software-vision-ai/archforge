@@ -197,7 +197,7 @@ impl Project {
     }
 
     /// A connection to `branch` of this project, whichever branch is current by then.
-    fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+    pub(crate) fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
         database_connection(&self.server().connector(), branch)
     }
 }
@@ -256,7 +256,7 @@ impl Project {
     }
 
     /// [`Project::prepare_model`] over `c`, which is given back for the read that follows.
-    fn prepare_on(&self, mut c: mysql::Conn, schema: &ModelSchema) -> Result<mysql::Conn, Error> {
+    pub(crate) fn prepare_on(&self, mut c: mysql::Conn, schema: &ModelSchema) -> Result<mysql::Conn, Error> {
         match self.version_reader().held_fingerprint(&mut c)? {
             Some(f) if f != schema.fingerprint => {
                 // Made by an earlier Archforge, as its fingerprint says: the columns added since come
