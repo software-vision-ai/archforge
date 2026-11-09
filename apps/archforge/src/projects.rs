@@ -78,7 +78,7 @@ enum Job {
     /// Move a project to another branch; the generation is the project's when it was asked for.
     Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
     /// Make a branch at a version; the generation is the project's when it was asked for.
-    CreateBranch(PathBuf, SafeBranch, String, u64, Sender<Result<BranchCreated, CreateBranchError>>),
+    CreateBranch(PathBuf, SafeBranch, String, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
     /// Restore a version of a project; the generation is the project's when it was asked for.
     /// Restore a version of a project, the open instance and generation it was asked for with it.
     /// The flag is the claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the
@@ -211,6 +211,8 @@ impl std::error::Error for SwitchError {}
 pub enum CreateBranchError {
     /// A switch moved the project after this was asked for.
     BranchChanged,
+    /// The project was closed after this was asked for, though it may be open again.
+    Reopened,
     NotOpen,
     /// The project's own refusal or failure.
     Creation(BranchCreationError),
@@ -223,6 +225,7 @@ impl std::fmt::Display for CreateBranchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CreateBranchError::BranchChanged => f.write_str("another switch moved the project first"),
+            CreateBranchError::Reopened => f.write_str("the project was closed after this was asked for"),
             CreateBranchError::NotOpen => f.write_str("the project is no longer open"),
             CreateBranchError::Creation(e) => e.fmt(f),
             CreateBranchError::Failed(why) => f.write_str(why),
@@ -395,7 +398,8 @@ impl Projects {
     pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
-        if let Err(e) = writer(&self.inner).send(Job::CreateBranch(project.to_path_buf(), name, start, generation, tx.clone())) {
+        let instance = instance_of(&self.inner, project);
+        if let Err(e) = writer(&self.inner).send(Job::CreateBranch(project.to_path_buf(), name, start, generation, instance, tx.clone())) {
             let _ = tx.send(Err(CreateBranchError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
@@ -1091,8 +1095,8 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 let answer = switch(inner, &project, target, generation, &mut waiting, &mut failed);
                 let _ = reply.send(answer);
             }
-            Some(Job::CreateBranch(project, name, start, generation, reply)) => {
-                let _ = reply.send(create_branch(inner, &project, &name, &start, generation));
+            Some(Job::CreateBranch(project, name, start, generation, instance, reply)) => {
+                let _ = reply.send(create_branch(inner, &project, &name, &start, generation, instance));
             }
             Some(Job::Restore(project, request, generation, instance, claim, reply)) => {
                 if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
@@ -1471,9 +1475,19 @@ fn restored(saved: archforge_project::Saved, kept_work: bool) -> Restored {
     }
 }
 
-/// Makes the branch `name` of the project at `path`, on the writer, unless a switch has moved the
-/// project since this was asked for. What waits is left waiting: it does not reach a version.
-fn create_branch(inner: &Inner, path: &Path, name: &SafeBranch, start: &str, generation: u64) -> Result<BranchCreated, CreateBranchError> {
+/// Makes the branch `name` of the project at `path`, on the writer, unless it has closed or a
+/// switch has moved it since this was asked for. What waits is left waiting: it does not reach a version.
+fn create_branch(
+    inner: &Inner,
+    path: &Path,
+    name: &SafeBranch,
+    start: &str,
+    generation: u64,
+    instance: u64,
+) -> Result<BranchCreated, CreateBranchError> {
+    if instance != instance_of(inner, path) {
+        return Err(CreateBranchError::Reopened);
+    }
     if generation != generation_of(inner, path) {
         return Err(CreateBranchError::BranchChanged);
     }
@@ -3135,12 +3149,39 @@ mod tests {
         answer.recv_timeout(Duration::from_secs(60)).expect("the restore answers")
     }
 
+    /// Both of the routes by which a project closes.
+    fn closing_routes() -> [fn(&Projects, &Path) -> Receiver<Result<(), String>>; 2] {
+        [|h, p| h.close(p), |h, p| h.close_without_writing(p)]
+    }
+
+    /// A branch asked for before a close and reopen makes nothing, by either closing route; one
+    /// asked for from the instance open now is made.
+    #[test]
+    fn a_branch_job_from_before_a_close_and_reopen_is_refused() {
+        for closing in closing_routes() {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let (start, stale) = (lock(&host.inner.open)[0].head_of("main").unwrap(), instance_of(&host.inner, &path));
+            assert_eq!(closing(host, &path).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            let (reply, refused) = channel();
+            writer(&host.inner)
+                .send(Job::CreateBranch(path.clone(), branch("stale"), start.clone(), generation_of(&host.inner, &path), stale, reply))
+                .unwrap();
+            assert_eq!(refused.recv_timeout(Duration::from_secs(60)).unwrap(), Err(CreateBranchError::Reopened));
+            assert!(!has_branch(&lock(&host.inner.open)[0], "stale"));
+            assert!(!path.join(".creating-branch").exists(), "no record was left");
+            let made = host.create_branch(&path, branch("fresh"), start).recv_timeout(Duration::from_secs(60)).unwrap();
+            assert_eq!(made, Ok(BranchCreated::Listed));
+            assert!(has_branch(&lock(&host.inner.open)[0], "fresh"));
+        }
+    }
+
     /// A job from before a close and reopen is refused and writes nothing, by either closing route;
     /// one from the instance open now runs.
     #[test]
     fn a_restore_from_before_a_close_and_reopen_is_refused() {
-        let closings: [fn(&Projects, &Path) -> Receiver<Result<(), String>>; 2] = [|h, p| h.close(p), |h, p| h.close_without_writing(p)];
-        for closing in closings {
+        for closing in closing_routes() {
             let (sandbox, path) = branched();
             let host = &sandbox.host;
             let (old, before) = (version(host, 1), instance_of(&host.inner, &path));
