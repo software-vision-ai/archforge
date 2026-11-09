@@ -1,12 +1,14 @@
 //! The project's versions, read from the current branch's log for History: the commits Save made,
 //! newest first, a page at a time.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 
 use mysql::prelude::Queryable;
 
+use crate::branch_name::SafeBranch;
 use crate::branches::{CurrentBranch, branch_now};
-use crate::model::{database_connection, sql};
+use crate::chat::is_commit;
+use crate::model::{database_connection, sql, unsaved_tables};
 use crate::saving::{is_agent, is_version, shown_author};
 use crate::{Error, Project};
 
@@ -115,7 +117,78 @@ impl Project {
     }
 }
 
+/// What deleting a branch would take with it, as its confirmation says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchCounts {
+    /// The versions no other branch has. Chat commits are not versions.
+    pub versions_only_here: u64,
+    /// The conversations on the branch, committed or not.
+    pub conversations: u64,
+    /// Whether it holds unsaved changes to the model, as the branch row's dot says.
+    pub unsaved: bool,
+}
+
+/// The text in cell `i`.
+fn text_at(row: &mysql::Row, i: usize) -> Option<String> {
+    row.get_opt::<String, usize>(i).and_then(Result::ok)
+}
+
 impl VersionReader {
+    /// What deleting `branch` would take with it, read for that branch whichever one is current.
+    pub fn branch_counts(&self, branch: &SafeBranch) -> Result<BranchCounts, Error> {
+        let mut c = database_connection(&self.connector, branch)?;
+        let others = self.other_heads(&mut c, branch)?;
+        let versions_only_here = self.versions_only_on(&mut c, branch, &others)?;
+        let conversations = self.conversations_held(&mut c)?;
+        Ok(BranchCounts { versions_only_here, conversations, unsaved: !unsaved_tables(&mut c, &self.path)?.is_empty() })
+    }
+
+    /// The heads of every other branch, the same head once. By hash, not name: a branch whose name
+    /// is outside the safe set is an other branch too, and a hash is always safe in a statement.
+    fn other_heads(&self, c: &mut mysql::Conn, branch: &SafeBranch) -> Result<BTreeSet<String>, Error> {
+        let rows: Vec<mysql::Row> =
+            c.query("SELECT CAST(name AS CHAR), LEFT(CAST(hash AS CHAR), 64) FROM dolt_branches").map_err(sql("cannot list the branches"))?;
+        let mut heads = BTreeSet::new();
+        for row in &rows {
+            if text_at(row, 0).is_none_or(|name| !name.eq_ignore_ascii_case(branch.stored())) {
+                heads.insert(text_at(row, 1).filter(|hash| is_commit(hash)).ok_or_else(|| self.damaged_log())?);
+            }
+        }
+        Ok(heads)
+    }
+
+    /// The versions on `branch` and on none of the `others`. With no other branch, its whole line,
+    /// less the oldest commits, which are never versions.
+    fn versions_only_on(&self, c: &mut mysql::Conn, branch: &SafeBranch, others: &BTreeSet<String>) -> Result<u64, Error> {
+        let quoted: Vec<String> = others.iter().map(|hash| format!("'{hash}'")).collect();
+        let not = if quoted.is_empty() { String::new() } else { format!(", '--not', {}", quoted.join(", ")) };
+        let query = format!(
+            "SELECT LEFT(CAST(email AS CHAR), {TEXT_CHARS}), CAST(COUNT(*) AS CHAR) FROM dolt_log('{}'{not}) GROUP BY email",
+            branch.stored()
+        );
+        let rows: Vec<mysql::Row> = c.query(query).map_err(sql("cannot read the branch's versions"))?;
+        let mut versions = 0;
+        for row in &rows {
+            let count = text_at(row, 1).and_then(|n| n.parse::<u64>().ok()).ok_or_else(|| self.damaged_log())?;
+            if text_at(row, 0).is_some_and(|email| is_version(&email)) {
+                versions += count;
+            }
+        }
+        Ok(if others.is_empty() { versions.saturating_sub(NOT_VERSIONS as u64) } else { versions })
+    }
+
+    /// The conversations on the branch `c` is on; a version from before the first holds no table.
+    fn conversations_held(&self, c: &mut mysql::Conn) -> Result<u64, Error> {
+        let held: Option<mysql::Row> = c
+            .query_first("SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'chat'")
+            .map_err(sql("cannot list the branch's tables"))?;
+        if held.is_none() {
+            return Ok(0);
+        }
+        let row: Option<mysql::Row> = c.query_first("SELECT CAST(COUNT(*) AS CHAR) FROM `chat`").map_err(sql("cannot count the conversations"))?;
+        row.and_then(|r| text_at(&r, 0)).and_then(|n| n.parse().ok()).ok_or_else(|| self.damaged_log())
+    }
+
     /// The name Dolt gives the branch a connection to this project is on now.
     pub fn active_branch(&self) -> Result<String, Error> {
         let mut c = database_connection(&self.connector, &branch_now(&self.branch))?;

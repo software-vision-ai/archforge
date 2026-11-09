@@ -31,8 +31,8 @@ use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
-    Author, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, RenameBranchError, SafeBranch,
-    VersionReader, check_description,
+    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, RenameBranchError,
+    SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
@@ -453,6 +453,14 @@ impl Projects {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn create_branch_from_work(&self, project: &Path, name: SafeBranch) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, None)
+    }
+
+    /// Reads, off the writer, what deleting `branch` would take with it, for its confirmation. An
+    /// answer from before a switch is dropped, as any read of the versions is. The screen that asks
+    /// for this comes with AR-292.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn branch_counts(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<BranchCounts, String>> {
+        self.on_a_reader(project, move |reader| reader.branch_counts(&branch).map_err(|e| e.to_string()))
     }
 
     /// Starts renaming the branch `from` to `to` on the writer, and returns at once; see
@@ -3991,6 +3999,56 @@ mod tests {
             assert!(has_branch(&lock(&host.inner.open)[0], "elsewhere"), "nothing was renamed");
             assert_eq!(answer(host.rename_branch(&path, branch("elsewhere"), branch("z"))), Ok(()));
         }
+    }
+
+    /// The counts are the target's, read while another branch is current, and that branch differs
+    /// from it in versions, conversations and unsaved work.
+    #[test]
+    fn the_counts_are_those_of_the_branch_asked_about() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let counts = |name: &str| host.branch_counts(&path, branch(name)).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let on_it = |name: &str, statement: &str| lock(&host.inner.open)[0].run_on_branch(name, statement).unwrap();
+        let commit = |name: &str, author: &str| on_it(name, &format!("CALL DOLT_COMMIT('--allow-empty', '-m', 'x', '--author', '{author}')"));
+        let main = BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false };
+        assert_eq!(counts("main"), main, "its second save");
+        assert_eq!(counts("elsewhere"), BranchCounts { versions_only_here: 0, conversations: 0, unsaved: false }, "its head is on main too");
+        // Conversations made on the target, whose chat commits are no versions.
+        switch_to(host, &path, "elsewhere").unwrap();
+        undone_since_the_save(host, &path);
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        switch_to(host, &path, "main").unwrap();
+        let base = counts("elsewhere");
+        assert_eq!((base.conversations, counts("main")), (1, main.clone()));
+        commit("elsewhere", "A Person <a@person>");
+        let first = lock(&host.inner.open)[0].head_of("elsewhere").unwrap();
+        commit("elsewhere", archforge_project::CHAT_AUTHOR);
+        commit("elsewhere", "A Person <a@person>");
+        assert_eq!(counts("elsewhere").versions_only_here, base.versions_only_here + 2, "a chat commit is no version");
+        // Another branch holding the first of them, under a name outside the safe set.
+        on_it("main", &format!("CALL DOLT_BRANCH('odd+name', '{first}')"));
+        assert!(SafeBranch::found("odd+name").is_err());
+        assert_eq!(counts("elsewhere").versions_only_here, 1, "only what no other branch has");
+        // Only the model's changes are unsaved: a conversation's are not.
+        on_it("elsewhere", "UPDATE chat SET title = 'not committed'");
+        assert!(!counts("elsewhere").unsaved);
+        on_it("elsewhere", "CREATE TABLE unsaved (a INT PRIMARY KEY)");
+        assert!(counts("elsewhere").unsaved);
+        assert_eq!(counts("main"), main, "nothing of that is the current branch's");
+        // The other way round: asked from the branch that has the conversations.
+        lock(&host.inner.open)[0].set_current_branch(branch("elsewhere"));
+        assert_eq!(counts("main"), main);
+    }
+
+    /// With no other branch to leave out, its whole line counts, less the commits never shown.
+    #[test]
+    fn the_counts_of_the_only_branch_need_no_other() {
+        let sandbox = Sandbox::new(None);
+        let path = sandbox.project();
+        sandbox.host.write(&path, model("a"));
+        assert_eq!(saved(&sandbox.host, &path), Ok(true));
+        let counts = sandbox.host.branch_counts(&path, branch("main")).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        assert_eq!(counts, BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false });
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
