@@ -788,6 +788,11 @@ impl Project {
         self.changes.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The project moved to another branch: what the ledger knew was of the branch left.
+    pub(crate) fn forget_changes(&self) {
+        *self.changes() = Ledger::default();
+    }
+
     /// A save took every turn's state as it is now.
     pub(crate) fn changes_saved(&self) {
         let mut ledger = self.changes();

@@ -116,6 +116,13 @@ impl Project {
 }
 
 impl VersionReader {
+    /// The name Dolt gives the branch a connection to this project is on now.
+    pub fn active_branch(&self) -> Result<String, Error> {
+        let mut c = database_connection(&self.connector, &branch_now(&self.branch))?;
+        let name: Option<String> = c.query_first("SELECT active_branch()").map_err(sql("cannot read the current branch"))?;
+        name.ok_or_else(|| self.damaged_log())
+    }
+
     /// The project this reader reads.
     pub(crate) fn path(&self) -> &std::path::Path {
         &self.path

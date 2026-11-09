@@ -34,6 +34,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+archforge-project = { workspace = true, features = ["testing"] }
 archforge-core.workspace = true
 archforge-diagram.workspace = true
 archforge-er.workspace = true

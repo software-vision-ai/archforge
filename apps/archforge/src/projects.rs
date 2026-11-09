@@ -28,7 +28,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::rows::Rows;
-use archforge_project::{Author, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, VersionReader, check_description};
+use archforge_project::{Author, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, SafeBranch, VersionReader, check_description};
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing};
 
@@ -65,7 +65,46 @@ enum Job {
     /// is not or its generation has passed), in order with every other job; it answers through its
     /// own channel.
     Chat(PathBuf, u64, ChatJob),
+    /// Move a project to another branch; the generation is the project's when it was asked for.
+    Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
 }
+
+/// How a switch of branch went.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Switched {
+    /// The project is on the branch now, whose model this is.
+    Moved(Arc<Rows>),
+    /// It was on that branch already, under this or another case: nothing moved.
+    AlreadyThere,
+}
+
+/// Why a project did not move to another branch: it stays where it was, with its work.
+#[derive(Debug)]
+pub enum SwitchError {
+    /// Another switch moved the project after this one was asked for.
+    BranchChanged,
+    NotOpen,
+    /// What waits could not be written: the rows are kept for the next write.
+    Unwritten(String),
+    /// The target branch did not pass what an opening checks.
+    Checks(archforge_project::Error),
+    /// The model's tables could not be described, or the writer has stopped.
+    Failed(String),
+}
+
+impl std::fmt::Display for SwitchError {
+    /// The reason in English, as the project's own errors give it; a screen words it through `tr`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SwitchError::BranchChanged => f.write_str("another switch moved the project first"),
+            SwitchError::NotOpen => f.write_str("the project is no longer open"),
+            SwitchError::Unwritten(why) | SwitchError::Failed(why) => f.write_str(why),
+            SwitchError::Checks(e) => e.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for SwitchError {}
 
 /// Why a job on the conversations has no project to run against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +154,12 @@ struct Inner {
     readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
     /// Each project's switch generation: absent is 0, and nothing has moved it yet.
     generations: Mutex<BTreeMap<PathBuf, u64>>,
+    /// Runs just before a switch moves, for a test to ask for a job between the steps.
+    #[cfg(test)]
+    before_move: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+    /// Makes committing the waiting conversations fail, for a test.
+    #[cfg(test)]
+    fail_chats: AtomicBool,
     /// How many sets of rows each project has been handed, counted as each goes to the writer.
     handed: Mutex<BTreeMap<PathBuf, u64>>,
     /// Who checks a description against the kept API keys; while nobody does, a description is refused.
@@ -160,6 +205,10 @@ impl Projects {
                 closers: Mutex::new(Vec::new()),
                 readers: Mutex::new(BTreeMap::new()),
                 generations: Mutex::new(BTreeMap::new()),
+                #[cfg(test)]
+                before_move: Mutex::new(None),
+                #[cfg(test)]
+                fail_chats: AtomicBool::new(false),
                 handed: Mutex::new(BTreeMap::new()),
                 keys: OnceLock::new(),
             }),
@@ -184,6 +233,28 @@ impl Projects {
         job: impl FnOnce(&Project) -> Result<T, String> + Send + 'static,
     ) -> Receiver<Result<T, String>> {
         on_writer(&self.inner, path, job)
+    }
+
+    /// Starts moving `project` to `target` on the writer, and returns at once; see [`switch`]. The
+    /// window calls this and the read-back below once it has its hold (AR-289).
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn switch_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<Switched, SwitchError>> {
+        let (tx, rx) = channel();
+        let generation = generation_of(&self.inner, project);
+        if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, generation, tx.clone())) {
+            let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
+    }
+
+    /// Reads back, off the writer, whether `project` is on `target`, for when a switch's answer was
+    /// lost; an error says it cannot be told, and no answer at all means the same.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn read_back_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<bool, String>> {
+        self.on_a_reader(project, move |reader| {
+            let name = reader.active_branch().map_err(|e| e.to_string())?;
+            Ok(SafeBranch::found(&name).map_err(|e| e.to_string())?.same_branch(&target))
+        })
     }
 
     /// The project's switch generation now, to take when a job is asked for.
@@ -819,6 +890,11 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     log::error!("a job on the conversations of {} failed", project.display());
                 }
             }
+            Some(Job::Switch(project, target, generation, reply)) => {
+                let answer = switch(inner, &project, target, generation, &mut waiting);
+                failed = !waiting.is_empty();
+                let _ = reply.send(answer);
+            }
             Some(Job::Flush(project, reply)) => {
                 write_waiting(inner, &mut waiting);
                 failed = !waiting.is_empty();
@@ -866,6 +942,51 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             }
         }
     }
+}
+
+/// Moves `path` to `target`, on the writer. In this order, so that nothing moves until the target
+/// has passed everything an opening checks: what waits is written; the waiting conversations are
+/// committed, which does not stop the switch when it fails, as their rows stay in this branch's
+/// working set for the next chat commit; the target is checked and its model built; and only then
+/// do the connections move, the change ledger start again and, last, the generation move. A job
+/// asked for before that last step has the old generation and is refused when the writer reaches
+/// it. A branch the project is on already, in any case, moves nothing.
+fn switch(inner: &Inner, path: &Path, target: SafeBranch, generation: u64, waiting: &mut BTreeMap<PathBuf, Rows>) -> Result<Switched, SwitchError> {
+    if generation != generation_of(inner, path) {
+        return Err(SwitchError::BranchChanged);
+    }
+    let on_target = |p: &Project| p.current_branch().same_branch(&target);
+    if lock(&inner.open).iter().find(|p| p.path() == path).ok_or(SwitchError::NotOpen).map(on_target)? {
+        return Ok(Switched::AlreadyThere);
+    }
+    let schema = schema(inner).map_err(|e| SwitchError::Failed(format!("{e:?}")))?;
+    write_waiting(inner, waiting);
+    if waiting.contains_key(path) {
+        return Err(SwitchError::Unwritten(unwritten(inner, path)));
+    }
+    let open = lock(&inner.open);
+    let project = open.iter().find(|p| p.path() == path).ok_or(SwitchError::NotOpen)?;
+    if let Err(e) = keep_conversations(inner, project) {
+        log::warn!("the conversations of {} wait in their branch: {e}", path.display());
+    }
+    let rows = project.check_branch(&target, &schema).map_err(SwitchError::Checks)?;
+    #[cfg(test)]
+    if let Some(step) = lock(&inner.before_move).take() {
+        step();
+    }
+    project.move_to_branch(target);
+    *lock(&inner.generations).entry(path.to_path_buf()).or_default() += 1;
+    Ok(Switched::Moved(Arc::new(rows)))
+}
+
+/// Commits what of the conversations waits.
+fn keep_conversations(inner: &Inner, project: &Project) -> Result<bool, archforge_project::Error> {
+    #[cfg(test)]
+    if inner.fail_chats.load(Ordering::SeqCst) {
+        return Err(archforge_project::Error::Damaged { path: project.path().to_path_buf(), why: "a test refused".into() });
+    }
+    let _ = inner;
+    project.commit_chats()
 }
 
 /// Hands a save to the writer; a writer that has stopped is the save's answer.
@@ -1969,6 +2090,176 @@ mod tests {
             Ok(2)
         });
         assert_eq!(across.recv_timeout(Duration::from_secs(30)), Err(std::sync::mpsc::RecvTimeoutError::Disconnected));
+    }
+
+    /// A saved project on `main` with the branches `elsewhere` (an earlier state) and `scripted`.
+    fn branched() -> (Sandbox, PathBuf) {
+        let sandbox = Sandbox::new(None);
+        let path = sandbox.project();
+        sandbox.host.write(&path, model("a"));
+        assert_eq!(saved(&sandbox.host, &path), Ok(true));
+        let run = |branch: &str, statement: &str| lock(&sandbox.host.inner.open)[0].run_on_branch(branch, statement).unwrap();
+        run("main", "CALL DOLT_BRANCH('elsewhere')");
+        run("main", "CALL DOLT_BRANCH('scripted')");
+        run("scripted", "CREATE TRIGGER t BEFORE UPDATE ON settings FOR EACH ROW SET NEW.`value` = NEW.`value`");
+        sandbox.host.write(&path, model("b"));
+        assert_eq!(saved(&sandbox.host, &path), Ok(true));
+        (sandbox, path)
+    }
+
+    /// The branch named `name`.
+    fn branch(name: &str) -> SafeBranch {
+        SafeBranch::found(name).unwrap()
+    }
+
+    /// Asks for a switch and gives its answer.
+    fn switch_to(host: &Projects, path: &Path, name: &str) -> Result<Switched, SwitchError> {
+        host.switch_branch(path, branch(name)).recv_timeout(Duration::from_secs(60)).expect("the switch answers")
+    }
+
+    /// The branch the project is on, by its name.
+    fn on(host: &Projects) -> String {
+        lock(&host.inner.open)[0].current_branch().stored().to_string()
+    }
+
+    /// A conversation with one change link, applied at the last save and undone since.
+    fn undone_since_the_save(host: &Projects, path: &Path) -> (archforge_mof::Uuid, archforge_mof::Uuid) {
+        use archforge_project::{
+            ChangeKind, ChangeState, ChangedElement, NewChat, NewQuestion, NewTurn, Provider, TurnChanges, TurnEnd, TurnOutcome,
+        };
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        let (chat, turn) = (id(1), id(2));
+        let seeded = on_writer(&host.inner, path, move |p| {
+            let (now, keys) = (now(), archforge_secrets::MemoryStore::new());
+            let e = |e: archforge_project::Error| e.to_string();
+            let new = NewChat {
+                id: chat,
+                origin: "Chat 1".into(),
+                title: "T".into(),
+                provider: Provider::Codex,
+                model: "m".into(),
+                created_by: "t".into(),
+                now: now.clone(),
+            };
+            p.create_chat(&new, &keys).map_err(e)?;
+            let asked = NewTurn { id: turn, chat, model: "m".into(), allow_changes: true, now: now.clone() };
+            p.start_turn(&asked, &NewQuestion { id: id(3), body: "Q".into(), anchors: Vec::new() }, &keys).map_err(e)?;
+            let changed = vec![ChangedElement { element: id(4), kind: ChangeKind::Added, metaclass: "er_schema".into(), name: None }];
+            let changes = Some(TurnChanges { changes: 1, elements: 1, changed });
+            p.end_turn(&TurnEnd { turn, outcome: TurnOutcome::Completed, error: None, now: now.clone(), changes }).map_err(e)?;
+            p.commit("Saved").map_err(e)?;
+            p.set_change_states(&[(turn, ChangeState::Undone)], &now).map_err(e)
+        });
+        assert_eq!(seeded.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+        (chat, turn)
+    }
+
+    /// What Don't save leaves the conversation's change link as: back at its saved state while the
+    /// ledger still knows it, as it is once the ledger has started again.
+    fn after_dont_save(host: &Projects, path: &Path, chat: archforge_mof::Uuid) -> Option<archforge_project::ChangeState> {
+        let read = on_writer(&host.inner, path, move |p| {
+            p.discard(&now()).map_err(|e| e.to_string())?;
+            Ok(p.load_chat(chat).map_err(|e| e.to_string())?.turns[0].change.as_ref().map(|c| c.state))
+        });
+        read.recv_timeout(Duration::from_secs(60)).unwrap().unwrap()
+    }
+
+    /// The whole of a switch: what waits is written first, the target's rows come back, and the
+    /// connections, ledger and generation move once.
+    #[test]
+    fn a_switch_writes_what_waits_then_moves_to_the_target() {
+        use archforge_project::ChangeState::Undone;
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (chat, _) = undone_since_the_save(host, &path);
+        let before = host.generation_of(&path);
+        host.write(&path, model("c"));
+        let moved = switch_to(host, &path, "elsewhere").unwrap();
+        assert_eq!(moved, Switched::Moved(Arc::new(model("a"))));
+        assert_eq!((on(host).as_str(), host.generation_of(&path)), ("elsewhere", before + 1));
+        // The rows that waited went to the branch left.
+        assert_eq!(lock(&host.inner.open)[0].check_branch(&branch("main"), &schema(&host.inner).unwrap()).unwrap(), model("c"));
+        // A later switch back leaves the ledger empty: Don't save moves nothing back.
+        switch_to(host, &path, "main").unwrap();
+        assert_eq!(after_dont_save(host, &path, chat), Some(Undone), "the ledger started again");
+    }
+
+    /// Each way a switch can fail leaves the branch, the generation and the ledger as they were.
+    #[test]
+    fn a_failed_switch_moves_nothing() {
+        use archforge_project::{ChangeState::Applied, Error};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (chat, _) = undone_since_the_save(host, &path);
+        let before = host.generation_of(&path);
+        let unmoved = || assert_eq!((on(host).as_str(), host.generation_of(&path)), ("main", before));
+        assert!(matches!(switch_to(host, &path, "nosuchbranch"), Err(SwitchError::Checks(Error::Damaged { .. }))));
+        unmoved();
+        assert!(matches!(switch_to(host, &path, "scripted"), Err(SwitchError::Checks(Error::Scripted { what: "triggers", .. }))));
+        unmoved();
+        // Rows that cannot be written stop it, and stay waiting.
+        let mut broken = model("c");
+        broken.tables.iter_mut().find(|t| !t.is_empty()).unwrap()[0].clear();
+        host.write(&path, broken);
+        assert!(matches!(switch_to(host, &path, "elsewhere"), Err(SwitchError::Unwritten(_))));
+        unmoved();
+        assert!(host.writing(&path).pending, "the rows are still waiting");
+        host.write(&path, model("b"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        // The same case of the same branch is no switch at all.
+        assert_eq!(switch_to(host, &path, "MAIN").unwrap(), Switched::AlreadyThere);
+        unmoved();
+        assert_eq!(after_dont_save(host, &path, chat), Some(Applied), "the ledger still knew the save");
+    }
+
+    /// A job asked for between the steps, before the generation moved, is refused; one after is not.
+    #[test]
+    fn a_job_asked_for_during_a_switch_is_refused_and_a_later_one_is_not() {
+        let (sandbox, path) = branched();
+        let host = sandbox.host.clone();
+        let (late, late_path) = (host.clone(), path.clone());
+        let (asked, answer) = channel();
+        *lock(&host.inner.before_move) = Some(Box::new(move || {
+            late.write(&late_path, model("late"));
+            let _ = asked.send(late.save(&late_path, None, nobody()));
+        }));
+        let before = host.generation_of(&path);
+        assert!(matches!(switch_to(&host, &path, "elsewhere"), Ok(Switched::Moved(_))));
+        assert_eq!(host.generation_of(&path), before + 1, "moved exactly once");
+        let queued = answer.recv_timeout(Duration::from_secs(60)).unwrap();
+        assert_eq!(made(queued.recv_timeout(Duration::from_secs(60)).unwrap()), Err(SaveError::BranchChanged));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        assert!(host.writing(&path).error.is_some(), "the write from before the move was recorded");
+        host.write(&path, model("after"));
+        assert_eq!(saved(&host, &path), Ok(true), "a job asked for after the move is accepted");
+    }
+
+    /// A switch asked for before another moved the project is refused and moves nothing.
+    #[test]
+    fn a_switch_from_before_another_is_refused() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let release = hold_the_writer(host, &path);
+        let asked = host.switch_branch(&path, branch("elsewhere"));
+        switched(&host.inner, &path);
+        drop(release);
+        assert!(matches!(asked.recv_timeout(Duration::from_secs(60)).unwrap(), Err(SwitchError::BranchChanged)));
+        assert_eq!(on(host), "main");
+    }
+
+    /// A lost answer is read back from the branch the connections are on, in any case of its name.
+    #[test]
+    fn a_lost_switch_answer_is_read_back() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let read = |name: &str| host.read_back_branch(&path, branch(name)).recv_timeout(Duration::from_secs(30)).unwrap();
+        assert_eq!(read("elsewhere"), Ok(false));
+        // Conversations that cannot be committed do not stop a switch.
+        host.inner.fail_chats.store(true, Ordering::SeqCst);
+        assert!(matches!(switch_to(host, &path, "elsewhere"), Ok(Switched::Moved(_))));
+        assert_eq!((read("elsewhere"), read("ELSEWHERE"), read("main")), (Ok(true), Ok(true), Ok(false)));
+        close(host, &path).unwrap();
+        assert!(read("elsewhere").is_err(), "a project not open cannot be told");
     }
 
     /// A store that is locked: no key can be read from it.
