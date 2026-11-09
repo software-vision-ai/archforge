@@ -80,6 +80,13 @@ impl std::error::Error for UnsafeBranch {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SafeBranch(String);
 
+impl Default for SafeBranch {
+    /// The branch a project opens on.
+    fn default() -> SafeBranch {
+        SafeBranch::main()
+    }
+}
+
 impl SafeBranch {
     /// The name to store for the text a person typed. Distinct texts give names distinct even to
     /// Dolt, which ignores case: only lower-case text can stay as it is, and the rest is encoded.
@@ -123,6 +130,16 @@ impl SafeBranch {
             return Err(UnsafeBranch::NotABranchName);
         }
         Ok(SafeBranch(stored.to_string()))
+    }
+
+    /// The branch every project has and opens on.
+    pub(crate) fn main() -> SafeBranch {
+        SafeBranch("main".to_string())
+    }
+
+    /// Whether `other` names this branch: Dolt treats names that differ only in case as one.
+    pub fn same_branch(&self, other: &SafeBranch) -> bool {
+        self.0.eq_ignore_ascii_case(&other.0)
     }
 
     /// The name as stored, for a statement.

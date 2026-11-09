@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 
 use mysql::prelude::Queryable;
 
+use crate::branches::{CurrentBranch, branch_now};
 use crate::model::{database_connection, sql};
 use crate::saving::{is_agent, is_version, shown_author};
 use crate::{Error, Project};
@@ -50,6 +51,8 @@ pub struct Versions {
 pub struct VersionReader {
     connector: archforge_dolt::Connector,
     path: std::path::PathBuf,
+    /// The project's current branch, followed as it moves.
+    branch: CurrentBranch,
 }
 
 /// One commit as the log gives it.
@@ -103,7 +106,7 @@ impl Gathering<'_> {
 impl Project {
     /// A reader of this project's versions and their models, for a thread of its own.
     pub fn version_reader(&self) -> VersionReader {
-        VersionReader { connector: self.server().connector(), path: self.path().to_path_buf() }
+        VersionReader { connector: self.server().connector(), path: self.path().to_path_buf(), branch: self.branch.clone() }
     }
 
     /// [`VersionReader::versions`], on this project.
@@ -120,7 +123,7 @@ impl VersionReader {
 
     /// A connection of this reader's own, using the project's database.
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        database_connection(&self.connector)
+        database_connection(&self.connector, &branch_now(&self.branch))
     }
 
     /// The current branch's versions, newest first: at most `limit`, starting after the version
@@ -131,7 +134,7 @@ impl VersionReader {
         if limit > MOST_IN_A_PAGE {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
-        let mut c = database_connection(&self.connector)?;
+        let mut c = database_connection(&self.connector, &branch_now(&self.branch))?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \
              FROM dolt_log LIMIT {}",

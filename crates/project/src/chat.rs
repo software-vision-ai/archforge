@@ -31,7 +31,7 @@ use archforge_secrets::SecretStore;
 use mysql::prelude::Queryable;
 
 use crate::model::{changed_tables, columns_of, same_column, sql, stage, tables_held_by};
-use crate::{DATABASE, Error, FORMAT, Project};
+use crate::{Error, FORMAT, Project};
 
 /// The conversations' tables, all made together with the first conversation.
 pub const CHAT_TABLES: [&str; 7] = ["chat", "chat_turn", "chat_message", "chat_tool_call", "chat_anchor", "chat_change", "chat_change_element"];
@@ -890,7 +890,7 @@ impl Project {
             return Ok(false);
         }
         let table: Option<mysql::Row> = c
-            .exec_first("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'chat'", (DATABASE,))
+            .query_first("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'chat'")
             .map_err(sql("cannot list the conversations' tables"))?;
         if first_int(table).map_err(|why| self.unreadable(why))? == 0 {
             return Ok(false);

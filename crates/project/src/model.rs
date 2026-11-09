@@ -19,6 +19,7 @@ use std::collections::BTreeMap;
 use mysql::prelude::Queryable;
 
 use crate::VersionReader;
+use crate::branch_name::SafeBranch;
 use crate::chat::{head, is_chat_table, is_commit};
 use crate::saving::{AfterFailure, Author, SaveFailure, Saved, after_failed_commit, reply_lost};
 use crate::{DATABASE, Error, Project};
@@ -177,17 +178,27 @@ pub(crate) fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
     move |source| Error::Sql { what, source }
 }
 
-/// A connection through `connector`, using the project's database.
-pub(crate) fn database_connection(connector: &archforge_dolt::Connector) -> Result<mysql::Conn, Error> {
+/// A connection through `connector`, using `branch` of the project's database.
+pub(crate) fn database_connection(connector: &archforge_dolt::Connector, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
     let mut c = connector.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
+    c.query_drop(format!("USE `{}`", database_name(branch))).map_err(sql("cannot use the project database"))?;
     Ok(c)
+}
+
+/// The database that is `branch` of the project. Only a [`SafeBranch`] reaches a statement.
+pub(crate) fn database_name(branch: &SafeBranch) -> String {
+    format!("{DATABASE}/{}", branch.stored())
 }
 
 impl Project {
     /// A connection to this project's server, using its database.
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        database_connection(&self.server().connector())
+        self.connection_to(&self.current_branch())
+    }
+
+    /// A connection to `branch` of this project, whichever branch is current by then.
+    fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+        database_connection(&self.server().connector(), branch)
     }
 }
 
@@ -544,7 +555,10 @@ impl Project {
     pub fn save_with(&self, commit: impl FnOnce(&mut mysql::Conn) -> Result<(), mysql::Error>) -> Result<Saved, SaveFailure> {
         // Everything before the commit fails with the history untouched.
         let untouched = |error| SaveFailure { error, version: AfterFailure::NoVersion };
-        let mut c = self.model_connection().map_err(untouched)?;
+        // Taken once: what a failure is judged by is the branch this save was on, wherever the
+        // current branch has moved to since.
+        let branch = self.current_branch();
+        let mut c = self.connection_to(&branch).map_err(untouched)?;
         let tables = unsaved_tables(&mut c, self.path()).map_err(untouched)?;
         if tables.is_empty() {
             self.changes_saved();
@@ -561,7 +575,7 @@ impl Project {
             }
             Err(source) => {
                 // On a connection of its own: the failure may have been this one's.
-                let after = self.model_connection().ok().and_then(|mut fresh| head(&mut fresh).ok());
+                let after = self.connection_to(&branch).ok().and_then(|mut fresh| head(&mut fresh).ok());
                 let version = after_failed_commit(before.as_deref(), after.as_deref(), reply_lost(&source));
                 if matches!(version, AfterFailure::Version(_)) {
                     self.changes_saved();
@@ -638,7 +652,7 @@ pub(crate) fn changed_tables(c: &mut impl Queryable, path: &std::path::Path) -> 
 }
 
 /// The changed tables a Save commits: every one but the conversations'.
-fn unsaved_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<Vec<String>, Error> {
+pub(crate) fn unsaved_tables(c: &mut impl Queryable, path: &std::path::Path) -> Result<Vec<String>, Error> {
     Ok(changed_tables(c, path)?.into_iter().filter(|name| !is_chat_table(name)).collect())
 }
 
