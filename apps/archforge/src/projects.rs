@@ -2947,6 +2947,145 @@ mod tests {
         assert!(has_branch(project, "opening") && has_branch(project, "main"));
     }
 
+    /// How many rows `table` holds on `branch`.
+    fn rows_on(project: &Project, branch: &str, table: &str) -> u64 {
+        project.first_on_branch(branch, &format!("SELECT CAST(COUNT(*) AS CHAR) FROM `{table}`")).unwrap().parse().unwrap()
+    }
+
+    /// A new branch has no conversations and the version's model, whatever was inherited, and its
+    /// one chat commit is not a version; the branch it came from is untouched.
+    #[test]
+    fn a_new_branch_starts_at_the_version_with_no_conversations() {
+        let (sandbox, path) = branched();
+        undone_since_the_save(&sandbox.host, &path);
+        assert_eq!(sandbox.host.flush_for_test(&path), Ok(()));
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let (held, old) = (project.head_of("main").unwrap(), project.head_of("elsewhere").unwrap());
+        let chats = rows_on(project, "main", "chat_turn");
+        assert!(chats > 0, "there is something to inherit");
+        project.create_branch(&branch("inherits"), &held, &schema).unwrap();
+        for table in archforge_project::CHAT_TABLES {
+            assert_eq!(rows_on(project, "inherits", table), 0, "{table}");
+        }
+        assert_eq!(project.check_branch(&branch("inherits"), &schema).unwrap(), project.check_branch(&branch("main"), &schema).unwrap());
+        assert_eq!((project.head_of("main").unwrap(), rows_on(project, "main", "chat_turn")), (held.clone(), chats), "the source is untouched");
+        // A version with nothing to inherit: the commit is an empty one, and made all the same.
+        project.create_branch(&branch("empty"), &old, &schema).unwrap();
+        assert_eq!(project.check_branch(&branch("empty"), &schema).unwrap(), model("a"));
+        // The creation commit, which has no model tables: they are prepared on the new branch.
+        let first = project.first_on_branch("main", "SELECT CAST(commit_hash AS CHAR) FROM dolt_log WHERE message = 'Create the project'").unwrap();
+        project.create_branch(&branch("first"), &first, &schema).unwrap();
+        assert!(project.first_on_branch("first", "SELECT CAST(COUNT(*) AS CHAR) FROM `model_tables`").is_ok(), "prepared");
+        for (name, start) in [("inherits", &held), ("empty", &old), ("first", &first)] {
+            assert_ne!(&project.head_of(name).unwrap(), start, "{name}: finished, so past its start");
+            let parent = format!("SELECT CAST(parent_hash AS CHAR) FROM dolt_commit_ancestors WHERE commit_hash = HASHOF('{name}')");
+            assert_eq!(&project.first_on_branch(name, &parent).unwrap(), start, "{name}: one commit on its start");
+            let email = project.first_on_branch(name, "SELECT CAST(email AS CHAR) FROM dolt_log LIMIT 1").unwrap();
+            assert!(!archforge_project::is_version(&email), "{name}: left out of History");
+            // What was removed is in that commit; only the tables prepared on `first` are unsaved.
+            let dirty = format!("SELECT CAST(dirty AS CHAR) FROM dolt_branches WHERE name = '{name}'");
+            assert_eq!(project.first_on_branch("main", &dirty).unwrap() == "1", name == "first", "{name}");
+        }
+        assert!(!path.join(".creating-branch").exists());
+    }
+
+    /// A stop just before each step, then the real recovery on reopening: the branch goes up to
+    /// the chat commit, and is kept once that is made.
+    #[test]
+    fn a_creation_that_stops_is_cleaned_up_only_before_its_chat_commit() {
+        use archforge_project::CreationStep::{ChatCommit, MakeBranch, PrepareModel, RemoveConversations, RemoveRecord};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let reopened = || {
+            close(host, &path).unwrap();
+            wait(&host.open(&path)).unwrap();
+        };
+        let name = |n: usize| format!("stop{n}");
+        for (n, (step, kept)) in [(MakeBranch, false), (PrepareModel, false), (RemoveConversations, false), (ChatCommit, false), (RemoveRecord, true)]
+            .into_iter()
+            .enumerate()
+        {
+            {
+                let open = lock(&host.inner.open);
+                let start = open[0].head_of("main").unwrap();
+                assert!(open[0].create_branch_halted(&branch(&name(n)), &start, &schema(&host.inner).unwrap(), (step, false)).is_err());
+                assert!(path.join(".creating-branch").exists(), "{step:?}: a stop leaves the record");
+            }
+            reopened();
+            assert_eq!(has_branch(&lock(&host.inner.open)[0], &name(n)), kept, "{step:?}");
+            assert!(!path.join(".creating-branch").exists(), "{step:?}");
+        }
+        // Finished, and then the record came back: only the record goes.
+        let start = lock(&host.inner.open)[0].head_of("main").unwrap();
+        lock(&host.inner.open)[0].create_branch(&branch("finished"), &start, &schema(&host.inner).unwrap()).unwrap();
+        stopped_creation(&path, "finished", "main", &start);
+        reopened();
+        assert!(has_branch(&lock(&host.inner.open)[0], "finished"));
+    }
+
+    /// A version holding a script is refused by what it holds, before the record or the branch, so
+    /// that nothing that could fire it is ever run. Each is committed at the version.
+    #[test]
+    fn a_version_with_a_script_is_refused_before_anything_is_written() {
+        let (sandbox, path) = branched();
+        undone_since_the_save(&sandbox.host, &path);
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let rows = [
+            ("trigger", "CREATE TRIGGER t BEFORE DELETE ON chat FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000'; END", "triggers"),
+            ("procedure", "CREATE PROCEDURE p() SELECT 1", "stored procedures"),
+            ("event", "CREATE EVENT e ON SCHEDULE EVERY 1 YEAR DO SELECT 1", "events"),
+        ];
+        for (name, script, what) in rows {
+            project.run_on_branch("main", &format!("CALL DOLT_BRANCH('{name}')")).unwrap();
+            project.run_on_branch(name, script).unwrap();
+            project.run_on_branch(name, "CALL DOLT_COMMIT('-A', '-m', 'x', '--author', 'A Person <a@person>')").unwrap();
+            let made = format!("from{name}");
+            let answer = project.create_branch(&branch(&made), &project.head_of(name).unwrap(), &schema);
+            assert_eq!(answer, Err(archforge_project::BranchCreationError::Scripted { what }), "{name}");
+            assert!(!has_branch(project, &made) && !path.join(".creating-branch").exists(), "{name}: nothing was made");
+        }
+    }
+
+    /// A failure at any step deletes the branch and then the record, and refusals change nothing.
+    #[test]
+    fn a_creation_that_fails_leaves_the_project_as_it_was() {
+        use archforge_project::BranchCreationError::{Failed, NameTaken, NotACommit, RecordRemains};
+        use archforge_project::CreationStep::{ChatCommit, CheckVersion, MakeBranch, PrepareModel, RemoveConversations, RemoveRecord};
+        let (sandbox, path) = branched();
+        undone_since_the_save(&sandbox.host, &path);
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let start = project.head_of("main").unwrap();
+        let as_it_was =
+            |name: &str| !has_branch(project, name) && !path.join(".creating-branch").exists() && project.head_of("main").unwrap() == start;
+        // By a test hook just before each step: the failure path is real, the failing statement is not.
+        for (n, step) in [MakeBranch, PrepareModel, RemoveConversations, ChatCommit, RemoveRecord].into_iter().enumerate() {
+            let name = format!("fail{n}");
+            let answer = project.create_branch_halted(&branch(&name), &start, &schema, (step, true));
+            assert!(matches!(answer, Err(Failed { step: s, .. }) if s == step), "{step:?}: {answer:?}");
+            assert!(as_it_was(&name), "{step:?}");
+        }
+        // A commit that does not exist, a start that is none, and names taken in any case.
+        let unknown = "0123456789abcdefghijklmnopqrstuv";
+        assert!(matches!(project.create_branch(&branch("nowhere"), unknown, &schema), Err(Failed { step: CheckVersion, .. })));
+        assert!(as_it_was("nowhere"));
+        assert_eq!(project.create_branch(&branch("bad"), "'; DROP DATABASE project; --", &schema), Err(NotACommit));
+        assert_eq!(project.create_branch(&branch("ELSEWHERE"), &start, &schema), Err(NameTaken));
+        assert_eq!(project.create_branch(&branch("MAIN"), &start, &schema), Err(NameTaken));
+        // While a record remains, good or damaged, even a name taken says so.
+        stopped_creation(&path, "held", "main", &start);
+        assert_eq!(project.create_branch(&branch("elsewhere"), &start, &schema), Err(RecordRemains));
+        std::fs::write(path.join(".creating-branch"), b"broken").unwrap();
+        assert_eq!(project.create_branch(&branch("other"), &start, &schema), Err(RecordRemains));
+        std::fs::remove_file(path.join(".creating-branch")).unwrap();
+        assert!(as_it_was("other"));
+    }
+
     /// The whole of a switch: what waits is written first, the target's rows come back, and the
     /// connections, ledger and generation move once.
     #[test]

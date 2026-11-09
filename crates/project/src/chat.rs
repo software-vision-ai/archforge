@@ -848,6 +848,29 @@ impl Project {
         Ok(self.chat_tables(c)?.is_some())
     }
 
+    /// Empties every chat table of the branch `c` is on, if it holds them: a version from before
+    /// the first conversation does not.
+    pub(crate) fn empty_chats(&self, c: &mut mysql::Conn) -> Result<(), Error> {
+        if !self.chats_held(c)? {
+            return Ok(());
+        }
+        for def in &TABLES {
+            c.query_drop(format!("DELETE FROM `{}`", def.name)).map_err(sql("cannot remove the inherited conversations"))?;
+        }
+        Ok(())
+    }
+
+    /// The chat commit that finishes a new branch, made even when no conversation was inherited:
+    /// recovery goes by it, as only a branch still at its start commit is unfinished.
+    pub(crate) fn commit_new_branch(&self, c: &mut mysql::Conn) -> Result<(), Error> {
+        const MESSAGE: &str = "A new branch starts with no conversations";
+        if !self.chat_commit(c, MESSAGE)? {
+            c.exec_drop("CALL DOLT_COMMIT('--allow-empty', '-m', ?, '--author', ?)", (MESSAGE, CHAT_AUTHOR))
+                .map_err(sql("cannot commit the conversations"))?;
+        }
+        Ok(())
+    }
+
     /// Adds to each chat table made before its later columns the columns it lacks, at its end,
     /// empty for the rows it holds, before a write that names them. Each addition is a change to the
     /// table that the next chat commit takes. Run outside a transaction: a change of a table's

@@ -1,7 +1,7 @@
 //! The branch creation record: a file in the project folder, beside the [`crate::MARKER`], naming
 //! the branch being made, the branch it is made from and the commit it starts at. This module
 //! writes, reads and removes such a file, sets a damaged one aside, and on opening cleans up after
-//! a creation that stopped. Nothing writes a record yet (AR-287).
+//! a creation that stopped. Only [`crate::Project::create_branch`] writes a record.
 //!
 //! The file is a claim, read as one. Only the exact shape, with every name passing
 //! [`SafeBranch::found`], counts as a record; anything else is damaged, and is not to be acted on.
@@ -18,7 +18,7 @@
 //! it through a power cut. For that this rests on the operating system and the disk.
 //!
 //! Recovery deletes a branch only while its head is the recorded start commit. That is safe because
-//! a creation (AR-287) is to end with a chat commit, always made, and only then remove the record:
+//! a creation ends with a chat commit, always made, and only then removes the record:
 //! a finished branch is never at its start. So a record that comes back cannot cost a finished
 //! branch, which is why it does not matter that a folder flush does nothing outside Unix and a
 //! removed record can return after a power cut there; only the record goes. What remains: a branch
@@ -158,6 +158,23 @@ fn only_the_record(record: &CreationRecord, head: Option<&str>, opening: &SafeBr
     }
 }
 
+/// Deletes `branch` and looks for it again, as the reply can be lost either way: only a branch
+/// seen gone counts.
+pub(crate) fn delete_seen_gone(store: &mut dyn BranchStore, branch: &SafeBranch) -> Result<(), String> {
+    let deleted = store.delete(branch);
+    match store.head(branch)? {
+        None => Ok(()),
+        Some(_) => Err(deleted.err().unwrap_or_else(|| "the branch is still there".into())),
+    }
+}
+
+/// Undoes a creation that failed: the branch goes, seen gone, and only then the record, so a
+/// branch that could not be deleted keeps its record for the next opening.
+pub(crate) fn undo(folder: &Path, store: &mut dyn BranchStore, branch: &SafeBranch) -> Result<(), String> {
+    delete_seen_gone(store, branch)?;
+    remove(folder).map_err(|e| e.to_string())
+}
+
 /// Deals with the record in `folder`, if any. After a delete the branch is looked for again, as
 /// the reply can be lost either way, and only a branch seen gone lets the record go. A stop at any
 /// point repeats safely: a branch already gone only removes the record.
@@ -180,12 +197,10 @@ pub(crate) fn recover(folder: &Path, opening: &SafeBranch, store: &mut dyn Branc
     let outcome = match only_the_record(&record, head.as_deref(), opening) {
         Some(outcome) => outcome,
         None => {
-            let deleted = store.delete(&record.branch);
-            match store.head(&record.branch) {
-                Ok(None) => CreationRecovery::Deleted(record.branch.clone()),
-                Ok(Some(_)) => return unsettled(RecoveryStep::Delete, deleted.err().unwrap_or_else(|| "the branch is still there".into())),
-                Err(why) => return unsettled(RecoveryStep::Delete, why),
+            if let Err(why) = delete_seen_gone(store, &record.branch) {
+                return unsettled(RecoveryStep::Delete, why);
             }
+            CreationRecovery::Deleted(record.branch.clone())
         }
     };
     match remove(folder) {
@@ -269,8 +284,6 @@ pub(crate) fn read(folder: &Path) -> Found {
 /// name, linked to its own name, which fails if it is taken, and the folder flushed. Answers whether
 /// it was written; something already there is left as it was. An error means no creation may go on:
 /// a record linked but not flushed is removed, and if even that fails it stays, naming no branch yet.
-/// Nothing calls this until the creation itself (AR-287).
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn write(folder: &Path, record: &CreationRecord) -> Result<bool, Error> {
     write_watched(folder, record, &mut |_| Ok(()))
 }
@@ -721,6 +734,20 @@ mod tests {
             }
             assert_eq!(folder.record().exists(), failed.is_some(), "{n}");
         }
+    }
+
+    /// A creation is undone branch first, and a branch that stays keeps its record.
+    #[test]
+    fn undoing_a_creation_removes_the_record_only_once_the_branch_is_gone() {
+        let folder = Folder::new();
+        fs::write(folder.record(), text("made", "from", HASH)).unwrap();
+        let mut store = at("made", HASH);
+        store.delete_does_nothing = true;
+        assert!(undo(&folder.0, &mut store, &branch("made")).is_err());
+        assert!(folder.record().exists());
+        store.delete_does_nothing = false;
+        undo(&folder.0, &mut store, &branch("made")).unwrap();
+        assert_eq!((read(&folder.0), store.branches.len()), (Found::None, 0));
     }
 
     /// A record that cannot be removed or set aside stays, and the next opening finishes the job.

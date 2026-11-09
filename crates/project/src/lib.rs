@@ -32,7 +32,7 @@ use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
 pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBranch};
-pub use branches::{Branches, ListedBranch, MAX_BRANCHES};
+pub use branches::{BranchCreationError, Branches, CreationStep, ListedBranch, MAX_BRANCHES};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,
@@ -390,7 +390,7 @@ fn build(
     c.query_drop(format!("CALL DOLT_COMMIT('-Am', 'Create the project', '--author', '{AUTHOR}')")).map_err(sql("cannot commit the project"))?;
     hooks.cancelled()?;
     drop(c);
-    let settings = read_settings(s, target, &SafeBranch::default())?;
+    let settings = read_settings(s, target, &model::database_name(&SafeBranch::default()))?;
     if settings.name != name {
         return Err(Error::Damaged { path: target.to_path_buf(), why: "the name read back differs".into() });
     }
@@ -399,14 +399,18 @@ fn build(
 
 /// The settings of `branch`, once they are readable and it runs no scripts: what an opening checks.
 pub(crate) fn checked_settings(server: &Server, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
-    read_settings(server, path, branch).and_then(|settings| unscripted(server, path, branch, settings))
+    checked_database(server, path, &model::database_name(branch))
+}
+
+/// [`checked_settings`] of a database by its name: a branch, or a commit, which is only looked at.
+pub(crate) fn checked_database(server: &Server, path: &Path, database: &str) -> Result<Settings, Error> {
+    read_settings(server, path, database).and_then(|settings| unscripted(server, path, database, settings))
 }
 
 /// The settings, read with a cap on rows, keys and values; anything that does not read cleanly is
 /// a damaged project, never a panic.
-fn read_settings(server: &Server, path: &Path, branch: &SafeBranch) -> Result<Settings, Error> {
+fn read_settings(server: &Server, path: &Path, database: &str) -> Result<Settings, Error> {
     let damaged = |why: String| Error::Damaged { path: path.to_path_buf(), why };
-    let database = model::database_name(branch);
     let mut c = server.connect().map_err(Error::Server)?;
     c.query_drop(format!("USE `{database}`")).map_err(|e| damaged(format!("its {database} database cannot be used: {e}")))?;
     let kind: Option<mysql::Row> = c
@@ -456,9 +460,9 @@ fn readable(format: u32, supported: u32) -> Result<(), Error> {
 
 /// Refuses a project whose database holds triggers, stored procedures or events: Archforge's own
 /// writes would set them off, and they could change what it stores or what Save commits.
-fn unscripted(server: &Server, path: &Path, branch: &SafeBranch, settings: Settings) -> Result<Settings, Error> {
+fn unscripted(server: &Server, path: &Path, database: &str, settings: Settings) -> Result<Settings, Error> {
     let mut c = server.connect().map_err(Error::Server)?;
-    c.query_drop(format!("USE `{}`", model::database_name(branch))).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
+    c.query_drop(format!("USE `{database}`")).map_err(|e| Error::Sql { what: "cannot use the project database", source: e })?;
     for (what, table, column) in
         [("triggers", "triggers", "trigger_schema"), ("stored procedures", "routines", "routine_schema"), ("events", "events", "event_schema")]
     {
