@@ -3025,11 +3025,36 @@ mod tests {
         assert!(has_branch(&lock(&host.inner.open)[0], "finished"));
     }
 
+    /// A version holding a script is refused by what it holds, before the record or the branch, so
+    /// that nothing that could fire it is ever run. Each is committed at the version.
+    #[test]
+    fn a_version_with_a_script_is_refused_before_anything_is_written() {
+        let (sandbox, path) = branched();
+        undone_since_the_save(&sandbox.host, &path);
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let rows = [
+            ("trigger", "CREATE TRIGGER t BEFORE DELETE ON chat FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000'; END", "triggers"),
+            ("procedure", "CREATE PROCEDURE p() SELECT 1", "stored procedures"),
+            ("event", "CREATE EVENT e ON SCHEDULE EVERY 1 YEAR DO SELECT 1", "events"),
+        ];
+        for (name, script, what) in rows {
+            project.run_on_branch("main", &format!("CALL DOLT_BRANCH('{name}')")).unwrap();
+            project.run_on_branch(name, script).unwrap();
+            project.run_on_branch(name, "CALL DOLT_COMMIT('-A', '-m', 'x', '--author', 'A Person <a@person>')").unwrap();
+            let made = format!("from{name}");
+            let answer = project.create_branch(&branch(&made), &project.head_of(name).unwrap(), &schema);
+            assert_eq!(answer, Err(archforge_project::BranchCreationError::Scripted { what }), "{name}");
+            assert!(!has_branch(project, &made) && !path.join(".creating-branch").exists(), "{name}: nothing was made");
+        }
+    }
+
     /// A failure at any step deletes the branch and then the record, and refusals change nothing.
     #[test]
     fn a_creation_that_fails_leaves_the_project_as_it_was() {
         use archforge_project::BranchCreationError::{Failed, NameTaken, NotACommit, RecordRemains};
-        use archforge_project::CreationStep::{ChatCommit, MakeBranch, PrepareModel, RemoveConversations, RemoveRecord};
+        use archforge_project::CreationStep::{ChatCommit, CheckVersion, MakeBranch, PrepareModel, RemoveConversations, RemoveRecord};
         let (sandbox, path) = branched();
         undone_since_the_save(&sandbox.host, &path);
         let schema = schema(&sandbox.host.inner).unwrap();
@@ -3038,22 +3063,16 @@ mod tests {
         let start = project.head_of("main").unwrap();
         let as_it_was =
             |name: &str| !has_branch(project, name) && !path.join(".creating-branch").exists() && project.head_of("main").unwrap() == start;
+        // By a test hook just before each step: the failure path is real, the failing statement is not.
         for (n, step) in [MakeBranch, PrepareModel, RemoveConversations, ChatCommit, RemoveRecord].into_iter().enumerate() {
             let name = format!("fail{n}");
             let answer = project.create_branch_halted(&branch(&name), &start, &schema, (step, true));
             assert!(matches!(answer, Err(Failed { step: s, .. }) if s == step), "{step:?}: {answer:?}");
             assert!(as_it_was(&name), "{step:?}");
         }
-        // A delete of inherited rows that really fails, by a trigger committed at the version.
-        project.run_on_branch("main", "CALL DOLT_BRANCH('guarded')").unwrap();
-        project.run_on_branch("guarded", "CREATE TRIGGER t BEFORE DELETE ON chat FOR EACH ROW BEGIN SIGNAL SQLSTATE '45000'; END").unwrap();
-        project.run_on_branch("guarded", "CALL DOLT_COMMIT('-A', '-m', 'guarded', '--author', 'A Person <a@person>')").unwrap();
-        let answer = project.create_branch(&branch("refused"), &project.head_of("guarded").unwrap(), &schema);
-        assert!(matches!(answer, Err(Failed { step: RemoveConversations, .. })), "{answer:?}");
-        assert!(as_it_was("refused"));
         // A commit that does not exist, a start that is none, and names taken in any case.
         let unknown = "0123456789abcdefghijklmnopqrstuv";
-        assert!(matches!(project.create_branch(&branch("nowhere"), unknown, &schema), Err(Failed { step: MakeBranch, .. })));
+        assert!(matches!(project.create_branch(&branch("nowhere"), unknown, &schema), Err(Failed { step: CheckVersion, .. })));
         assert!(as_it_was("nowhere"));
         assert_eq!(project.create_branch(&branch("bad"), "'; DROP DATABASE project; --", &schema), Err(NotACommit));
         assert_eq!(project.create_branch(&branch("ELSEWHERE"), &start, &schema), Err(NameTaken));

@@ -10,7 +10,7 @@ use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::is_commit;
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_name, sql, unsaved_tables};
-use crate::{Error, Project};
+use crate::{DATABASE, Error, Project};
 
 /// The most branches listed.
 pub const MAX_BRANCHES: usize = 200;
@@ -54,6 +54,7 @@ impl BranchStore for OpenBranches {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     CheckName,
+    CheckVersion,
     WriteRecord,
     MakeBranch,
     PrepareModel,
@@ -71,6 +72,8 @@ pub enum BranchCreationError {
     NameTaken,
     /// The start is not a commit hash.
     NotACommit,
+    /// The version holds these scripts, which Archforge does not run.
+    Scripted { what: &'static str },
     /// `step` failed, and the project is as it was: no branch and no record.
     Failed { step: CreationStep, why: String },
     /// `step` failed and cleaning up did too. The record stays, so the next opening finishes it.
@@ -84,6 +87,7 @@ impl fmt::Display for BranchCreationError {
             BranchCreationError::RecordRemains => f.write_str("the last new branch is not cleaned up yet"),
             BranchCreationError::NameTaken => f.write_str("a branch of that name exists"),
             BranchCreationError::NotACommit => f.write_str("the start is not a commit hash"),
+            BranchCreationError::Scripted { what } => write!(f, "the version holds {what}, which Archforge does not run"),
             BranchCreationError::Failed { step, why } => write!(f, "{step:?} failed: {why}"),
             BranchCreationError::NotCleanedUp { step, why, cleaning } => write!(f, "{step:?} failed: {why}; cleaning up failed: {cleaning}"),
         }
@@ -188,8 +192,9 @@ impl Project {
     }
 
     /// Makes the branch `name` at the version `start`, with no conversations. On the writer only.
-    /// In this order: the record, the branch, its model tables, the inherited conversations
-    /// removed, the chat commit that marks it finished, and the record removed. If any of that
+    /// A version holding triggers, procedures or events is refused first, as an opening refuses
+    /// them, so none can run. Then, in this order: the record, the branch, its model tables, the
+    /// inherited conversations removed, the chat commit that marks it finished, and the record removed. If any of that
     /// fails the branch is deleted and then the record removed.
     ///
     /// Nothing may call this until the writer job and the branch list land: until then a recorded
@@ -208,6 +213,13 @@ impl Project {
         let record = CreationRecord::new(name.clone(), self.current_branch(), start).ok_or(BranchCreationError::NotACommit)?;
         if self.branch_name_taken(name).map_err(|e| refused(CreationStep::CheckName, e))? {
             return Err(BranchCreationError::NameTaken);
+        }
+        // As an opening checks a branch, and of the commit itself: only looking, so nothing is written
+        // to a version whose scripts could run, and there is nothing to undo.
+        match crate::checked_database(self.server(), self.path(), &format!("{DATABASE}/{}", record.start)) {
+            Ok(_) => {}
+            Err(Error::Scripted { what, .. }) => return Err(BranchCreationError::Scripted { what }),
+            Err(e) => return Err(refused(CreationStep::CheckVersion, e)),
         }
         if !creation::write(self.path(), &record).map_err(|e| refused(CreationStep::WriteRecord, e))? {
             return Err(BranchCreationError::RecordRemains);
