@@ -27,12 +27,13 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use archforge_dolt::{Dolt, Home, ServerOptions};
+use archforge_mof::Uuid;
 use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
-    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, RenameBranchError,
-    SafeBranch, VersionReader, check_description,
+    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem, Hooks, ModelSchema, Project,
+    RenameBranchError, SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
@@ -83,6 +84,8 @@ enum Job {
     /// Make a branch at a version, or from current work when none is named; the generation and the
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
+    /// Delete a branch; the generation and the open instance are the project's when it was asked for.
+    DeleteBranch(PathBuf, SafeBranch, u64, u64, Sender<Result<Vec<Uuid>, DeleteJobError>>),
     /// Rename a branch, from the name to the name; the generation and the open instance are the
     /// project's when it was asked for.
     RenameBranch(PathBuf, SafeBranch, SafeBranch, u64, u64, Sender<Result<(), RenameJobError>>),
@@ -305,6 +308,36 @@ impl std::fmt::Display for CreateBranchError {
 
 impl std::error::Error for CreateBranchError {}
 
+/// Why the writer deleted no branch. Its `Display` text is English, for logs only: the screen
+/// (AR-292) words each variant through `tr` and never shows `to_string()`.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DeleteJobError {
+    /// A switch moved the project after this was asked for.
+    BranchChanged,
+    /// The project was closed after this was asked for, though it may be open again.
+    Reopened,
+    NotOpen,
+    /// The project's own refusal, failure or uncertainty.
+    Delete(DeleteBranchError),
+    /// The writer has stopped.
+    Failed(String),
+}
+
+impl std::fmt::Display for DeleteJobError {
+    /// The reason in English, as the project's own errors give it; a screen words it through `tr`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DeleteJobError::BranchChanged => f.write_str("another switch moved the project first"),
+            DeleteJobError::Reopened => f.write_str("the project was closed after this was asked for"),
+            DeleteJobError::NotOpen => f.write_str("the project is no longer open"),
+            DeleteJobError::Delete(e) => e.fmt(f),
+            DeleteJobError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for DeleteJobError {}
+
 /// Why the writer renamed no branch.
 #[derive(Debug, PartialEq, Eq)]
 pub enum RenameJobError {
@@ -516,6 +549,18 @@ impl Projects {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn branch_counts(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<BranchCounts, String>> {
         self.on_a_reader(project, move |reader| reader.branch_counts(&branch).map_err(|e| e.to_string()))
+    }
+
+    /// Starts deleting `branch` on the writer, and returns at once; see [`Project::delete_branch`].
+    /// The answer is the conversations whose folders can go. The screen comes with AR-292.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn delete_branch(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<Vec<Uuid>, DeleteJobError>> {
+        let (tx, rx) = channel();
+        let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
+        if let Err(e) = writer(&self.inner).send(Job::DeleteBranch(project.to_path_buf(), branch, asked.0, asked.1, tx.clone())) {
+            let _ = tx.send(Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
     }
 
     /// Starts renaming the branch `from` to `to` on the writer, and returns at once; see
@@ -1300,6 +1345,9 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             Some(Job::CreateBranch(project, name, start, generation, instance, reply)) => {
                 let _ = reply.send(create_branch(inner, &project, &name, start.as_deref(), generation, instance, &mut waiting, &mut failed));
             }
+            Some(Job::DeleteBranch(project, branch, generation, instance, reply)) => {
+                let _ = reply.send(delete_branch(inner, &project, &branch, generation, instance));
+            }
             Some(Job::RenameBranch(project, from, to, generation, instance, reply)) => {
                 let _ = reply.send(rename_branch(inner, &project, &from, &to, generation, instance));
             }
@@ -1433,8 +1481,8 @@ fn checked_target<T>(
     if waiting.contains_key(path) {
         return Err(SwitchError::Unwritten(unwritten(inner, path)));
     }
-    let open = lock(&inner.open);
-    let project = open.iter().find(|p| p.path() == path).ok_or(SwitchError::NotOpen)?;
+    let (open, at) = open_as_asked(inner, path, (generation, instance), (SwitchError::Reopened, SwitchError::BranchChanged, SwitchError::NotOpen))?;
+    let project = &open[at];
     if let Err(e) = keep_conversations(inner, project) {
         log::warn!("the conversations of {} wait in their branch: {e}", path.display());
     }
@@ -1503,8 +1551,9 @@ fn restore(
     if waiting.contains_key(path) {
         return Err(RestoreError::Unwritten(unwritten(inner, path)));
     }
-    let open = lock(&inner.open);
-    let project = open.iter().find(|p| p.path() == path).ok_or(RestoreError::NotOpen)?;
+    let (open, at) =
+        open_as_asked(inner, path, (generation, instance), (RestoreError::Reopened, RestoreError::BranchChanged, RestoreError::NotOpen))?;
+    let project = &open[at];
     let version = project.read_model_at(&schema, &request.commit).map_err(RestoreError::Version)?;
     let current = project.read_model(&schema).map_err(|e| RestoreError::Failed(e.to_string()))?;
     if !differs(archforge_notations::differences::classified(&current, &version, request.repair))? {
@@ -1752,6 +1801,8 @@ enum Fault {
     Hold(bool, Box<dyn FnOnce() + Send>),
     /// Runs at this point of a read-back.
     Reading(ReadingAt, Box<dyn FnOnce() + Send>),
+    /// Runs just before a job picks its project, after any checks it made before writing.
+    AtSelection(Box<dyn FnOnce() + Send>),
 }
 
 /// What a failed commit is judged to have left, for a test.
@@ -1843,8 +1894,14 @@ fn create_branch(
             return Err(CreateBranchError::Unwritten(unwritten(inner, path)));
         }
     }
-    let open = lock(&inner.open);
-    let project = open.iter().find(|p| p.path() == path).ok_or(CreateBranchError::NotOpen)?;
+    // Checked again now that nothing can move: writing what waits may have taken a while.
+    let (open, at) = open_as_asked(
+        inner,
+        path,
+        (generation, instance),
+        (CreateBranchError::Reopened, CreateBranchError::BranchChanged, CreateBranchError::NotOpen),
+    )?;
+    let project = &open[at];
     match start {
         Some(start) => project.create_branch(name, start, &schema),
         None => project.create_branch_from_work(name, &schema),
@@ -1852,18 +1909,49 @@ fn create_branch(
     .map_err(CreateBranchError::Creation)
 }
 
+/// The open project at `path`, as the guard on the open projects and its place there, if it is
+/// still what a job was asked for under: `asked` is the generation and the open instance then, and
+/// `refusals` what to answer for a different instance, a different generation and no project.
+///
+/// All of it under the one lock, so that what passes is what the job gets. A closing removes the
+/// project and only later moves the instance, but nothing can reopen it until that closing is
+/// over, as both hold the job lock: so a project found here under the old instance is the old one,
+/// and one removed but not yet counted is simply not found. Nothing takes these in the other order.
+fn open_as_asked<'a, E>(
+    inner: &'a Inner,
+    path: &Path,
+    (generation, instance): (u64, u64),
+    (reopened, changed, not_open): (E, E, E),
+) -> Result<(MutexGuard<'a, Vec<Project>>, usize), E> {
+    #[cfg(test)]
+    if let Some(Fault::AtSelection(step)) = take_fault(inner, |f| matches!(f, Fault::AtSelection(_))) {
+        step();
+    }
+    let open = lock(&inner.open);
+    if instance != instance_of(inner, path) {
+        return Err(reopened);
+    }
+    if generation != generation_of(inner, path) {
+        return Err(changed);
+    }
+    let at = open.iter().position(|p| p.path() == path).ok_or(not_open)?;
+    Ok((open, at))
+}
+
+/// Deletes a branch of the project at `path`, on the writer, unless it has closed or a switch has
+/// moved it since this was asked for.
+fn delete_branch(inner: &Inner, path: &Path, branch: &SafeBranch, generation: u64, instance: u64) -> Result<Vec<Uuid>, DeleteJobError> {
+    let (open, at) =
+        open_as_asked(inner, path, (generation, instance), (DeleteJobError::Reopened, DeleteJobError::BranchChanged, DeleteJobError::NotOpen))?;
+    open[at].delete_branch(branch).map_err(DeleteJobError::Delete)
+}
+
 /// Renames a branch of the project at `path`, on the writer, unless it has closed or a switch has
 /// moved it since this was asked for. What waits follows, as writes go to the current branch.
 fn rename_branch(inner: &Inner, path: &Path, from: &SafeBranch, to: &SafeBranch, generation: u64, instance: u64) -> Result<(), RenameJobError> {
-    if instance != instance_of(inner, path) {
-        return Err(RenameJobError::Reopened);
-    }
-    if generation != generation_of(inner, path) {
-        return Err(RenameJobError::BranchChanged);
-    }
-    let open = lock(&inner.open);
-    let project = open.iter().find(|p| p.path() == path).ok_or(RenameJobError::NotOpen)?;
-    project.rename_branch(from, to).map_err(RenameJobError::Rename)
+    let (open, at) =
+        open_as_asked(inner, path, (generation, instance), (RenameJobError::Reopened, RenameJobError::BranchChanged, RenameJobError::NotOpen))?;
+    open[at].rename_branch(from, to).map_err(RenameJobError::Rename)
 }
 
 /// Commits what of the conversations waits.
@@ -2117,9 +2205,6 @@ fn kind(e: archforge_project::Error) -> CreateError {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
-    use archforge_mof::Uuid;
-    use archforge_project::DeleteBranchError;
-
     use super::*;
 
     fn wait(rx: &Receiver<Result<Opened, CreateError>>) -> Result<Opened, CreateError> {
@@ -4682,6 +4767,80 @@ mod tests {
         let target = branch("elsewhere");
         let read = open[0].version_reader().branch_counts_interrupted(&target, || assert_eq!(open[0].delete_branch(&target), Ok(Vec::new())));
         assert!(read.is_err(), "{read:?}");
+    }
+
+    /// The writer's job is refused from before a reopen, by either closing route, from before a
+    /// switch, by either route that moves the project, and with no project; one asked for now runs.
+    #[test]
+    fn a_delete_job_from_before_a_switch_or_a_reopen_is_refused() {
+        for closing in closing_routes() {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let answer = |asked: Receiver<Result<Vec<Uuid>, DeleteJobError>>| asked.recv_timeout(Duration::from_secs(60)).expect("the job answers");
+            assert_eq!(answer(host.delete_branch(&sandbox.base.join("nowhere"), branch("a"))), Err(DeleteJobError::NotOpen));
+            let stale = instance_of(&host.inner, &path);
+            assert_eq!(closing(host, &path).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            let (reply, refused) = channel();
+            writer(&host.inner).send(Job::DeleteBranch(path.clone(), branch("scripted"), generation_of(&host.inner, &path), stale, reply)).unwrap();
+            assert_eq!(answer(refused), Err(DeleteJobError::Reopened));
+            // The switch is queued first and the delete asked for before the writer reaches it.
+            let release = hold_the_writer(host, &path);
+            let switch = host.switch_branch(&path, branch("elsewhere"));
+            let stale = host.delete_branch(&path, branch("scripted"));
+            drop(release);
+            assert!(matches!(switch.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Switched::Moved(_))));
+            assert_eq!(answer(stale), Err(DeleteJobError::BranchChanged), "one switch route");
+            let (check, moving) = checked(host, &path, "main");
+            assert!(check.is_ok());
+            let release = hold_the_writer(host, &path);
+            let switch = moving.run();
+            let stale = host.delete_branch(&path, branch("scripted"));
+            drop(release);
+            assert!(matches!(switch.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Switched::Moved(_))));
+            assert_eq!(answer(stale), Err(DeleteJobError::BranchChanged), "the other, in two steps");
+            assert!(has_branch(&lock(&host.inner.open)[0], "scripted"), "nothing was deleted");
+            assert_eq!(answer(host.delete_branch(&path, branch("scripted"))), Ok(Vec::new()));
+            assert_eq!(answer(host.delete_branch(&path, branch("main"))), Err(DeleteJobError::Delete(DeleteBranchError::Main)));
+        }
+    }
+
+    /// Has the project close and open again just before the next job picks it, as a closing does
+    /// it: on the writer's thread the closing's own wait for the writer could not end.
+    fn reopened_at_selection(host: &Arc<Projects>, path: &Path) {
+        let (late, at) = (host.clone(), path.to_path_buf());
+        let reopen = move || {
+            let project = lock(&late.inner.open).remove(0);
+            settle_reads(&late.inner, &at, Duration::from_secs(30));
+            *lock(&late.inner.instances).entry(at.clone()).or_default() += 1;
+            project.close().unwrap();
+            wait(&late.open(&at)).unwrap();
+        };
+        lock(&host.inner.restore_faults).push(Fault::AtSelection(Box::new(reopen)));
+    }
+
+    /// A close and reopen just before a job picks its project answers `Reopened` and touches
+    /// nothing in the new instance, for every job that names the instance it was asked for under.
+    #[test]
+    fn a_job_is_refused_when_the_project_reopens_just_before_it_picks_it() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let wait_for = Duration::from_secs(60);
+        let start = lock(&host.inner.open)[0].head_of("main").unwrap();
+        let old = version(host, 1);
+        reopened_at_selection(host, &path);
+        assert_eq!(host.delete_branch(&path, branch("scripted")).recv_timeout(wait_for).unwrap(), Err(DeleteJobError::Reopened));
+        reopened_at_selection(host, &path);
+        assert_eq!(host.rename_branch(&path, branch("scripted"), branch("x")).recv_timeout(wait_for).unwrap(), Err(RenameJobError::Reopened));
+        reopened_at_selection(host, &path);
+        assert_eq!(host.create_branch(&path, branch("made"), start).recv_timeout(wait_for).unwrap(), Err(CreateBranchError::Reopened));
+        reopened_at_selection(host, &path);
+        assert!(matches!(host.switch_branch(&path, branch("elsewhere")).recv_timeout(wait_for).unwrap(), Err(SwitchError::Reopened)));
+        reopened_at_selection(host, &path);
+        assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::Reopened)));
+        let open = lock(&host.inner.open);
+        assert!(has_branch(&open[0], "scripted") && !has_branch(&open[0], "x") && !has_branch(&open[0], "made"));
+        assert_eq!(open[0].current_branch().stored(), "main");
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
