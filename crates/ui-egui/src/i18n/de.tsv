@@ -475,6 +475,12 @@ str		No changes since the last version.	Keine Änderungen seit der letzten Versi
 str		No versions yet.	Noch keine Versionen.
 str		No versions yet. Save version records your first one.	Noch keine Versionen. „Version speichern“ legt die erste an.
 str		Loading	Wird geladen
+str		All	Alle
+str		With a description	Mit Beschreibung
+str		Show more	Mehr anzeigen
+str		None of these versions has a description.	Keine dieser Versionen hat eine Beschreibung.
+str		The next versions couldn't be read.	Die nächsten Versionen konnten nicht gelesen werden.
+str		{name}, selected	{name}, ausgewählt
 str		No description	Keine Beschreibung
 str		Saved by an agent	Von einem Agenten gespeichert
 str		This version can't be shown	Diese Version kann nicht angezeigt werden

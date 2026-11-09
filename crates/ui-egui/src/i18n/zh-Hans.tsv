@@ -475,6 +475,12 @@ str		No changes since the last version.	自上一版本以来没有更改。
 str		No versions yet.	还没有版本。
 str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
 str		Loading	正在加载
+str		All	全部
+str		With a description	有描述
+str		Show more	显示更多
+str		None of these versions has a description.	这些版本都没有描述。
+str		The next versions couldn't be read.	无法读取后续版本。
+str		{name}, selected	{name}，已选中
 str		No description	无描述
 str		Saved by an agent	由代理保存
 str		This version can't be shown	无法显示此版本
