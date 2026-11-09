@@ -312,6 +312,7 @@ str		The undo history ends when the project closes, so these changes can no long
 str		The model changed after this turn, so its changes can no longer be undone on their own.	Le modèle a changé après ce tour ; ses modifications ne peuvent donc plus être annulées seules.
 str		The model changed during this turn, so its changes can no longer be undone on their own.	Le modèle a changé pendant ce tour ; ses modifications ne peuvent donc plus être annulées seules.
 str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	L’historique d’annulation ne contient plus les modifications de ce tour ; elles ne peuvent donc plus être annulées ici.
+str		Back to current work to undo these changes.	Revenez au travail en cours pour annuler ces modifications.
 str		Interrupted: Archforge closed while this turn ran.	Interrompu : Archforge s’est fermé pendant ce tour.
 str		Stopped.	Arrêté.
 str		Stopped. Nothing was changed.	Arrêté. Rien n’a été modifié.

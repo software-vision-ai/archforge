@@ -252,7 +252,7 @@ impl Shell {
     /// The replacement takes the session's place, and the hold ends. What was read is what the
     /// project holds, so nothing is handed over for it, unless a repair changed it while it was
     /// built: then the project reads as unsaved and the repair is written like any change.
-    fn install(&mut self, mut session: Session, repaired: bool) {
+    pub(crate) fn install(&mut self, mut session: Session, repaired: bool) {
         self.written = Some(session.revision()).filter(|_| !repaired);
         if repaired {
             session.mark_unsaved();

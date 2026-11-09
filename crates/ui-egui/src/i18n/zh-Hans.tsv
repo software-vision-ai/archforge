@@ -312,6 +312,7 @@ str		The undo history ends when the project closes, so these changes can no long
 str		The model changed after this turn, so its changes can no longer be undone on their own.	此轮之后模型已更改，因此无法再单独撤销它的更改。
 str		The model changed during this turn, so its changes can no longer be undone on their own.	此轮期间模型已更改，因此无法再单独撤销它的更改。
 str		The undo history no longer holds this turn's changes, so they can no longer be undone here.	撤销历史中已不再有此轮的更改，因此无法再在这里撤销。
+str		Back to current work to undo these changes.	返回当前工作以撤销这些更改。
 str		Interrupted: Archforge closed while this turn ran.	已中断：此轮运行时 Archforge 已关闭。
 str		Stopped.	已停止。
 str		Stopped. Nothing was changed.	已停止。没有更改任何内容。
