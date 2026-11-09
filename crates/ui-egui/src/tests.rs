@@ -9668,6 +9668,44 @@ fn an_undo_before_a_failed_deletion_keeps_the_folder_of_a_conversation_still_lis
     }
 }
 
+/// Only some refusals of a restoration mean the conversation stays deleted: a changed branch may
+/// still list it, so its folder stays, while the refusals that always let it go still do.
+#[test]
+fn a_restore_refused_for_a_changed_branch_keeps_the_folder_and_only_that_reason_decides() {
+    use crate::chat_store::{Answer, Refusal};
+    let cases = [
+        (Refusal::BranchChanged, false),
+        (Refusal::Listed, false),
+        (Refusal::Failed("the project is busy".into()), true),
+        (Refusal::HeldKey { provider: None }, true),
+    ];
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for (refusal, goes) in cases.clone() {
+            let (mut h, rig, chats) = chat_history(theme);
+            rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+            let row = rect_of(&h, "workspace.chat.history.2");
+            point_at(&mut h, row.center());
+            let bin = rect_of(&h, "workspace.chat.history.2.delete");
+            click(&mut h, bin.center());
+            let at = rect_of(&h, "workspace.chat.delete.confirm").center();
+            click(&mut h, at);
+            let at = rect_of(&h, "workspace.chat.toast.undo").center();
+            click(&mut h, at);
+            // The writes are answered and never run: the new branch still holds the conversation.
+            let held: Vec<_> = std::mem::take(&mut *rig.store.held.lock().unwrap());
+            let mut answers = [Ok(Answer::Deleted { before: "0".repeat(32) }), Err(refusal.clone())].into_iter();
+            for (_, tx) in held {
+                let _ = tx.send(answers.next().unwrap());
+            }
+            h.run();
+            h.run();
+            let expected: Vec<String> = if goes { vec![chats[2].to_string()] } else { Vec::new() };
+            assert_eq!(forgotten(&rig), expected, "{theme:?}: {refusal:?}");
+            assert!(rig.store.kept(chats[2]).is_some(), "still listed");
+        }
+    }
+}
+
 /// A conversation started while the host removes its private folder (AR-218), as a copy of the
 /// project can: the host refuses the start, the turn says it is not started yet as the conversation
 /// is being removed (AR-225), with Send again, and nothing hangs; the refused start keeps the

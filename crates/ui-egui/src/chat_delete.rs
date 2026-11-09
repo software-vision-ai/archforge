@@ -456,7 +456,9 @@ fn step(shell: &mut Shell, mut d: Deletion, now: u64, shown: bool) -> Next {
             Ok(Err(r)) => {
                 notice(shell, &project, fmt(&tr("This conversation could not be brought back: {why}"), &[("why", &refused_why(&r))]));
                 reread(shell, &project);
-                Next::Done { forget: true }
+                // By the rule a closing goes by: a refusal after a branch change says nothing of
+                // whether the branch shown now still lists the conversation.
+                Next::Done { forget: FolderGoes::IfNotRestored.decides(&Err(r)) }
             }
             // Whether it came back is not known: its folder stays.
             Err(TryRecvError::Disconnected) => {
