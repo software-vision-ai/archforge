@@ -193,7 +193,12 @@ pub(crate) fn database_name(branch: &SafeBranch) -> String {
 impl Project {
     /// A connection to this project's server, using its database.
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        database_connection(&self.server().connector(), &self.current_branch())
+        self.connection_to(&self.current_branch())
+    }
+
+    /// A connection to `branch` of this project, whichever branch is current by then.
+    fn connection_to(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+        database_connection(&self.server().connector(), branch)
     }
 }
 
@@ -550,7 +555,10 @@ impl Project {
     pub fn save_with(&self, commit: impl FnOnce(&mut mysql::Conn) -> Result<(), mysql::Error>) -> Result<Saved, SaveFailure> {
         // Everything before the commit fails with the history untouched.
         let untouched = |error| SaveFailure { error, version: AfterFailure::NoVersion };
-        let mut c = self.model_connection().map_err(untouched)?;
+        // Taken once: what a failure is judged by is the branch this save was on, wherever the
+        // current branch has moved to since.
+        let branch = self.current_branch();
+        let mut c = self.connection_to(&branch).map_err(untouched)?;
         let tables = unsaved_tables(&mut c, self.path()).map_err(untouched)?;
         if tables.is_empty() {
             self.changes_saved();
@@ -567,7 +575,7 @@ impl Project {
             }
             Err(source) => {
                 // On a connection of its own: the failure may have been this one's.
-                let after = self.model_connection().ok().and_then(|mut fresh| head(&mut fresh).ok());
+                let after = self.connection_to(&branch).ok().and_then(|mut fresh| head(&mut fresh).ok());
                 let version = after_failed_commit(before.as_deref(), after.as_deref(), reply_lost(&source));
                 if matches!(version, AfterFailure::Version(_)) {
                     self.changes_saved();

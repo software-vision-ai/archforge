@@ -58,8 +58,12 @@ impl Project {
     }
 
     /// The project's branches, at most `max` of them. A name that cannot be used is listed with
-    /// its reason rather than left out.
+    /// its reason rather than left out. Refused when `max` is over [`MAX_BRANCHES`], before
+    /// anything is read: a dirty branch costs its own statements.
     pub fn branches(&self, max: usize) -> Result<Branches, Error> {
+        if max > MAX_BRANCHES {
+            return Err(Error::TooLarge { what: "a list", size: max, max: MAX_BRANCHES, unit: "branches" });
+        }
         let mut c = self.model_connection()?;
         let query = format!("SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}), dirty FROM dolt_branches ORDER BY name LIMIT {}", max.saturating_add(1));
         let rows: Vec<mysql::Row> = c.query(query).map_err(sql("cannot list the branches"))?;

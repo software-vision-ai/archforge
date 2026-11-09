@@ -1161,3 +1161,59 @@ fn the_branch_list_reads_each_branch_and_counts_only_the_model() {
     assert_eq!((over.listed.len(), over.cut), (4, true));
     project.close().unwrap();
 }
+
+/// A list over the most branches is refused before anything is read: the refusal comes even where
+/// a connection could not be opened.
+#[test]
+fn a_list_of_more_branches_than_the_most_is_refused_before_it_is_read() {
+    use archforge_project::{MAX_BRANCHES, SafeBranch};
+    let env = Env::new("cap");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    assert_eq!(project.branches(MAX_BRANCHES).unwrap().listed.len(), 1);
+    let refused =
+        |e: Error| matches!(e, Error::TooLarge { what: "a list", size, max, unit: "branches" } if size == MAX_BRANCHES + 1 && max == MAX_BRANCHES);
+    assert!(refused(project.branches(MAX_BRANCHES + 1).unwrap_err()));
+    project.set_current_branch(SafeBranch::found("nosuchbranch").unwrap());
+    assert!(matches!(project.branches(MAX_BRANCHES), Err(Error::Sql { .. })), "this branch cannot be opened");
+    assert!(refused(project.branches(MAX_BRANCHES + 1).unwrap_err()), "the refusal needed no connection");
+    project.close().unwrap();
+}
+
+/// A commit that went through on one branch is reported with that branch's head, however the
+/// current branch moved before the failure was looked at; a branch gone by then cannot be told.
+#[test]
+fn a_lost_reply_is_read_back_from_the_branch_the_save_started_on() {
+    use archforge_project::{AfterFailure, SafeBranch};
+    let env = Env::new("landed");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let mut main = on_branch(&project, "main");
+    for branch in ["landed", "gone"] {
+        main.exec_drop("CALL DOLT_BRANCH(?)", (branch,)).unwrap();
+        on_branch(&project, branch).query_drop("CREATE TABLE er_extra (id INT PRIMARY KEY)").unwrap();
+    }
+    let lost = || mysql::Error::IoError(std::io::ErrorKind::TimedOut.into());
+    let found = |name: &str| SafeBranch::found(name).unwrap();
+    project.set_current_branch(found("landed"));
+    let landed = project
+        .save_with(|c| {
+            let done = c.query_drop("CALL DOLT_COMMIT('-m', 'Kept', '--author', 'T <t@t>')");
+            project.set_current_branch(found("main"));
+            done.and(Err(lost()))
+        })
+        .unwrap_err();
+    let newest: String = on_branch(&project, "landed").query_first("SELECT commit_hash FROM dolt_log LIMIT 1").unwrap().unwrap();
+    assert_eq!(landed.version, AfterFailure::Version(newest));
+
+    project.set_current_branch(found("gone"));
+    let unknown = project
+        .save_with(|_| {
+            project.set_current_branch(found("main"));
+            main.query_drop("CALL DOLT_BRANCH('-D', '-f', 'gone')").unwrap();
+            Err(lost())
+        })
+        .unwrap_err();
+    assert_eq!(unknown.version, AfterFailure::CannotTell);
+    project.close().unwrap();
+}

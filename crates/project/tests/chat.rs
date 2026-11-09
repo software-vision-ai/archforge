@@ -408,6 +408,43 @@ fn the_format_is_raised_on_the_branch_in_use() {
     p.close().unwrap();
 }
 
+/// A save that failed on one branch is judged there: a current branch moved elsewhere, with another
+/// head, makes it neither a version nor the state Don't save goes back to.
+#[test]
+fn a_failed_save_is_judged_on_the_branch_it_started_on() {
+    use archforge_project::{AfterFailure, SafeBranch};
+    let env = Env::new("save-branch");
+    let p = env.create("Earlier", &schema());
+    p.create_chat(&new_chat(1, "Chat 1", 0), &no_keys()).unwrap();
+    p.start_turn(&turn(2, id(1), 1), &question(3, "Add"), &no_keys()).unwrap();
+    let changed = vec![ChangedElement { element: id(900), kind: ChangeKind::Added, metaclass: "er_schema".into(), name: Some("shop".into()) }];
+    p.end_turn(&ended(id(2), 2, Some(TurnChanges { changes: 1, elements: 1, changed }))).unwrap();
+    p.commit("Saved").unwrap();
+    let mut c = sql(&p);
+    for name in ["edited", "elsewhere"] {
+        c.exec_drop("CALL DOLT_BRANCH(?)", (name,)).unwrap();
+    }
+    c.query_drop("USE `project/elsewhere`").unwrap();
+    c.query_drop("CALL DOLT_COMMIT('--allow-empty', '-m', 'Another head')").unwrap();
+    c.query_drop("USE `project/edited`").unwrap();
+    c.query_drop("CREATE TABLE er_extra (id INT PRIMARY KEY)").unwrap();
+    let edited = SafeBranch::found("edited").unwrap();
+    p.set_current_branch(edited.clone());
+    p.set_change_states(&[(id(2), ChangeState::Undone)], &at(3)).unwrap();
+    let failed = p
+        .save_with(|_| {
+            p.set_current_branch(SafeBranch::found("elsewhere").unwrap());
+            Err(mysql::Error::MySqlError(mysql::MySqlError { state: "HY000".into(), code: 1105, message: "refused".into() }))
+        })
+        .unwrap_err();
+    assert_eq!(failed.version, AfterFailure::NoVersion, "{}", failed.error);
+    p.set_current_branch(edited);
+    p.discard(&at(4)).unwrap();
+    let state = p.load_chat(id(1)).unwrap().turns[0].change.clone().map(|c| c.state);
+    assert_eq!(state, Some(ChangeState::Applied), "the failed save moved nothing Don't save goes back to");
+    p.close().unwrap();
+}
+
 #[test]
 fn a_format_2_project_without_conversations_stays_format_2() {
     let env = Env::new("stay");
