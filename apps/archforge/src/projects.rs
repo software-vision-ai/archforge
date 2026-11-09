@@ -4185,6 +4185,25 @@ mod tests {
         }
     }
 
+    /// Asked again once its branch is the one in use, an unclear delete is settled all the same,
+    /// so that the name is free to change again, and it still deletes nothing there.
+    #[test]
+    fn an_unclear_delete_is_settled_even_on_the_branch_now_in_use() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (target, asked) = (branch("elsewhere"), std::cell::Cell::new(false));
+        let unclear = lock(&host.inner.open)[0].delete_branch_faulted(&target, false, false, &asked);
+        assert!(matches!(unclear, Err(DeleteBranchError::CannotTell(_))), "{unclear:?}");
+        asked.set(false);
+        switch_to(host, &path, "elsewhere").unwrap();
+        let open = lock(&host.inner.open);
+        let still = open[0].delete_branch_faulted(&target, true, false, &asked);
+        assert!(matches!(still, Err(DeleteBranchError::CannotTell(_))), "not settled yet: {still:?}");
+        assert_eq!(open[0].delete_branch_faulted(&target, true, true, &asked), Err(DeleteBranchError::Current));
+        assert!(!asked.get() && has_branch(&open[0], "elsewhere"), "no delete was asked for");
+        assert_eq!(open[0].rename_branch(&target, &branch("moved")), Ok(()), "settled, so the name may change");
+    }
+
     /// A read on the branch when it goes fails; it does not answer for anything else.
     #[test]
     fn a_read_in_flight_on_a_deleted_branch_only_fails() {

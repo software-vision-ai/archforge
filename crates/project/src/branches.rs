@@ -458,19 +458,9 @@ impl Project {
         if branch.same_branch(&SafeBranch::default()) {
             return Err(DeleteBranchError::Main);
         }
-        if branch.same_branch(&self.current_branch()) {
-            return Err(DeleteBranchError::Current);
-        }
-        if let Found::Good(record) = creation::read(self.path())
-            && record.branch.same_branch(branch)
-        {
-            return Err(DeleteBranchError::RecordRemains);
-        }
-        let earlier = self.unclear_delete().clone();
+        // An earlier try is settled first: its branch may be the one in use by now.
+        let earlier = self.unclear_delete().clone().filter(|(was, _)| was.same_branch(branch));
         if let Some((was, chats)) = earlier {
-            if !was.same_branch(branch) {
-                return Err(DeleteBranchError::CannotTell("another delete is not settled".into()));
-            }
             match read(&was) {
                 Ok(false) => {
                     *self.unclear_delete() = None;
@@ -479,6 +469,17 @@ impl Project {
                 Ok(true) => *self.unclear_delete() = None,
                 Err(why) => return Err(DeleteBranchError::CannotTell(why)),
             }
+        }
+        if branch.same_branch(&self.current_branch()) {
+            return Err(DeleteBranchError::Current);
+        }
+        if let Found::Good(record) = creation::read(self.path())
+            && record.branch.same_branch(branch)
+        {
+            return Err(DeleteBranchError::RecordRemains);
+        }
+        if self.unclear_delete().is_some() {
+            return Err(DeleteBranchError::CannotTell("another delete is not settled".into()));
         }
         let connected = self.connection_to(&SafeBranch::default());
         if matches!(connected, Err(Error::BranchUnclear { .. })) {
