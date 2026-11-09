@@ -1226,14 +1226,20 @@ fn a_hold_until_closed_lets_only_closing_without_writing_end_it() {
     let now = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1_000));
     let clock = now.clone();
     h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now: clock.load(Relaxed), offset: None }));
-    let (job, _, answer, _reading) = test_job();
+    let (mut job, _, answer, _reading) = test_job();
+    // The time the reading takes to start counts towards its limit.
+    let (slow, read_back) = (now.clone(), job.read_back);
+    job.read_back = Box::new(move || {
+        slow.fetch_add(crate::replace::READ_BACK_LIMIT - 1, Relaxed);
+        read_back()
+    });
     let read = start_replacing(&mut h, Some(job));
     read.send(Ok(empty)).unwrap();
     h.run_steps(3);
     drop(answer);
     h.run_steps(3);
     assert!(h.state().save_error.is_none(), "still reading back");
-    now.fetch_add(crate::replace::READ_BACK_LIMIT, Relaxed);
+    now.fetch_add(1, Relaxed);
     h.run_steps(3);
     assert!(h.state().save_error.as_deref().is_some_and(|e| e.contains("could not tell")), "{:?}", h.state().save_error);
     h.state_mut().discard_tab(0, true);
@@ -1310,6 +1316,24 @@ fn another_projects_closing_refused_does_not_bring_the_hold_back() {
     first.send(Err("the disk is full".into())).unwrap();
     h.run_steps(3);
     assert!(!h.state().is_held(), "the project refused was not the one held");
+}
+
+/// A quit asked for while a held project closes waits for that, with nothing unsaved too.
+#[test]
+fn a_quit_during_a_held_projects_closing_waits_and_goes_with_a_refusal() {
+    for refused in [true, false] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        held_until_closed(&mut h, "shop", |_| {});
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.state_mut().discard_tab(0, false);
+        h.state_mut().request_quit();
+        h.run_steps(3);
+        assert!(!h.state().quit_confirmed(), "it waits for the closing");
+        let answer = if refused { Err("the disk is full".to_string()) } else { Ok(()) };
+        host.closings.lock().unwrap().pop().unwrap().send(answer).unwrap();
+        h.run_steps(4);
+        assert_eq!((h.state().quit_confirmed(), h.state().is_held()), (!refused, refused));
+    }
 }
 
 /// Another project closing for real leaves the hold where it is.

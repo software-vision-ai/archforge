@@ -30,7 +30,9 @@ pub type JobAnswer = Receiver<Result<(), JobFailure>>;
 /// What reading a job back gives: whether it finished, later, or why that could not be read.
 pub type ReadBack = Receiver<Result<bool, String>>;
 
-/// An operation's writes, run as one job on the writer.
+/// An operation's writes, run as one job on the writer. Both callbacks are called on the frame
+/// thread, so each only hands its work to the writer and returns its answer's channel at once, as
+/// the host's Save does; one that blocked would stop the window, which no limit here can catch.
 pub struct Job {
     pub run: Box<dyn FnOnce() -> JobAnswer>,
     /// Reads `HEAD` or the branch list to see whether the job finished.
@@ -45,7 +47,7 @@ enum Stage {
     /// Built, and waiting for Chat to be still before the job or the replacement.
     Ready(Box<Session>, Option<u64>),
     Writing(Box<Session>, JobAnswer),
-    Reading(Box<Session>, ReadBack, Option<u64>),
+    Reading(Box<Session>, ReadBack, u64),
     /// What happened could not be told: held until the project is closed.
     Unknown,
 }
@@ -132,15 +134,18 @@ impl Shell {
                 Ok(Err(JobFailure::Failed(why))) => return self.give_up(Some(why)),
                 // A lost reply says nothing about what happened: it is read back, never guessed.
                 Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
-                    Some(read) => Stage::Reading(session, read(), None),
+                    Some(read) => {
+                        // Before the call, so that the time it takes to return counts.
+                        let since = chat_panel::clock(self).now;
+                        Stage::Reading(session, read(), since)
+                    }
                     None => self.could_not_tell(),
                 },
             },
             Stage::Reading(session, answer, since) => match answer.try_recv() {
                 Err(TryRecvError::Empty) => {
                     let now = chat_panel::clock(self).now;
-                    let since = since.unwrap_or(now);
-                    if now.saturating_sub(since) < READ_BACK_LIMIT { Stage::Reading(session, answer, Some(since)) } else { self.could_not_tell() }
+                    if now.saturating_sub(since) < READ_BACK_LIMIT { Stage::Reading(session, answer, since) } else { self.could_not_tell() }
                 }
                 Ok(Ok(true)) => {
                     r.wrote = true;

@@ -214,7 +214,9 @@ impl Shell {
     /// While held, keeps `action` for when the hold ends (a quit once) and gives true.
     pub(crate) fn remember(&mut self, action: Waiting) -> bool {
         // Closing is what ends a hold kept until closed, and only without writing anything back.
-        if !self.is_held() || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false))) {
+        // A quit waits for a held project's closing too: a refusal must find the window still there.
+        let behind_closing = matches!(action, Waiting::Quit) && self.holding.closing.is_some();
+        if !(self.is_held() || behind_closing) || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false))) {
             return false;
         }
         if !(matches!(action, Waiting::Quit) && self.holding.waiting.iter().any(|w| matches!(w, Waiting::Quit))) {
