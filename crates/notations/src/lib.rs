@@ -5,6 +5,8 @@
 //! projects here and name no notation for it. Pure: builds for the portable target.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+pub mod differences;
+
 use std::sync::Arc;
 
 use archforge_diagram::{Notation, ProjectView};
