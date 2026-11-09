@@ -1497,6 +1497,7 @@ impl Shell {
             done.extend(poll_save(&mut p.saving, p.session.as_mut(), &mut p.save_error));
         }
         for (ticket, outcome) in done {
+            version_chip::close(self);
             self.finished_save(ticket, outcome);
         }
         if let Some(rx) = &self.dolt_check {

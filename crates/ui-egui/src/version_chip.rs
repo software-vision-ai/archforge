@@ -53,9 +53,8 @@ pub(crate) fn open(shell: &mut Shell) {
 }
 
 /// Closes the list; what it read goes with it.
-fn close(shell: &mut Shell) {
-    let shown = std::mem::take(&mut shell.version_list.shown);
-    shell.version_list = List { shown, ..List::default() };
+pub(crate) fn close(shell: &mut Shell) {
+    shell.version_list = List { shown: shell.version_list.shown.take(), ..List::default() };
 }
 
 /// Takes the host's answer; a list that cannot be read shows current work alone until AR-339.

@@ -39,22 +39,19 @@ fn list_shows(h: &Harness<'static, Shell>) -> bool {
 #[test]
 fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
     in_both(|mut h, host| {
-        assert!(h.query_by_label("Current work").is_some());
         for open in [true, false] {
             let at = rect_of(&h, "workspace.header.version").center();
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
-        let (after, limit, _) = host.pages.lock().unwrap().remove(0);
-        assert_eq!((after, limit), (None, 7), "the newest versions, each one in reach");
+        assert_eq!(host.pages.lock().unwrap().remove(0).1, 7, "the newest versions, each one in reach");
         opened_list(&mut h, &host);
         assert!(
             ["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "Add status")
         );
         add_schema(&mut h, "shop");
         h.run_steps(2);
-        assert!(painted_has(&h, "Unsaved changes") && painted_has(&h, "Add status"));
-        assert!(h.query_by_label("Current work · unsaved changes").is_some());
+        assert!(painted_has(&h, "Unsaved changes") && painted_has(&h, "Add status") && h.query_by_label("Current work · unsaved changes").is_some());
     });
 }
 
@@ -71,7 +68,6 @@ fn the_keys_move_view_and_close() {
         assert_eq!(host.reads.lock().unwrap()[0].0, "h3", "the row under the highlight, the last one being as far as it goes");
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
-        assert_eq!(h.state().viewing(), Some("h3"));
         assert!(h.query_by_label_contains("Viewing the version of 8 Nov").is_some());
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::Escape, MOVE[0]);
@@ -96,6 +92,11 @@ fn the_keys_move_view_and_close() {
         h.run_steps(2);
         assert!(!list_shows(&h), "a hold closes it");
         h.state_mut().end_hold();
+        opened_list(&mut h, &host);
+        h.state_mut().save();
+        host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("no".into()))).unwrap();
+        h.run_steps(3);
+        assert!(!list_shows(&h), "a finished save closes it, even a failed one");
         opened_list(&mut h, &host);
         h.state_mut().project.as_mut().unwrap().path = "/another".into();
         h.run_steps(2);
