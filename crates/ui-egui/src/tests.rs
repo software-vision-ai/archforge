@@ -8124,6 +8124,151 @@ fn the_versions_panel_reads_only_for_what_it_is_about() {
     });
 }
 
+/// A panel whose clock is an hour east of UTC, its first read answered with `versions`.
+fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = versions_panel(theme);
+    let now = crate::chat_words::seconds_of("2026-11-09T12:00:00Z").unwrap();
+    h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now, offset: Some(3600) }));
+    versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions, more: false }));
+    (h, host)
+}
+
+/// A version with the things a row says.
+fn version_row(hash: &str, description: Option<&str>, by: (Option<&str>, bool), date: &str) -> crate::VersionEntry {
+    let (description, author) = (description.map(str::to_string), by.0.map(str::to_string));
+    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None }
+}
+
+/// A row's two lines, its date local and never as stored: with and without a description, by a
+/// person or an agent, from another year or with a date that cannot be read; in the language shown.
+#[test]
+fn a_versions_row_says_what_it_holds_and_when() {
+    let shown = |theme| {
+        let dejan = (Some("Dejan"), false);
+        let agent = (Some("Chat 3"), true);
+        let (h, host) = versions_listed(
+            theme,
+            vec![
+                version_row("a", Some("Add order status"), dejan, "2026-11-08T15:30:00Z"),
+                version_row("b", None, dejan, "2026-11-06T16:05:00Z"),
+                version_row("c", None, agent, "2026-11-08T11:40:00Z"),
+                version_row("d", Some("By hand"), agent, "2026-11-07T10:00:00Z"),
+                version_row("e", Some("Last year"), (None, false), "2025-03-02T08:00:00Z"),
+                version_row("f", Some("Odd"), dejan, "yesterday"),
+                version_row("g", Some("   "), dejan, "2026-11-05T09:00:00Z"),
+            ],
+        );
+        (h, host)
+    };
+    in_both_appearances(|theme| {
+        let (mut h, _host) = shown(theme);
+        let texts = painted(&h);
+        for t in [
+            "Add order status",
+            "8 Nov 16:30 · Dejan",
+            "6 Nov 17:05",
+            "No description",
+            "8 Nov 12:40",
+            "Saved by an agent",
+            "By hand",
+            "7 Nov 11:00 · Saved by an agent",
+            "2 Mar 2025 09:00",
+            "Date not known · Dejan",
+            "5 Nov 10:00",
+        ] {
+            assert!(texts.iter().any(|x| x == t), "{theme:?}: {t}: {texts:?}");
+        }
+        assert!(!texts.iter().any(|t| t.contains("T15:30") || t == "yesterday"), "{theme:?}: {texts:?}");
+        h.state_mut().state.language = "de".to_string();
+        h.run_steps(2);
+        let german =
+            crate::chat_words::date_and_time(crate::chat_words::seconds_of("2026-11-06T16:05:00Z").unwrap(), crate::chat_panel::clock(h.state()));
+        assert!(german.starts_with("6.") && painted(&h).contains(&german), "{german}: {:?}", painted(&h));
+        h.state_mut().state.language = "en".to_string();
+        h.run_steps(2);
+    });
+}
+
+/// A version that cannot be shown says so, with its reason behind "Why?" and read out by a screen
+/// reader; what was shown about it before does not stay, and the reason ends with the project.
+#[test]
+fn an_unavailable_version_says_so_and_why() {
+    use egui_kittest::kittest::Queryable;
+    in_both_appearances(|theme| {
+        let (mut h, _host) = versions_listed(theme, vec![version_row("a", Some("Add order status"), (None, false), "2026-11-08T15:30:00Z")]);
+        let why = "its tables are damaged";
+        h.state_mut().versions.unavailable.insert("a".to_string(), why.to_string());
+        h.run_steps(2);
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "This version can't be shown") && !texts.iter().any(|t| t == "Add order status"), "{texts:?}");
+        assert_eq!(h.query_all_by_label_contains(why).count(), 2, "{theme:?}: the row and its Why?");
+        let at = rect_of(&h, "workspace.versions.row.a.why").center();
+        h.event(egui::Event::PointerMoved(at));
+        h.run_steps(4);
+        assert!(painted(&h).iter().any(|t| t == why), "{theme:?}: on hover");
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(h.state().versions.unavailable.is_empty(), "{theme:?}: it was about the session left");
+    });
+}
+
+/// The rail counts the working changes above zero, in its badge and what it says; they end with
+/// the session. Sections fold, a long list scrolls, and the narrowest column holds its rows.
+#[test]
+fn the_rail_counts_changes_sections_fold_and_rows_fit() {
+    use egui_kittest::kittest::Queryable;
+    in_both_appearances(|theme| {
+        let many = (0..30).map(|i| version_row(&format!("v{i}"), Some("A version"), (None, false), "2026-11-08T15:30:00Z")).collect();
+        let (mut h, _host) = versions_listed(theme, many);
+        let badge = "workspace.explorers.source-control.badge";
+        assert!(!has_id(&h, badge) && h.query_by_label("Versions").is_some(), "{theme:?}");
+        for (working, shows, says) in [(5, "5", "Versions · 5 changes"), (1, "1", "Versions · 1 change"), (150, "99+", "Versions · 150 changes")] {
+            h.state_mut().versions.working = working;
+            h.run_steps(2);
+            assert!(has_id(&h, badge) && painted(&h).iter().any(|t| t == shows) && h.query_by_label(says).is_some(), "{theme:?}: {says}");
+        }
+        assert!(!painted(&h).iter().any(|t| t == "No changes since the last version."), "{theme:?}: never beside a count");
+        h.state_mut().versions.working = 0;
+        h.run_steps(2);
+        assert!(!has_id(&h, badge), "{theme:?}: none at zero");
+        assert!(!has_id(&h, "workspace.versions.row.v29"), "{theme:?}: below the column");
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.versions.row.v0").center()));
+        for _ in 0..8 {
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -1200.0),
+                modifiers: egui::Modifiers::NONE,
+                phase: egui::TouchPhase::Move,
+                source: egui::MouseWheelSource::Wheel,
+            });
+            h.run_steps(2);
+        }
+        assert!(has_id(&h, "workspace.versions.row.v29"), "{theme:?}: scrolled to");
+        assert!(!has_id(&h, "workspace.versions.row.v0"), "{theme:?}: scrolled past");
+        let folds = |h: &mut Harness<'static, Shell>, id: &str| {
+            let at = rect_of(h, id).center();
+            click(h, at);
+        };
+        folds(&mut h, "workspace.versions.history");
+        assert!(!has_id(&h, "workspace.versions.row.v29"), "{theme:?}: History folds");
+        folds(&mut h, "workspace.versions.history");
+        assert!(has_id(&h, "workspace.versions.row.v29"), "{theme:?}: and opens");
+        let no_changes = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t == "No changes since the last version.");
+        assert!(no_changes(&h), "{theme:?}");
+        folds(&mut h, "workspace.versions.working");
+        assert!(!no_changes(&h), "{theme:?}: Working changes folds");
+        h.state_mut().state.explorer_width = 240.0;
+        h.set_size(egui::vec2(760.0, 860.0));
+        h.run_steps(3);
+        let shown = ids(&h).into_iter().find(|i| i.starts_with("workspace.versions.row.")).expect("rows in the narrowest column");
+        assert!(rect_of(&h, &shown).right() <= 52.0 + 240.0 + 8.0, "{theme:?}: the narrowest column");
+        h.state_mut().versions.working = 5;
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(!has_id(&h, badge), "{theme:?}: the count ended with the session");
+    });
+}
+
 #[test]
 fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_the_same_canvas() {
     let (mut h, d, a, b, e) = sketch_harness();

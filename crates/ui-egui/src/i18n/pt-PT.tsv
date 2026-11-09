@@ -475,6 +475,14 @@ str		No changes since the last version.	Sem alterações desde a última versão
 str		No versions yet.	Ainda não há versões.
 str		No versions yet. Save version records your first one.	Ainda não há versões. Guardar versão regista a primeira.
 str		Loading	A carregar
+str		No description	Sem descrição
+str		Saved by an agent	Guardado por um agente
+str		This version can't be shown	Esta versão não pode ser mostrada
+str		Why?	Porquê?
+str		Date not known	Data desconhecida
+plural		Versions · {n} change	Versões · {n} alteração|Versões · {n} alterações
+str		{date} {time}	{date} {time}
+str		{when} · {who}	{when} · {who}
 str		The versions couldn't be read.	Não foi possível ler as versões.
 str		Chat	Conversa
 str		Appearance	Aparência

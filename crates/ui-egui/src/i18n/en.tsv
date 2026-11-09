@@ -474,6 +474,14 @@ str		No changes since the last version.	No changes since the last version.
 str		No versions yet.	No versions yet.
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
+str		No description	No description
+str		Saved by an agent	Saved by an agent
+str		This version can't be shown	This version can't be shown
+str		Why?	Why?
+str		Date not known	Date not known
+plural		Versions · {n} change	Versions · {n} change|Versions · {n} changes
+str		{date} {time}	{date} {time}
+str		{when} · {who}	{when} · {who}
 str		The versions couldn't be read.	The versions couldn't be read.
 str		Chat	Chat
 str		Appearance	Appearance
