@@ -23,6 +23,9 @@
 //!   ([`settle`]): the host ends the program first and waits a bounded time, and refuses to start
 //!   the conversation until it is done. A folder of a conversation a project open here still shows
 //!   (a copy of the project) stays.
+//! - **A branch deleted** lets go of the folders of the conversations that were only on it, the
+//!   same way, once the project says the branch is gone: [`delete_branch`]. Any other answer keeps
+//!   them, as does no answer by the time Archforge quits.
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -340,6 +343,34 @@ fn forget(shell: &mut Shell, key: &str, after: Awaited) {
     shell.chats.forgetting.push((key.to_string(), rx));
 }
 
+/// Asks the project to delete the branch `branch` of `project`; the folders of the conversations
+/// only on it go once the answer says it is gone, whichever project is shown by then. The screen
+/// that asks for this comes with AR-292.
+pub fn delete_branch(shell: &mut Shell, project: &Path, branch: &str) {
+    let Some(host) = shell.services.projects.clone() else { return };
+    shell.chats.branch_deletes.push(host.delete_branch(project, branch));
+}
+
+/// Takes the answers that have come to branch deletes. Only a branch seen gone names
+/// conversations; every other answer, or a project that stopped answering, lets go of nothing.
+fn branch_answers(shell: &mut Shell) {
+    let mut answers = Vec::new();
+    shell.chats.branch_deletes.retain(|rx| match rx.try_recv() {
+        Ok(answer) => {
+            answers.push(answer);
+            false
+        }
+        Err(TryRecvError::Empty) => true,
+        Err(TryRecvError::Disconnected) => false,
+    });
+    for answer in answers {
+        match answer {
+            Ok(chats) => chats.iter().for_each(|chat| forget(shell, &chat.to_string(), Vec::new())),
+            Err(why) => log::info!("a branch's delete let go of no conversation's folder: {why}"),
+        }
+    }
+}
+
 /// What became of a deletion this frame.
 enum Next {
     Keep(Deletion),
@@ -370,6 +401,7 @@ pub(crate) fn frame(shell: &mut Shell) {
             Next::Done { forget: false } => {}
         }
     }
+    branch_answers(shell);
     shell.chats.forgetting.retain(|(key, rx)| match rx.try_recv() {
         Ok(Ok(_)) => false,
         Ok(Err(why)) => {
@@ -480,6 +512,7 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
     let shown = shell.project.as_ref().map(|p| p.path.as_path());
     shell.chats.deletions.iter().any(|d| !matches!(d.stage, Stage::Deleted { .. }) || (d.toast && shown == Some(d.project.as_path())))
         || !shell.chats.forgetting.is_empty()
+        || !shell.chats.branch_deletes.is_empty()
 }
 
 /// Whether a deletion or a restoration in the project at `project` has not been answered yet.
@@ -495,8 +528,15 @@ pub(crate) fn under_way(shell: &Shell, project: &Path) -> bool {
 /// either, so the folder goes only once the deletion said deleted (AR-218). The host waits a
 /// bounded time, and at quit is waited for with its own threads; an answer that does not come in
 /// time keeps the folder, as a crash does. An Undo pressed before its deletion answered is on the
-/// writer already, ahead of the closing.
+/// writer already, ahead of the closing. A branch delete's answer is taken frame by frame whatever
+/// closes; one that has not come when Archforge quits keeps its folders, as a crash does.
 pub(crate) fn settle(shell: &mut Shell, project: Option<&Path>) {
+    if project.is_none() {
+        branch_answers(shell);
+        if !shell.chats.branch_deletes.is_empty() {
+            log::warn!("Archforge quit before a branch's delete answered: its conversations' folders are kept");
+        }
+    }
     // A deletion still waiting for its conversation's question to land is not made: said in the
     // log, as the window has no frame left to make it in.
     let mut waiting: Vec<(PathBuf, Uuid)> = Vec::new();

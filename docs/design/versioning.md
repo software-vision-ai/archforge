@@ -472,7 +472,7 @@ All run on the writer, in order with every model and conversation write.
 | **Create from a version** | **Start a branch here…** in details and the viewing banner | The creation record; `DOLT_BRANCH` at that hash; removes inherited conversations; removes the record; switches. Viewing ends | The same. Not offered on a version that cannot be read |
 | **Switch** | Branch row, chip list | Section 6's rules, then: writes what waits, commits waiting conversations, runs the opening checks on the target and builds its model, moves the connection, reloads. A conversation commit that fails does not stop it: those rows wait in that branch's working set for the next chat commit | Connection and session stay on the current branch |
 | **Rename** | Branch row menu | `DOLT_BRANCH('-m')`. Allowed on the current branch; the connection and the stored current branch follow | Name stays |
-| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
+| **Delete** | Branch row menu, not on `main` or the current branch | Confirmation names the versions only on this branch, its conversations and whether it holds unsaved work (found as the branch row's dot is); then `DOLT_BRANCH('-D')`; once the branch is seen gone, conversation folders are let go through `chat_delete::settle`'s host path | Branch stays |
 
 Creating a branch keeps a record in the project folder, beside the `.creating` marker: the branch being
 made and the branch it was made from. The record is written atomically and flushed to disk, its folder included, once
@@ -562,7 +562,7 @@ the inherited rows on the new branch only, in one chat commit. No table or colum
 | Switch | The running turn ends as closing a tab ends it (`lib.rs:758-765`), its reply so far kept and written before the switch; the requests still on their way are settled first (section 6); the program is let go of; the panel reloads from the new branch |
 | Numbering | `Chat N` is per branch, so a new branch starts at Chat 1 |
 | Rename a branch | Conversations unaffected |
-| Delete a branch | Its conversations go with it; the confirmation counts them; their private folders are let go |
+| Delete a branch | Its conversations go with it; the confirmation counts them; their private folders are let go once the branch is seen gone, the program of any still running ended first. A delete refused or failed keeps them, and so does a folder a project open here still shows. A delete whose outcome is still unknown when its project closes, or not answered when Archforge quits, leaves its folders on disk, unused, and nothing removes them later |
 | Change links | The session's ledger (`Project::changes`) is reset on a switch, as on opening |
 | Viewing a version | Chat stays on the live branch with its composer off: "Back to current work to chat" |
 | A link to an element absent from the viewed version | Says so |
