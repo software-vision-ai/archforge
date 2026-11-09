@@ -452,7 +452,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     ux::text(&paint, at(20.0, 25.0), &tr("Diagrams").to_uppercase(), types::EYEBROW, p.text, Some((r.width() - 80.0).max(0.0)));
     let add = Rect::from_min_size(pos2(r.right() - 40.0, r.top() + 20.0), Vec2::splat(24.0));
     ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-    let live = shell.session.is_some();
+    let live = shell.session.is_some() && !shell.looking_only();
     if control(shell, ui, "workspace.diagrams.add", "button", add, live).on_hover_text(tr("New diagram")).clicked() {
         open_new(shell);
     }
@@ -600,7 +600,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
         if let Some(k) = known(kind) {
             let plus = Rect::from_center_size(pos2(column.right() - 29.0, mid), Vec2::splat(24.0));
             ux::icon_in(&paint, Rect::from_center_size(plus.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-            let live = shell.session.is_some();
+            let live = shell.session.is_some() && !shell.looking_only();
             let key = format!("workspace.diagrams.group.{}.add", group_key(kind));
             if control(shell, ui, &key, "button", plus, live).on_hover_text(tr("New diagram")).clicked() {
                 add = Some(k);

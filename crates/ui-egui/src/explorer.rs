@@ -387,16 +387,20 @@ fn commit_rename(shell: &mut Shell) {
 
 /// Whether the notation of `obj` renames it in place, so its row opens its name for typing.
 fn renames(shell: &Shell, obj: Obj) -> bool {
-    shell.session.as_ref().is_some_and(|s| {
-        let store = s.doc();
-        crate::notation_ui::of(shell.notation_uis, store, obj).is_some_and(|ui| ui.rename(store, obj).is_some())
-    })
+    !shell.looking_only()
+        && shell.session.as_ref().is_some_and(|s| {
+            let store = s.doc();
+            crate::notation_ui::of(shell.notation_uis, store, obj).is_some_and(|ui| ui.rename(store, obj).is_some())
+        })
 }
 
 /// Removes the selection: at once when nothing else goes with it and no diagram shows it, else
 /// after the dialog, which counts the diagrams that show it as the canvas's Delete from the model
 /// does ([`crate::editing::diagrams_showing`]).
 pub fn remove_selection(shell: &mut Shell) {
+    if shell.looking_only() {
+        return;
+    }
     shell.explorer.notice = None;
     let Some(obj) = selected(shell) else { return };
     let Some(session) = shell.session.as_ref() else { return };
@@ -521,7 +525,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         paint.rect_filled(add, 6.0, p.accent_tint);
     }
     ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, if menu_open { p.accent } else { p.text_secondary });
-    let live = shell.session.is_some();
+    let live = shell.session.is_some() && !shell.looking_only();
     if control(shell, ui, "workspace.explorer.add", "button", add, live).on_hover_text(tr("Add")).clicked() {
         shell.explorer.menu_open = !menu_open;
     }
@@ -741,7 +745,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     }
     let id = format!("workspace.explorer.row.{}", row.id);
     // A table row drags onto the canvas; its click still selects.
-    if row.draggable {
+    if row.draggable && !shell.looking_only() {
         let drag = ui.interact(hit, widgets::egui_id(&format!("{id}.drag")), Sense::drag());
         if drag.drag_started() {
             shell.explorer.dragging = Some(row.id);
@@ -1000,6 +1004,9 @@ fn menu_rows(
 /// nest, then Rename, Show in diagram and Delete from model. The arrows walk it, → opens the
 /// submenu and ← closes it, Enter picks, Escape closes; a press elsewhere closes it.
 fn context_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) {
+    if shell.looking_only() {
+        shell.explorer.context = None;
+    }
     let Some(menu) = shell.explorer.context.clone() else { return };
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return };
     let Some(obj) = store.by_uuid(menu.target).filter(|o| store.is_alive(*o)) else {

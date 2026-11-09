@@ -68,6 +68,7 @@ fn the_keys_move_view_and_close() {
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
         assert!(h.query_by_label_contains("Viewing the version of 8 Nov").is_some());
+        assert!(painted(&h).iter().any(|t| t.starts_with("Viewing the version of 8 Nov") && t.ends_with("· Read only")), "the banner names it");
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::Escape, MOVE[0]);
         assert!(!list_shows(&h) && h.state().viewing() == Some("h3"), "Esc never leaves the version");

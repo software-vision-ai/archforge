@@ -450,7 +450,11 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let canvas_rect = Rect::from_min_max(pos2(r.left(), tabs.bottom()), r.max);
     tab_strip(shell, ui, p, tabs);
     match shell.canvas.active.filter(|id| shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), *id))) {
-        Some(skill) => crate::skill_tab::draw(shell, ui, p, canvas_rect, skill),
+        Some(skill) => {
+            ui.scope(|ui| {
+                ui.add_enabled_ui(!shell.looking_only(), |ui| crate::skill_tab::draw(shell, ui, p, canvas_rect, skill));
+            });
+        }
         None => canvas(shell, ui, p, canvas_rect),
     }
 }
@@ -462,7 +466,7 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     paint.rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, p.border);
     let add = Rect::from_min_size(pos2(r.left() + 8.0, r.top() + 4.0), Vec2::splat(28.0));
     ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-    let live = shell.session.is_some();
+    let live = shell.session.is_some() && !shell.looking_only();
     if control(shell, ui, "workspace.tabs.add", "button", add, live).on_hover_text(tr("New diagram")).clicked() {
         crate::diagrams::open_new(shell);
     }
@@ -2784,8 +2788,20 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
-        ux::icon_in(&paint, b, icon, if active { p.accent } else { p.text_secondary });
-        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, true).on_hover_text(tr(hint)).clicked() {
+        let looks = matches!(tool, Tool::Select | Tool::Pan) || !shell.looking_only();
+        ux::icon_in(
+            &paint,
+            b,
+            icon,
+            if active {
+                p.accent
+            } else if looks {
+                p.text_secondary
+            } else {
+                p.text_muted
+            },
+        );
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", b, looks).on_hover_text(tr(hint)).clicked() {
             shell.canvas.tool = tool;
         }
     }
@@ -2801,13 +2817,20 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         if active {
             paint.rect_filled(b, 8.0, p.accent_tint);
         }
-        let ink = if active { p.accent } else { p.text_secondary };
+        let ink = if active {
+            p.accent
+        } else if shell.looking_only() {
+            p.text_muted
+        } else {
+            p.text_secondary
+        };
         if !kind.is_some_and(|k| k.tool_face(shell, &paint, p, tool.key, b, ink, active)) {
             ux::icon_in(&paint, b, tool.icon, ink);
         }
         let hint = kind.and_then(|k| k.tool_hint(shell, tool.key)).unwrap_or_else(|| tr(tool.hint));
         // Its name for assistive technology is its tooltip: what it makes now, and which way.
-        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, true)
+        let live = !shell.looking_only();
+        if control(shell, ui, &format!("workspace.tools.{}", tool.key), "button", b, live)
             .on_hover_text(hint.as_str())
             .accessible_name(hint)
             .clicked()
@@ -2827,7 +2850,8 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     for ((key, hint), picked, chevron) in chevrons {
         let open = shell.canvas.popover == Some(key);
         ux::icon_in(&paint, chevron, &icons::CHEVRON_SMALL, if open { p.accent } else { p.text_secondary });
-        if control(shell, ui, &format!("workspace.tools.{key}"), "button", chevron, true).on_hover_text(tr(hint)).clicked() {
+        let live = !shell.looking_only();
+        if control(shell, ui, &format!("workspace.tools.{key}"), "button", chevron, live).on_hover_text(tr(hint)).clicked() {
             shell.canvas.popover = if open { None } else { Some(key) };
             shell.canvas.menu_focus = None;
             if !open {
@@ -2867,7 +2891,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     // shown.
     paint.rect_filled(divider(at.arrange - 8.0), 0.0, p.border);
     let arrange = button(at.arrange);
-    let live = shell.canvas.active.is_some();
+    let live = shell.canvas.active.is_some() && !shell.looking_only();
     let resp = control(shell, ui, "workspace.tools.arrange", "button", arrange, live).on_hover_text(tr("Arrange diagram"));
     if resp.hovered() && live {
         paint.rect_filled(arrange, 8.0, p.page);
