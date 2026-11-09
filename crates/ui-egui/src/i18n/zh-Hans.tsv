@@ -475,6 +475,16 @@ str		No changes since the last version.	自上一版本以来没有更改。
 str		No versions yet.	还没有版本。
 str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
 str		Loading	正在加载
+str		Save version…	保存版本…
+str		Save version	保存版本
+str		Back to current work to save a version	返回当前工作以保存版本
+str		Archforge could not tell whether a version was made. Look at History before trying again.	Archforge 无法确定是否已创建版本。重试前请先查看历史记录。
+str		{what} changed since {when}.	自 {when} 以来 {what}已更改。
+str		{what} changed.	{what}已更改。
+str		These changes become a new version of {name}.	这些更改将成为 {name} 的新版本。
+str		The model changed while this was open. The summary is up to date again.	此窗口打开期间模型已更改。摘要已重新更新。
+str		One line, at most 200 characters. It stays in the history.	一行，最多 200 个字符。它会保留在历史记录中。
+plural		{n} model element	{n} 个模型元素
 str		Filter changes…	筛选更改…
 str		Model elements	模型元素
 str		Unnamed	未命名

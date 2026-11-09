@@ -49,6 +49,7 @@ pub mod problems;
 mod project_search;
 pub mod relation;
 pub mod replace;
+pub mod save_version;
 pub mod settings;
 mod settings_agents;
 pub mod skill_tab;
@@ -1740,6 +1741,7 @@ impl Shell {
         chat_panel::frame(self);
         // Deleted conversations: the project's answers, the toast's time, the folders let go.
         chat_delete::frame(self);
+        save_version::frame(self);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says

@@ -475,6 +475,16 @@ str		No changes since the last version.	Keine Änderungen seit der letzten Versi
 str		No versions yet.	Noch keine Versionen.
 str		No versions yet. Save version records your first one.	Noch keine Versionen. „Version speichern“ legt die erste an.
 str		Loading	Wird geladen
+str		Save version…	Version speichern…
+str		Save version	Version speichern
+str		Back to current work to save a version	Kehre zur aktuellen Arbeit zurück, um eine Version zu speichern
+str		Archforge could not tell whether a version was made. Look at History before trying again.	Archforge konnte nicht feststellen, ob eine Version erstellt wurde. Sieh im Verlauf nach, bevor du es erneut versuchst.
+str		{what} changed since {when}.	{what} seit {when} geändert.
+str		{what} changed.	{what} geändert.
+str		These changes become a new version of {name}.	Diese Änderungen werden zu einer neuen Version von {name}.
+str		The model changed while this was open. The summary is up to date again.	Das Modell wurde geändert, während dies geöffnet war. Die Zusammenfassung ist wieder aktuell.
+str		One line, at most 200 characters. It stays in the history.	Eine Zeile, höchstens 200 Zeichen. Sie bleibt im Verlauf.
+plural		{n} model element	{n} Modellelement|{n} Modellelemente
 str		Filter changes…	Änderungen filtern…
 str		Model elements	Modellelemente
 str		Unnamed	Unbenannt

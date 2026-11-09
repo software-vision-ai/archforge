@@ -149,6 +149,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         // Over everything: the explorer's dialog and the New diagram dialog, when they ask.
         crate::explorer::delete_dialog(shell, ui, &p);
         crate::chat_delete::dialog(shell, ui, &p);
+        crate::save_version::dialog(shell, ui, &p);
         crate::diagrams::new_dialog(shell, ui, &p);
     });
 }
