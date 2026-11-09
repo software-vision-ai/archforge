@@ -22,18 +22,18 @@ pub struct NativeMenu {
 }
 
 /// Builds the menu bar and installs it for the application; `ctx` is the window a chosen item wakes.
-pub fn build(ctx: egui::Context) -> Result<NativeMenu, String> {
+pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
     let app = Submenu::new("Archforge", true);
-    let quit = MenuItem::with_id(QUIT, actions::label(QUIT), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
-    let about = MenuItem::with_id(ABOUT, actions::label(ABOUT), true, None);
+    let quit = MenuItem::with_id(QUIT, actions::label(shell, QUIT), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
+    let about = MenuItem::with_id(ABOUT, actions::label(shell, ABOUT), true, None);
     app.append_items(&[&about, &PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])
         .map_err(err)?;
     let file = Submenu::new(tr("File"), true);
-    let open = MenuItem::with_id(OPEN, actions::label(OPEN), false, Accelerator::from_str("CmdOrCtrl+O").ok());
-    let save = MenuItem::with_id(SAVE, actions::label(SAVE), false, Accelerator::from_str("CmdOrCtrl+S").ok());
-    let generate = MenuItem::with_id(GENERATE, actions::label(GENERATE), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
+    let open = MenuItem::with_id(OPEN, actions::label(shell, OPEN), false, Accelerator::from_str("CmdOrCtrl+O").ok());
+    let save = MenuItem::with_id(SAVE, actions::label(shell, SAVE), false, Accelerator::from_str("CmdOrCtrl+S").ok());
+    let generate = MenuItem::with_id(GENERATE, actions::label(shell, GENERATE), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
     file.append_items(&[&open, &PredefinedMenuItem::separator(), &save, &PredefinedMenuItem::separator(), &generate]).map_err(err)?;
     menu.append_items(&[&app, &file]).map_err(err)?;
     let (sender, chosen) = channel();

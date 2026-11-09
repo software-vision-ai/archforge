@@ -267,7 +267,7 @@ fn native_options() -> eframe::NativeOptions {
 #[cfg(target_os = "macos")]
 fn native_menu(shell: &mut Shell, ctx: &egui::Context) -> Option<macos_menu::NativeMenu> {
     shell.top_inset = macos_window::TITLE_BAR_INSET;
-    match macos_menu::build(ctx.clone()) {
+    match macos_menu::build(shell, ctx.clone()) {
         Ok(menu) => Some(menu),
         Err(e) => {
             log::warn!("the native menu bar could not be built: {e}");
