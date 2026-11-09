@@ -458,6 +458,8 @@ str		Archforge is viewing an earlier version of this project, so this request wa
 str		Close a project to open another	別のプロジェクトを開くには、プロジェクトを閉じてください
 str		The closing stopped without an answer	閉じる処理が応答なしで終了しました
 str		The project could not be opened: {why}	プロジェクトを開けませんでした: {why}
+str		The branch {name} is no longer in this project	ブランチ {name} はこのプロジェクトにもうありません
+str		The branch {name} could not be opened: {why}	ブランチ {name} を開けませんでした: {why}
 str		The project could not be closed: {why}	プロジェクトを閉じられませんでした: {why}
 str		Model · the project's root	モデル · プロジェクトのルート
 str		Model	モデル

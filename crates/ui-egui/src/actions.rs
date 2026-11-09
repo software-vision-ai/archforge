@@ -242,7 +242,7 @@ pub(crate) mod tests {
         let pick_folder = Some(Arc::new(|_: &str| Some("/pinned".into())) as _);
         let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() });
         shell.session = Some(session());
-        shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false });
+        shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
         (shell, host, picks)
     }
 
