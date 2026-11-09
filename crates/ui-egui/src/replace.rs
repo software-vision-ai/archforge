@@ -227,7 +227,14 @@ impl Shell {
                         None => self.install(*session, r.repaired),
                     }
                     if let Some(unsaved) = r.arrives_unsaved {
-                        self.arrived_on_branch(unsaved.load(Ordering::SeqCst));
+                        // On another branch: the status bar's reason about the branch left goes.
+                        self.save_error = None;
+                        if unsaved.load(Ordering::SeqCst)
+                            && let Some(session) = self.session.as_mut()
+                        {
+                            session.mark_unsaved();
+                        }
+                        chat_panel::branch_changed(self);
                     }
                     return None;
                 }
@@ -305,16 +312,6 @@ impl Shell {
         {
             log::warn!("the work kept as a version could not be marked saved: {e}");
         }
-    }
-
-    /// The project arrived on another branch: it reads as unsaved when the branch holds such work,
-    /// the status bar's reason about the branch left goes, and Chat starts again on the branch's own.
-    fn arrived_on_branch(&mut self, unsaved: bool) {
-        self.save_error = None;
-        if unsaved && let Some(session) = self.session.as_mut() {
-            session.mark_unsaved();
-        }
-        chat_panel::branch_changed(self);
     }
 
     /// The replacement takes the session's place, and the hold ends. What was read is what the

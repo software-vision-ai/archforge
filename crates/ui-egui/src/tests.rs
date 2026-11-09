@@ -1892,6 +1892,21 @@ fn switch_checked(h: &mut Harness<'static, Shell>, ends: &SwitchEnds, rows: std:
     h.run_steps(4);
 }
 
+/// Runs `test` on what `fixture` makes, once in each appearance.
+fn in_both<A, B>(fixture: impl Fn() -> (Harness<'static, Shell>, A, B), test: impl Fn(Harness<'static, Shell>, A, B)) {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, a, b) = fixture();
+        h.state_mut().state.theme = theme;
+        test(h, a, b);
+    }
+}
+
+/// Answers a switch's move as finished.
+fn switch_moved(h: &mut Harness<'static, Shell>, ends: &SwitchEnds) {
+    ends.moved.0.send(Ok(())).unwrap();
+    h.run_steps(8);
+}
+
 /// The status bar's reason, and that the work is as it was and no longer held.
 #[track_caller]
 fn the_work_stays_saying(h: &Harness<'static, Shell>, why: &str) {
@@ -1899,132 +1914,125 @@ fn the_work_stays_saying(h: &Harness<'static, Shell>, why: &str) {
     assert!(!h.state().is_held() && schema_names(h).contains(&"shop".to_string()));
 }
 
-/// A switch that finishes puts the branch's model in place, with a fresh undo history, in either
-/// appearance, reading as unsaved when the branch holds such work; nothing changes before its move
-/// has finished, and what was read is not written back.
+/// A finished switch installs the branch with a fresh undo history, unsaved if the branch is, and
+/// writes nothing back; nothing changes before its move has finished.
 #[test]
 fn a_finished_switch_installs_the_branch_and_undo_starts_fresh() {
-    use crate::replace::JobFailure;
-    for (theme, unsaved) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
-        let (mut h, host, earlier) = work_and_earlier();
-        h.state_mut().state.theme = theme;
-        let ends = switch_asked(&mut h, &host);
-        assert_eq!(ends.branch, "elsewhere");
-        ends.unsaved.store(unsaved, std::sync::atomic::Ordering::SeqCst);
-        switch_checked(&mut h, &ends, earlier);
-        assert!(h.state().is_held() && schema_names(&h).contains(&"shop".to_string()), "not before the move");
-        let written = host.written.lock().unwrap().len();
-        ends.moved.0.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(8);
-        assert!(!h.state().is_held() && !schema_names(&h).contains(&"shop".to_string()));
-        let session = h.state().session.as_ref().unwrap();
-        assert_eq!((session.undo_label(), session.is_dirty(), session.read_only()), (None, unsaved, false), "{theme:?}");
-        assert_eq!(host.written.lock().unwrap().len(), written, "what was read is what the branch holds");
+    for unsaved in [false, true] {
+        in_both(work_and_earlier, |mut h, host, earlier| {
+            let ends = switch_asked(&mut h, &host);
+            assert_eq!(ends.branch, "elsewhere");
+            ends.unsaved.store(unsaved, std::sync::atomic::Ordering::SeqCst);
+            switch_checked(&mut h, &ends, earlier);
+            assert!(h.state().is_held() && schema_names(&h).contains(&"shop".to_string()), "not before the move");
+            let written = host.written.lock().unwrap().len();
+            switch_moved(&mut h, &ends);
+            assert!(!h.state().is_held() && !schema_names(&h).contains(&"shop".to_string()));
+            let session = h.state().session.as_ref().unwrap();
+            assert_eq!((session.undo_label(), session.is_dirty(), session.read_only()), (None, unsaved, false));
+            assert_eq!(host.written.lock().unwrap().len(), written, "what was read is what the branch holds");
+        });
     }
 }
 
 /// The check is not asked for until a save under way has answered and the latest rows are over.
 #[test]
 fn a_switch_asks_for_its_check_only_after_the_latest_rows_have_gone_over() {
-    let (mut h, host, _) = work_and_earlier();
-    h.state_mut().save();
-    h.run_steps(2);
-    h.state_mut().switch_branch("elsewhere".to_string()).unwrap();
-    h.run_steps(4);
-    assert!(host.switches.lock().unwrap().is_empty(), "the save has not answered");
-    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
-    h.run_steps(6);
-    assert_eq!(host.switches.lock().unwrap().len(), 1);
-    assert_eq!(host.written.lock().unwrap().last().unwrap().1, *rows_now(&h), "the latest rows went first");
+    in_both(work_and_earlier, |mut h, host, _| {
+        h.state_mut().save();
+        h.state_mut().switch_branch("elsewhere".to_string()).unwrap();
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().is_empty(), "the save has not answered");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(6);
+        assert_eq!(host.switches.lock().unwrap().len(), 1);
+        assert_eq!(host.written.lock().unwrap().last().unwrap().1, *rows_now(&h), "the latest rows went first");
+    });
 }
 
 /// A failed check says why and the work stays; a lost answer claims only that the project stayed.
 #[test]
 fn a_failed_check_says_why_and_the_work_stays() {
-    let stayed = "The switch did not finish, so the project stayed on its branch.";
-    let (mut h, host, _) = work_and_earlier();
-    host.switch_refused.lock().unwrap().replace("Another switch".to_string());
-    h.state_mut().switch_branch("elsewhere".to_string()).unwrap();
-    h.run_steps(4);
-    the_work_stays_saying(&h, "Another switch");
-    let ends = switch_asked(&mut h, &host);
-    ends.check.send(Err("The reason".to_string())).unwrap();
-    h.run_steps(4);
-    the_work_stays_saying(&h, "The reason");
-    let ends = switch_asked(&mut h, &host);
-    drop(ends);
-    h.run_steps(4);
-    the_work_stays_saying(&h, stayed);
-    // Anything else that loses its reading keeps its own words.
-    h.state_mut().begin_replacement(std::sync::mpsc::channel().1, None).unwrap();
-    h.run_steps(4);
-    the_work_stays_saying(&h, "The reading stopped without an answer, so nothing was changed.");
+    in_both(work_and_earlier, |mut h, host, _| {
+        host.switch_refused.lock().unwrap().replace("Another switch".to_string());
+        h.state_mut().switch_branch("elsewhere".to_string()).unwrap();
+        h.run_steps(4);
+        the_work_stays_saying(&h, "Another switch");
+        let ends = switch_asked(&mut h, &host);
+        ends.check.send(Err("The reason".to_string())).unwrap();
+        h.run_steps(4);
+        the_work_stays_saying(&h, "The reason");
+        drop(switch_asked(&mut h, &host));
+        h.run_steps(4);
+        the_work_stays_saying(&h, "The switch did not finish, so the project stayed on its branch.");
+        h.state_mut().begin_replacement(std::sync::mpsc::channel().1, None).unwrap();
+        h.run_steps(4);
+        the_work_stays_saying(&h, "The reading stopped without an answer, so nothing was changed.");
+    });
 }
 
 /// A move with no clear answer is read back: installed, stayed, or held until closed.
 #[test]
 fn a_move_with_no_clear_answer_is_read_back() {
-    use crate::replace::JobFailure;
-    let unclear = |answer: Result<bool, String>| {
-        let (mut h, host, earlier) = work_and_earlier();
-        let ends = switch_asked(&mut h, &host);
-        switch_checked(&mut h, &ends, earlier);
-        ends.moved.0.send(Err(JobFailure::Unclear)).unwrap();
-        h.run_steps(3);
-        ends.moved.1.send(answer).unwrap();
-        h.run_steps(6);
-        h
-    };
-    the_version_is_installed(&unclear(Ok(true)));
-    the_work_stays_saying(&unclear(Ok(false)), "The switch did not finish, so the project stayed on its branch.");
-    let h = unclear(Err("no".to_string()));
-    assert!(h.state().is_held() && h.state().save_error.as_deref().is_some_and(|w| w.starts_with("Archforge could not tell")));
+    let told: [(Result<bool, String>, fn(&Harness<'static, Shell>)); 3] = [
+        (Ok(true), the_version_is_installed),
+        (Ok(false), |h| the_work_stays_saying(h, "The switch did not finish, so the project stayed on its branch.")),
+        (Err("no".to_string()), |h| {
+            assert!(h.state().is_held() && h.state().save_error.as_deref().is_some_and(|w| w.starts_with("Archforge could not tell")))
+        }),
+    ];
+    for (answer, then) in told {
+        in_both(work_and_earlier, |mut h, host, earlier| {
+            let ends = switch_asked(&mut h, &host);
+            switch_checked(&mut h, &ends, earlier);
+            ends.moved.0.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
+            h.run_steps(3);
+            ends.moved.1.send(answer.clone()).unwrap();
+            h.run_steps(6);
+            then(&h);
+        });
+    }
 }
 
 /// From a version in view the switch goes back to current work first, unless it is refused.
 #[test]
 fn a_switch_from_every_starting_point() {
     use crate::hold::HoldRefused::{Another, NoProject};
-    let (mut h, host) = saving_harness(None, None);
-    assert_eq!(h.state_mut().switch_branch("x".to_string()), Err(NoProject));
-    assert!(host.switches.lock().unwrap().is_empty());
-    let (mut h, host, earlier) = work_and_earlier();
-    h.state_mut().begin_hold().unwrap();
-    assert_eq!(h.state_mut().switch_branch("x".to_string()), Err(Another));
-    h.state_mut().end_hold();
-    assert!(host.switches.lock().unwrap().is_empty());
-    start_viewing(&mut h, "c1");
-    answer_read(&mut h, &host, Ok(earlier));
-    assert_eq!(h.state().viewing(), Some("c1"));
-    h.state_mut().begin_hold().unwrap();
-    assert_eq!((h.state_mut().switch_branch("x".to_string()), h.state().viewing()), (Err(Another), Some("c1")));
-    h.state_mut().end_hold();
-    let _ends = switch_asked(&mut h, &host);
-    assert_eq!(h.state().viewing(), None, "current work first");
-    assert!(schema_names(&h).contains(&"shop".to_string()));
+    assert_eq!(Shell::new(Services::default()).switch_branch("x".to_string()), Err(NoProject), "this part draws nothing");
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        start_viewing(&mut h, "c1");
+        answer_read(&mut h, &host, Ok(earlier));
+        assert_eq!(h.state().viewing(), Some("c1"));
+        h.state_mut().begin_hold().unwrap();
+        assert_eq!((h.state_mut().switch_branch("x".to_string()), h.state().viewing()), (Err(Another), Some("c1")));
+        assert!(host.switches.lock().unwrap().is_empty());
+        h.state_mut().end_hold();
+        let _ends = switch_asked(&mut h, &host);
+        assert_eq!(h.state().viewing(), None, "current work first");
+        assert!(schema_names(&h).contains(&"shop".to_string()));
+    });
 }
 
 /// A close and a quit asked for during either step of a switch wait for it, and then go ahead.
 #[test]
 fn closing_or_quitting_during_a_switch_waits_for_it() {
-    use crate::replace::JobFailure;
     let routes: [fn(&mut Shell); 2] = [|s| s.close_tab(0), Shell::request_quit];
     for (n, route) in routes.into_iter().enumerate() {
         for during_check in [true, false] {
-            let (mut h, host, earlier) = work_and_earlier();
-            let ends = switch_asked(&mut h, &host);
-            if !during_check {
-                switch_checked(&mut h, &ends, earlier.clone());
-            }
-            route(h.state_mut());
-            h.run_steps(3);
-            assert!(!h.state().quit_confirmed() && host.closings.lock().unwrap().is_empty() && h.state().is_held(), "it waits");
-            if during_check {
-                switch_checked(&mut h, &ends, earlier);
-            }
-            ends.moved.0.send(Ok::<(), JobFailure>(())).unwrap();
-            h.run_steps(6);
-            assert!(if n == 0 { !host.closings.lock().unwrap().is_empty() } else { h.state().quit_confirmed() }, "then goes ahead");
+            in_both(work_and_earlier, |mut h, host, earlier| {
+                let ends = switch_asked(&mut h, &host);
+                if !during_check {
+                    switch_checked(&mut h, &ends, earlier.clone());
+                }
+                route(h.state_mut());
+                h.run_steps(3);
+                assert!(!h.state().quit_confirmed() && host.closings.lock().unwrap().is_empty() && h.state().is_held(), "it waits");
+                if during_check {
+                    switch_checked(&mut h, &ends, earlier);
+                }
+                switch_moved(&mut h, &ends);
+                assert!(if n == 0 { !host.closings.lock().unwrap().is_empty() } else { h.state().quit_confirmed() }, "then goes ahead");
+            });
         }
     }
 }
@@ -2033,7 +2041,6 @@ fn closing_or_quitting_during_a_switch_waits_for_it() {
 #[test]
 fn a_switch_lets_the_conversation_go_only_once_it_has_finished() {
     use crate::chat::{ChatEvent, TurnEnd};
-    use crate::replace::JobFailure;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, rig, host, earlier) = chat_and_a_version(theme);
         ask_in_chat(&mut h, "First");
@@ -2048,8 +2055,7 @@ fn a_switch_lets_the_conversation_go_only_once_it_has_finished() {
         let ended = chat_calls(&rig).3;
         let ends = switch_asked(&mut h, &host);
         switch_checked(&mut h, &ends, earlier);
-        ends.moved.0.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(6);
+        switch_moved(&mut h, &ends);
         assert_eq!(chat_calls(&rig).3, ended + 1, "{theme:?}: its program ended");
         let panel = &h.state().chat_panel;
         assert!(panel.chat.as_ref().is_none_or(|c| c.id != old && c.turns.is_empty()), "{theme:?}: a new conversation");
@@ -2061,20 +2067,22 @@ fn a_switch_lets_the_conversation_go_only_once_it_has_finished() {
 /// A deleted conversation's toast closes with a finished switch.
 #[test]
 fn a_switch_settles_the_toasts_of_deleted_conversations() {
-    use crate::replace::JobFailure;
-    let (mut h, _rig, chats) = chat_history(ThemeKind::Dark);
-    let host = std::sync::Arc::new(SavingHost::default());
-    h.state_mut().services.projects = Some(host.clone());
-    crate::chat_delete::ask(h.state_mut(), chats[2], 2);
-    crate::chat_delete::confirm(h.state_mut());
-    h.run_steps(4);
-    assert_eq!(h.state().chats.deletions.len(), 1, "its toast shows");
-    let rows = rows_now(&h);
-    let ends = switch_asked(&mut h, &host);
-    switch_checked(&mut h, &ends, rows);
-    ends.moved.0.send(Ok::<(), JobFailure>(())).unwrap();
-    h.run_steps(6);
-    assert!(h.state().chats.deletions.is_empty());
+    in_both(
+        || chat_history(ThemeKind::Light),
+        |mut h, _rig, chats| {
+            let host = std::sync::Arc::new(SavingHost::default());
+            h.state_mut().services.projects = Some(host.clone());
+            crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+            crate::chat_delete::confirm(h.state_mut());
+            h.run_steps(4);
+            assert_eq!(h.state().chats.deletions.len(), 1, "its toast shows");
+            let rows = rows_now(&h);
+            let ends = switch_asked(&mut h, &host);
+            switch_checked(&mut h, &ends, rows);
+            switch_moved(&mut h, &ends);
+            assert!(h.state().chats.deletions.is_empty());
+        },
+    );
 }
 
 /// A close and a quit asked for during a restore wait for it, and then go ahead.
