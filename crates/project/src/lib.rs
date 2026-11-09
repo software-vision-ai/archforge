@@ -13,6 +13,7 @@
 //! user. Host services, layer 9: the interface never depends on this crate.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
+mod branch_name;
 mod chat;
 mod description;
 mod error;
@@ -28,6 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use archforge_dolt::{Dolt, Server, ServerOptions};
 use mysql::prelude::Queryable;
 
+pub use branch_name::{BRANCH_NAME_CHARS, BranchNameProblem, SafeBranch, UnsafeBranch};
 pub use chat::{
     Anchor, AnchorRole, CHAT_AUTHOR, CHAT_TABLES, ChangeKind, ChangeRecord, ChangeState, ChangedElement, Chat, ChatSummary, Conversation, Deleted,
     Listed, Message, MessageRecord, NewAnchor, NewChat, NewQuestion, NewReply, NewToolCall, NewTurn, Provider, Rerun, Role, ToolCall, ToolStatus,

@@ -34,7 +34,7 @@ pub fn check_description(text: &str) -> Result<(), DescriptionProblem> {
 
 /// Whether `c` has no place in one line of text: the control characters, and the Unicode line and
 /// paragraph separators, which are not control characters but do break a line.
-fn breaks_the_line(c: char) -> bool {
+pub(crate) fn breaks_the_line(c: char) -> bool {
     c.is_control() || matches!(c, '\u{2028}' | '\u{2029}')
 }
 
