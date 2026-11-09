@@ -753,7 +753,15 @@ fn a_request_carries_the_generation_it_was_accepted_under() {
     let call = std::thread::spawn(move || {
         let live = Arc::new(AtomicBool::new(true));
         let role = archforge_control::Role::Full;
-        handler(archforge_control::Call { method: "document.inspect", params: json!({}), origin: None, conversation: None, role, live: &live })
+        // A field of the request has no say in it.
+        handler(archforge_control::Call {
+            method: "document.inspect",
+            params: json!({ "generation": 99 }),
+            origin: None,
+            conversation: None,
+            role,
+            live: &live,
+        })
     });
     let request = requests.recv_timeout(WAIT).unwrap();
     generation.store(8, Ordering::SeqCst);
