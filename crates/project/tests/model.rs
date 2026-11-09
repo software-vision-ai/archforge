@@ -333,6 +333,19 @@ fn a_version_from_before_an_upgrade_reads_as_the_upgrade_leaves_it() {
     project.close().unwrap();
 }
 
+/// A reader reads a version by itself, and once its project has closed it reads nothing.
+#[test]
+fn a_version_reader_reads_on_its_own_and_fails_once_the_project_has_closed() {
+    let env = Env::new("reader");
+    let schema = schema();
+    let project = saved_project(&env, &schema);
+    let hash = head_of(&project);
+    let reader = project.version_reader();
+    assert_eq!(reader.read_model_at(&schema, &hash).unwrap(), project.read_model_at(&schema, &hash).unwrap());
+    project.close().unwrap();
+    assert!(matches!(reader.read_model_at(&schema, &hash), Err(Error::Server(_) | Error::Sql { .. })));
+}
+
 /// Each commit Archforge cannot read names its own reason, and which commit it was about.
 #[test]
 fn a_version_of_a_shape_this_archforge_cannot_read_is_refused_with_its_reason() {

@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 
 use mysql::prelude::Queryable;
 
+use crate::VersionReader;
 use crate::chat::{head, is_chat_table, is_commit};
 use crate::saving::{AfterFailure, Author, SaveFailure, Saved, after_failed_commit, reply_lost};
 use crate::{DATABASE, Error, Project};
@@ -188,7 +189,9 @@ impl Project {
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
         database_connection(&self.server().connector())
     }
+}
 
+impl VersionReader {
     /// A connection to the version `commit` through Dolt's revision database: it sees that commit
     /// and nothing else, and the server itself refuses every write over it, so the working set
     /// cannot be touched. The name goes into a `USE` only once it has the shape of a hash, and only
@@ -231,13 +234,15 @@ impl Project {
         })
         .transpose()
     }
+}
 
+impl Project {
     /// Records the model tables' fingerprint, bringing a project made by an earlier Archforge up to
     /// date; a project made for other tables is refused. The tables themselves are made as rows go
     /// there.
     pub fn prepare_model(&self, schema: &ModelSchema) -> Result<(), Error> {
         let mut c = self.model_connection()?;
-        match self.held_fingerprint(&mut c)? {
+        match self.version_reader().held_fingerprint(&mut c)? {
             Some(f) if f != schema.fingerprint => {
                 // Made by an earlier Archforge, as its fingerprint says: the columns added since come
                 // last and are empty or hold what a new object holds, so adding them keeps every row
@@ -355,9 +360,16 @@ impl Project {
     /// than its type allows), and a table it lacks holds nothing; the rows are read one at a time
     /// within the budgets of rows per table and of cells and bytes for the whole model.
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
-        self.read_rows(&mut self.model_connection()?, schema, None)
+        self.version_reader().read_rows(&mut self.model_connection()?, schema, None)
     }
 
+    /// [`VersionReader::read_model_at`], on this project.
+    pub fn read_model_at(&self, schema: &ModelSchema, commit: &str) -> Result<Rows, Error> {
+        self.version_reader().read_model_at(schema, commit)
+    }
+}
+
+impl VersionReader {
     /// The model's rows as the version `commit` holds them, read as [`Project::read_model`] reads
     /// the working set, under the same budgets and from that commit's own table shapes. Nothing is
     /// written and nothing moves: unsaved work, the head and the branch stay as they were, and a
@@ -493,7 +505,9 @@ impl Project {
         }
         Ok(rows)
     }
+}
 
+impl Project {
     /// Whether the project holds changes not yet committed. The conversations are left out: they
     /// are committed in chat commits of their own, and a chat message never makes the project
     /// unsaved (owner decision, AR-206).

@@ -208,6 +208,49 @@ impl Projects {
     }
 }
 
+impl Projects {
+    /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
+    /// short lock on the readers is taken here, so the read waits for no write and no write waits
+    /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
+    /// reader has left the map, so a later read cannot reach it.
+    fn on_a_reader<T: Send + 'static>(
+        &self,
+        project: &Path,
+        read: impl FnOnce(&VersionReader) -> Result<T, String> + Send + 'static,
+    ) -> Receiver<Result<T, String>> {
+        let (tx, rx) = channel();
+        let reader = {
+            let readers = lock(&self.inner.readers);
+            let Some(reader) = readers.get(project) else {
+                let _ = tx.send(Err(format!("{} is no longer open", project.display())));
+                return rx;
+            };
+            // Counted and taken under one lock: the map holds one, each read under way another.
+            if Arc::strong_count(reader) > MOST_READS {
+                let _ = tx.send(Err(tr("Too many versions are being read at once. Try again in a moment.")));
+                return rx;
+            }
+            reader.clone()
+        };
+        let answer = tx.clone();
+        let work = move || {
+            let result = read(&reader);
+            let _ = answer.send(result);
+        };
+        match std::thread::Builder::new().name("archforge-versions".into()).spawn(work) {
+            Ok(handle) => {
+                let mut closers = lock(&self.inner.closers);
+                closers.retain(|c| !c.is_finished());
+                closers.push(handle);
+            }
+            Err(e) => {
+                let _ = tx.send(Err(format!("the read could not start: {e}")));
+            }
+        }
+        rx
+    }
+}
+
 impl ProjectHost for Projects {
     fn open(&self, path: &Path) -> Receiver<Result<Opened, CreateError>> {
         let (tx, rx) = channel();
@@ -254,39 +297,18 @@ impl ProjectHost for Projects {
         rx
     }
 
-    /// A page of the project's versions, read on a thread of its own: only the short lock on the
-    /// readers is taken here, so the read waits for no write and no write waits for it.
+    /// A page of the project's versions, read on a thread of its own ([`Projects::on_a_reader`]).
     fn versions(&self, project: &Path, after: Option<String>, limit: usize) -> Receiver<Result<VersionsPage, String>> {
-        let (tx, rx) = channel();
-        let reader = {
-            let readers = lock(&self.inner.readers);
-            let Some(reader) = readers.get(project) else {
-                let _ = tx.send(Err(format!("{} is no longer open", project.display())));
-                return rx;
-            };
-            // Counted and taken under one lock: the map holds one, each read under way another.
-            if Arc::strong_count(reader) > MOST_READS {
-                let _ = tx.send(Err(tr("Too many versions are being read at once. Try again in a moment.")));
-                return rx;
-            }
-            reader.clone()
-        };
-        let answer = tx.clone();
-        let read = move || {
-            let page = reader.versions(after.as_deref(), limit).map(page_of).map_err(|e| e.to_string());
-            let _ = answer.send(page);
-        };
-        match std::thread::Builder::new().name("archforge-versions".into()).spawn(read) {
-            Ok(handle) => {
-                let mut closers = lock(&self.inner.closers);
-                closers.retain(|c| !c.is_finished());
-                closers.push(handle);
-            }
-            Err(e) => {
-                let _ = tx.send(Err(format!("the read could not start: {e}")));
-            }
-        }
-        rx
+        self.on_a_reader(project, move |reader| reader.versions(after.as_deref(), limit).map(page_of).map_err(|e| e.to_string()))
+    }
+
+    /// The model a version of the project holds, read on a thread of its own ([`Projects::on_a_reader`]).
+    fn read_version(&self, project: &Path, commit: String) -> Receiver<Result<Arc<Rows>, String>> {
+        let inner = self.inner.clone();
+        self.on_a_reader(project, move |reader| {
+            let schema = schema(&inner).map_err(|e| format!("{e:?}"))?;
+            reader.read_model_at(&schema, &commit).map(Arc::new).map_err(|e| e.to_string())
+        })
     }
 
     fn writing(&self, project: &Path) -> Writing {
@@ -1398,6 +1420,26 @@ mod tests {
     }
 
     /// A model's rows: a project with one schema of the given name.
+    /// Runs `read` while another thread holds the open-projects lock, which also stops the writer.
+    /// The holder lets go when told or after a bounded wait, so a read that waits for the lock
+    /// fails here instead of hanging the test.
+    fn with_open_lock_held<T: Send>(host: &Projects, read: impl FnOnce() -> T) -> T {
+        std::thread::scope(|scope| {
+            let (locked, is_locked) = channel();
+            let (release, released) = channel::<()>();
+            let holder = scope.spawn(move || {
+                let _open = lock(&host.inner.open);
+                let _ = locked.send(());
+                released.recv_timeout(Duration::from_secs(15)).is_ok()
+            });
+            is_locked.recv_timeout(Duration::from_secs(60)).expect("the lock is held");
+            let answer = read();
+            let _ = release.send(());
+            assert!(holder.join().unwrap(), "the read waited for the open-projects lock");
+            answer
+        })
+    }
+
     fn model(schema: &str) -> Rows {
         let mut n = 0u64;
         let ids = Box::new(move || {
@@ -1610,23 +1652,7 @@ mod tests {
         let by_agent = host.save(&path, None, SavedBy::Agent(Some("Chat 3".into()))).recv_timeout(Duration::from_secs(60)).expect("the save answers");
         assert!(matches!(by_agent, Ok(Saved::Version { .. })), "{by_agent:?}");
 
-        // Another thread holds the lock and lets go when told or after a bounded wait, so a read
-        // that waits for the lock, even on this thread, fails here instead of hanging the test.
-        let page = std::thread::scope(|scope| {
-            let (locked, is_locked) = channel();
-            let (release, released) = channel::<()>();
-            let holder = scope.spawn(move || {
-                let _open = lock(&host.inner.open);
-                let _ = locked.send(());
-                released.recv_timeout(Duration::from_secs(15)).is_ok()
-            });
-            is_locked.recv_timeout(Duration::from_secs(60)).expect("the lock is held");
-            let page = read(None, 1);
-            let _ = release.send(());
-            assert!(holder.join().unwrap(), "the read waited for the open-projects lock");
-            page
-        })
-        .expect("the versions, with the lock held");
+        let page = with_open_lock_held(host, || read(None, 1)).expect("the versions, with the lock held");
         let newest = &page.versions[0];
         assert!(page.more);
         assert_eq!((newest.author.as_deref(), newest.by_agent, newest.description.as_ref()), (Some("Chat 3"), true, None));
@@ -1644,6 +1670,33 @@ mod tests {
         assert_eq!(read(None, 1).unwrap().versions[0].hash, newest.hash, "and comes back with it, on the new server");
     }
 
+    /// A version's model comes back while the open-projects lock is held, whatever came after it;
+    /// a reader goes with its project and a new one comes with the project opened again.
+    #[test]
+    fn a_version_is_read_without_the_writer_and_goes_with_the_project() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let read = |commit: &str| host.read_version(&path, commit.to_string()).recv_timeout(Duration::from_secs(30)).expect("the read answers");
+        host.write(&path, model("a"));
+        assert_eq!(saved(host, &path), Ok(true));
+        let first = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].hash.clone();
+        host.write(&path, model("b"));
+        assert_eq!(saved(host, &path), Ok(true));
+        assert_eq!(*with_open_lock_held(host, || read(&first)).expect("the version, with the lock held"), model("a"));
+        assert!(read("0123456789abcdefghijklmnopqrstuv").unwrap_err().contains("not a version"), "a commit it does not hold");
+        let thread = host.on_a_reader(&path, |_| Ok(std::thread::current().name().map(str::to_string)));
+        assert_eq!(thread.recv_timeout(Duration::from_secs(30)).unwrap(), Ok(Some("archforge-versions".to_string())), "a thread of its own");
+
+        // A reader kept past the closing, as a read still running would be, reads nothing more.
+        let stale = (**lock(&host.inner.readers).get(&path).unwrap()).clone();
+        close(host, &path).unwrap();
+        let shape = schema(&host.inner).unwrap();
+        assert!(matches!(stale.read_model_at(&shape, &first), Err(archforge_project::Error::Server(_) | archforge_project::Error::Sql { .. })));
+        assert_eq!(read(&first), Err(format!("{} is no longer open", path.display())), "and a new read does not reach it");
+        wait(&host.open(&path)).unwrap();
+        assert_eq!(*read(&first).unwrap(), model("a"), "the project opened again has a reader of its own");
+    }
+
     /// Reads past the cap are refused until one ends, and the cap is each project's own.
     #[test]
     fn reads_of_one_project_are_capped() {
@@ -1652,7 +1705,9 @@ mod tests {
         let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
         let read = |project: &Path| host.versions(project, None, 1).recv_timeout(Duration::from_secs(30)).expect("the read answers");
         let mut under_way: Vec<_> = (0..MOST_READS).map(|_| lock(&host.inner.readers).get(&path).cloned().unwrap()).collect();
-        assert_eq!(read(&path), Err("Too many versions are being read at once. Try again in a moment.".to_string()));
+        let too_many = "Too many versions are being read at once. Try again in a moment.".to_string();
+        assert_eq!(read(&path), Err(too_many.clone()));
+        assert_eq!(host.read_version(&path, "any".into()).recv_timeout(Duration::from_secs(30)).unwrap(), Err(too_many), "the models read count too");
         assert!(read(&other).is_ok(), "another project is not held back");
         under_way.pop();
         assert!(read(&path).is_ok(), "one ended, so one may start");
