@@ -428,6 +428,9 @@ str		This description could not be checked against your saved API keys, so nothi
 str		A description has to be text, so nothing was saved.	A description has to be text, so nothing was saved.
 str		A save is under way, so this description was not used. Try again when it has finished.	A save is under way, so this description was not used. Try again when it has finished.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	The project changed after you reviewed it, so nothing was saved. Review the changes and save again.
+str		The branch changed before this save could run, so nothing was saved.	The branch changed before this save could run, so nothing was saved.
+str		the branch changed while it was on its way	the branch changed while it was on its way
+str		A change arrived after the branch changed, so it was not written.	A change arrived after the branch changed, so it was not written.
 str		The opening stopped without an answer	The opening stopped without an answer
 str		Chat did not finish in time, so nothing was changed.	Chat did not finish in time, so nothing was changed.
 str		The reading stopped without an answer, so nothing was changed.	The reading stopped without an answer, so nothing was changed.

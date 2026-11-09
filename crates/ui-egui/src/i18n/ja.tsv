@@ -429,6 +429,9 @@ str		This description could not be checked against your saved API keys, so nothi
 str		A description has to be text, so nothing was saved.	説明はテキストである必要があるため、何も保存されませんでした。
 str		A save is under way, so this description was not used. Try again when it has finished.	保存の処理中のため、この説明は使用されませんでした。完了してからもう一度お試しください。
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	確認後にプロジェクトが変更されたため、何も保存されませんでした。変更内容を確認して、もう一度保存してください。
+str		The branch changed before this save could run, so nothing was saved.	この保存を実行する前にブランチが変更されたため、何も保存されませんでした。
+str		the branch changed while it was on its way	処理中にブランチが変更されました
+str		A change arrived after the branch changed, so it was not written.	ブランチの変更後に届いた変更は書き込まれませんでした。
 str		The opening stopped without an answer	開く処理が応答なしで終了しました
 str		Chat did not finish in time, so nothing was changed.	チャットが時間内に完了しなかったため、何も変更していません。
 str		The reading stopped without an answer, so nothing was changed.	読み取りが応答なしで止まったため、何も変更していません。
