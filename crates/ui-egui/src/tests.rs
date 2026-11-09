@@ -357,6 +357,8 @@ struct SavingHost {
     branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
+    /// Each read of the versions waiting for the answer the test sends.
+    version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
     /// Each branch switch asked for, and what the next one is refused with.
@@ -420,6 +422,18 @@ impl crate::ProjectHost for SavingHost {
 
     fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         std::sync::mpsc::channel().1
+    }
+
+    /// Keeps the answer for the test to send.
+    fn versions(
+        &self,
+        _project: &std::path::Path,
+        _after: Option<String>,
+        _limit: usize,
+    ) -> std::sync::mpsc::Receiver<Result<crate::VersionsPage, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.version_reads.lock().unwrap().push(tx);
+        rx
     }
 
     /// Keeps the answer for the test to send.
@@ -7975,6 +7989,139 @@ fn a_stores_diagram_draws_with_no_shell() {
         let (texts, ..) = drawn_alone(&session, &d, dark, 400.0, &dragged.into_iter().collect(), &clean);
         assert!(texts.iter().any(|x| x == "Customer"), "a drag brought it into view: {texts:?}");
     }
+}
+
+/// Runs `check` in both appearances.
+fn in_both_appearances(check: impl Fn(ThemeKind)) {
+    [ThemeKind::Light, ThemeKind::Dark].into_iter().for_each(check);
+}
+
+/// The Versions explorer of a project, first drawn with no host, then its read waiting for the test.
+fn versions_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().state.theme = theme;
+    h.state_mut().services.projects = None;
+    let at = rect_of(&h, "workspace.explorers.source-control").center();
+    click(&mut h, at);
+    h.state_mut().services.projects = Some(host.clone());
+    h.run_steps(2);
+    (h, host)
+}
+
+/// Answers the read the panel is waiting for.
+fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: Result<crate::VersionsPage, String>) {
+    h.run_steps(2);
+    let reply = host.version_reads.lock().unwrap().pop().expect("a read was asked for");
+    reply.send(answer).unwrap();
+    h.run_steps(2);
+}
+
+/// Two versions, the older without a description.
+fn two_versions() -> crate::VersionsPage {
+    let date = "2026-11-08T15:30:00Z".to_string();
+    let aa =
+        crate::VersionEntry { hash: "aa".into(), description: Some("Add order status".into()), author: None, by_agent: false, date, previous: None };
+    let bb = crate::VersionEntry { hash: "bb".into(), description: None, ..aa.clone() };
+    crate::VersionsPage { versions: vec![aa, bb], more: false }
+}
+
+/// Whether the control `id` is drawn.
+fn has_id(h: &Harness<'static, Shell>, id: &str) -> bool {
+    ids(h).iter().any(|i| i == id)
+}
+
+/// The panel says what is true while it loads, when a read fails, on Retry, and with no version yet.
+#[test]
+fn the_versions_panel_says_it_is_loading_failed_or_empty() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let texts = painted(&h);
+        assert!(["VERSIONS", "Branches", "Working changes", "History"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
+        assert!(has_id(&h, "workspace.versions.loading") && !has_id(&h, "workspace.versions.retry"), "{theme:?}");
+        assert!(!painted(&h).iter().any(|t| t == "No versions yet."), "not said before it is known");
+        drop(host.version_reads.lock().unwrap().pop());
+        h.run_steps(2);
+        assert!(painted(&h).iter().any(|t| t == "The versions couldn't be read.") && !has_id(&h, "workspace.versions.loading"), "{theme:?}");
+        let at = rect_of(&h, "workspace.versions.retry").center();
+        click(&mut h, at);
+        assert!(has_id(&h, "workspace.versions.loading") && !has_id(&h, "workspace.versions.failed"), "{theme:?}: Retry reads again");
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "No versions yet."), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "No versions yet. Save version records your first one."), "{texts:?}");
+        assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}");
+    });
+}
+
+/// History lists what was read and keeps it through a failed read; a save, another session or
+/// another project read again; "No changes" is never said of unsaved work.
+#[test]
+fn the_versions_panel_lists_keeps_and_reads_again() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let (first, second) = ("workspace.versions.row.aa", "workspace.versions.row.bb");
+        let no_changes = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t == "No changes since the last version.");
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        assert!(has_id(&h, first) && has_id(&h, second), "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Add order status") && painted(&h).iter().any(|t| t == "2"), "{:?}", painted(&h));
+        assert!(no_changes(&h), "{theme:?}: nothing unsaved");
+        add_schema(&mut h, "crm");
+        assert!(!no_changes(&h), "{theme:?}: unsaved work");
+        h.state_mut().save();
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        versions_answer(&mut h, &host, Err("the server stopped".into()));
+        assert!(has_id(&h, first) && has_id(&h, "workspace.versions.failed"), "{theme:?}: what was shown stays");
+    });
+}
+
+/// What the panel is about, against whether a read starts: from a list read, each change as the
+/// reads then waiting and whether the list stays; and an answer for what was left behind is dropped.
+#[test]
+fn the_versions_panel_reads_only_for_what_it_is_about() {
+    type Step = fn(&mut Shell);
+    let no_host: Step = |s| s.services.projects = None;
+    let first_draw: Step = |s| s.versions = Default::default();
+    let project: Step = |s| s.project.as_mut().unwrap().path = "/tmp/Other.archforge".into();
+    let session: Step = |s| s.session_replaced();
+    let failed: Step = |s| s.finished_save(0, crate::SaveState::Failed("no".into()));
+    let unknown: Step = |s| s.finished_save(0, crate::SaveState::Unknown);
+    let cases: [(&str, &[Step], usize, bool); 9] = [
+        ("nothing", &[], 0, true),
+        ("first draw, host", &[first_draw], 1, false),
+        ("first draw, no host", &[no_host, first_draw], 0, false),
+        ("project, host", &[project], 1, false),
+        ("project, no host", &[no_host, project], 0, false),
+        ("session, host", &[session], 1, false),
+        ("session, no host", &[no_host, session], 0, false),
+        ("save failed, host", &[failed], 1, true),
+        ("save unknown, no host", &[no_host, unknown], 0, true),
+    ];
+    let (first, list) = ("workspace.versions.row.aa", || Ok(two_versions()));
+    let waiting = |host: &SavingHost| host.version_reads.lock().unwrap().len();
+    in_both_appearances(|theme| {
+        for (what, steps, reads, stays) in cases {
+            let (mut h, host) = versions_panel(theme);
+            versions_answer(&mut h, &host, list());
+            steps.iter().for_each(|step| step(h.state_mut()));
+            h.run_steps(2);
+            assert_eq!((waiting(&host), has_id(&h, first)), (reads, stays), "{theme:?}: {what}");
+        }
+        let (mut h, host) = versions_panel(theme);
+        unknown(h.state_mut());
+        h.run_steps(2);
+        assert_eq!(waiting(&host), 1, "{theme:?}: a save waits for the read on its way");
+        versions_answer(&mut h, &host, list());
+        assert_eq!(waiting(&host), 1, "{theme:?}: then reads");
+        let left = host.version_reads.lock().unwrap().pop().unwrap();
+        project(h.state_mut());
+        h.run_steps(2);
+        assert!(left.send(list()).is_err() && !has_id(&h, first), "{theme:?}: the old answer is dropped");
+        versions_answer(&mut h, &host, Err("no".into()));
+        no_host(h.state_mut());
+        session(h.state_mut());
+        h.run_steps(2);
+        assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}: nor is its error kept");
+    });
 }
 
 #[test]
