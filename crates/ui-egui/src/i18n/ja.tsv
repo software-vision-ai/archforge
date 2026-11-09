@@ -446,6 +446,7 @@ str		You are already on this branch.	すでにこのブランチにいます。
 str		The project stayed on its branch because it changed or was busy.	プロジェクトが変更されたか使用中だったため、現在のブランチのままです。
 str		Your latest changes could not be written, so the project stayed on its branch.	最新の変更を書き込めなかったため、プロジェクトは現在のブランチのままです。
 str		The project stayed on its branch: {why}	プロジェクトは現在のブランチのままです: {why}
+str		The switch did not finish, so the project stayed on its branch.	切り替えが完了しなかったため、プロジェクトは現在のブランチのままです。
 str		The version could not be restored: {why}	バージョンを復元できませんでした: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	このバージョンは現在の作業と同じです。未保存の作業はバージョンとして保持しました。
 str		The version could not be restored: {why}. Your work will be written with your next change.	バージョンを復元できませんでした: {why}。作業内容は次の変更時に書き込まれます。

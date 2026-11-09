@@ -445,6 +445,7 @@ str		You are already on this branch.	You are already on this branch.
 str		The project stayed on its branch because it changed or was busy.	The project stayed on its branch because it changed or was busy.
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
+str		The switch did not finish, so the project stayed on its branch.	The switch did not finish, so the project stayed on its branch.
 str		The version could not be restored: {why}	The version could not be restored: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	This version is the same as your current work. Your unsaved work was kept as a version.
 str		The version could not be restored: {why}. Your work will be written with your next change.	The version could not be restored: {why}. Your work will be written with your next change.

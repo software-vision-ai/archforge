@@ -446,6 +446,7 @@ str		You are already on this branch.	Sie sind bereits auf diesem Zweig.
 str		The project stayed on its branch because it changed or was busy.	Das Projekt ist auf seinem Zweig geblieben, weil es sich geändert hat oder beschäftigt war.
 str		Your latest changes could not be written, so the project stayed on its branch.	Ihre letzten Änderungen konnten nicht geschrieben werden, daher ist das Projekt auf seinem Zweig geblieben.
 str		The project stayed on its branch: {why}	Das Projekt ist auf seinem Zweig geblieben: {why}
+str		The switch did not finish, so the project stayed on its branch.	Der Wechsel wurde nicht abgeschlossen, daher ist das Projekt auf seinem Zweig geblieben.
 str		The version could not be restored: {why}	Die Version konnte nicht wiederhergestellt werden: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Diese Version entspricht Ihrer aktuellen Arbeit. Ihre nicht gespeicherte Arbeit wurde als Version behalten.
 str		The version could not be restored: {why}. Your work will be written with your next change.	Die Version konnte nicht wiederhergestellt werden: {why}. Ihre Arbeit wird mit Ihrer nächsten Änderung geschrieben.

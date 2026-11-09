@@ -446,6 +446,7 @@ str		You are already on this branch.	Ya estás en esta rama.
 str		The project stayed on its branch because it changed or was busy.	El proyecto se quedó en su rama porque cambió o estaba ocupado.
 str		Your latest changes could not be written, so the project stayed on its branch.	No se pudieron escribir tus últimos cambios, por lo que el proyecto se quedó en su rama.
 str		The project stayed on its branch: {why}	El proyecto se quedó en su rama: {why}
+str		The switch did not finish, so the project stayed on its branch.	El cambio no terminó, por lo que el proyecto se quedó en su rama.
 str		The version could not be restored: {why}	No se pudo restaurar la versión: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Esta versión es igual que tu trabajo actual. Tu trabajo sin guardar se conservó como una versión.
 str		The version could not be restored: {why}. Your work will be written with your next change.	No se pudo restaurar la versión: {why}. Tu trabajo se escribirá con tu próximo cambio.

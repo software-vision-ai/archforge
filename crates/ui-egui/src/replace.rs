@@ -5,14 +5,15 @@
 //! Archforge says so, writes nothing back, and the project stays held until it is closed.
 
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use archforge_mof::rows::Rows;
 use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
-use crate::{SavedBy, Shell, chat_panel, editing};
+use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
@@ -74,6 +75,18 @@ pub(crate) struct Replacing {
     viewing: Option<String>,
     /// The session built differs from the rows read: a repair made while building it.
     repaired: bool,
+    /// A branch switch still to be asked of the host, once the latest rows have gone over.
+    switch: Option<Box<dyn FnOnce() -> Result<BranchSwitch, String>>>,
+    /// Asked of the host: whether the branch arrived on holds unsaved work.
+    arrives_unsaved: Option<Arc<AtomicBool>>,
+}
+
+impl Replacing {
+    /// `otherwise` unless this is a switch whose check has been asked for: that may have upgraded
+    /// the target's tables, so no more is claimed than that the project stayed.
+    fn stopped(&self, otherwise: String) -> String {
+        if self.arrives_unsaved.is_some() { tr("The switch did not finish, so the project stayed on its branch.") } else { otherwise }
+    }
 }
 
 impl Shell {
@@ -95,6 +108,26 @@ impl Shell {
         Ok(())
     }
 
+    /// Moves the project to `branch` under the hold: the version in view gives way to current work
+    /// first, the check is asked for once the latest rows have gone over, and the branch's model
+    /// takes the session's place once the move has finished. Refused while another hold runs, or
+    /// without a model or a host, with nothing changed.
+    pub fn switch_branch(&mut self, branch: String) -> Result<(), HoldRefused> {
+        if self.holding.pending() {
+            return Err(HoldRefused::Another);
+        }
+        let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
+            return Err(HoldRefused::NoProject);
+        };
+        self.leave_version();
+        self.begin_hold()?;
+        self.start_replacing(channel().1, None, None);
+        if let Some(r) = self.replacing.as_mut() {
+            r.switch = Some(Box::new(move || host.begin_branch_switch(&path, branch)));
+        }
+        Ok(())
+    }
+
     /// Holds the project and starts replacing its session with the model `read` answers, running
     /// `job` once it is built. What happens is driven frame by frame.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
@@ -106,7 +139,17 @@ impl Shell {
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside.
     pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<String>) {
-        self.replacing = Some(Replacing { stage: Stage::Chat, read, job, read_back: None, wrote: false, viewing, repaired: false });
+        self.replacing = Some(Replacing {
+            stage: Stage::Chat,
+            read,
+            job,
+            read_back: None,
+            wrote: false,
+            viewing,
+            repaired: false,
+            switch: None,
+            arrives_unsaved: None,
+        });
     }
 
     /// The version being read to be shown.
@@ -138,11 +181,23 @@ impl Shell {
                     // The rows could not be made, and the status bar already says why.
                     return self.give_up(None);
                 }
+                if let Some(start) = r.switch.take() {
+                    match start() {
+                        Ok(BranchSwitch { read, unsaved, job }) => {
+                            r.read = read;
+                            r.job = Some(job);
+                            r.arrives_unsaved = Some(unsaved);
+                        }
+                        Err(why) => return self.give_up(Some(why)),
+                    }
+                }
                 Stage::Build
             }
             Stage::Build => match r.read.try_recv() {
                 Err(TryRecvError::Empty) => Stage::Build,
-                Err(TryRecvError::Disconnected) => return self.give_up(Some(tr("The reading stopped without an answer, so nothing was changed."))),
+                Err(TryRecvError::Disconnected) => {
+                    return self.give_up(Some(r.stopped(tr("The reading stopped without an answer, so nothing was changed."))));
+                }
                 Ok(Err(why)) => return self.give_up(Some(why)),
                 Ok(Ok(rows)) => match self.build(&rows) {
                     Ok(session) => {
@@ -161,7 +216,7 @@ impl Shell {
                     } else if r.wrote {
                         self.could_not_tell()
                     } else {
-                        return self.give_up(Some(tr("Chat did not finish in time, so nothing was changed.")));
+                        return self.give_up(Some(r.stopped(tr("Chat did not finish in time, so nothing was changed."))));
                     }
                 } else if let Some(job) = r.job.take() {
                     r.read_back = Some(job.read_back);
@@ -170,6 +225,9 @@ impl Shell {
                     match r.viewing.take() {
                         Some(commit) => self.show_version(*session, commit),
                         None => self.install(*session, r.repaired),
+                    }
+                    if let Some(unsaved) = r.arrives_unsaved {
+                        self.arrived_on_branch(unsaved.load(Ordering::SeqCst));
                     }
                     return None;
                 }
@@ -204,7 +262,7 @@ impl Shell {
                     r.wrote = true;
                     Stage::Ready(session, None)
                 }
-                Ok(Ok(false)) => return self.give_up(Some(tr("The change did not finish, so the project is as it was."))),
+                Ok(Ok(false)) => return self.give_up(Some(r.stopped(tr("The change did not finish, so the project is as it was.")))),
                 Ok(Err(_)) | Err(TryRecvError::Disconnected) => self.could_not_tell(),
             },
             Stage::Unknown => Stage::Unknown,
@@ -247,6 +305,16 @@ impl Shell {
         {
             log::warn!("the work kept as a version could not be marked saved: {e}");
         }
+    }
+
+    /// The project arrived on another branch: it reads as unsaved when the branch holds such work,
+    /// the status bar's reason about the branch left goes, and Chat starts again on the branch's own.
+    fn arrived_on_branch(&mut self, unsaved: bool) {
+        self.save_error = None;
+        if unsaved && let Some(session) = self.session.as_mut() {
+            session.mark_unsaved();
+        }
+        chat_panel::branch_changed(self);
     }
 
     /// The replacement takes the session's place, and the hold ends. What was read is what the

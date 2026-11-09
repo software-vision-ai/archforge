@@ -1742,6 +1742,17 @@ pub(crate) fn leaving(shell: &mut Shell) {
     }
 }
 
+/// The project shown moved branch: the program of the conversation shown ends, the panel starts
+/// again keeping only the text being typed, and deleted conversations' toasts close with the branch.
+pub(crate) fn branch_changed(shell: &mut Shell) {
+    retire(shell);
+    let draft = std::mem::take(&mut shell.chat_panel.draft);
+    shell.chat_panel = Panel { draft, ..Panel::default() };
+    if let Some(path) = shell.project.as_ref().map(|p| p.path.clone()) {
+        crate::chat_delete::settle(shell, Some(&path));
+    }
+}
+
 /// A project closes: its conversation's program ends, and the panel's conversation is let go of.
 pub(crate) fn closing(shell: &mut Shell, chat: Option<(String, Option<String>)>) {
     if let Some((key, origin)) = chat {
