@@ -351,6 +351,8 @@ struct SavingHost {
     /// writing what waited (Close without writing).
     discarded: std::sync::Mutex<Vec<std::path::PathBuf>>,
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
+    /// Each branch delete's answer, sent by the test.
+    branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Where the answers of each restore's job go, sent by the test.
@@ -392,6 +394,17 @@ impl crate::ProjectHost for SavingHost {
 
     fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         std::sync::mpsc::channel().1
+    }
+
+    /// Keeps the answer for the test to send.
+    fn delete_branch(
+        &self,
+        _path: &std::path::Path,
+        _branch: &str,
+    ) -> std::sync::mpsc::Receiver<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_deletes.lock().unwrap().push(tx);
+        rx
     }
 
     fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
@@ -10404,6 +10417,55 @@ fn a_restore_refused_for_a_changed_branch_keeps_the_folder_and_only_that_reason_
             assert_eq!(forgotten(&rig), expected, "{theme:?}: {refusal:?}");
             assert!(rig.store.kept(chats[2]).is_some(), "still listed");
         }
+    }
+}
+
+/// A deleted branch lets go of the folders of the conversations only on it, a running program
+/// ended first, once it is seen gone and only then: no refusal lets go of any, nor does a project
+/// that stopped answering. An answer still comes after the project closed, and at quit one that
+/// has come is taken; a conversation a panel shows keeps its folder. In both appearances.
+#[test]
+fn a_deleted_branchs_conversation_folders_go_only_once_it_is_seen_gone() {
+    use crate::BranchNotDeleted::{Failed, Moved, Unclear};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let host = std::sync::Arc::new(SavingHost::default());
+        h.state_mut().services.projects = Some(host.clone());
+        let path = std::path::PathBuf::from("/tmp/Commerce platform.archforge");
+        let ask = |h: &mut Harness<'static, Shell>| {
+            crate::chat_delete::delete_branch(h.state_mut(), &path, "topic");
+            host.branch_deletes.lock().unwrap().pop().unwrap()
+        };
+        let id = |n: u8| archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+        for refusal in [Unclear("why".into()), Moved, Failed("why".into())] {
+            let answer = ask(&mut h);
+            h.run();
+            answer.send(Err(refusal.clone())).unwrap();
+            h.run();
+            assert!(forgotten(&rig).is_empty(), "{refusal:?}");
+            assert!(h.state().chats.branch_deletes.is_empty(), "{refusal:?}: answered");
+        }
+        drop(ask(&mut h));
+        h.run();
+        assert!(forgotten(&rig).is_empty() && h.state().chats.branch_deletes.is_empty(), "no answer will come");
+        let running = id(1).to_string();
+        rig.agents.running.lock().unwrap().push(running.clone());
+        let shown = h.state().chat_panel.chat.as_ref().unwrap().id;
+        let answer = ask(&mut h);
+        assert!(crate::chat_delete::waiting(h.state()), "the window looks again for the answer");
+        crate::chat_delete::settle(h.state_mut(), Some(&path));
+        h.run();
+        assert!(forgotten(&rig).is_empty() && !h.state().chats.branch_deletes.is_empty(), "the closing waits for no answer and drops none");
+        answer.send(Ok(vec![id(1), shown])).unwrap();
+        h.run();
+        assert_eq!(forgotten(&rig), std::slice::from_ref(&running), "{theme:?}: only the one no panel shows");
+        assert!(!rig.agents.running.lock().unwrap().contains(&running), "its program ended");
+        let answered = ask(&mut h);
+        answered.send(Ok(vec![id(2)])).unwrap();
+        let _unanswered = ask(&mut h);
+        crate::chat_delete::settle(h.state_mut(), None);
+        assert_eq!(forgotten(&rig), [running, id(2).to_string()], "quitting takes what has come");
+        assert_eq!(h.state().chats.branch_deletes.len(), 1, "and keeps the folders of what has not");
     }
 }
 

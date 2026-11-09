@@ -37,7 +37,9 @@ use archforge_project::{
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
-use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing};
+use archforge_ui_egui::{
+    BranchNotDeleted, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing,
+};
 
 /// How long the writer waits after a change for the next one before it writes.
 const SETTLE: Duration = Duration::from_millis(300);
@@ -556,7 +558,6 @@ impl Projects {
 
     /// Starts deleting `branch` on the writer, and returns at once; see [`Project::delete_branch`].
     /// The answer is the conversations whose folders can go. The screen comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub fn delete_branch(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<Vec<Uuid>, DeleteJobError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
@@ -818,6 +819,28 @@ impl ProjectHost for Projects {
     /// Worded on the wait's own thread in the language shown when the job runs.
     fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
+    }
+
+    /// The writer's delete, its answer put as the window takes it, on a thread of its own as only
+    /// the writer can answer it.
+    fn delete_branch(&self, path: &Path, name: &str) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
+        let (tx, rx) = channel();
+        let job = match SafeBranch::found(name) {
+            Ok(branch) => Projects::delete_branch(self, path, branch),
+            Err(e) => {
+                let _ = tx.send(Err(BranchNotDeleted::Failed(e.to_string())));
+                return rx;
+            }
+        };
+        let reply = tx.clone();
+        let wait = move || {
+            let answer = job.recv().unwrap_or_else(|e| Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
+            let _ = reply.send(answer.map_err(not_deleted));
+        };
+        if let Err(e) = std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait) {
+            let _ = tx.send(Err(BranchNotDeleted::Failed(format!("no thread could wait for the answer: {e}"))));
+        }
+        rx
     }
 
     fn open(&self, path: &Path) -> Receiver<Result<Opened, CreateError>> {
@@ -1961,6 +1984,15 @@ fn rename_branch(inner: &Inner, path: &Path, from: &SafeBranch, to: &SafeBranch,
     let (open, at) =
         open_as_asked(inner, path, (generation, instance), (RenameJobError::Reopened, RenameJobError::BranchChanged, RenameJobError::NotOpen))?;
     open[at].rename_branch(from, to).map_err(RenameJobError::Rename)
+}
+
+/// The writer's reason for deleting no branch, as the window takes it. None holds conversations.
+fn not_deleted(error: DeleteJobError) -> BranchNotDeleted {
+    match error {
+        DeleteJobError::BranchChanged | DeleteJobError::Reopened | DeleteJobError::NotOpen => BranchNotDeleted::Moved,
+        DeleteJobError::Delete(DeleteBranchError::CannotTell(why)) => BranchNotDeleted::Unclear(why),
+        other => BranchNotDeleted::Failed(other.to_string()),
+    }
 }
 
 /// Commits what of the conversations waits.
@@ -4884,6 +4916,62 @@ mod tests {
             assert_eq!(answer(host.delete_branch(&path, branch("scripted"))), Ok(Vec::new()));
             assert_eq!(answer(host.delete_branch(&path, branch("main"))), Err(DeleteJobError::Delete(DeleteBranchError::Main)));
         }
+    }
+
+    /// The window is told of conversations only for a branch seen gone: not for a job's refusal,
+    /// an unclear delete or a failure, each by its reason; asked again, the delete names them.
+    #[test]
+    fn the_window_hears_of_conversations_only_for_a_branch_seen_gone() {
+        use BranchNotDeleted::{Failed, Moved, Unclear};
+        use DeleteBranchError::{CannotTell, Current, Held, Main, NoSuchBranch, RecordRemains};
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat_store::{Answer, ChatStore, Write};
+        for (error, kept) in [
+            (DeleteJobError::BranchChanged, Moved),
+            (DeleteJobError::Reopened, Moved),
+            (DeleteJobError::NotOpen, Moved),
+            (DeleteJobError::Delete(CannotTell("why".into())), Unclear("why".into())),
+            (DeleteJobError::Delete(DeleteBranchError::Failed("why".into())), Failed("why".into())),
+            (DeleteJobError::Failed("why".into()), Failed("why".into())),
+        ] {
+            assert_eq!(not_deleted(error), kept);
+        }
+        for refused in [Main, Current, RecordRemains, NoSuchBranch, Held] {
+            assert!(matches!(not_deleted(DeleteJobError::Delete(refused)), Failed(_)));
+        }
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let delete = |at: &Path, name: &str| ProjectHost::delete_branch(&**host, at, name);
+        let answer = |asked: Receiver<_>| asked.recv_timeout(Duration::from_secs(60)).expect("the delete answers");
+        let moved = |to: &str| assert!(matches!(wait_for_switch(host, &path, to), Ok(Switched::Moved(_))), "{to}");
+        assert_eq!(answer(delete(&sandbox.base.join("nowhere"), "a")), Err(Moved));
+        assert!(matches!(answer(delete(&path, "a'b")), Err(Failed(_))));
+        assert!(matches!(answer(delete(&path, "main")), Err(Failed(_))));
+        let release = hold_the_writer(host, &path);
+        let switch = host.switch_branch(&path, branch("elsewhere"));
+        let stale = delete(&path, "scripted");
+        drop(release);
+        assert!(matches!(switch.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Switched::Moved(_))));
+        assert_eq!(answer(stale), Err(Moved), "a switch got there first");
+        // A conversation only on the branch: unclear, the delete names it to nobody; asked again, it does.
+        let keys = archforge_secrets::MemoryStore::new();
+        let agents = Arc::new(crate::agents::Agents::with(&sandbox.base.join("agents"), Box::new(keys), archforge_agents::HostEnv::default()));
+        let chats = crate::chats::Chats::new(host.clone(), agents);
+        let chat = Uuid::v7(1_762_400_000_000, [7; 10]);
+        let create =
+            Write::Create { chat, title: "On it".into(), provider: Provider::Claude, model: "sonnet".into(), skip: Vec::new(), now: 1_762_437_731 };
+        assert!(matches!(chats.write(&path, create).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Answer::Created { .. })));
+        moved("main");
+        let asked = std::cell::Cell::new(false);
+        let unclear = lock(&host.inner.open)[0].delete_branch_faulted(&branch("elsewhere"), false, false, &asked);
+        assert!(matches!(unclear, Err(CannotTell(_))));
+        assert_eq!(answer(delete(&path, "elsewhere")), Ok(vec![chat]));
+        assert!(!has_branch(&lock(&host.inner.open)[0], "elsewhere"));
+    }
+
+    /// Switches to `to` and waits for the answer.
+    fn wait_for_switch(host: &Projects, path: &Path, to: &str) -> Result<Switched, SwitchError> {
+        host.switch_branch(path, branch(to)).recv_timeout(Duration::from_secs(60)).expect("the switch answers")
     }
 
     /// Has the project close and open again just before the next job picks it, as a closing does
