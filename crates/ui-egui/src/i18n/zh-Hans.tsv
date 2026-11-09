@@ -439,6 +439,7 @@ str		The change did not finish, so the project is as it was.	更改未完成，�
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge 无法确定上一次更改是否完成。没有再写入任何内容。请关闭项目并重新打开。
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
+str		Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.	Archforge 正在查看此项目的早期版本，因此未运行此请求。请返回当前工作，然后重新发送。
 str		Close a project to open another	请先关闭一个项目再打开另一个
 str		The closing stopped without an answer	关闭未返回结果即已停止
 str		The project could not be opened: {why}	无法打开项目：{why}

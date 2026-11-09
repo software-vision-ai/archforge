@@ -9,6 +9,9 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 
+/// A refusal as the window words it while a version is in view, in Japanese.
+const REFUSED_WHILE_VIEWING: &str = "viewing: Archforge はこのプロジェクトの以前のバージョンを表示しているため、このリクエストは実行しませんでした。";
+
 /// A fresh home folder for the child, and the settings folder it will look in.
 fn home(name: &str) -> (PathBuf, PathBuf) {
     let home = std::env::temp_dir().join(format!("archforge-cli-{name}-{}", std::process::id()));
@@ -40,6 +43,7 @@ fn an_agent_drives_the_application_through_the_real_binary() {
         match method {
             "engine.execute" => Ok(json!({ "result": { "id": "e1" }, "undo": "Add entity" })),
             "document.inspect" => Ok(json!({ "open": true })),
+            "app.save" => Err(REFUSED_WHILE_VIEWING.to_string()),
             _ => Err(format!("unknown method {method:?}")),
         }
     });
@@ -73,6 +77,10 @@ fn an_agent_drives_the_application_through_the_real_binary() {
     assert_eq!(ok.status.code(), Some(0));
     assert_eq!(serde_json::from_slice::<Value>(&ok.stdout).unwrap(), json!({ "open": true }));
     assert_eq!(cli(&home).args(["app", "engine.nope", "--port", &port]).output().unwrap().status.code(), Some(1));
+    // A refusal shows as the window words it, translated text included.
+    let refused = cli(&home).args(["app", "app.save", "--port", &port]).output().unwrap();
+    assert_eq!(refused.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&refused.stderr).contains(REFUSED_WHILE_VIEWING), "{refused:?}");
     drop(server);
     let gone = cli(&home).args(["app", "document.inspect", "--port", &port]).output().unwrap();
     assert_eq!(gone.status.code(), Some(3));

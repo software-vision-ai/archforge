@@ -8,7 +8,7 @@
 use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
-use crate::{Shell, canvas, diagrams, explorer, panels};
+use crate::{Shell, canvas, chat_panel, diagrams, explorer, panels};
 
 /// The version being viewed and everything set aside for going back.
 pub(crate) struct Viewing {
@@ -34,6 +34,12 @@ impl Shell {
     /// The version being viewed, if one is.
     pub fn viewing(&self) -> Option<&str> {
         self.viewing.as_ref().map(|v| v.commit.as_str())
+    }
+
+    /// The version shown or being read to be shown: while there is one, what may change anything
+    /// is refused on the control channel.
+    pub(crate) fn version_in_view(&self) -> Option<&str> {
+        self.viewing().or_else(|| self.version_being_read())
     }
 
     /// Starts viewing the version `commit`: the project is held while it is read and built, and it
@@ -80,11 +86,18 @@ impl Shell {
     /// dropped instead, and with its channel its answer, which can then replace nothing. False when
     /// neither applies.
     pub fn back_to_current_work(&mut self) -> bool {
-        if self.reading_a_version() {
+        if self.version_being_read().is_some() {
             self.replacing = None;
             self.end_hold();
             return true;
         }
+        if self.viewing.is_none() {
+            return false;
+        }
+        // A turn started on the version ends here, without waiting for its program to answer the
+        // stop: its agent never read the work it would otherwise reach until then.
+        chat_panel::leaving(self);
+        chat_panel::end_here(self, chat_panel::TurnState::Stopped);
         let Some(v) = self.viewing.take() else { return false };
         let v = *v;
         self.session = Some(v.session);

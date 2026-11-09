@@ -1408,6 +1408,194 @@ fn closing_without_asking_stops_on_the_works_refused_write() {
     assert!(host.closed.lock().unwrap().is_empty());
 }
 
+/// The refusal while a version is in view, in English.
+const VIEWING_REFUSED: &str =
+    "viewing: Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.";
+
+/// A request as the channel brings it, accepted now.
+fn accepted(h: &Harness<'static, Shell>, method: &str, params: serde_json::Value, read_only: bool) -> crate::control::ControlRequest {
+    crate::control::ControlRequest {
+        method: method.into(),
+        params,
+        origin: None,
+        conversation: None,
+        reply: std::sync::mpsc::channel().0,
+        state: Default::default(),
+        read_only,
+        live: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        generation: h.state().session_generation(),
+    }
+}
+
+/// Every request that may change something; a view command counts, as it does for a read-only token.
+fn changing_requests() -> Vec<(&'static str, serde_json::Value)> {
+    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+    let mixed = serde_json::json!({ "steps": [{ "command": "er.schema.list" }, add] });
+    vec![
+        ("engine.execute", add.clone()),
+        ("engine.execute", serde_json::json!({ "command": "view.select", "params": { "ids": [] } })),
+        ("engine.batch", serde_json::json!({ "steps": [add] })),
+        ("engine.batch", mixed),
+        ("engine.undo", serde_json::json!({})),
+        ("engine.redo", serde_json::json!({})),
+        ("app.save", serde_json::json!({})),
+    ]
+}
+
+/// Asserts that each changing request is refused for the version, by either kind of token, by the
+/// window's own side too, and that the session shown did not move.
+fn every_change_is_refused(h: &mut Harness<'static, Shell>) {
+    let revision = h.state().session.as_ref().unwrap().revision();
+    for (method, params) in changing_requests() {
+        for read_only in [false, true] {
+            let request = accepted(h, method, params.clone(), read_only);
+            assert_eq!(crate::control::answer_request(h.state_mut(), &request), Err(VIEWING_REFUSED.to_string()), "{method}");
+        }
+        assert_eq!(crate::control::answer(h.state_mut(), method, &params), Err(VIEWING_REFUSED.to_string()), "{method}");
+    }
+    assert_eq!(h.state().session.as_ref().unwrap().revision(), revision);
+}
+
+/// What `document.inspect` says.
+fn inspected(h: &mut Harness<'static, Shell>) -> serde_json::Value {
+    let request = accepted(h, "document.inspect", serde_json::json!({}), false);
+    crate::control::answer_request(h.state_mut(), &request).unwrap()
+}
+
+/// A version in view refuses every change and answers every read about what shows; back at the
+/// work the same requests run.
+#[test]
+fn an_agent_can_read_a_version_and_change_nothing_until_it_goes_back() {
+    let (mut h, host, earlier) = work_and_earlier();
+    assert_eq!(inspected(&mut h)["viewing"], serde_json::Value::Null);
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    let saves = host.saved_by.lock().unwrap().len();
+    every_change_is_refused(&mut h);
+    assert_eq!(host.saved_by.lock().unwrap().len(), saves, "no save started");
+
+    let listing = serde_json::json!({ "command": "er.schema.list" });
+    let batch = serde_json::json!({ "steps": [listing.clone(), listing.clone()] });
+    for (method, params) in [
+        ("engine.commands", serde_json::json!({})),
+        ("engine.describe", serde_json::json!({ "command": "er.schema.add" })),
+        ("ui.inspect", serde_json::json!({})),
+    ] {
+        let request = accepted(&h, method, params, false);
+        assert!(crate::control::answer_request(h.state_mut(), &request).is_ok(), "{method}");
+    }
+    let long = serde_json::json!({ "steps": vec![listing.clone(); crate::control::MAX_STEPS + 1] });
+    assert!(crate::control::answer(h.state_mut(), "engine.batch", &long).unwrap_err().contains("1 to 256"), "its own reason");
+    for (method, params) in [("engine.execute", listing.clone()), ("engine.batch", batch)] {
+        let request = accepted(&h, method, params, true);
+        let answer = crate::control::answer_request(h.state_mut(), &request).unwrap().to_string();
+        assert!(!answer.contains("shop"), "{method} describes the version: {answer}");
+    }
+    let saved = accepted(&h, "app.saved", serde_json::json!({ "ticket": 99 }), false);
+    assert!(crate::control::answer_request(h.state_mut(), &saved).unwrap_err().contains("no save 99"));
+    let shown = inspected(&mut h);
+    assert_eq!(shown["viewing"], serde_json::json!({ "version": "c1", "reading": false, "work_unsaved": true }));
+    assert_eq!((&shown["unsaved"], &shown["undo"]), (&serde_json::json!(false), &serde_json::Value::Null), "the rest is the version's");
+
+    assert!(h.state_mut().back_to_current_work());
+    h.run_steps(3);
+    assert_eq!(inspected(&mut h)["viewing"], serde_json::Value::Null);
+    let add = accepted(&h, "engine.execute", serde_json::json!({ "command": "er.schema.add", "params": { "name": "after" } }), false);
+    assert!(crate::control::answer_request(h.state_mut(), &add).is_ok());
+    assert!(schema_names(&h).contains(&"after".to_string()));
+    let save = accepted(&h, "app.save", serde_json::json!({}), false);
+    assert!(crate::control::answer_request(h.state_mut(), &save).is_ok());
+    assert_eq!(host.saved_by.lock().unwrap().len(), saves + 1);
+}
+
+/// While the version is still being read nothing can be written, and the refusal is the viewing one.
+#[test]
+fn a_version_still_being_read_counts_as_viewing() {
+    let (mut h, host, earlier) = work_and_earlier();
+    start_viewing(&mut h, "c1");
+    every_change_is_refused(&mut h);
+    assert_eq!(inspected(&mut h)["viewing"], serde_json::json!({ "version": "c1", "reading": true, "work_unsaved": true }));
+    assert!(schema_names(&h).contains(&"shop".to_string()), "the work still shows");
+    answer_read(&mut h, &host, Ok(earlier));
+    assert_eq!(inspected(&mut h)["viewing"]["reading"], false);
+}
+
+/// A request waiting its turn carries the session it was accepted under, so it lands on neither the
+/// version nor the work when the other has taken its place, whatever it asks.
+#[test]
+fn a_request_accepted_before_a_change_of_session_runs_on_neither() {
+    const CHANGED: &str = "The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.";
+    let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+    let (mut h, host, earlier) = work_and_earlier();
+    let before_viewing = accepted(&h, "engine.execute", add.clone(), false);
+    let reading_before = accepted(&h, "document.inspect", serde_json::json!({}), false);
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    for request in [&before_viewing, &reading_before] {
+        assert_eq!(crate::control::answer_request(h.state_mut(), request), Err(CHANGED.to_string()));
+    }
+    let while_viewing = accepted(&h, "engine.execute", add, false);
+    let revision = |h: &Harness<'static, Shell>| h.state().session.as_ref().unwrap().revision();
+    assert!(h.state_mut().back_to_current_work());
+    h.run_steps(3);
+    let work = revision(&h);
+    assert_eq!(crate::control::answer_request(h.state_mut(), &while_viewing), Err(CHANGED.to_string()));
+    assert_eq!(revision(&h), work);
+}
+
+/// The sentence is translated and the word before it is not, so that an agent can rely on it.
+#[test]
+fn the_refusal_keeps_its_word_in_every_language() {
+    let (mut h, host, earlier) = work_and_earlier();
+    start_viewing(&mut h, "c1");
+    answer_read(&mut h, &host, Ok(earlier));
+    crate::i18n::set_language("de");
+    let refused = crate::control::answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap_err();
+    crate::i18n::set_language("en");
+    assert_eq!(
+        refused,
+        "viewing: Archforge zeigt eine frühere Version dieses Projekts, daher wurde diese Anfrage nicht ausgeführt. Kehren Sie zur aktuellen Arbeit zurück und senden Sie sie erneut."
+    );
+}
+
+/// A Chat turn started on a version is refused like any agent, and ends when the person goes back,
+/// so that it cannot reach the work it never read.
+#[test]
+fn a_chat_turn_on_a_version_changes_nothing_and_stops_on_going_back() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, rig) = chat_harness(theme, true);
+        let host = std::sync::Arc::new(SavingHost::default());
+        h.state_mut().services.projects = Some(host.clone());
+        let earlier = rows_now(&h);
+        start_viewing(&mut h, "c1");
+        answer_read(&mut h, &host, Ok(earlier));
+        h.state_mut().chat_panel.chat.as_mut().unwrap().allow_changes = true;
+        ask_in_chat(&mut h, "What did this version hold?");
+        let add = serde_json::json!({ "command": "er.schema.add", "params": { "name": "x" } });
+        assert_eq!(crate::chat_fixture::call(h.state_mut(), "engine.execute", add.clone()), Err(VIEWING_REFUSED.to_string()));
+        assert_eq!(crate::chat_fixture::call(h.state_mut(), "app.save", serde_json::json!({})), Err(VIEWING_REFUSED.to_string()));
+        assert!(crate::chat_fixture::call(h.state_mut(), "document.inspect", serde_json::json!({})).unwrap()["viewing"]["version"] == "c1");
+        let tool_rows = |h: &Harness<'static, Shell>| {
+            let turns = &h.state().chat_panel.chat.as_ref().unwrap().turns;
+            let rows =
+                turns.last().unwrap().items.iter().filter_map(|i| if let crate::chat_panel::Item::Tool(t) = i { Some(t.status) } else { None });
+            rows.collect::<Vec<_>>()
+        };
+        let refused = crate::chat_store::ToolStatus::Refused;
+        assert_eq!(tool_rows(&h)[..2], [refused, refused], "the turn's rows say it was refused");
+        assert_eq!(chat_calls(&rig).2, 0);
+        assert!(h.state_mut().back_to_current_work());
+        h.run();
+        assert_eq!(chat_calls(&rig).2, 1, "going back stopped the turn");
+        let late = crate::chat_fixture::call(h.state_mut(), "engine.execute", add).unwrap_err();
+        assert!(late.contains("has no turn running"), "the turn reaches nothing before its program answers: {late}");
+        let key = crate::chat_fixture::key(h.state());
+        assert!(rig.agents.emit(&key, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Stopped)));
+        h.run();
+        assert_eq!(h.state().chat_panel.chat.as_ref().unwrap().turns.last().unwrap().state, crate::chat_panel::TurnState::Stopped);
+    }
+}
+
 /// A refused view starts no read: the hold comes before the first step.
 #[test]
 fn a_version_is_not_read_over_another_hold_or_without_a_project() {

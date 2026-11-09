@@ -439,6 +439,7 @@ str		The change did not finish, so the project is as it was.	El cambio no termin
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge no pudo saber si el último cambio terminó. No se escribió nada más. Cierra el proyecto y vuelve a abrirlo.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	El proyecto mostrado cambió después de enviar esta solicitud, por lo que no se ejecutó. Revisa lo que se muestra ahora y vuelve a enviarla.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	El proyecto está en espera mientras se reemplaza, por lo que esta solicitud no se ejecutó. Inténtalo de nuevo cuando termine.
+str		Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.	Archforge está mostrando una versión anterior de este proyecto, por lo que esta solicitud no se ejecutó. Vuelve al trabajo actual y envíala de nuevo.
 str		Close a project to open another	Cierra un proyecto para abrir otro
 str		The closing stopped without an answer	El cierre terminó sin respuesta
 str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}
