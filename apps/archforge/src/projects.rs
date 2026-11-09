@@ -31,8 +31,8 @@ use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
-    Author, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, SafeBranch, VersionReader,
-    check_description,
+    Author, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DescriptionProblem, Hooks, ModelSchema, Project, RenameBranchError, SafeBranch,
+    VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
@@ -81,6 +81,9 @@ enum Job {
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
     /// Restore a version of a project; the generation is the project's when it was asked for.
+    /// Rename a branch, from the name to the name; the generation and the open instance are the
+    /// project's when it was asked for.
+    RenameBranch(PathBuf, SafeBranch, SafeBranch, u64, u64, Sender<Result<(), RenameJobError>>),
     /// Restore a version of a project, the open instance and generation it was asked for with it.
     /// The flag is the claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the
     /// job or the wait that gave up on it, decides, so a job given up on is never run late.
@@ -237,6 +240,35 @@ impl std::fmt::Display for CreateBranchError {
 }
 
 impl std::error::Error for CreateBranchError {}
+
+/// Why the writer renamed no branch.
+#[derive(Debug, PartialEq, Eq)]
+pub enum RenameJobError {
+    /// A switch moved the project after this was asked for.
+    BranchChanged,
+    /// The project was closed after this was asked for, though it may be open again.
+    Reopened,
+    NotOpen,
+    /// The project's own refusal or failure.
+    Rename(RenameBranchError),
+    /// The writer has stopped.
+    Failed(String),
+}
+
+impl std::fmt::Display for RenameJobError {
+    /// The reason in English, as the project's own errors give it; a screen words it through `tr`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenameJobError::BranchChanged => f.write_str("another switch moved the project first"),
+            RenameJobError::Reopened => f.write_str("the project was closed after this was asked for"),
+            RenameJobError::NotOpen => f.write_str("the project is no longer open"),
+            RenameJobError::Rename(e) => e.fmt(f),
+            RenameJobError::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for RenameJobError {}
 
 /// Why a job on the conversations has no project to run against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,6 +439,18 @@ impl Projects {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn create_branch_from_work(&self, project: &Path, name: SafeBranch) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, None)
+    }
+
+    /// Starts renaming the branch `from` to `to` on the writer, and returns at once; see
+    /// [`Project::rename_branch`]. The screen that asks for this comes with AR-292.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn rename_branch(&self, project: &Path, from: SafeBranch, to: SafeBranch) -> Receiver<Result<(), RenameJobError>> {
+        let (tx, rx) = channel();
+        let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
+        if let Err(e) = writer(&self.inner).send(Job::RenameBranch(project.to_path_buf(), from, to, asked.0, asked.1, tx.clone())) {
+            let _ = tx.send(Err(RenameJobError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
     }
 
     /// Hands the making of a branch to the writer, under the project's generation now.
@@ -1113,6 +1157,9 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             Some(Job::CreateBranch(project, name, start, generation, instance, reply)) => {
                 let _ = reply.send(create_branch(inner, &project, &name, start.as_deref(), generation, instance, &mut waiting, &mut failed));
             }
+            Some(Job::RenameBranch(project, from, to, generation, instance, reply)) => {
+                let _ = reply.send(rename_branch(inner, &project, &from, &to, generation, instance));
+            }
             Some(Job::Restore(project, request, generation, instance, claim, reply)) => {
                 if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
                     // The wait gave up on it before it started: it must not run late.
@@ -1525,6 +1572,20 @@ fn create_branch(
         None => project.create_branch_from_work(name, &schema),
     }
     .map_err(CreateBranchError::Creation)
+}
+
+/// Renames a branch of the project at `path`, on the writer, unless it has closed or a switch has
+/// moved it since this was asked for. What waits follows, as writes go to the current branch.
+fn rename_branch(inner: &Inner, path: &Path, from: &SafeBranch, to: &SafeBranch, generation: u64, instance: u64) -> Result<(), RenameJobError> {
+    if instance != instance_of(inner, path) {
+        return Err(RenameJobError::Reopened);
+    }
+    if generation != generation_of(inner, path) {
+        return Err(RenameJobError::BranchChanged);
+    }
+    let open = lock(&inner.open);
+    let project = open.iter().find(|p| p.path() == path).ok_or(RenameJobError::NotOpen)?;
+    project.rename_branch(from, to).map_err(RenameJobError::Rename)
 }
 
 /// Commits what of the conversations waits.
@@ -3559,6 +3620,123 @@ mod tests {
         assert_eq!(answer(asked), Err(CreateBranchError::BranchChanged));
         assert!(!has_branch(&lock(&host.inner.open)[0], "stale"));
         assert!(!path.join(".creating-branch").exists());
+    }
+
+    /// A rename moves the branch with what it holds, and a branch in use stays current under its
+    /// new name, with what was waiting and no change of generation.
+    #[test]
+    fn a_rename_takes_what_the_branch_holds_and_the_current_branch_follows() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let schema = schema(&host.inner).unwrap();
+        {
+            let open = lock(&host.inner.open);
+            let head = open[0].head_of("elsewhere").unwrap();
+            open[0].run_on_branch("elsewhere", "CREATE TABLE unsaved (a INT PRIMARY KEY)").unwrap();
+            assert_eq!(open[0].rename_branch(&branch("elsewhere"), &branch("other")), Ok(()));
+            assert!(has_branch(&open[0], "other") && !has_branch(&open[0], "elsewhere"));
+            assert_eq!(open[0].head_of("other").unwrap(), head);
+            assert_eq!(
+                open[0].first_on_branch("main", "SELECT CAST(dirty AS CHAR) FROM dolt_branches WHERE name = 'other'").unwrap(),
+                "1",
+                "its work went with it"
+            );
+            assert_eq!(open[0].current_branch().stored(), "main", "another branch's rename moves nothing here");
+        }
+        switch_to(host, &path, "other").unwrap();
+        let generation = host.generation_of(&path);
+        let release = hold_the_writer(host, &path);
+        host.write(&path, model("waited"));
+        let asked = host.rename_branch(&path, branch("other"), branch("again"));
+        drop(release);
+        assert_eq!(asked.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+        assert_eq!((on(host).as_str(), host.generation_of(&path)), ("again", generation));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        assert_eq!(lock(&host.inner.open)[0].check_branch(&branch("again"), &schema).unwrap(), model("waited"));
+        // The current branch may be held in another case, which `USE` accepts: it follows too.
+        let open = lock(&host.inner.open);
+        open[0].set_current_branch(branch("AGAIN"));
+        assert_eq!(open[0].rename_branch(&branch("again"), &branch("third")), Ok(()));
+        assert_eq!(open[0].current_branch().stored(), "third");
+    }
+
+    /// Each refusal by its own reason, with nothing renamed.
+    #[test]
+    fn a_rename_is_refused_by_its_own_reason() {
+        use archforge_project::RenameBranchError::{Main, NameTaken, NoSuchBranch, RecordRemains};
+        let (sandbox, path) = branched();
+        let open = lock(&sandbox.host.inner.open);
+        let project = &open[0];
+        let start = project.head_of("main").unwrap();
+        let rename = |from: &str, to: &str| project.rename_branch(&branch(from), &branch(to));
+        let rows = [
+            ("main", "x", Main),
+            ("MAIN", "x", Main),
+            ("Elsewhere", "x", NoSuchBranch),
+            ("nowhere", "x", NoSuchBranch),
+            ("elsewhere", "scripted", NameTaken),
+            ("elsewhere", "SCRIPTED", NameTaken),
+            ("elsewhere", "MAIN", NameTaken),
+            ("elsewhere", "ELSEWHERE", NameTaken),
+            ("elsewhere", "elsewhere", NameTaken),
+        ];
+        for (from, to, why) in rows {
+            assert_eq!(rename(from, to), Err(why), "{from} to {to}");
+        }
+        // A record's name is held, though the list leaves it out, in any case and from either side.
+        stopped_creation(&path, "held", "main", &start);
+        assert_eq!(rename("elsewhere", "HELD"), Err(RecordRemains));
+        stopped_creation(&path, "elsewhere", "main", &start);
+        assert_eq!(rename("elsewhere", "free"), Err(RecordRemains));
+        std::fs::write(path.join(".creating-branch"), b"broken").unwrap();
+        assert_eq!(rename("scripted", "renamed"), Ok(()), "a damaged record names nothing");
+        std::fs::remove_file(path.join(".creating-branch")).unwrap();
+        assert!(has_branch(project, "elsewhere") && has_branch(project, "renamed"), "only that one was renamed");
+        // Dolt refuses while another session is on the branch; the current branch does not move.
+        let session = project.session_on(&branch("elsewhere")).unwrap();
+        assert!(matches!(rename("elsewhere", "free"), Err(archforge_project::RenameBranchError::Failed(_))));
+        assert!(has_branch(project, "elsewhere") && !has_branch(project, "free"));
+        drop(session);
+        assert_eq!(rename("elsewhere", "free"), Ok(()), "and once it has gone, the rename goes through");
+    }
+
+    /// A lost reply is read back: the branch went, so it counts, and the current branch follows.
+    #[test]
+    fn a_rename_whose_reply_was_lost_is_read_back() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        switch_to(host, &path, "elsewhere").unwrap();
+        let open = lock(&host.inner.open);
+        // Done just before it is asked for, so that asking fails as a lost reply would look.
+        let done = || open[0].run_on_branch("main", "CALL DOLT_BRANCH('-m', 'elsewhere', 'moved')").unwrap();
+        assert_eq!(open[0].rename_branch_after(&branch("elsewhere"), &branch("moved"), done), Ok(()));
+        assert_eq!(open[0].current_branch().stored(), "moved");
+    }
+
+    /// The writer's job is refused when it comes from before a switch or a reopen, or finds no project.
+    #[test]
+    fn a_rename_job_from_before_a_switch_or_a_reopen_is_refused() {
+        for closing in closing_routes() {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let answer = |asked: Receiver<Result<(), RenameJobError>>| asked.recv_timeout(Duration::from_secs(60)).expect("the job answers");
+            assert_eq!(answer(host.rename_branch(&sandbox.base.join("nowhere"), branch("a"), branch("b"))), Err(RenameJobError::NotOpen));
+            let stale = instance_of(&host.inner, &path);
+            assert_eq!(closing(host, &path).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            let (reply, refused) = channel();
+            writer(&host.inner)
+                .send(Job::RenameBranch(path.clone(), branch("elsewhere"), branch("x"), generation_of(&host.inner, &path), stale, reply))
+                .unwrap();
+            assert_eq!(answer(refused), Err(RenameJobError::Reopened));
+            let release = hold_the_writer(host, &path);
+            let asked = host.rename_branch(&path, branch("elsewhere"), branch("y"));
+            switched(&host.inner, &path);
+            drop(release);
+            assert_eq!(answer(asked), Err(RenameJobError::BranchChanged));
+            assert!(has_branch(&lock(&host.inner.open)[0], "elsewhere"), "nothing was renamed");
+            assert_eq!(answer(host.rename_branch(&path, branch("elsewhere"), branch("z"))), Ok(()));
+        }
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.
