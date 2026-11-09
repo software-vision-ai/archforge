@@ -183,21 +183,22 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
-    /// The job that restores a version of the project at `project` as a new version, for
-    /// [`Shell::begin_replacement`]: its callbacks only hand the work over and return at once.
-    fn restore_job(&self, _project: &std::path::Path, _request: RestoreRequest) -> replace::Job {
-        let no_versions = "this host keeps no versions";
-        let run = move || {
-            let (tx, rx) = std::sync::mpsc::channel();
-            let _ = tx.send(Err(replace::JobFailure::Failed(no_versions.into())));
-            rx
-        };
-        let read_back = move || {
-            let (tx, rx) = std::sync::mpsc::channel();
-            let _ = tx.send(Err(no_versions.to_string()));
-            rx
-        };
-        replace::Job { run: Box::new(run), read_back: Box::new(read_back) }
+    /// The job that restores the version `commit` of the project at `project`, saved at `saved_at`
+    /// (RFC 3339 in UTC), as a new version recorded as `by`, for [`Shell::begin_replacement`];
+    /// `repair` is what an opening does to a model. Its callbacks only hand the work over.
+    fn restore_job(
+        &self,
+        _project: &std::path::Path,
+        _commit: String,
+        _saved_at: String,
+        _by: SavedBy,
+        _repair: fn(&mut archforge_mof::Store),
+    ) -> replace::Job {
+        let (failed, answer) = std::sync::mpsc::channel();
+        let _ = failed.send(Err(replace::JobFailure::Failed("this host keeps no versions".into())));
+        let (unread, read) = std::sync::mpsc::channel();
+        let _ = unread.send(Err("this host keeps no versions".to_string()));
+        replace::Job { run: Box::new(move || answer), read_back: Box::new(move || read) }
     }
 
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
@@ -298,17 +299,6 @@ pub struct VersionsPage {
     pub versions: Vec<VersionEntry>,
     /// Whether older versions follow this page.
     pub more: bool,
-}
-
-/// A version to restore, and who asks.
-pub struct RestoreRequest {
-    /// The version's commit.
-    pub commit: String,
-    /// When the version was saved, RFC 3339 in UTC, for the new version's message.
-    pub saved_at: String,
-    pub by: SavedBy,
-    /// What an opening does to a model, applied to both sides of the comparison.
-    pub repair: fn(&mut archforge_mof::Store),
 }
 
 /// Who asked for a save, recorded with its version.
