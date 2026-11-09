@@ -150,6 +150,12 @@ pub trait ProjectHost: Send + Sync {
     /// own thread and sends one answer. The project created is open afterwards.
     fn create(&self, folder: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>>;
 
+    /// [`ProjectHost::open`] on the branch the project was left on, as Dolt stores the name; the
+    /// answer's notice says why when it could not be, and the project is then on `main`.
+    fn open_on(&self, path: &std::path::Path, _branch: Option<&str>) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>> {
+        self.open(path)
+    }
+
     /// Starts opening the project at `path` and returns at once, with its model's rows in the
     /// answer; the project opened shows in a tab of its own. Without it, opening is not available.
     fn open(&self, _path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>> {
@@ -455,6 +461,29 @@ pub struct Opened {
     pub path: std::path::PathBuf,
     pub model: Option<std::sync::Arc<archforge_mof::rows::Rows>>,
     pub unsaved: bool,
+    /// Why it opened on `main` and not on the branch it was left on.
+    pub notice: Option<BranchNotice>,
+}
+
+/// Why a project did not open on the branch it was left on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchNotice {
+    /// The project no longer has it.
+    Gone { name: String },
+    /// It could not be opened; `why` is the host's own technical text.
+    CannotOpen { name: String, why: String },
+}
+
+impl BranchNotice {
+    /// What the status bar says.
+    pub fn words(&self) -> String {
+        match self {
+            BranchNotice::Gone { name } => crate::i18n::fmt(&crate::i18n::tr("The branch {name} is no longer in this project"), &[("name", name)]),
+            BranchNotice::CannotOpen { name, why } => {
+                crate::i18n::fmt(&crate::i18n::tr("The branch {name} could not be opened: {why}"), &[("name", name), ("why", why)])
+            }
+        }
+    }
 }
 
 /// Why a project could not be created, in the kinds the dialog explains; a detail is the host's
@@ -677,6 +706,10 @@ impl Shell {
         // Home's recent list puts it first.
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         self.state.remember(&opened.name, &opened.path, now);
+        // It is on `main` now, and the notice has said why just this once.
+        if opened.notice.is_some() {
+            self.state.keep_branch(&opened.path, None);
+        }
         if let Some(i) = self.tabs.iter().position(|t| t.path == opened.path) {
             self.activate(i);
             return;
@@ -1385,7 +1418,7 @@ impl Shell {
         // The shown model's newest state goes to the host first, as before every change of tab.
         self.write_changes();
         let Some(host) = &self.services.projects else { return };
-        self.opening = Some(host.open(path));
+        self.opening = Some(host.open_on(path, self.state.branch_of(path)));
         self.open_error = None;
     }
 

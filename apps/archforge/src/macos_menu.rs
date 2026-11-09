@@ -129,7 +129,7 @@ mod tests {
             archforge_mof::Uuid(n.to_le_bytes())
         });
         shell.session = Some(archforge_notations::new_project_session("Shop", ids).unwrap());
-        shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false });
+        shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
         (shell, host, picks)
     }
 

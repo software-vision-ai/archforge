@@ -454,6 +454,8 @@ str		Archforge is viewing an earlier version of this project, so this request wa
 str		Close a project to open another	Cierra un proyecto para abrir otro
 str		The closing stopped without an answer	El cierre terminó sin respuesta
 str		The project could not be opened: {why}	No se pudo abrir el proyecto: {why}
+str		The branch {name} is no longer in this project	La rama {name} ya no está en este proyecto
+str		The branch {name} could not be opened: {why}	No se pudo abrir la rama {name}: {why}
 str		The project could not be closed: {why}	No se pudo cerrar el proyecto: {why}
 str		Model · the project's root	Modelo · la raíz del proyecto
 str		Model	Modelo

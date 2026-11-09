@@ -37,7 +37,9 @@ use archforge_project::{
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
-use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing};
+use archforge_ui_egui::{
+    BranchNotice, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry, VersionsPage, Writing,
+};
 
 /// How long the writer waits after a change for the next one before it writes.
 const SETTLE: Duration = Duration::from_millis(300);
@@ -817,12 +819,20 @@ impl ProjectHost for Projects {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
     }
 
+    /// Opens the project on `main`, with no branch stored for it.
     fn open(&self, path: &Path) -> Receiver<Result<Opened, CreateError>> {
+        self.open_on(path, None)
+    }
+
+    /// Opens the project on its own thread, on the stored `branch` when that can still be opened;
+    /// otherwise on `main`, and what is opened carries the reason as a notice.
+    fn open_on(&self, path: &Path, branch: Option<&str>) -> Receiver<Result<Opened, CreateError>> {
         let (tx, rx) = channel();
         let inner = self.inner.clone();
         let path = path.to_path_buf();
+        let stored = branch.map(str::to_string);
         let reply = tx.clone();
-        match std::thread::Builder::new().name("archforge-open".into()).spawn(move || open_job(&inner, &path, &reply)) {
+        match std::thread::Builder::new().name("archforge-open".into()).spawn(move || open_job(&inner, &path, stored.as_deref(), &reply)) {
             Ok(handle) => *lock(&self.inner.worker) = Some(handle),
             Err(e) => {
                 let _ = tx.send(Err(CreateError::Failed { detail: format!("the work could not start: {e}") }));
@@ -990,7 +1000,7 @@ fn job(inner: &Inner, folder: &Path, name: &str, reply: &Sender<Result<Opened, C
 }
 
 /// One opening, on the worker thread: the project's server, its model's tables and rows.
-fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateError>>) {
+fn open_job(inner: &Inner, path: &Path, stored: Option<&str>, reply: &Sender<Result<Opened, CreateError>>) {
     let _job = lock(&inner.job);
     // A project already open is read where it is (the window shows its tab when it has one),
     // after what waits for it was written.
@@ -1007,7 +1017,13 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
         let answer = schema(inner).and_then(|s| {
             let rows = project.read_model(&s).map_err(kind)?;
             let unsaved = project.has_unsaved().map_err(kind)?;
-            Ok(Opened { name: project.settings().name.clone(), path: project.path().to_path_buf(), model: Some(Arc::new(rows)), unsaved })
+            Ok(Opened {
+                name: project.settings().name.clone(),
+                path: project.path().to_path_buf(),
+                model: Some(Arc::new(rows)),
+                unsaved,
+                notice: None,
+            })
         });
         drop(open);
         let _ = reply.send(answer);
@@ -1021,9 +1037,14 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
     let result = dolt(inner).and_then(|dolt| {
         let opts = ServerOptions::new(inner.settings.join("servers"));
         let project = Project::open(&dolt, &opts, path).map_err(kind)?;
-        // Before anything lists or reads branches. The status bar's words come with AR-293.
+        // Told first which branch it will open on, so that recovery keeps it, and before anything
+        // lists or reads branches.
+        if let Some(wanted) = stored.and_then(|name| SafeBranch::found(name).ok()) {
+            project.set_current_branch(wanted);
+        }
         project.recover_creation();
         let read = schema(inner).and_then(|s| {
+            let notice = stored.and_then(|name| project.open_on_stored(name, &s).err().map(|e| branch_notice(name, e)));
             project.prepare_model(&s).map_err(kind)?;
             let rows = project.read_model(&s).map_err(kind)?;
             // Damaged conversations never keep the model from opening: the chat panel says why.
@@ -1031,10 +1052,10 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
                 log::warn!("the conversations of {} were not prepared: {e}", project.path().display());
             }
             let unsaved = project.has_unsaved().map_err(kind)?;
-            Ok((rows, unsaved))
+            Ok((rows, unsaved, notice))
         });
         match read {
-            Ok((rows, unsaved)) => Ok((project, rows, unsaved)),
+            Ok(read) => Ok((project, read)),
             Err(e) => {
                 let _ = project.close();
                 Err(e)
@@ -1042,12 +1063,13 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
         }
     });
     let answer = match result {
-        Ok((project, _, _)) if inner.cancel.load(Ordering::SeqCst) => {
+        Ok((project, _)) if inner.cancel.load(Ordering::SeqCst) => {
             let _ = project.close();
             Err(CreateError::Failed { detail: "Archforge is quitting".into() })
         }
-        Ok((project, rows, unsaved)) => {
-            let opened = Opened { name: project.settings().name.clone(), path: project.path().to_path_buf(), model: Some(Arc::new(rows)), unsaved };
+        Ok((project, (rows, unsaved, notice))) => {
+            let opened =
+                Opened { name: project.settings().name.clone(), path: project.path().to_path_buf(), model: Some(Arc::new(rows)), unsaved, notice };
             log::info!("opened the project {}", opened.path.display());
             adopt(inner, project).map(|()| opened)
         }
@@ -1057,6 +1079,16 @@ fn open_job(inner: &Inner, path: &Path, reply: &Sender<Result<Opened, CreateErro
         }
     };
     let _ = reply.send(answer);
+}
+
+/// The window's words for why the branch `stored` did not open. A name made in Archforge is shown
+/// as it was typed.
+fn branch_notice(stored: &str, why: archforge_project::StoredBranch) -> BranchNotice {
+    let name = SafeBranch::found(stored).map_or_else(|_| stored.to_string(), |b| b.shown());
+    match why {
+        archforge_project::StoredBranch::Gone => BranchNotice::Gone { name },
+        archforge_project::StoredBranch::CannotOpen(why) => BranchNotice::CannotOpen { name, why },
+    }
 }
 
 /// Refuses another project when [`MAX_OPEN`] are open.
@@ -4841,6 +4873,56 @@ mod tests {
         let open = lock(&host.inner.open);
         assert!(has_branch(&open[0], "scripted") && !has_branch(&open[0], "x") && !has_branch(&open[0], "made"));
         assert_eq!(open[0].current_branch().stored(), "main");
+    }
+
+    /// Closes the project and opens it again on `stored`, and says what the opening said.
+    fn reopened_on(host: &Projects, path: &Path, stored: Option<&str>) -> Opened {
+        close(host, path).unwrap();
+        wait(&host.open_on(path, stored)).unwrap()
+    }
+
+    /// A project opens on the branch it was left on, a name in another case being that branch, and
+    /// on `main` otherwise, by its typed reason: gone, unusable, or refused by an opening's checks.
+    #[test]
+    fn a_project_reopens_on_the_branch_it_was_left_on_or_says_why_not() {
+        use BranchNotice::{CannotOpen, Gone};
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        for (stored, on_it) in [("elsewhere", "elsewhere"), ("ELSEWHERE", "elsewhere")] {
+            let opened = reopened_on(host, &path, Some(stored));
+            assert_eq!((opened.notice, on(host).as_str()), (None, on_it), "{stored}");
+            assert_eq!(opened.model.as_deref(), Some(&model("a")), "{stored}: that branch's own model");
+        }
+        let opened = reopened_on(host, &path, None);
+        assert_eq!((opened.notice, on(host).as_str()), (None, "main"), "a preference from before branches");
+        assert_eq!(opened.model.as_deref(), Some(&model("b")));
+        let opened = reopened_on(host, &path, Some("gone"));
+        assert_eq!((opened.notice, on(host).as_str()), (Some(Gone { name: "gone".into() }), "main"));
+        for stored in ["a'b", "scripted"] {
+            let opened = reopened_on(host, &path, Some(stored));
+            assert!(matches!(&opened.notice, Some(CannotOpen { name, .. }) if name == stored), "{stored}: {:?}", opened.notice);
+            assert_eq!(on(host), "main", "{stored}");
+            assert_eq!(opened.model.as_deref(), Some(&model("b")), "{stored}: main's own model");
+        }
+    }
+
+    /// A creation record naming the branch the project reopens on leaves it standing.
+    #[test]
+    fn recovery_keeps_the_branch_the_project_reopens_on() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        for (recorded, stored) in [("elsewhere", "elsewhere"), ("elsewhere", "ELSEWHERE")] {
+            let start = lock(&host.inner.open)[0].head_of("elsewhere").unwrap();
+            stopped_creation(&path, recorded, "main", &start);
+            let opened = reopened_on(host, &path, Some(stored));
+            assert_eq!((opened.notice, on(host).as_str()), (None, "elsewhere"), "{stored}");
+            assert!(has_branch(&lock(&host.inner.open)[0], "elsewhere") && !path.join(".creating-branch").exists(), "{stored}");
+        }
+        // Recovery does its work even when the branch it was told about has gone.
+        let start = lock(&host.inner.open)[0].head_of("scripted").unwrap();
+        stopped_creation(&path, "scripted", "main", &start);
+        reopened_on(host, &path, Some("gone"));
+        assert!(!has_branch(&lock(&host.inner.open)[0], "scripted") && !path.join(".creating-branch").exists());
     }
 
     /// A saved model and unsaved work on the source that differ in the rows and diagrams.

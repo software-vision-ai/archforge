@@ -454,6 +454,8 @@ str		Archforge is viewing an earlier version of this project, so this request wa
 str		Close a project to open another	请先关闭一个项目再打开另一个
 str		The closing stopped without an answer	关闭未返回结果即已停止
 str		The project could not be opened: {why}	无法打开项目：{why}
+str		The branch {name} is no longer in this project	分支 {name} 已不在此项目中
+str		The branch {name} could not be opened: {why}	无法打开分支 {name}：{why}
 str		The project could not be closed: {why}	无法关闭项目：{why}
 str		Model · the project's root	模型 · 项目的根
 str		Model	模型
