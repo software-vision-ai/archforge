@@ -275,6 +275,8 @@ pub enum Refusal {
     HeldKey { provider: Option<Provider> },
     /// The conversation to bring back is in the list: it was never deleted, or is back already.
     Listed,
+    /// The project's branch changed after the write was asked for, so it was not applied.
+    BranchChanged,
     /// Anything else, in the host's words.
     Failed(String),
 }

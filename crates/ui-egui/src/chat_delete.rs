@@ -386,6 +386,7 @@ fn refused_why(r: &Refusal) -> String {
     match r {
         Refusal::Failed(why) => why.clone(),
         Refusal::Listed => tr("it is in the conversation list already"),
+        Refusal::BranchChanged => tr("the branch changed while it was on its way"),
         Refusal::HeldKey { .. } => tr("the project did not answer"),
     }
 }

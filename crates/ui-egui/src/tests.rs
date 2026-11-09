@@ -15944,6 +15944,14 @@ fn a_save_records_whether_the_person_or_an_agent_asked() {
     }
 }
 
+/// A chat write refused for a changed branch says so in the panel's words.
+#[test]
+fn a_chat_write_refused_for_a_changed_branch_says_so() {
+    crate::i18n::set_language("en");
+    let words = crate::chat_panel::refusal_text(&crate::chat_store::Refusal::BranchChanged);
+    assert_eq!(words, "This conversation could not be saved: the branch changed while it was on its way");
+}
+
 /// A failed save says whether a version exists, in each of the ways it can stand, and so does
 /// one whose answer was lost; none of them marks the work saved.
 #[test]
@@ -15951,6 +15959,7 @@ fn a_failed_save_says_whether_a_version_exists() {
     use crate::VersionAfter::{Made, None as NoVersion, Unknown};
     let commit = |version| Some(crate::SaveError::Commit { why: "the disk went away".into(), version });
     let told = [
+        (Some(crate::SaveError::BranchChanged), "The branch changed before this save could run, so nothing was saved."),
         (commit(NoVersion), "No version was made: the disk went away"),
         (commit(Made("abc".into())), "A version was made, even though saving reported an error: the disk went away"),
         (commit(Unknown), "Archforge can't tell whether a version was made: the disk went away. It is safe to save again."),

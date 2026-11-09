@@ -429,6 +429,9 @@ str		This description could not be checked against your saved API keys, so nothi
 str		A description has to be text, so nothing was saved.	Une description doit être du texte ; rien n’a donc été enregistré.
 str		A save is under way, so this description was not used. Try again when it has finished.	Un enregistrement est en cours ; cette description n’a donc pas été utilisée. Réessayez lorsqu’il sera terminé.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	Le projet a changé après votre vérification ; rien n’a donc été enregistré. Vérifiez les modifications et enregistrez à nouveau.
+str		The branch changed before this save could run, so nothing was saved.	La branche a changé avant que cet enregistrement puisse s’exécuter ; rien n’a donc été enregistré.
+str		the branch changed while it was on its way	la branche a changé pendant l’envoi
+str		A change arrived after the branch changed, so it was not written.	Une modification est arrivée après le changement de branche ; elle n’a donc pas été écrite.
 str		The opening stopped without an answer	L’ouverture s’est arrêtée sans réponse
 str		Chat did not finish in time, so nothing was changed.	Le chat n'a pas terminé à temps ; rien n'a été modifié.
 str		The reading stopped without an answer, so nothing was changed.	La lecture s'est arrêtée sans réponse ; rien n'a été modifié.

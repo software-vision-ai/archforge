@@ -318,6 +318,8 @@ pub enum SaveError {
     /// The model moved after the state being saved was reviewed: nothing was saved, and the work
     /// stands as it was.
     Changed,
+    /// The project's branch changed after the save was asked for: nothing was saved.
+    BranchChanged,
     /// A failure before any commit was tried, in words: no version was made.
     Failed(String),
     /// The commit failed, and whether a version exists all the same.
@@ -329,6 +331,7 @@ impl std::fmt::Display for SaveError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SaveError::Changed => f.write_str("the model changed after it was reviewed"),
+            SaveError::BranchChanged => f.write_str("the branch changed before the save ran"),
             SaveError::Failed(why) | SaveError::Commit { why, .. } => f.write_str(why),
         }
     }
@@ -358,6 +361,7 @@ fn save_error_words(e: SaveError) -> String {
     use crate::i18n::{fmt, tr};
     match e {
         SaveError::Changed => tr("The project changed after you reviewed it, so nothing was saved. Review the changes and save again."),
+        SaveError::BranchChanged => tr("The branch changed before this save could run, so nothing was saved."),
         SaveError::Failed(why) => why,
         SaveError::Commit { why, version: VersionAfter::None } => fmt(&tr("No version was made: {why}"), &[("why", &why)]),
         SaveError::Commit { why, version: VersionAfter::Made(_) } => {

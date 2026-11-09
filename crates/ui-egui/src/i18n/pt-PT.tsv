@@ -429,6 +429,9 @@ str		This description could not be checked against your saved API keys, so nothi
 str		A description has to be text, so nothing was saved.	Uma descrição tem de ser texto, por isso nada foi guardado.
 str		A save is under way, so this description was not used. Try again when it has finished.	Está em curso uma gravação, por isso esta descrição não foi usada. Tente novamente quando terminar.
 str		The project changed after you reviewed it, so nothing was saved. Review the changes and save again.	O projeto foi alterado depois da sua revisão, por isso nada foi guardado. Reveja as alterações e guarde novamente.
+str		The branch changed before this save could run, so nothing was saved.	O ramo mudou antes de esta gravação poder ser feita, por isso nada foi guardado.
+str		the branch changed while it was on its way	o ramo mudou enquanto isto estava a caminho
+str		A change arrived after the branch changed, so it was not written.	Uma alteração chegou depois de o ramo mudar, por isso não foi escrita.
 str		The opening stopped without an answer	A abertura terminou sem resposta
 str		Chat did not finish in time, so nothing was changed.	O chat não terminou a tempo, por isso nada foi alterado.
 str		The reading stopped without an answer, so nothing was changed.	A leitura parou sem resposta, por isso nada foi alterado.

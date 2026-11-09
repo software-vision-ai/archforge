@@ -578,6 +578,9 @@ pub fn refusal_text(r: &Refusal) -> String {
         }
         Refusal::Failed(why) => fmt(&tr("This conversation could not be saved: {why}"), &[("why", why)]),
         Refusal::Listed => fmt(&tr("This conversation could not be saved: {why}"), &[("why", &tr("it is in the conversation list already"))]),
+        Refusal::BranchChanged => {
+            fmt(&tr("This conversation could not be saved: {why}"), &[("why", &tr("the branch changed while it was on its way"))])
+        }
     }
 }
 

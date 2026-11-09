@@ -45,9 +45,14 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// project named, recorded as who asked, under the description given or an automatic one, or only
 /// write when no project is named) with its answer; or a flush of one project (write what waits, answer whether that
 /// project's rows reached it).
+///
+/// The generation a job carries is its project's when the job was asked for, before any key check;
+/// a job of another generation is refused rather than applied to a branch it was not made for.
 enum Job {
-    Write(PathBuf, Rows),
-    Save(Option<(PathBuf, SavedBy)>, Option<Described>, Sender<Result<Saved, SaveError>>),
+    /// The rows, their generation, and the words to record if that generation has passed, put in
+    /// the language shown while still on the interface thread.
+    Write(PathBuf, Rows, u64, String),
+    Save(Option<(PathBuf, SavedBy, u64)>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
     Drop(PathBuf, Sender<()>),
@@ -57,8 +62,17 @@ enum Job {
     /// never run late.
     Discard(PathBuf, Arc<AtomicBool>, Sender<Result<(), String>>),
     /// Work on a project's conversations: run against the project while it is open (none when it
-    /// is not), in order with every other job; it answers through its own channel.
-    Chat(PathBuf, ChatJob),
+    /// is not or its generation has passed), in order with every other job; it answers through its
+    /// own channel.
+    Chat(PathBuf, u64, ChatJob),
+}
+
+/// Why a job on the conversations has no project to run against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoProject {
+    NotOpen,
+    /// The project's branch changed after the job was asked for.
+    OtherBranch,
 }
 
 /// A save's description, and how many sets of rows its project had been handed when the save was
@@ -70,7 +84,7 @@ struct Described {
 }
 
 /// A job on a project's conversations, run on the writer thread.
-type ChatJob = Box<dyn FnOnce(Option<&Project>) + Send>;
+type ChatJob = Box<dyn FnOnce(Result<&Project, NoProject>) + Send>;
 
 pub struct Projects {
     inner: Arc<Inner>,
@@ -99,6 +113,8 @@ struct Inner {
     /// A reader of each open project's versions. Apart from `open`, which the writer holds while
     /// it writes, so that a read is held up by no write and holds up none.
     readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
+    /// Each project's switch generation: absent is 0, and nothing has moved it yet.
+    generations: Mutex<BTreeMap<PathBuf, u64>>,
     /// How many sets of rows each project has been handed, counted as each goes to the writer.
     handed: Mutex<BTreeMap<PathBuf, u64>>,
     /// Who checks a description against the kept API keys; while nobody does, a description is refused.
@@ -143,6 +159,7 @@ impl Projects {
                 writing: Mutex::new(BTreeMap::new()),
                 closers: Mutex::new(Vec::new()),
                 readers: Mutex::new(BTreeMap::new()),
+                generations: Mutex::new(BTreeMap::new()),
                 handed: Mutex::new(BTreeMap::new()),
                 keys: OnceLock::new(),
             }),
@@ -169,14 +186,25 @@ impl Projects {
         on_writer(&self.inner, path, job)
     }
 
-    /// Runs `job` on the writer with the open project at `path`, or none when it is not open, after
+    /// The project's switch generation now, to take when a job is asked for.
+    pub fn generation_of(&self, path: &Path) -> u64 {
+        generation_of(&self.inner, path)
+    }
+
+    /// Runs `job` on the writer against the open project at `path`, or says why there is none, after
     /// every job sent before it, and answers with what it gives; nothing when the writer stopped.
-    pub fn on_writer_open<T: Send + 'static>(&self, path: &Path, job: impl FnOnce(Option<&Project>) -> T + Send + 'static) -> Receiver<T> {
+    /// `generation` is the project's when the job was asked for.
+    pub fn on_writer_open<T: Send + 'static>(
+        &self,
+        path: &Path,
+        generation: u64,
+        job: impl FnOnce(Result<&Project, NoProject>) -> T + Send + 'static,
+    ) -> Receiver<T> {
         let (tx, rx) = channel();
         let run: ChatJob = Box::new(move |project| {
             let _ = tx.send(job(project));
         });
-        if let Err(e) = writer(&self.inner).send(Job::Chat(path.to_path_buf(), run)) {
+        if let Err(e) = writer(&self.inner).send(Job::Chat(path.to_path_buf(), generation, run)) {
             log::warn!("a job on the conversations could not reach the writer: {e}");
         }
         rx
@@ -243,13 +271,16 @@ impl Projects {
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
     /// short lock on the readers is taken here, so the read waits for no write and no write waits
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
-    /// reader has left the map, so a later read cannot reach it.
+    /// reader has left the map, so a later read cannot reach it. An answer read across a change of
+    /// the project's branch is dropped: the receiver sees no answer rather than another branch's.
     fn on_a_reader<T: Send + 'static>(
         &self,
         project: &Path,
         read: impl FnOnce(&VersionReader) -> Result<T, String> + Send + 'static,
     ) -> Receiver<Result<T, String>> {
         let (tx, rx) = channel();
+        let generation = generation_of(&self.inner, project);
+        let (inner, path) = (self.inner.clone(), project.to_path_buf());
         let slot = match self.take_a_read(project) {
             Ok(slot) => slot,
             Err(why) => {
@@ -263,7 +294,9 @@ impl Projects {
             let (answer, slot) = (answer, slot);
             let result = read(&slot.0.reader);
             drop(slot);
-            let _ = answer.send(result);
+            if generation_of(&inner, &path) == generation {
+                let _ = answer.send(result);
+            }
         };
         match std::thread::Builder::new().name("archforge-versions".into()).spawn(work) {
             Ok(handle) => {
@@ -300,7 +333,8 @@ impl ProjectHost for Projects {
         // Counted and sent under one lock, so the count always agrees with the writer's queue.
         let mut handed = lock(&self.inner.handed);
         *handed.entry(project.to_path_buf()).or_default() += 1;
-        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows));
+        let stale = tr("A change arrived after the branch changed, so it was not written.");
+        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows, generation_of(&self.inner, project), stale));
         drop(handed);
         if let Err(e) = sent {
             log::error!("the model could not be handed to the writer: {e}");
@@ -313,10 +347,11 @@ impl ProjectHost for Projects {
     /// writer, which answers [`SaveError::Changed`] when more rows came in during the check.
     fn save(&self, project: &Path, description: Option<String>, by: SavedBy) -> Receiver<Result<Saved, SaveError>> {
         let (tx, rx) = channel();
+        let generation = generation_of(&self.inner, project);
         match description {
-            None => send_save(&self.inner, project, by, None, tx),
+            None => send_save(&self.inner, project, by, generation, None, tx),
             Some(text) => match check_description(&text) {
-                Ok(()) => save_described(&self.inner, project, by, text, tx),
+                Ok(()) => save_described(&self.inner, project, by, generation, text, tx),
                 Err(problem) => {
                     let _ = tx.send(Err(SaveError::Failed(refusal(problem))));
                 }
@@ -707,8 +742,16 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             }
         };
         match job {
-            Some(Job::Write(project, rows)) => {
+            Some(Job::Write(project, rows, generation, stale)) => {
                 *seen.entry(project.clone()).or_default() += 1;
+                if generation != generation_of(inner, &project) {
+                    log::warn!("changes for {} made before its branch changed are dropped", project.display());
+                    let pending = waiting.contains_key(&project);
+                    let mut states = lock(&inner.writing);
+                    let state = states.entry(project).or_default();
+                    (state.pending, state.error) = (pending, Some(stale));
+                    continue;
+                }
                 waiting.insert(project, rows);
                 failed = false;
             }
@@ -717,8 +760,14 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 failed = !waiting.is_empty();
             }
             Some(Job::Save(project, described, reply)) => {
+                if let Some((p, _, generation)) = &project
+                    && *generation != generation_of(inner, p)
+                {
+                    let _ = reply.send(Err(SaveError::BranchChanged));
+                    continue;
+                }
                 // Before anything is written: the rows that came in stay waiting, as any others do.
-                if let (Some((p, _)), Some(d)) = (&project, &described)
+                if let (Some((p, ..)), Some(d)) = (&project, &described)
                     && seen.get(p).copied().unwrap_or(0) != d.handed
                 {
                     let _ = reply.send(Err(SaveError::Changed));
@@ -728,8 +777,8 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 failed = !waiting.is_empty();
                 let answer = match project {
                     // A save needs its own project's rows written; a flush needs all.
-                    Some((p, _)) if waiting.contains_key(&p) => Err(SaveError::Failed(unwritten(inner, &p))),
-                    Some((p, by)) => commit(inner, &p, described.map(|d| d.text), &by),
+                    Some((p, ..)) if waiting.contains_key(&p) => Err(SaveError::Failed(unwritten(inner, &p))),
+                    Some((p, by, _)) => commit(inner, &p, described.map(|d| d.text), &by),
                     None => match waiting.keys().next() {
                         Some(p) => Err(SaveError::Failed(unwritten(inner, p))),
                         None => Ok(Saved::NothingNew),
@@ -759,10 +808,13 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                 }
                 let _ = reply.send(answer);
             }
-            Some(Job::Chat(project, job)) => {
+            Some(Job::Chat(project, generation, job)) => {
                 let open = lock(&inner.open);
+                let moved = generation != generation_of(inner, &project);
                 // A failing job never stops the writer: the model's rows still get written.
-                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job(open.iter().find(|p| p.path() == project))));
+                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    job(if moved { Err(NoProject::OtherBranch) } else { open.iter().find(|p| p.path() == project).ok_or(NoProject::NotOpen) })
+                }));
                 if ran.is_err() {
                     log::error!("a job on the conversations of {} failed", project.display());
                 }
@@ -817,8 +869,15 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
 }
 
 /// Hands a save to the writer; a writer that has stopped is the save's answer.
-fn send_save(inner: &Arc<Inner>, project: &Path, by: SavedBy, described: Option<Described>, reply: Sender<Result<Saved, SaveError>>) {
-    if let Err(e) = writer(inner).send(Job::Save(Some((project.to_path_buf(), by)), described, reply.clone())) {
+fn send_save(
+    inner: &Arc<Inner>,
+    project: &Path,
+    by: SavedBy,
+    generation: u64,
+    described: Option<Described>,
+    reply: Sender<Result<Saved, SaveError>>,
+) {
+    if let Err(e) = writer(inner).send(Job::Save(Some((project.to_path_buf(), by, generation)), described, reply.clone())) {
         let _ = reply.send(Err(SaveError::Failed(format!("the writer stopped: {e}"))));
     }
 }
@@ -839,7 +898,7 @@ fn refusal(problem: DescriptionProblem) -> String {
 /// to ask the person, so that runs on the agents host's thread and the writer is never held up.
 /// Text that cannot be checked is not saved: it would stay in the project's history. Both refusals
 /// are put in words here, since `tr` reads the language of the thread that calls it.
-fn save_described(inner: &Arc<Inner>, project: &Path, by: SavedBy, text: String, reply: Sender<Result<Saved, SaveError>>) {
+fn save_described(inner: &Arc<Inner>, project: &Path, by: SavedBy, generation: u64, text: String, reply: Sender<Result<Saved, SaveError>>) {
     let handed = lock(&inner.handed).get(project).copied().unwrap_or(0);
     let held = tr("This description holds one of your saved API keys, so nothing was saved.");
     let unchecked = tr("This description could not be checked against your saved API keys, so nothing was saved.");
@@ -852,7 +911,7 @@ fn save_described(inner: &Arc<Inner>, project: &Path, by: SavedBy, text: String,
     let (inner, path, answer, words) = (inner.clone(), project.to_path_buf(), reply.clone(), unchecked.clone());
     let started = std::thread::Builder::new().name("archforge-save-keys".into()).spawn(move || {
         match checked.recv().unwrap_or_else(|_| Err("the agents host stopped".into())) {
-            Ok(None) => send_save(&inner, &path, by, Some(Described { text, handed }), answer),
+            Ok(None) => send_save(&inner, &path, by, generation, Some(Described { text, handed }), answer),
             Ok(Some(_)) => {
                 let _ = answer.send(Err(SaveError::Failed(held)));
             }
@@ -931,6 +990,11 @@ fn now() -> String {
     archforge_project::timestamp(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0))
 }
 
+/// The switch generation of the project at `path` now.
+fn generation_of(inner: &Inner, path: &Path) -> u64 {
+    lock(&inner.generations).get(path).copied().unwrap_or(0)
+}
+
 /// Runs `job` against the open project at `path` on the writer thread, after every job sent before
 /// it, and answers with what it gives; a project no longer open is an error.
 fn on_writer<T: Send + 'static>(
@@ -941,10 +1005,16 @@ fn on_writer<T: Send + 'static>(
     let (tx, rx) = channel();
     let reply = tx.clone();
     let shown = path.display().to_string();
+    let generation = generation_of(inner, path);
+    let moved = tr("the branch changed while it was on its way");
     let run: ChatJob = Box::new(move |project| {
-        let _ = reply.send(project.map_or_else(|| Err(format!("{shown} is no longer open")), job));
+        let _ = reply.send(match project {
+            Ok(project) => job(project),
+            Err(NoProject::NotOpen) => Err(format!("{shown} is no longer open")),
+            Err(NoProject::OtherBranch) => Err(moved),
+        });
     });
-    if let Err(e) = writer(inner).send(Job::Chat(path.to_path_buf(), run)) {
+    if let Err(e) = writer(inner).send(Job::Chat(path.to_path_buf(), generation, run)) {
         let _ = tx.send(Err(format!("the writer stopped: {e}")));
     }
     rx
@@ -1509,7 +1579,7 @@ mod tests {
     /// the folder goes.
     struct Sandbox {
         base: PathBuf,
-        host: Projects,
+        host: Arc<Projects>,
         agents: Option<Arc<crate::agents::Agents>>,
     }
 
@@ -1520,7 +1590,7 @@ mod tests {
                 .map(|n| std::env::temp_dir().join(format!("af-d{}-{n}", std::process::id())))
                 .find(|p| std::fs::create_dir(p).is_ok())
                 .expect("a folder of the test's own");
-            let host = Projects::new(&base.join("settings"), "Archforge test".into());
+            let host = Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
             let agents = keys.map(|k| Arc::new(crate::agents::Agents::with(&base.join("settings"), k, archforge_agents::HostEnv::default())));
             if let Some(a) = &agents {
                 host.check_descriptions_with(a.clone());
@@ -1782,6 +1852,123 @@ mod tests {
         assert!(under_way.0.reader.versions(None, 1).is_ok(), "and the server still answers it");
         drop(under_way);
         assert_eq!(closing.recv_timeout(Duration::from_secs(60)).expect("the closing answers"), Ok(()));
+    }
+
+    /// Moves `path`'s generation, as a switch of its branch will.
+    fn switched(inner: &Inner, path: &Path) {
+        *lock(&inner.generations).entry(path.to_path_buf()).or_default() += 1;
+    }
+
+    /// Holds the writer at a job until the sender is used or dropped, so jobs asked for meanwhile
+    /// wait in its queue and a generation can move before it reaches them.
+    fn hold_the_writer(host: &Projects, path: &Path) -> Sender<()> {
+        let (release, wait) = channel::<()>();
+        let (started, running) = channel::<()>();
+        host.on_writer(path, move |_| {
+            let _ = started.send(());
+            let _ = wait.recv_timeout(Duration::from_secs(30));
+            Ok(())
+        });
+        running.recv_timeout(Duration::from_secs(30)).expect("the writer reached the job");
+        release
+    }
+
+    /// Rows from before a switch are dropped and said to be, and another project's are not touched.
+    #[test]
+    fn a_write_from_before_the_switch_is_dropped_and_recorded_for_that_project_only() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
+        host.write(&path, model("a"));
+        assert_eq!(saved(host, &path), Ok(true));
+        let release = hold_the_writer(host, &path);
+        host.write(&path, model("b"));
+        host.write(&other, model("z"));
+        switched(&host.inner, &path);
+        drop(release);
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        let words = "A change arrived after the branch changed, so it was not written.".to_string();
+        assert_eq!(host.writing(&path), Writing { pending: false, error: Some(words) });
+        assert_eq!(saved(host, &path), Ok(false), "the stale rows did not reach the project");
+        assert_eq!(saved(host, &other), Ok(true), "the other project's job was not refused");
+        // The next change, of the generation now, is written and clears the word.
+        host.write(&path, model("c"));
+        assert_eq!(saved(host, &path), Ok(true));
+        assert_eq!(host.writing(&path), Writing::default());
+    }
+
+    /// A save is refused by its reason, its generation taken before the key check it waits on.
+    #[test]
+    fn a_save_from_before_the_switch_is_refused_even_across_its_key_check() {
+        let gate = Arc::new(KeyGate::default());
+        let sandbox = Sandbox::new(Some(Box::new(Gated(gate.clone()))));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
+        host.write(&path, model("a"));
+        let release = hold_the_writer(host, &path);
+        let queued = host.save(&path, None, nobody());
+        switched(&host.inner, &path);
+        drop(release);
+        assert_eq!(made(queued.recv_timeout(Duration::from_secs(60)).unwrap()), Err(SaveError::BranchChanged));
+        let before = sandbox.messages();
+        // Across the key check: this project's move refuses it, another project's does not.
+        for (moved, answer, next) in [(&other, Ok(true), "b"), (&path, Err(SaveError::BranchChanged), "c")] {
+            gate.hold(true);
+            let asked = host.save(&path, Some("Described".into()), nobody());
+            gate.wait_for_a_read();
+            switched(&host.inner, moved);
+            gate.hold(false);
+            assert_eq!(made(asked.recv_timeout(Duration::from_secs(60)).unwrap()), answer);
+            host.write(&path, model(next));
+        }
+        assert_eq!(sandbox.messages().len(), before.len() + 1, "only the save in the other project's move made a version");
+    }
+
+    /// A conversation write is refused by its reason, its generation also taken before the key check.
+    #[test]
+    fn a_chat_write_from_before_the_switch_is_refused_by_its_reason() {
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat_store::{ChatStore, Refusal, Write};
+        let gate = Arc::new(KeyGate::default());
+        let sandbox = Sandbox::new(Some(Box::new(Gated(gate.clone()))));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let chats = crate::chats::Chats::new(host.clone(), sandbox.agents.clone().unwrap());
+        let chat = archforge_mof::Uuid::v7(1_762_400_000_000, [1; 10]);
+        gate.hold(true);
+        let asked = chats.write(
+            &path,
+            Write::Create { chat, title: "Hello".into(), provider: Provider::Claude, model: "m".into(), skip: Vec::new(), now: 1_762_437_731 },
+        );
+        gate.wait_for_a_read();
+        switched(&host.inner, &path);
+        gate.hold(false);
+        assert_eq!(asked.recv_timeout(Duration::from_secs(60)).unwrap(), Err(Refusal::BranchChanged));
+        assert!(chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap().is_empty(), "nothing was written");
+        // A job with no key check: its reason, and a project not open keeps its own.
+        let stale = host.generation_of(&path).saturating_sub(1);
+        let reason = host.on_writer_open(&path, stale, |p| p.err()).recv_timeout(Duration::from_secs(60)).unwrap();
+        assert_eq!(reason, Some(NoProject::OtherBranch));
+        let gone = host.on_writer_open(Path::new("/nowhere"), 0, |p| p.err()).recv_timeout(Duration::from_secs(60)).unwrap();
+        assert_eq!(gone, Some(NoProject::NotOpen));
+        let release = hold_the_writer(host, &path);
+        let read = host.on_writer(&path, |_| Ok(()));
+        switched(&host.inner, &path);
+        drop(release);
+        assert_eq!(read.recv_timeout(Duration::from_secs(60)).unwrap(), Err("the branch changed while it was on its way".to_string()));
+    }
+
+    /// An answer read across a switch is dropped; the same read with no switch answers.
+    #[test]
+    fn a_read_across_a_switch_gives_no_answer() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        assert_eq!(host.on_a_reader(&path, |_| Ok(1)).recv_timeout(Duration::from_secs(30)), Ok(Ok(1)));
+        let (inner, moved) = (host.inner.clone(), path.clone());
+        let across = host.on_a_reader(&path, move |_| {
+            switched(&inner, &moved);
+            Ok(2)
+        });
+        assert_eq!(across.recv_timeout(Duration::from_secs(30)), Err(std::sync::mpsc::RecvTimeoutError::Disconnected));
     }
 
     /// A store that is locked: no key can be read from it.

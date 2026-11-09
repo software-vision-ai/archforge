@@ -503,8 +503,10 @@ impl ChatStore for Chats {
     /// A write on the writer; one that keeps what a person typed is checked against the keys
     /// first, on the agents host's thread, and reaches the writer only once it passed.
     fn write(&self, project: &Path, write: Write) -> Receiver<Result<Answer, Refusal>> {
+        // Taken here, before any key check: the branch may change while the check runs.
+        let generation = self.projects.generation_of(project);
         let Some(text) = typed(&write).map(str::to_string) else {
-            return write_now(&self.projects, project, write, &self.deleted);
+            return write_now(&self.projects, project, generation, write, &self.deleted);
         };
         let (tx, rx) = channel();
         let projects = self.projects.clone();
@@ -513,9 +515,9 @@ impl ChatStore for Chats {
         let checked = self.agents.check_keys(text);
         let started = std::thread::Builder::new().name("archforge-chat-keys".into()).spawn(move || {
             let answer = match checked.recv() {
-                Ok(Ok(None)) => {
-                    write_now(&projects, &path, write, &deleted).recv().unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into())))
-                }
+                Ok(Ok(None)) => write_now(&projects, &path, generation, write, &deleted)
+                    .recv()
+                    .unwrap_or_else(|_| Err(Refusal::Failed("the writer stopped".into()))),
                 Ok(Ok(Some(provider))) => Err(Refusal::HeldKey { provider }),
                 Ok(Err(why)) => Err(Refusal::Failed(why)),
                 Err(_) => Err(Refusal::Failed("the keys could not be checked".into())),
@@ -532,13 +534,20 @@ impl ChatStore for Chats {
 }
 
 /// Sends `write` to the writer for the project at `project`; a project no longer open refuses it.
-fn write_now(projects: &crate::projects::Projects, project: &Path, write: Write, deleted: &Before) -> Receiver<Result<Answer, Refusal>> {
+fn write_now(
+    projects: &crate::projects::Projects,
+    project: &Path,
+    generation: u64,
+    write: Write,
+    deleted: &Before,
+) -> Receiver<Result<Answer, Refusal>> {
     let deleted = deleted.clone();
     let created_by = projects.created_by().to_string();
     let shown = project.display().to_string();
-    projects.on_writer_open(project, move |p| match p {
-        Some(p) => apply(p, write, &created_by, &deleted),
-        None => Err(Refusal::Failed(format!("{shown} is no longer open"))),
+    projects.on_writer_open(project, generation, move |p| match p {
+        Ok(p) => apply(p, write, &created_by, &deleted),
+        Err(crate::projects::NoProject::NotOpen) => Err(Refusal::Failed(format!("{shown} is no longer open"))),
+        Err(crate::projects::NoProject::OtherBranch) => Err(Refusal::BranchChanged),
     })
 }
 
