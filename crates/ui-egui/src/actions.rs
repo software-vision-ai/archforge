@@ -1,11 +1,14 @@
 //! The application's own actions in one table: Open, Save, Generate and the like, beside the
-//! engine's commands. Menus and shortcuts read a row for its name, ask it whether it can act and
+//! engine's commands. Menus, shortcuts and Home's search read a row for its name, ask it whether it can act and
 //! run it. Availability is a function asked each time; nothing here keeps its answer.
 
 use egui::{Key, Modifiers};
 
 use crate::Shell;
 use crate::i18n::tr;
+use crate::state::{RecentSort, RecentView};
+use crate::theme::ThemeKind;
+use crate::ux::{Icon, icons};
 
 pub const ABOUT: &str = "app.about";
 pub const QUIT: &str = "app.quit";
@@ -15,14 +18,15 @@ pub const OPEN: &str = "file.open";
 
 /// One application action.
 pub struct Action {
-    /// What a menu item names it by, never shown.
+    /// What a menu item or a search row names it by, never shown.
     pub id: &'static str,
     /// Its name, in the language in use when asked.
-    pub label: fn() -> String,
+    pub label: fn(&Shell) -> String,
     /// Whether it can act now.
     pub available: fn(&Shell) -> bool,
     pub run: fn(&mut Shell),
     pub keys: Option<Keys>,
+    pub search: Option<InSearch>,
 }
 
 /// An action's keyboard shortcut.
@@ -35,38 +39,94 @@ pub struct Keys {
     pub when: fn(&Shell) -> bool,
 }
 
-/// Every action. Keys are looked at in this order.
+/// How an action shows in Home's search.
+pub struct InSearch {
+    pub icon: fn(&Shell) -> &'static Icon,
+    /// Its wording there, when not the action's label.
+    pub label: Option<fn() -> String>,
+    /// Whether the row shows now, when not the action's availability. Open's row differs on purpose
+    /// and is broader than its menu item, as with its keys (AR-154).
+    pub shown: Option<fn(&Shell) -> bool>,
+}
+
+/// Every action. Keys are looked at in this order, and Home's search lists its rows in it.
 pub static ACTIONS: &[Action] = &[
-    Action { id: ABOUT, label: || tr("About Archforge…"), available: |_| true, run: Shell::open_about, keys: None },
-    Action { id: QUIT, label: || tr("Quit Archforge"), available: |_| true, run: Shell::request_quit, keys: None },
+    Action { id: ABOUT, label: |_| tr("About Archforge…"), available: |_| true, run: Shell::open_about, keys: None, search: None },
+    Action { id: QUIT, label: |_| tr("Quit Archforge"), available: |_| true, run: Shell::request_quit, keys: None, search: None },
     Action {
         id: GENERATE,
-        label: || tr("Generate…"),
+        label: |_| tr("Generate…"),
         available: Shell::can_generate,
         run: Shell::open_generate,
         keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::G, when: |s| s.can_generate() && s.ask.is_none() }),
+        search: None,
     },
     Action {
         id: SAVE,
-        label: || tr("Save"),
+        label: |_| tr("Save"),
         available: Shell::can_save,
         run: Shell::save,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::S, when: Shell::can_save }),
+        search: None,
     },
-    // Available as its row in Home's search shows it (that row moves here with AR-335).
+    // Its availability is its search row's; Home's start card has a test of its own.
     Action {
         id: "file.new",
-        label: || tr("New project"),
+        label: |_| tr("New project"),
         available: |s| s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
         run: crate::new_project::open,
         keys: None,
+        search: Some(InSearch { icon: |_| &icons::PLUS, label: None, shown: None }),
     },
     Action {
         id: OPEN,
-        label: || tr("Open…"),
+        label: |_| tr("Open…"),
         available: Shell::can_open_project,
         run: Shell::open_from_picker,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O, when: |s| s.about.is_none() }),
+        search: Some(InSearch { icon: |_| &icons::FOLDER, label: Some(|| tr("Open project")), shown: Some(crate::home::can_open) }),
+    },
+    Action {
+        id: "home.pin-folder",
+        label: |_| tr("Pin a folder"),
+        available: |s| s.services.pick_folder.is_some() && s.state.pinned.len() < crate::state::MAX_PINNED,
+        run: Shell::pin_from_picker,
+        keys: None,
+        search: Some(InSearch { icon: |_| &icons::PLUS, label: None, shown: None }),
+    },
+    Action {
+        id: "home.appearance",
+        label: |s| if s.state.theme.is_dark() { tr("Switch to the light appearance") } else { tr("Switch to the dark appearance") },
+        available: |_| true,
+        run: switch_appearance,
+        keys: None,
+        search: Some(InSearch { icon: |s| if s.state.theme.is_dark() { &icons::SUN } else { &icons::MOON }, label: None, shown: None }),
+    },
+    Action {
+        id: "home.recent-view",
+        label: |s| match s.state.recent_view {
+            RecentView::List => tr("Show recent projects as a gallery"),
+            RecentView::Gallery => tr("Show recent projects as a list"),
+        },
+        available: |_| true,
+        run: switch_recent_view,
+        keys: None,
+        search: Some(InSearch {
+            icon: |s| if s.state.recent_view == RecentView::List { &icons::GRID } else { &icons::LIST },
+            label: None,
+            shown: None,
+        }),
+    },
+    Action {
+        id: "home.recent-sort",
+        label: |s| match s.state.recent_sort {
+            RecentSort::LastOpened => tr("Sort recent projects by name"),
+            RecentSort::Name => tr("Sort recent projects by last opened"),
+        },
+        available: |_| true,
+        run: switch_recent_sort,
+        keys: None,
+        search: Some(InSearch { icon: |_| &icons::LIST, label: None, shown: None }),
     },
 ];
 
@@ -76,8 +136,8 @@ fn find(id: &str) -> Option<&'static Action> {
 }
 
 /// The name of the action `id`; empty when the table has none.
-pub fn label(id: &str) -> String {
-    find(id).map(|a| (a.label)()).unwrap_or_default()
+pub fn label(shell: &Shell, id: &str) -> String {
+    find(id).map(|a| (a.label)(shell)).unwrap_or_default()
 }
 
 /// Whether the action `id` can act now; an action the table lacks cannot.
@@ -102,8 +162,29 @@ pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     }
 }
 
+/// Changes between the light and the dark appearance.
+fn switch_appearance(shell: &mut Shell) {
+    shell.state.theme = if shell.state.theme.is_dark() { ThemeKind::Light } else { ThemeKind::Dark };
+}
+
+/// Changes between the list and the gallery of recent projects.
+fn switch_recent_view(shell: &mut Shell) {
+    shell.state.recent_view = match shell.state.recent_view {
+        RecentView::List => RecentView::Gallery,
+        RecentView::Gallery => RecentView::List,
+    };
+}
+
+/// Changes the order of the recent projects.
+fn switch_recent_sort(shell: &mut Shell) {
+    shell.state.recent_sort = match shell.state.recent_sort {
+        RecentSort::LastOpened => RecentSort::Name,
+        RecentSort::Name => RecentSort::LastOpened,
+    };
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::path::Path;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -113,12 +194,17 @@ mod tests {
     use crate::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services, Tab};
 
     const NEW: &str = "file.new";
-    const ALL: [&str; 6] = [ABOUT, QUIT, GENERATE, SAVE, NEW, OPEN];
+    const PIN: &str = "home.pin-folder";
+    const APPEARANCE: &str = "home.appearance";
+    const VIEW: &str = "home.recent-view";
+    const SORT: &str = "home.recent-sort";
+    const ALL: [&str; 10] = [ABOUT, QUIT, GENERATE, SAVE, NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
     const WITH_KEYS: [&str; 3] = [GENERATE, SAVE, OPEN];
+    const IN_SEARCH: [&str; 6] = [NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
 
     /// A host that counts the saves asked of it; the saves never finish.
     #[derive(Default)]
-    struct CountingHost(AtomicUsize);
+    pub(crate) struct CountingHost(AtomicUsize);
 
     impl ProjectHost for CountingHost {
         /// Never answers: no test here creates a project.
@@ -143,9 +229,9 @@ mod tests {
         archforge_notations::new_project_session("Shop", ids).unwrap()
     }
 
-    /// A shell with a project open, a host and a project picker, none of them asked yet; and the
-    /// counts of the saves and the picks asked of them.
-    fn shell() -> (Shell, Arc<CountingHost>, Arc<AtomicUsize>) {
+    /// A shell with a project open, a host and both pickers, none of them asked yet; and the counts
+    /// of the saves and the project picks asked of them. The folder picker finds a folder to pin.
+    pub(crate) fn shell() -> (Shell, Arc<CountingHost>, Arc<AtomicUsize>) {
         let host = Arc::new(CountingHost::default());
         let picks = Arc::new(AtomicUsize::new(0));
         let counted = picks.clone();
@@ -153,7 +239,8 @@ mod tests {
             counted.fetch_add(1, Ordering::SeqCst);
             None
         }) as _);
-        let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, ..Default::default() });
+        let pick_folder = Some(Arc::new(|_: &str| Some("/pinned".into())) as _);
+        let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() });
         shell.session = Some(session());
         shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false });
         (shell, host, picks)
@@ -180,31 +267,36 @@ mod tests {
     }
 
     /// The whole table, state by state, written out by hand from what each menu item and key did
-    /// before there was a table: which actions are off and which keys are left alone.
+    /// before there was a table: which actions are off, which keys are left alone and which search
+    /// rows go.
     #[test]
     fn every_action_is_available_when_it_was() {
         type Setup = fn(&mut Shell);
-        let states: [(&str, Setup, &[&str], &[&str]); 13] = [
-            ("a project", |_| {}, &[], &[]),
-            ("saving", |s| s.save(), &[SAVE], &[SAVE]),
-            ("held", |s| s.begin_hold().unwrap(), &[SAVE], &[SAVE]),
-            ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE], &[SAVE]),
-            ("About open", crate::support::open, &[GENERATE, OPEN], &[GENERATE, OPEN]),
-            ("Generate open", Shell::open_generate, &[GENERATE], &[GENERATE]),
-            ("New project open", crate::new_project::open, &[OPEN], &[]),
-            ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN], &[]),
-            ("a question open", |s| s.ask = Some(question()), &[], &[GENERATE]),
-            ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN], &[]),
-            ("no model", |s| s.session = None, &[GENERATE, SAVE], &[GENERATE, SAVE]),
-            ("no host", |s| s.services.projects = None, &[NEW, OPEN], &[]),
-            ("no project picker", |s| s.services.pick_project = None, &[OPEN], &[]),
+        let states: [(&str, Setup, &[&str], &[&str], &[&str]); 15] = [
+            ("a project", |_| {}, &[], &[], &[]),
+            ("saving", |s| s.save(), &[SAVE], &[SAVE], &[]),
+            ("held", |s| s.begin_hold().unwrap(), &[SAVE], &[SAVE], &[]),
+            ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE], &[SAVE], &[]),
+            ("About open", crate::support::open, &[GENERATE, OPEN], &[GENERATE, OPEN], &[]),
+            ("Generate open", Shell::open_generate, &[GENERATE], &[GENERATE], &[]),
+            ("New project open", crate::new_project::open, &[OPEN], &[], &[]),
+            ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN], &[], &[]),
+            ("a question open", |s| s.ask = Some(question()), &[], &[GENERATE], &[]),
+            ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN], &[], &[NEW, OPEN]),
+            ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN], &[], &[PIN]),
+            ("no folder picker", |s| s.services.pick_folder = None, &[PIN], &[], &[PIN]),
+            ("no model", |s| s.session = None, &[GENERATE, SAVE], &[GENERATE, SAVE], &[]),
+            ("no host", |s| s.services.projects = None, &[NEW, OPEN], &[], &[NEW, OPEN]),
+            ("no project picker", |s| s.services.pick_project = None, &[OPEN], &[], &[OPEN]),
         ];
-        for (name, setup, off, keys_off) in states {
+        for (name, setup, off, keys_off, search_off) in states {
             let (mut shell, ..) = shell();
             setup(&mut shell);
             let shell = &shell;
             assert_eq!(answering(|a| (a.available)(shell)), without(&ALL, off), "available, {name}");
             assert_eq!(answering(|a| a.keys.as_ref().is_some_and(|k| (k.when)(shell))), without(&WITH_KEYS, keys_off), "keys, {name}");
+            let shown = |a: &Action| a.search.as_ref().is_some_and(|s| s.shown.unwrap_or(a.available)(shell));
+            assert_eq!(answering(shown), without(&IN_SEARCH, search_off), "search, {name}");
         }
     }
 
@@ -221,6 +313,7 @@ mod tests {
 
     /// Which actions' effects show in `shell`, in the table's order.
     fn effects(shell: &Shell, saves: &CountingHost, picks: &AtomicUsize) -> Vec<&'static str> {
+        let fresh = Shell::new(Services::default()).state;
         let shown = [
             (ABOUT, shell.about.is_some()),
             (QUIT, shell.quit_requested),
@@ -228,6 +321,10 @@ mod tests {
             (SAVE, saves.0.load(Ordering::SeqCst) == 1),
             (NEW, shell.new_project.is_some()),
             (OPEN, picks.load(Ordering::SeqCst) == 1),
+            (PIN, !shell.state.pinned.is_empty()),
+            (APPEARANCE, shell.state.theme != fresh.theme),
+            (VIEW, shell.state.recent_view != fresh.recent_view),
+            (SORT, shell.state.recent_sort != fresh.recent_sort),
         ];
         shown.iter().filter(|(_, on)| *on).map(|(id, _)| *id).collect()
     }
@@ -242,17 +339,44 @@ mod tests {
             run(&mut shell, id);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
+        for id in [APPEARANCE, VIEW, SORT] {
+            let (mut shell, saves, picks) = shell();
+            run(&mut shell, id);
+            run(&mut shell, id);
+            assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "{id} comes back");
+        }
         let (mut shell, saves, picks) = shell();
         run(&mut shell, "no.such.action");
         assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new());
-        assert!(!available(&shell, "no.such.action") && label("no.such.action").is_empty());
+        assert!(!available(&shell, "no.such.action") && label(&shell, "no.such.action").is_empty());
     }
 
-    /// Each row keeps its name: the catalogue's own key.
+    /// Each row keeps its name, the catalogue's own key, the wording that depends on the state with
+    /// it.
     #[test]
     fn every_action_keeps_its_name() {
-        let names = ["About Archforge…", "Quit Archforge", "Generate…", "Save", "New project", "Open…"];
-        assert_eq!(ALL.map(label), names);
+        let (mut shell, ..) = shell();
+        shell.state.theme = ThemeKind::Light;
+        shell.state.recent_view = RecentView::List;
+        shell.state.recent_sort = RecentSort::LastOpened;
+        let names = [
+            "About Archforge…",
+            "Quit Archforge",
+            "Generate…",
+            "Save",
+            "New project",
+            "Open…",
+            "Pin a folder",
+            "Switch to the dark appearance",
+            "Show recent projects as a gallery",
+            "Sort recent projects by name",
+        ];
+        assert_eq!(ALL.map(|id| label(&shell, id)), names);
+        shell.state.theme = ThemeKind::Dark;
+        shell.state.recent_view = RecentView::Gallery;
+        shell.state.recent_sort = RecentSort::Name;
+        let flipped = [APPEARANCE, VIEW, SORT].map(|id| label(&shell, id));
+        assert_eq!(flipped, ["Switch to the light appearance", "Show recent projects as a list", "Sort recent projects by last opened"]);
     }
 
     /// A shortcut pressed runs its own action, and a key left alone runs nothing.

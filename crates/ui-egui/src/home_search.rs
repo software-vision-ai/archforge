@@ -11,7 +11,6 @@ use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::tr;
-use crate::state::{RecentSort, RecentView};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 
@@ -57,19 +56,10 @@ const LIST_WIDTH: f32 = 420.0;
 enum Target {
     Project(std::path::PathBuf),
     Folder(std::path::PathBuf),
-    Action(Action),
+    /// The application action of this id.
+    Action(&'static str),
     /// In a project: a diagram or an element.
     Model(crate::project_search::Found),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Action {
-    NewProject,
-    OpenProject,
-    PinFolder,
-    Theme,
-    View,
-    Sort,
 }
 
 /// A row of the list: what it runs, its icon, its name and the line beside it.
@@ -239,33 +229,13 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
 
 /// What Home can do now, worded for the state it is in.
 fn actions(shell: &Shell) -> Vec<Hit> {
-    let mut out = Vec::new();
-    let mut add = |action: Action, icon: &'static ux::Icon, label: String| {
-        out.push(Hit { target: Target::Action(action), icon, label, detail: String::new() });
-    };
-    if shell.services.projects.is_some() && shell.tabs.len() < crate::MAX_TABS {
-        add(Action::NewProject, &icons::PLUS, tr("New project"));
-    }
-    if crate::home::can_open(shell) {
-        add(Action::OpenProject, &icons::FOLDER, tr("Open project"));
-    }
-    if shell.services.pick_folder.is_some() && shell.state.pinned.len() < crate::state::MAX_PINNED {
-        add(Action::PinFolder, &icons::PLUS, tr("Pin a folder"));
-    }
-    if shell.state.theme.is_dark() {
-        add(Action::Theme, &icons::SUN, tr("Switch to the light appearance"));
-    } else {
-        add(Action::Theme, &icons::MOON, tr("Switch to the dark appearance"));
-    }
-    match shell.state.recent_view {
-        RecentView::List => add(Action::View, &icons::GRID, tr("Show recent projects as a gallery")),
-        RecentView::Gallery => add(Action::View, &icons::LIST, tr("Show recent projects as a list")),
-    }
-    match shell.state.recent_sort {
-        RecentSort::LastOpened => add(Action::Sort, &icons::LIST, tr("Sort recent projects by name")),
-        RecentSort::Name => add(Action::Sort, &icons::LIST, tr("Sort recent projects by last opened")),
-    }
-    out
+    let rows = crate::actions::ACTIONS.iter().filter_map(|a| Some((a, a.search.as_ref()?)));
+    rows.filter(|(a, search)| search.shown.unwrap_or(a.available)(shell))
+        .map(|(a, search)| {
+            let label = search.label.map_or_else(|| (a.label)(shell), |own| own());
+            Hit { target: Target::Action(a.id), icon: (search.icon)(shell), label, detail: String::new() }
+        })
+        .collect()
 }
 
 /// Runs a row and closes the search.
@@ -275,24 +245,7 @@ fn run(shell: &mut Shell, target: Target) {
         Target::Project(path) => shell.open_path(&path),
         Target::Model(found) => crate::project_search::go(shell, found),
         Target::Folder(path) => shell.open_from_picker_in(Some(&path)),
-        Target::Action(Action::NewProject) => crate::new_project::open(shell),
-        Target::Action(Action::OpenProject) => shell.open_from_picker(),
-        Target::Action(Action::PinFolder) => shell.pin_from_picker(),
-        Target::Action(Action::Theme) => {
-            shell.state.theme = if shell.state.theme.is_dark() { crate::theme::ThemeKind::Light } else { crate::theme::ThemeKind::Dark };
-        }
-        Target::Action(Action::View) => {
-            shell.state.recent_view = match shell.state.recent_view {
-                RecentView::List => RecentView::Gallery,
-                RecentView::Gallery => RecentView::List,
-            };
-        }
-        Target::Action(Action::Sort) => {
-            shell.state.recent_sort = match shell.state.recent_sort {
-                RecentSort::LastOpened => RecentSort::Name,
-                RecentSort::Name => RecentSort::LastOpened,
-            };
-        }
+        Target::Action(id) => crate::actions::run(shell, id),
     }
 }
 
@@ -446,5 +399,76 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, groups: &[(S
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|pos| r.contains(pos) || field.contains(pos)));
     if outside {
         close(shell);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actions::tests::shell;
+    use crate::state::{RecentSort, RecentView};
+    use crate::theme::ThemeKind;
+
+    /// The rows of the list, as (target, icon, wording), each in its table order.
+    fn rows(shell: &Shell) -> Vec<(Target, ux::Icon, String)> {
+        actions(shell).into_iter().map(|h| (h.target, *h.icon, h.label)).collect()
+    }
+
+    /// One row of the list.
+    fn row(id: &'static str, icon: ux::Icon, label: &str) -> (Target, ux::Icon, String) {
+        (Target::Action(id), icon, label.to_string())
+    }
+
+    /// The list shows what it showed before the table, with Open's own wording and each toggle
+    /// worded and drawn for the state it is in.
+    #[test]
+    fn the_lists_actions_are_worded_and_drawn_as_they_were() {
+        let (mut shell, ..) = shell();
+        shell.state.theme = ThemeKind::Light;
+        shell.state.recent_view = RecentView::List;
+        shell.state.recent_sort = RecentSort::LastOpened;
+        assert_eq!(
+            rows(&shell),
+            [
+                row("file.new", icons::PLUS, "New project"),
+                row("file.open", icons::FOLDER, "Open project"),
+                row("home.pin-folder", icons::PLUS, "Pin a folder"),
+                row("home.appearance", icons::MOON, "Switch to the dark appearance"),
+                row("home.recent-view", icons::GRID, "Show recent projects as a gallery"),
+                row("home.recent-sort", icons::LIST, "Sort recent projects by name"),
+            ]
+        );
+        shell.state.theme = ThemeKind::Dark;
+        shell.state.recent_view = RecentView::Gallery;
+        let flipped: Vec<_> = rows(&shell).into_iter().skip(3).take(2).collect();
+        let wanted = [
+            row("home.appearance", icons::SUN, "Switch to the light appearance"),
+            row("home.recent-view", icons::LIST, "Show recent projects as a list"),
+        ];
+        assert_eq!(flipped, wanted);
+    }
+
+    /// A row shows by search's own rule: Open behind the dialog that turns off its menu item, and
+    /// neither New project nor Open without a host.
+    #[test]
+    fn the_list_shows_a_row_by_searchs_own_rule() {
+        let open = Target::Action("file.open");
+        let shown = |shell: &Shell| rows(shell).into_iter().map(|(target, ..)| target).collect::<Vec<_>>();
+        let (mut shell, ..) = shell();
+        crate::new_project::open(&mut shell);
+        assert!(shown(&shell).contains(&open) && !crate::actions::available(&shell, "file.open"));
+        shell.services.projects = None;
+        assert!(!shown(&shell).contains(&open) && !shown(&shell).contains(&Target::Action("file.new")));
+    }
+
+    /// Running a row closes the search and runs its action.
+    #[test]
+    fn running_an_action_row_closes_the_search_and_runs_it() {
+        let (mut shell, ..) = shell();
+        let dark = shell.state.theme.is_dark();
+        shell.home_search.open = true;
+        run(&mut shell, Target::Action("home.appearance"));
+        assert!(!shell.home_search.open);
+        assert_ne!(shell.state.theme.is_dark(), dark);
     }
 }
