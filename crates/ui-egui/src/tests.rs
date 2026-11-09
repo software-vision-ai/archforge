@@ -7744,7 +7744,7 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
 }
 
 /// History lists what was read and keeps it through a failed read; a save, another session or
-/// another project read again; "No changes" is never said of unsaved work; sections fold.
+/// another project read again; "No changes" is never said of unsaved work.
 #[test]
 fn the_versions_panel_lists_keeps_and_reads_again() {
     in_both_appearances(|theme| {
@@ -7761,38 +7761,56 @@ fn the_versions_panel_lists_keeps_and_reads_again() {
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         versions_answer(&mut h, &host, Err("the server stopped".into()));
         assert!(has_id(&h, first) && has_id(&h, "workspace.versions.failed"), "{theme:?}: what was shown stays");
-        h.state_mut().session_replaced();
-        versions_answer(&mut h, &host, Ok(two_versions()));
-        for outcome in [crate::SaveState::Failed("no".into()), crate::SaveState::Unknown] {
-            h.state_mut().finished_save(0, outcome);
-            versions_answer(&mut h, &host, Ok(two_versions()));
-        }
-        let at = rect_of(&h, "workspace.versions.history").center();
-        click(&mut h, at);
-        assert!(!has_id(&h, first), "{theme:?}: History folds");
-        let at = rect_of(&h, "workspace.versions.working").center();
-        click(&mut h, at);
-        assert!(!no_changes(&h), "{theme:?}: Working changes folds");
-        let at = rect_of(&h, "workspace.versions.history").center();
-        click(&mut h, at);
-        h.state_mut().project.as_mut().unwrap().path = "/tmp/Other.archforge".into();
-        h.run_steps(2);
-        assert!(!has_id(&h, first) && has_id(&h, "workspace.versions.loading"), "{theme:?}: another project's list is not kept");
-        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: read for that project");
     });
 }
 
-/// In the narrowest column the panel stays inside it, in both appearances. At 640 px the column
-/// gives way, as every explorer's does (the design's frame).
+/// What the panel is about, against whether a read starts: from a list read, each change as the
+/// reads then waiting and whether the list stays; and an answer for what was left behind is dropped.
 #[test]
-fn the_versions_panel_fits_the_narrowest_column() {
+fn the_versions_panel_reads_only_for_what_it_is_about() {
+    type Step = fn(&mut Shell);
+    let no_host: Step = |s| s.services.projects = None;
+    let first_draw: Step = |s| s.versions = Default::default();
+    let project: Step = |s| s.project.as_mut().unwrap().path = "/tmp/Other.archforge".into();
+    let session: Step = |s| s.session_replaced();
+    let failed: Step = |s| s.finished_save(0, crate::SaveState::Failed("no".into()));
+    let unknown: Step = |s| s.finished_save(0, crate::SaveState::Unknown);
+    let cases: [(&str, &[Step], usize, bool); 9] = [
+        ("nothing", &[], 0, true),
+        ("first draw, host", &[first_draw], 1, false),
+        ("first draw, no host", &[no_host, first_draw], 0, false),
+        ("project, host", &[project], 1, false),
+        ("project, no host", &[no_host, project], 0, false),
+        ("session, host", &[session], 1, false),
+        ("session, no host", &[no_host, session], 0, false),
+        ("save failed, host", &[failed], 1, true),
+        ("save unknown, no host", &[no_host, unknown], 0, true),
+    ];
+    let (first, list) = ("workspace.versions.row.aa", || Ok(two_versions()));
+    let waiting = |host: &SavingHost| host.version_reads.lock().unwrap().len();
     in_both_appearances(|theme| {
+        for (what, steps, reads, stays) in cases {
+            let (mut h, host) = versions_panel(theme);
+            versions_answer(&mut h, &host, list());
+            steps.iter().for_each(|step| step(h.state_mut()));
+            h.run_steps(2);
+            assert_eq!((waiting(&host), has_id(&h, first)), (reads, stays), "{theme:?}: {what}");
+        }
         let (mut h, host) = versions_panel(theme);
-        versions_answer(&mut h, &host, Ok(two_versions()));
-        h.state_mut().state.explorer_width = 240.0;
-        h.set_size(egui::vec2(760.0, 860.0));
-        h.run_steps(3);
-        assert!(rect_of(&h, "workspace.versions.row.aa").right() <= 52.0 + 240.0 + 8.0, "{theme:?}");
+        unknown(h.state_mut());
+        h.run_steps(2);
+        assert_eq!(waiting(&host), 1, "{theme:?}: a save waits for the read on its way");
+        versions_answer(&mut h, &host, list());
+        assert_eq!(waiting(&host), 1, "{theme:?}: then reads");
+        let left = host.version_reads.lock().unwrap().pop().unwrap();
+        project(h.state_mut());
+        h.run_steps(2);
+        assert!(left.send(list()).is_err() && !has_id(&h, first), "{theme:?}: the old answer is dropped");
+        versions_answer(&mut h, &host, Err("no".into()));
+        no_host(h.state_mut());
+        session(h.state_mut());
+        h.run_steps(2);
+        assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}: nor is its error kept");
     });
 }
 

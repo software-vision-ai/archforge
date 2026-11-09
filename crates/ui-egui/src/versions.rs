@@ -10,7 +10,7 @@ use egui::{Rect, Vec2, pos2, vec2};
 
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::i18n::tr;
-use crate::settings::{Look, button, control, focus_ring};
+use crate::settings::{Look, button, control};
 use crate::ux::{self, Palette, icons, types};
 use crate::{Shell, VersionEntry, VersionsPage};
 
@@ -26,56 +26,53 @@ const SKELETON_ROWS: usize = 6;
 /// What the panel keeps between frames.
 #[derive(Default)]
 pub struct State {
-    /// The project and session the versions were asked for.
-    asked: Option<(PathBuf, u64)>,
+    /// The project and session the panel is about.
+    about: Option<(PathBuf, u64)>,
+    /// Whether a read has started for them.
+    asked: bool,
     reading: Option<Receiver<Result<VersionsPage, String>>>,
     page: Option<VersionsPage>,
     /// Why the last read failed; what was shown stays.
     failed: Option<String>,
     /// A save made a version since the read.
     pub(crate) stale: bool,
-    working_folded: bool,
-    history_folded: bool,
     scroll: TreeScroll,
 }
 
-/// Asks for the versions when the project or the session changed or a save made one, and takes
-/// the answer that has come.
+/// Keeps the panel to the project and session shown, takes the answer that has come, and asks for
+/// the versions when they are due. A change of either lets go of all that belonged to the old one,
+/// the read on its way among it, so an answer for it cannot land, whether or not a host is there.
 fn refresh(shell: &mut Shell, ctx: &egui::Context) {
-    let asked = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
-    if (asked != shell.versions.asked || shell.versions.stale) && shell.services.projects.is_some() {
-        if shell.versions.asked.as_ref().map(|a| &a.0) != asked.as_ref().map(|a| &a.0) {
-            shell.versions.page = None;
-            shell.versions.scroll = TreeScroll::default();
-        }
-        shell.versions.asked = asked;
-        shell.versions.stale = false;
+    let about = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
+    let v = &mut shell.versions;
+    if about != v.about {
+        (v.about, v.page, v.failed, v.reading, v.asked) = (about, None, None, None, false);
+        v.scroll = TreeScroll::default();
+    }
+    let answer = match v.reading.as_ref().map(Receiver::try_recv) {
+        Some(Ok(answer)) => Some(answer),
+        Some(Err(TryRecvError::Disconnected)) => Some(Err("the read stopped without an answer".to_string())),
+        _ => None,
+    };
+    match answer {
+        Some(Ok(page)) => (v.reading, v.page) = (None, Some(page)),
+        Some(Err(why)) => (v.reading, v.failed) = (None, Some(why)),
+        None => {}
+    }
+    if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
     }
-    let answer = match shell.versions.reading.as_ref().map(Receiver::try_recv) {
-        None => return,
-        Some(Err(TryRecvError::Empty)) => {
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
-            return;
-        }
-        Some(Ok(answer)) => answer,
-        Some(Err(TryRecvError::Disconnected)) => Err("the read stopped without an answer".to_string()),
-    };
-    shell.versions.reading = None;
-    match answer {
-        Ok(page) => shell.versions.page = Some(page),
-        Err(why) => shell.versions.failed = Some(why),
+    if shell.versions.reading.is_some() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 }
 
-/// Starts a read of the newest versions, in place of any on its way.
+/// Starts a read of the newest versions when a host can answer it: only then is it asked for.
 fn read(shell: &mut Shell) {
-    shell.versions.failed = None;
-    let path = shell.versions.asked.as_ref().map(|a| a.0.clone());
-    shell.versions.reading = match (&shell.services.projects, path) {
-        (Some(host), Some(path)) => Some(host.versions(&path, None, PAGE)),
-        _ => None,
-    };
+    let (Some(host), Some((path, _))) = (shell.services.projects.clone(), shell.versions.about.clone()) else { return };
+    let v = &mut shell.versions;
+    (v.failed, v.stale, v.asked) = (None, false, true);
+    v.reading = Some(host.versions(&path, None, PAGE));
 }
 
 /// What Working changes says, when what is known allows it. Until AR-269 counts the changes,
@@ -92,24 +89,16 @@ fn working_words(shell: &Shell) -> Option<String> {
     }
 }
 
-/// Draws a section's header at `y`, from its id, label, whether it is open, whether it can fold and
-/// its count, and gives whether it was toggled.
-fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, section: (&str, &str, bool, bool, Option<usize>)) -> bool {
-    let (id, label, open, live, count) = section;
+/// Draws a section's header at `y`, from its id, label and count. AR-338 makes sections fold.
+fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, (id, label, count): (&str, &str, Option<usize>)) {
     let row = Rect::from_min_max(pos2(r.left(), y), pos2(r.right(), y + HEADER));
-    let hit = Rect::from_min_max(pos2(r.left() + 12.0, y + 6.0), pos2(r.right() - 12.0, y + HEADER - 6.0));
-    let resp = control(shell, ui, &format!("workspace.versions.{id}"), "button", hit, live);
-    let _ = resp.clone().accessible_name(label);
+    let _ = control(shell, ui, &format!("workspace.versions.{id}"), "heading", row, false).accessible_name(label);
     let paint = ui.painter();
-    focus_ring(paint, p, hit, 6.0, &resp);
-    let chevron = Rect::from_center_size(pos2(r.left() + 24.0, row.center().y), Vec2::splat(12.0));
-    ux::icon_in(paint, chevron, if open { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT }, p.text_secondary);
-    ux::text(paint, pos2(r.left() + 38.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - 80.0).max(0.0)));
+    ux::text(paint, pos2(r.left() + 20.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - 60.0).max(0.0)));
     if let Some(n) = count {
         let g = ux::galley(paint, &n.to_string(), types::CAPTION, p.text_muted, None);
         paint.galley(pos2(r.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_muted);
     }
-    resp.clicked() && live
 }
 
 /// A line across the column at `y`.
@@ -123,8 +112,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     ux::text(ui.painter(), r.min + vec2(20.0, 21.0), &tr("Versions").to_uppercase(), types::EYEBROW, p.text, Some((r.width() - 40.0).max(0.0)));
     let mut y = r.top() + 56.0;
     rule(ui, p, r, y);
-    // Folded and not to be opened while the project has only `main`; AR-292 adds its list and +.
-    header(shell, ui, p, r, y, ("branches", &tr("Branches"), false, false, None));
+    // A header only, while the project has only `main`; AR-292 adds its list and +.
+    header(shell, ui, p, r, y, ("branches", &tr("Branches"), None));
     y += HEADER;
     rule(ui, p, r, y);
     y = working(shell, ui, p, r, y);
@@ -135,12 +124,9 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 /// Working changes from `y`: its header and what can be said so far. Gives where the next
 /// section starts.
 fn working(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
-    let open = !shell.versions.working_folded;
-    if header(shell, ui, p, r, y, ("working", &tr("Working changes"), open, true, None)) {
-        shell.versions.working_folded = open;
-    }
+    header(shell, ui, p, r, y, ("working", &tr("Working changes"), None));
     let next = y + HEADER;
-    let Some(words) = working_words(shell).filter(|_| open) else { return next };
+    let Some(words) = working_words(shell) else { return next };
     let g = ux::galley_rows(ui.painter(), &words, types::SMALL, p.text_secondary, Some((r.width() - 40.0).max(1.0)), 3);
     let h = g.size().y;
     ui.painter().galley(pos2(r.left() + 20.0, next), g, p.text_secondary);
@@ -149,14 +135,8 @@ fn working(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) -> f3
 
 /// History from `y`: its header, the banner of a failed read, and the bars, the words or the rows.
 fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
-    let open = !shell.versions.history_folded;
     let count = shell.versions.page.as_ref().map(|page| page.versions.len()).filter(|n| *n > 0);
-    if header(shell, ui, p, r, y, ("history", &tr("History"), open, true, count)) {
-        shell.versions.history_folded = open;
-    }
-    if !open {
-        return;
-    }
+    header(shell, ui, p, r, y, ("history", &tr("History"), count));
     let mut top = y + HEADER;
     if let Some(why) = shell.versions.failed.clone() {
         top = banner(shell, ui, p, r, top, &why);
