@@ -475,6 +475,12 @@ str		No changes since the last version.	Sin cambios desde la última versión.
 str		No versions yet.	Todavía no hay versiones.
 str		No versions yet. Save version records your first one.	Todavía no hay versiones. Guardar versión registra la primera.
 str		Loading	Cargando
+str		All	Todas
+str		With a description	Con descripción
+str		Show more	Mostrar más
+str		None of these versions has a description.	Ninguna de estas versiones tiene descripción.
+str		The next versions couldn't be read.	No se pudieron leer las siguientes versiones.
+str		{name}, selected	{name}, seleccionada
 str		No description	Sin descripción
 str		Saved by an agent	Guardado por un agente
 str		This version can't be shown	Esta versión no se puede mostrar

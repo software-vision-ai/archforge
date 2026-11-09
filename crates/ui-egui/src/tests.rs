@@ -362,6 +362,8 @@ struct SavingHost {
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Each read of the versions waiting for the answer the test sends.
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
+    /// The version each read of the versions started after.
+    version_asks: std::sync::Mutex<Vec<Option<String>>>,
     /// The branch the project is on.
     branch_now: std::sync::Mutex<Option<String>>,
     /// Where the answers of each restore's job go, sent by the test.
@@ -438,9 +440,10 @@ impl crate::ProjectHost for SavingHost {
     fn versions(
         &self,
         _project: &std::path::Path,
-        _after: Option<String>,
+        after: Option<String>,
         limit: usize,
     ) -> std::sync::mpsc::Receiver<Result<crate::VersionsPage, String>> {
+        self.version_asks.lock().unwrap().push(after);
         let (tx, rx) = std::sync::mpsc::channel();
         self.version_limits.lock().unwrap().push(limit);
         self.version_reads.lock().unwrap().push(tx);
@@ -8341,6 +8344,144 @@ fn the_rail_counts_changes_sections_fold_and_rows_fit() {
         h.run_steps(2);
         assert!(!has_id(&h, badge), "{theme:?}: the count ended with the session");
     });
+}
+
+/// Versions `from..to`, those with even numbers described.
+fn long_page(from: usize, to: usize, more: bool) -> crate::VersionsPage {
+    let entry = |i: usize| version_row(&format!("v{i}"), i.is_multiple_of(2).then_some("Described"), (None, false), "2026-11-08T15:30:00Z");
+    crate::VersionsPage { versions: (from..to).map(entry).collect(), more }
+}
+
+/// The first page of a long history, read.
+fn long_history(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = versions_panel(theme);
+    versions_answer(&mut h, &host, Ok(long_page(0, 50, true)));
+    (h, host)
+}
+
+/// Clicks the control `id`.
+fn click_id(h: &mut Harness<'static, Shell>, id: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+}
+
+/// A long history comes a page at a time; Show more asks for what follows the last row, once,
+/// and adds it; a list that ends says so by offering no more; a short one has no filter.
+#[test]
+fn show_more_adds_the_next_page() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = long_history(theme);
+        let (more, all) = ("workspace.versions.more", "workspace.versions.all");
+        assert!(has_id(&h, all) && painted(&h).iter().any(|t| t == "50+"), "{theme:?}: {:?}", painted(&h));
+        h.state_mut().versions.selected = Some("v0".to_string());
+        scrolled_to_end(&mut h);
+        assert!(has_id(&h, "workspace.versions.row.v49"), "{theme:?}");
+        click_id(&mut h, more);
+        assert!(h.ctx.has_requested_repaint(), "{theme:?}: the window looks again for it");
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), Some("v49"), "{theme:?}");
+        click_id(&mut h, more);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: one at a time");
+        versions_answer(&mut h, &host, Ok(long_page(50, 60, false)));
+        assert!(painted(&h).iter().any(|t| t == "60") && !has_id(&h, more), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(h.state().versions.selected.as_deref(), Some("v0"), "{theme:?}: the selection held as the list grew");
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        assert!(!has_id(&h, all) && !has_id(&h, more), "{theme:?}: a short list");
+    });
+}
+
+/// A next page on its way when the list is read again, or the project's session changes, has
+/// nowhere to land; a failed one keeps the list and Retry asks for that page only.
+#[test]
+fn a_next_page_belongs_to_the_list_it_was_asked_for() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = long_history(theme);
+        let more_id = "workspace.versions.more";
+        for change in [|s: &mut Shell| s.versions.stale = true, |s: &mut Shell| s.session_replaced()] {
+            click_id_when_shown(&mut h, more_id);
+            let next = host.version_reads.lock().unwrap().pop().unwrap();
+            change(h.state_mut());
+            h.run_steps(2);
+            assert!(next.send(Ok(long_page(50, 60, false))).is_err(), "{theme:?}: its answer has nowhere to land");
+            versions_answer(&mut h, &host, Ok(long_page(0, 50, true)));
+            assert!(painted(&h).iter().any(|t| t == "50+"), "{theme:?}");
+        }
+        click_id_when_shown(&mut h, more_id);
+        versions_answer(&mut h, &host, Err("the server stopped".to_string()));
+        assert!(painted(&h).iter().any(|t| t == "50+") && !has_id(&h, "workspace.versions.failed"), "{theme:?}: the list stays");
+        scrolled_to_end(&mut h);
+        click_id(&mut h, "workspace.versions.more.retry");
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), Some("v49"), "{theme:?}: that page only");
+        versions_answer(&mut h, &host, Ok(long_page(50, 52, true)));
+        assert!(painted(&h).iter().any(|t| t == "52+"), "{theme:?}");
+        click_id_when_shown(&mut h, more_id);
+        let next = host.version_reads.lock().unwrap().pop().unwrap();
+        h.state_mut().services.projects = None;
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(next.send(Ok(long_page(60, 61, false))).is_err(), "{theme:?}: with no host to read again too");
+    });
+}
+
+/// Scrolls the list to its end.
+fn scrolled_to_end(h: &mut Harness<'static, Shell>) {
+    let at = rect_of(h, "workspace.versions.history").center() + egui::vec2(0.0, 200.0);
+    h.event(egui::Event::PointerMoved(at));
+    for _ in 0..12 {
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -1200.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(2);
+    }
+}
+
+/// Scrolls to Show more and presses it.
+fn click_id_when_shown(h: &mut Harness<'static, Shell>, id: &str) {
+    scrolled_to_end(h);
+    click_id(h, id);
+}
+
+/// A row chosen stays chosen by its hash: through a filter that hides it, without another taking
+/// its place, and through a read again; a new session lets go of it and of the filter.
+#[test]
+fn a_selection_is_held_by_its_hash() {
+    use egui_kittest::kittest::Queryable;
+    in_both_appearances(|theme| {
+        let (mut h, host) = long_history(theme);
+        let (hidden, described) = ("workspace.versions.row.v1", "workspace.versions.described");
+        click_id(&mut h, hidden);
+        assert_eq!(h.state().versions.selected.as_deref(), Some("v1"), "{theme:?}");
+        assert!(h.query_by_label_contains(", selected").is_some(), "{theme:?}: read out");
+        click_id(&mut h, described);
+        assert!(!has_id(&h, hidden) && has_id(&h, "workspace.versions.row.v0"), "{theme:?}: filtered");
+        assert_eq!(h.state().versions.selected.as_deref(), Some("v1"), "{theme:?}: still chosen, nothing else is");
+        h.state_mut().versions.stale = true;
+        h.run_steps(2);
+        versions_answer(&mut h, &host, Ok(long_page(0, 50, true)));
+        assert_eq!(h.state().versions.selected.as_deref(), Some("v1"), "{theme:?}: through a read again");
+        click_id(&mut h, "workspace.versions.all");
+        assert!(has_id(&h, hidden) && h.query_by_label_contains(", selected").is_some(), "{theme:?}: and shown again");
+        click_id(&mut h, described);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        versions_answer(&mut h, &host, Ok(long_page(0, 50, true)));
+        assert!(h.state().versions.selected.is_none() && has_id(&h, hidden), "{theme:?}: a new session lets go of both");
+        click_id(&mut h, described);
+        versions_answer_none(&mut h, &host);
+        assert!(painted(&h).iter().any(|t| t == "None of these versions has a description."), "{theme:?}");
+    });
+}
+
+/// A read again that finds no version with a description.
+fn versions_answer_none(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    h.state_mut().versions.stale = true;
+    let odd = (0..3).map(|i| version_row(&format!("o{i}"), None, (None, false), "2026-11-08T15:30:00Z")).collect();
+    h.run_steps(2);
+    versions_answer(h, host, Ok(crate::VersionsPage { versions: odd, more: true }));
 }
 
 #[test]

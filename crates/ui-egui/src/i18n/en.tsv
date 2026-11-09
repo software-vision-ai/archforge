@@ -474,6 +474,12 @@ str		No changes since the last version.	No changes since the last version.
 str		No versions yet.	No versions yet.
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
+str		All	All
+str		With a description	With a description
+str		Show more	Show more
+str		None of these versions has a description.	None of these versions has a description.
+str		The next versions couldn't be read.	The next versions couldn't be read.
+str		{name}, selected	{name}, selected
 str		No description	No description
 str		Saved by an agent	Saved by an agent
 str		This version can't be shown	This version can't be shown
