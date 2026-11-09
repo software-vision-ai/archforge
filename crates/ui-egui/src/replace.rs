@@ -21,6 +21,8 @@ pub const READ_BACK_LIMIT: u64 = 30;
 pub enum JobFailure {
     /// It failed, and the project is as it was.
     Failed(String),
+    /// It failed after saving the unsaved work as a version: the model is the work, now saved.
+    WorkSaved(String),
     /// It gave no clear answer: what happened has to be read back.
     Unclear,
 }
@@ -147,7 +149,7 @@ impl Shell {
                     r.wrote = true;
                     Stage::Ready(session, None)
                 }
-                Ok(Err(JobFailure::Failed(why))) => return self.give_up(Some(why)),
+                Ok(Err(JobFailure::Failed(why) | JobFailure::WorkSaved(why))) => return self.give_up(Some(why)),
                 // A lost reply says nothing about what happened: it is read back, never guessed.
                 Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
                     Some(read) => {

@@ -438,6 +438,14 @@ str		The change did not finish, so the project is as it was.	The change did not 
 str		Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.	Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
+str		This version is the same as your current work.	This version is the same as your current work.
+str		Your unsaved work was kept as a version.	Your unsaved work was kept as a version.
+str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	The restore could not go ahead because the project changed or was busy, so nothing was restored.
+str		The version could not be restored: {why}	The version could not be restored: {why}
+str		Your unsaved work could not be kept, so nothing was restored.	Your unsaved work could not be kept, so nothing was restored.
+str		Archforge could not tell whether your unsaved work was kept as a version, so nothing was restored.	Archforge could not tell whether your unsaved work was kept as a version, so nothing was restored.
+str		Your work will be written with your next change.	Your work will be written with your next change.
+str		Archforge could not tell whether an earlier restore finished. Close the project and open it again before restoring.	Archforge could not tell whether an earlier restore finished. Close the project and open it again before restoring.
 str		Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.	Archforge is viewing an earlier version of this project, so this request was not run. Go back to current work, then send it again.
 str		Close a project to open another	Close a project to open another
 str		The closing stopped without an answer	The closing stopped without an answer

@@ -93,8 +93,9 @@ struct RestoreWatch {
     /// The claim, as for [`Job::Discard`]: whoever sets it first, the writer to run the job or the
     /// wait that gave up on it, decides, so a job given up on is never run late.
     claim: AtomicBool,
-    /// The newest version just before the job's commit; none until the job has got that far.
-    before_commit: Mutex<Option<String>>,
+    /// The newest version just before the job's commit, and the branch the job ran on; none until
+    /// the job has got that far.
+    before_commit: Mutex<Option<(String, SafeBranch)>>,
     /// The read-back found this restore's version. Set and read under the lock on the marks, so
     /// that it and the writer's mark decide in either order.
     confirmed: AtomicBool,
@@ -560,23 +561,30 @@ impl Projects {
     /// alone would not do: an earlier restore of a version saved at the same time has the same text
     /// and may still be the newest. Anything else cannot be told, never that it did not finish, as
     /// a commit whose reply was lost may still be running; so too once the project has closed or
-    /// its branch moved. A restore found finished clears its own mark, never another restore's.
+    /// its branch moved, the switch's own first step included. A restore found finished clears its own mark, never another restore's.
     fn read_back_restore(&self, project: &Path, message: String, asked: (u64, u64), watch: Arc<RestoreWatch>) -> Receiver<Result<bool, String>> {
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
         self.on_a_reader(project, move |reader| {
             #[cfg(test)]
-            hold_reading(&inner, false);
+            hold_reading(&inner, ReadingAt::Start);
             // The baseline first: read after the page, it could be newer than the page, which
             // would then look like a new version though nothing has happened since.
             let before = lock(&watch.before_commit).clone();
             #[cfg(test)]
-            hold_reading(&inner, true);
+            hold_reading(&inner, ReadingAt::Baseline);
             let page = reader.versions(None, 1).map_err(|e| e.to_string())?;
             let newest = page.versions.first();
-            let made = newest.is_some_and(|v| before.as_deref().is_some_and(|b| b != v.hash) && v.description.as_deref() == Some(message.as_str()));
+            let made =
+                newest.is_some_and(|v| before.as_ref().is_some_and(|(b, _)| *b != v.hash) && v.description.as_deref() == Some(message.as_str()));
+            #[cfg(test)]
+            hold_reading(&inner, ReadingAt::Page);
+            // After the page: a switch shows its target before its generation moves, so a page
+            // read from the target is found here; one read before the switch is refused as well.
+            let same_branch = reader.active_branch().ok().and_then(|name| SafeBranch::found(&name).ok());
+            let same_branch = before.as_ref().is_some_and(|(_, ran_on)| same_branch.is_some_and(|now| now.same_branch(ran_on)));
             // Under the writer's lock, so that this and its mark decide in either order.
             let mut unknown = lock(&inner.restores_unknown);
-            if !made || asked != (generation_of(&inner, &path), instance_of(&inner, &path)) {
+            if !made || !same_branch || asked != (generation_of(&inner, &path), instance_of(&inner, &path)) {
                 return Err("whether the restore finished could not be told".to_string());
             }
             watch.confirmed.store(true, Ordering::SeqCst);
@@ -1367,11 +1375,13 @@ fn start_restore(
     limit: Duration,
 ) -> JobAnswer {
     let deadline = Instant::now() + limit;
+    let language = archforge_ui_egui::i18n::language();
     let (answer, gives) = channel();
     let (reply, from_writer) = channel();
     let wait = {
         let (inner, watch, answer) = (inner.clone(), watch.clone(), answer.clone());
         move || {
+            archforge_ui_egui::i18n::set_language(language);
             let _ = answer.send(forwarded(&from_writer, &watch.claim, deadline, &inner.cancel));
         }
     };
@@ -1409,20 +1419,61 @@ fn forwarded(
         }
     }
     if claim.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-        Err(JobFailure::Failed("the restore did not start in time, so nothing changed".into()))
+        Err(JobFailure::Failed(not_going_ahead()))
     } else {
         Err(JobFailure::Unclear)
     }
 }
 
-/// A restore's answer as a [`Job`] gives it. Only a commit that cannot be told is unclear.
+/// What the log says of a restore that stopped: the exact reason, which the person's message may
+/// put together with others.
+fn stop_note(error: &RestoreError) -> String {
+    format!("a restore stopped: {error}")
+}
+
+/// `text` as a failure, saying that the unsaved work was kept when it was.
+fn failure(text: String, kept_work: bool) -> JobFailure {
+    if kept_work { JobFailure::WorkSaved(format!("{text} {}", tr("Your unsaved work was kept as a version."))) } else { JobFailure::Failed(text) }
+}
+
+/// A restore's answer as a [`Job`] gives it, in the language of the thread it is made on. Only a
+/// commit that cannot be told is unclear.
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
-    match answer {
-        Ok(Restored::Version { .. }) => Ok(()),
-        Ok(Restored::Same { .. }) => Err(JobFailure::Failed("this version is the same as the current work".into())),
-        Err(RestoreError::CannotTell { .. }) => Err(JobFailure::Unclear),
-        Err(e) => Err(JobFailure::Failed(e.to_string())),
-    }
+    let error = match answer {
+        Ok(Restored::Version { .. }) => return Ok(()),
+        Ok(Restored::Same { kept_work }) => return Err(failure(tr("This version is the same as your current work."), kept_work)),
+        Err(error) => error,
+    };
+    log::warn!("{}", stop_note(&error));
+    let not_restored = |why: &str| fmt(&tr("The version could not be restored: {why}"), &[("why", why)]);
+    Err(match error {
+        RestoreError::CannotTell { .. } => JobFailure::Unclear,
+        RestoreError::BranchChanged | RestoreError::Reopened | RestoreError::NotOpen => JobFailure::Failed(not_going_ahead()),
+        RestoreError::Unwritten(_) | RestoreError::WorkNotKept(_) => {
+            JobFailure::Failed(tr("Your unsaved work could not be kept, so nothing was restored."))
+        }
+        RestoreError::WorkUnknown(_) => {
+            JobFailure::Failed(tr("Archforge could not tell whether your unsaved work was kept as a version, so nothing was restored."))
+        }
+        RestoreError::OutcomeUnknown => JobFailure::Failed(earlier_unknown()),
+        RestoreError::Version(e) => JobFailure::Failed(not_restored(&e.to_string())),
+        RestoreError::Failed(why) => JobFailure::Failed(not_restored(&why)),
+        RestoreError::NotRestored { why, kept_work, written_back } => {
+            let text = not_restored(&why);
+            let text = if written_back { text } else { format!("{text} {}", tr("Your work will be written with your next change.")) };
+            failure(text, kept_work)
+        }
+    })
+}
+
+/// The message of a restore refused as an earlier one's outcome could not be told.
+fn earlier_unknown() -> String {
+    tr("Archforge could not tell whether an earlier restore finished. Close the project and open it again before restoring.")
+}
+
+/// The message of a restore that could not go ahead, whichever way the project had changed.
+fn not_going_ahead() -> String {
+    tr("The restore could not go ahead because the project changed or was busy, so nothing was restored.")
 }
 
 /// The message of the version a restore makes of the version saved at `saved_at`.
@@ -1462,7 +1513,8 @@ fn replace(
     if let Err(e) = write_step(inner, project, schema, version) {
         return Err(Stop::WriteBack { why: e.to_string(), kept_work });
     }
-    *lock(&watch.before_commit) = project.versions(None, 1).ok().and_then(|page| page.versions.first().map(|v| v.hash.clone()));
+    *lock(&watch.before_commit) =
+        project.versions(None, 1).ok().and_then(|page| page.versions.first().map(|v| (v.hash.clone(), project.current_branch())));
     match save_step(inner, project, &restored_message(&request.saved_at), &author) {
         Ok(saved) => Ok(restored(saved, kept_work)),
         Err(f) => match f.version {
@@ -1517,8 +1569,8 @@ enum Fault {
     WriteBack,
     /// Runs when the restore has started, or, when true, after a commit with a fault has landed.
     Hold(bool, Box<dyn FnOnce() + Send>),
-    /// Runs as a read-back starts, or, when true, once it has taken its baseline.
-    Reading(bool, Box<dyn FnOnce() + Send>),
+    /// Runs at this point of a read-back.
+    Reading(ReadingAt, Box<dyn FnOnce() + Send>),
 }
 
 /// What a failed commit is judged to have left, for a test.
@@ -1542,10 +1594,19 @@ impl Told {
     }
 }
 
+/// The points of a read-back a test can hold it at.
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ReadingAt {
+    Start,
+    Baseline,
+    Page,
+}
+
 /// Runs the step a test has put at this point of a read-back.
 #[cfg(test)]
-fn hold_reading(inner: &Inner, after_baseline: bool) {
-    if let Some(Fault::Reading(_, step)) = take_fault(inner, |f| matches!(f, Fault::Reading(at, _) if *at == after_baseline)) {
+fn hold_reading(inner: &Inner, here: ReadingAt) {
+    if let Some(Fault::Reading(_, step)) = take_fault(inner, |f| matches!(f, Fault::Reading(at, _) if *at == here)) {
         step();
     }
 }
@@ -3184,13 +3245,63 @@ mod tests {
         assert!(matches!(forwarded(&waiting, &AtomicBool::new(true), far, &no), Err(JobFailure::Unclear)), "the reply was lost, started");
     }
 
-    /// Only a commit that cannot be told is unclear.
+    /// Each answer becomes the failure it should; a commit that cannot be told is the only unclear
+    /// one, and only the work having been kept makes a failure one that saved it.
     #[test]
     fn a_restores_answer_becomes_the_jobs() {
+        let not_restored = |kept_work, written_back| RestoreError::NotRestored { why: "x".into(), kept_work, written_back };
         assert!(matches!(job_answer(Ok(Restored::Version { kept_work: true })), Ok(())));
         assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Failed(_))));
-        assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: false })), Err(JobFailure::Unclear)));
-        assert!(matches!(job_answer(Err(RestoreError::NotOpen)), Err(JobFailure::Failed(_))));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: true })), Err(JobFailure::Unclear)));
+        assert!(matches!(job_answer(Err(not_restored(true, true))), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Err(not_restored(false, true))), Err(JobFailure::Failed(_))));
+        let plain = [
+            RestoreError::BranchChanged,
+            RestoreError::Reopened,
+            RestoreError::NotOpen,
+            RestoreError::Unwritten("x".into()),
+            RestoreError::WorkNotKept("x".into()),
+            RestoreError::WorkUnknown("x".into()),
+            RestoreError::OutcomeUnknown,
+            RestoreError::Failed("x".into()),
+        ];
+        for error in plain {
+            let said = format!("{error:?}");
+            assert!(matches!(job_answer(Err(error)), Err(JobFailure::Failed(text)) if !text.is_empty()), "{said}");
+        }
+        // Rows that wait say so, which the rows written back do not.
+        let text = |answer| match answer {
+            Err(JobFailure::WorkSaved(text) | JobFailure::Failed(text)) => text,
+            _ => panic!("a failure"),
+        };
+        assert!(text(job_answer(Err(not_restored(false, false)))).len() > text(job_answer(Err(not_restored(false, true)))).len());
+        // Merged for the person, the three reasons stay apart in the log.
+        let notes = [RestoreError::BranchChanged, RestoreError::Reopened, RestoreError::NotOpen].map(|e| stop_note(&e));
+        assert!(notes[0] != notes[1] && notes[1] != notes[2] && notes[0] != notes[2], "{notes:?}");
+    }
+
+    /// The words are made on the wait's own thread in the language the job was run under, not that
+    /// thread's default.
+    #[test]
+    fn a_jobs_failure_comes_in_the_interfaces_language() {
+        use archforge_ui_egui::i18n::set_language;
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let same = version(host, 0);
+        let english = |_: ()| job_answer(Ok(Restored::Same { kept_work: false }));
+        let word = |answer: Result<(), JobFailure>| match answer {
+            Err(JobFailure::Failed(text)) => text,
+            _ => panic!("a failure"),
+        };
+        set_language("en");
+        let in_english = word(english(()));
+        set_language("de");
+        let in_german = word(english(()));
+        let told = word(ran(&(job_of(host, &path, &same).run)()));
+        set_language("en");
+        assert_ne!(in_german, in_english, "the sentence is translated");
+        assert_eq!(told, in_german);
     }
 
     /// A job taken for a branch the project has since left is refused, its generation taken when
@@ -3203,7 +3314,7 @@ mod tests {
         let (stale, closed) = (job_of(host, &path, &old), job_of(host, &path, &old));
         let messages = sandbox.messages();
         switched(&host.inner, &path);
-        assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why.contains("switch")));
+        assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
         let fresh = job_of(host, &path, &old);
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
@@ -3222,7 +3333,7 @@ mod tests {
         let (old, messages) = (version(host, 1), sandbox.messages());
         let job = host.restore_job_within(&path, restoring(&old), Duration::ZERO);
         let release = hold_the_writer(host, &path);
-        assert!(matches!(ran(&(job.run)()), Err(JobFailure::Failed(why)) if why.contains("did not start")));
+        assert!(matches!(ran(&(job.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert!((job.read_back)().recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "the read-back needs no writer");
         drop(release);
         assert_eq!(host.flush_for_test(&path), Ok(()));
@@ -3326,7 +3437,7 @@ mod tests {
     /// and a baseline read as none says nothing even when the commit has landed since.
     #[test]
     fn a_read_back_is_not_fooled_while_the_writer_records_its_baseline() {
-        for (after_baseline, lands) in [(false, false), (true, false), (true, true)] {
+        for (at, lands) in [(ReadingAt::Start, false), (ReadingAt::Baseline, false), (ReadingAt::Baseline, true)] {
             let (sandbox, path) = branched();
             let host = &sandbox.host;
             let old = version(host, 1);
@@ -3340,13 +3451,44 @@ mod tests {
                 let _ = hold.recv_timeout(Duration::from_secs(30));
             };
             *lock(&host.inner.restore_faults) =
-                vec![Fault::Commit("Restored the version", Told::CannotTell, lands), Fault::Reading(after_baseline, Box::new(step))];
+                vec![Fault::Commit("Restored the version", Told::CannotTell, lands), Fault::Reading(at, Box::new(step))];
             let read = read_back();
             reading.recv_timeout(Duration::from_secs(60)).expect("the read-back is under way");
             assert!(matches!(ran(&run()), Err(JobFailure::Unclear)));
             drop(go_on);
-            assert!(read.recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "after_baseline {after_baseline}, lands {lands}");
+            assert!(read.recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "at {at:?}, lands {lands}");
             assert!(matches!(restore_of(host, &path, &old), Err(RestoreError::OutcomeUnknown)), "the mark stays");
+        }
+    }
+
+    /// A read-back during a switch, which shows its target before the generation moves, cannot
+    /// tell: read from the target, where the same message is the newest, or from the job's branch
+    /// just before the switch, where the restore did land.
+    #[test]
+    fn a_read_back_during_a_switch_cannot_tell() {
+        for (at, lands) in [(ReadingAt::Baseline, false), (ReadingAt::Page, true)] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let message = format!("Restored the version of {SAVED_AT}");
+            let on_target = format!("CALL DOLT_COMMIT('--allow-empty', '-m', '{message}', '--author', 'Archforge <archforge@localhost>')");
+            lock(&host.inner.open)[0].run_on_branch("elsewhere", &on_target).unwrap();
+            let ReplacementJob { run, read_back } = job_of(host, &path, &version(host, 1));
+            *lock(&host.inner.restore_faults) = vec![Fault::Commit("Restored the version", Told::CannotTell, lands)];
+            assert!(matches!(ran(&run()), Err(JobFailure::Unclear)));
+            let (reached, reading) = channel();
+            let (go_on, hold) = channel::<()>();
+            let step = move || {
+                let _ = reached.send(());
+                let _ = hold.recv_timeout(Duration::from_secs(30));
+            };
+            lock(&host.inner.restore_faults).push(Fault::Reading(at, Box::new(step)));
+            let read = read_back();
+            reading.recv_timeout(Duration::from_secs(60)).expect("the read-back is under way");
+            lock(&host.inner.open)[0].move_to_branch(branch("elsewhere"));
+            drop(go_on);
+            assert!(read.recv_timeout(Duration::from_secs(60)).unwrap().is_err(), "at {at:?}");
+            lock(&host.inner.open)[0].move_to_branch(branch("main"));
+            assert!(matches!(restore_of(host, &path, &version(host, 0)), Err(RestoreError::OutcomeUnknown)), "the mark stays");
         }
     }
 
