@@ -7,6 +7,8 @@ use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
 /// A click of the primary button at `at`, pointer moved there first.
+mod version_chip;
+
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
     for pressed in [true, false] {
@@ -339,6 +341,7 @@ impl SaveAnswer {
 /// save's and opening's sender, so a test answers when it chooses.
 #[derive(Default)]
 struct SavingHost {
+    pages: std::sync::Mutex<Vec<(Option<String>, std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>)>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
@@ -379,6 +382,18 @@ type RestoreEnds = (std::sync::mpsc::Sender<Result<(), crate::replace::JobFailur
 type ReadAnswer = std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>;
 
 impl crate::ProjectHost for SavingHost {
+    /// Keeps the read of a page for the test to answer.
+    fn versions(
+        &self,
+        _project: &std::path::Path,
+        after: Option<String>,
+        _limit: usize,
+    ) -> std::sync::mpsc::Receiver<Result<crate::VersionsPage, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.pages.lock().unwrap().push((after, tx));
+        rx
+    }
+
     /// A job the test answers through what is kept in `restores`.
     fn restore_job(
         &self,

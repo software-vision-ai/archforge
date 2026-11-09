@@ -15,6 +15,7 @@ pub const QUIT: &str = "app.quit";
 pub const GENERATE: &str = "file.generate";
 pub const SAVE: &str = "file.save";
 pub const OPEN: &str = "file.open";
+pub const VERSIONS: &str = "versions.list";
 
 /// One application action.
 pub struct Action {
@@ -127,6 +128,14 @@ pub static ACTIONS: &[Action] = &[
         run: switch_recent_sort,
         keys: None,
         search: Some(InSearch { icon: |_| &icons::LIST, label: None, shown: None }),
+    },
+    Action {
+        id: VERSIONS,
+        label: |_| tr("Versions"),
+        available: crate::version_chip::available,
+        run: crate::version_chip::open,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H, when: crate::version_chip::available }),
+        search: None,
     },
 ];
 
@@ -263,7 +272,7 @@ pub(crate) mod tests {
 
     /// The ids of the rows of the table `on` answers yes for.
     fn answering(on: impl Fn(&Action) -> bool) -> Vec<&'static str> {
-        ACTIONS.iter().filter(|a| on(a)).map(|a| a.id).collect()
+        ACTIONS.iter().filter(|a| a.id != VERSIONS && on(a)).map(|a| a.id).collect()
     }
 
     /// The whole table, state by state, written out by hand from what each menu item and key did
@@ -333,7 +342,7 @@ pub(crate) mod tests {
     /// rows, each once, and an id it lacks runs nothing, has no name and is never available.
     #[test]
     fn every_action_runs_its_handler_and_only_that() {
-        assert_eq!(ACTIONS.iter().map(|a| a.id).collect::<Vec<_>>(), ALL);
+        assert_eq!(ACTIONS.iter().map(|a| a.id).filter(|id| *id != VERSIONS).collect::<Vec<_>>(), ALL, "the chip's tests walk its own row");
         for id in ALL {
             let (mut shell, saves, picks) = shell();
             run(&mut shell, id);

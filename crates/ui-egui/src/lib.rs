@@ -72,6 +72,7 @@ mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
 pub mod ux;
+pub mod version_chip;
 mod viewing;
 pub mod widgets;
 pub mod workspace;
@@ -310,7 +311,7 @@ impl Tab {
 }
 
 /// One version of a project, as History lists it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VersionEntry {
     pub hash: String,
     /// What the person typed; none for an automatic save.
@@ -649,6 +650,8 @@ pub struct Shell {
     pub ask: Option<close_ask::Ask>,
     /// File → Generate…'s handoff to an agent, while it is open.
     pub generate: Option<generate::Generate>,
+    /// The version chip's list.
+    pub version_list: version_chip::List,
     quitting: Option<Vec<std::path::PathBuf>>,
     close_after_save: Vec<(std::path::PathBuf, u64)>,
     quit_confirmed: bool,
@@ -693,6 +696,7 @@ impl Shell {
             fonts: fonts::FontState::default(),
             #[cfg(test)]
             font_notices: Vec::new(),
+            version_list: version_chip::List::default(),
             applied_theme: None,
             last_title: String::new(),
             top_inset: 0.0,
@@ -1554,6 +1558,11 @@ impl Shell {
     /// Whether Save can act now: a model is open, no save is under way, it is not held and no version shows.
     pub fn can_save(&self) -> bool {
         self.session.is_some() && self.saving.is_none() && !self.is_held() && self.viewing.is_none()
+    }
+
+    /// Whether the project shown holds unsaved work.
+    pub(crate) fn shown_unsaved(&self) -> bool {
+        self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.

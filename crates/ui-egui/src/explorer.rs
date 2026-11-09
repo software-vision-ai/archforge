@@ -154,7 +154,7 @@ impl Rename {
 }
 
 /// A removal the dialog asks about: what goes, named, and what goes with it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Delete {
     pub ids: Vec<Uuid>,
     pub name: String,

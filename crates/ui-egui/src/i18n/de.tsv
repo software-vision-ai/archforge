@@ -1426,3 +1426,13 @@ str		The changes since the last write are lost.	Die Änderungen seit dem letzten
 str		The changes to {name} cannot be written	Die Änderungen an {name} können nicht geschrieben werden
 # Ordnerauswahl unter Linux
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	Es konnte keine Ordnerauswahl geöffnet werden: Installieren Sie xdg-desktop-portal und ein Backend für Ihren Desktop.
+str		Versions	Versionen
+str		{day} {month} {time}	{day}. {month} {time}
+str		Unsaved changes	Ungespeicherte Änderungen
+str		No unsaved changes	Keine ungespeicherten Änderungen
+str		Same as current work	Gleich wie die aktuelle Arbeit
+str		Saved by an agent	Von einem Agenten gespeichert
+str		Current work	Aktuelle Arbeit
+str		Current work · unsaved changes	Aktuelle Arbeit · ungespeicherte Änderungen
+str		Viewing the version of {date}	Version vom {date} wird angezeigt
+str		Viewing a version	Eine Version wird angezeigt

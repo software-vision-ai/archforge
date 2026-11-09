@@ -1425,3 +1425,13 @@ str		The changes since the last write are lost.	The changes since the last write
 str		The changes to {name} cannot be written	The changes to {name} cannot be written
 # Linux folder picker
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	No folder picker could open: install xdg-desktop-portal and a backend for your desktop.
+str		Versions	Versions
+str		{day} {month} {time}	{day} {month} {time}
+str		Unsaved changes	Unsaved changes
+str		No unsaved changes	No unsaved changes
+str		Same as current work	Same as current work
+str		Saved by an agent	Saved by an agent
+str		Current work	Current work
+str		Current work · unsaved changes	Current work · unsaved changes
+str		Viewing the version of {date}	Viewing the version of {date}
+str		Viewing a version	Viewing a version
