@@ -465,14 +465,22 @@ str		Model · the project's root	Modell · die Wurzel des Projekts
 str		Model	Modell
 str		Name	Name
 str		Models	Modelle
-str		Source Control	Quellverwaltung
+str		Versions	Versionen
+str		Branches	Zweige
+str		Working changes	Aktuelle Änderungen
+str		History	Verlauf
+str		Retry	Erneut versuchen
+str		No changes since the last version.	Keine Änderungen seit der letzten Version.
+str		No versions yet.	Noch keine Versionen.
+str		No versions yet. Save version records your first one.	Noch keine Versionen. „Version speichern“ legt die erste an.
+str		Loading	Wird geladen
+str		The versions couldn't be read.	Die Versionen konnten nicht gelesen werden.
 str		Chat	Chat
 str		Appearance	Darstellung
 str		Properties	Eigenschaften
 str		Skills	Skills
 str		Filter models…	Modelle filtern…
 str		Filter diagrams…	Diagramme filtern…
-str		Filter changes…	Änderungen filtern…
 str		No diagrams yet	Noch keine Diagramme
 str		Other diagrams	Andere Diagramme
 str		Select	Auswählen
@@ -663,7 +671,6 @@ str		{n} %	{n} %
 str		Empty diagram	Leeres Diagramm
 str		Unnamed diagram	Unbenanntes Diagramm
 str		Model behind this diagram	Modell hinter diesem Diagramm
-str		No changes yet	Noch keine Änderungen
 str		Style	Stil
 str		Fill	Füllung
 str		Border	Rahmen

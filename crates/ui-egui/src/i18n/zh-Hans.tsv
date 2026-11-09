@@ -465,14 +465,22 @@ str		Model · the project's root	模型 · 项目的根
 str		Model	模型
 str		Name	名称
 str		Models	模型
-str		Source Control	源代码管理
+str		Versions	版本
+str		Branches	分支
+str		Working changes	工作更改
+str		History	历史记录
+str		Retry	重试
+str		No changes since the last version.	自上一版本以来没有更改。
+str		No versions yet.	还没有版本。
+str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
+str		Loading	正在加载
+str		The versions couldn't be read.	无法读取版本。
 str		Chat	聊天
 str		Appearance	外观
 str		Properties	属性
 str		Skills	技能
 str		Filter models…	筛选模型…
 str		Filter diagrams…	筛选图…
-str		Filter changes…	筛选更改…
 str		No diagrams yet	还没有图
 str		Other diagrams	其他图
 str		Select	选择
@@ -663,7 +671,6 @@ str		{n} %	{n} %
 str		Empty diagram	空图
 str		Unnamed diagram	未命名的图
 str		Model behind this diagram	此图背后的模型
-str		No changes yet	还没有更改
 str		Style	样式
 str		Fill	填充
 str		Border	边框

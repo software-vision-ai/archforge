@@ -10,7 +10,7 @@
 //! strip 36 tall, the right rail 40, the panel 280, the status bar 40. In a narrower window the
 //! panel, then the explorer, give way so the centre keeps at least `CENTRE_MIN`.
 
-use egui::{Rect, Sense, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Rect, Sense, Vec2, pos2, vec2};
 
 use crate::home::{BAR, STRIP, control, title_strip};
 use crate::i18n::tr;
@@ -40,7 +40,7 @@ const RAIL_PITCH: f32 = 46.0;
 const EXPLORERS: [(&str, Explorer, &ux::Icon, &str); 3] = [
     ("diagrams", Explorer::Diagrams, &icons::DIAGRAM, "Diagrams"),
     ("models", Explorer::Models, &icons::CUBE, "Models"),
-    ("source-control", Explorer::SourceControl, &icons::BRANCH, "Source Control"),
+    ("source-control", Explorer::SourceControl, &icons::BRANCH, "Versions"),
 ];
 
 /// The panels of the right rail: automation id, the panel, its icon and its title.
@@ -348,35 +348,17 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
-/// The explorer column: Models is the tree over the session; Diagrams and Source Control show
-/// their titles, filters and what is true, which is nothing yet.
+/// The explorer column: Models is the tree over the session, Diagrams the open project's diagrams
+/// and Versions its history.
 fn explorer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.surface);
     paint.rect_filled(Rect::from_min_max(pos2(r.right() - 1.0, r.top()), r.max), 0.0, p.border);
-    let at = |x: f32, y: f32| r.min + vec2(x, y);
-    let (title, filter, empty) = match shell.state.explorer {
-        Explorer::Models => {
-            crate::explorer::draw(shell, ui, p, r);
-            return;
-        }
-        Explorer::Diagrams => {
-            crate::diagrams::draw(shell, ui, p, r);
-            return;
-        }
-        Explorer::SourceControl => (tr("Source Control"), tr("Filter changes…"), tr("No changes yet")),
-    };
-    ux::text(&paint, at(20.0, 25.0), &title.to_uppercase(), types::EYEBROW, p.text, room(r.width() - 80.0));
-    let add = Rect::from_min_size(pos2(r.right() - 40.0, r.top() + 20.0), Vec2::splat(24.0));
-    ux::icon_in(&paint, Rect::from_center_size(add.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
-    control(shell, ui, "workspace.explorer.add", "button", add, false);
-    let field = Rect::from_min_max(at(16.0, 65.0), pos2(r.right() - 16.0, r.top() + 97.0));
-    paint.rect_filled(field, 8.0, p.page);
-    paint.rect_stroke(field, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-    ux::icon(&paint, field.min + vec2(10.0, 9.0), &icons::SEARCH, 13.0, p.text_secondary);
-    ux::text(&paint, field.min + vec2(33.0, 7.0), &filter, types::SMALL, p.text_secondary, room(field.width() - 44.0));
-    control(shell, ui, "workspace.explorer.filter", "button", field, false);
-    ux::text(&paint, at(36.0, 119.0), &empty, types::SMALL, p.text_muted, room(r.width() - 52.0));
+    match shell.state.explorer {
+        Explorer::Models => crate::explorer::draw(shell, ui, p, r),
+        Explorer::Diagrams => crate::diagrams::draw(shell, ui, p, r),
+        Explorer::SourceControl => crate::versions::draw(shell, ui, p, r),
+    }
 }
 
 /// A column divider: dragging it changes the column's width within its range.

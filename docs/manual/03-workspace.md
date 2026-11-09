@@ -7,8 +7,8 @@ An open project fills the window with its workspace.
 - **The bar at the top** holds Home, the open projects' tabs, the search field, Help and your
   avatar (which opens Settings, where you enter your name; it is saved with each version, so
   anyone given a copy of the project can read it).
-- **The left rail** switches the left column between **Diagrams**, at the top, and **Models**. (Source Control
-  is planned and not available yet.)
+- **The left rail** switches the left column between **Diagrams**, at the top, **Models** and **Versions**,
+  which lists the project's history, newest first.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

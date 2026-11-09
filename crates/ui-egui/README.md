@@ -101,7 +101,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `new_project::{open, name_problem, file_name}` | the New project dialog: open it, a name's problem in words, the file a name gives |
 | `Folder` | a folder as the shell shows it: its path and its label |
 
-**Non-goals.** The screens behind Home's other controls, the Source Control explorer's contents,
+**Non-goals.** The screens behind Home's other controls, opening a version from the Versions explorer,
 the Agent and Appearance panels, relationships and foreign keys in Properties, key editing beyond
 key editing past name, columns and Nulls distinct, the drawing
 tools' menus, folders and renaming in the Diagrams tree: their own rows.

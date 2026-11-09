@@ -464,14 +464,22 @@ str		Model · the project's root	Model · the project's root
 str		Model	Model
 str		Name	Name
 str		Models	Models
-str		Source Control	Source Control
+str		Versions	Versions
+str		Branches	Branches
+str		Working changes	Working changes
+str		History	History
+str		Retry	Retry
+str		No changes since the last version.	No changes since the last version.
+str		No versions yet.	No versions yet.
+str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
+str		Loading	Loading
+str		The versions couldn't be read.	The versions couldn't be read.
 str		Chat	Chat
 str		Appearance	Appearance
 str		Properties	Properties
 str		Skills	Skills
 str		Filter models…	Filter models…
 str		Filter diagrams…	Filter diagrams…
-str		Filter changes…	Filter changes…
 str		No diagrams yet	No diagrams yet
 str		Other diagrams	Other diagrams
 str		Select	Select
@@ -662,7 +670,6 @@ str		{n} %	{n} %
 str		Empty diagram	Empty diagram
 str		Unnamed diagram	Unnamed diagram
 str		Model behind this diagram	Model behind this diagram
-str		No changes yet	No changes yet
 str		Style	Style
 str		Fill	Fill
 str		Border	Border

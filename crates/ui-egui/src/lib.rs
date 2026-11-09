@@ -72,6 +72,7 @@ mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
 pub mod ux;
+pub mod versions;
 mod viewing;
 pub mod widgets;
 pub mod workspace;
@@ -647,6 +648,8 @@ pub struct Shell {
     pub explorer: explorer::State,
     /// The Diagrams explorer's own state: folds, filter, the New diagram dialog.
     pub diagrams: diagrams::State,
+    /// The Versions explorer: what it read and how it is folded.
+    pub versions: versions::State,
     /// The centre's own state: the open tabs, the view, the tool and the toggles.
     pub canvas: canvas::State,
     /// The right panels' own state: the open editors and the last refusal.
@@ -716,6 +719,7 @@ impl Shell {
             picker_error: None,
             explorer: explorer::State::default(),
             diagrams: diagrams::State::default(),
+            versions: versions::State::default(),
             canvas: canvas::State::default(),
             panels: panels::State::default(),
             markdown: Default::default(),
@@ -1588,6 +1592,8 @@ impl Shell {
 
     /// Keeps how a save went, the latest few, for the agent that asked for it.
     fn finished_save(&mut self, ticket: u64, outcome: SaveState) {
+        // A version may have been made: History reads again when it is next drawn.
+        self.versions.stale |= matches!(outcome, SaveState::Saved(_));
         // A closing that waited for this save goes on, asks again when edits came in meanwhile,
         // or stops with the save's error.
         let waiting: Vec<std::path::PathBuf> = self.close_after_save.iter().filter(|(_, t)| *t == ticket).map(|(p, _)| p.clone()).collect();
