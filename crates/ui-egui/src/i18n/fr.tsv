@@ -475,6 +475,13 @@ str		No changes since the last version.	Aucune modification depuis la dernière 
 str		No versions yet.	Aucune version pour l'instant.
 str		No versions yet. Save version records your first one.	Aucune version pour l'instant. Enregistrer la version crée la première.
 str		Loading	Chargement
+str		Filter changes…	Filtrer les modifications…
+str		Model elements	Éléments du modèle
+str		Unnamed	Sans nom
+str		Added	Ajouté
+str		Changed	Modifié
+str		Removed	Supprimé
+str		The changes couldn't be compared.	Les modifications n'ont pas pu être comparées.
 str		No description	Aucune description
 str		Saved by an agent	Enregistré par un agent
 str		This version can't be shown	Cette version ne peut pas être affichée

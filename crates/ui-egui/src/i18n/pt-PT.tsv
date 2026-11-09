@@ -475,6 +475,13 @@ str		No changes since the last version.	Sem alterações desde a última versão
 str		No versions yet.	Ainda não há versões.
 str		No versions yet. Save version records your first one.	Ainda não há versões. Guardar versão regista a primeira.
 str		Loading	A carregar
+str		Filter changes…	Filtrar alterações…
+str		Model elements	Elementos do modelo
+str		Unnamed	Sem nome
+str		Added	Adicionado
+str		Changed	Alterado
+str		Removed	Removido
+str		The changes couldn't be compared.	Não foi possível comparar as alterações.
 str		No description	Sem descrição
 str		Saved by an agent	Guardado por um agente
 str		This version can't be shown	Esta versão não pode ser mostrada
