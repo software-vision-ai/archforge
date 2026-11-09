@@ -420,6 +420,7 @@ str		No version was made: {why}	未创建版本：{why}
 str		A version was made, even though saving reported an error: {why}	虽然保存时报告了错误，但版本已创建：{why}
 str		Archforge can't tell whether a version was made: {why}. It is safe to save again.	Archforge 无法判断是否已创建版本：{why}。可以放心再次保存。
 str		The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.	保存未返回结果即已停止，因此 Archforge 无法判断是否已创建版本。可以放心再次保存。
+str		Too many versions are being read at once. Try again in a moment.	同时读取的版本过多。请稍后重试。
 str		A description can't be empty.	描述不能为空。
 str		A description has to fit on one line.	描述必须写在一行内。
 str		A description is at most {max} characters; this one has {n}.	描述最多 {max} 个字符，当前有 {n} 个。

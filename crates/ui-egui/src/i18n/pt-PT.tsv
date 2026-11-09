@@ -420,6 +420,7 @@ str		No version was made: {why}	Não foi criada nenhuma versão: {why}
 str		A version was made, even though saving reported an error: {why}	Foi criada uma versão, embora a gravação tenha comunicado um erro: {why}
 str		Archforge can't tell whether a version was made: {why}. It is safe to save again.	O Archforge não consegue determinar se foi criada uma versão: {why}. Pode guardar novamente em segurança.
 str		The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.	A gravação terminou sem resposta, por isso o Archforge não consegue determinar se foi criada uma versão. Pode guardar novamente em segurança.
+str		Too many versions are being read at once. Try again in a moment.	Estão a ser lidas demasiadas versões ao mesmo tempo. Tente novamente daqui a pouco.
 str		A description can't be empty.	Uma descrição não pode estar vazia.
 str		A description has to fit on one line.	Uma descrição tem de caber numa só linha.
 str		A description is at most {max} characters; this one has {n}.	Uma descrição tem no máximo {max} caracteres; esta tem {n}.

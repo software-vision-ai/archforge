@@ -419,6 +419,7 @@ str		No version was made: {why}	No version was made: {why}
 str		A version was made, even though saving reported an error: {why}	A version was made, even though saving reported an error: {why}
 str		Archforge can't tell whether a version was made: {why}. It is safe to save again.	Archforge can't tell whether a version was made: {why}. It is safe to save again.
 str		The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.	The save stopped without an answer, so Archforge can't tell whether a version was made. It is safe to save again.
+str		Too many versions are being read at once. Try again in a moment.	Too many versions are being read at once. Try again in a moment.
 str		A description can't be empty.	A description can't be empty.
 str		A description has to fit on one line.	A description has to fit on one line.
 str		A description is at most {max} characters; this one has {n}.	A description is at most {max} characters; this one has {n}.

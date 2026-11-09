@@ -176,11 +176,17 @@ pub(crate) fn sql(what: &'static str) -> impl Fn(mysql::Error) -> Error {
     move |source| Error::Sql { what, source }
 }
 
+/// A connection through `connector`, using the project's database.
+pub(crate) fn database_connection(connector: &archforge_dolt::Connector) -> Result<mysql::Conn, Error> {
+    let mut c = connector.connect().map_err(Error::Server)?;
+    c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
+    Ok(c)
+}
+
 impl Project {
+    /// A connection to this project's server, using its database.
     pub(crate) fn model_connection(&self) -> Result<mysql::Conn, Error> {
-        let mut c = self.server().connect().map_err(Error::Server)?;
-        c.query_drop(format!("USE `{DATABASE}`")).map_err(sql("cannot use the project database"))?;
-        Ok(c)
+        database_connection(&self.server().connector())
     }
 
     /// A connection to the version `commit` through Dolt's revision database: it sees that commit
