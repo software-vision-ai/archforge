@@ -4205,10 +4205,12 @@ mod tests {
         assert!(matches!(both, Err(SwitchError::Reopened)), "a close is the reason that outlasts the rest: {both:?}");
     }
 
-    /// A switch within `limit`, its check answered.
+    /// A switch whose check has answered within the real limit, its move left with `limit`: the
+    /// check does real work on the writer, which a short limit must not bound.
     fn checked_within(host: &Projects, path: &Path, limit: Duration) -> SwitchMove {
-        let SwitchSteps { check, moving } = host.start_switch_within(path, branch("elsewhere"), limit).unwrap();
+        let SwitchSteps { check, mut moving } = host.start_switch(path, branch("elsewhere")).unwrap();
         check.recv_timeout(Duration::from_secs(60)).expect("the check answers").expect("the check passes");
+        moving.limit = limit;
         moving
     }
 
@@ -4245,13 +4247,15 @@ mod tests {
         assert!(checked(host, &path, "elsewhere").0.is_ok(), "the claim was released");
     }
 
-    /// A move that started and outlasts the limit cannot be told: its answer is unclear, the
-    /// read-back says it cannot tell until the writer has finished, and then finds where it went.
+    /// A move that started and whose wait ended, as it does at the limit or an exit, cannot be told:
+    /// its answer is unclear, the read-back says it cannot tell until the writer has finished, and
+    /// then finds where it went. The wait is ended by the exit flag once the writer holds the move,
+    /// as a short limit could pass before the writer reached it.
     #[test]
-    fn a_move_past_its_limit_is_read_back_only_once_the_writer_has_finished() {
+    fn a_move_past_its_wait_is_read_back_only_once_the_writer_has_finished() {
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let moving = checked_within(host, &path, Duration::from_millis(50));
+        let moving = checked_within(host, &path, RESTORE_LIMIT);
         let (running, started) = channel();
         let (go_on, hold) = channel::<()>();
         *lock(&host.inner.before_move) = Some(Box::new(move || {
@@ -4261,7 +4265,9 @@ mod tests {
         let ReplacementJob { run, read_back } = moving.into_job();
         let answer = run();
         started.recv_timeout(Duration::from_secs(60)).expect("the move is under way");
+        host.inner.cancel.store(true, Ordering::SeqCst);
         let answer = answer.recv_timeout(Duration::from_secs(60)).expect("the wait answers");
+        host.inner.cancel.store(false, Ordering::SeqCst);
         assert!(matches!(answer, Err(JobFailure::Unclear)), "unclear");
         let watch = lock(&host.inner.switches).get(&path).and_then(std::sync::Weak::upgrade).expect("still under way");
         let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60)).unwrap();
