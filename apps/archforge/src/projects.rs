@@ -308,7 +308,8 @@ impl std::fmt::Display for CreateBranchError {
 
 impl std::error::Error for CreateBranchError {}
 
-/// Why the writer deleted no branch.
+/// Why the writer deleted no branch. Its `Display` text is English, for logs only: the screen
+/// (AR-292) words each variant through `tr` and never shows `to_string()`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum DeleteJobError {
     /// A switch moved the project after this was asked for.
