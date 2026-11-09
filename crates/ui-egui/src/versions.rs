@@ -201,6 +201,14 @@ fn read(shell: &mut Shell) {
     v.reading = Some(host.versions(&path, None, PAGE));
 }
 
+/// Whether a comparison of what is shown now has finished, and none is on its way.
+pub(crate) fn settled(shell: &Shell) -> bool {
+    let v = &shell.versions;
+    let last = v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone());
+    let now = shell.session.as_ref().map(|s| (last, s.revision()));
+    v.compared.is_some() && v.compared == now && v.comparing.is_none() && v.reading_base.is_none()
+}
+
 /// What Working changes says, when what is known allows it. "No changes" is what Save would find:
 /// no difference in the model and diagrams, and none in what only a save writes (`settings` and
 /// `model_tables`, which leave the session marked unsaved with nothing to list).
@@ -209,6 +217,8 @@ fn working_words(shell: &Shell) -> Option<String> {
     let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !crate::panels::description_pending(&shell.panels);
     if page.versions.is_empty() {
         Some(tr("No versions yet. Save version records your first one."))
+    } else if !settled(shell) {
+        shell.viewing.is_none().then(|| tr("Loading"))
     } else if untouched && shell.versions.working == 0 {
         Some(tr("No changes since the last version."))
     } else {
@@ -292,7 +302,8 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         filter_field(shell, ui, p, Rect::from_min_size(pos2(r.left() + 16.0, y), vec2((r.width() - 32.0).max(0.0), 30.0)));
         top += 38.0;
     }
-    let needle = shell.versions.filter.to_lowercase();
+    // Only while the field is there to clear it.
+    let needle = if shell.versions.changes.len() > FILTER_FROM { shell.versions.filter.to_lowercase() } else { String::new() };
     let holds = |d: &&Difference| needle.is_empty() || d.name.as_deref().unwrap_or("").to_lowercase().contains(&needle);
     let group = |area: Area| shell.versions.changes.iter().filter(|d| d.area == area).filter(holds).cloned().collect::<Vec<_>>();
     let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram))];

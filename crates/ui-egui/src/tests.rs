@@ -8132,13 +8132,10 @@ fn the_versions_panel_lists_keeps_and_reads_again() {
     in_both_appearances(|theme| {
         let (mut h, host) = versions_panel(theme);
         let (first, second) = ("workspace.versions.row.aa", "workspace.versions.row.bb");
-        let no_changes = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t == "No changes since the last version.");
         versions_answer(&mut h, &host, Ok(two_versions()));
         assert!(has_id(&h, first) && has_id(&h, second), "{theme:?}");
         assert!(painted(&h).iter().any(|t| t == "Add order status") && painted(&h).iter().any(|t| t == "2"), "{:?}", painted(&h));
-        assert!(no_changes(&h), "{theme:?}: nothing unsaved");
         add_schema(&mut h, "crm");
-        assert!(!no_changes(&h), "{theme:?}: unsaved work");
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         versions_answer(&mut h, &host, Err("the server stopped".into()));
@@ -8202,6 +8199,11 @@ fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Har
     let now = crate::chat_words::seconds_of("2026-11-09T12:00:00Z").unwrap();
     h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now, offset: Some(3600) }));
     versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions, more: false }));
+    h.run_steps(2);
+    assert!(h.ctx.has_requested_repaint(), "{theme:?}: the window looks again for the last version's rows");
+    let rows = rows_now(&h);
+    answer_read(&mut h, &host, Ok(rows));
+    compared(&mut h);
     (h, host)
 }
 
@@ -8355,15 +8357,7 @@ fn compared(h: &mut Harness<'static, Shell>) {
 
 /// A project with one version, the rows of now, its panel read and compared: no changes yet.
 fn changes_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
-    let (mut h, host) = versions_panel(theme);
-    let last = version_row("c1", Some("First"), (None, false), "2026-11-08T15:30:00Z");
-    versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![last], more: false }));
-    h.run_steps(2);
-    assert!(h.ctx.has_requested_repaint(), "{theme:?}: the window looks again for the last version's rows");
-    let rows = rows_now(&h);
-    answer_read(&mut h, &host, Ok(rows));
-    compared(&mut h);
-    (h, host)
+    versions_listed(theme, vec![version_row("c1", Some("First"), (None, false), "2026-11-08T15:30:00Z")])
 }
 
 /// Whether the panel says nothing has changed.
@@ -8379,6 +8373,13 @@ fn working_changes_list_what_a_save_would_write() {
     in_both_appearances(|theme| {
         let (mut h, _host) = changes_panel(theme);
         assert!(no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let key = h.state().versions.compared.clone().unwrap();
+        h.state_mut().versions.comparing = Some((key, rx));
+        h.run_steps(2);
+        assert!(!crate::versions::settled(h.state()) && !no_changes_said(&h), "{theme:?}: not before it has said");
+        h.state_mut().versions.comparing = None;
+        drop(tx);
         add_schema(&mut h, "crm");
         compared(&mut h);
         assert_eq!((row_count(&h), h.state().versions.working), (1, 1), "{theme:?}");
@@ -8420,6 +8421,10 @@ fn working_changes_filter_a_long_list() {
         h.run_steps(1);
         let texts = painted(&h);
         assert!(["MODEL ELEMENTS", "DIAGRAMS", "item1", "item2", "C", "R"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
+        h.state_mut().versions.filter = "nothing has this".to_string();
+        h.run_steps(2);
+        let rows = ids(&h).iter().filter(|i| i.starts_with("workspace.versions.change.")).count();
+        assert_eq!(rows, 2, "{theme:?}: a filter left from a longer list hides nothing, as nothing could clear it");
         h.state_mut().versions.filter = "gone with the session".to_string();
         h.state_mut().session_replaced();
         h.run_steps(2);
@@ -8447,9 +8452,9 @@ fn working_changes_belong_to_the_rows_compared() {
         compared(&mut h);
         assert_eq!(h.state().versions.working, 2, "{theme:?}: the old answer is dropped, the newest rows compared");
         h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
-        h.state_mut().versions.compared = None;
+        h.state_mut().versions.compared = Some((Some("older".to_string()), 0));
         h.run_steps(2);
-        assert!(h.state().versions.comparing.is_none(), "{theme:?}: not during a gesture");
+        assert!(h.state().versions.comparing.is_none() && !crate::versions::settled(h.state()), "{theme:?}: not during a gesture");
         h.state_mut().session.as_mut().unwrap().cancel().unwrap();
         start_viewing(&mut h, "c1");
         let earlier = rows_now(&h);
@@ -8457,6 +8462,7 @@ fn working_changes_belong_to_the_rows_compared() {
         versions_answer(&mut h, &host, Ok(two_versions()));
         let v = &h.state().versions;
         assert!(v.comparing.is_none() && v.working == 0 && host.reads.lock().unwrap().is_empty(), "{theme:?}: a version in view is not current work");
+        assert!(!painted(&h).iter().any(|t| t == "Loading"), "{theme:?}: nor waited for");
         let (mut h, host) = versions_panel(theme);
         let last = version_row("c1", None, (None, false), "2026-11-08T15:30:00Z");
         versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![last], more: false }));
