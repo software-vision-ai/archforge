@@ -114,6 +114,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         Answer::GoOn if quitting => {}
         Answer::GoOn => shell.close_tab_now(i),
         Answer::Cancel => {
+            shell.holding.forget_quit();
             if quitting {
                 shell.cancel_quit();
             }

@@ -4,7 +4,7 @@
 //! waited through a failed hold asks again, so it never acts on a state the person did not see.
 
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::close_ask::Ask;
 use crate::{Opened, Shell, chat_panel};
@@ -38,6 +38,8 @@ struct Hold {
     handed_over: bool,
     /// When Chat began to settle for this hold, by the panel's clock.
     chat_since: Option<u64>,
+    /// Whether what happened could not be told, so that only closing the project ends the hold.
+    until_closed: bool,
 }
 
 /// An action that waits for the hold to end.
@@ -62,12 +64,66 @@ pub(crate) struct Holding {
     failed: bool,
     /// The path and name of the project the failed hold held, which the question after it names.
     held: Option<(PathBuf, String)>,
+    /// The hold of a project held until closed, while its closing is under way, with its path.
+    closing: Option<(PathBuf, Hold)>,
 }
 
 impl Holding {
+    /// Keeps the hold until its project is closed.
+    pub(crate) fn keep_until_closed(&mut self) {
+        if let Some(hold) = self.hold.as_mut() {
+            hold.until_closed = true;
+        }
+    }
+
+    /// Whether the hold lasts until its project is closed.
+    pub(crate) fn until_closed(&self) -> bool {
+        self.hold.as_ref().is_some_and(|h| h.until_closed)
+    }
+
+    /// The project at `path`, held until closed, is closing: nothing holds meanwhile, and what
+    /// waited asks again, as after any hold that failed. The hold is kept for a closing refused.
+    pub(crate) fn let_go(&mut self, path: &Path) {
+        if self.until_closed() {
+            self.closing = self.hold.take().map(|hold| (path.to_path_buf(), hold));
+            self.failed = true;
+        }
+    }
+
+    /// The closing of the project at `path` was refused or lost: if it was held until closed it is
+    /// held again, what happened still not being known, and a quit that waited for it is off.
+    pub(crate) fn hold_again(&mut self, path: &Path) {
+        if self.closing.as_ref().is_some_and(|(held, _)| held == path) {
+            self.hold = self.closing.take().map(|(_, hold)| hold);
+            self.forget_quit();
+        }
+    }
+
+    /// The project at `path`, `shown` or not, has really closed. Gives whether that ended a hold
+    /// kept until closed, whether its closing went through the host or there is no host to ask.
+    pub(crate) fn closed(&mut self, path: &Path, shown: bool) -> bool {
+        if self.closing.as_ref().is_some_and(|(held, _)| held == path) {
+            self.closing = None;
+            return true;
+        }
+        if shown && self.until_closed() {
+            self.hold = None;
+            self.failed = true;
+            return true;
+        }
+        false
+    }
+
+    /// Keep open was answered while held until closed: a quit that waited for that closing is off.
+    pub(crate) fn forget_quit(&mut self) {
+        if self.until_closed() {
+            self.waiting.retain(|w| !matches!(w, Waiting::Quit));
+        }
+    }
+
     /// Whether a hold runs or something still waits for one.
     pub(crate) fn pending(&self) -> bool {
-        self.hold.is_some() || !self.waiting.is_empty()
+        self.hold.is_some() || self.closing.is_some() || !self.waiting.is_empty()
     }
 
     /// Whether the latest rows have gone over, so that no more may.
@@ -90,7 +146,7 @@ impl Shell {
         let session = self.session.as_mut().ok_or(HoldRefused::NoProject)?;
         let was_read_only = session.read_only();
         session.set_read_only(true).map_err(|_| HoldRefused::Gesture)?;
-        self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None });
+        self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None, until_closed: false });
         Ok(())
     }
 
@@ -157,7 +213,10 @@ impl Shell {
 
     /// While held, keeps `action` for when the hold ends (a quit once) and gives true.
     pub(crate) fn remember(&mut self, action: Waiting) -> bool {
-        if !self.is_held() {
+        // Closing is what ends a hold kept until closed, and only without writing anything back.
+        // A quit waits for a held project's closing too: a refusal must find the window still there.
+        let behind_closing = matches!(action, Waiting::Quit) && self.holding.closing.is_some();
+        if !(self.is_held() || behind_closing) || (self.holding.until_closed() && matches!(action, Waiting::Close(_) | Waiting::Discard(_, false))) {
             return false;
         }
         if !(matches!(action, Waiting::Quit) && self.holding.waiting.iter().any(|w| matches!(w, Waiting::Quit))) {
@@ -168,7 +227,7 @@ impl Shell {
 
     /// Runs what waited for the hold, each action once the question or quit before it is answered.
     pub(crate) fn run_after_hold(&mut self, ctx: &egui::Context) {
-        while !self.is_held() && self.ask.is_none() && !self.quitting() {
+        while !self.is_held() && self.holding.closing.is_none() && self.ask.is_none() && !self.quitting() {
             let Some(action) = self.holding.waiting.pop_front() else { return };
             let failed = self.holding.failed;
             match action {

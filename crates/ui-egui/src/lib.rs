@@ -790,6 +790,10 @@ impl Shell {
     /// The description being typed is written first; one refused counts as unsaved.
     fn start_quit(&mut self, ctx: &egui::Context) {
         if self.remember(hold::Waiting::Quit) {
+            // Held until closed: the closing's question comes first, and the quit follows it.
+            if let Some(i) = self.active.filter(|_| self.holding.until_closed()) {
+                self.close_tab(i);
+            }
             return;
         }
         if self.active.is_some() {
@@ -952,6 +956,9 @@ impl Shell {
         if i >= self.tabs.len() {
             return;
         }
+        if self.holding.closed(&self.tabs[i].path.clone(), self.active == Some(i)) {
+            self.replacing = None;
+        }
         if self.active == Some(i) {
             self.clear_workspace();
             self.project = None;
@@ -999,6 +1006,7 @@ impl Shell {
     fn stash(&mut self) {
         let Some(i) = self.active else { return };
         let Some(project) = self.project.take() else { return };
+        self.holding.let_go(&project.path);
         // A drawing under way never outlives the project it was on (AR-128).
         self.canvas.nary = None;
         self.canvas.nary_menu = None;
@@ -1432,6 +1440,8 @@ impl Shell {
         self.tabs[i].closing = None;
         self.tabs[i].close_error = Some(why);
         self.activate(i);
+        // Still not known what happened: read-only and held, as before the closing was asked for.
+        self.holding.hold_again(&self.tabs[i].path.clone());
     }
 
     /// Why the project shown could not be closed, when it could not.
