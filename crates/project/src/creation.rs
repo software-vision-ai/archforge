@@ -1,6 +1,6 @@
 //! The branch creation record: a file in the project folder, beside the [`crate::MARKER`], naming
 //! the branch being made, the branch it is made from and the commit it starts at. This module
-//! reads such a file and sets a damaged one aside. Nothing writes the file or calls this yet.
+//! writes, reads and removes such a file and sets a damaged one aside. Nothing calls it yet.
 //!
 //! The file is a claim, read as one. Only the exact shape, with every name passing
 //! [`SafeBranch::found`], counts as a record; anything else is damaged, and is not to be acted on.
@@ -11,9 +11,13 @@
 //! It is four fixed lines, not JSON. This crate has no JSON reader outside its tests, and a repeated
 //! key in JSON can be read without complaint, the last one winning, so a file could say two things.
 //! Here a repeated, unknown or reordered line is simply the wrong shape.
+//!
+//! Writing and removing flush what they do, the folder included. The tests show those calls are
+//! made and in which order; no test can show that a flush reached the disk, or that the disk kept
+//! it through a power cut. For that this rests on the operating system and the disk.
 
-use std::fs::{self, File};
-use std::io::{self, ErrorKind, Read};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::chat::is_commit;
@@ -21,6 +25,8 @@ use crate::{Error, SafeBranch, UnsafeBranch};
 
 /// The record's file in the project folder.
 pub(crate) const RECORD: &str = ".creating-branch";
+/// Where a record is made before it takes its name; never read as a record.
+const TEMPORARY: &str = ".creating-branch.tmp";
 /// A record's first line, which says this is one and of which shape.
 const FIRST_LINE: &str = "archforge branch creation 1";
 /// More than the longest good record; a longer file is damaged and is not read in full.
@@ -61,13 +67,37 @@ pub(crate) enum Found {
     Damaged(RecordDamage),
 }
 
+/// A step whose order makes a record safe, so that tests can watch and fail it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    Temporary,
+    FlushTemporary,
+    Link,
+    Remove,
+    FlushFolder,
+}
+
+/// Told of each step before it runs; an error stands in for the step's own.
+type Watch<'a> = &'a mut dyn FnMut(Step) -> io::Result<()>;
+
+/// Runs `action` as `step`.
+fn step(watch: Watch, step: Step, action: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
+    watch(step)?;
+    action()
+}
+
 impl CreationRecord {
     /// A record of `branch` made from `source` at the commit `start`; none if `start` is no hash.
     pub(crate) fn new(branch: SafeBranch, source: SafeBranch, start: &str) -> Option<CreationRecord> {
         is_commit(start).then(|| CreationRecord { branch, source, start: start.to_string() })
     }
 
-    /// The record `text` holds: exactly the first line, `branch`, `source` and `start`, in that order.
+    /// The record as the file holds it.
+    fn text(&self) -> String {
+        format!("{FIRST_LINE}\nbranch {}\nsource {}\nstart {}\n", self.branch.stored(), self.source.stored(), self.start)
+    }
+
+    /// The record `text` holds, in exactly the shape [`CreationRecord::text`] gives.
     fn parse(text: &str) -> Result<CreationRecord, RecordDamage> {
         let mut lines = text.strip_suffix('\n').ok_or(RecordDamage::Shape)?.split('\n');
         if lines.next() != Some(FIRST_LINE) {
@@ -108,6 +138,54 @@ pub(crate) fn read(folder: &Path) -> Found {
     }
 }
 
+/// Writes `record` into `folder` unless something has its name: whole and flushed under a temporary
+/// name, linked to its own name, which fails if it is taken, and the folder flushed. Answers whether
+/// it was written; something already there is left as it was. An error means no creation may go on:
+/// a record linked but not flushed is removed, and if even that fails it stays, naming no branch yet.
+pub(crate) fn write(folder: &Path, record: &CreationRecord) -> Result<bool, Error> {
+    write_watched(folder, record, &mut |_| Ok(()))
+}
+
+/// [`write`], telling `watch` of each step.
+fn write_watched(folder: &Path, record: &CreationRecord, watch: Watch) -> Result<bool, Error> {
+    let (path, temporary) = (folder.join(RECORD), folder.join(TEMPORARY));
+    // A stop can leave one behind; it was never the record.
+    clear(&temporary).map_err(|e| Error::io("cannot clear", &temporary, e))?;
+    let made = step(watch, Step::Temporary, || File::create_new(&temporary)?.write_all(record.text().as_bytes()))
+        .and_then(|()| step(watch, Step::FlushTemporary, || OpenOptions::new().write(true).open(&temporary)?.sync_all()));
+    let linked = made.map(|()| step(watch, Step::Link, || fs::hard_link(&temporary, &path)));
+    if let Err(e) = clear(&temporary) {
+        log::warn!("the temporary record {} stays until the next creation: {e}", temporary.display());
+    }
+    match linked.map_err(|e| Error::io("cannot write", &temporary, e))? {
+        Ok(()) => {}
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => return Ok(false),
+        Err(e) => return Err(Error::io("cannot write", &path, e)),
+    }
+    if let Err(e) = step(watch, Step::FlushFolder, || flush_folder(folder)) {
+        // Not known to last, so no creation may go on under it. One left here names no branch yet.
+        if let Err(r) = fs::remove_file(&path) {
+            log::warn!("the record {} stays until the project opens again: {r}", path.display());
+        }
+        return Err(Error::io("cannot flush", folder, e));
+    }
+    Ok(true)
+}
+
+/// Removes the record from `folder` and flushes that, as a record that came back would delete a
+/// finished branch. A record already gone is no error, and the folder is flushed all the same: a
+/// stop before the first flush leaves exactly that.
+pub(crate) fn remove(folder: &Path) -> Result<(), Error> {
+    remove_watched(folder, &mut |_| Ok(()))
+}
+
+/// [`remove`], telling `watch` of each step.
+fn remove_watched(folder: &Path, watch: Watch) -> Result<(), Error> {
+    let path = folder.join(RECORD);
+    step(watch, Step::Remove, || clear(&path)).map_err(|e| Error::io("cannot remove", &path, e))?;
+    step(watch, Step::FlushFolder, || flush_folder(folder)).map_err(|e| Error::io("cannot flush", folder, e))
+}
+
 /// Moves whatever has the record's name, a link or folder too, to a free `.damaged-<n>` name and
 /// says which. The name is claimed first, by making something there exclusively, so an earlier
 /// damaged record is never replaced.
@@ -133,6 +211,24 @@ pub(crate) fn set_aside(folder: &Path) -> Result<PathBuf, Error> {
         };
     }
     Err(Error::io("cannot set aside", &path, io::Error::other("every damaged name is taken")))
+}
+
+/// Removes the file at `path`, which may be gone already.
+fn clear(path: &Path) -> io::Result<()> {
+    fs::remove_file(path).or_else(|e| if e.kind() == ErrorKind::NotFound { Ok(()) } else { Err(e) })
+}
+
+/// Makes the folder's list of files last.
+#[cfg(unix)]
+fn flush_folder(folder: &Path) -> io::Result<()> {
+    File::open(folder)?.sync_all()
+}
+
+/// Does nothing: a folder cannot be opened to flush it here, so the file system alone decides when
+/// its list of files lasts.
+#[cfg(not(unix))]
+fn flush_folder(_folder: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
@@ -165,6 +261,11 @@ mod tests {
         fn record(&self) -> PathBuf {
             self.0.join(RECORD)
         }
+
+        /// Whether the temporary file is there.
+        fn temporary(&self) -> bool {
+            self.0.join(TEMPORARY).exists()
+        }
     }
 
     impl Drop for Folder {
@@ -177,6 +278,11 @@ mod tests {
     /// The branch named `name`.
     fn branch(name: &str) -> SafeBranch {
         SafeBranch::found(name).unwrap()
+    }
+
+    /// A record of the branch `name`.
+    fn record(name: &str) -> CreationRecord {
+        CreationRecord::new(branch(name), branch("from"), HASH).unwrap()
     }
 
     /// The text of a record, each part as given.
@@ -271,6 +377,103 @@ mod tests {
         if File::open(folder.record()).is_err() {
             assert_eq!(read(&folder.0), Found::Damaged(RecordDamage::Unreadable(ErrorKind::PermissionDenied)));
         }
+    }
+
+    /// What is written is read back as it was, the longest names too.
+    #[test]
+    fn a_record_written_reads_back() {
+        let folder = Folder::new();
+        assert!(write(&folder.0, &record("made")).unwrap());
+        assert_eq!(fs::read(folder.record()).unwrap(), text("made", "from", HASH).into_bytes());
+        assert_eq!(read(&folder.0), Found::Good(record("made")));
+        assert!(!folder.temporary());
+        remove(&folder.0).unwrap();
+        assert_eq!(read(&folder.0), Found::None);
+        let longest = CreationRecord::new(branch(&"a".repeat(512)), branch(&"b".repeat(512)), HASH).unwrap();
+        assert!(write(&folder.0, &longest).unwrap());
+        assert_eq!(read(&folder.0), Found::Good(longest));
+    }
+
+    /// Whatever has the record's name stays as it was, and no creation goes on.
+    #[test]
+    fn a_second_record_is_refused_and_the_first_kept() {
+        let folder = Folder::new();
+        assert!(write(&folder.0, &record("first")).unwrap());
+        assert!(!write(&folder.0, &record("second")).unwrap());
+        assert_eq!(read(&folder.0), Found::Good(record("first")));
+        assert!(!folder.temporary());
+        let held = Folder::new();
+        fs::create_dir(held.record()).unwrap();
+        assert!(!write(&held.0, &record("made")).unwrap());
+        assert!(held.record().is_dir());
+    }
+
+    /// The steps run in order, each seeing what the one before it left. This shows the flushes are
+    /// asked for and when; no test can show that one reached the disk, or that the disk kept it.
+    #[test]
+    fn a_write_flushes_the_whole_record_before_it_has_its_name_and_the_folder_after() {
+        let folder = Folder::new();
+        let mut steps = Vec::new();
+        let whole = record("made").text().into_bytes();
+        let temporary = folder.0.join(TEMPORARY);
+        let written = write_watched(&folder.0, &record("made"), &mut |s| {
+            assert_eq!(folder.temporary(), matches!(s, Step::FlushTemporary | Step::Link), "{s:?}");
+            if matches!(s, Step::FlushTemporary | Step::Link) {
+                assert_eq!(fs::read(&temporary).unwrap(), whole, "{s:?}: the whole record");
+            }
+            assert_eq!(folder.record().exists(), s == Step::FlushFolder, "{s:?}");
+            steps.push(s);
+            Ok(())
+        });
+        assert!(written.unwrap());
+        assert_eq!(steps, [Step::Temporary, Step::FlushTemporary, Step::Link, Step::FlushFolder]);
+    }
+
+    /// A record not known to be on disk does not stay to be acted on.
+    #[test]
+    fn a_write_that_fails_at_any_step_leaves_no_record() {
+        for failing in [Step::Temporary, Step::FlushTemporary, Step::Link, Step::FlushFolder] {
+            let folder = Folder::new();
+            let answer = write_watched(&folder.0, &record("made"), &mut |s| if s == failing { Err(io::Error::other("refused")) } else { Ok(()) });
+            assert!(answer.is_err(), "{failing:?}");
+            assert_eq!(read(&folder.0), Found::None, "{failing:?}");
+            assert!(!folder.temporary(), "{failing:?}");
+        }
+    }
+
+    /// What a stop leaves under the temporary name is no record and does not hold up the next.
+    #[test]
+    fn a_temporary_file_left_by_a_stop_is_no_record() {
+        let folder = Folder::new();
+        fs::write(folder.0.join(TEMPORARY), record("stopped").text()).unwrap();
+        assert_eq!(read(&folder.0), Found::None);
+        assert!(write(&folder.0, &record("next")).unwrap());
+        assert_eq!(read(&folder.0), Found::Good(record("next")));
+        let blocked = Folder::new();
+        fs::create_dir(blocked.0.join(TEMPORARY)).unwrap();
+        assert!(write(&blocked.0, &record("made")).is_err(), "what cannot be cleared stops it");
+        assert_eq!(read(&blocked.0), Found::None);
+    }
+
+    /// Removal is flushed after it, repeats safely, and a failure says so.
+    #[test]
+    fn a_removal_is_flushed_and_repeats_safely() {
+        let folder = Folder::new();
+        assert!(write(&folder.0, &record("made")).unwrap());
+        let refuse = |failing: Step| move |s: Step| if s == failing { Err(io::Error::other("refused")) } else { Ok(()) };
+        assert!(remove_watched(&folder.0, &mut refuse(Step::Remove)).is_err());
+        assert_eq!(read(&folder.0), Found::Good(record("made")), "a failed removal keeps the record");
+        let mut steps = Vec::new();
+        for _ in 0..2 {
+            let removed = remove_watched(&folder.0, &mut |s| {
+                assert_eq!(steps.is_empty(), folder.record().exists(), "{s:?}");
+                steps.push(s);
+                Ok(())
+            });
+            removed.unwrap();
+        }
+        assert_eq!(steps, [Step::Remove, Step::FlushFolder, Step::Remove, Step::FlushFolder]);
+        assert!(remove_watched(&folder.0, &mut refuse(Step::FlushFolder)).is_err(), "an unflushed removal is a failed one");
     }
 
     /// Set aside whole under a free name; an earlier one is never replaced.
