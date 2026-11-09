@@ -76,7 +76,10 @@ enum Job {
     /// own channel.
     Chat(PathBuf, u64, ChatJob),
     /// Move a project to another branch; the generation is the project's when it was asked for.
-    Switch(PathBuf, SafeBranch, u64, Sender<Result<Switched, SwitchError>>),
+    Switch(PathBuf, SafeBranch, (u64, u64), Arc<()>, Sender<Result<Switched, SwitchError>>),
+    /// The first step of a switch: everything but the move. Generation and open instance as for
+    /// [`Job::Switch`], whose token keeps the switch under way until the writer is done with it.
+    CheckSwitch(PathBuf, SafeBranch, (u64, u64), Sender<Result<CheckedBranch, SwitchError>>),
     /// Make a branch at a version, or from current work when none is named; the generation and the
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
@@ -196,11 +199,55 @@ pub enum Switched {
     AlreadyThere,
 }
 
+/// What the first step of a switch found on the target branch.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckedBranch {
+    pub rows: Arc<Rows>,
+    /// Whether the branch holds work not saved as a version.
+    pub unsaved: bool,
+}
+
+/// The two steps of a switch: the check, already asked of the writer, and the move. There is no
+/// limit on either and no reading back of a lost answer until AR-334.
+#[cfg_attr(not(test), allow(dead_code))]
+pub struct SwitchSteps {
+    pub check: Receiver<Result<CheckedBranch, SwitchError>>,
+    pub moving: SwitchMove,
+}
+
+/// The second step of a switch, to run once the window has built the branch's model.
+#[cfg_attr(not(test), allow(dead_code))]
+pub struct SwitchMove {
+    inner: Arc<Inner>,
+    path: PathBuf,
+    target: SafeBranch,
+    asked: (u64, u64),
+    under_way: Arc<()>,
+}
+
+impl SwitchMove {
+    /// Hands the move to the writer and returns at once.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn run(self) -> Receiver<Result<Switched, SwitchError>> {
+        let (tx, rx) = channel();
+        if let Err(e) = writer(&self.inner).send(Job::Switch(self.path, self.target, self.asked, self.under_way, tx.clone())) {
+            let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
+        }
+        rx
+    }
+}
+
 /// Why a project did not move to another branch: it stays where it was, with its work.
 #[derive(Debug)]
 pub enum SwitchError {
     /// Another switch moved the project after this one was asked for.
     BranchChanged,
+    /// The project was closed after this was asked for, though it may be open again.
+    Reopened,
+    /// The project is on that branch already, under this or another case.
+    AlreadyOnIt,
+    /// Another switch of this project is under way.
+    UnderWay,
     NotOpen,
     /// What waits could not be written: the rows are kept for the next write.
     Unwritten(String),
@@ -215,6 +262,9 @@ impl std::fmt::Display for SwitchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SwitchError::BranchChanged => f.write_str("another switch moved the project first"),
+            SwitchError::Reopened => f.write_str("the project was closed after this was asked for"),
+            SwitchError::AlreadyOnIt => f.write_str("the project is on that branch already"),
+            SwitchError::UnderWay => f.write_str("another switch of this project is under way"),
             SwitchError::NotOpen => f.write_str("the project is no longer open"),
             SwitchError::Unwritten(why) | SwitchError::Failed(why) => f.write_str(why),
             SwitchError::Checks(e) => e.fmt(f),
@@ -332,12 +382,15 @@ struct Inner {
     readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
     /// Each project's switch generation: absent is 0, and nothing has moved it yet.
     generations: Mutex<BTreeMap<PathBuf, u64>>,
+    /// The switch asked for on each project, under way for as long as anything still holds it.
+    switches: Mutex<BTreeMap<PathBuf, std::sync::Weak<()>>>,
     /// The projects a restore of which ended with its outcome unknown, each with that restore,
     /// until they are closed or that restore's read-back finds it finished.
     restores_unknown: Mutex<BTreeMap<PathBuf, Arc<RestoreWatch>>>,
     /// How many times each project has closed, as the instance a job names: absent is 0.
     instances: Mutex<BTreeMap<PathBuf, u64>>,
-    /// Runs just before a switch moves, for a test to ask for a job between the steps.
+    /// Runs in both steps of a switch, once the target is checked, for a test to act just before
+    /// the move or its first step's end.
     #[cfg(test)]
     before_move: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     /// What is to go wrong in a restore, for a test: each fault is used once.
@@ -399,6 +452,7 @@ impl Projects {
                 #[cfg(test)]
                 restore_faults: Mutex::new(Vec::new()),
                 restores_unknown: Mutex::new(BTreeMap::new()),
+                switches: Mutex::new(BTreeMap::new()),
                 instances: Mutex::new(BTreeMap::new()),
                 #[cfg(test)]
                 fail_chats: AtomicBool::new(false),
@@ -435,8 +489,8 @@ impl Projects {
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn switch_branch(&self, project: &Path, target: SafeBranch) -> Receiver<Result<Switched, SwitchError>> {
         let (tx, rx) = channel();
-        let generation = generation_of(&self.inner, project);
-        if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, generation, tx.clone())) {
+        let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
+        if let Err(e) = writer(&self.inner).send(Job::Switch(project.to_path_buf(), target, asked, Arc::new(()), tx.clone())) {
             let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
@@ -485,6 +539,29 @@ impl Projects {
             let _ = tx.send(Err(CreateBranchError::Failed(format!("the writer stopped: {e}"))));
         }
         rx
+    }
+
+    /// Asks for a switch of `project` to `target` in two steps: the check goes to the writer now,
+    /// and the move runs once the window has built the branch's model (AR-289). Refused while
+    /// another switch of the project is under way, which holds from here until its move has ended
+    /// or been dropped.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn start_switch(&self, project: &Path, target: SafeBranch) -> Result<SwitchSteps, SwitchError> {
+        let under_way = Arc::new(());
+        {
+            let mut switches = lock(&self.inner.switches);
+            if switches.get(project).is_some_and(|held| held.strong_count() > 0) {
+                return Err(SwitchError::UnderWay);
+            }
+            switches.insert(project.to_path_buf(), Arc::downgrade(&under_way));
+        }
+        let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
+        let (tx, check) = channel();
+        if let Err(e) = writer(&self.inner).send(Job::CheckSwitch(project.to_path_buf(), target.clone(), asked, tx.clone())) {
+            let _ = tx.send(Err(SwitchError::Failed(format!("the writer stopped: {e}"))));
+        }
+        let moving = SwitchMove { inner: self.inner.clone(), path: project.to_path_buf(), target, asked, under_way };
+        Ok(SwitchSteps { check, moving })
     }
 
     /// Reads back, off the writer, whether `project` is on `target`, for when a switch's answer was
@@ -1211,8 +1288,13 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     log::error!("a job on the conversations of {} failed", project.display());
                 }
             }
-            Some(Job::Switch(project, target, generation, reply)) => {
-                let answer = switch(inner, &project, target, generation, &mut waiting, &mut failed);
+            Some(Job::CheckSwitch(project, target, asked, reply)) => {
+                let _ = reply.send(check_switch(inner, &project, &target, asked, &mut waiting, &mut failed));
+            }
+            Some(Job::Switch(project, target, asked, under_way, reply)) => {
+                let answer = switch(inner, &project, target, asked, &mut waiting, &mut failed);
+                // Released before the answer, so whoever has the answer can ask again at once.
+                drop(under_way);
                 let _ = reply.send(answer);
             }
             Some(Job::CreateBranch(project, name, start, generation, instance, reply)) => {
@@ -1286,28 +1368,64 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
     }
 }
 
-/// Moves `path` to `target`, on the writer. In this order, so that nothing moves until the target
-/// has passed everything an opening checks: what waits is written; the waiting conversations are
-/// committed, which does not stop the switch when it fails, as their rows stay uncommitted on the
-/// branch left; the target is checked and its model built; and only then do the connections move,
-/// the change ledger start again and, last, the generation move. A job asked for before that last
-/// step has the old generation and is refused when the writer reaches it. A branch the project is
-/// on already, in any case, moves nothing. `failed` changes only once the write has been tried: a
-/// switch that stops before it says nothing about how writing stands.
+/// Moves `path` to `target`, on the writer, after everything [`checked_target`] does. Only then do
+/// the connections move, the change ledger start again and, last, the generation move: a job
+/// asked for before that last step has the old generation and is refused when the writer reaches
+/// it. A branch the project is on already, in any case, moves nothing.
 fn switch(
     inner: &Inner,
     path: &Path,
     target: SafeBranch,
-    generation: u64,
+    asked: (u64, u64),
     waiting: &mut BTreeMap<PathBuf, Rows>,
     failed: &mut bool,
 ) -> Result<Switched, SwitchError> {
+    let moved = checked_target(inner, path, &target.clone(), asked, waiting, failed, |project, rows| {
+        project.move_to_branch(target);
+        *lock(&inner.generations).entry(path.to_path_buf()).or_default() += 1;
+        Ok(Switched::Moved(Arc::new(rows)))
+    });
+    if matches!(moved, Err(SwitchError::AlreadyOnIt)) { Ok(Switched::AlreadyThere) } else { moved }
+}
+
+/// The first step of a switch, on the writer: what [`checked_target`] does, and no move. The
+/// target's checks may upgrade its tables, which stays: the project stays on the branch it was on.
+fn check_switch(
+    inner: &Inner,
+    path: &Path,
+    target: &SafeBranch,
+    asked: (u64, u64),
+    waiting: &mut BTreeMap<PathBuf, Rows>,
+    failed: &mut bool,
+) -> Result<CheckedBranch, SwitchError> {
+    checked_target(inner, path, target, asked, waiting, failed, |project, rows| {
+        let unsaved = project.branch_has_unsaved(target).map_err(SwitchError::Checks)?;
+        Ok(CheckedBranch { rows: Arc::new(rows), unsaved })
+    })
+}
+
+/// What both steps of a switch do, in this order, on the writer: a job from before a close or
+/// another switch is refused, and so is the branch the project is on, before anything is written;
+/// what waits is written; the waiting conversations are committed, which does not stop the switch
+/// when it fails, as their rows stay uncommitted on the branch left; the target is checked and its
+/// model built; and `then` runs on the result. `failed` changes only once the write has been tried.
+fn checked_target<T>(
+    inner: &Inner,
+    path: &Path,
+    target: &SafeBranch,
+    (generation, instance): (u64, u64),
+    waiting: &mut BTreeMap<PathBuf, Rows>,
+    failed: &mut bool,
+    then: impl FnOnce(&Project, Rows) -> Result<T, SwitchError>,
+) -> Result<T, SwitchError> {
+    if instance != instance_of(inner, path) {
+        return Err(SwitchError::Reopened);
+    }
     if generation != generation_of(inner, path) {
         return Err(SwitchError::BranchChanged);
     }
-    let on_target = |p: &Project| p.current_branch().same_branch(&target);
-    if lock(&inner.open).iter().find(|p| p.path() == path).ok_or(SwitchError::NotOpen).map(on_target)? {
-        return Ok(Switched::AlreadyThere);
+    if lock(&inner.open).iter().find(|p| p.path() == path).ok_or(SwitchError::NotOpen)?.current_branch().same_branch(target) {
+        return Err(SwitchError::AlreadyOnIt);
     }
     let schema = schema(inner).map_err(|e| SwitchError::Failed(format!("{e:?}")))?;
     write_waiting(inner, waiting);
@@ -1320,14 +1438,12 @@ fn switch(
     if let Err(e) = keep_conversations(inner, project) {
         log::warn!("the conversations of {} wait in their branch: {e}", path.display());
     }
-    let rows = project.check_branch(&target, &schema).map_err(SwitchError::Checks)?;
+    let rows = project.check_branch(target, &schema).map_err(SwitchError::Checks)?;
     #[cfg(test)]
     if let Some(step) = lock(&inner.before_move).take() {
         step();
     }
-    project.move_to_branch(target);
-    *lock(&inner.generations).entry(path.to_path_buf()).or_default() += 1;
-    Ok(Switched::Moved(Arc::new(rows)))
+    then(project, rows)
 }
 
 /// Whether what `classified` found means the restore goes on. A comparison too large to finish
@@ -3719,6 +3835,191 @@ mod tests {
         assert_eq!(close(host, &other), Ok(()));
         assert!(matches!(ran(&(job.run)()), Ok(())));
         assert_eq!(work(host), model("a"));
+    }
+
+    /// Asks for a switch in two steps; gives its check's answer and the move.
+    fn checked(host: &Projects, path: &Path, name: &str) -> (Result<CheckedBranch, SwitchError>, SwitchMove) {
+        let SwitchSteps { check, moving } = host.start_switch(path, branch(name)).unwrap();
+        (check.recv_timeout(Duration::from_secs(60)).expect("the check answers"), moving)
+    }
+
+    /// The answer of a move, once run.
+    fn moved(moving: SwitchMove) -> Result<Switched, SwitchError> {
+        moving.run().recv_timeout(Duration::from_secs(60)).expect("the move answers")
+    }
+
+    /// Asserts that the project is on `main`, at the generation `before`.
+    #[track_caller]
+    fn still_on_main(host: &Projects, path: &Path, before: u64) {
+        assert_eq!((on(host).as_str(), host.generation_of(path)), ("main", before));
+    }
+
+    /// The check does everything but move: what waits is written, the conversations are committed
+    /// and the target's model and unsaved state come back. The move then moves.
+    #[test]
+    fn a_switch_checks_first_and_moves_only_when_told() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        undone_since_the_save(host, &path);
+        let before = host.generation_of(&path);
+        host.write(&path, model("c"));
+        let (check, moving) = checked(host, &path, "elsewhere");
+        assert_eq!(check.unwrap(), CheckedBranch { rows: Arc::new(model("a")), unsaved: false });
+        still_on_main(host, &path, before);
+        assert_eq!(work(host), model("c"), "what waited was written, on the branch left");
+        let chats = on_writer(&host.inner, &path, |p| p.commit_chats().map_err(|e| e.to_string()));
+        assert_eq!(chats.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(false), "the conversations were committed");
+        assert!(matches!(moved(moving), Ok(Switched::Moved(_))));
+        assert_eq!((on(host).as_str(), host.generation_of(&path)), ("elsewhere", before + 1));
+        // Unsaved work left on a branch is told when coming back to it.
+        host.write(&path, model("d"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        let (back, moving) = checked(host, &path, "main");
+        assert_eq!(back.unwrap(), CheckedBranch { rows: Arc::new(model("c")), unsaved: true });
+        assert!(matches!(moved(moving), Ok(Switched::Moved(_))));
+        let (there, _moving) = checked(host, &path, "elsewhere");
+        assert_eq!(there.unwrap(), CheckedBranch { rows: Arc::new(model("d")), unsaved: true });
+    }
+
+    /// The branch the project is on, in any case, is refused before anything is written: what
+    /// waits is still unwritten by the job right behind the check, ahead of any timer.
+    #[test]
+    fn a_switch_to_the_branch_in_use_is_refused_before_anything_is_written() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (before, was, shape) = (host.generation_of(&path), work(host), schema(&host.inner).unwrap());
+        let release = hold_the_writer(host, &path);
+        host.write(&path, model("c"));
+        let SwitchSteps { check, moving: _moving } = host.start_switch(&path, branch("MAIN")).unwrap();
+        let behind = on_writer(&host.inner, &path, move |p| p.read_model(&shape).map_err(|e| e.to_string()));
+        drop(release);
+        let check = check.recv_timeout(Duration::from_secs(60)).expect("the check answers");
+        assert!(matches!(check, Err(SwitchError::AlreadyOnIt)), "{check:?}");
+        assert_eq!(behind.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(was), "nothing was written yet");
+        still_on_main(host, &path, before);
+    }
+
+    /// A failed check leaves the project where it was, and the switch can be asked for again.
+    #[test]
+    fn a_failed_check_leaves_the_project_on_its_branch() {
+        use archforge_project::Error;
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let before = host.generation_of(&path);
+        let (check, moving) = checked(host, &path, "scripted");
+        assert!(matches!(check, Err(SwitchError::Checks(Error::Scripted { .. }))), "{check:?}");
+        still_on_main(host, &path, before);
+        drop(moving);
+        let (check, _moving) = checked(host, &path, "elsewhere");
+        assert!(check.is_ok(), "{check:?}");
+    }
+
+    /// A second request between the steps is refused for as long as the first holds, and goes
+    /// through once its move has ended or been dropped. Another project's switch is no reason.
+    #[test]
+    fn a_second_switch_is_refused_while_the_first_is_under_way() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (_, first) = checked(host, &path, "elsewhere");
+        assert!(matches!(host.start_switch(&path, branch("scripted")), Err(SwitchError::UnderWay)));
+        assert!(host.start_switch(&sandbox.base.join("nowhere"), branch("x")).is_ok(), "another project's");
+        let (running, started) = channel();
+        let (go_on, hold) = channel::<()>();
+        *lock(&host.inner.before_move) = Some(Box::new(move || {
+            let _ = running.send(());
+            let _ = hold.recv_timeout(Duration::from_secs(30));
+        }));
+        let reply = first.run();
+        started.recv_timeout(Duration::from_secs(60)).expect("the move is under way");
+        assert!(matches!(host.start_switch(&path, branch("scripted")), Err(SwitchError::UnderWay)), "during the move");
+        drop(go_on);
+        assert!(matches!(reply.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(Switched::Moved(_))));
+        let (_, second) = checked(host, &path, "main");
+        assert!(matches!(host.start_switch(&path, branch("elsewhere")), Err(SwitchError::UnderWay)));
+        drop(second);
+        let (check, _third) = checked(host, &path, "main");
+        assert!(check.is_ok(), "{check:?}");
+    }
+
+    /// Between the steps a change of generation, or a close and reopen by either route, refuses the
+    /// move by its reason, and nothing moves.
+    #[test]
+    fn a_move_from_before_a_change_between_the_steps_is_refused() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let (_, moving) = checked(host, &path, "elsewhere");
+        switched(&host.inner, &path);
+        let before = host.generation_of(&path);
+        assert!(matches!(moved(moving), Err(SwitchError::BranchChanged)));
+        still_on_main(host, &path, before);
+        for closing in closing_routes() {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let (_, moving) = checked(host, &path, "elsewhere");
+            assert_eq!(closing(host, &path).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()));
+            wait(&host.open(&path)).unwrap();
+            let before = host.generation_of(&path);
+            assert!(matches!(moved(moving), Err(SwitchError::Reopened)));
+            still_on_main(host, &path, before);
+        }
+    }
+
+    /// A check asked for before the project closed or its generation moved is refused too.
+    #[test]
+    fn a_check_from_before_a_change_is_refused_by_its_reason() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let release = hold_the_writer(host, &path);
+        let SwitchSteps { check, .. } = host.start_switch(&path, branch("elsewhere")).unwrap();
+        switched(&host.inner, &path);
+        drop(release);
+        assert!(matches!(check.recv_timeout(Duration::from_secs(60)).unwrap(), Err(SwitchError::BranchChanged)));
+        let (generation, instance) = (host.generation_of(&path), instance_of(&host.inner, &path));
+        let (mut waiting, mut failed) = (BTreeMap::new(), false);
+        let stale = check_switch(&host.inner, &path, &branch("elsewhere"), (generation, instance.wrapping_sub(1)), &mut waiting, &mut failed);
+        assert!(matches!(stale, Err(SwitchError::Reopened)), "{stale:?}");
+        let both =
+            check_switch(&host.inner, &path, &branch("elsewhere"), (generation.wrapping_sub(1), instance.wrapping_sub(1)), &mut waiting, &mut failed);
+        assert!(matches!(both, Err(SwitchError::Reopened)), "a close is the reason that outlasts the rest: {both:?}");
+    }
+
+    /// A close asked for while either step runs on the writer waits for it: the step ends as it
+    /// would have, and only then does the project close.
+    #[test]
+    fn a_close_during_either_step_waits_for_it() {
+        for step in ["check", "move"] {
+            let (sandbox, path) = branched();
+            let host = sandbox.host.clone();
+            let (running, started) = channel();
+            let (go_on, hold) = channel::<()>();
+            let held: Box<dyn FnOnce() + Send> = Box::new(move || {
+                let _ = running.send(());
+                let _ = hold.recv_timeout(Duration::from_secs(30));
+            });
+            let (answer, closing) = if step == "check" {
+                *lock(&host.inner.before_move) = Some(held);
+                let SwitchSteps { check, moving } = host.start_switch(&path, branch("elsewhere")).unwrap();
+                started.recv_timeout(Duration::from_secs(60)).expect("the check is under way");
+                let closing = host.close(&path);
+                assert!(closing.recv_timeout(Duration::from_millis(300)).is_err(), "the close waits for the check");
+                drop(go_on);
+                let answer = check.recv_timeout(Duration::from_secs(60)).unwrap().map(|_| ());
+                drop(moving);
+                (answer, closing)
+            } else {
+                let (check, moving) = checked(&host, &path, "elsewhere");
+                assert!(check.is_ok());
+                *lock(&host.inner.before_move) = Some(held);
+                let reply = moving.run();
+                started.recv_timeout(Duration::from_secs(60)).expect("the move is under way");
+                let closing = host.close(&path);
+                assert!(closing.recv_timeout(Duration::from_millis(300)).is_err(), "the close waits for the move");
+                drop(go_on);
+                (reply.recv_timeout(Duration::from_secs(60)).unwrap().map(|_| ()), closing)
+            };
+            assert!(answer.is_ok(), "{step}: the step finished with the project open: {answer:?}");
+            assert_eq!(closing.recv_timeout(Duration::from_secs(60)).unwrap(), Ok(()), "{step}");
+        }
     }
 
     /// A switch that stopped before it tried to write leaves the writer's timer running: rows queued
