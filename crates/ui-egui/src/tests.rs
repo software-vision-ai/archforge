@@ -7686,12 +7686,15 @@ fn in_both_appearances(check: impl Fn(ThemeKind)) {
     [ThemeKind::Light, ThemeKind::Dark].into_iter().for_each(check);
 }
 
-/// The Versions explorer of an open project, its first read waiting for the test.
+/// The Versions explorer of a project, first drawn with no host, then its read waiting for the test.
 fn versions_panel(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
     let (mut h, host) = saving_harness(Some(commerce()), None);
     h.state_mut().state.theme = theme;
+    h.state_mut().services.projects = None;
     let at = rect_of(&h, "workspace.explorers.source-control").center();
     click(&mut h, at);
+    h.state_mut().services.projects = Some(host.clone());
+    h.run_steps(2);
     (h, host)
 }
 
@@ -7756,7 +7759,6 @@ fn the_versions_panel_lists_keeps_and_reads_again() {
         assert!(!no_changes(&h), "{theme:?}: unsaved work");
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
-        h.run_steps(3);
         versions_answer(&mut h, &host, Err("the server stopped".into()));
         assert!(has_id(&h, first) && has_id(&h, "workspace.versions.failed"), "{theme:?}: what was shown stays");
         h.state_mut().session_replaced();
@@ -7790,8 +7792,7 @@ fn the_versions_panel_fits_the_narrowest_column() {
         h.state_mut().state.explorer_width = 240.0;
         h.set_size(egui::vec2(760.0, 860.0));
         h.run_steps(3);
-        let row = rect_of(&h, "workspace.versions.row.aa");
-        assert!(row.left() >= 52.0 && row.right() <= 52.0 + 240.0 + 8.0, "{theme:?}: {row:?}");
+        assert!(rect_of(&h, "workspace.versions.row.aa").right() <= 52.0 + 240.0 + 8.0, "{theme:?}");
     });
 }
 

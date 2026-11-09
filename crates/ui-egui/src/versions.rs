@@ -43,7 +43,7 @@ pub struct State {
 /// the answer that has come.
 fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     let asked = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
-    if asked != shell.versions.asked || shell.versions.stale {
+    if (asked != shell.versions.asked || shell.versions.stale) && shell.services.projects.is_some() {
         if shell.versions.asked.as_ref().map(|a| &a.0) != asked.as_ref().map(|a| &a.0) {
             shell.versions.page = None;
             shell.versions.scroll = TreeScroll::default();
@@ -120,8 +120,7 @@ fn rule(ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
 /// The Versions explorer in the column `r`.
 pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     refresh(shell, ui.ctx());
-    let eyebrow = tr("Versions").to_uppercase();
-    ux::text(ui.painter(), r.min + vec2(20.0, 21.0), &eyebrow, types::EYEBROW, p.text, Some((r.width() - 40.0).max(0.0)));
+    ux::text(ui.painter(), r.min + vec2(20.0, 21.0), &tr("Versions").to_uppercase(), types::EYEBROW, p.text, Some((r.width() - 40.0).max(0.0)));
     let mut y = r.top() + 56.0;
     rule(ui, p, r, y);
     // Folded and not to be opened while the project has only `main`; AR-292 adds its list and +.
