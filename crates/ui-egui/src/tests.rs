@@ -7,6 +7,8 @@ use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
 /// A click of the primary button at `at`, pointer moved there first.
+mod version_chip;
+
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
     for pressed in [true, false] {
@@ -339,6 +341,7 @@ impl SaveAnswer {
 /// save's and opening's sender, so a test answers when it chooses.
 #[derive(Default)]
 struct SavingHost {
+    version_limits: std::sync::Mutex<Vec<usize>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
@@ -436,9 +439,10 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         _after: Option<String>,
-        _limit: usize,
+        limit: usize,
     ) -> std::sync::mpsc::Receiver<Result<crate::VersionsPage, String>> {
         let (tx, rx) = std::sync::mpsc::channel();
+        self.version_limits.lock().unwrap().push(limit);
         self.version_reads.lock().unwrap().push(tx);
         rx
     }

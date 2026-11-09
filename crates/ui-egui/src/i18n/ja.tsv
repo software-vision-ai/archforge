@@ -1441,3 +1441,13 @@ str		The changes since the last write are lost.	前回の書き込み以降の�
 str		The changes to {name} cannot be written	{name} への変更を書き込めません
 # Linux のフォルダーピッカー
 str		No folder picker could open: install xdg-desktop-portal and a backend for your desktop.	フォルダーピッカーを開けませんでした: お使いのデスクトップ用に xdg-desktop-portal とバックエンドをインストールしてください。
+str		Versions	バージョン
+str		{day} {month} {time}	{month}{day}日 {time}
+str		Unsaved changes	未保存の変更
+str		No unsaved changes	未保存の変更はありません
+str		Same as current work	現在の作業と同じ
+str		Saved by an agent	エージェントが保存
+str		Current work	現在の作業
+str		Current work · unsaved changes	現在の作業 · 未保存の変更
+str		Viewing the version of {date}	{date} のバージョンを表示中
+str		Viewing a version	バージョンを表示中

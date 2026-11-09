@@ -72,6 +72,7 @@ mod uml_stereotypes;
 mod uml_templates;
 mod uml_ui;
 pub mod ux;
+pub mod version_chip;
 pub mod versions;
 mod viewing;
 pub mod widgets;
@@ -317,7 +318,7 @@ impl Tab {
 }
 
 /// One version of a project, as History lists it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VersionEntry {
     pub hash: String,
     /// What the person typed; none for an automatic save.
@@ -656,6 +657,7 @@ pub struct Shell {
     pub ask: Option<close_ask::Ask>,
     /// File → Generate…'s handoff to an agent, while it is open.
     pub generate: Option<generate::Generate>,
+    pub version_list: version_chip::List,
     quitting: Option<Vec<std::path::PathBuf>>,
     close_after_save: Vec<(std::path::PathBuf, u64)>,
     quit_confirmed: bool,
@@ -702,6 +704,7 @@ impl Shell {
             fonts: fonts::FontState::default(),
             #[cfg(test)]
             font_notices: Vec::new(),
+            version_list: version_chip::List::default(),
             applied_theme: None,
             last_title: String::new(),
             top_inset: 0.0,
@@ -1503,6 +1506,7 @@ impl Shell {
             done.extend(poll_save(&mut p.saving, p.session.as_mut(), &mut p.save_error));
         }
         for (ticket, outcome) in done {
+            version_chip::close(self);
             self.finished_save(ticket, outcome);
         }
         if let Some(rx) = &self.dolt_check {
@@ -1564,6 +1568,11 @@ impl Shell {
     /// Whether Save can act now: a model is open, no save is under way, it is not held and no version shows.
     pub fn can_save(&self) -> bool {
         self.session.is_some() && self.saving.is_none() && !self.is_held() && self.viewing.is_none()
+    }
+
+    /// Whether the project shown holds unsaved work.
+    pub(crate) fn shown_unsaved(&self) -> bool {
+        self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.
@@ -1720,6 +1729,7 @@ impl Shell {
             self.look_for_dolt();
         }
         self.poll_host();
+        version_chip::keep_valid(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);
@@ -1751,6 +1761,7 @@ impl Shell {
             || self.agents.busy()
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
+            || self.version_list.reading.is_some()
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }

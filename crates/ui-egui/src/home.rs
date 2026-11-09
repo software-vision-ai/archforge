@@ -304,7 +304,7 @@ pub(crate) fn bar_tail(
     }
     // The search field keeps its distance from the left part when the window is narrow.
     let end = help.left() - 12.0;
-    let start = (end - 300.0).max(start);
+    let start = if prefix == "workspace.header" { crate::version_chip::bar(shell, ui, p, mid, start, end) } else { (end - 300.0).max(start) };
     if end - start >= 160.0 {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
         // Home's field searches projects; a project's, its diagrams and elements.
