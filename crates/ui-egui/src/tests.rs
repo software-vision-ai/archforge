@@ -2100,6 +2100,8 @@ fn an_agent_is_told_the_branch_and_has_no_way_to_change_it() {
         assert_eq!(inspected(&mut h)["branch"], "topic");
         *host.branch_now.lock().unwrap() = None;
         assert_eq!(inspected(&mut h)["branch"], serde_json::Value::Null);
+        h.state_mut().session = None;
+        assert_eq!(inspected(&mut h).get("branch"), Some(&serde_json::Value::Null), "the field is there with nothing open");
         assert!(crate::control::METHODS.iter().all(|(m, _)| !m.contains("branch")));
     });
 }

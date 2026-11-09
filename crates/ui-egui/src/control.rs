@@ -288,7 +288,7 @@ pub fn answer_from(shell: &mut Shell, method: &str, params: &Value, origin: Opti
 /// unsaved changes, which the rest of the answer does not describe once the version shows.
 fn inspect(shell: &Shell) -> Value {
     let Some(session) = shell.session.as_ref() else {
-        return json!({ "open": false, "projects": shell.tabs.iter().map(|t| t.name.clone()).collect::<Vec<_>>() });
+        return json!({ "open": false, "branch": null, "projects": shell.tabs.iter().map(|t| t.name.clone()).collect::<Vec<_>>() });
     };
     let store = session.doc();
     let ids = |objs: &[archforge_mof::Obj]| objs.iter().filter_map(|o| store.uuid(*o).ok()).map(|u| u.to_string()).collect::<Vec<_>>();
