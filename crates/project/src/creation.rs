@@ -172,7 +172,7 @@ pub(crate) fn delete_seen_gone(store: &mut dyn BranchStore, branch: &SafeBranch)
 /// branch that could not be deleted keeps its record for the next opening.
 pub(crate) fn undo(folder: &Path, store: &mut dyn BranchStore, branch: &SafeBranch) -> Result<(), String> {
     delete_seen_gone(store, branch)?;
-    remove(folder).map_err(|e| e.to_string())
+    remove_seen_gone(folder)
 }
 
 /// Deals with the record in `folder`, if any. After a delete the branch is looked for again, as
@@ -203,9 +203,9 @@ pub(crate) fn recover(folder: &Path, opening: &SafeBranch, store: &mut dyn Branc
             CreationRecovery::Deleted(record.branch.clone())
         }
     };
-    match remove(folder) {
+    match remove_seen_gone(folder) {
         Ok(()) => outcome,
-        Err(e) => unsettled(RecoveryStep::RemoveRecord, e.to_string()),
+        Err(why) => unsettled(RecoveryStep::RemoveRecord, why),
     }
 }
 
@@ -314,11 +314,25 @@ fn write_watched(folder: &Path, record: &CreationRecord, watch: Watch) -> Result
     Ok(true)
 }
 
-/// Removes the record from `folder` and flushes that, as a record that came back would delete a
-/// finished branch. A record already gone is no error, and the folder is flushed all the same: a
-/// stop before the first flush leaves exactly that.
-pub(crate) fn remove(folder: &Path) -> Result<(), Error> {
-    remove_watched(folder, &mut |_| Ok(()))
+/// Removes the record from `folder`, flushes that, and says whether it is gone, which is what a
+/// caller goes by. A record already gone is no error, and the folder is flushed all the same: a
+/// stop before the first flush leaves exactly that. A flush that fails after the file went leaves
+/// it gone, though it may come back after a power cut, so that is logged and not an error: a
+/// record that returns costs a finished branch nothing.
+pub(crate) fn remove_seen_gone(folder: &Path) -> Result<(), String> {
+    remove_seen_gone_watched(folder, &mut |_| Ok(()))
+}
+
+/// [`remove_seen_gone`], telling `watch` of each step.
+fn remove_seen_gone_watched(folder: &Path, watch: Watch) -> Result<(), String> {
+    match remove_watched(folder, watch) {
+        Ok(()) => Ok(()),
+        Err(e) if read(folder) == Found::None => {
+            log::warn!("the removal of the creation record may not last: {e}");
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// [`remove`], telling `watch` of each step.
@@ -532,7 +546,7 @@ mod tests {
         assert_eq!(fs::read(folder.record()).unwrap(), text("made", "from", HASH).into_bytes());
         assert_eq!(read(&folder.0), Found::Good(record("made")));
         assert!(!folder.temporary());
-        remove(&folder.0).unwrap();
+        remove_seen_gone(&folder.0).unwrap();
         assert_eq!(read(&folder.0), Found::None);
         let longest = CreationRecord::new(branch(&"a".repeat(512)), branch(&"b".repeat(512)), HASH).unwrap();
         assert!(write(&folder.0, &longest).unwrap());
@@ -748,6 +762,18 @@ mod tests {
         store.delete_does_nothing = false;
         undo(&folder.0, &mut store, &branch("made")).unwrap();
         assert_eq!((read(&folder.0), store.branches.len()), (Found::None, 0));
+    }
+
+    /// What counts is whether the record is gone, in either order of what can fail.
+    #[test]
+    fn a_record_is_gone_once_it_is_unlinked_whether_or_not_the_flush_worked() {
+        let refuse = |failing: Step| move |s: Step| if s == failing { Err(io::Error::other("refused")) } else { Ok(()) };
+        let folder = Folder::new();
+        assert!(write(&folder.0, &CreationRecord::new(branch("made"), branch("from"), HASH).unwrap()).unwrap());
+        assert!(remove_seen_gone_watched(&folder.0, &mut refuse(Step::Remove)).is_err(), "not unlinked");
+        assert!(folder.record().exists());
+        assert_eq!(remove_seen_gone_watched(&folder.0, &mut refuse(Step::FlushFolder)), Ok(()), "unlinked, not flushed");
+        assert_eq!(read(&folder.0), Found::None);
     }
 
     /// A record that cannot be removed or set aside stays, and the next opening finishes the job.

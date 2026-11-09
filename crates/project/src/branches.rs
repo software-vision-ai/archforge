@@ -63,6 +63,16 @@ pub enum CreationStep {
     RemoveRecord,
 }
 
+/// A branch that was made. Its chat commit marks it finished, so nothing after that undoes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchCreated {
+    /// The record is gone and the branch is listed.
+    Listed,
+    /// The record could not be removed. The branch is complete but left out of the list, and
+    /// another creation is refused, until the next opening removes the record.
+    RecordStays { why: String },
+}
+
 /// Why a branch was not made.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BranchCreationError {
@@ -74,9 +84,10 @@ pub enum BranchCreationError {
     NotACommit,
     /// The version holds these scripts, which Archforge does not run.
     Scripted { what: &'static str },
-    /// `step` failed, and the project is as it was: no branch and no record.
+    /// `step`, before the chat commit, failed, and the project is as it was: no branch, no record.
     Failed { step: CreationStep, why: String },
-    /// `step` failed and cleaning up did too. The record stays, so the next opening finishes it.
+    /// `step`, before the chat commit, failed and cleaning up did too. The record stays, so the
+    /// next opening finishes it.
     NotCleanedUp { step: CreationStep, why: String, cleaning: String },
 }
 
@@ -185,7 +196,7 @@ impl Project {
         start: &str,
         schema: &ModelSchema,
         halt: (CreationStep, bool),
-    ) -> Result<(), BranchCreationError> {
+    ) -> Result<BranchCreated, BranchCreationError> {
         let (step, clean) = halt;
         let mut watch = |s: CreationStep| if s == step { Err(Halted { step, why: "halted".into(), clean }) } else { Ok(()) };
         self.create_branch_watched(name, start, schema, &mut watch)
@@ -194,18 +205,24 @@ impl Project {
     /// Makes the branch `name` at the version `start`, with no conversations. On the writer only.
     /// A version holding triggers, procedures or events is refused first, as an opening refuses
     /// them, so none can run. Then, in this order: the record, the branch, its model tables, the
-    /// inherited conversations removed, the chat commit that marks it finished, and the record removed. If any of that
-    /// fails the branch is deleted and then the record removed.
+    /// inherited conversations removed, the chat commit that marks it finished, and the record
+    /// removed. If anything fails up to that commit the branch is deleted and then the record
+    /// removed; after it the branch is finished and stays, whatever becomes of the record.
     ///
-    /// Nothing may call this until the writer job and the branch list land: until then a recorded
-    /// branch is not hidden from the list.
-    pub fn create_branch(&self, name: &SafeBranch, start: &str, schema: &ModelSchema) -> Result<(), BranchCreationError> {
+    /// The screen that asks for this comes with AR-292.
+    pub fn create_branch(&self, name: &SafeBranch, start: &str, schema: &ModelSchema) -> Result<BranchCreated, BranchCreationError> {
         self.create_branch_watched(name, start, schema, &mut |_| Ok(()))
     }
 
     /// [`Project::create_branch`], telling `watch` of each step. A record that remains goes first,
     /// so that a branch it hides is reported as that and not as a name taken.
-    fn create_branch_watched(&self, name: &SafeBranch, start: &str, schema: &ModelSchema, watch: StepWatch) -> Result<(), BranchCreationError> {
+    fn create_branch_watched(
+        &self,
+        name: &SafeBranch,
+        start: &str,
+        schema: &ModelSchema,
+        watch: StepWatch,
+    ) -> Result<BranchCreated, BranchCreationError> {
         let refused = |step: CreationStep, e: Error| BranchCreationError::Failed { step, why: e.to_string() };
         if creation::read(self.path()) != Found::None {
             return Err(BranchCreationError::RecordRemains);
@@ -225,8 +242,9 @@ impl Project {
             return Err(BranchCreationError::RecordRemains);
         }
         match self.build_branch(&record, schema, watch) {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(BranchCreated::Listed),
             Err(Halted { step, why, clean: false }) => Err(BranchCreationError::Failed { step, why }),
+            Err(Halted { step: CreationStep::RemoveRecord, why, .. }) => Ok(BranchCreated::RecordStays { why }),
             Err(Halted { step, why, .. }) => Err(self.undo_creation(name, step, why)),
         }
     }
@@ -254,7 +272,7 @@ impl Project {
         watch(CreationStep::ChatCommit)?;
         self.commit_new_branch(&mut c).map_err(failed(CreationStep::ChatCommit))?;
         watch(CreationStep::RemoveRecord)?;
-        creation::remove(self.path()).map_err(failed(CreationStep::RemoveRecord))
+        creation::remove_seen_gone(self.path()).map_err(failed(CreationStep::RemoveRecord))
     }
 
     /// After `step` failed: the creation is undone, and the answer says whether it could be.
@@ -285,9 +303,18 @@ impl Project {
             return Err(Error::TooLarge { what: "a list", size: max, max: MAX_BRANCHES, unit: "branches" });
         }
         let mut c = self.model_connection()?;
-        let query = format!("SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}), dirty FROM dolt_branches ORDER BY name LIMIT {}", max.saturating_add(1));
-        let rows: Vec<mysql::Row> = c.query(query).map_err(sql("cannot list the branches"))?;
         let current = self.current_branch();
+        // What a record names is left out in the query, so the cap counts only what is listed. No
+        // name is empty; a damaged record cannot say which branch it meant; the branch in use shows.
+        let hidden = match creation::read(self.path()) {
+            Found::Good(record) if !record.branch.same_branch(&current) => record.branch.stored().to_string(),
+            _ => String::new(),
+        };
+        let query = format!(
+            "SELECT LEFT(CAST(name AS CHAR), {NAME_BYTES}), dirty FROM dolt_branches WHERE LOWER(name) <> LOWER(?) ORDER BY name LIMIT {}",
+            max.saturating_add(1)
+        );
+        let rows: Vec<mysql::Row> = c.exec(query, (hidden,)).map_err(sql("cannot list the branches"))?;
         let mut listed = Vec::new();
         for row in rows.iter().take(max) {
             let (name, dirty) = self.branch_row(row)?;
