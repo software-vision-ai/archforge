@@ -8417,7 +8417,8 @@ fn working_changes_filter_a_long_list() {
         };
         let found = vec![item(1, Area::Model, ChangeKind::Changed), item(2, Area::Diagram, ChangeKind::Removed)];
         h.state_mut().versions.filter.clear();
-        crate::versions::settle_changes(h.state_mut(), (None, 0), Ok(found));
+        let current = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), current, Ok(found));
         h.run_steps(1);
         let texts = painted(&h);
         assert!(["MODEL ELEMENTS", "DIAGRAMS", "item1", "item2", "C", "R"].iter().all(|t| texts.iter().any(|x| x == t)), "{theme:?}: {texts:?}");
