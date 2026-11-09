@@ -9,7 +9,7 @@ use mysql::prelude::Queryable;
 use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
-use crate::model::{ModelSchema, database_name, sql, unsaved_tables};
+use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
 use crate::{DATABASE, Error, Project};
 use archforge_mof::rows::Rows;
 
@@ -133,6 +133,9 @@ pub enum RenameBranchError {
     RecordRemains,
     /// The rename did not happen; Dolt's own words, such as another session being on the branch.
     Failed(String),
+    /// The reply was lost and where the branch is could not be read. Until the same rename is asked
+    /// again or the project closes, nothing is written to either name if it is the branch in use.
+    CannotTell(String),
 }
 
 impl fmt::Display for RenameBranchError {
@@ -143,7 +146,7 @@ impl fmt::Display for RenameBranchError {
             RenameBranchError::NoSuchBranch => f.write_str("there is no such branch"),
             RenameBranchError::NameTaken => f.write_str("a branch of that name exists"),
             RenameBranchError::RecordRemains => f.write_str("the last new branch is not cleaned up yet"),
-            RenameBranchError::Failed(why) => f.write_str(why),
+            RenameBranchError::Failed(why) | RenameBranchError::CannotTell(why) => f.write_str(why),
         }
     }
 }
@@ -248,16 +251,22 @@ impl Project {
         }
     }
 
-    /// [`Project::rename_branch`], running `before` just before the rename is asked for.
+    /// [`Project::rename_branch`] with its answer and its read-back shaped by a test: whether the
+    /// rename lands, whether its reply comes, and whether where the branch is can be read.
     #[cfg(feature = "testing")]
-    pub fn rename_branch_after(&self, from: &SafeBranch, to: &SafeBranch, before: impl FnOnce()) -> Result<(), RenameBranchError> {
-        self.rename_branch_watched(from, to, before)
-    }
-
-    /// A connection left open on `branch`, as another session would be, until it is dropped.
-    #[cfg(feature = "testing")]
-    pub fn session_on(&self, branch: &SafeBranch) -> Result<impl Sized + use<>, String> {
-        self.connection_to(branch).map_err(|e| e.to_string())
+    pub fn rename_branch_faulted(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        lands: bool,
+        answered: bool,
+        readable: bool,
+    ) -> Result<(), RenameBranchError> {
+        let ask = |store: &mut OpenBranches| {
+            let done = if lands { store.rename(from, to) } else { Ok(()) };
+            done.and_then(|()| if answered { Ok(()) } else { Err("the reply was lost".to_string()) })
+        };
+        self.rename_steps(from, to, ask, || if readable { self.where_is(from, to) } else { Err("it cannot be read".to_string()) })
     }
 
     /// Renames the branch `from` to `to`, on the writer only. A branch this project is on stays
@@ -269,22 +278,68 @@ impl Project {
     /// types: [`SafeBranch::typed`] encodes anything not lower case, so `foo` and `Foo` from the
     /// dialog are two different stored names and both allowed.
     pub fn rename_branch(&self, from: &SafeBranch, to: &SafeBranch) -> Result<(), RenameBranchError> {
-        self.rename_branch_watched(from, to, || ())
+        self.rename_steps(from, to, |store| store.rename(from, to), || self.where_is(from, to))
     }
 
-    /// [`Project::rename_branch`], with `before` run just before the rename is asked for.
-    fn rename_branch_watched(&self, from: &SafeBranch, to: &SafeBranch, before: impl FnOnce()) -> Result<(), RenameBranchError> {
+    /// The rename, from and to, whose outcome could not be told.
+    fn unclear(&self) -> std::sync::MutexGuard<'_, Option<(SafeBranch, SafeBranch)>> {
+        self.unclear_rename.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Whether a rename of the branch in use has an unknown outcome.
+    pub(crate) fn branch_is_unclear(&self) -> bool {
+        self.unclear().as_ref().is_some_and(|(from, _)| from.same_branch(&self.current_branch()))
+    }
+
+    /// Whether `from` and `to` exist, over a connection of its own, as the one that asked may be
+    /// the one that was lost, and on `main`, which no unclear rename can be.
+    fn where_is(&self, from: &SafeBranch, to: &SafeBranch) -> Result<(bool, bool), String> {
+        let mut store = OpenBranches(database_connection(&self.server().connector(), &SafeBranch::default()).map_err(|e| e.to_string()));
+        Ok((store.head(from)?.is_some(), store.head(to)?.is_some()))
+    }
+
+    /// The rename has happened: a branch in use stays current under its new name.
+    fn renamed(&self, from: &SafeBranch, to: &SafeBranch) {
+        if from.same_branch(&self.current_branch()) {
+            self.set_current_branch(to.clone());
+        }
+    }
+
+    /// [`Project::rename_branch`], `ask` making the rename and `read` saying which of the names
+    /// exist. Dolt's success is taken as the rename done. Its failure is read back, as the reply
+    /// can be what was lost: only "still at the old name" is a failure, and not being able to tell
+    /// holds the project until the same rename is asked for again or it closes.
+    fn rename_steps(
+        &self,
+        from: &SafeBranch,
+        to: &SafeBranch,
+        ask: impl FnOnce(&mut OpenBranches) -> Result<(), String>,
+        read: impl Fn() -> Result<(bool, bool), String>,
+    ) -> Result<(), RenameBranchError> {
         let failed = |why: String| RenameBranchError::Failed(why);
         if from.same_branch(&SafeBranch::default()) {
             return Err(RenameBranchError::Main);
+        }
+        if self.unclear().as_ref().is_some_and(|(was, then)| was == from && then == to) {
+            match read() {
+                Ok((true, false)) => *self.unclear() = None,
+                Ok((false, true)) => {
+                    *self.unclear() = None;
+                    self.renamed(from, to);
+                    return Ok(());
+                }
+                other => return Err(RenameBranchError::CannotTell(other.err().unwrap_or_else(|| "neither name, or both, can be found".into()))),
+            }
+        } else if self.branch_is_unclear() {
+            return Err(RenameBranchError::CannotTell("an earlier rename of this branch is not settled".into()));
         }
         if let Found::Good(record) = creation::read(self.path())
             && (record.branch.same_branch(to) || record.branch.same_branch(from))
         {
             return Err(RenameBranchError::RecordRemains);
         }
-        // Over a connection on `main` throughout: Dolt refuses while another session is on the
-        // branch, and the one that asks must not be such a session itself.
+        // Over a connection on `main`, which stays good whatever becomes of the branch. Dolt refuses
+        // while another session is on the branch (measured); that comes back as a failure.
         let mut store = OpenBranches(self.connection_to(&SafeBranch::default()).map_err(|e| e.to_string()));
         if store.head(from).map_err(failed)?.is_none() {
             return Err(RenameBranchError::NoSuchBranch);
@@ -292,16 +347,21 @@ impl Project {
         if self.branch_name_taken(to).map_err(|e| failed(e.to_string()))? {
             return Err(RenameBranchError::NameTaken);
         }
-        before();
-        let asked = store.rename(from, to);
-        // The reply can be lost either way: what counts is where the branch is now.
-        if store.head(from).map_err(failed)?.is_some() || store.head(to).map_err(failed)?.is_none() {
-            return Err(failed(asked.err().unwrap_or_else(|| "the branch did not change its name".into())));
+        let Err(why) = ask(&mut store) else {
+            self.renamed(from, to);
+            return Ok(());
+        };
+        match read() {
+            Ok((false, true)) => {
+                self.renamed(from, to);
+                Ok(())
+            }
+            Ok((true, false)) => Err(failed(why)),
+            _ => {
+                *self.unclear() = Some((from.clone(), to.clone()));
+                Err(RenameBranchError::CannotTell(why))
+            }
         }
-        if from.same_branch(&self.current_branch()) {
-            self.set_current_branch(to.clone());
-        }
-        Ok(())
     }
 
     /// Makes the branch `name` at the version `start`, with no conversations. On the writer only.

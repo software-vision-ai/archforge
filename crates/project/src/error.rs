@@ -7,6 +7,11 @@ use archforge_names::Problem;
 
 #[derive(Debug)]
 pub enum Error {
+    /// A rename of the branch in use may or may not have happened, so nothing is read from or
+    /// written to either name until the rename is settled or the project closes.
+    BranchUnclear {
+        path: PathBuf,
+    },
     /// A name that cannot be a file name.
     BadName {
         name: String,
@@ -189,6 +194,7 @@ impl fmt::Display for Error {
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
             Error::NotAVersion { commit } => write!(f, "{commit:?} is not a version of this project"),
             Error::VersionShape { commit, why } => write!(f, "the version {commit} cannot be read by this Archforge: {why}"),
+            Error::BranchUnclear { path } => write!(f, "whether a branch of {} was renamed cannot be told", path.display()),
             Error::Scripted { path, what } => write!(f, "the project {} holds {what}, which Archforge does not run", path.display()),
             Error::TooLarge { what, size, max, unit } => write!(f, "{what} of {size} {unit} is longer than the {max} {unit} allowed"),
             Error::Full { what, max } => write!(f, "{what} already holds {max}, the most it may"),

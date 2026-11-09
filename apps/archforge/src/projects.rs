@@ -80,7 +80,6 @@ enum Job {
     /// Make a branch at a version, or from current work when none is named; the generation and the
     /// open instance are the project's when it was asked for.
     CreateBranch(PathBuf, SafeBranch, Option<String>, u64, u64, Sender<Result<BranchCreated, CreateBranchError>>),
-    /// Restore a version of a project; the generation is the project's when it was asked for.
     /// Rename a branch, from the name to the name; the generation and the open instance are the
     /// project's when it was asked for.
     RenameBranch(PathBuf, SafeBranch, SafeBranch, u64, u64, Sender<Result<(), RenameJobError>>),
@@ -3907,25 +3906,65 @@ mod tests {
         assert_eq!(rename("scripted", "renamed"), Ok(()), "a damaged record names nothing");
         std::fs::remove_file(path.join(".creating-branch")).unwrap();
         assert!(has_branch(project, "elsewhere") && has_branch(project, "renamed"), "only that one was renamed");
-        // Dolt refuses while another session is on the branch; the current branch does not move.
-        let session = project.session_on(&branch("elsewhere")).unwrap();
-        assert!(matches!(rename("elsewhere", "free"), Err(archforge_project::RenameBranchError::Failed(_))));
-        assert!(has_branch(project, "elsewhere") && !has_branch(project, "free"));
-        drop(session);
-        assert_eq!(rename("elsewhere", "free"), Ok(()), "and once it has gone, the rename goes through");
     }
 
-    /// A lost reply is read back: the branch went, so it counts, and the current branch follows.
+    /// Dolt said yes and the check after it broke; the reply lost, landed; lost, not landed: the
+    /// next write and the next switch carry on under the name that is true.
     #[test]
-    fn a_rename_whose_reply_was_lost_is_read_back() {
+    fn a_rename_whose_outcome_is_known_carries_on_under_the_true_name() {
+        for (lands, answered, readable, name) in [(true, true, false, "moved"), (true, false, true, "moved"), (false, false, true, "elsewhere")] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let schema = schema(&host.inner).unwrap();
+            switch_to(host, &path, "elsewhere").unwrap();
+            let answer = lock(&host.inner.open)[0].rename_branch_faulted(&branch("elsewhere"), &branch("moved"), lands, answered, readable);
+            assert_eq!(answer.is_ok(), lands, "{answer:?}");
+            assert!(lands || matches!(answer, Err(RenameBranchError::Failed(_))), "{answer:?}");
+            assert_eq!(on(host), name);
+            host.write(&path, model("next"));
+            assert_eq!(host.flush_for_test(&path), Ok(()), "the next write goes through");
+            assert_eq!(lock(&host.inner.open)[0].check_branch(&branch(name), &schema).unwrap(), model("next"));
+            assert!(matches!(switch_to(host, &path, "main"), Ok(Switched::Moved(_))));
+        }
+    }
+
+    /// Neither the reply nor where the branch is can be had: nothing is written to either name and
+    /// a switch is refused, even with nothing waiting, until the same rename, asked again, settles
+    /// it or the project closes. Another branch's unclear rename holds nothing of this one.
+    #[test]
+    fn a_rename_that_cannot_be_told_holds_the_project_until_it_is_settled() {
+        let unclear = |answer: Result<(), RenameBranchError>| assert!(matches!(answer, Err(RenameBranchError::CannotTell(_))), "{answer:?}");
+        let (from, to) = (branch("elsewhere"), branch("moved"));
+        for (lands, settled) in [(true, "moved"), (false, "moved")] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let schema = schema(&host.inner).unwrap();
+            switch_to(host, &path, "elsewhere").unwrap();
+            unclear(lock(&host.inner.open)[0].rename_branch_faulted(&from, &to, lands, false, false));
+            host.write(&path, model("held"));
+            assert!(host.flush_for_test(&path).is_err() && host.writing(&path).pending, "not written to either name");
+            assert!(matches!(switch_to(host, &path, "main"), Err(SwitchError::Unwritten(_))), "the next switch is refused");
+            unclear(lock(&host.inner.open)[0].rename_branch_faulted(&from, &to, lands, false, false));
+            unclear(lock(&host.inner.open)[0].rename_branch(&branch("scripted"), &branch("other")));
+            assert_eq!(lock(&host.inner.open)[0].rename_branch(&from, &to), Ok(()), "asked again, it is settled");
+            assert_eq!(on(host), settled);
+            assert_eq!(host.flush_for_test(&path), Ok(()), "what waited now has somewhere to go");
+            assert_eq!(lock(&host.inner.open)[0].check_branch(&to, &schema).unwrap(), model("held"));
+        }
         let (sandbox, path) = branched();
         let host = &sandbox.host;
         switch_to(host, &path, "elsewhere").unwrap();
+        unclear(lock(&host.inner.open)[0].rename_branch_faulted(&from, &to, false, false, false));
+        let answer = switch_to(host, &path, "main");
+        assert!(matches!(answer, Err(SwitchError::Checks(archforge_project::Error::BranchUnclear { .. }))), "{answer:?}");
+        close(host, &path).unwrap();
+        wait(&host.open(&path)).unwrap();
+        host.write(&path, model("after"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
         let open = lock(&host.inner.open);
-        // Done just before it is asked for, so that asking fails as a lost reply would look.
-        let done = || open[0].run_on_branch("main", "CALL DOLT_BRANCH('-m', 'elsewhere', 'moved')").unwrap();
-        assert_eq!(open[0].rename_branch_after(&branch("elsewhere"), &branch("moved"), done), Ok(()));
-        assert_eq!(open[0].current_branch().stored(), "moved");
+        unclear(open[0].rename_branch_faulted(&branch("scripted"), &to, true, false, false));
+        assert!(open[0].has_unsaved().is_ok(), "the branch in use is not held");
+        assert_eq!(open[0].rename_branch(&branch("scripted"), &to), Ok(()), "and a retry does not fail");
     }
 
     /// The writer's job is refused when it comes from before a switch or a reopen, or finds no project.

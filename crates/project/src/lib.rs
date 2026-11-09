@@ -99,9 +99,16 @@ pub struct Project {
     changes: std::sync::Mutex<chat::Ledger>,
     /// The branch every connection uses, shared with the project's readers.
     branch: branches::CurrentBranch,
+    /// A rename, from and to, whose outcome could not be told, until it is settled or this closes.
+    unclear_rename: std::sync::Mutex<Option<(SafeBranch, SafeBranch)>>,
 }
 
 impl Project {
+    /// A project open on `server`, on the branch every project opens on.
+    fn assembled(server: Server, path: PathBuf, settings: Settings) -> Project {
+        Project { server, path, settings, changes: Default::default(), branch: Default::default(), unclear_rename: Default::default() }
+    }
+
     /// Creates the project `name` in `folder` and leaves it open.
     pub fn create(dolt: &Dolt, opts: &ServerOptions, folder: &Path, name: &str, created_by: &str, now: &str) -> Result<Project, Error> {
         Project::create_with(dolt, opts, folder, name, created_by, now, &Hooks::default())
@@ -142,7 +149,7 @@ impl Project {
         let mut server = None;
         match build(dolt, opts, &target, name, created_by, now, hooks, &mut server) {
             Ok(settings) => match (std::fs::remove_file(target.join(MARKER)), server) {
-                (Ok(()), Some(server)) => Ok(Project { server, path: target, settings, changes: Default::default(), branch: Default::default() }),
+                (Ok(()), Some(server)) => Ok(Project::assembled(server, target, settings)),
                 (Err(e), server) => Err(undo(server, &made, Error::io("cannot remove the marker from", &target, e))),
                 (Ok(()), None) => Err(undo(None, &made, Error::Damaged { path: target.clone(), why: "no server ran".into() })),
             },
@@ -174,7 +181,7 @@ impl Project {
         own_dot_dolt(&path)?;
         let server = Server::start(dolt, &path, opts).map_err(Error::Server)?;
         match checked_settings(&server, &path, &SafeBranch::default()) {
-            Ok(settings) => Ok(Project { server, path, settings, changes: Default::default(), branch: Default::default() }),
+            Ok(settings) => Ok(Project::assembled(server, path, settings)),
             Err(e) => {
                 if let Err(stop) = server.stop() {
                     log::warn!("the server of the refused project {} did not stop: {stop}", path.display());
