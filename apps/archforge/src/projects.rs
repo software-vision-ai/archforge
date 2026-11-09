@@ -4201,6 +4201,48 @@ mod tests {
         }
     }
 
+    /// While a delete is unclear nothing may change what its name means, and nothing else is held;
+    /// once it is settled all of that is allowed again. Asked in another case, it reads the branch
+    /// it recorded, so a name that merely differs in case does not read as the branch being gone.
+    #[test]
+    fn an_unclear_delete_keeps_its_name_from_changing_meaning() {
+        use archforge_project::BranchCreationError::NameTaken;
+        use archforge_project::RenameBranchError::CannotTell as Unsettled;
+        for lands in [false, true] {
+            let (sandbox, path) = branched();
+            let host = &sandbox.host;
+            let chat = chat_on(host, &path, "elsewhere");
+            let schema = schema(&host.inner).unwrap();
+            let open = lock(&host.inner.open);
+            let project = &open[0];
+            let (target, other, asked) = (branch("elsewhere"), branch("scripted"), std::cell::Cell::new(false));
+            let start = project.head_of("main").unwrap();
+            assert!(matches!(project.delete_branch_faulted(&target, lands, false, &asked), Err(DeleteBranchError::CannotTell(_))));
+            for from in ["elsewhere", "ELSEWHERE"] {
+                assert!(matches!(project.rename_branch(&branch(from), &branch("moved")), Err(Unsettled(_))), "{from}");
+            }
+            for to in ["elsewhere", "Elsewhere"] {
+                assert!(matches!(project.rename_branch(&other, &branch(to)), Err(Unsettled(_))), "{to}");
+                assert_eq!(project.create_branch(&branch(to), &start, &schema), Err(NameTaken), "{to}");
+            }
+            assert!(matches!(project.delete_branch(&other), Err(DeleteBranchError::CannotTell(_))), "not recorded over it");
+            assert!(has_branch(project, "scripted"));
+            assert!(project.write_model(&schema, &model("saved on")).is_ok(), "autosave is not held");
+            // Settled, the first delete answers its own ids, and in another case reads what it recorded.
+            let variant = project.delete_branch(&branch("ELSEWHERE"));
+            if lands {
+                assert_eq!(variant, Ok(vec![chat]));
+            } else {
+                assert_eq!(variant, Err(DeleteBranchError::NoSuchBranch), "still there, under its exact name");
+                assert_eq!(project.delete_branch(&target), Ok(vec![chat]));
+            }
+            assert_eq!(project.create_branch(&target, &start, &schema), Ok(BranchCreated::Listed));
+            assert_eq!(project.rename_branch(&target, &branch("moved")), Ok(()));
+            assert_eq!(project.rename_branch(&other, &target), Ok(()));
+            assert_eq!(project.delete_branch(&branch("moved")), Ok(Vec::new()));
+        }
+    }
+
     /// A read on the branch when it goes fails; it does not answer for anything else.
     #[test]
     fn a_read_in_flight_on_a_deleted_branch_only_fails() {
