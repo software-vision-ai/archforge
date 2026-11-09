@@ -21,7 +21,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
@@ -98,11 +98,28 @@ struct Inner {
     closers: Mutex<Vec<std::thread::JoinHandle<()>>>,
     /// A reader of each open project's versions. Apart from `open`, which the writer holds while
     /// it writes, so that a read is held up by no write and holds up none.
-    readers: Mutex<BTreeMap<PathBuf, Arc<VersionReader>>>,
+    readers: Mutex<BTreeMap<PathBuf, Arc<OpenReader>>>,
     /// How many sets of rows each project has been handed, counted as each goes to the writer.
     handed: Mutex<BTreeMap<PathBuf, u64>>,
     /// Who checks a description against the kept API keys; while nobody does, a description is refused.
     keys: OnceLock<Arc<crate::agents::Agents>>,
+}
+
+/// An open project's reader, and how many reads are using it now. The count is the cap's and the
+/// closing's only measure: a clone of this held for any other reason changes neither.
+struct OpenReader {
+    reader: VersionReader,
+    under_way: AtomicUsize,
+}
+
+/// One read under way, counted from when it was let in until this is dropped, on every path.
+struct ReadUnderWay(Arc<OpenReader>);
+
+impl Drop for ReadUnderWay {
+    /// Gives the read's place back.
+    fn drop(&mut self) {
+        self.0.under_way.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// A lock that a panic elsewhere left poisoned is taken over: the data behind it is still whole.
@@ -209,6 +226,20 @@ impl Projects {
 }
 
 impl Projects {
+    /// Lets one more read of `project` in, counted under the lock that finds its reader, so no two
+    /// can take the last place. Refused past [`MOST_READS`] and for a project no longer open.
+    fn take_a_read(&self, project: &Path) -> Result<ReadUnderWay, String> {
+        let readers = lock(&self.inner.readers);
+        let Some(open) = readers.get(project) else {
+            return Err(format!("{} is no longer open", project.display()));
+        };
+        if open.under_way.load(Ordering::SeqCst) >= MOST_READS {
+            return Err(tr("Too many versions are being read at once. Try again in a moment."));
+        }
+        open.under_way.fetch_add(1, Ordering::SeqCst);
+        Ok(ReadUnderWay(open.clone()))
+    }
+
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
     /// short lock on the readers is taken here, so the read waits for no write and no write waits
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
@@ -219,22 +250,19 @@ impl Projects {
         read: impl FnOnce(&VersionReader) -> Result<T, String> + Send + 'static,
     ) -> Receiver<Result<T, String>> {
         let (tx, rx) = channel();
-        let reader = {
-            let readers = lock(&self.inner.readers);
-            let Some(reader) = readers.get(project) else {
-                let _ = tx.send(Err(format!("{} is no longer open", project.display())));
-                return rx;
-            };
-            // Counted and taken under one lock: the map holds one, each read under way another.
-            if Arc::strong_count(reader) > MOST_READS {
-                let _ = tx.send(Err(tr("Too many versions are being read at once. Try again in a moment.")));
+        let slot = match self.take_a_read(project) {
+            Ok(slot) => slot,
+            Err(why) => {
+                let _ = tx.send(Err(why));
                 return rx;
             }
-            reader.clone()
         };
         let answer = tx.clone();
         let work = move || {
-            let result = read(&reader);
+            // In this order, so that a panic gives the place back before the sender goes.
+            let (answer, slot) = (answer, slot);
+            let result = read(&slot.0.reader);
+            drop(slot);
             let _ = answer.send(result);
         };
         match std::thread::Builder::new().name("archforge-versions".into()).spawn(work) {
@@ -506,7 +534,8 @@ fn adopt(inner: &Inner, project: Project) -> Result<(), CreateError> {
         let _ = project.close();
         return Err(CreateError::Failed { detail: format!("{MAX_OPEN} projects are open; close one to open another") });
     }
-    lock(&inner.readers).insert(project.path().to_path_buf(), Arc::new(project.version_reader()));
+    let reader = OpenReader { reader: project.version_reader(), under_way: AtomicUsize::new(0) };
+    lock(&inner.readers).insert(project.path().to_path_buf(), Arc::new(reader));
     open.push(project);
     Ok(())
 }
@@ -859,16 +888,17 @@ fn commit(inner: &Inner, target: &Path, description: Option<String>, by: &SavedB
 }
 
 /// Takes `path`'s reader away and waits, within `budget`, for the reads already under way, so its
-/// server is not stopped under them. A read holds the reader while it runs and new ones can only
-/// get it from the map, so once it is gone the count can only fall. A read that outlasts the
+/// server is not stopped under them. New reads are let in only through the map, so once the reader
+/// has left it the count of reads under way can only fall. A read that outlasts the
 /// budget fails when the server stops: a closing is never held up for longer.
 fn settle_reads(inner: &Inner, path: &Path, budget: Duration) {
-    let Some(reader) = lock(&inner.readers).remove(path) else { return };
+    let Some(open) = lock(&inner.readers).remove(path) else { return };
+    let running = || open.under_way.load(Ordering::SeqCst) > 0;
     let started = Instant::now();
-    while Arc::strong_count(&reader) > 1 && started.elapsed() < budget {
+    while running() && started.elapsed() < budget {
         std::thread::sleep(Duration::from_millis(20));
     }
-    if Arc::strong_count(&reader) > 1 {
+    if running() {
         log::warn!("a read of the versions of {} outlasted the closing", path.display());
     }
 }
@@ -1688,7 +1718,7 @@ mod tests {
         assert_eq!(thread.recv_timeout(Duration::from_secs(30)).unwrap(), Ok(Some("archforge-versions".to_string())), "a thread of its own");
 
         // A reader kept past the closing, as a read still running would be, reads nothing more.
-        let stale = (**lock(&host.inner.readers).get(&path).unwrap()).clone();
+        let stale = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
         close(host, &path).unwrap();
         let shape = schema(&host.inner).unwrap();
         assert!(matches!(stale.read_model_at(&shape, &first), Err(archforge_project::Error::Server(_) | archforge_project::Error::Sql { .. })));
@@ -1704,7 +1734,9 @@ mod tests {
         let (host, path) = (&sandbox.host, sandbox.project());
         let other = wait(&host.create(&sandbox.base.join("p"), "Other")).unwrap().path;
         let read = |project: &Path| host.versions(project, None, 1).recv_timeout(Duration::from_secs(30)).expect("the read answers");
-        let mut under_way: Vec<_> = (0..MOST_READS).map(|_| lock(&host.inner.readers).get(&path).cloned().unwrap()).collect();
+        // A clone held for another reason takes no place.
+        let _kept: Vec<_> = (0..2 * MOST_READS).map(|_| lock(&host.inner.readers).get(&path).cloned().unwrap()).collect();
+        let mut under_way: Vec<_> = (0..MOST_READS).map(|_| host.take_a_read(&path).expect("a place")).collect();
         let too_many = "Too many versions are being read at once. Try again in a moment.".to_string();
         assert_eq!(read(&path), Err(too_many.clone()));
         assert_eq!(host.read_version(&path, "any".into()).recv_timeout(Duration::from_secs(30)).unwrap(), Err(too_many), "the models read count too");
@@ -1713,16 +1745,30 @@ mod tests {
         assert!(read(&path).is_ok(), "one ended, so one may start");
     }
 
+    /// A read gives its place back however it ends, and a clone held outside a read holds up nothing.
+    #[test]
+    fn a_read_gives_its_place_back_on_every_path_and_a_clone_holds_no_closing_up() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let open = lock(&host.inner.readers).get(&path).cloned().expect("the open project's reader");
+        let failed = host.read_version(&path, "not a hash".into()).recv_timeout(Duration::from_secs(30)).expect("the read answers");
+        assert!(failed.is_err() && open.under_way.load(Ordering::SeqCst) == 0, "a failed read holds no place");
+        let panicked = host.on_a_reader(&path, |_| -> Result<(), String> { panic!("a read that panics") });
+        assert!(panicked.recv_timeout(Duration::from_secs(30)).is_err() && open.under_way.load(Ordering::SeqCst) == 0, "nor does one that panics");
+        assert_eq!(host.close(&path).recv_timeout(Duration::from_secs(5)).expect("the closing does not wait for the clone"), Ok(()));
+    }
+
     /// Closing waits for a read under way, and for no longer than its budget.
     #[test]
     fn closing_waits_for_the_reads_under_way_within_a_budget() {
         let sandbox = Sandbox::new(None);
         let (host, path) = (&sandbox.host, sandbox.project());
-        let under_way = lock(&host.inner.readers).get(&path).cloned().expect("the open project's reader");
+        let open = lock(&host.inner.readers).get(&path).cloned().expect("the open project's reader");
+        let under_way = host.take_a_read(&path).expect("a read");
 
         // A read that does not end is given up on when the budget runs out. On a thread of its own,
         // so that a wait with no bound fails here instead of hanging the test.
-        lock(&host.inner.readers).insert(PathBuf::from("/held"), under_way.clone());
+        lock(&host.inner.readers).insert(PathBuf::from("/held"), open.clone());
         let (inner, (done, settled)) = (host.inner.clone(), channel());
         std::thread::spawn(move || {
             settle_reads(&inner, Path::new("/held"), Duration::from_millis(50));
@@ -1733,7 +1779,7 @@ mod tests {
 
         let closing = host.close(&path);
         assert!(closing.recv_timeout(Duration::from_secs(2)).is_err(), "the closing waits for the read");
-        assert!(under_way.versions(None, 1).is_ok(), "and the server still answers it");
+        assert!(under_way.0.reader.versions(None, 1).is_ok(), "and the server still answers it");
         drop(under_way);
         assert_eq!(closing.recv_timeout(Duration::from_secs(60)).expect("the closing answers"), Ok(()));
     }
