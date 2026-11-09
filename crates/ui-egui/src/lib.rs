@@ -156,6 +156,15 @@ pub trait ProjectHost: Send + Sync {
         self.open(path)
     }
 
+    /// Starts deleting the branch `branch`, as Dolt stores the name, of the open project at `path`
+    /// and returns at once. The answer names the conversations that were only on it, once the
+    /// branch is seen gone; any other answer names none.
+    fn delete_branch(&self, _path: &std::path::Path, _branch: &str) -> std::sync::mpsc::Receiver<Result<Vec<archforge_mof::Uuid>, BranchNotDeleted>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(BranchNotDeleted::Failed("this host deletes no branches".into())));
+        rx
+    }
+
     /// Starts opening the project at `path` and returns at once, with its model's rows in the
     /// answer; the project opened shows in a tab of its own. Without it, opening is not available.
     fn open(&self, _path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Opened, CreateError>> {
@@ -485,6 +494,31 @@ impl BranchNotice {
         }
     }
 }
+
+/// Why a branch's delete let go of nothing. No variant holds conversations: only a branch seen
+/// gone has any to give up. Its `Display` text is English, for logs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchNotDeleted {
+    /// Whether it went could not be told; asking again settles it.
+    Unclear(String),
+    /// The project moved, closed or reopened after this was asked for: nothing was tried.
+    Moved,
+    /// It was refused or failed, and the branch stays; `why` is the host's own technical text.
+    Failed(String),
+}
+
+impl std::fmt::Display for BranchNotDeleted {
+    /// The reason in English; a screen words each variant itself.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BranchNotDeleted::Unclear(why) => write!(f, "whether the branch went cannot be told: {why}"),
+            BranchNotDeleted::Moved => f.write_str("the project moved or closed after this was asked for"),
+            BranchNotDeleted::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for BranchNotDeleted {}
 
 /// Why a project could not be created, in the kinds the dialog explains; a detail is the host's
 /// own technical text, shown small and untranslated under the translated sentence.
