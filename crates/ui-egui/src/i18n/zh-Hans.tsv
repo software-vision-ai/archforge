@@ -1467,3 +1467,10 @@ str		Read only while viewing a version	查看版本时为只读
 str		Back to current work	返回当前工作
 str		Back to current work to chat	返回当前工作以进行聊天
 str		Viewing the version of {date} · Read only	正在查看 {date} 的版本 · 只读
+str		Older version	较旧的版本
+str		Newer version	较新的版本
+str		No older version	没有更旧的版本
+str		No newer version	没有更新的版本
+str		Finish or cancel your edit first.	请先完成或取消您的编辑。
+str		Wait for the change under way to finish.	请等待正在进行的更改完成。
+str		There is no model to show a version of.	没有可显示版本的模型。

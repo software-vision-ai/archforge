@@ -16,6 +16,8 @@ pub const GENERATE: &str = "file.generate";
 pub const SAVE: &str = "file.save";
 pub const OPEN: &str = "file.open";
 pub const VERSIONS: &str = "versions.list";
+pub const OLDER: &str = "versions.older";
+pub const NEWER: &str = "versions.newer";
 
 /// One application action.
 pub struct Action {
@@ -133,8 +135,24 @@ pub static ACTIONS: &[Action] = &[
         id: VERSIONS,
         label: |_| tr("Versions"),
         available: crate::version_chip::available,
-        run: crate::version_chip::open,
+        run: crate::version_chip::toggle,
         keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H, when: crate::version_chip::available }),
+        search: None,
+    },
+    Action {
+        id: OLDER,
+        label: |_| tr("Older version"),
+        available: crate::version_chip::available,
+        run: crate::version_chip::older,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::OpenBracket, when: crate::version_chip::available }),
+        search: None,
+    },
+    Action {
+        id: NEWER,
+        label: |_| tr("Newer version"),
+        available: crate::version_chip::available,
+        run: crate::version_chip::newer,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket, when: crate::version_chip::available }),
         search: None,
     },
 ];
@@ -272,7 +290,7 @@ pub(crate) mod tests {
 
     /// The ids of the rows of the table `on` answers yes for.
     fn answering(on: impl Fn(&Action) -> bool) -> Vec<&'static str> {
-        ACTIONS.iter().filter(|a| a.id != VERSIONS && on(a)).map(|a| a.id).collect()
+        ACTIONS.iter().filter(|a| !a.id.starts_with("versions.") && on(a)).map(|a| a.id).collect()
     }
 
     /// The whole table, state by state, written out by hand from what each menu item and key did
@@ -342,7 +360,11 @@ pub(crate) mod tests {
     /// rows, each once, and an id it lacks runs nothing, has no name and is never available.
     #[test]
     fn every_action_runs_its_handler_and_only_that() {
-        assert_eq!(ACTIONS.iter().map(|a| a.id).filter(|id| *id != VERSIONS).collect::<Vec<_>>(), ALL, "the chip's tests walk its own row");
+        assert_eq!(
+            ACTIONS.iter().map(|a| a.id).filter(|id| !id.starts_with("versions.")).collect::<Vec<_>>(),
+            ALL,
+            "the chip's tests walk its own row"
+        );
         for id in ALL {
             let (mut shell, saves, picks) = shell();
             run(&mut shell, id);

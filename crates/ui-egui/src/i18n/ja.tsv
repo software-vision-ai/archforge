@@ -1467,3 +1467,10 @@ str		Read only while viewing a version	バージョンの表示中は読み取�
 str		Back to current work	現在の作業に戻る
 str		Back to current work to chat	チャットするには現在の作業に戻ってください
 str		Viewing the version of {date} · Read only	{date} のバージョンを表示中 · 読み取り専用
+str		Older version	古いバージョン
+str		Newer version	新しいバージョン
+str		No older version	これより古いバージョンはありません
+str		No newer version	これより新しいバージョンはありません
+str		Finish or cancel your edit first.	先に編集を完了するかキャンセルしてください。
+str		Wait for the change under way to finish.	進行中の変更が完了するまでお待ちください。
+str		There is no model to show a version of.	バージョンを表示できるモデルがありません。

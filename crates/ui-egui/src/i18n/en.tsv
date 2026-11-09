@@ -1466,3 +1466,10 @@ str		Read only while viewing a version	Read only while viewing a version
 str		Back to current work	Back to current work
 str		Back to current work to chat	Back to current work to chat
 str		Viewing the version of {date} · Read only	Viewing the version of {date} · Read only
+str		Older version	Older version
+str		Newer version	Newer version
+str		No older version	No older version
+str		No newer version	No newer version
+str		Finish or cancel your edit first.	Finish or cancel your edit first.
+str		Wait for the change under way to finish.	Wait for the change under way to finish.
+str		There is no model to show a version of.	There is no model to show a version of.

@@ -1467,3 +1467,10 @@ str		Read only while viewing a version	Só de leitura enquanto vê uma versão
 str		Back to current work	Voltar ao trabalho atual
 str		Back to current work to chat	Volte ao trabalho atual para conversar
 str		Viewing the version of {date} · Read only	A ver a versão de {date} · Só de leitura
+str		Older version	Versão anterior
+str		Newer version	Versão mais recente
+str		No older version	Não há versão anterior
+str		No newer version	Não há versão mais recente
+str		Finish or cancel your edit first.	Termine ou cancele primeiro a sua edição.
+str		Wait for the change under way to finish.	Aguarde que a alteração em curso termine.
+str		There is no model to show a version of.	Não há nenhum modelo de que mostrar uma versão.
