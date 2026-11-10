@@ -43,6 +43,7 @@ fn opened(h: &mut Harness<'static, Shell>, row: &str) {
 fn a_refused_view_keeps_the_details_and_says_why() {
     in_both(|h, host| {
         opened(h, "c2");
+        host.reads.lock().unwrap().clear();
         h.state_mut().explorer.dragging = Some(archforge_mof::Uuid([7; 16]));
         tap(h, VIEW);
         assert!(h.state().versions.details.is_some(), "the details stay");
