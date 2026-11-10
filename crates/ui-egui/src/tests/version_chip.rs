@@ -494,6 +494,91 @@ fn a_refused_view_says_why() {
     });
 }
 
+/// What a step is refused with while an edit is under way.
+const EDITING: &str = "Finish or cancel your edit first.";
+
+/// Asks for ⌘[ with an edit under way, which refuses it; the edit is then called off.
+fn refused_step(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+    press(h, egui::Key::OpenBracket);
+    answer_versions(host);
+    h.run_steps(3);
+    assert!(host.reads.lock().unwrap().is_empty() && h.state().viewing().is_none(), "the step did not go");
+    h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+    h.run_steps(2);
+}
+
+/// With no diagram open a refused step says why in the empty centre, and the step that then goes
+/// through takes the reason away, here and in the view set aside for coming back to.
+#[test]
+fn a_refused_step_says_why_with_no_diagram_open() {
+    in_both(|mut h, host| {
+        assert_eq!(centre(&h), (vec![], None), "nothing is open");
+        refused_step(&mut h, &host);
+        assert_eq!(painted_times(&h, EDITING), 1, "{:?}", painted(&h));
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(painted_times(&h, EDITING), 0, "the step went through, so the reason is over");
+        shown(&mut h, &host, "h2");
+        h.state_mut().back_to_current_work();
+        h.run_steps(2);
+        assert_eq!(painted_times(&h, EDITING), 0, "nor does it come back with current work");
+    });
+}
+
+/// A skill's tab in the centre says why as well, and a diagram says it once.
+#[test]
+fn a_refused_step_says_why_over_a_skill_and_once_over_a_diagram() {
+    in_both(|mut h, host| {
+        let diagram = add_diagram(&mut h, "Alpha");
+        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
+        show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
+        refused_step(&mut h, &host);
+        assert_eq!(painted_times(&h, EDITING), 1, "{:?}", painted(&h));
+        show_diagram(&mut h, diagram);
+        assert_eq!(painted_times(&h, EDITING), 0, "opening something else ends it");
+        refused_step(&mut h, &host);
+        assert_eq!(painted_times(&h, EDITING), 1, "{:?}", painted(&h));
+    });
+}
+
+/// Over a diagram the words stay below its path bar.
+#[test]
+fn a_notice_sits_below_the_path_bar() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _, _) = nested_orders(theme);
+        h.state_mut().canvas.notice = Some("Refused".into());
+        h.run();
+        let words = text_boxes(&h).into_iter().find(|(t, _)| t == "Refused").map(|(_, r)| r).unwrap();
+        assert!(words.top() >= rect_of(&h, "workspace.canvas.path").bottom(), "{words:?}");
+    }
+}
+
+/// What was said about a diagram goes with the last tab, closed or its diagram removed, rather
+/// than staying on in the empty centre.
+#[test]
+fn a_notice_goes_with_the_last_diagram() {
+    const SAID: &str = "About that diagram";
+    in_both(|mut h, _host| {
+        let said = |h: &mut Harness<'static, Shell>, name: &str| {
+            let id = add_diagram(h, name);
+            show_diagram(h, id);
+            h.state_mut().canvas.notice = Some(SAID.into());
+            h.run_steps(2);
+            assert_eq!(painted_times(h, SAID), 1, "{:?}", painted(h));
+            id
+        };
+        let closed = said(&mut h, "Alpha");
+        crate::canvas::close_tab(h.state_mut(), closed);
+        h.run_steps(2);
+        assert_eq!((centre(&h), painted_times(&h, SAID)), ((vec![], None), 0), "the tab closed");
+        let removed = said(&mut h, "Beta");
+        crate::panels::run(h.state_mut(), "diagram.remove", serde_json::json!({ "diagram": removed.to_string() })).unwrap();
+        h.run_steps(3);
+        assert_eq!((centre(&h), painted_times(&h, SAID)), ((vec![], None), 0), "the diagram removed");
+    });
+}
+
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
     let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
