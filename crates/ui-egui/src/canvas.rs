@@ -465,10 +465,25 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         }
         None => canvas(shell, ui, p, canvas_rect),
     };
-    if let Some(notice) = shell.canvas.notice.as_deref().filter(|_| canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0) {
-        let at = canvas_rect.min + vec2(16.0, 12.0 + below_path);
-        ux::text(ui.painter(), at, notice, types::CAPTION, p.amber, Some((canvas_rect.width() - 32.0).max(0.0)));
+    if canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0 {
+        notice(shell, ui, p, canvas_rect.min + vec2(16.0, 12.0 + below_path), (canvas_rect.width() - 32.0).max(0.0));
     }
+}
+
+/// Says `canvas.notice`, if there is one, at `at` within `width`: wrapped to eight rows at most,
+/// and whole to a screen reader as a status. Gives the height it took.
+pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, width: f32) -> f32 {
+    let Some(notice) = shell.canvas.notice.clone() else { return 0.0 };
+    let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
+    let area = Rect::from_min_size(at, g.size());
+    ui.painter().galley(at, g, p.amber);
+    widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.notice", "status", area);
+    ui.ctx().accesskit_node_builder(widgets::egui_id("workspace.canvas.notice"), |node| {
+        node.set_role(egui::accesskit::Role::Status);
+        node.set_live(egui::accesskit::Live::Polite);
+        node.set_label(notice.as_str());
+    });
+    area.height()
 }
 
 /// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.

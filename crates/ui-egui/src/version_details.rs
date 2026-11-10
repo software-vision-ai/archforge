@@ -185,10 +185,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let (title, meta) = lines(&entry, clock);
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     // Panels still report on the canvas, which this covers.
-    if let Some(notice) = shell.canvas.notice.clone() {
-        ux::text(ui.painter(), pos2(left, r.top() + BAND + 6.0), &notice, types::CAPTION, p.amber, Some(width));
-    }
-    let mut y = r.top() + BAND + 24.0;
+    let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
+    let mut y = r.top() + BAND + 24.0 + (said - types::CAPTION.line).max(0.0);
     let g = ux::galley_rows(ui.painter(), &title, types::PAGE_TITLE, p.text, Some(width), 3);
     let height = g.size().y;
     ui.painter().galley(pos2(left, y), g, p.text);
