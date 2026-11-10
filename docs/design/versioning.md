@@ -228,7 +228,8 @@ and a test:
 | `control::engine` and `save` (`control.rs:249`, `:301`) | Agents would write into the preview |
 | `uml.model.root` on adopting (`lib.rs:965-970`) | Adopting edits on open, so a preview does not adopt |
 
-Each load carries a counter and only the newest applies, the pattern of `Saving` (`lib.rs:234-235`).
+One read of a version runs at a time with the newest version wanted behind it, and only that one
+applies; an answer overtaken is dropped, and the version in view stays until the next has arrived.
 The last few
 previews are cached by hash. A load does not run on the writer or hold `inner.open`, which the
 writer holds while it

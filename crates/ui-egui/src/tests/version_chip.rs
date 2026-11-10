@@ -92,8 +92,9 @@ fn the_keys_move_view_and_close() {
         assert!(!list_shows(&h) && h.state().viewing() == Some("h3"), "Esc never leaves the version");
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::ArrowDown, MOVE[0]);
+        key(&mut h, egui::Key::ArrowDown, MOVE[0]);
         key(&mut h, egui::Key::Enter, MOVE[0]);
-        assert_eq!(host.reads.lock().unwrap()[0].0, "h3", "from a version, to another");
+        assert_eq!(host.reads.lock().unwrap()[0].0, "h2", "from a version, to another");
         h.state_mut().back_to_current_work();
         opened_list(&mut h, &host);
         click(&mut h, egui::pos2(20.0, 600.0));
@@ -826,7 +827,6 @@ fn a_refusal_keeps_the_version_and_the_list_and_says_why() {
         assert!(!h.state().is_held() && h.state().viewing().is_none() && host.reads.lock().unwrap().len() == before, "the row began nothing");
         h.state_mut().session.as_mut().unwrap().cancel().unwrap();
         assert!(crate::version_chip::view(h.state_mut(), "h1".to_string(), "x".to_string()));
-        assert_eq!(h.state().canvas.notice, None, "the step that goes clears the reason");
     });
 }
 
@@ -1136,6 +1136,166 @@ fn nothing_is_carried_past_an_empty_view_or_a_dropped_read() {
         assert_eq!(centre(&h).1, Some(b), "current work's own");
         enter(&mut h, &host, two, "c4");
         assert_eq!(centre(&h), (vec![b], Some(b)), "what the dropped read carried is gone");
+    });
+}
+
+/// Viewing `v`, of 8 Nov, which holds neither schema; gives the rows of `b`, which holds the schema
+/// `b`, and of `c`, which holds `b` and `c`.
+fn stepping(h: &mut Harness<'static, Shell>, host: &SavingHost) -> [std::sync::Arc<archforge_mof::rows::Rows>; 2] {
+    let earlier = rows_now(h);
+    add_schema(h, "b");
+    let b = rows_now(h);
+    add_schema(h, "c");
+    let c = rows_now(h);
+    crate::version_chip::view(h.state_mut(), "v".into(), "8 Nov 14:02".into());
+    h.run_steps(3);
+    answer_read(h, host, Ok(earlier));
+    [b, c]
+}
+
+/// Steps to `commit` as the chip does, its date being `9 Nov <commit>`.
+fn step_to(h: &mut Harness<'static, Shell>, commit: &str) {
+    assert!(crate::version_chip::view(h.state_mut(), commit.into(), format!("9 Nov {commit}")));
+    h.run_steps(3);
+}
+
+/// That `commit` shows, holding the schemas `b` and `c` or not.
+#[track_caller]
+fn showing(h: &Harness<'static, Shell>, commit: &str, schemas: (bool, bool)) {
+    let names = schema_names(h);
+    assert_eq!((h.state().viewing(), (names.contains(&"b".to_string()), names.contains(&"c".to_string()))), (Some(commit), schemas));
+}
+
+/// That what the chip and the banner say is still the version of 8 Nov.
+#[track_caller]
+fn dated_as_before(h: &Harness<'static, Shell>) {
+    assert!(crate::version_chip::read_only_words(h.state()).contains("8 Nov 14:02"));
+}
+
+/// A step takes no hold, wakes the window, and leaves the version, its date and its view until the
+/// next arrives; what was set aside stays through it.
+#[test]
+fn a_step_takes_no_hold_and_the_version_stays_until_the_next_arrives() {
+    in_both(|mut h, host| {
+        let [b, _] = stepping(&mut h, &host);
+        answer_versions(&host);
+        h.run_steps(3);
+        step_to(&mut h, "b");
+        assert!(!h.state().is_held(), "no hold");
+        assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");
+        showing(&h, "v", (false, false));
+        dated_as_before(&h);
+        answer_read(&mut h, &host, Ok(b));
+        showing(&h, "b", (true, false));
+        assert!(!h.state().is_held() && h.query_by_label("Viewing the version of 9 Nov b").is_some(), "the date comes with it");
+        assert!(h.state_mut().back_to_current_work() && schema_names(&h).contains(&"c".to_string()), "the work comes back");
+    });
+}
+
+/// One read runs at a time, an answer overtaken never shows, and the newest asked for does, its
+/// read saved when it is the one already under way.
+#[test]
+fn an_answer_overtaken_never_shows_and_the_newest_asked_for_does() {
+    in_both(|mut h, host| {
+        let [b, c] = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        step_to(&mut h, "c");
+        assert_eq!(host.reads.lock().unwrap().len(), 1, "one read at a time");
+        answer_read(&mut h, &host, Ok(b.clone()));
+        showing(&h, "v", (false, false));
+        assert_eq!(host.reads.lock().unwrap()[0].0, "c", "the newest is read next");
+        answer_read(&mut h, &host, Ok(c));
+        showing(&h, "c", (true, true));
+        assert!(host.reads.lock().unwrap().is_empty(), "no read more");
+    });
+}
+
+/// A step that fails, or whose read is lost, stays on the version in view and says why; a read
+/// overtaken says nothing however it ends.
+#[test]
+fn a_failed_step_stays_on_the_version_in_view_and_says_why() {
+    in_both(|mut h, host| {
+        let _ = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        answer_read(&mut h, &host, Err("not readable".into()));
+        showing(&h, "v", (false, false));
+        dated_as_before(&h);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("not readable"));
+        assert!(!h.state().loads.waiting() && !h.state().is_held());
+        step_to(&mut h, "b");
+        assert_eq!(h.state().canvas.notice, None, "the step that goes clears the reason");
+        host.reads.lock().unwrap().remove(0);
+        h.run_steps(3);
+        showing(&h, "v", (false, false));
+        assert!(h.state().canvas.notice.as_deref().is_some_and(|n| n.contains("without an answer")), "the read was lost");
+    });
+}
+
+/// Stepping back to the version in view calls off the one asked for: its answer is dropped.
+#[test]
+fn stepping_back_to_the_version_in_view_calls_off_the_one_asked_for() {
+    in_both(|mut h, host| {
+        let [b, _] = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        step_to(&mut h, "v");
+        assert_eq!(h.state().stepping_from(), Some("v"));
+        answer_read(&mut h, &host, Ok(b));
+        showing(&h, "v", (false, false));
+        dated_as_before(&h);
+        assert!(!h.state().loads.waiting() && host.reads.lock().unwrap().is_empty());
+    });
+}
+
+/// The keys go from the version asked for, so two presses go two versions, and pressing back to
+/// the one in view calls the step off.
+#[test]
+fn the_keys_step_from_the_version_asked_for() {
+    in_both(|mut h, host| {
+        add_schema(&mut h, "shop");
+        press(&mut h, egui::Key::OpenBracket);
+        answer_versions(&host);
+        h.run_steps(3);
+        shown(&mut h, &host, "h3");
+        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(h.state().stepping_from(), Some("h1"));
+        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::CloseBracket);
+        assert_eq!(h.state().stepping_from(), Some("h3"), "back to the one in view");
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        assert_eq!(h.state().viewing(), Some("h3"), "called off");
+    });
+}
+
+/// A hold, going back or the project going clears the step asked for, and its answer changes nothing.
+#[test]
+fn a_hold_or_going_back_clears_the_step_asked_for() {
+    let routes: [fn(&mut Shell); 3] = [|s| s.begin_hold().unwrap(), |s| assert!(s.back_to_current_work()), Shell::clear_workspace];
+    for route in routes {
+        in_both(|mut h, host| {
+            let [b, _] = stepping(&mut h, &host);
+            step_to(&mut h, "b");
+            route(h.state_mut());
+            let viewing = h.state().viewing().map(str::to_string);
+            assert_eq!(h.state().stepping_from(), viewing.as_deref());
+            answer_read(&mut h, &host, Ok(b));
+            assert_eq!(h.state().viewing().map(str::to_string), viewing, "nothing landed");
+            assert!(!h.state().loads.waiting() && host.reads.lock().unwrap().is_empty());
+        });
+    }
+}
+
+/// A step between versions leaves no current work: a Chat turn is neither asked about nor stopped.
+#[test]
+fn a_step_leaves_a_chat_turn_alone() {
+    in_both_appearances(|theme| {
+        let (mut h, rig, host) = turn_running(theme);
+        let preview = h.state().build(&rows_now(&h)).unwrap();
+        h.state_mut().show_version(preview, "v".into());
+        assert_eq!(h.state_mut().move_to_version("b", None), Ok(()));
+        turn_left_alone(&h, &rig, "a step");
+        assert!(!h.state().is_held() && host.reads.lock().unwrap().len() == 1);
     });
 }
 

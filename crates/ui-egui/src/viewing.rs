@@ -4,23 +4,15 @@
 //! the model is not handed to the host and Save is refused. It opens on the diagram that was
 //! showing if it has it, otherwise its first. Showing another tab or Home, opening a project,
 //! closing the project shown and quitting all return to current work first, so the work set aside
-//! goes back to its own project.
+//! goes back to its own project. A step to another version takes no hold ([`crate::version_load`]).
 
 use archforge_mof::Uuid;
+use archforge_mof::rows::Rows;
 use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
 use crate::leaving::{Cleared, Leaving};
 use crate::{Shell, canvas, diagrams, explorer, panels};
-
-/// Which diagram a version opens on, when it holds it.
-#[derive(Clone, Copy)]
-pub(crate) enum OpensOn {
-    /// The one showing when the version arrives: entering from current work.
-    Showing,
-    /// The one in view in the version left for this one, if any: never current work's.
-    Carried(Option<Uuid>),
-}
 
 /// The version being viewed and everything set aside for going back.
 pub(crate) struct Viewing {
@@ -69,45 +61,66 @@ impl Shell {
         self.move_to_version(commit, None)
     }
 
-    /// Goes from the version shown, if one is, to the version `commit`, staying on the diagram in
-    /// view there rather than the one current work has open. A refusal, as for
-    /// [`Self::view_version`], leaves the version in view as it was. Once it goes ahead the chip
-    /// says `label` of the version, when it has one to say.
+    /// Goes to the version `commit`, the chip then saying `label` of it when it has one. From current
+    /// work it enters under a hold, Chat's question first. From a version it is a step, with no hold
+    /// or question as no current work is left. A refusal leaves what shows as it was.
     pub(crate) fn move_to_version(&mut self, commit: &str, label: Option<String>) -> Result<(), HoldRefused> {
+        if self.viewing.is_some() {
+            self.clear_to_leave(None)?;
+            return self.step_to(commit, label);
+        }
         let cleared = self.clear_to_leave(Some(Leaving::View { commit: commit.to_string(), label: label.clone() }))?;
-        let opens_on = if self.viewing.is_some() { OpensOn::Carried(self.canvas.active) } else { OpensOn::Showing };
-        self.leave_version();
-        self.read_to_view(commit, opens_on, cleared)?;
+        self.read_to_view(commit, cleared)?;
         if let Some(label) = label {
             self.version_list.shown = Some((commit.to_string(), label));
         }
         Ok(())
     }
 
-    /// Holds the project and has `commit` read to be shown. The diagram to open goes with the read,
-    /// so a read dropped or refused leaves nothing behind for the next.
-    fn read_to_view(&mut self, commit: &str, opens_on: OpensOn, cleared: Cleared) -> Result<(), HoldRefused> {
+    /// The version a step goes from: the one a step has asked for, otherwise the one in view.
+    pub(crate) fn stepping_from(&self) -> Option<&str> {
+        self.loads.wanted_commit().or_else(|| self.viewing())
+    }
+
+    /// The version a step asked for has been read, as `rows`: it takes the place of the one in
+    /// view, on the diagram in view when it arrives if it has it, otherwise its first, and what
+    /// was set aside stays as it is. One that cannot be built changes nothing and gives why.
+    pub(crate) fn show_step(&mut self, rows: &Rows, commit: String, label: Option<String>) -> Result<(), String> {
+        let mut preview = self.build(rows)?;
+        preview.set_read_only(true).map_err(|e| e.to_string())?;
+        let Some(viewing) = self.viewing.as_mut() else { return Ok(()) };
+        viewing.commit.clone_from(&commit);
+        let showing = self.canvas.active;
+        (self.explorer, self.diagrams, self.canvas, self.panels) = Default::default();
+        self.session = Some(preview);
+        self.session_replaced();
+        self.open_in_version(showing);
+        if let Some(label) = label {
+            self.version_list.shown = Some((commit, label));
+        }
+        Ok(())
+    }
+
+    /// Holds the project and has `commit` read to be shown.
+    fn read_to_view(&mut self, commit: &str, cleared: Cleared) -> Result<(), HoldRefused> {
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
         self.begin_hold()?;
-        self.start_replacing(host.read_version(&path, commit.to_string()), None, Some((commit.to_string(), opens_on)), cleared);
+        self.start_replacing(host.read_version(&path, commit.to_string()), None, Some(commit.to_string()), cleared);
         Ok(())
     }
 
     /// The version read takes the session's place, and the real session and its view are set aside
     /// as they are. The hold ends first, while the real session is in place, so that it gets back
-    /// the read-only state it had before the hold. The version then opens as `opens_on` says.
-    pub(crate) fn show_version(&mut self, mut preview: Session, commit: String, opens_on: OpensOn) {
+    /// the read-only state it had before the hold. It opens on the diagram showing, if it has it.
+    pub(crate) fn show_version(&mut self, mut preview: Session, commit: String) {
         if let Err(e) = preview.set_read_only(true) {
             self.give_up(Some(e.to_string()));
             return;
         }
         self.end_hold();
-        let showing = match opens_on {
-            OpensOn::Showing => self.canvas.active,
-            OpensOn::Carried(id) => id,
-        };
+        let showing = self.canvas.active;
         let Some(session) = self.session.take() else { return };
         self.viewing = Some(Box::new(Viewing {
             commit,
@@ -139,8 +152,9 @@ impl Shell {
 
     /// Back to current work: what was set aside returns as it was. A version still being read is
     /// dropped instead, and with its channel its answer, which can then replace nothing. False when
-    /// neither applies.
+    /// neither applies. Any step on its way is called off.
     pub fn back_to_current_work(&mut self) -> bool {
+        self.loads.call_off();
         if self.version_being_read().is_some() {
             self.replacing = None;
             self.end_hold();

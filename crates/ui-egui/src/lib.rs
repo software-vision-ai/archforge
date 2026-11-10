@@ -78,6 +78,7 @@ mod uml_ui;
 pub mod ux;
 pub mod version_chip;
 mod version_details;
+mod version_load;
 pub mod versions;
 mod viewing;
 pub mod widgets;
@@ -650,6 +651,8 @@ pub struct Shell {
     replacing: Option<replace::Replacing>,
     /// Set while Stop and go on replays what its question held; see [`leaving`].
     chat_answered: bool,
+    /// The read of a version a step asked for, and the newest one asked for.
+    loads: version_load::Loads,
     /// The version shown read-only, and the real work set aside for going back.
     viewing: Option<Box<viewing::Viewing>>,
     /// The hold under way, and what waits for it to end.
@@ -741,6 +744,7 @@ impl Shell {
             saves: std::collections::VecDeque::new(),
             replacing: None,
             chat_answered: false,
+            loads: Default::default(),
             viewing: None,
             holding: hold::Holding::default(),
             opening: None,
@@ -1199,6 +1203,7 @@ impl Shell {
     fn clear_workspace(&mut self) {
         // What was set aside belongs to the project going, and never passes to the next one shown.
         self.viewing = None;
+        self.loads.call_off();
         self.session = None;
         self.session_error = None;
         self.adopted = None;
@@ -1779,6 +1784,7 @@ impl Shell {
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
             || self.version_list.steps.reading.is_some()
+            || self.loads.waiting()
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
@@ -1814,6 +1820,7 @@ impl Shell {
             self.start_quit(ctx);
         }
         self.continue_quit(ctx);
+        self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
     }

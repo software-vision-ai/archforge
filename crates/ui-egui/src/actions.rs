@@ -336,7 +336,7 @@ pub(crate) mod tests {
             ("a project", |_| {}, &[]),
             ("saving", |s| s.save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
-            ("viewing a version", |s| s.show_version(session(), "c1".to_string(), crate::viewing::OpensOn::Showing), &[SAVE]),
+            ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE]),
             ("About open", crate::support::open, &BEHIND_A_DIALOG),
             ("Settings open", crate::settings::open, &BEHIND_A_DIALOG),
             ("Generate open", Shell::open_generate, &BEHIND_A_DIALOG),
