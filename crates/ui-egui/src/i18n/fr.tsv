@@ -519,6 +519,21 @@ str		{name}, selected	{name}, sélectionnée
 str		Compared with the version of {when}	Comparé à la version du {when}
 str		There is no version to compare with yet.	Il n’y a pas encore de version à comparer.
 str		This element couldn't be compared.	Impossible de comparer cet élément.
+str		This element was added	Cet élément a été ajouté
+str		It is only on the After side, so there is nothing to compare.	Il ne se trouve que du côté Après : il n’y a donc rien à comparer.
+str		This element was removed	Cet élément a été supprimé
+str		It is only on the Before side, so there is nothing to compare.	Il ne se trouve que du côté Avant : il n’y a donc rien à comparer.
+plural		{n} value changed	{n} valeur modifiée|{n} valeurs modifiées
+str		Members, relationships and ownership aren't shown here yet.	Les membres, les relations et l’appartenance ne sont pas encore affichés ici.
+str		Only members, relationships or ownership changed	Seuls des membres, des relations ou l’appartenance ont changé
+str		The cards show the same on both sides, and these changes aren't shown here yet.	Les cartes affichent la même chose des deux côtés, et ces modifications ne sont pas encore affichées ici.
+str		The cards show no difference	Les cartes n’affichent aucune différence
+str		The name changed from {from} to {to}.	Le nom a changé de {from} à {to}.
+str		The kind changed from {from} to {to}.	Le genre a changé de {from} à {to}.
+str		{property} changed from {from} to {to}.	{property} a changé de {from} à {to}.
+str		{property} is only on the Before side.	{property} ne se trouve que du côté Avant.
+str		{property} is only on the After side.	{property} ne se trouve que du côté Après.
+plural		{n} more value changed.	{n} autre valeur a changé.|{n} autres valeurs ont changé.
 str		Yes	Oui
 str		Not set	Non défini
 str		Nothing here yet	Rien pour l’instant

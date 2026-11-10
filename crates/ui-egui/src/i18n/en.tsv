@@ -518,6 +518,21 @@ str		{name}, selected	{name}, selected
 str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
 str		This element couldn't be compared.	This element couldn't be compared.
+str		This element was added	This element was added
+str		It is only on the After side, so there is nothing to compare.	It is only on the After side, so there is nothing to compare.
+str		This element was removed	This element was removed
+str		It is only on the Before side, so there is nothing to compare.	It is only on the Before side, so there is nothing to compare.
+plural		{n} value changed	{n} value changed|{n} values changed
+str		Members, relationships and ownership aren't shown here yet.	Members, relationships and ownership aren't shown here yet.
+str		Only members, relationships or ownership changed	Only members, relationships or ownership changed
+str		The cards show the same on both sides, and these changes aren't shown here yet.	The cards show the same on both sides, and these changes aren't shown here yet.
+str		The cards show no difference	The cards show no difference
+str		The name changed from {from} to {to}.	The name changed from {from} to {to}.
+str		The kind changed from {from} to {to}.	The kind changed from {from} to {to}.
+str		{property} changed from {from} to {to}.	{property} changed from {from} to {to}.
+str		{property} is only on the Before side.	{property} is only on the Before side.
+str		{property} is only on the After side.	{property} is only on the After side.
+plural		{n} more value changed.	{n} more value changed.|{n} more values changed.
 str		Yes	Yes
 str		Not set	Not set
 str		Nothing here yet	Nothing here yet
