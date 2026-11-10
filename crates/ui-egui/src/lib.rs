@@ -53,6 +53,7 @@ pub mod problems;
 mod project_search;
 pub mod relation;
 pub mod replace;
+mod restore_ask;
 pub mod save_version;
 pub mod settings;
 mod settings_agents;
@@ -253,7 +254,7 @@ pub trait ProjectHost: Send + Sync {
     }
 
     /// The job that restores the version `commit` of the project at `project`, saved at `saved_at`
-    /// (RFC 3339 in UTC), as a new version recorded as `by`, for [`Shell::begin_replacement`];
+    /// as the list says it, as a new version recorded as `by`, for [`Shell::begin_replacement`];
     /// `repair` is what an opening does to a model. Its callbacks only hand the work over.
     fn restore_job(
         &self,
@@ -1906,7 +1907,7 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. }));
+            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. }));
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

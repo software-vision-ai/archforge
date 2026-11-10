@@ -24,6 +24,15 @@ An open project fills the window with its workspace.
   work as After; the button between them swaps the two, and each select lists your current work
   and this branch's versions, reading further ones as you reach the end. What differs between the
   two is not shown there yet.
+  **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
+  work** in the banner of a version you are viewing, makes the content of that version a new version
+  on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
+  and later versions stay in History. A question names the version and says all this first, and
+  that unsaved work is first kept as a version called *Before restoring* and the time. Undo starts
+  fresh after a restore. If it doesn't finish, the same question says what happened and whether your
+  work is as it was, with **Retry**; when Archforge can't tell whether it finished, the status bar
+  says so instead. Restore isn't offered for the last version while nothing is
+  unsaved, which is what you have now, or for a version that can't be read.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
   Clicking a model element under Working changes opens it in the centre: its name, whether it was

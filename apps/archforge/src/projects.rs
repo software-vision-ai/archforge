@@ -121,7 +121,7 @@ struct JobWatch {
 pub struct RestoreRequest {
     /// The version's commit.
     pub commit: String,
-    /// When the version was saved, RFC 3339 in UTC, for the new version's message.
+    /// When the version was saved, as the list says it, for the new version's message.
     pub saved_at: String,
     pub by: SavedBy,
     /// What an opening does to a model, applied to both sides of the comparison.

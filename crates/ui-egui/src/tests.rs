@@ -371,6 +371,8 @@ struct SavingHost {
     branch_now: std::sync::Mutex<Option<String>>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
+    /// When each version restored was saved, as its job was told.
+    restore_dates: std::sync::Mutex<Vec<String>>,
     /// Each branch switch asked for, and what the next one is refused with.
     switches: std::sync::Mutex<Vec<SwitchEnds>>,
     switch_refused: std::sync::Mutex<Option<String>>,
@@ -396,12 +398,13 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         _commit: String,
-        _saved_at: String,
+        saved_at: String,
         _by: crate::SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> crate::replace::Job {
         let (answer, answers) = std::sync::mpsc::channel();
         let (reading, readings) = std::sync::mpsc::channel();
+        self.restore_dates.lock().unwrap().push(saved_at);
         self.restores.lock().unwrap().push((answer, reading));
         crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
     }

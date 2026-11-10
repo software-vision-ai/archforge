@@ -446,6 +446,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Le projet affiché a changé après l'envoi de cette requête ; elle n'a donc pas été exécutée. Vérifiez ce qui est affiché et renvoyez-la.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Le projet est figé pendant son remplacement ; cette requête n'a donc pas été exécutée. Réessayez une fois l'opération terminée.
 str		This version is the same as your current work.	Cette version est identique à votre travail en cours.
+str		Restore this version…	Restaurer cette version…
+str		Restore this version?	Restaurer cette version ?
+str		The version of {what}	La version du {what}
+str		A new version with that content is added on top of the history, called "{name}".	Une nouvelle version avec ce contenu est ajoutée en haut de l’historique, nommée « {name} ».
+str		Nothing is rewound or removed, and later versions stay in History.	Rien n’est annulé ni supprimé, et les versions ultérieures restent dans l’historique.
+str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Vos modifications non enregistrées sont d’abord enregistrées comme une version nommée « Before restoring » suivie de l’heure.
+str		You can reach them again from History.	Vous pourrez les retrouver dans l’historique.
+str		Undo starts fresh after a Restore.	L’annulation repart de zéro après une restauration.
+str		Restore	Restaurer
+str		The restore did not finish	La restauration n’a pas abouti
+str		{why} Nothing was changed.	{why} Rien n’a été modifié.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauration n'a pas pu avoir lieu car le projet a changé ou était occupé ; rien n'a donc été restauré.
 str		You are already on this branch.	Vous êtes déjà sur cette branche.
 str		The project stayed on its branch because it changed or was busy.	Le projet est resté sur sa branche car il a changé ou était occupé.

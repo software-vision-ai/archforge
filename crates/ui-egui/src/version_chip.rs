@@ -47,7 +47,7 @@ pub struct List {
 #[derive(Default)]
 pub struct Steps {
     project: Option<PathBuf>,
-    history: Vec<VersionEntry>,
+    pub(crate) history: Vec<VersionEntry>,
     /// Whether older versions follow what is read.
     more: bool,
     /// The one read under way: the newest page, or the page after `history`.
@@ -278,7 +278,7 @@ fn pick(shell: &mut Shell, (hash, label, _): Row) {
 }
 
 /// The date of the version in view, when it is the one it was picked with.
-fn shown(shell: &Shell) -> Option<&String> {
+pub(crate) fn shown(shell: &Shell) -> Option<&String> {
     let (commit, date) = shell.version_list.shown.as_ref()?;
     (shell.version_in_view() == Some(commit.as_str())).then_some(date)
 }

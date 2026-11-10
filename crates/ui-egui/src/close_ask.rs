@@ -30,6 +30,8 @@ pub enum Ask {
     /// Switching away from the unsaved work of `path`, as session `generation` holds it, or how
     /// that switch ended.
     Switch { path: std::path::PathBuf, generation: u64, confirm: crate::switch_ask::Confirm },
+    /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed.
+    Restore { path: std::path::PathBuf, generation: u64, confirm: crate::restore_ask::Confirm },
 }
 
 impl Ask {
@@ -41,7 +43,8 @@ impl Ask {
             | Ask::ConfirmLoss { path }
             | Ask::HoldFailed { path, .. }
             | Ask::StopChat { path, .. }
-            | Ask::Switch { path, .. } => path,
+            | Ask::Switch { path, .. }
+            | Ask::Restore { path, .. } => path,
         }
     }
 }
@@ -67,7 +70,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         return;
     };
     // Chat's question is about the session it was asked over; another showing now takes it along.
-    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Switch { generation, .. } if generation != shell.session_generation()) {
+    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Switch { generation, .. } | Ask::Restore { generation, .. } if generation != shell.session_generation())
+    {
         shell.ask = None;
         return;
     }
@@ -75,6 +79,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let quitting = shell.quitting();
     let (title, lines, buttons): (String, Vec<String>, Vec<(&str, String, Answer, bool)>) = match &ask {
         Ask::Switch { confirm, .. } => return crate::switch_ask::show(shell, ui, confirm.clone()),
+        Ask::Restore { confirm, .. } => return crate::restore_ask::show(shell, ui, confirm.clone()),
         Ask::Unsaved { .. } => (
             fmt(&tr("Save the changes to {name}?"), &[("name", &name)]),
             vec![tr("If you don't save, the changes since the last save are lost.")],

@@ -76,6 +76,8 @@ pub struct State {
     described_only: bool,
     /// The Save version dialog, while it is open.
     pub(crate) dialog: Option<crate::save_version::Dialog>,
+    /// The restore asked for here that has not ended; a failure brings its question back.
+    pub(crate) restoring: Option<crate::restore_ask::Confirm>,
     /// The version whose details the centre shows.
     pub(crate) details: Option<crate::version_details::Details>,
     /// The one comparison of two versions the details have under way.
