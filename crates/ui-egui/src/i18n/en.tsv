@@ -1456,6 +1456,182 @@ str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	Association class · {package}
 str		{name} removed; what it held moved to {parent}	{name} removed; what it held moved to {parent}
+# Words for what the metamodel names
+str		Alias	Alias
+str		Allow substitutable	Allow substitutable
+str		Alt	Alt
+str		Applies to	Applies to
+str		Assembly	Assembly
+str		Assert	Assert
+str		Associative	Associative
+str		Asynch call	Asynch call
+str		Asynch signal	Asynch signal
+str		Body	Body
+str		Break	Break
+str		Check constraint	Check constraint
+str		Choice	Choice
+str		Classifier template parameter	Classifier template parameter
+str		Comment	Comment
+str		Computed stored	Computed stored
+str		Computed virtual	Computed virtual
+str		Concurrency	Concurrency
+str		Concurrent	Concurrent
+str		Consider	Consider
+str		Content	Content
+str		Create message	Create message
+str		Critical	Critical
+str		Deep history	Deep history
+str		Delegation	Delegation
+str		Delete message	Delete message
+str		Deployment location	Deployment location
+str		Derivation	Derivation
+str		Direction	Direction
+str		Domain check	Domain check
+str		Drawing	Drawing
+str		Effect	Effect
+str		Entry point	Entry point
+str		Enumeration literal	Enumeration literal
+str		Exactly one	Exactly one
+str		Execution location	Execution location
+str		Exit point	Exit point
+str		Export	Export
+str		Extension	Extension
+str		Extension end	Extension end
+str		External	External
+str		FIFO	FIFO
+str		File name	File name
+str		First	First
+str		First event	First event
+str		Fork	Fork
+str		Format	Format
+str		Found	Found
+str		From end	From end
+str		From role	From role
+str		Guarded	Guarded
+str		Identity always	Identity always
+str		Identity by default	Identity by default
+str		Ignore	Ignore
+str		In	In
+str		Index column	Index column
+str		Initial	Initial
+str		Initially deferred	Initially deferred
+str		Initially immediate	Initially immediate
+str		Inout	Inout
+str		Instance specification	Instance specification
+str		Instance value	Instance value
+str		Interaction operator	Interaction operator
+str		Internal	Internal
+str		Is ID	Is ID
+str		Is abstract	Is abstract
+str		Is active	Is active
+str		Is assured	Is assured
+str		Is behavior	Is behavior
+str		Is combine duplicate	Is combine duplicate
+str		Is conjugated	Is conjugated
+str		Is control	Is control
+str		Is control type	Is control type
+str		Is covering	Is covering
+str		Is derived	Is derived
+str		Is derived union	Is derived union
+str		Is destroy duplicates	Is destroy duplicates
+str		Is destroy links	Is destroy links
+str		Is destroy owned objects	Is destroy owned objects
+str		Is determinate	Is determinate
+str		Is dimension	Is dimension
+str		Is direct	Is direct
+str		Is disjoint	Is disjoint
+str		Is exception	Is exception
+str		Is external	Is external
+str		Is final specialization	Is final specialization
+str		Is indirectly instantiated	Is indirectly instantiated
+str		Is leaf	Is leaf
+str		Is locally reentrant	Is locally reentrant
+str		Is multicast	Is multicast
+str		Is multireceive	Is multireceive
+str		Is ordered	Is ordered
+str		Is query	Is query
+str		Is read only	Is read only
+str		Is reentrant	Is reentrant
+str		Is relative	Is relative
+str		Is remove duplicates	Is remove duplicates
+str		Is replace all	Is replace all
+str		Is service	Is service
+str		Is single execution	Is single execution
+str		Is static	Is static
+str		Is stream	Is stream
+str		Is strict	Is strict
+str		Is substitutable	Is substitutable
+str		Is synchronous	Is synchronous
+str		Is tested first	Is tested first
+str		Is unique	Is unique
+str		Is unmarshall	Is unmarshall
+str		Iterative	Iterative
+str		Join	Join
+str		Junction	Junction
+str		LIFO	LIFO
+str		Last	Last
+str		Literal boolean	Literal boolean
+str		Literal integer	Literal integer
+str		Literal real	Literal real
+str		Literal string	Literal string
+str		Literal unlimited natural	Literal unlimited natural
+str		Local	Local
+str		Loop	Loop
+str		Lost	Lost
+str		Message sort	Message sort
+str		Mode	Mode
+str		Modelling	Modelling
+str		Must isolate	Must isolate
+str		Naming	Naming
+str		Neg	Neg
+str		Not deferrable	Not deferrable
+str		Nullable	Nullable
+str		Nulls	Nulls
+str		One or more	One or more
+str		Opaque expression	Opaque expression
+str		Opt	Opt
+str		Ordering	Ordering
+str		Out	Out
+str		Par	Par
+str		Parallel	Parallel
+str		Persistence	Persistence
+str		Profile application	Profile application
+str		Property	Property
+str		Read	Read
+str		Realization	Realization
+str		Redefinable template signature	Redefinable template signature
+str		Refinement	Refinement
+str		Reply	Reply
+str		Return	Return
+str		Satisfaction	Satisfaction
+str		Seq	Seq
+str		Sequential	Sequential
+str		Setting	Setting
+str		Shallow history	Shallow history
+str		Slot	Slot
+str		Stream	Stream
+str		Strict	Strict
+str		Subtype mapping	Subtype mapping
+str		Subtypes complete	Subtypes complete
+str		Subtypes disjoint	Subtypes disjoint
+str		Symbol	Symbol
+str		Synch call	Synch call
+str		Table index	Table index
+str		Tag	Tag
+str		Template parameter substitution	Template parameter substitution
+str		Terminate	Terminate
+str		To end	To end
+str		To role	To role
+str		Trace	Trace
+str		Type pattern	Type pattern
+str		URI	URI
+str		Unique constraint	Unique constraint
+str		Unknown	Unknown
+str		Unordered	Unordered
+str		Update	Update
+str		Viewpoint	Viewpoint
+str		Zero or more	Zero or more
+str		Zero or one	Zero or one
 # Unsaved changes on close
 str		Close and lose changes	Close and lose changes
 str		Close without writing	Close without writing

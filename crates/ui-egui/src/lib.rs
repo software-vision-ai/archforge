@@ -38,6 +38,7 @@ pub mod indexes;
 pub mod keys;
 mod kinds;
 pub mod markdown;
+pub mod model_words;
 pub mod new_project;
 mod notation_ui;
 pub mod objects;
