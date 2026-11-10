@@ -730,10 +730,15 @@ fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
     frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
 }
 
+/// The sides of `id` with these cards and `fields`, and no lists.
+fn sided(id: Uuid, before: Option<ElementCard>, after: Option<ElementCard>, fields: Vec<CardField>) -> ElementSides {
+    ElementSides { id, before, after, fields, lists: Default::default() }
+}
+
 /// The sides of an element called `name` on both sides of the comparison.
 fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
     let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) };
-    Ok(Some(ElementSides { id, before: Some(card.clone()), after: Some(card), fields: Vec::new() }))
+    Ok(Some(sided(id, Some(card.clone()), Some(card), Vec::new())))
 }
 
 /// Puts a read of `id` about `key` under way, the test holding its answer.
@@ -1066,7 +1071,7 @@ fn values_are_worded_per_type_without_a_read() {
         ];
         let mut fields: Vec<CardField> = cases.iter().map(|(v, _)| field(Some(v.clone()), None, false)).collect();
         fields.push(CardField { prop: archforge_diagram::node::ELEMENT, ..field(Some(Value::str("odd")), None, false) });
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("a"), after: None, fields })));
+        landed(h, id, key, Ok(Some(sided(id, schema("a"), None, fields))));
         for (_, want) in &cases {
             let times = cases.iter().filter(|(_, w)| w == want).count();
             assert_eq!(named(h, &format!("Visibility, {want}")), times, "{want}: {:?}", painted(h));
@@ -1084,18 +1089,18 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         let p = colours(h);
         let fields =
             vec![field(Some(Value::str("old")), Some(Value::str("new")), true), field(Some(Value::str("same")), Some(Value::str("same")), false)];
-        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("kept"), after: schema("kept"), fields })));
+        landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
         assert_eq!((named(h, "Visibility, old, Changed"), named(h, "Visibility, new, Changed"), named(h, "Visibility, same")), (1, 1, 2));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1), "{:?}", painted(h));
         assert!(filled(h, &format!("{BEFORE}.field.0"), p.danger_tint) && filled(h, &format!("{AFTER}.field.0"), p.green_tint));
         assert!(!filled(h, &format!("{BEFORE}.field.1"), p.danger_tint), "a same row is plain");
         assert_eq!(named(h, "Schema, kept"), 2, "the same name is not marked");
-        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("was"), after: schema("is"), fields: Vec::new() })));
+        landed(h, id, key.clone(), Ok(Some(sided(id, schema("was"), schema("is"), Vec::new()))));
         assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
         assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
         let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()) });
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("kept"), after: entity, fields: Vec::new() })));
+        landed(h, id, key, Ok(Some(sided(id, schema("kept"), entity, Vec::new()))));
         assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Entity, kept, Changed")), (1, 1), "a new kind");
     });
 }
@@ -1108,7 +1113,7 @@ fn a_side_without_the_element_is_a_tinted_card() {
         let p = colours(h);
         assert_eq!((named(h, "Before, Nothing here yet"), named(h, "After, Current work")), (1, 1), "added");
         assert!(filled(h, BEFORE, p.field) && !has_id(h, &format!("{BEFORE}.name")));
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("gone"), after: None, fields: Vec::new() })));
+        landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
         assert_eq!((named(h, "After, Removed"), named(h, "Before, Version of 7 Nov 17:15")), (1, 1), "{:?}", painted(h));
         assert!(filled(h, AFTER, p.field), "removed");
         h.state_mut().versions.page.as_mut().unwrap().versions.clear();
@@ -1129,7 +1134,7 @@ fn the_summary_says_added_or_removed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("gone"), after: None, fields: Vec::new() })));
+        landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
         says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
     });
 }
@@ -1143,10 +1148,10 @@ fn the_summary_counts_and_says_each_difference() {
         let visibility = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
         let fields = vec![visibility.clone(), same];
-        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("kept"), after: schema("kept"), fields })));
+        landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
         says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
         let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None });
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("was"), after: entity, fields: vec![visibility] })));
+        landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
         let said = "The name changed from was to Unnamed. The kind changed from Schema to Entity. Visibility changed from Not set to Private.";
         says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
     });
@@ -1161,7 +1166,7 @@ fn the_summary_counts_what_it_does_not_write_out() {
         let three = format!("{line} {line} {line}");
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
-            landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+            landed(h, id, key.clone(), Ok(Some(sided(id, schema("k"), schema("k"), fields))));
             says(h, &format!("{n} values changed"), &format!("{three}{more} {NOT_SHOWN}"));
         }
     });
@@ -1173,7 +1178,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         let said = "Visibility is only on the Before side. Visibility is only on the After side.";
         says(h, "2 values changed", &format!("{said} {NOT_SHOWN}"));
     });
@@ -1186,7 +1191,7 @@ fn unmarked_cards_never_read_as_nothing_changed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         says(
             h,
             "Only members, relationships or ownership changed",
@@ -1205,7 +1210,7 @@ fn the_summary_cuts_a_long_value() {
         let (id, key) = element_open(h, host);
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         says(h, "1 value changed", &format!("Visibility changed from {}… to b. {NOT_SHOWN}", "x".repeat(40)));
         assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
     });
@@ -1216,7 +1221,7 @@ fn the_summary_cuts_a_long_value() {
 fn the_summary_sits_above_the_cards() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields: Vec::new() })));
+        landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), Vec::new()))));
         let (area, before, after) = (rect_of(h, SUMMARY), rect_of(h, BEFORE), rect_of(h, AFTER));
         assert_eq!((area.left(), area.right()), (before.left(), after.right()), "as wide as the two cards");
         assert_eq!(area.height(), 86.0, "one row of sentences, as the frame");
@@ -1231,7 +1236,7 @@ fn the_cards_scroll_as_one() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::Null), Some(Value::Null), false); 60];
-        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("long"), after: schema("long"), fields })));
+        landed(h, id, key, Ok(Some(sided(id, schema("long"), schema("long"), fields))));
         let (first, last) = (format!("{BEFORE}.field.0"), format!("{AFTER}.field.59"));
         assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of sight");
         assert!(has_id(h, SUMMARY), "at the top the summary shows");
