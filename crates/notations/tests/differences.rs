@@ -1,9 +1,11 @@
 //! Two states of a project classified and named, built with the real commands.
 
 use archforge_mof::rows::{self, Cell, Rows};
-use archforge_mof::{Store, Uuid, Value};
-use archforge_notations::differences::{Area, ChangeKind, ClassifyError, Difference, classified};
-use archforge_notations::{Session, new_project_session, storage};
+use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
+use archforge_notations::differences::{
+    Area, CardField, ChangeKind, ClassifyError, Difference, ElementCard, ElementSides, classified, element_sides,
+};
+use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
 
 /// Ids that never repeat within a test.
@@ -151,4 +153,192 @@ fn a_side_that_cannot_be_read_is_named() {
     let refused: Result<Vec<Difference>, Box<dyn std::error::Error>> = (|| Ok(classified(&Rows::default(), &good, |_| {})?))();
     assert_eq!(refused.unwrap_err().to_string(), "the before side cannot be read: the rows do not match the project's tables");
     assert!(matches!(classified(&good, &Rows::default(), |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
+}
+
+/// The two sides of the element `id`, with no repair.
+fn sides(before: &Rows, after: &Rows, id: &str) -> ElementSides {
+    element_sides(before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
+}
+
+/// The field of `prop` on the two cards.
+fn field(seen: &ElementSides, prop: PropId) -> &CardField {
+    seen.fields.iter().find(|f| f.prop == prop).unwrap()
+}
+
+/// A card to expect.
+fn card(class: ClassId, name: &str) -> Option<ElementCard> {
+    Some(ElementCard { class, name: Some(name.to_string()) })
+}
+
+/// The name of an enumeration value of `prop`, through the metamodel the view will word it from.
+fn literal(prop: PropId, value: &Option<Value>) -> String {
+    let all = universe().unwrap();
+    let (Some(TypeRef::Data(data)), Some(Value::Enum(at))) = (all.prop(prop).map(|p| p.ty), value) else { panic!("{value:?} is no literal") };
+    let DataKind::Enumeration(literals) = &all.data_type(data).unwrap().kind else { panic!("{data:?} is no enumeration") };
+    literals[*at as usize].to_string()
+}
+
+/// A project with a UML package shop holding a class Order and its private attribute total.
+fn uml_project() -> (Session, String, String, String) {
+    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let shop = run(&mut s, "uml.package.add", json!({ "name": "shop" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Order" }));
+    let total = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total", "visibility": "private" }));
+    (s, shop, order, total)
+}
+
+/// An ER sequence edited: its typed values on both sides, and marks on only what differs.
+#[test]
+fn an_er_element_marks_only_the_fields_that_differ() {
+    use archforge_er::sequence::{CYCLE, INCREMENT, MAXIMUM, MINIMUM, START};
+    let (mut s, shop, ..) = project();
+    let orders = run(&mut s, "er.sequence.add", json!({ "schema": shop, "name": "orders", "start": 5, "increment": 7 }));
+    let states = run(&mut s, "er.enum.add", json!({ "schema": shop, "name": "state", "literals": ["open", "paid"] }));
+    let before = state(&s);
+    run(&mut s, "er.sequence.set", json!({ "sequence": orders, "name": "orders", "start": 20, "increment": 7, "cycle": true, "minimum": "3" }));
+    let seen = sides(&before, &state(&s), &orders);
+    assert_eq!((seen.before.clone(), seen.after.clone()), (card(archforge_er::SEQUENCE, "orders"), card(archforge_er::SEQUENCE, "orders")));
+    assert_eq!(
+        seen.fields.iter().map(|f| f.prop).collect::<Vec<_>>(),
+        [archforge_er::element::DESCRIPTION, START, INCREMENT, MINIMUM, MAXIMUM, CYCLE],
+        "the metamodel's order, no name, no reference"
+    );
+    assert!(sides(&before, &before, &states).fields.iter().all(|f| f.prop != archforge_er::enum_type::LITERAL), "a list is left to the members");
+    let told = |prop| (field(&seen, prop).before.clone(), field(&seen, prop).after.clone(), field(&seen, prop).changed);
+    assert_eq!(told(START), (Some(Value::Int(5)), Some(Value::Int(20)), true));
+    assert_eq!(told(INCREMENT), (Some(Value::Int(7)), Some(Value::Int(7)), false));
+    assert_eq!(told(MINIMUM), (Some(Value::Null), Some(Value::str("3")), true));
+    assert_eq!(told(MAXIMUM), (Some(Value::Null), Some(Value::Null), false));
+    assert_eq!(told(CYCLE), (Some(Value::Bool(false)), Some(Value::Bool(true)), true));
+}
+
+/// UML through the same reader: an enumeration stays a typed literal, and only data properties reach a card.
+#[test]
+fn a_uml_element_is_read_from_its_own_metamodel() {
+    use archforge_uml::{class, named_element};
+    let (mut s, _, order, total) = uml_project();
+    let before = state(&s);
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "visibility": "public" }));
+    run(&mut s, "uml.class.set", json!({ "class": order, "abstract": true }));
+    let after = state(&s);
+    let attribute = sides(&before, &after, &total);
+    let shown = field(&attribute, named_element::VISIBILITY);
+    assert_eq!((literal(shown.prop, &shown.before), literal(shown.prop, &shown.after), shown.changed), ("private".into(), "public".into(), true));
+    assert_eq!(attribute.fields.iter().filter(|f| f.changed).count(), 1, "{attribute:?}");
+    let owner = sides(&before, &after, &order);
+    assert_eq!(field(&owner, class::IS_ABSTRACT).after, Some(Value::Bool(true)));
+    let all = universe().unwrap();
+    for f in owner.fields.iter().chain(&attribute.fields) {
+        let p = all.prop(f.prop).unwrap();
+        assert!(matches!(p.ty, TypeRef::Data(_)) && !p.is_many() && !p.is_name && p.is_stored(), "{}", all.prop_name(f.prop));
+    }
+}
+
+/// An added or removed element has an explicit absent side, told apart from a value left empty.
+#[test]
+fn an_added_or_removed_element_has_an_absent_side_and_no_marks() {
+    let (mut s, _, customer, id) = project();
+    let before = state(&s);
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    run(&mut s, "element.remove", json!({ "ids": [id] }));
+    let after = state(&s);
+    let added = sides(&before, &after, &email);
+    assert_eq!((added.before.clone(), added.after.clone()), (None, card(archforge_er::ATTRIBUTE, "email")));
+    assert!(!added.fields.is_empty() && added.fields.iter().all(|f| f.before.is_none() && f.after.is_some() && !f.changed), "{added:?}");
+    assert_eq!(field(&added, archforge_er::attribute::DEFAULT).after, Some(Value::Null), "an empty value is a value");
+    let removed = sides(&before, &after, &id);
+    assert_eq!((removed.before.clone(), removed.after.clone()), (card(archforge_er::ATTRIBUTE, "id"), None));
+    assert!(!removed.fields.is_empty() && removed.fields.iter().all(|f| f.before.is_some() && f.after.is_none() && !f.changed), "{removed:?}");
+    let (mut s, _, order, _) = uml_project();
+    let before = state(&s);
+    run(&mut s, "element.remove", json!({ "ids": [order] }));
+    let gone = sides(&before, &state(&s), &order);
+    assert_eq!((gone.before, gone.after), (card(archforge_uml::CLASS, "Order"), None));
+}
+
+/// A rename or a move is one element on both sides with no field marked; so is nothing at all.
+#[test]
+fn a_renamed_moved_or_unchanged_element_stays_one_element() {
+    let (mut s, _, customer, _) = project();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let renamed = sides(&before, &state(&s), &customer);
+    assert_eq!(
+        (renamed.id.to_string(), renamed.before.clone(), renamed.after.clone()),
+        (customer.clone(), card(archforge_er::ENTITY, "customer"), card(archforge_er::ENTITY, "client"))
+    );
+    assert!(!renamed.fields.is_empty() && renamed.fields.iter().all(|f| !f.changed && f.before == f.after), "{renamed:?}");
+    let unchanged = sides(&before, &before, &customer);
+    assert_eq!(unchanged.before, unchanged.after);
+    assert!(!unchanged.fields.is_empty() && unchanged.fields.iter().all(|f| !f.changed && f.before.is_some() && f.before == f.after));
+    let (mut s, _, order, _) = uml_project();
+    let warehouse = run(&mut s, "uml.package.add", json!({ "name": "warehouse" }));
+    let before = state(&s);
+    run(&mut s, "uml.class.move", json!({ "class": order, "package": warehouse }));
+    let moved = sides(&before, &state(&s), &order);
+    assert_eq!((moved.before, moved.after.clone()), (moved.after, card(archforge_uml::CLASS, "Order")));
+    assert!(moved.fields.iter().all(|f| !f.changed));
+}
+
+/// A box a repair fits shows no false change on either side, and is named by what it shows.
+#[test]
+fn a_card_shows_each_side_as_an_opening_repairs_it() {
+    use archforge_diagram::node::HEIGHT;
+    let (mut s, shop, customer, _) = project();
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop }));
+    let node = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0, "width": 100, "height": 40 }));
+    let before = state(&s);
+    run(&mut s, "diagram.resize", json!({ "node": node, "width": 100, "height": 200 }));
+    let after = state(&s);
+    let raw = sides(&before, &after, &node);
+    assert_eq!((field(&raw, HEIGHT).before.clone(), field(&raw, HEIGHT).changed), (Some(Value::Real(40.0)), true));
+    assert_eq!(raw.after.and_then(|c| c.name).as_deref(), Some("customer"));
+    let fit = |st: &mut Store| {
+        let nodes: Vec<_> = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).collect();
+        for n in nodes {
+            st.set(n, HEIGHT, Value::Real(200.0)).unwrap();
+        }
+    };
+    let id = Uuid::parse(&node).unwrap();
+    for (one, other) in [(&before, &after), (&after, &before)] {
+        let seen = element_sides(one, other, id, fit).unwrap().unwrap();
+        assert_eq!((field(&seen, HEIGHT).before.clone(), field(&seen, HEIGHT).changed), (Some(Value::Real(200.0)), false));
+    }
+}
+
+/// An id that moves to another class keeps one card pair: shared fields line up, the rest fall on one side.
+#[test]
+fn fields_line_up_by_property_when_the_class_differs() {
+    use archforge_uml::{class, classifier, packageable_element};
+    let (mut s, shop, order, _) = uml_project();
+    let port = run(&mut s, "uml.interface.add", json!({ "package": shop, "name": "Port" }));
+    let before = state(&s);
+    run(&mut s, "element.remove", json!({ "ids": [order] }));
+    let (mut after, from, to) = (state(&s), Uuid::parse(&port).unwrap(), Uuid::parse(&order).unwrap());
+    after.tables.iter_mut().flatten().flatten().filter(|c| **c == Cell::Id(from)).for_each(|c| *c = Cell::Id(to));
+    for (owner, _, value) in after.junctions.iter_mut().flatten() {
+        *owner = if *owner == from { to } else { *owner };
+        *value = if *value == Cell::Id(from) { Cell::Id(to) } else { value.clone() };
+    }
+    let seen = sides(&before, &after, &order);
+    assert_eq!((seen.before.clone(), seen.after.clone()), (card(archforge_uml::CLASS, "Order"), card(archforge_uml::INTERFACE, "Port")));
+    let shared = field(&seen, packageable_element::VISIBILITY);
+    assert!(shared.before.is_some() && shared.before == shared.after && !shared.changed, "{shared:?}");
+    let only_before = field(&seen, class::IS_ABSTRACT);
+    assert!(only_before.before.is_some() && only_before.after.is_none() && only_before.changed, "{only_before:?}");
+    let at = |prop| seen.fields.iter().position(|f| f.prop == prop).unwrap();
+    let only_after = field(&seen, classifier::IS_ABSTRACT);
+    assert!(only_after.before.is_none() && only_after.after.is_some() && only_after.changed, "{only_after:?}");
+    assert!(at(class::IS_ABSTRACT) < at(classifier::IS_ABSTRACT), "the after side's own ones follow");
+}
+
+/// An id on neither side is told as such; a side that cannot be restored is refused and named.
+#[test]
+fn an_unknown_element_is_none_and_an_unreadable_side_is_named() {
+    let (s, _, customer, _) = project();
+    let good = state(&s);
+    let id = Uuid::parse(&customer).unwrap();
+    assert_eq!(element_sides(&good, &good, Uuid([7; 16]), |_| {}), Ok(None));
+    assert!(matches!(element_sides(&Rows::default(), &good, id, |_| {}), Err(ClassifyError::Unreadable { side: "before", .. })));
+    assert!(matches!(element_sides(&good, &Rows::default(), id, |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
 }
