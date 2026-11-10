@@ -472,6 +472,7 @@ str		Name	Name
 str		Models	Models
 str		Versions	Versions
 str		Branches	Branches
+str		This branch	This branch
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry

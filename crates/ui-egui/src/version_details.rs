@@ -19,7 +19,7 @@ use crate::ux::{self, Palette, icons, types};
 use crate::versions::{change_row, dated, lines};
 use crate::{Shell, VersionEntry};
 
-mod compare;
+pub(crate) mod compare;
 
 pub(crate) const MARGIN: f32 = 32.0;
 pub(crate) const BAND: f32 = 72.0;

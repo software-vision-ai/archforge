@@ -1792,8 +1792,9 @@ impl Shell {
         // The table's keys, while each action is available; on macOS the menu bar takes an enabled
         // item's keys first.
         let now = ctx.input(|i| i.time);
-        // An open menu holds the keys, as a native one does.
-        if self.menu_bar.open.is_none() {
+        version_details::compare::keep(self);
+        // An open menu or select list holds the keys, as a native one does.
+        if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
             actions::run_shortcuts(self, ctx);
         }
         // A skill's text is kept once its typing pauses, and all of it before quitting.
@@ -1845,7 +1846,10 @@ impl Shell {
         // Escape closes About before the window behind it is drawn, so no editor there reads it.
         support::dismiss_key(self, ui.ctx());
         let menu_was_open = self.menu_bar.open.is_some();
-        menu_bar::keys(self, ui.ctx());
+        let choosing = version_details::compare::keys(self, ui.ctx());
+        if !choosing {
+            menu_bar::keys(self, ui.ctx());
+        }
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();
@@ -1862,6 +1866,7 @@ impl Shell {
             || self.new_project.is_some()
             || self.versions.dialog.is_some()
             || menu_was_open
+            || choosing
             || self.menu_bar.open.is_some()
             || matches!(self.ask, Some(close_ask::Ask::StopChat { .. }));
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };

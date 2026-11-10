@@ -43,7 +43,7 @@ pub struct State {
     about: Option<(PathBuf, u64)>,
     /// Whether a read has started for them.
     asked: bool,
-    reading: Option<Receiver<Result<VersionsPage, String>>>,
+    pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
     pub(crate) page: Option<VersionsPage>,
     /// Why the last read failed; what was shown stays.
     failed: Option<String>,
@@ -66,8 +66,8 @@ pub struct State {
     pub(crate) filter: String,
     changes_scroll: TreeScroll,
     /// The next page, on its way, and why the last one could not be read.
-    more_reading: Option<Receiver<Result<VersionsPage, String>>>,
-    more_failed: Option<String>,
+    pub(crate) more_reading: Option<Receiver<Result<VersionsPage, String>>>,
+    pub(crate) more_failed: Option<String>,
     /// The version chosen, by its hash: a list that grows or a filter that hides it keeps it.
     pub(crate) selected: Option<String>,
     /// Only versions with a description are listed.
@@ -255,8 +255,9 @@ fn take_more(v: &mut State) {
     v.more_reading = None;
     match (answer, v.page.as_mut()) {
         (Ok(next), Some(page)) => {
+            // An empty page ends the list whatever it says, so reading on always stops.
+            page.more = next.more && !next.versions.is_empty();
             page.versions.extend(next.versions);
-            page.more = next.more;
         }
         (Ok(_), None) => {}
         (Err(why), _) => v.more_failed = Some(why),
@@ -264,7 +265,7 @@ fn take_more(v: &mut State) {
 }
 
 /// Asks for the page after the versions listed; its button is off while a read is on its way.
-fn read_more(shell: &mut Shell) {
+pub(crate) fn read_more(shell: &mut Shell) {
     let v = &shell.versions;
     let after = v.page.as_ref().and_then(|page| page.versions.last()).map(|last| last.hash.clone());
     let (Some(host), Some((path, _)), Some(after)) = (shell.services.projects.clone(), v.about.clone(), after) else { return };

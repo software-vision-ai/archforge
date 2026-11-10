@@ -58,7 +58,7 @@ pub(crate) fn keep_valid(shell: &mut Shell) {
 
 /// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.
 /// Not `consume_key`, which lets Shift through: Shift+F10 opens the row menus of the explorer and Chat.
-fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool {
+pub(crate) fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool {
     ctx.input_mut(|i| {
         let found = i.events.iter().position(|e| {
             matches!(e, egui::Event::Key { key: k, pressed: true, repeat, modifiers, .. }

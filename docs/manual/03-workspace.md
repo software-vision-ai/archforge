@@ -18,7 +18,9 @@ An open project fills the window with its workspace.
   changes of the version you stop on appear once the comparison under way has ended.
   **View this version** shows it read-only; the project's name at the top closes the details.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
-  work as After; the button between them swaps the two. Choosing other versions is not available yet.
+  work as After; the button between them swaps the two, and each select lists your current work
+  and this branch's versions, reading further ones as you reach the end. What differs between the
+  two is not shown there yet.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
   Clicking a model element under Working changes opens it in the centre: its name, whether it was
