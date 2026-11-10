@@ -1,6 +1,7 @@
 //! The menu bar in the title strip on Windows and Linux: the groups of the table below, each a popup
 //! of rows from the table of actions. macOS keeps its native menu, so `Shell::in_window_menu` is false
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
+//! F10 reaches the bar from the keys: the arrows walk groups and live rows, wrapping, Enter or Space runs the row.
 
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
@@ -39,6 +40,10 @@ const DIVIDER: f32 = 9.0;
 pub(crate) struct Bar {
     pub(crate) open: Option<&'static str>,
     pub(crate) chosen: Option<&'static str>,
+    /// The row the keys are on; none leaves the highlight to the pointer.
+    pub(crate) row: Option<&'static str>,
+    /// What had the keyboard focus before the menu opened: egui drops the focus on Esc, so it comes back here.
+    back: Option<egui::Id>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
@@ -51,9 +56,69 @@ pub(crate) fn keep_valid(shell: &mut Shell) {
     }
 }
 
-/// Escape closes an open menu before anything behind it can read the key.
-pub(crate) fn dismiss_key(shell: &mut Shell, ctx: &egui::Context) {
-    if shell.menu_bar.open.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+/// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.
+/// Not `consume_key`, which lets Shift through: Shift+F10 opens the row menus of the explorer and Chat.
+fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool {
+    ctx.input_mut(|i| {
+        let found = i.events.iter().position(|e| {
+            matches!(e, egui::Event::Key { key: k, pressed: true, repeat, modifiers, .. }
+                if *k == key && (repeats || !repeat) && modifiers.matches_exact(egui::Modifiers::NONE))
+        });
+        found.map(|at| i.events.remove(at)).is_some()
+    })
+}
+
+/// The next live row of `group` after `from`, going down or up and wrapping; from no row, the first
+/// live one that way. None when every row is off.
+fn step(shell: &Shell, group: &Group, from: Option<&str>, down: bool) -> Option<&'static str> {
+    let mut rows: Vec<&'static str> = group.sections.iter().flat_map(|s| s.iter().copied()).collect();
+    if !down {
+        rows.reverse();
+    }
+    let start = from.and_then(|id| rows.iter().position(|r| *r == id)).map_or(0, |at| at + 1);
+    (0..rows.len()).map(|n| rows[(start + n) % rows.len()]).find(|id| actions::available(shell, id))
+}
+
+/// The keys of the bar, before anything behind it can read them: F10 opens the first menu when the
+/// bar can open at all, and with a menu open F10 or Esc closes it, handing the focus back, the
+/// arrows move, and Enter or Space runs the row if it can still act.
+pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
+    use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Enter, Escape, F10, Space};
+    let Some(at) = GROUPS.iter().position(|g| shell.menu_bar.open == Some(g.id)) else {
+        shell.menu_bar.back = ctx.memory(egui::Memory::focused);
+        if shell.in_window_menu && actions::free(shell) && press(ctx, F10, false) {
+            shell.menu_bar.open = Some(GROUPS[0].id);
+            shell.menu_bar.row = step(shell, &GROUPS[0], None, true);
+        }
+        return;
+    };
+    // Tab and the arrows were read for the focus before this frame began; it stays where it was.
+    ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+    let from = shell.menu_bar.row;
+    let across = if press(ctx, ArrowRight, true) {
+        1
+    } else if press(ctx, ArrowLeft, true) {
+        GROUPS.len() - 1
+    } else {
+        0
+    };
+    if press(ctx, Escape, false) || press(ctx, F10, false) {
+        shell.menu_bar.open = None;
+        if let Some(id) = shell.menu_bar.back {
+            ctx.memory_mut(|m| m.request_focus(id));
+        }
+    } else if across > 0 {
+        let group = &GROUPS[(at + across) % GROUPS.len()];
+        shell.menu_bar.open = Some(group.id);
+        shell.menu_bar.row = step(shell, group, None, true);
+    } else if press(ctx, ArrowDown, true) {
+        shell.menu_bar.row = step(shell, &GROUPS[at], from, true);
+    } else if press(ctx, ArrowUp, true) {
+        shell.menu_bar.row = step(shell, &GROUPS[at], from, false);
+    } else if (press(ctx, Enter, false) || press(ctx, Space, false))
+        && let Some(id) = from.filter(|id| actions::available(shell, id))
+    {
+        shell.menu_bar.chosen = Some(id);
         shell.menu_bar.open = None;
     }
 }
@@ -90,6 +155,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         paint.galley(pos2(button.left() + GROUP_PAD, mid - text.size().y / 2.0), text, p.text);
         if resp.clicked() {
             shell.menu_bar.open = if was_open { None } else { Some(group.id) };
+            shell.menu_bar.row = None;
         }
         if shell.menu_bar.open == Some(group.id) {
             shown = Some((group, button));
@@ -115,6 +181,10 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
     let window = ui.ctx().content_rect();
     let x = at.x.min(window.right() - MENU_WIDTH - 8.0).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(x, at.y), vec2(MENU_WIDTH, height));
+    // A pointer moving over the menu takes the highlight back from the keys.
+    if ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO && i.pointer.hover_pos().is_some_and(|at| m.contains(at))) {
+        shell.menu_bar.row = None;
+    }
     let picked = ux::overlay(ui, widgets::egui_id("strip.menu.layer"), m, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, m, 8.0, p.shadow);
@@ -141,7 +211,8 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
     (m, picked)
 }
 
-/// One row, its name and keys; off, it says why on hover and takes no click. True when clicked.
+/// One row, its name and keys, highlighted under the keys or else the pointer; off, it says why on
+/// hover and takes no click. True when clicked.
 fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) -> bool {
     let paint = ui.painter();
     let label = actions::label(shell, id);
@@ -159,7 +230,11 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
         });
         resp.on_hover_text(why).accessible_name(label.as_str())
     };
-    if live && resp.hovered() {
+    let keyed = live && shell.menu_bar.row == Some(id);
+    if keyed {
+        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| node.set_selected(true));
+    }
+    if keyed || (live && shell.menu_bar.row.is_none() && resp.hovered()) {
         paint.rect_filled(row, 5.0, p.accent_tint);
     }
     let keys = actions::keys(id).map(chord).unwrap_or_default();
