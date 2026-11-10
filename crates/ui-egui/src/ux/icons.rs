@@ -584,6 +584,22 @@ pub const HISTORY: Icon = Icon {
     ],
 };
 
+/// The versions' clock (the design's Icon / History): a counter-clockwise arrow round the hands.
+pub const VERSION_CLOCK: Icon = Icon {
+    size: [14.0, 14.0],
+    stroke: 1.2,
+    segments: &[
+        C([2.2, 7.0], [2.206, 9.29], [3.828, 11.257], [6.074, 11.698]),
+        C([6.074, 11.698], [8.321, 12.14], [10.567, 10.933], [11.438, 8.816]),
+        C([11.438, 8.816], [12.31, 6.699], [11.565, 4.26], [9.659, 2.992]),
+        C([9.659, 2.992], [7.753, 1.724], [5.216, 1.978], [3.6, 3.6]),
+        L([2.2, 1.8], [2.2, 3.9]),
+        L([2.2, 3.9], [4.3, 3.9]),
+        L([7.0, 4.4], [7.0, 7.0]),
+        L([7.0, 7.0], [8.8, 8.2]),
+    ],
+};
+
 /// A cube: the Models explorer and a model element.
 pub const CUBE: Icon = Icon {
     size: [16.0, 16.0],

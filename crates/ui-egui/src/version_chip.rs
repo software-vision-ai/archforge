@@ -1,6 +1,6 @@
 //! The version chip in the project bar and its list (`docs/design/versioning.md`, section 2): what
 //! the project shows, the versions to view and the steps between them, both over one history that
-//! reads on a [`PAGE`] at a time. AR-342 brings the narrowing order.
+//! reads on a [`PAGE`] at a time.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -10,7 +10,7 @@ use egui::{Key, Modifiers, Rect, Stroke, StrokeKind, pos2, vec2};
 use crate::chat_words::{Clock, civil, clock_time, local, month};
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::hold::HoldRefused;
-use crate::home::control;
+use crate::home::{SEARCH_MIN, control};
 use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, icons, types};
@@ -25,6 +25,10 @@ const ROW: f32 = 30.0;
 const WIDTH: f32 = 360.0;
 const FIELD: f32 = 28.0;
 const ID: &str = "workspace.header.version";
+/// The chip at its narrowest: one icon.
+pub(crate) const NARROWEST: f32 = 32.0;
+/// Between the chip and search.
+const SEARCH_GAP: f32 = 12.0;
 
 /// The list's state between frames.
 #[derive(Default)]
@@ -280,20 +284,52 @@ fn chip_words(shell: &Shell) -> (String, String) {
     }
 }
 
-/// The chip left of search, its width by what it says until AR-342 narrows it, and its list; gives where search starts.
+/// The chip left of search and its list; gives where search starts. Its label goes before search
+/// does: without room for the whole chip and search it is one icon, and without room for search as
+/// well it sits against Help.
 pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start: f32, end: f32) -> f32 {
     let width = match (shell.version_in_view(), shell.shown_unsaved()) {
         (Some(_), _) => 282.0,
         (None, true) => 147.0,
         (None, false) => 135.0,
     };
-    let search = (end - 300.0).max(start + width + 12.0);
-    let r = Rect::from_min_size(pos2(search - 12.0 - width, mid - 16.0), vec2(width, 32.0));
-    chip(shell, ui, p, r);
+    let narrow = end - start < width + SEARCH_GAP + SEARCH_MIN;
+    let width = if narrow { NARROWEST } else { width };
+    let search = (end - 300.0).max(start + width + SEARCH_GAP);
+    let right = if end - search < SEARCH_MIN { end } else { search - SEARCH_GAP };
+    let r = Rect::from_min_size(pos2(right - width, mid - 16.0), vec2(width, 32.0));
+    if narrow {
+        icon_chip(shell, ui, p, r);
+    } else {
+        chip(shell, ui, p, r);
+    }
     if shell.version_list.project.is_some() {
         list(shell, ui, p, r);
     }
     search
+}
+
+/// Opens the list, or closes it when it is open.
+fn toggle_list(shell: &mut Shell) {
+    if shell.version_list.project.is_some() { close(shell) } else { open(shell) }
+}
+
+/// The chip at its narrowest: the clock, untinted even while viewing, and a dot for unsaved work; the
+/// whole label in its tooltip and accessible name, and a click opens the list.
+fn icon_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let paint = ui.painter().clone();
+    paint.rect_filled(r, 8.0, p.surface);
+    paint.rect_stroke(r, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let label = if shell.version_in_view().is_some() { read_only_words(shell) } else { chip_words(shell).0 };
+    let resp = control(shell, ui, ID, "button", r, true).on_hover_text(&label);
+    let _ = resp.clone().accessible_name(&label);
+    ux::icon_mid(&paint, r.center(), &icons::VERSION_CLOCK, p.text_secondary);
+    if shell.shown_unsaved() {
+        paint.circle_filled(pos2(r.left() + 24.0, r.top() + 8.0), 3.0, p.amber);
+    }
+    if resp.clicked() {
+        toggle_list(shell);
+    }
 }
 
 /// The chip: what shows, a dot for unsaved work. Viewing, the steps and the way back.
@@ -306,14 +342,14 @@ fn chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
     let resp = control(shell, ui, ID, "button", r, true).on_hover_text(&label);
     let _ = resp.clone().accessible_name(&label);
-    ux::icon_mid(&paint, pos2(r.left() + 16.0, mid), &icons::HISTORY, p.text_secondary);
-    let name = ux::text_mid(&paint, r.left() + 30.0, mid, &text, types::UI, p.text, Some(84.0));
+    ux::icon_mid(&paint, pos2(r.left() + 18.0, mid), &icons::VERSION_CLOCK, p.text_secondary);
+    let name = ux::text_mid(&paint, r.left() + 31.0, mid, &text, types::SMALL, p.text, Some(84.0));
     if shell.shown_unsaved() {
         paint.circle_filled(pos2(name.right() + 9.0, mid), 3.0, p.amber);
     }
-    ux::icon_mid(&paint, pos2(r.right() - 14.0, mid), &icons::CHEVRON_DOWN, p.text_secondary);
+    ux::icon_mid(&paint, pos2(r.right() - 15.0, mid), &icons::CHEVRON_DOWN, p.text_secondary);
     if resp.clicked() {
-        if shell.version_list.project.is_some() { close(shell) } else { open(shell) }
+        toggle_list(shell);
     }
 }
 
@@ -327,7 +363,7 @@ fn viewing_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (label, 
     let _ = resp.clone().accessible_name(label);
     ux::text_mid(&paint, face.left() + 3.0, mid, date, types::SMALL, p.accent, Some(face.width() - 4.0));
     if resp.clicked() {
-        if shell.version_list.project.is_some() { close(shell) } else { open(shell) }
+        toggle_list(shell);
     }
     paint.rect_filled(Rect::from_center_size(pos2(r.left() + 137.0, mid), vec2(1.0, 18.0)), 0.0, p.border_hover);
     let back = Rect::from_min_max(pos2(r.left() + 138.0, r.top()), r.max);

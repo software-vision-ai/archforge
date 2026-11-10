@@ -202,8 +202,8 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
     let home_on = shell.active.is_none();
     let home_label = ux::galley(&paint, &tr("Home"), types::UI, if home_on { p.accent } else { p.text }, None);
     let home_full = 8.0 + 16.0 + 6.0 + home_label.size().x + 10.0;
-    // Help's left edge, less a margin: the tabs end before it.
-    let limit = r.right() - 96.0;
+    // Help's left edge, less a margin and the version chip at its narrowest: the tabs end before it.
+    let limit = r.right() - 96.0 - crate::version_chip::NARROWEST - 24.0;
     let start = after + 29.0;
     let n = tabs.len() as f32;
     let full_room = |home_w: f32| -> Option<f32> {
@@ -403,7 +403,7 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
     let band = Rect::from_min_size(r.min, vec2(r.width(), 44.0));
     let paint = ui.painter();
     paint.rect_filled(band, 0.0, p.accent_tint);
-    ux::icon_mid(paint, pos2(band.left() + 20.0, band.center().y), &icons::HISTORY, p.accent);
+    ux::icon_mid(paint, pos2(band.left() + 20.0, band.center().y), &icons::VERSION_CLOCK, p.accent);
     let words = crate::version_chip::read_only_words(shell);
     let back = tr("Back to current work");
     let g = ux::galley(paint, &back, types::UI, p.on_accent, None);
