@@ -3729,6 +3729,20 @@ fn a_row_runs_its_action_and_a_row_off_takes_no_click() {
     }
 }
 
+/// A row chosen acts on the project it was chosen on, though another finishes opening before it runs.
+#[test]
+fn a_chosen_close_closes_the_project_it_was_chosen_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, true);
+        let (answer, opening) = std::sync::mpsc::channel();
+        answer.send(Ok(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() })).unwrap();
+        h.state_mut().menu_bar.chosen = Some(crate::actions::CLOSE);
+        h.state_mut().opening = Some(opening);
+        h.run();
+        assert_eq!(h.state().tabs.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Other"], "{theme:?}");
+    }
+}
+
 /// A click on another group moves the open menu there; a click on the open one closes it.
 #[test]
 fn a_click_moves_the_menu_or_closes_it() {

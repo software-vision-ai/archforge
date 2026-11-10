@@ -38,7 +38,7 @@ const DIVIDER: f32 = 9.0;
 #[derive(Default)]
 pub(crate) struct Bar {
     pub(crate) open: Option<&'static str>,
-    chosen: Option<&'static str>,
+    pub(crate) chosen: Option<&'static str>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.

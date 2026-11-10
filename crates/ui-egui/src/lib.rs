@@ -1715,6 +1715,8 @@ impl Shell {
     /// Once per frame, before `ui`: the language, the fonts, the appearance and the exit.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.frames = self.frames.wrapping_add(1);
+        // First, so a row acts on the project it was chosen on: polling below can show another.
+        menu_bar::keep_valid(self);
         settings::note_keyboard(ctx);
         // The stored language, once registered, is the one drawn.
         if crate::i18n::language() != self.state.language && !crate::i18n::set_language(&self.state.language) {
@@ -1740,7 +1742,6 @@ impl Shell {
         }
         self.poll_host();
         version_chip::keep_valid(self);
-        menu_bar::keep_valid(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);
