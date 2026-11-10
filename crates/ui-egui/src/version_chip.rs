@@ -183,12 +183,12 @@ fn take_steps(shell: &mut Shell) {
     }
 }
 
-/// The version a step goes to: from a version, or one on its way, the one beside it; from current
-/// work, going older, the latest when work is unsaved and otherwise the one before it, the first
-/// that differs.
-fn target(shell: &Shell, older: bool) -> Option<&VersionEntry> {
+/// The version a step goes to, past any known not to show, and the first of those it passed: from
+/// a version, or one on its way, the one beside it; from current work, going older, the latest when
+/// work is unsaved and otherwise the one before it, the first that differs.
+fn target(shell: &Shell, older: bool) -> Option<(&VersionEntry, Option<&VersionEntry>)> {
     let history = &shell.version_list.steps.history;
-    let to = match shell.stepping_from() {
+    let mut to = match shell.stepping_from() {
         Some(commit) => {
             let at = history.iter().position(|v| v.hash == commit)?;
             if older { at + 1 } else { at.checked_sub(1)? }
@@ -196,14 +196,27 @@ fn target(shell: &Shell, older: bool) -> Option<&VersionEntry> {
         None if older => usize::from(!shell.shown_unsaved()),
         None => return None,
     };
-    history.get(to)
+    let mut passed = None;
+    loop {
+        let version = history.get(to)?;
+        if !shell.versions.unavailable.contains_key(&version.hash) {
+            return Some((version, passed));
+        }
+        passed.get_or_insert(version);
+        to = if older { to + 1 } else { to.checked_sub(1)? };
+    }
 }
 
-/// Goes one version older or newer; at the end of what is read, nowhere.
+/// Goes one version older or newer, saying so when it passes one that can't be shown; at the end
+/// of what is read, nowhere.
 fn step(shell: &mut Shell, older: bool) {
     let clock = crate::chat_panel::clock(shell);
-    if let Some((hash, label)) = target(shell, older).map(|v| (v.hash.clone(), when(&v.date, clock))) {
-        view(shell, hash, label);
+    let Some((version, passed)) = target(shell, older) else { return };
+    let (hash, label, passed) = (version.hash.clone(), when(&version.date, clock), passed.map(|v| when(&v.date, clock)));
+    let words = tr("{from} can't be shown. Skipped to {to}.");
+    let said = passed.map(|from| (hash.clone(), fmt(&words, &[("from", &from), ("to", &label)])));
+    if view(shell, hash, label) {
+        shell.loads.skipped = said;
     }
 }
 

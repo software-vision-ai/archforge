@@ -1721,7 +1721,7 @@ fn the_chip_has_the_designs_clock_and_label_size() {
 
 /// A failure that may pass, the host's limit among them, marks no row; one that lasts marks its
 /// row, of the project shown only, and a newer Archforge's has no reason. Rows that cannot be built
-/// mark theirs too. A step to any of them stays on the version in view and says why; showing
+/// mark theirs too. Picking any of them stays on the version in view and says why; showing
 /// another version moves the session and keeps what is known.
 #[test]
 fn only_a_lasting_failure_marks_the_row() {
@@ -1739,9 +1739,9 @@ fn only_a_lasting_failure_marks_the_row() {
         assert_eq!(h.state().canvas.notice, Some(Unavailable.to_string()), "says why");
         showing(&h, "v", (false, false));
         step_to(&mut h, "x");
-        assert_eq!(host.reads.lock().unwrap().remove(0).0, "x", "a marked version can still be stepped to");
+        assert_eq!(host.reads.lock().unwrap().remove(0).0, "x", "a marked version can still be picked");
         h.run_steps(3);
-        assert!(h.state().canvas.notice.is_some(), "and that step says why");
+        assert!(h.state().canvas.notice.is_some(), "and that pick says why");
         step_to(&mut h, "n");
         answer_read(&mut h, &host, Err(Shape));
         assert_eq!((reason(&h, "n"), h.state().canvas.notice.clone()), (Some(None), Some(Shape.to_string())));
@@ -1821,5 +1821,230 @@ fn a_reason_ends_when_the_branch_may_differ() {
         h.state_mut().versions.unavailable.insert("a".into(), None);
         h.state_mut().view_version("b").unwrap();
         assert_eq!(h.state().versions.unavailable.len(), 1, "an entry is no change of branch");
+    });
+}
+
+/// What a step past `from` to `to` says, of two of [`answer_versions`]'s dates.
+fn skip_words(h: &Harness<'static, Shell>, from: usize, to: usize) -> String {
+    let clock = crate::chat_panel::clock(h.state());
+    let date = |n: usize| crate::version_chip::when(&format!("2026-11-08T14:{n:02}:00Z"), clock);
+    crate::i18n::fmt(&crate::i18n::tr("{from} can't be shown. Skipped to {to}."), &[("from", &date(from)), ("to", &date(to))])
+}
+
+/// Marks the version `hash` as one that can't be shown.
+fn mark(h: &mut Harness<'static, Shell>, hash: &str) {
+    h.state_mut().versions.unavailable.insert(hash.into(), None);
+}
+
+/// Unsaved work, so that going older from current work starts at the newest version.
+fn unsaved_then_older(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    add_schema(h, "shop");
+    press(h, egui::Key::OpenBracket);
+    answer_versions(host);
+    h.run_steps(3);
+}
+
+/// That the toast says `words`, once.
+#[track_caller]
+fn toast_says(h: &Harness<'static, Shell>, words: &str) {
+    assert_eq!(h.state().canvas.notice.as_deref(), Some(words));
+    assert_eq!(h.state().canvas.refused_step.as_deref(), Some(words), "as the toast");
+    assert_eq!(painted_times(h, words), 1, "{:?}", painted(h));
+}
+
+/// A step passes what can't be shown, either way and from current work, and says so only once it
+/// has arrived; with nothing else that way it goes nowhere, whichever end is unavailable.
+#[test]
+fn stepping_skips_what_cannot_be_shown_and_says_so_on_arrival() {
+    in_both(|mut h, host| {
+        mark(&mut h, "h3");
+        unsaved_then_older(&mut h, &host);
+        assert_eq!(h.state().canvas.notice, None, "not before it has arrived");
+        shown(&mut h, &host, "h2");
+        toast_says(&h, &skip_words(&h, 3, 2));
+        press(&mut h, egui::Key::CloseBracket);
+        assert_eq!((h.state().viewing(), host.reads.lock().unwrap().len()), (Some("h2"), 0), "the newest can't be shown");
+        assert!(h.get_by_label("Newer version").accesskit_node().is_disabled(), "and the chip says there is nowhere to go");
+        h.state_mut().versions.unavailable.clear();
+        press(&mut h, egui::Key::CloseBracket);
+        assert_eq!(h.state().canvas.notice, None, "the step that goes ends what was said");
+        shown(&mut h, &host, "h3");
+        assert_eq!(h.state().canvas.notice, None, "nothing was passed");
+        mark(&mut h, "h2");
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(h.state().canvas.notice, None, "not before it has arrived");
+        shown(&mut h, &host, "h1");
+        toast_says(&h, &skip_words(&h, 2, 1));
+        press(&mut h, egui::Key::CloseBracket);
+        shown_kept(&mut h, &host, "h3");
+        toast_says(&h, &skip_words(&h, 2, 3));
+        mark(&mut h, "h1");
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!((h.state().viewing(), host.reads.lock().unwrap().len()), (Some("h3"), 0), "the oldest can't be shown either");
+        assert!(h.get_by_label("Older version").accesskit_node().is_disabled());
+    });
+}
+
+/// Passing several, the words name the first; and all passed is nowhere to go.
+#[test]
+fn a_skip_past_several_names_the_first() {
+    in_both(|mut h, host| {
+        ["h3", "h2"].iter().for_each(|hash| mark(&mut h, hash));
+        unsaved_then_older(&mut h, &host);
+        shown(&mut h, &host, "h1");
+        toast_says(&h, &skip_words(&h, 3, 1));
+    });
+    in_both(|mut h, host| {
+        ["h3", "h2", "h1"].iter().for_each(|hash| mark(&mut h, hash));
+        unsaved_then_older(&mut h, &host);
+        assert_eq!((h.state().viewing(), host.reads.lock().unwrap().len()), (None, 0), "nothing to show");
+    });
+}
+
+/// What a step passed is said of that step alone: a read that fails or a person going back ends
+/// it, and the version showing later by another way says nothing of it.
+#[test]
+fn a_skip_that_never_arrives_is_not_said() {
+    for gone_back in [false, true] {
+        in_both(|mut h, host| {
+            mark(&mut h, "h3");
+            unsaved_then_older(&mut h, &host);
+            if gone_back {
+                h.state_mut().back_to_current_work();
+            } else {
+                answer_read(&mut h, &host, Err("old".to_string().into()));
+            }
+            h.run_steps(2);
+            assert!(h.state().loads.skipped.is_none(), "over with the step");
+            crate::version_chip::view(h.state_mut(), "h2".into(), "8 Nov".into());
+            h.run_steps(3);
+            shown(&mut h, &host, "h2");
+            assert_eq!(h.state().canvas.notice, None, "said of no later arrival");
+        });
+    }
+}
+
+/// The failed-load banner and its Retry, by the ids `versions` gives them.
+const LOAD_FAILED: &str = "workspace.versions.load.failed";
+const LOAD_RETRY: &str = "workspace.versions.load.retry";
+
+/// History open and listing a version, the read of `b` failed in a way that may pass, from `a`
+/// when `stepped` and otherwise from current work.
+fn load_failed(theme: ThemeKind, stepped: bool) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = versions_listed(theme, vec![version_row("a", None, (None, false), "2026-11-08T15:30:00Z")]);
+    if stepped {
+        crate::version_chip::view(h.state_mut(), "a".into(), "8 Nov".into());
+        h.run_steps(3);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        h.run_steps(3);
+        host.reads.lock().unwrap().clear();
+    }
+    assert!(crate::version_chip::view(h.state_mut(), "b".into(), "9 Nov b".into()));
+    h.run_steps(3);
+    answer_read(&mut h, &host, Err(crate::VersionReadError::Failed("Too many".into())));
+    h.run_steps(3);
+    assert!(has_id(&h, LOAD_FAILED) && painted(&h).iter().any(|t| t == "This version couldn't be read."), "{theme:?}: {:?}", painted(&h));
+    (h, host)
+}
+
+/// The banner's Retry reads the same version again and then says the date it was asked for with;
+/// failing again brings the banner back.
+#[test]
+fn the_load_banner_retries_the_same_version() {
+    in_both_appearances(|theme| {
+        for stepped in [false, true] {
+            let (mut h, host) = load_failed(theme, stepped);
+            click_id(&mut h, LOAD_RETRY);
+            assert_eq!(host.reads.lock().unwrap().first().map(|r| r.0.clone()).as_deref(), Some("b"), "{theme:?}: the same version");
+            assert!(!has_id(&h, LOAD_FAILED) && h.state().versions.load_failed.is_none(), "{theme:?}: gone once it reads");
+            answer_read(&mut h, &host, Err("again".to_string().into()));
+            h.run_steps(3);
+            assert!(has_id(&h, LOAD_FAILED), "{theme:?}: back when it fails again");
+            click_id(&mut h, LOAD_RETRY);
+            let rows = rows_now(&h);
+            answer_read(&mut h, &host, Ok(rows));
+            h.run_steps(3);
+            assert_eq!(h.state().viewing(), Some("b"), "{theme:?}");
+            assert!(crate::version_chip::read_only_words(h.state()).contains("9 Nov b"), "{theme:?}: its date");
+        }
+        // A version asked for with no date does not take the date of one asked for before.
+        let (mut h, host) = load_failed(theme, false);
+        h.state_mut().view_version("c").unwrap();
+        h.run_steps(3);
+        answer_read(&mut h, &host, Err("gone".to_string().into()));
+        assert_eq!(h.state().versions.load_failed.as_ref().map(|f| f.label.clone()), Some(None), "{theme:?}");
+    });
+}
+
+/// A refused Retry leaves the banner up and says why as a step refused.
+#[test]
+fn a_refused_retry_leaves_the_banner() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = load_failed(theme, false);
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        click_id(&mut h, LOAD_RETRY);
+        assert!(has_id(&h, LOAD_FAILED) && host.reads.lock().unwrap().is_empty(), "{theme:?}: refused");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(EDITING), "{theme:?}: says why");
+        assert_eq!(h.state().canvas.refused_step.as_deref(), Some(EDITING), "{theme:?}: as a step refused");
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        click_id(&mut h, LOAD_RETRY);
+        assert!(!has_id(&h, LOAD_FAILED) && h.state().canvas.notice.is_none(), "{theme:?}: goes once it may");
+    });
+}
+
+/// Only a failure that may pass, of the project shown and for the version asked for, puts it up.
+#[test]
+fn only_a_failure_that_may_pass_offers_retry() {
+    use crate::VersionReadError::{Failed, Shape, Unavailable};
+    in_both(|mut h, host| {
+        let _ = stepping(&mut h, &host);
+        for lasting in [Shape, Unavailable] {
+            step_to(&mut h, "b");
+            answer_read(&mut h, &host, Err(lasting));
+            assert!(h.state().versions.load_failed.is_none());
+        }
+        step_to(&mut h, "x");
+        step_to(&mut h, "y");
+        answer_read(&mut h, &host, Err(Failed("overtaken".into())));
+        assert!(h.state().versions.load_failed.is_none(), "not the version asked for now");
+        answer_read(&mut h, &host, Err(Failed("may pass".into())));
+        let failed = h.state().versions.load_failed.clone().expect("the version asked for");
+        assert_eq!((failed.commit.as_str(), failed.label.as_deref(), failed.why.as_str()), ("y", Some("9 Nov y"), "may pass"));
+        step_to(&mut h, "z");
+        h.state_mut().project.as_mut().unwrap().path = "/elsewhere".into();
+        h.run_steps(2);
+        answer_read(&mut h, &host, Err(Failed("late".into())));
+        assert!(h.state().versions.load_failed.is_none(), "another project's");
+    });
+}
+
+/// The banner ends with a step elsewhere or to what shows, going back, another entry, the project
+/// or branch going, and only then: ⇧⌘H with nothing in view moves nothing.
+#[test]
+fn the_load_banner_ends_on_every_path() {
+    let enders: [(bool, fn(&mut Shell)); 7] = [
+        (false, |s| _ = crate::version_chip::view(s, "c".into(), "9 Nov c".into())),
+        (false, |s| s.restore_version("c1", "2026-11-08T14:02:11Z").unwrap()),
+        (false, |s| s.switch_branch("elsewhere".to_string()).unwrap()),
+        (false, |s| s.clear_workspace()),
+        (true, |s| _ = crate::version_chip::view(s, "c".into(), "9 Nov c".into())),
+        (true, |s| _ = crate::version_chip::view(s, "a".into(), "8 Nov".into())),
+        (true, |s| _ = s.back_to_current_work()),
+    ];
+    in_both_appearances(|theme| {
+        for (stepped, end) in enders {
+            let (mut h, _host) = load_failed(theme, stepped);
+            end(h.state_mut());
+            assert!(h.state().versions.load_failed.is_none(), "{theme:?}");
+        }
+        let (mut h, _host) = load_failed(theme, true);
+        h.state_mut().project.as_mut().unwrap().path = "/elsewhere".into();
+        h.run_steps(3);
+        assert!(h.state().versions.load_failed.is_none(), "{theme:?}: the project changed");
+        let (mut h, _host) = load_failed(theme, false);
+        assert!(!h.state_mut().back_to_current_work(), "{theme:?}: nothing in view");
+        h.run_steps(2);
+        assert!(has_id(&h, LOAD_FAILED), "{theme:?}: the banner stays");
     });
 }

@@ -542,6 +542,8 @@ str		Last version	Last version
 str		No description	No description
 str		Saved by an agent	Saved by an agent
 str		This version can't be shown	This version can't be shown
+str		This version couldn't be read.	This version couldn't be read.
+str		{from} can't be shown. Skipped to {to}.	{from} can't be shown. Skipped to {to}.
 str		It isn't a version of this branch.	It isn't a version of this branch.
 str		Made with a newer Archforge.	Made with a newer Archforge.
 str		Why?	Why?

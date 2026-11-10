@@ -18,7 +18,10 @@ An open project fills the window with its workspace.
   changes of the version you stop on appear once the comparison under way has ended.
   A version that turns out not to be readable stays in the list, marked **This version can't be
   shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
-  Archforge saved it.
+  Archforge saved it. The steps between versions pass it and say which one they passed.
+  A read that fails for now shows **This version couldn't be read.** in History, with **Retry**;
+  that goes when any version is asked for, on going back from a version, and with a restore or a
+  change of branch or project.
   **View this version** shows it read-only; the project's name at the top closes the details.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
