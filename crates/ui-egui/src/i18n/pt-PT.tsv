@@ -446,6 +446,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	O projeto apresentado mudou depois de este pedido ser enviado, por isso não foi executado. Veja o que está apresentado agora e envie-o novamente.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	O projeto está retido enquanto é substituído, por isso este pedido não foi executado. Tente novamente quando terminar.
 str		This version is the same as your current work.	Esta versão é igual ao seu trabalho atual.
+str		Restore this version…	Restaurar esta versão…
+str		Restore this version?	Restaurar esta versão?
+str		The version of {what}	A versão de {what}
+str		A new version with that content is added on top of the history, called "{name}".	É adicionada uma nova versão com esse conteúdo no topo do histórico, chamada «{name}».
+str		Nothing is rewound or removed, and later versions stay in History.	Nada é rebobinado nem removido, e as versões posteriores permanecem no Histórico.
+str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	As suas alterações por guardar são primeiro guardadas como uma versão chamada «Before restoring» seguida da hora.
+str		You can reach them again from History.	Pode voltar a encontrá-las no Histórico.
+str		Undo starts fresh after a Restore.	Anular recomeça do início após um Restauro.
+str		Restore	Restaurar
+str		The restore did not finish	O restauro não terminou
+str		{why} Nothing was changed.	{why} Nada foi alterado.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	O restauro não pôde avançar porque o projeto mudou ou estava ocupado, por isso nada foi restaurado.
 str		You are already on this branch.	Já está neste ramo.
 str		The project stayed on its branch because it changed or was busy.	O projeto ficou no seu ramo porque mudou ou estava ocupado.

@@ -409,13 +409,30 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
     let back = tr("Back to current work");
     let g = ux::galley(paint, &back, types::UI, p.on_accent, None);
     let button = Rect::from_min_size(pos2(band.right() - 12.0 - g.size().x - 20.0, band.top() + 8.0), vec2(g.size().x + 20.0, 28.0));
-    ux::text_mid(paint, band.left() + 36.0, band.center().y, &words, types::UI, p.accent, room(button.left() - band.left() - 48.0));
+    let text_end = restore_in_banner(shell, ui, p, button);
+    ux::text_mid(paint, band.left() + 36.0, band.center().y, &words, types::UI, p.accent, room(text_end - band.left() - 48.0));
     paint.rect_filled(button, 6.0, p.accent_fill);
     paint.galley(button.center() - g.size() / 2.0, g, p.on_accent);
     if control(shell, ui, "workspace.banner.back", "button", button, true).accessible_name(&back).clicked() {
         shell.back_to_current_work();
     }
     Rect::from_min_max(pos2(r.left(), band.bottom()), r.max)
+}
+
+/// Left of `back` while the version shown can be restored: the icon that asks. Gives where the words
+/// must end; without it they may reach `back`.
+fn restore_in_banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, back: Rect) -> f32 {
+    let shown = shell.viewing().map(str::to_string).zip(crate::version_chip::shown(shell).cloned());
+    let Some((commit, saved)) = shown.filter(|(commit, _)| crate::restore_ask::offered(shell, commit)) else { return back.left() };
+    let at = Rect::from_min_size(pos2(back.left() - 36.0, back.top()), Vec2::splat(28.0));
+    let (live, words) = (crate::version_chip::available(shell), tr("Restore this version…"));
+    let resp = control(shell, ui, "workspace.banner.restore", "button", at, live).on_hover_text(&words);
+    let _ = resp.clone().accessible_name(&words);
+    ux::icon_in(ui.painter(), at, &icons::RESTORE, if live { p.text_secondary } else { p.text_muted });
+    if resp.clicked() {
+        crate::restore_ask::ask(shell, (commit, saved.clone(), saved), None);
+    }
+    at.left()
 }
 
 /// The right rail: the four panels, the active one marked.
