@@ -475,6 +475,16 @@ str		No changes since the last version.	Sin cambios desde la última versión.
 str		No versions yet.	Todavía no hay versiones.
 str		No versions yet. Save version records your first one.	Todavía no hay versiones. Guardar versión registra la primera.
 str		Loading	Cargando
+str		Save version…	Guardar versión…
+str		Save version	Guardar versión
+str		Back to current work to save a version	Vuelve al trabajo actual para guardar una versión
+str		Archforge could not tell whether a version was made. Look at History before trying again.	Archforge no ha podido saber si se creó una versión. Mira el historial antes de volver a intentarlo.
+str		{what} changed since {when}.	{what} cambiado desde {when}.
+str		{what} changed.	{what} cambiado.
+str		These changes become a new version of {name}.	Estos cambios serán una nueva versión de {name}.
+str		The model changed while this was open. The summary is up to date again.	El modelo cambió mientras esto estaba abierto. El resumen vuelve a estar al día.
+str		One line, at most 200 characters. It stays in the history.	Una línea, 200 caracteres como máximo. Queda en el historial.
+plural		{n} model element	{n} elemento del modelo|{n} elementos del modelo
 str		Filter changes…	Filtrar cambios…
 str		Model elements	Elementos del modelo
 str		Unnamed	Sin nombre
@@ -1467,3 +1477,10 @@ str		Read only while viewing a version	Solo lectura mientras se ve una versión
 str		Back to current work	Volver al trabajo actual
 str		Back to current work to chat	Vuelve al trabajo actual para chatear
 str		Viewing the version of {date} · Read only	Viendo la versión del {date} · Solo lectura
+str		Older version	Versión anterior
+str		Newer version	Versión más reciente
+str		No older version	No hay ninguna versión anterior
+str		No newer version	No hay ninguna versión más reciente
+str		Finish or cancel your edit first.	Termina o cancela primero tu edición.
+str		Wait for the change under way to finish.	Espera a que termine el cambio en curso.
+str		There is no model to show a version of.	No hay ningún modelo del que mostrar una versión.

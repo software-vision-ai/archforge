@@ -475,6 +475,16 @@ str		No changes since the last version.	前のバージョンから変更はあ�
 str		No versions yet.	バージョンはまだありません。
 str		No versions yet. Save version records your first one.	バージョンはまだありません。「バージョンを保存」で最初のバージョンを記録します。
 str		Loading	読み込み中
+str		Save version…	バージョンを保存…
+str		Save version	バージョンを保存
+str		Back to current work to save a version	バージョンを保存するには現在の作業に戻ってください
+str		Archforge could not tell whether a version was made. Look at History before trying again.	バージョンが作成されたか判断できませんでした。再試行する前に履歴を確認してください。
+str		{what} changed since {when}.	{when}以降、{what}が変更されました。
+str		{what} changed.	{what}が変更されました。
+str		These changes become a new version of {name}.	これらの変更は{name}の新しいバージョンになります。
+str		The model changed while this was open. The summary is up to date again.	開いている間にモデルが変更されました。概要は最新の状態に戻りました。
+str		One line, at most 200 characters. It stays in the history.	1行、200文字以内。履歴に残ります。
+plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
 str		Model elements	モデル要素
 str		Unnamed	名前なし
@@ -1467,3 +1477,10 @@ str		Read only while viewing a version	バージョンの表示中は読み取�
 str		Back to current work	現在の作業に戻る
 str		Back to current work to chat	チャットするには現在の作業に戻ってください
 str		Viewing the version of {date} · Read only	{date} のバージョンを表示中 · 読み取り専用
+str		Older version	古いバージョン
+str		Newer version	新しいバージョン
+str		No older version	これより古いバージョンはありません
+str		No newer version	これより新しいバージョンはありません
+str		Finish or cancel your edit first.	先に編集を完了するかキャンセルしてください。
+str		Wait for the change under way to finish.	進行中の変更が完了するまでお待ちください。
+str		There is no model to show a version of.	バージョンを表示できるモデルがありません。

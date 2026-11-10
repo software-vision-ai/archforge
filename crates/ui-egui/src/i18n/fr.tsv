@@ -475,6 +475,16 @@ str		No changes since the last version.	Aucune modification depuis la dernière 
 str		No versions yet.	Aucune version pour l'instant.
 str		No versions yet. Save version records your first one.	Aucune version pour l'instant. Enregistrer la version crée la première.
 str		Loading	Chargement
+str		Save version…	Enregistrer la version…
+str		Save version	Enregistrer la version
+str		Back to current work to save a version	Revenez au travail en cours pour enregistrer une version
+str		Archforge could not tell whether a version was made. Look at History before trying again.	Archforge n'a pas pu savoir si une version a été créée. Regardez l'historique avant de réessayer.
+str		{what} changed since {when}.	{what} modifié(s) depuis {when}.
+str		{what} changed.	{what} modifié(s).
+str		These changes become a new version of {name}.	Ces modifications deviennent une nouvelle version de {name}.
+str		The model changed while this was open. The summary is up to date again.	Le modèle a changé pendant que ceci était ouvert. Le résumé est de nouveau à jour.
+str		One line, at most 200 characters. It stays in the history.	Une ligne, 200 caractères au plus. Elle reste dans l'historique.
+plural		{n} model element	{n} élément du modèle|{n} éléments du modèle
 str		Filter changes…	Filtrer les modifications…
 str		Model elements	Éléments du modèle
 str		Unnamed	Sans nom
@@ -1467,3 +1477,10 @@ str		Read only while viewing a version	Lecture seule pendant l'affichage d'une v
 str		Back to current work	Revenir au travail en cours
 str		Back to current work to chat	Revenez au travail en cours pour discuter
 str		Viewing the version of {date} · Read only	Affichage de la version du {date} · Lecture seule
+str		Older version	Version précédente
+str		Newer version	Version suivante
+str		No older version	Aucune version précédente
+str		No newer version	Aucune version suivante
+str		Finish or cancel your edit first.	Terminez ou annulez d'abord votre modification.
+str		Wait for the change under way to finish.	Attendez la fin de la modification en cours.
+str		There is no model to show a version of.	Il n'y a aucun modèle dont afficher une version.

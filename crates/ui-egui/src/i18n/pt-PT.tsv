@@ -475,6 +475,16 @@ str		No changes since the last version.	Sem alterações desde a última versão
 str		No versions yet.	Ainda não há versões.
 str		No versions yet. Save version records your first one.	Ainda não há versões. Guardar versão regista a primeira.
 str		Loading	A carregar
+str		Save version…	Guardar versão…
+str		Save version	Guardar versão
+str		Back to current work to save a version	Volte ao trabalho atual para guardar uma versão
+str		Archforge could not tell whether a version was made. Look at History before trying again.	O Archforge não conseguiu saber se foi criada uma versão. Veja o histórico antes de tentar novamente.
+str		{what} changed since {when}.	{what} alterado(s) desde {when}.
+str		{what} changed.	{what} alterado(s).
+str		These changes become a new version of {name}.	Estas alterações passam a ser uma nova versão de {name}.
+str		The model changed while this was open. The summary is up to date again.	O modelo mudou enquanto isto estava aberto. O resumo está novamente atualizado.
+str		One line, at most 200 characters. It stays in the history.	Uma linha, no máximo 200 caracteres. Fica no histórico.
+plural		{n} model element	{n} elemento do modelo|{n} elementos do modelo
 str		Filter changes…	Filtrar alterações…
 str		Model elements	Elementos do modelo
 str		Unnamed	Sem nome
@@ -1467,3 +1477,10 @@ str		Read only while viewing a version	Só de leitura enquanto vê uma versão
 str		Back to current work	Voltar ao trabalho atual
 str		Back to current work to chat	Volte ao trabalho atual para conversar
 str		Viewing the version of {date} · Read only	A ver a versão de {date} · Só de leitura
+str		Older version	Versão anterior
+str		Newer version	Versão mais recente
+str		No older version	Não há versão anterior
+str		No newer version	Não há versão mais recente
+str		Finish or cancel your edit first.	Termine ou cancele primeiro a sua edição.
+str		Wait for the change under way to finish.	Aguarde que a alteração em curso termine.
+str		There is no model to show a version of.	Não há nenhum modelo de que mostrar uma versão.
