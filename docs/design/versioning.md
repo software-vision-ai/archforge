@@ -228,12 +228,13 @@ and a test:
 | `control::engine` and `save` (`control.rs:249`, `:301`) | Agents would write into the preview |
 | `uml.model.root` on adopting (`lib.rs:965-970`) | Adopting edits on open, so a preview does not adopt |
 
-One read of a version runs at a time with the newest version wanted behind it, and only that one
-applies; an answer overtaken is dropped, and the version in view stays until the next has arrived.
-The last few
-previews are cached by hash. A load does not run on the writer or hold `inner.open`, which the
-writer holds while it
-writes (`projects.rs:647-657`).
+One read of a version runs at a time, for a step or an entry alike, with the newest version wanted
+behind it, and only that one applies; the version in view stays until the next has arrived. An
+answer overtaken is never shown, and goes into a small cache under its project and hash, as does
+every answer read for viewing (`version_load.rs`, limited in entries and in bytes, least recently
+used going first). A restore or a branch switch empties it when it starts, and the read then
+under way stays out of it. A load does not run on the writer or hold `inner.open`, which the writer
+holds while it writes (`projects.rs:647-657`).
 
 ---
 

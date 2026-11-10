@@ -103,11 +103,12 @@ impl Shell {
 
     /// Holds the project and has `commit` read to be shown.
     fn read_to_view(&mut self, commit: &str, cleared: Cleared) -> Result<(), HoldRefused> {
-        let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
+        let (Some(_), Some(path)) = (&self.services.projects, self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
         self.begin_hold()?;
-        self.start_replacing(host.read_version(&path, commit.to_string()), None, Some(commit.to_string()), cleared);
+        let read = self.read_for_entry(path, commit);
+        self.start_replacing(read, None, Some(commit.to_string()), cleared);
         Ok(())
     }
 
@@ -151,8 +152,8 @@ impl Shell {
     }
 
     /// Back to current work: what was set aside returns as it was. A version still being read is
-    /// dropped instead, and with its channel its answer, which can then replace nothing. False when
-    /// neither applies. Any step on its way is called off.
+    /// dropped instead: its answer can then replace nothing and only goes into the cache. False
+    /// when neither applies. Any step on its way is called off.
     pub fn back_to_current_work(&mut self) -> bool {
         self.loads.call_off();
         if self.version_being_read().is_some() {

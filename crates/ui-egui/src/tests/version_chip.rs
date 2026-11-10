@@ -178,6 +178,14 @@ fn shown(h: &mut Harness<'static, Shell>, host: &SavingHost, hash: &str) {
     h.run_steps(2);
 }
 
+/// That `hash`, read before, shows with no second read.
+#[track_caller]
+fn shown_kept(h: &mut Harness<'static, Shell>, host: &SavingHost, hash: &str) {
+    h.run_steps(2);
+    assert!(host.reads.lock().unwrap().is_empty(), "no second read");
+    assert_eq!(h.state().viewing(), Some(hash));
+}
+
 /// From current work a step reads the 50 newest and goes to the first that differs; then it moves
 /// one at a time and stops at the ends; ⇧⌘H goes back. With unsaved work it goes to the latest.
 #[test]
@@ -196,7 +204,7 @@ fn the_keys_step_through_the_versions() {
         press(&mut h, egui::Key::OpenBracket);
         assert!(host.reads.lock().unwrap().is_empty(), "the oldest has nothing before it");
         press(&mut h, egui::Key::CloseBracket);
-        shown(&mut h, &host, "h2");
+        shown_kept(&mut h, &host, "h2");
         press(&mut h, egui::Key::CloseBracket);
         shown(&mut h, &host, "h3");
         press(&mut h, egui::Key::CloseBracket);
@@ -207,7 +215,8 @@ fn the_keys_step_through_the_versions() {
         assert!(host.reads.lock().unwrap().is_empty(), "nothing is newer than current work");
         add_schema(&mut h, "shop");
         press(&mut h, egui::Key::OpenBracket);
-        shown(&mut h, &host, "h3");
+        h.run_steps(4);
+        shown_kept(&mut h, &host, "h3");
     });
 }
 
@@ -1109,7 +1118,7 @@ fn every_way_between_versions_stays_on_the_diagram_in_view() {
         key(&mut h, egui::Key::ArrowDown, MOVE[0]);
         key(&mut h, egui::Key::Enter, MOVE[0]);
         h.run_steps(3);
-        shown(&mut h, &host, "h3");
+        shown_kept(&mut h, &host, "h3");
         assert_eq!(centre(&h), (vec![b], Some(b)), "the list");
     });
 }
@@ -1210,6 +1219,85 @@ fn an_answer_overtaken_never_shows_and_the_newest_asked_for_does() {
     });
 }
 
+/// An answer overtaken goes into the cache unseen, so that stepping to it later reads nothing,
+/// and shows what it read, on the same one read path whether it is a step or an entry.
+#[test]
+fn an_answer_overtaken_is_kept_and_a_version_read_before_needs_no_second_read() {
+    in_both(|mut h, host| {
+        let [b, c] = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        step_to(&mut h, "c");
+        answer_read(&mut h, &host, Ok(b));
+        showing(&h, "v", (false, false));
+        assert!(h.state().loads.kept_commits().contains(&"b"), "kept under its own hash");
+        answer_read(&mut h, &host, Ok(c));
+        showing(&h, "c", (true, true));
+        step_to(&mut h, "b");
+        shown_kept(&mut h, &host, "b");
+        showing(&h, "b", (true, false));
+        step_to(&mut h, "x");
+        step_to(&mut h, "c");
+        showing(&h, "c", (true, true));
+        host.reads.lock().unwrap().clear();
+        assert!(h.state_mut().back_to_current_work());
+        h.state_mut().view_version("c").unwrap();
+        assert_eq!(h.state().stepping_from(), None, "an entry is no step asked for");
+        h.run_steps(4);
+        assert!(host.reads.lock().unwrap().is_empty() && !h.state().is_held(), "an entry takes it from the cache too");
+        showing(&h, "c", (true, true));
+    });
+}
+
+/// A restore or a branch switch empties the cache as it starts, and the read then under way
+/// neither fills it nor counts for a later step.
+#[test]
+fn a_restore_or_a_switch_empties_the_cache_and_the_read_under_way_stays_out() {
+    let routes: [fn(&mut Shell); 2] = [|s| s.restore_version("v", "8 Nov").unwrap(), |s| s.switch_branch("other".into()).unwrap()];
+    for route in routes {
+        in_both(|mut h, host| {
+            let [b, _] = stepping(&mut h, &host);
+            step_to(&mut h, "b");
+            assert_eq!(h.state().loads.kept_commits(), ["v"], "what the entry read is kept");
+            route(h.state_mut());
+            assert!(h.state().loads.kept_commits().is_empty(), "as it starts");
+            answer_read(&mut h, &host, Ok(b));
+            assert!(h.state().loads.kept_commits().is_empty(), "the read under way stays out");
+        });
+    }
+}
+
+/// An answer read for one project is not used for the same hash wanted of another: it is read again.
+#[test]
+fn an_answer_for_another_project_is_not_used_for_the_same_hash() {
+    in_both(|mut h, host| {
+        let [b, _] = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        h.state_mut().project.as_mut().unwrap().path = "/another".into();
+        step_to(&mut h, "b");
+        answer_read(&mut h, &host, Ok(b.clone()));
+        showing(&h, "v", (false, false));
+        assert_eq!(host.reads.lock().unwrap()[0].0, "b", "read for the other project");
+        answer_read(&mut h, &host, Ok(b));
+        showing(&h, "b", (true, false));
+    });
+}
+
+/// A read from before the cache was emptied is not used even for the version it read: it is read
+/// again, and only then shows.
+#[test]
+fn a_read_from_before_the_cache_was_emptied_is_read_again() {
+    in_both(|mut h, host| {
+        let [b, _] = stepping(&mut h, &host);
+        step_to(&mut h, "b");
+        h.state_mut().loads.clear();
+        answer_read(&mut h, &host, Ok(b.clone()));
+        showing(&h, "v", (false, false));
+        assert_eq!(host.reads.lock().unwrap()[0].0, "b", "read afresh");
+        answer_read(&mut h, &host, Ok(b));
+        showing(&h, "b", (true, false));
+    });
+}
+
 /// A step that fails, or whose read is lost, stays on the version in view and says why; a read
 /// overtaken says nothing however it ends.
 #[test]
@@ -1231,7 +1319,7 @@ fn a_failed_step_stays_on_the_version_in_view_and_says_why() {
     });
 }
 
-/// Stepping back to the version in view calls off the one asked for: its answer is dropped.
+/// Stepping back to the version in view calls off the one asked for: its answer does not show.
 #[test]
 fn stepping_back_to_the_version_in_view_calls_off_the_one_asked_for() {
     in_both(|mut h, host| {

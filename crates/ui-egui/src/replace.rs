@@ -149,8 +149,9 @@ impl Shell {
 
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside. Without it the project's versions or branch
-    /// may change, even if this later fails, so the steps between versions read them afresh.
-    /// `_cleared` is the proof that [`Self::clear_to_leave`] let it through.
+    /// may change, even if this later fails, so the steps between versions read them afresh and
+    /// the versions kept for viewing go. `_cleared` is the proof that [`Self::clear_to_leave`] let
+    /// it through.
     pub(crate) fn start_replacing(
         &mut self,
         read: Receiver<Result<Arc<Rows>, String>>,
@@ -160,6 +161,7 @@ impl Shell {
     ) {
         if viewing.is_none() {
             self.version_list.steps = Default::default();
+            self.loads.clear();
         }
         self.replacing = Some(Replacing {
             stage: Stage::Chat,
