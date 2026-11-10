@@ -8719,6 +8719,27 @@ fn a_dialog_whose_changes_are_undone_has_nothing_to_save() {
     });
 }
 
+/// Enter with no description keeps the field; with the keyboard elsewhere nothing behind the dialog acts.
+#[test]
+fn the_save_dialog_keeps_the_keys_from_what_is_behind_it() {
+    let field = "workspace.versions.dialog.description";
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(dialog_open(&h) && focused_on(&h, field), "{theme:?}: Enter with no description keeps the field");
+        h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id(field)));
+        let revision = h.state().session.as_ref().unwrap().revision();
+        key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::S, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: no undo behind it");
+        assert!(host.saves.lock().unwrap().is_empty() && dialog_open(&h), "{theme:?}: no Save behind it");
+        assert!(
+            ![crate::actions::GENERATE, crate::actions::OPEN, crate::actions::VERSIONS].iter().any(|a| crate::actions::available(h.state(), a)),
+            "{theme:?}"
+        );
+    });
+}
+
 /// A save that fails or goes unanswered keeps what was typed and offers Retry.
 #[test]
 fn a_failed_save_keeps_the_description_and_offers_retry() {

@@ -1566,9 +1566,9 @@ impl Shell {
         self.dolt_check.is_some()
     }
 
-    /// Whether Save can act now: a model is open, no save is under way, it is not held and no version shows.
+    /// Whether Save can act now: a model is open, no save is under way, it is not held, no version shows and the Save version dialog is shut.
     pub fn can_save(&self) -> bool {
-        self.session.is_some() && self.saving.is_none() && !self.is_held() && self.viewing.is_none()
+        self.session.is_some() && self.saving.is_none() && !self.is_held() && self.viewing.is_none() && self.versions.dialog.is_none()
     }
 
     /// Whether the project shown holds unsaved work.
@@ -1578,7 +1578,7 @@ impl Shell {
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.
     pub fn can_generate(&self) -> bool {
-        self.session.is_some() && self.generate.is_none() && self.about.is_none()
+        self.session.is_some() && self.generate.is_none() && self.about.is_none() && self.versions.dialog.is_none()
     }
 
     /// Opens About Archforge, with how to support its development.
@@ -1594,7 +1594,7 @@ impl Shell {
     /// Whether Open can act now: the host opens projects, no opening is under way, the New
     /// project dialog is closed and a tab is free.
     pub fn can_open_project(&self) -> bool {
-        home::can_open(self) && self.opening.is_none() && self.new_project.is_none() && self.about.is_none()
+        home::can_open(self) && self.opening.is_none() && self.new_project.is_none() && self.about.is_none() && self.versions.dialog.is_none()
     }
 
     /// Tab `i`'s project stays open: it shows again, its status bar saying why.
@@ -1826,10 +1826,10 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About or Settings is over the window, the window behind it takes no keys: its tree,
+        // While About, Settings or Save version is over the window, the one behind takes no keys: its tree,
         // canvas and editors read keys directly, so the frame's keys are held back while it is
         // drawn and given back for the dialogs.
-        let held = if self.about.is_some() || self.settings.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
+        let held = if self.about.is_some() || self.settings.is_some() || self.versions.dialog.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);
         } else {
@@ -1838,6 +1838,7 @@ impl Shell {
         if !held.is_empty() {
             ui.ctx().input_mut(|i| i.events.extend(held));
         }
+        save_version::dialog(self, ui);
         new_project::show(self, ui);
         settings::show(self, ui);
         support::show(self, ui);

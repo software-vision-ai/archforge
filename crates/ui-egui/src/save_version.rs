@@ -30,6 +30,7 @@ pub struct Dialog {
     ticket: Option<u64>,
     /// Why the last try did not save; what was typed stays.
     error: Option<String>,
+    /// The field has been given the keyboard; Enter gives it up, so it is given back.
     focused: bool,
 }
 
@@ -130,17 +131,19 @@ fn summary(shell: &Shell) -> String {
     }
 }
 
-/// The dialog over the window, when it is open.
-pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
+/// The dialog over the window, when it is open: drawn after the window behind it, as the keys held
+/// back from that window are given back for it.
+pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui) {
     if shell.versions.dialog.is_none() {
         return;
     }
+    let p = *ux::palette(shell.state.theme.is_dark());
     let window = ui.ctx().content_rect();
     let shown =
         egui::Area::new(widgets::egui_id("workspace.versions.dialog")).order(egui::Order::Foreground).fixed_pos(window.min).show(ui.ctx(), |ui| {
             ui.set_clip_rect(window);
             ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
-            body(shell, ui, p, window)
+            body(shell, ui, &p, window)
         });
     if shown.inner {
         close(shell);
@@ -196,7 +199,7 @@ fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, window: Rect) -> bool
         paint.galley(pos2(area.left() + if error.is_some() { 12.0 } else { 32.0 }, area.top() + 10.0), g, ink);
     }
     if let Some(d) = shell.versions.dialog.as_mut() {
-        (d.text, d.focused) = (text, true);
+        (d.text, d.focused) = (text, !enter);
     }
     let live = shell.versions.dialog.as_ref().is_some_and(|d| can_save(shell, d));
     let label = if error.is_some() { tr("Retry") } else { tr("Save version") };
