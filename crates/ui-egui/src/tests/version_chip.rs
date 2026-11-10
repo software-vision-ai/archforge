@@ -241,6 +241,38 @@ fn a_step_waiting_for_its_read() {
     });
 }
 
+/// A restore or a branch switch that has started means reading the versions again, whether it
+/// finished or failed after saving the work: no step goes through what was read before it.
+#[test]
+fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
+    use crate::replace::JobFailure::WorkSaved;
+    let jobs: [fn(&mut Harness<'static, Shell>, &SavingHost) -> RestoreEnds; 2] = [
+        |h, host| {
+            let rows = rows_now(h);
+            restore_under_way(h, host, rows)
+        },
+        |h, host| {
+            let (rows, ends) = (rows_now(h), switch_asked(h, host));
+            switch_checked(h, &ends, rows);
+            ends.moved
+        },
+    ];
+    for (job, failed) in jobs.into_iter().flat_map(|job| [(job, false), (job, true)]) {
+        in_both(|mut h, host| {
+            press(&mut h, egui::Key::OpenBracket);
+            answer_versions(&host);
+            h.run_steps(3);
+            shown(&mut h, &host, "h2");
+            job(&mut h, &host).0.send(if failed { Err(WorkSaved("no".into())) } else { Ok(()) }).unwrap();
+            h.run_steps(8);
+            assert!(!h.state().is_held() && h.state().viewing().is_none(), "over, and back on the work");
+            press(&mut h, egui::Key::OpenBracket);
+            assert!(host.reads.lock().unwrap().is_empty(), "no step through what was read before");
+            assert!(h.state().version_list.steps.reading.is_some(), "the versions are read again");
+        });
+    }
+}
+
 /// The viewing chip steps, opens the list from its date and goes back; at an end a step is muted,
 /// does nothing and reads as unavailable.
 #[test]
