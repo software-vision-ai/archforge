@@ -692,6 +692,7 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
             written_role: none,
             written,
             refused: [None, None],
+            role_tried: [None, None],
             modifiers: [modifiers(), modifiers()],
             written_modifiers: [modifiers(), modifiers()],
             modifier_refused: [None, None],
@@ -754,6 +755,46 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
         h.run_steps(4);
         assert!(!h.state().is_held() && h.state().session.as_ref().unwrap().doc().by_uuid(paid).is_none(), "replaced without it");
         assert!(h.state().panels.ends.is_none() && h.state().panels.notice.is_none());
+    });
+}
+
+/// A role the model refused goes as Cancel when the selection moves on, even once nothing would
+/// refuse it any more; what was tried is forgotten once the model's role changes.
+#[test]
+fn a_refused_role_is_not_written_when_the_selection_moves_on() {
+    const ROLE: &str = "workspace.properties.end.1.role";
+    /// What end `i` of `a` is called in the model.
+    fn role(h: &Harness<'static, Shell>, a: archforge_mof::Uuid, i: usize) -> String {
+        let st = h.state().session.as_ref().unwrap().doc();
+        archforge_core::name_of(st, archforge_uml::figures::member_ends(st, st.by_uuid(a).unwrap()).unwrap()[i])
+    }
+    in_both(|mut h, _| {
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let paid = select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
+        let name_end = |h: &mut Harness<'static, Shell>, end: usize, name: &str| {
+            let params = serde_json::json!({ "association": paid.to_string(), "end": end, "role": name });
+            h.state_mut().session.as_mut().unwrap().execute("uml.association.set-end", &params).unwrap();
+            h.run();
+        };
+        name_end(&mut h, 0, "taken");
+        retype(&mut h, ROLE, "taken");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(role(&h, paid, 1), "payment", "refused: the other end has that role");
+        name_end(&mut h, 0, "buyer");
+        let away = rect_of(&h, "workspace.canvas").left_top() + egui::vec2(30.0, 30.0);
+        click(&mut h, away);
+        assert!(h.state().panels.ends.is_none() && role(&h, paid, 1) == "payment", "never written, though nothing refuses it now");
+        select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
+        retype(&mut h, ROLE, "payer");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        assert_eq!(role(&h, paid, 1), "payer");
+        name_end(&mut h, 1, "other");
+        retype(&mut h, ROLE, "payer");
+        click(&mut h, away);
+        assert_eq!(role(&h, paid, 1), "payer", "the model moved on, so this typing is new");
     });
 }
 

@@ -749,6 +749,9 @@ pub struct EndsEdit {
     pub written: [String; 2],
     /// Why an end's typed multiplicity was refused, shown under its field until it changes.
     pub refused: [Option<String>; 2],
+    /// The role last sent to the model for each end, until the model's own changes: a draft still
+    /// equal to it had its answer, so the selection moving on does not send it again.
+    pub role_tried: [Option<String>; 2],
     /// Each end's static and modifiers as edited, and as the model last had them (AR-126): Apply
     /// writes the edited ones, Cancel and Escape bring the model's back.
     pub modifiers: [EndModifiers; 2],
@@ -770,15 +773,17 @@ impl EndsEdit {
 /// Ends the draft of an association that is no longer `subject`, the selection. A role or a
 /// multiplicity that reads and was not refused is written, one step for each end, as leaving its
 /// field would: the click that moves the selection draws the next subject before that field can
-/// see it lose the keyboard. The rest goes as Cancel: a refused multiplicity, Modifiers not Applied.
+/// see it lose the keyboard. The rest goes as Cancel: a refused role or multiplicity, Modifiers
+/// not Applied.
 pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
     let Some(edit) = shell.panels.ends.take_if(|e| Some(e.association) != subject) else { return };
     let parse = archforge_uml::members::parse_multiplicity;
     for i in 0..2 {
         // What is left out keeps what the end has.
         let mut params = json!({ "association": edit.association.to_string(), "end": i });
-        if edit.role[i].trim() != edit.written_role[i] {
-            params["role"] = json!(edit.role[i].trim());
+        let role = edit.role[i].trim();
+        if role != edit.written_role[i] && edit.role_tried[i].as_deref() != Some(role) {
+            params["role"] = json!(role);
         }
         let typed = parse(&edit.multiplicity[i]);
         if edit.refused[i].is_none() && typed.is_ok() && typed != parse(&edit.written[i]) {
@@ -850,6 +855,7 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
         role,
         multiplicity,
         refused: [None, None],
+        role_tried: [None, None],
         written_modifiers: modifiers.clone(),
         modifiers,
         modifier_refused: [None, None],
@@ -1017,6 +1023,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         if edit.written_role[i] != roles[i] {
             edit.role[i] = roles[i].clone();
             edit.written_role[i] = roles[i].clone();
+            edit.role_tried[i] = None;
         }
         if edit.written[i] != written[i] {
             edit.multiplicity[i] = written[i].clone();
@@ -1190,6 +1197,9 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 apply_end_modifiers(shell, id, ends[i], i, &roles[i], &written[i], navigable[i] && !whole, aggregations[i]);
                 return y;
             }
+        }
+        if role && let Some(e) = shell.panels.ends.as_mut() {
+            e.role_tried[i] = Some(edit.role[i].trim().to_string());
         }
         // An association class's end takes no role one of its attributes is named, as they share
         // its names: said in the user's words, and nothing is written.
