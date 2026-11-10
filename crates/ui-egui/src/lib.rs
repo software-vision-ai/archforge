@@ -652,7 +652,7 @@ pub struct Shell {
     replacing: Option<replace::Replacing>,
     /// Set while Stop and go on replays what its question held; see [`leaving`].
     chat_answered: bool,
-    /// The read of a version a step asked for, and the newest one asked for.
+    /// The read of a version under way, the newest one asked for, and those kept for viewing again.
     loads: version_load::Loads,
     /// The version shown read-only, and the real work set aside for going back.
     viewing: Option<Box<viewing::Viewing>>,

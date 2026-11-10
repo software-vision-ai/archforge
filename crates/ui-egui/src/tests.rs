@@ -1339,7 +1339,7 @@ fn a_read_that_fails_leaves_the_work_and_says_why() {
     }
 }
 
-/// Going back during the read drops it, so that its answer cannot replace anything later.
+/// Going back during the read leaves its answer nothing to replace: it only goes into the cache.
 #[test]
 fn going_back_during_the_read_lets_no_late_answer_land() {
     let (mut h, host, earlier) = work_and_earlier();
@@ -1348,7 +1348,10 @@ fn going_back_during_the_read_lets_no_late_answer_land() {
     assert!(h.state_mut().back_to_current_work());
     h.run_steps(3);
     the_work_shows(&h);
-    assert!(late.send(Ok(earlier.clone())).is_err(), "nothing listens for the first read any more");
+    late.send(Ok(earlier.clone())).unwrap();
+    h.run_steps(3);
+    the_work_shows(&h);
+    assert_eq!(h.state().loads.kept_commits(), ["c1"], "the late answer lands nowhere but the cache");
     start_viewing(&mut h, "c2");
     answer_read(&mut h, &host, Ok(earlier));
     assert_eq!(h.state().viewing(), Some("c2"));
