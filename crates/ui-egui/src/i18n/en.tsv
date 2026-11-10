@@ -494,6 +494,8 @@ str		Removed	Removed
 str		The changes couldn't be compared.	The changes couldn't be compared.
 str		Changed items	Changed items
 plural		{n} changed item	{n} changed item|{n} changed items
+str		Previous version	Previous version
+str		The previous version couldn't be read.	The previous version couldn't be read.
 str		View this version	View this version
 str		First version: there is nothing earlier to compare it with.	First version: there is nothing earlier to compare it with.
 str		All	All

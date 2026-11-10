@@ -18,8 +18,13 @@ fn history() -> Vec<crate::VersionEntry> {
 
 /// Runs `test` over a listed history, once in each appearance.
 fn in_both(test: impl Fn(&mut Harness<'static, Shell>, &SavingHost)) {
+    in_both_listing(history(), test);
+}
+
+/// Runs `test` over `listed`, once in each appearance.
+fn in_both_listing(listed: Vec<crate::VersionEntry>, test: impl Fn(&mut Harness<'static, Shell>, &SavingHost)) {
     in_both_appearances(|theme| {
-        let (mut h, host) = versions_listed(theme, history());
+        let (mut h, host) = versions_listed(theme, listed.clone());
         host.version_reads.lock().unwrap().clear();
         host.reads.lock().unwrap().clear();
         test(&mut h, &host);
@@ -418,5 +423,177 @@ fn a_save_or_a_refused_restore_keeps_the_comparison_running() {
         answer(host, "c3", Ok(after));
         settled(h);
         assert!(painted_has(h, "1 changed item") && asked(host).is_empty(), "{:?}", painted(h));
+    });
+}
+
+const LINK: &str = "workspace.version-details.previous";
+const LINK_LOADING: &str = "workspace.version-details.previous.loading";
+const LINK_FAILED: &str = "workspace.version-details.previous.failed";
+const LINK_RETRY: &str = "workspace.version-details.previous.retry";
+
+/// Frames until the host has been asked for the version before and gives that read.
+fn the_read(h: &mut Harness<'static, Shell>, host: &SavingHost) -> std::sync::mpsc::Sender<Result<crate::VersionsPage, String>> {
+    frames_until(h, |_| !host.version_reads.lock().unwrap().is_empty());
+    host.version_reads.lock().unwrap().remove(0)
+}
+
+/// A page holding only `entry`.
+fn page_of(entry: crate::VersionEntry) -> Result<crate::VersionsPage, String> {
+    Ok(crate::VersionsPage { versions: vec![entry], more: true })
+}
+
+/// Listed, the version before is named from the list with no read, at the design's place under
+/// the last card, and opens through the comparison running; a version with no description reads
+/// as its date alone, and the first version has no link.
+#[test]
+fn the_link_names_a_listed_version_without_a_read_and_opens_it() {
+    in_both(|h, host| {
+        let (before, after) = before_and_after(h, host);
+        host.version_reads.lock().unwrap().clear();
+        opened(h, "c3");
+        h.run_steps(1);
+        assert!(has_id(h, LINK) && painted_has(h, "7 Nov 09:20 · First classes"), "{:?}", painted(h));
+        let dates = |h: &Harness<'static, Shell>| painted(h).iter().filter(|t| *t == "6 Nov 16:05").count();
+        assert_eq!(dates(h), 1, "only c1's row while c3 is shown");
+        tap(h, LINK);
+        h.run_steps(1);
+        assert_eq!(h.state().versions.selected.as_deref(), Some("c2"));
+        assert_eq!(asked(host), ["c2", "c3"], "the comparison running goes on");
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(after.clone()));
+        next_reads(h, host);
+        assert_eq!(asked(host), ["c1", "c2"], "for the version shown");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing read for what is listed");
+        assert_eq!(dates(h), 2, "the row and, with no description, the link");
+        answer(host, "c1", Ok(before));
+        answer(host, "c2", Ok(after));
+        settled(h);
+        let card = h.state().widgets().iter().find(|w| w.id.starts_with("workspace.version-details.change.")).unwrap().id.clone();
+        assert_eq!((rect_of(h, LINK).top() - rect_of(h, &card).bottom()).round(), 43.0, "the link's line box under the last card");
+        tap(h, LINK);
+        h.run_steps(1);
+        assert!(painted_has(h, "First version: there is nothing earlier to compare it with.") && !has_id(h, LINK) && !has_id(h, LINK_LOADING));
+    });
+}
+
+/// Not listed, the version before is read after the comparison, never beside it, so the details
+/// stay at the two reads a comparison takes; while only it is awaited the window wakes.
+#[test]
+fn a_version_before_not_listed_is_read_after_the_comparison() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let (before, after) = before_and_after(h, host);
+        host.version_reads.lock().unwrap().clear();
+        opened(h, "c3");
+        h.run_steps(1);
+        assert_eq!(asked(host), ["c2", "c3"]);
+        assert!(has_id(h, LINK_LOADING) && host.version_reads.lock().unwrap().is_empty(), "not beside the comparison");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        let read = the_read(h, host);
+        settled(h);
+        assert_eq!(*host.version_asks.lock().unwrap().last().unwrap(), Some("c3".to_string()), "the one after it in the line");
+        assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 1);
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && has_id(h, LINK_LOADING), "only the link is awaited, and it wakes the window");
+        read.send(page_of(history().remove(1))).unwrap();
+        frames_until(h, |h| has_id(h, LINK));
+        assert!(painted_has(h, "7 Nov 09:20 · First classes"), "{:?}", painted(h));
+        h.run_steps(4);
+        assert!(!h.ctx.has_requested_repaint(), "at rest once it has landed");
+    });
+}
+
+/// A failed read, an empty page and a page about another version each say so; its own Retry reads
+/// only that again and leaves the changes as they were.
+#[test]
+fn a_failed_read_of_the_version_before_is_said_and_retried_alone() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let rows = rows_now(h);
+        for bad in [Err("Too many".to_string()), Ok(crate::VersionsPage { versions: Vec::new(), more: false }), page_of(history().remove(2))] {
+            list_still(h);
+            host.version_reads.lock().unwrap().clear();
+            host.reads.lock().unwrap().clear();
+            opened(h, "c3");
+            answer(host, "c2", Ok(rows.clone()));
+            answer(host, "c3", Ok(rows.clone()));
+            the_read(h, host).send(bad).unwrap();
+            frames_until(h, |h| has_id(h, LINK_FAILED));
+            assert!(painted_has(h, "The previous version couldn't be read.") && !has_id(h, LINK), "{:?}", painted(h));
+            assert!(painted_has(h, "0 changed items"), "the changes stay");
+            tap(h, LINK_RETRY);
+            let read = the_read(h, host);
+            assert!(asked(host).is_empty(), "only the link is read again");
+            read.send(page_of(history().remove(1))).unwrap();
+            frames_until(h, |h| has_id(h, LINK));
+        }
+    });
+}
+
+/// Beside a failed comparison the changes' Retry stands for both, so there is one, and it reads
+/// both again; a read that ends without an answer has failed too.
+#[test]
+fn the_changes_retry_covers_the_version_before() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        opened(h, "c3");
+        answer(host, "c2", Err("gone".into()));
+        answer(host, "c3", Err("gone".into()));
+        settled(h);
+        drop(the_read(h, host));
+        frames_until(h, |h| has_id(h, LINK_FAILED));
+        assert!(has_id(h, "workspace.version-details.retry") && !has_id(h, LINK_RETRY), "one Retry");
+        tap(h, "workspace.version-details.retry");
+        h.run_steps(1);
+        assert_eq!(asked(host), ["c2", "c3"], "both models again");
+        assert!(has_id(h, LINK_LOADING) && !has_id(h, LINK_FAILED), "and the link with them");
+    });
+}
+
+/// The link's answer lands only on the two versions it is about: not on another version with the
+/// same one before it, nor on the same version with another one before it.
+#[test]
+fn a_link_answer_lands_only_on_the_two_versions_it_is_about() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let rows = rows_now(h);
+        for (hash, previous) in [("c4", "c2"), ("c3", "c1")] {
+            host.version_reads.lock().unwrap().clear();
+            host.reads.lock().unwrap().clear();
+            list_still(h);
+            opened(h, "c3");
+            answer(host, "c2", Ok(rows.clone()));
+            answer(host, "c3", Ok(rows.clone()));
+            let read = the_read(h, host);
+            crate::version_details::open(
+                h.state_mut(),
+                crate::VersionEntry { hash: hash.into(), previous: Some(previous.into()), ..history().remove(0) },
+            );
+            h.run_steps(1);
+            read.send(page_of(history().remove(1))).unwrap();
+            next_reads(h, host);
+            assert_eq!(asked(host), [previous, hash], "the details shown compare next");
+            assert!(has_id(h, LINK_LOADING) && !has_id(h, LINK), "c3's answer stays out: {:?}", painted(h));
+            answer(host, previous, Ok(rows.clone()));
+            answer(host, hash, Ok(rows.clone()));
+            settled(h);
+        }
+    });
+}
+
+/// Another session lets the link's read go, so the new session's reads do not wait for it.
+#[test]
+fn a_new_session_does_not_wait_for_the_link_read_left() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let rows = rows_now(h);
+        opened(h, "c3");
+        answer(host, "c2", Ok(rows.clone()));
+        answer(host, "c3", Ok(rows.clone()));
+        let _left = the_read(h, host);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history()[..1].to_vec(), more: false }));
+        answer_read(h, host, Ok(rows));
+        list_still(h);
+        host.reads.lock().unwrap().clear();
+        opened(h, "c3");
+        assert_eq!(asked(host), ["c2", "c3"], "its own reads, without waiting for the one left");
     });
 }

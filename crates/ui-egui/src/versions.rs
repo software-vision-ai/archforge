@@ -44,7 +44,7 @@ pub struct State {
     /// Whether a read has started for them.
     asked: bool,
     reading: Option<Receiver<Result<VersionsPage, String>>>,
-    page: Option<VersionsPage>,
+    pub(crate) page: Option<VersionsPage>,
     /// Why the last read failed; what was shown stays.
     failed: Option<String>,
     /// A save or a restore may have made a version since the read.
@@ -77,7 +77,9 @@ pub struct State {
     /// The version whose details the centre shows.
     pub(crate) details: Option<crate::version_details::Details>,
     /// The one comparison of two versions the details have under way.
-    pub(crate) details_comparing: Option<crate::version_details::Running>,
+    pub(crate) details_comparing: Option<crate::version_details::Running<Arc<Vec<Difference>>>>,
+    /// The one read of the version before the link has under way.
+    pub(crate) details_reading: Option<crate::version_details::Running<VersionsPage>>,
     pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
@@ -598,12 +600,12 @@ fn footer_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, mo
 }
 
 /// When `date`, as the project stores it, was, in the language shown; never the stored text.
-fn when(date: &str, clock: Clock) -> String {
+pub(crate) fn when(date: &str, clock: Clock) -> String {
     seconds_of(date).map_or_else(|| tr("Date not known"), |secs| date_and_time(secs, clock))
 }
 
 /// What a version was described as, when it was.
-fn described(v: &VersionEntry) -> Option<&str> {
+pub(crate) fn described(v: &VersionEntry) -> Option<&str> {
     v.description.as_deref().filter(|d| !d.trim().is_empty())
 }
 

@@ -495,6 +495,8 @@ str		Removed	已移除
 str		The changes couldn't be compared.	无法比较这些更改。
 str		Changed items	已更改的项目
 plural		{n} changed item	{n} 个已更改的项目
+str		Previous version	上一个版本
+str		The previous version couldn't be read.	无法读取上一个版本。
 str		View this version	查看此版本
 str		First version: there is nothing earlier to compare it with.	第一个版本：没有更早的版本可供比较。
 str		All	全部
