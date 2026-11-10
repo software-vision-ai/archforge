@@ -614,6 +614,9 @@ pub const VERSION_CLOCK: Icon = Icon {
     ],
 };
 
+/// Restore: the versions' clock without its hands, the counter-clockwise arrow alone.
+pub const RESTORE: Icon = Icon { segments: VERSION_CLOCK.segments.split_at(6).0, ..VERSION_CLOCK };
+
 /// A cube: the Models explorer and a model element.
 pub const CUBE: Icon = Icon {
     size: [16.0, 16.0],

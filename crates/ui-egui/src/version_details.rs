@@ -1,7 +1,7 @@
 //! A version's details in the centre (frame V2.2 of page 09 of the design and sections 4 and 10 of
 //! `docs/design/versioning.md`): what it is, when and by whom, the way to view it, what changed
 //! since the version before and a link to that version. Compare opens its page in their place;
-//! Restore joins the actions when it can be carried out from here.
+//! Restore (`crate::restore_ask`) joins the actions where it is offered.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -230,9 +230,19 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         return true;
     }
     let id = "workspace.version-details.compare";
-    if button(shell, ui, p, id, pos2(view.right() + 8.0, y), &tr("Compare…"), Look::Secondary, true, None).1.clicked() {
+    let (compared, compare_pressed) = button(shell, ui, p, id, pos2(view.right() + 8.0, y), &tr("Compare…"), Look::Secondary, true, None);
+    if compare_pressed.clicked() {
         compare::open(shell);
         return true;
+    }
+    if crate::restore_ask::offered(shell, &entry.hash) {
+        let (id, label) = ("workspace.version-details.restore", tr("Restore this version…"));
+        let at = pos2(compared.right() + 8.0, y);
+        if button(shell, ui, p, id, at, &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
+            let saved = crate::version_chip::when(&entry.date, clock);
+            crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)), None);
+            return true;
+        }
     }
     y += 45.0;
     ui.painter().rect_filled(Rect::from_min_size(pos2(left, y), vec2(width, 1.0)), 0.0, p.border);

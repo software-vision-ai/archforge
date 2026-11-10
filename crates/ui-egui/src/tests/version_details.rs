@@ -1378,3 +1378,164 @@ fn the_list_reads_on_at_its_end_and_says_when_that_failed() {
         assert!(asks() == 3 && !h.state().versions.page.as_ref().unwrap().more, "an empty page ends it");
     });
 }
+
+const RESTORE: &str = "workspace.version-details.restore";
+const ON_BANNER: &str = "workspace.banner.restore";
+const GO: &str = "restore-ask.restore";
+const CLOSE: &str = "restore-ask.close";
+
+/// Asks to restore the version `row` from its details.
+fn asking(h: &mut Harness<'static, Shell>, row: &str) {
+    opened(h, row);
+    tap(h, RESTORE);
+    h.run_steps(2);
+}
+
+/// Answers the question open with Restore or Retry; the read answered, its job waits for the test.
+fn restoring(h: &mut Harness<'static, Shell>, host: &SavingHost, commit: &str) -> RestoreEnds {
+    tap(h, GO);
+    h.run_steps(3);
+    answer_all(h, host, commit);
+    h.run_steps(4);
+    host.restores.lock().unwrap().remove(0)
+}
+
+/// Answers every read of `commit`, a comparison's among them.
+fn answer_all(h: &Harness<'static, Shell>, host: &SavingHost, commit: &str) {
+    while asked(host).iter().any(|c| c == commit) {
+        answer(host, commit, Ok(rows_now(h)));
+    }
+}
+
+/// Shows the version `row` from its details.
+fn viewing(h: &mut Harness<'static, Shell>, host: &SavingHost, row: &str) {
+    opened(h, row);
+    tap(h, VIEW);
+    h.run_steps(3);
+    answer_all(h, host, row);
+    h.run_steps(4);
+    assert_eq!(h.state().viewing(), Some(row));
+}
+
+/// The details ask before anything starts and say what the restore makes, unsaved work included;
+/// Cancel starts nothing, and the job is told the date the question quotes.
+#[test]
+fn the_details_ask_first_and_say_what_a_restore_makes() {
+    in_both(|h, host| {
+        asking(h, "c2");
+        assert!(painted_has(h, "The version of 7 Nov 09:20 · First classes") && painted_has(h, "Undo starts fresh"), "{:?}", painted(h));
+        assert!(painted_has(h, "\"Restored the version of 7 Nov 09:20\"") && !painted_has(h, "Before restoring"), "nothing unsaved");
+        tap(h, CLOSE);
+        assert!(h.state().ask.is_none() && host.restores.lock().unwrap().is_empty() && !h.state().is_held());
+        add_schema(h, "shop");
+        list_still(h);
+        asking(h, "c3");
+        assert!(painted_has(h, "\"Before restoring\""), "the last version is on offer with unsaved work: {:?}", painted(h));
+        let _job = restoring(h, host, "c3");
+        assert!(h.state().is_held() && h.state().ask.is_none());
+        assert_eq!(*host.restore_dates.lock().unwrap(), ["7 Nov 17:15"]);
+    });
+}
+
+/// The banner asks too, naming the version in view, and restoring ends the viewing first.
+#[test]
+fn the_banner_asks_and_restoring_ends_the_viewing() {
+    in_both(|h, host| {
+        viewing(h, host, "c2");
+        tap(h, ON_BANNER);
+        h.run_steps(2);
+        assert!(painted_has(h, "The version of 7 Nov 09:20"), "{:?}", painted(h));
+        let _job = restoring(h, host, "c2");
+        assert!(h.state().viewing().is_none() && h.state().is_held());
+    });
+}
+
+/// The last version with nothing unsaved is current work, and a version that can't be read can't
+/// be restored: neither is offered, in the details or the banner.
+#[test]
+fn restore_is_not_offered_for_current_work_or_an_unreadable_version() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        assert!(has_id(h, VIEW) && !has_id(h, RESTORE), "the last version");
+        h.state_mut().versions.unavailable.insert("c2".into(), Some("gone".into()));
+        opened(h, "c2");
+        assert!(has_id(h, VIEW) && !has_id(h, RESTORE), "unreadable");
+        h.state_mut().versions.unavailable.clear();
+        opened(h, "c2");
+        assert!(has_id(h, RESTORE), "offered");
+        viewing(h, host, "c3");
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        h.run_steps(2);
+        assert!(!has_id(h, ON_BANNER), "the last version in view");
+    });
+}
+
+/// A failure brings the question back saying what happened, with Retry unless trying again can't
+/// help; one before anything is written says that nothing changed.
+#[test]
+fn a_failure_comes_back_and_says_what_happened() {
+    use crate::replace::JobFailure::{Failed, WorkSaved};
+    in_both(|h, host| {
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(WorkSaved("Your unsaved work was kept as a version.".into()))).unwrap();
+        h.run_steps(4);
+        assert!(
+            painted_has(h, "The restore did not finish")
+                && painted_has(h, "Your unsaved work was kept")
+                && painted_has(h, "Retry")
+                && !h.state().is_held()
+        );
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        h.run_steps(4);
+        assert!(painted_has(h, "This version is the same") && !has_id(h, GO), "nothing to try again");
+        tap(h, CLOSE);
+        assert!(h.state().ask.is_none() && h.state().versions.details.is_some());
+        tap(h, RESTORE);
+        h.run_steps(2);
+        tap(h, GO);
+        h.run_steps(3);
+        answer(host, "c2", Err("gone".to_string().into()));
+        h.run_steps(4);
+        assert!(painted_has(h, "gone Nothing was changed.") && has_id(h, GO), "{:?}", painted(h));
+    });
+}
+
+/// With a Chat turn running, Restore asks about it next and Keep working ends it; typing goes
+/// nowhere behind the question, and Escape cancels it.
+#[test]
+fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
+    use crate::close_ask::Ask;
+    in_both_appearances(|theme| {
+        let (mut h, _rig, _host, _) = chat_and_a_version(theme);
+        h.state_mut().state.explorer = crate::state::Explorer::SourceControl;
+        crate::version_details::open(h.state_mut(), history().remove(1));
+        ask_in_chat(&mut h, "A long question");
+        let at = rect_of(&h, "workspace.chat.composer").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("y".into()));
+        h.run();
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        h.run_steps(2);
+        h.event(egui::Event::Text("x".into()));
+        h.run();
+        assert_eq!(h.state().chat_panel.draft, "y", "held behind the question");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().ask.is_none());
+        for answer in ["close-ask.keep", "close-ask.stop-chat"] {
+            tap(&mut h, RESTORE);
+            h.run_steps(2);
+            tap(&mut h, GO);
+            assert!(matches!(h.state().ask, Some(Ask::StopChat { .. })) && !h.state().is_held());
+            tap(&mut h, answer);
+            h.run_steps(1);
+            assert_eq!(h.state().is_held(), answer == "close-ask.stop-chat", "{answer}");
+            assert_eq!(h.state().versions.restoring.is_some(), h.state().is_held());
+        }
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(h.state().ask.is_none(), "about the session left");
+    });
+}

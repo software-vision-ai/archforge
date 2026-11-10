@@ -13,7 +13,7 @@ use archforge_mof::rows::Rows;
 use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr};
 use crate::leaving::{Cleared, Leaving};
 use crate::{BranchSwitch, SavedBy, Shell, VersionRead, chat_panel, editing};
 
@@ -90,6 +90,12 @@ impl Replacing {
     /// the target's tables, so no more is claimed than that the project stayed.
     fn stopped(&self, otherwise: String) -> String {
         if self.arrives_unsaved.is_some() { tr("The switch did not finish, so the project stayed on its branch.") } else { otherwise }
+    }
+
+    /// `why` the version a restore wanted could not be read or built, which is before its job has
+    /// written anything, said so; other replacements keep their own words.
+    fn before_writing(&self, why: String) -> String {
+        if self.job.is_some() && self.arrives_unsaved.is_none() { fmt(&tr("{why} Nothing was changed."), &[("why", &why)]) } else { why }
     }
 }
 
@@ -182,6 +188,7 @@ impl Shell {
         if let Some(r) = self.replacing.take() {
             self.replacing = self.advance(r);
         }
+        crate::restore_ask::keep(self);
     }
 
     /// Takes `r` one stage on; none once it has ended.
@@ -192,6 +199,7 @@ impl Shell {
                 ChatSettling::Settled => Stage::Save,
                 ChatSettling::Refused => {
                     self.save_error = Some(tr("Chat did not finish in time, so nothing was changed."));
+                    crate::restore_ask::failed(self);
                     return None;
                 }
             },
@@ -218,7 +226,7 @@ impl Shell {
                 Err(TryRecvError::Disconnected) => {
                     return self.give_up(Some(r.stopped(tr("The reading stopped without an answer, so nothing was changed."))));
                 }
-                Ok(Err(why)) => return self.give_up(Some(why.to_string())),
+                Ok(Err(why)) => return self.give_up(Some(r.before_writing(why.to_string()))),
                 Ok(Ok(rows)) => match self.build(&rows) {
                     Ok(session) => {
                         r.repaired = r.viewing.is_none() && differs_from(&session, &rows);
@@ -228,7 +236,7 @@ impl Shell {
                         if let Some(commit) = r.viewing.take() {
                             self.mark_unbuilt(commit, &why);
                         }
-                        return self.give_up(Some(why));
+                        return self.give_up(Some(r.before_writing(why)));
                     }
                 },
             },
@@ -324,6 +332,7 @@ impl Shell {
         }
         self.versions.stale = true;
         self.fail_hold();
+        crate::restore_ask::failed(self);
         None
     }
 

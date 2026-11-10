@@ -445,6 +445,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
+str		Restore this version…	Restore this version…
+str		Restore this version?	Restore this version?
+str		The version of {what}	The version of {what}
+str		A new version with that content is added on top of the history, called "{name}".	A new version with that content is added on top of the history, called "{name}".
+str		Nothing is rewound or removed, and later versions stay in History.	Nothing is rewound or removed, and later versions stay in History.
+str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Your unsaved changes are saved first, as a version called "Before restoring" and the time.
+str		You can reach them again from History.	You can reach them again from History.
+str		Undo starts fresh after a Restore.	Undo starts fresh after a Restore.
+str		Restore	Restore
+str		The restore did not finish	The restore did not finish
+str		{why} Nothing was changed.	{why} Nothing was changed.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	The restore could not go ahead because the project changed or was busy, so nothing was restored.
 str		You are already on this branch.	You are already on this branch.
 str		The project stayed on its branch because it changed or was busy.	The project stayed on its branch because it changed or was busy.
