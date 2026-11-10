@@ -520,6 +520,21 @@ str		{name}, selected	{name}，已选中
 str		Compared with the version of {when}	与 {when} 的版本比较
 str		There is no version to compare with yet.	还没有可比较的版本。
 str		This element couldn't be compared.	无法比较此元素。
+str		This element was added	此元素已添加
+str		It is only on the After side, so there is nothing to compare.	它仅存在于“之后”一侧，因此无可比较。
+str		This element was removed	此元素已移除
+str		It is only on the Before side, so there is nothing to compare.	它仅存在于“之前”一侧，因此无可比较。
+plural		{n} value changed	{n} 个值已更改
+str		Members, relationships and ownership aren't shown here yet.	成员、关系和所有权暂未在此显示。
+str		Only members, relationships or ownership changed	仅成员、关系或所有权发生了更改
+str		The cards show the same on both sides, and these changes aren't shown here yet.	两侧卡片显示的内容相同，这些更改暂未在此显示。
+str		The cards show no difference	卡片未显示任何差异
+str		The name changed from {from} to {to}.	名称从 {from} 变为 {to}。
+str		The kind changed from {from} to {to}.	种类从 {from} 变为 {to}。
+str		{property} changed from {from} to {to}.	{property} 从 {from} 变为 {to}。
+str		{property} is only on the Before side.	{property} 仅存在于“之前”一侧。
+str		{property} is only on the After side.	{property} 仅存在于“之后”一侧。
+plural		{n} more value changed.	另有 {n} 个值已更改。
 str		Yes	是
 str		Not set	未设置
 str		Nothing here yet	尚无内容
