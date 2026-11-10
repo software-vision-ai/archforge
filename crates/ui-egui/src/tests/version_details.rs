@@ -137,9 +137,11 @@ fn view_shows_the_version_from_its_details() {
         h.run_steps(3);
         opened(h, "c2");
         host.reads.lock().unwrap().clear();
+        h.state_mut().canvas.notice = Some("Refused earlier".into());
         tap(h, VIEW);
         assert!(!has_id(h, VIEW) && host.reads.lock().unwrap().is_empty(), "nothing read again");
         assert_eq!(h.state().viewing(), Some("c2"));
+        assert_eq!(h.state().canvas.notice, None, "the reason from an earlier try goes too");
     });
 }
 
