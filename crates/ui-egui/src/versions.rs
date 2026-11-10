@@ -10,7 +10,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{Area, ChangeKind, Difference};
-use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Color32, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::chat_words::{Clock, date_and_time, seconds_of};
 use crate::explorer::{TreeScroll, scroll_tree};
@@ -138,28 +138,19 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
 /// in view is not current work, and nothing is compared while the last version is in doubt.
 fn keep_changes(shell: &mut Shell) {
     take_change_answers(shell);
-    let comparable = shell.viewing.is_none() && shell.versions.page.is_some() && last_known(&shell.versions);
-    let session = shell.session.as_ref().filter(|s| comparable && !s.interacting());
-    let Some(session) = session else { return };
-    let last = last_version(&shell.versions);
-    let key = (last.clone(), session.revision());
+    let (Some(key), Some(session)) = (working_key(shell), shell.session.as_ref()) else { return };
     if shell.versions.compared.as_ref() == Some(&key) || shell.versions.comparing.is_some() {
         return;
     }
     let (tables, junctions) = archforge_notations::storage();
     let v = &mut shell.versions;
-    let before = match (&v.base, &last) {
-        (Some((hash, rows)), _) if *hash == last => rows.clone(),
-        // Before the first version there is no baseline: everything is added.
-        (_, None) => Arc::new(Rows { tables: vec![Vec::new(); tables.len()], junctions: vec![Vec::new(); junctions.len()] }),
-        (_, Some(hash)) => {
-            if v.reading_base.as_ref().is_none_or(|(h, _)| h != hash)
-                && let Some((host, (path, _))) = shell.services.projects.as_ref().zip(v.about.as_ref())
-            {
-                v.reading_base = Some((hash.clone(), host.read_version(path, hash.clone())));
-            }
-            return;
+    let Some(before) = base_held(v, &key.0) else {
+        if let Some(hash) = key.0.as_ref().filter(|hash| v.reading_base.as_ref().is_none_or(|(h, _)| h != *hash))
+            && let Some((host, (path, _))) = shell.services.projects.as_ref().zip(v.about.as_ref())
+        {
+            v.reading_base = Some((hash.clone(), host.read_version(path, hash.clone())));
         }
+        return;
     };
     let after = match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
         Ok(rows) => rows,
@@ -173,6 +164,28 @@ fn keep_changes(shell: &mut Shell) {
     match std::thread::Builder::new().name("archforge-working-changes".into()).spawn(compare) {
         Ok(_) => v.comparing = Some((key, rx)),
         Err(e) => settle_changes(shell, key, Err(e.to_string())),
+    }
+}
+
+/// What a comparison of current work is of now; none while a version is in view, the last version
+/// is in doubt or an edit is under way.
+fn working_key(shell: &Shell) -> Option<Compared> {
+    let v = &shell.versions;
+    let comparable = shell.viewing.is_none() && v.page.is_some() && last_known(v);
+    let session = shell.session.as_ref().filter(|s| comparable && !s.interacting())?;
+    Some((last_version(v), session.revision()))
+}
+
+/// The rows of the last version `last`, when they are held. Before the first version there is no
+/// baseline, so they are empty rows and everything is added.
+fn base_held(v: &State, last: &Option<String>) -> Option<Arc<Rows>> {
+    match (&v.base, last) {
+        (Some((hash, rows)), _) if hash == last => Some(rows.clone()),
+        (_, Some(_)) => None,
+        (_, None) => {
+            let (tables, junctions) = archforge_notations::storage();
+            Some(Arc::new(Rows { tables: vec![Vec::new(); tables.len()], junctions: vec![Vec::new(); junctions.len()] }))
+        }
     }
 }
 
@@ -417,7 +430,8 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         at += GROUP;
         for d in group {
             let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
-            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}", d.id), d);
+            // By class too: an element that changes table has two rows.
+            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, false);
             at += CHANGE_PITCH;
         }
     }
@@ -446,20 +460,26 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let _ = ui.put(inner, edit).accessible_name(words);
 }
 
+/// What a change is called, and its ink and tint.
+fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Color32) {
+    match kind {
+        ChangeKind::Added => (tr("Added"), p.green, p.green_tint),
+        ChangeKind::Changed => (tr("Changed"), p.accent, p.accent_tint),
+        ChangeKind::Removed => (tr("Removed"), p.danger, p.danger_tint),
+    }
+}
+
 /// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
-/// to it. Nothing out of sight is drawn or registered.
-pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Rect, id: &str, d: &Difference) {
+/// to it. `live` says whether the row takes clicks; so far nothing asks it to. Nothing out of sight
+/// is drawn or registered.
+pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Rect, id: &str, d: &Difference, live: bool) {
     if !area.intersects(ui.clip_rect()) {
         return;
     }
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
-    let (what, ink, tint) = match d.kind {
-        ChangeKind::Added => (tr("Added"), p.green, p.green_tint),
-        ChangeKind::Changed => (tr("Changed"), p.accent, p.accent_tint),
-        ChangeKind::Removed => (tr("Removed"), p.danger, p.danger_tint),
-    };
+    let (what, ink, tint) = kind_look(d.kind, p);
     let path = d.path.join(" / ");
-    let _ = control(shell, ui, id, "row", area, false).accessible_name(format!("{name}, {path}, {what}"));
+    let _ = control(shell, ui, id, "row", area, live).accessible_name(format!("{name}, {path}, {what}"));
     let paint = ui.painter();
     let room = (area.width() - 76.0).max(0.0);
     let icon = if d.area == Area::Diagram { &icons::DIAGRAM } else { &icons::CUBE };

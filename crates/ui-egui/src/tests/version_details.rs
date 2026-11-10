@@ -138,6 +138,7 @@ fn details_say_what_a_version_is() {
         assert_eq!(times(h, "Payment methods split out"), 2, "the row and the title: {:?}", painted(h));
         assert_eq!(times(h, meta), 2, "the date and the author, in the row and under the title");
         assert!(!painted_has(h, FIRST), "it has a version before it");
+        assert_eq!(times(h, "History"), 2, "the section's header and the breadcrumb");
         opened(h, "c1");
         assert!(painted_has(h, FIRST), "{:?}", painted(h));
         assert_eq!(times(h, "No description"), 2, "said for no description, and no author made up");

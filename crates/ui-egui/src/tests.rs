@@ -8375,6 +8375,24 @@ fn no_changes_said(h: &Harness<'static, Shell>) -> bool {
     painted(h).iter().any(|t| t == "No changes since the last version.")
 }
 
+/// An element that changes table has two rows, and each is a control of its own.
+#[test]
+fn two_rows_of_one_element_have_ids_of_their_own() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        let (row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
+        let moved = archforge_notations::differences::Difference { class: archforge_er::ENTITY, ..row.clone() };
+        let id = |d: &archforge_notations::differences::Difference| format!("workspace.versions.change.{}.{}", d.id, d.class.0);
+        let wanted = [id(&row), id(&moved)];
+        crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, moved]));
+        h.run_steps(2);
+        assert!(wanted.iter().all(|i| has_id(&h, i)), "{theme:?}: {:?}", ids(&h));
+        assert_ne!(wanted[0], wanted[1], "{theme:?}");
+    });
+}
+
 /// What differs from the last version lists by group with a count and fills the rail's badge; a
 /// save's own tables list nothing and are not called no changes; a change the model undoes is.
 #[test]
