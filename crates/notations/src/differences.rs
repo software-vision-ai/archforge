@@ -127,6 +127,8 @@ pub struct CardList {
 pub struct CardLists {
     pub before: Vec<CardList>,
     pub after: Vec<CardList>,
+    /// How many members differ, counted once when read, so a summary doesn't walk the lists each frame.
+    pub member_changes: usize,
 }
 
 /// Why two states could not be classified. There is never a partial answer.
@@ -210,7 +212,16 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
         marked(&mut before_lists, &after_lists, ChangeKind::Removed);
         marked(&mut after_lists, &before_lists, ChangeKind::Added);
     }
-    let lists = Arc::new(CardLists { before: before_lists, after: after_lists });
+    let marks = |of: &[CardList], only: Option<ChangeKind>| {
+        of.iter()
+            .filter(|l| l.kind != ListKind::Ownership)
+            .flat_map(|l| &l.rows)
+            .filter(|r| r.change.is_some() && (only.is_none() || r.change == only))
+            .count()
+    };
+    // A changed row is on both sides, so it counts once, on the before side.
+    let member_changes = marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added));
+    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, member_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
 }
 

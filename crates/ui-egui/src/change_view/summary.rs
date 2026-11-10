@@ -1,11 +1,12 @@
 //! The short summary above the Before and After cards (frames V1.1 and V3.3 of page 09): how many
-//! values differ and which, in whole sentences, worded while drawing from the two sides held. What
-//! the cards don't hold yet is said plainly, so a card with no marks never reads as "nothing changed".
+//! values and members differ and which values, in whole sentences, worded while drawing from the two
+//! sides held. What the cards don't hold yet is said plainly, so a card with no marks never reads as
+//! "nothing changed".
 
 use std::sync::Arc;
 
 use archforge_mof::Universe;
-use archforge_notations::differences::{CardField, ElementCard, ElementSides};
+use archforge_notations::differences::{CardField, ElementCard, ElementSides, ListKind};
 use egui::{Galley, Rect, Stroke, StrokeKind, pos2};
 
 use super::cards::worded;
@@ -37,22 +38,23 @@ pub(super) struct Words {
 /// What to say of `sides`. `listed` says the list of changes vouches that the element changed: a
 /// failed list doesn't, so the summary then speaks only of what the cards hold.
 pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> Words {
+    let not_shown = tr("Relationships aren't shown here yet.");
     let (Some(was), Some(is)) = (&sides.before, &sides.after) else {
         let (head, body) = if sides.before.is_none() {
             (tr("This element was added"), tr("It is only on the After side, so there is nothing to compare."))
         } else {
             (tr("This element was removed"), tr("It is only on the Before side, so there is nothing to compare."))
         };
-        return Words { head, body };
+        return Words { head, body: joined(&[body, not_shown]) };
     };
     let mut said = differences(universe, (was, is), &sides.fields);
-    let not_shown = tr("Members, relationships and ownership aren't shown here yet.");
-    if said.is_empty() {
+    if sides.lists.after.iter().any(|l| l.kind == ListKind::Ownership && l.rows.iter().any(|r| r.change.is_some())) {
+        said.push(tr("The owner changed."));
+    }
+    let members = sides.lists.member_changes;
+    if said.is_empty() && members == 0 {
         return if listed {
-            Words {
-                head: tr("Only members, relationships or ownership changed"),
-                body: tr("The cards show the same on both sides, and these changes aren't shown here yet."),
-            }
+            Words { head: tr("Only what these cards don't show changed"), body: joined(&[tr("The cards show the same on both sides."), not_shown]) }
         } else {
             Words { head: tr("The cards show no difference"), body: not_shown }
         };
@@ -63,7 +65,14 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
         said.push(trn("{n} more value changed.", "{n} more values changed.", count.saturating_sub(MOST_SAID) as u64));
     }
     said.push(not_shown);
-    Words { head: trn("{n} value changed", "{n} values changed", count as u64), body: joined(&said) }
+    let member_head = trn("{n} member changed", "{n} members changed", members as u64);
+    let value_head = trn("{n} value changed", "{n} values changed", count as u64);
+    let head = match (count, members) {
+        (_, 0) => value_head,
+        (0, _) => member_head,
+        _ => fmt(&tr("{values} · {members}"), &[("values", &value_head), ("members", &member_head)]),
+    };
+    Words { head, body: joined(&said) }
 }
 
 /// One whole sentence for each thing that differs between the cards, in the order the cards show them.

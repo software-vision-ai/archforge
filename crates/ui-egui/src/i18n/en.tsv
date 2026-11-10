@@ -519,14 +519,23 @@ str		{name}, selected	{name}, selected
 str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
 str		This element couldn't be compared.	This element couldn't be compared.
+str		Attributes	Attributes
+str		Operations	Operations
+str		Literals	Literals
+str		Members	Members
+str		Ownership	Ownership
+str		Not available on this side	Not available on this side
+str		Relationships aren't shown here yet.	Relationships aren't shown here yet.
+str		Only what these cards don't show changed	Only what these cards don't show changed
+str		The cards show the same on both sides.	The cards show the same on both sides.
+str		The owner changed.	The owner changed.
+plural		{n} member changed	{n} member changed|{n} members changed
+str		{values} · {members}	{values} · {members}
 str		This element was added	This element was added
 str		It is only on the After side, so there is nothing to compare.	It is only on the After side, so there is nothing to compare.
 str		This element was removed	This element was removed
 str		It is only on the Before side, so there is nothing to compare.	It is only on the Before side, so there is nothing to compare.
 plural		{n} value changed	{n} value changed|{n} values changed
-str		Members, relationships and ownership aren't shown here yet.	Members, relationships and ownership aren't shown here yet.
-str		Only members, relationships or ownership changed	Only members, relationships or ownership changed
-str		The cards show the same on both sides, and these changes aren't shown here yet.	The cards show the same on both sides, and these changes aren't shown here yet.
 str		The cards show no difference	The cards show no difference
 str		The name changed from {from} to {to}.	The name changed from {from} to {to}.
 str		The kind changed from {from} to {to}.	The kind changed from {from} to {to}.
