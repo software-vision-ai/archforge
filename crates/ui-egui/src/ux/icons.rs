@@ -230,6 +230,20 @@ pub const ENUM: Icon = Icon {
 pub const ARROW: Icon =
     Icon { size: [16.0, 16.0], stroke: 1.7, segments: &[L([0.0, 8.0], [16.0, 8.0]), L([9.778, 0.0], [16.0, 8.0]), L([16.0, 8.0], [9.778, 16.0])] };
 
+/// The two opposed arrows of Swap.
+pub const SWAP: Icon = Icon {
+    size: [10.0, 8.8],
+    stroke: 1.2,
+    segments: &[
+        L([0.0, 2.4], [9.0, 2.4]),
+        L([6.6, 0.0], [9.0, 2.4]),
+        L([9.0, 2.4], [6.6, 4.8]),
+        L([10.0, 6.4], [1.0, 6.4]),
+        L([3.4, 4.0], [1.0, 6.4]),
+        L([1.0, 6.4], [3.4, 8.8]),
+    ],
+};
+
 /// The map icon.
 pub const MAP: Icon = Icon {
     size: [18.0, 18.0],

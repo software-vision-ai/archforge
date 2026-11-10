@@ -1,7 +1,7 @@
 //! A version's details in the centre (frame V2.2 of page 09 of the design and sections 4 and 10 of
 //! `docs/design/versioning.md`): what it is, when and by whom, the way to view it, what changed
-//! since the version before and a link to that version. Compare and Restore join the actions when
-//! they can be carried out from here.
+//! since the version before and a link to that version. Compare opens its page in their place;
+//! Restore joins the actions when it can be carried out from here.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -12,12 +12,14 @@ use archforge_notations::differences::{Area, Difference, classified};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::explorer::{TreeScroll, scroll_tree};
-use crate::i18n::{fmt, tr, trn};
+use crate::i18n::{tr, trn};
 use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
-use crate::versions::{change_row, described, lines, when};
+use crate::versions::{change_row, dated, lines};
 use crate::{Shell, VersionEntry};
+
+mod compare;
 
 pub(crate) const MARGIN: f32 = 32.0;
 pub(crate) const BAND: f32 = 72.0;
@@ -71,6 +73,8 @@ pub struct Details {
     entry: VersionEntry,
     /// None for the first version.
     comparison: Option<Comparison>,
+    /// The Compare page shown in place of these details, while it is.
+    compare: Option<compare::Pair>,
     scroll: TreeScroll,
 }
 
@@ -118,7 +122,7 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
     shell.versions.selected = Some(entry.hash.clone());
     let Some(about) = about(shell).filter(|_| shell.services.projects.is_some()) else { return };
     let comparison = entry.previous.clone().map(|before| Comparison { before, found: None, earlier: None });
-    shell.versions.details = Some(Details { about, entry, comparison, scroll: TreeScroll::default() });
+    shell.versions.details = Some(Details { about, entry, comparison, compare: None, scroll: TreeScroll::default() });
 }
 
 /// Once a frame: what belongs to another project or session is let go, the answers that have come
@@ -181,6 +185,10 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         return false;
     }
     ui.painter().rect_filled(r, 0.0, p.page);
+    if shell.versions.details.as_ref().is_some_and(|d| d.compare.is_some()) {
+        compare::draw(shell, ui, p, r);
+        return true;
+    }
     if breadcrumb(shell, ui, p, r, "workspace.version-details.close", &tr("History")) {
         shell.versions.details = None;
     }
@@ -202,7 +210,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         (!crate::version_chip::available(shell)).then(|| tr("Wait for the change under way to finish."))
     };
     let id = "workspace.version-details.view";
-    if button(shell, ui, p, id, pos2(left, y), &tr("View this version"), Look::Primary, off.is_none(), off.as_deref()).1.clicked() {
+    let (view, pressed) = button(shell, ui, p, id, pos2(left, y), &tr("View this version"), Look::Primary, off.is_none(), off.as_deref());
+    if pressed.clicked() {
         // Refused, these details stay and say why, above: an editor still open is one of the reasons.
         if shell.viewing() == Some(entry.hash.as_str()) {
             // Already showing, so nothing can refuse: a reason from an earlier try goes with these,
@@ -213,6 +222,11 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         } else if crate::version_chip::view(shell, entry.hash.clone(), crate::version_chip::when(&entry.date, clock)) {
             shell.versions.details = None;
         }
+        return true;
+    }
+    let id = "workspace.version-details.compare";
+    if button(shell, ui, p, id, pos2(view.right() + 8.0, y), &tr("Compare…"), Look::Secondary, true, None).1.clicked() {
+        compare::open(shell);
         return true;
     }
     y += 45.0;
@@ -336,8 +350,7 @@ fn previous(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, cloc
             }
         }
         Some(Ok(before)) => {
-            let date = when(&before.date, clock);
-            let words = described(&before).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", d)]));
+            let words = dated(&before, clock);
             let g = ux::galley(ui.painter(), &words, types::SMALL, p.accent, Some(width));
             let at = Rect::from_min_size(pos2(left, line), g.size());
             let resp = control(shell, ui, "workspace.version-details.previous", "link", at, true);

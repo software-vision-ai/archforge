@@ -502,6 +502,12 @@ plural		{n} changed item	{n} changed item|{n} changed items
 str		Previous version	Previous version
 str		The previous version couldn't be read.	The previous version couldn't be read.
 str		View this version	View this version
+str		Compare	Compare
+str		Compare…	Compare…
+str		Before	Before
+str		After	After
+str		Before → After	Before → After
+str		Swap Before and After	Swap Before and After
 str		First version: there is nothing earlier to compare it with.	First version: there is nothing earlier to compare it with.
 str		All	All
 str		With a description	With a description
