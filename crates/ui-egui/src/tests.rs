@@ -8443,8 +8443,8 @@ fn working_changes_filter_a_long_list() {
     });
 }
 
-/// An answer for rows that have moved on is dropped, a version in view is not compared, a change
-/// of session lets go of what was found, and rows that cannot be read say so, not "no changes".
+/// An answer for rows that have moved on shows for what it read, a version in view is not compared,
+/// a change of session lets go of what was found, and rows that cannot be read say so, not "no changes".
 #[test]
 fn working_changes_belong_to_the_rows_compared() {
     in_both_appearances(|theme| {
@@ -8459,9 +8459,9 @@ fn working_changes_belong_to_the_rows_compared() {
         assert_eq!(h.state().versions.comparing.as_ref().map(|(key, _)| key.1), Some(revision), "{theme:?}: one at a time");
         tx.send(Ok(Vec::new())).unwrap();
         h.run_steps(1);
-        assert_eq!(h.state().versions.working, 1, "{theme:?}: the old answer is dropped");
+        assert_eq!(h.state().versions.working, 0, "{theme:?}: what that answer read, shown until the newest rows are compared");
         compared(&mut h);
-        assert_eq!(h.state().versions.working, 2, "{theme:?}: the old answer is dropped, the newest rows compared");
+        assert_eq!(h.state().versions.working, 2, "{theme:?}: the newest rows compared");
         h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
         h.state_mut().versions.compared = Some((Some("older".to_string()), 0));
         h.run_steps(2);
@@ -8483,6 +8483,193 @@ fn working_changes_belong_to_the_rows_compared() {
         assert!(has_id(&h, "workspace.versions.changes.failed") && !no_changes_said(&h), "{theme:?}");
         assert!(host.reads.lock().unwrap().is_empty(), "{theme:?}: not asked again every frame");
     });
+}
+
+/// An agent's edit, through the road the control channel takes: answered in the window's own frame.
+fn agent_adds(h: &mut Harness<'static, Shell>, name: &str) {
+    let add = accepted(h, "engine.execute", serde_json::json!({ "command": "er.schema.add", "params": { "name": name } }), false);
+    assert!(crate::control::answer_request(h.state_mut(), &add).is_ok(), "{name}");
+}
+
+/// The session's revision now, and which rows the comparison on its way is of.
+fn revisions(h: &Harness<'static, Shell>) -> (u64, Option<u64>) {
+    (h.state().session.as_ref().unwrap().revision(), h.state().versions.comparing.as_ref().map(|(key, _)| key.1))
+}
+
+/// A difference that no real comparison of these rows could find.
+fn found(n: u8) -> archforge_notations::differences::Difference {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: Area::Model,
+        kind: ChangeKind::Changed,
+        name: None,
+        path: vec![],
+    }
+}
+
+/// While an agent keeps editing, the list still follows: an answer for rows that have moved on
+/// lands for what it read and is not called current, the newest rows are compared next, and one
+/// comparison runs at a time. A failure for moved rows says nothing, and an answer against a version
+/// that is no longer the last is dropped.
+#[test]
+fn working_changes_keep_up_while_an_agent_edits() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        let ((first, _), (tx, rx)) = (revisions(&h), std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("c1".to_string()), first), rx));
+        agent_adds(&mut h, "crm");
+        h.run_steps(2);
+        assert_eq!(revisions(&h).1, Some(first), "{theme:?}: one at a time, whatever the agent does");
+        tx.send(Ok(vec![found(1), found(2), found(3)])).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.state().versions.working, 3, "{theme:?}: what it read lands, though the rows moved on");
+        assert_eq!(h.state().versions.compared, Some((Some("c1".to_string()), first)), "{theme:?}: pinned to the rows it read");
+        assert!(!crate::versions::settled(h.state()), "{theme:?}: and it is not called current");
+        let (now, comparing) = revisions(&h);
+        assert_eq!(comparing, Some(now), "{theme:?}: the newest rows are next, in that same frame");
+        assert_ne!(now, first, "{theme:?}");
+        compared(&mut h);
+        assert!(h.state().versions.working == 1 && crate::versions::settled(h.state()), "{theme:?}: crm");
+
+        let (behind, (tx, rx)) = (revisions(&h).0, std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("c1".to_string()), behind), rx));
+        agent_adds(&mut h, "more");
+        tx.send(Err("the comparison stopped".to_string())).unwrap();
+        h.run_steps(1);
+        assert!(!has_id(&h, "workspace.versions.changes.failed"), "{theme:?}: a failure for rows that moved on says nothing of the newest");
+        compared(&mut h);
+        assert!(h.state().versions.working == 2 && crate::versions::settled(h.state()), "{theme:?}: crm and more");
+
+        let (now, (tx, rx)) = (revisions(&h).0, std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("older".to_string()), now), rx));
+        tx.send(Ok(vec![found(9)])).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.state().versions.working, 2, "{theme:?}: against a version no longer the last it says nothing");
+    });
+}
+
+/// A page with `newest` over the version the panel was first read with.
+fn page_with(newest: &str) -> crate::VersionsPage {
+    let row = |hash: &str| version_row(hash, None, (None, false), "2026-11-08T15:30:00Z");
+    crate::VersionsPage { versions: vec![row(newest), row("c1")], more: false }
+}
+
+/// Makes the Save that follows an edit, and has it answered.
+fn saved(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    h.state_mut().save();
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+}
+
+/// Ends a comparison of the last version `last` and rows `revision` with three changes that no real
+/// comparison could find, for the test to see whether they land.
+fn comparison_ends(h: &mut Harness<'static, Shell>, last: &str, revision: u64) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    h.state_mut().versions.comparing = Some(((Some(last.to_string()), revision), rx));
+    tx.send(Ok(vec![found(1), found(2), found(3)])).unwrap();
+    h.run_steps(1);
+}
+
+/// Until a read begun after a Save has answered, the listed last version may be the one before it:
+/// a comparison against it does not land and none starts. Then the new last version is compared.
+#[test]
+fn working_changes_wait_for_the_version_a_save_made() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        agent_adds(&mut h, "crm");
+        compared(&mut h);
+        let (behind, shown) = (revisions(&h).0, h.state().versions.compared.clone());
+        agent_adds(&mut h, "more");
+        saved(&mut h, &host);
+        h.run_steps(2);
+        assert!(h.state().versions.comparing.is_none(), "{theme:?}: none starts against the page kept meanwhile");
+        comparison_ends(&mut h, "c1", behind);
+        assert_eq!((h.state().versions.working, &h.state().versions.compared), (1, &shown), "{theme:?}: nor does one land");
+        assert!(!crate::versions::settled(h.state()), "{theme:?}");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        let v = &h.state().versions;
+        assert_eq!(v.compared.as_ref().map(|key| key.0.as_deref()), Some(Some("c2")), "{theme:?}");
+        assert!(v.working == 0 && crate::versions::settled(h.state()), "{theme:?}: what was saved is no working change");
+    });
+}
+
+/// A read for a Save's version that fails leaves no count from the version before: the list says
+/// the changes could not be compared, not "no changes", and Retry brings it back.
+#[test]
+fn working_changes_say_so_when_the_read_after_a_save_fails() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        agent_adds(&mut h, "crm");
+        compared(&mut h);
+        saved(&mut h, &host);
+        versions_answer(&mut h, &host, Err("the server stopped".to_string()));
+        h.run_steps(1);
+        let failed = "workspace.versions.changes.failed";
+        assert!(has_id(&h, failed) && !no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
+        assert!(h.state().versions.compared.is_none() && !crate::versions::settled(h.state()), "{theme:?}");
+        let off = crate::save_version::off_because(h.state());
+        assert_eq!(off, Some(crate::i18n::tr("The changes couldn't be compared.")), "{theme:?}: Save version says why it is off, not Loading");
+        let now = revisions(&h).0;
+        comparison_ends(&mut h, "c1", now);
+        assert_eq!(h.state().versions.working, 0, "{theme:?}: the kept page is no last version to count against");
+        click_id(&mut h, "workspace.versions.retry");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(!has_id(&h, failed) && h.state().versions.working == 0 && crate::versions::settled(h.state()), "{theme:?}");
+    });
+}
+
+/// A read begun before a Save ended may not list its version, however it answers: it is read again.
+#[test]
+fn a_read_from_before_a_save_ended_is_not_the_last_word() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        h.state_mut().versions.stale = true;
+        h.run_steps(2);
+        h.state_mut().versions.stale = true;
+        let reply = host.version_reads.lock().unwrap().pop().expect("a read was asked for");
+        reply.send(Ok(page_with("c1"))).unwrap();
+        h.run_steps(1);
+        assert!(!crate::versions::settled(h.state()), "{theme:?}");
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: read again at once");
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
+        assert!(crate::versions::settled(h.state()), "{theme:?}: a save that made no version leaves the comparison good");
+    });
+}
+
+/// A restore that does not replace the session may still have kept the work as a version, or
+/// not say whether it did: each such ending reads the versions again.
+#[test]
+fn a_restore_that_ends_without_replacing_reads_the_versions_again() {
+    use crate::replace::JobFailure;
+    type Ending = fn(RestoreEnds);
+    let endings: [Ending; 3] = [
+        |(answer, _)| answer.send(Err(JobFailure::WorkSaved("told".into()))).unwrap(),
+        |(answer, reading)| {
+            answer.send(Err(JobFailure::Unclear)).unwrap();
+            reading.send(Ok(false)).unwrap();
+        },
+        |(answer, reading)| {
+            answer.send(Err(JobFailure::Unclear)).unwrap();
+            drop(reading);
+        },
+    ];
+    for (ending, theme) in endings.into_iter().flat_map(|e| [(e, ThemeKind::Light), (e, ThemeKind::Dark)]) {
+        let (mut h, host, earlier) = work_and_earlier();
+        h.state_mut().state.theme = theme;
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
+        // The last version's own rows, so the oldest read waiting is the restore's.
+        answer_read(&mut h, &host, Ok(earlier.clone()));
+        ending(restore_under_way(&mut h, &host, earlier));
+        h.run_steps(6);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: {:?}", h.state().save_error);
+    }
 }
 
 /// Before any version everything is added but the project's own root.
@@ -8674,9 +8861,33 @@ fn save_version_saves_what_was_reviewed_once() {
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(dialog_open(&h), "{theme:?}: a save under way is not called off");
         assert_eq!(*host.descriptions.lock().unwrap(), [Some("Added crm".to_string())], "{theme:?}");
+        let rows = rows_now(&h);
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);
-        assert!(!dialog_open(&h) && focused_on(&h, "workspace.versions.save"), "{theme:?}: done, and back on the button");
+        assert!(!dialog_open(&h) && h.state().versions.focus_save, "{theme:?}: done, the keyboard waiting for the read after the save");
+        add_schema(&mut h, "later");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(focused_on(&h, "workspace.versions.save"), "{theme:?}: and back on the button once it is on");
+    });
+}
+
+/// With nothing left to save the button stays off, so the keyboard stops waiting for it.
+#[test]
+fn save_version_lets_go_of_the_keyboard_when_nothing_is_left() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        h.event(egui::Event::Text("Added crm".into()));
+        h.run_steps(1);
+        click_id(&mut h, "workspace.versions.dialog.save");
+        let rows = rows_now(&h);
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(!dialog_open(&h) && !h.state().versions.focus_save && h.state().versions.working == 0, "{theme:?}");
     });
 }
 
@@ -8753,6 +8964,9 @@ fn a_failed_save_keeps_the_description_and_offers_retry() {
         assert_eq!(h.state().versions.dialog.as_ref().unwrap().text, "Kept", "{theme:?}");
         assert!(painted(&h).iter().any(|t| t == "Retry"), "{theme:?}");
         click_id(&mut h, "workspace.versions.dialog.description");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(host.descriptions.lock().unwrap().len(), 1, "{theme:?}: it may have made a version, so not before the list has been read");
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(*host.descriptions.lock().unwrap(), [Some("Kept".to_string()), Some("Kept".to_string())], "{theme:?}");
     });

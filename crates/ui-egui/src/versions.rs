@@ -47,8 +47,10 @@ pub struct State {
     page: Option<VersionsPage>,
     /// Why the last read failed; what was shown stays.
     failed: Option<String>,
-    /// A save made a version since the read.
+    /// A save or a restore may have made a version since the read.
     pub(crate) stale: bool,
+    /// A read begun for that has yet to succeed, so the first row may not be the last version.
+    last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
     pub(crate) working: usize,
     /// Why a version cannot be shown, by its hash; AR-266 fills it in.
@@ -91,7 +93,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         (v.working, v.unavailable, v.changes, v.compare_failed) = (0, BTreeMap::new(), Vec::new(), None);
         (v.base, v.reading_base, v.comparing, v.compared) = (None, None, None, None);
         (v.filter, v.changes_scroll) = (String::new(), TreeScroll::default());
-        (v.more_reading, v.more_failed, v.selected, v.described_only) = (None, None, None, false);
+        (v.more_reading, v.more_failed, v.selected, v.described_only, v.last_unsure) = (None, None, None, false, false);
     }
     let answer = match v.reading.as_ref().map(Receiver::try_recv) {
         Some(Ok(answer)) => Some(answer),
@@ -99,8 +101,17 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         _ => None,
     };
     match answer {
-        Some(Ok(page)) => (v.reading, v.page) = (None, Some(page)),
-        Some(Err(why)) => (v.reading, v.failed) = (None, Some(why)),
+        // Begun before a save that has ended since, it may not list that save's version: `stale`
+        // says so until the read after it.
+        Some(Ok(page)) => (v.reading, v.page, v.last_unsure) = (None, Some(page), false),
+        Some(Err(why)) => {
+            if v.last_unsure {
+                // Counted against a version that may no longer be the last: not "no changes" either.
+                (v.working, v.changes, v.compared, v.comparing) = (0, Vec::new(), None, None);
+                v.compare_failed = Some(why.clone());
+            }
+            (v.reading, v.failed) = (None, Some(why));
+        }
         None => {}
     }
     take_more(v);
@@ -115,13 +126,16 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
 }
 
 /// Takes the answers about the changes that have come, then compares the session's newest rows
-/// with the last version's when either has moved, off the interface thread. An answer for rows
-/// that have moved on is dropped by what it was of. A version in view is not current work.
+/// with the last version's when either has moved, off the interface thread. One comparison runs at
+/// a time, so revisions that move while it runs fold into the next, which reads the newest rows;
+/// edits an agent makes through the control channel move the revision like any other. A version
+/// in view is not current work, and nothing is compared while the last version is in doubt.
 fn keep_changes(shell: &mut Shell) {
     take_change_answers(shell);
-    let session = shell.session.as_ref().filter(|s| shell.viewing.is_none() && !s.interacting());
-    let (Some(session), Some(page)) = (session, shell.versions.page.as_ref()) else { return };
-    let last = page.versions.first().map(|v| v.hash.clone());
+    let comparable = shell.viewing.is_none() && shell.versions.page.is_some() && last_known(&shell.versions);
+    let session = shell.session.as_ref().filter(|s| comparable && !s.interacting());
+    let Some(session) = session else { return };
+    let last = last_version(&shell.versions);
     let key = (last.clone(), session.revision());
     if shell.versions.compared.as_ref() == Some(&key) || shell.versions.comparing.is_some() {
         return;
@@ -172,7 +186,10 @@ fn take_change_answers(shell: &mut Shell) {
             Some(Err(why)) => {
                 let revision = shell.session.as_ref().map_or(0, |s| s.revision());
                 shell.versions.reading_base = None;
-                settle_changes(shell, (Some(hash), revision), Err(why));
+                // Only of the version the changes are counted against.
+                if last_known(&shell.versions) && last_version(&shell.versions).as_ref() == Some(&hash) {
+                    settle_changes(shell, (Some(hash), revision), Err(why));
+                }
             }
         }
     }
@@ -184,8 +201,12 @@ fn take_change_answers(shell: &mut Shell) {
     };
     let key = key.clone();
     shell.versions.comparing = None;
-    // Of rows that have moved on: the next look compares the newest.
-    if shell.session.as_ref().map(|s| s.revision()) == Some(key.1) {
+    let moved = shell.session.as_ref().map(|s| s.revision()) != Some(key.1);
+    // Against another last version, or one a save may have replaced, it says nothing of these
+    // rows. Rows that have only moved on still show what they were, or edits in a steady stream
+    // would hide every answer until they stop; a failure for them says nothing of the newest
+    // rows, which the next look compares.
+    if last_known(&shell.versions) && key.0 == last_version(&shell.versions) && (!moved || answer.is_ok()) {
         settle_changes(shell, key, answer);
     }
 }
@@ -229,10 +250,12 @@ fn read_more(shell: &mut Shell) {
 }
 
 /// Starts a read of the newest versions when a host can answer it: only then is it asked for. The
-/// page on its way belonged to the list this replaces, so it goes.
+/// page on its way belonged to the list this replaces, so it goes. A read for a save's version
+/// leaves the last version in doubt until one succeeds.
 fn read(shell: &mut Shell) {
     let (Some(host), Some((path, _))) = (shell.services.projects.clone(), shell.versions.about.clone()) else { return };
     let v = &mut shell.versions;
+    v.last_unsure |= v.stale;
     (v.failed, v.stale, v.asked, v.more_reading, v.more_failed) = (None, false, true, None, None);
     v.reading = Some(host.versions(&path, None, PAGE));
 }
@@ -242,12 +265,23 @@ pub(crate) fn last_saved(v: &State, clock: Clock) -> Option<String> {
     v.page.as_ref()?.versions.first().map(|version| when(&version.date, clock))
 }
 
-/// Whether a comparison of what is shown now has finished, and none is on its way.
+/// The last version listed, by its hash; none before the first version or before the first read.
+fn last_version(v: &State) -> Option<String> {
+    v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone())
+}
+
+/// Whether the first row listed is known to be the last version: no save or restore has ended
+/// since the last read that succeeded began.
+fn last_known(v: &State) -> bool {
+    !v.stale && !v.last_unsure
+}
+
+/// Whether a comparison of what is shown now has finished, and none is on its way: an answer for
+/// rows that have moved on may be on the list, but it does not say the list is current.
 pub(crate) fn settled(shell: &Shell) -> bool {
     let v = &shell.versions;
-    let last = v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone());
-    let now = shell.session.as_ref().map(|s| (last, s.revision()));
-    v.compared.is_some() && v.compared == now && v.comparing.is_none() && v.reading_base.is_none()
+    let now = shell.session.as_ref().map(|s| (last_version(v), s.revision()));
+    last_known(v) && v.compared.is_some() && v.compared == now && v.comparing.is_none() && v.reading_base.is_none()
 }
 
 /// What Working changes says, when what is known allows it. "No changes" is what Save would find:
@@ -324,7 +358,9 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     if resp.clicked() {
         crate::save_version::open(shell);
     }
-    if std::mem::take(&mut shell.versions.focus_save) {
+    // The read after a save turns the button off for a moment, and an off button takes no keyboard.
+    if shell.versions.focus_save && !crate::save_version::waiting(shell) {
+        shell.versions.focus_save = false;
         resp.request_focus();
     }
     let next = y + HEADER;
