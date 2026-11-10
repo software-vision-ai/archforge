@@ -9,6 +9,7 @@ use crate::{Services, Shell, UiState};
 mod read_only;
 /// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
+mod version_details;
 
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));

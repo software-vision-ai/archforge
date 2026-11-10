@@ -493,6 +493,8 @@ str		Added	追加
 str		Changed	変更
 str		Removed	削除
 str		The changes couldn't be compared.	変更を比較できませんでした。
+str		View this version	このバージョンを表示
+str		First version: there is nothing earlier to compare it with.	最初のバージョンです。比較できる以前のものはありません。
 str		All	すべて
 str		With a description	説明あり
 str		Show more	さらに表示

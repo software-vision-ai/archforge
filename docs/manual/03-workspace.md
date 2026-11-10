@@ -11,6 +11,9 @@ An open project fills the window with its workspace.
   which lists what has changed since the last version and the project's history, newest first.
   **Save version…** there shows what changed and saves it as a new version under a description
   of one line, which stays in the history. It is off while there is nothing to save.
+  Clicking a version in the history opens its details in the centre: its description, when it
+  was saved and, where that is recorded, by whom. **View this version** shows it read-only; the
+  project's name at the top closes the details.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
