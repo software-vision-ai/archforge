@@ -37,6 +37,7 @@ pub mod i18n;
 pub mod indexes;
 pub mod keys;
 mod kinds;
+mod leaving;
 pub mod markdown;
 pub mod new_project;
 mod notation_ui;

@@ -139,6 +139,17 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
     ]
 }
 
+/// Whether something being typed or an editor card is open in `s`: the fields that only show what is
+/// stored are not counted.
+pub(crate) fn editing(s: &State) -> bool {
+    open_editors(s).iter().any(Option::is_some)
+        || s.name.is_some()
+        || s.role.is_some()
+        || s.binding.is_some()
+        || s.nary_remove.is_some()
+        || s.stereotypes.value.is_some()
+}
+
 /// Brings an editor card that just opened into the scrolled body's view: its foot if it fits,
 /// else its top. Editors call it with their card once drawn.
 pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {

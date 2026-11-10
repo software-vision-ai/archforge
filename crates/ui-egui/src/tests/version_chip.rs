@@ -579,6 +579,122 @@ fn a_notice_goes_with_the_last_diagram() {
     });
 }
 
+type Way = (&'static str, fn(&mut Shell) -> Result<(), crate::hold::HoldRefused>);
+
+/// The ways of leaving current work, begun on `c1` or the branch `x`.
+fn ways() -> [Way; 5] {
+    [
+        ("view", |s| s.view_version("c1")),
+        ("step", |s| s.move_to_version("c1")),
+        ("restore", |s| s.restore_version("c1", "d")),
+        ("switch", |s| s.switch_branch("x".to_string())),
+        ("replace", |s| s.begin_replacement(std::sync::mpsc::channel().1, None)),
+    ]
+}
+
+/// That nothing has begun: no hold, no read, no restore job and no switch.
+#[track_caller]
+fn nothing_began(h: &Harness<'static, Shell>, host: &SavingHost, what: &str) {
+    assert!(!h.state().is_held() && h.state().ask.is_none(), "{what}");
+    assert!(host.reads.lock().unwrap().is_empty() && host.restores.lock().unwrap().is_empty() && host.switches.lock().unwrap().is_empty(), "{what}");
+}
+
+const ID: archforge_mof::Uuid = archforge_mof::Uuid([7; 16]);
+
+/// An edit left open between frames: an n-ary end armed on the canvas.
+fn draw(s: &mut Shell) {
+    s.canvas.nary = Some(crate::uml_nary::Nary::AddEnd { diagram: ID, association: ID });
+}
+
+/// Every way of leaving is refused for an open editor, drawing, drag or dialog, with nothing begun.
+#[test]
+fn an_open_editor_stops_every_way_of_leaving() {
+    use crate::{
+        checks::CheckEdit,
+        editing::{Gesture, NodeRename},
+        explorer::Rename,
+        hold::HoldRefused::Editing,
+        panels::NameEdit,
+    };
+    let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
+        ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
+        ("panel card", &|s| {
+            s.panels.check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
+        }),
+        ("canvas name", &|s| s.canvas.rename = Some(NodeRename { node: ID, entity: ID, text: "x".into(), opened: false, refused: None })),
+        ("drag", &|s| s.canvas.gesture = Some(Gesture::Marquee { from: egui::Pos2::ZERO })),
+        ("drawing", &draw),
+        ("tree drag", &|s| s.explorer.dragging = Some(ID)),
+        ("tree name", &|s| s.explorer.rename = Some(Rename { target: ID, text: "x".into(), fresh: false, refused: None, opened: false })),
+        ("dialog", &crate::settings::open),
+    ];
+    for (what, opens) in open {
+        in_both(|mut h, host| {
+            opens(h.state_mut());
+            for (way, go) in ways() {
+                assert_eq!(go(h.state_mut()), Err(Editing), "{what} {way}");
+                nothing_began(&h, &host, &format!("{what} {way}"));
+            }
+        });
+    }
+}
+
+/// A refusal leaves the version in view with its date, says why, and keeps the list open for the
+/// row to be tried again; a step that then goes clears the reason.
+#[test]
+fn a_refusal_keeps_the_version_and_the_list_and_says_why() {
+    let words = Some(EDITING);
+    in_both(|mut h, host| {
+        let rows = rows_now(&h);
+        crate::version_chip::view(h.state_mut(), "c1".to_string(), "8 Nov 14:02".to_string());
+        h.run_steps(3);
+        answer_read(&mut h, &host, Ok(rows));
+        crate::settings::open(h.state_mut());
+        for (way, go) in ways() {
+            assert!(go(h.state_mut()).is_err() && h.state().viewing() == Some("c1"), "{way} leaves the version alone");
+        }
+        crate::version_chip::view(h.state_mut(), "c2".to_string(), "9 Nov 09:00".to_string());
+        assert_eq!(h.state().canvas.notice.as_deref(), words, "said");
+        assert!(crate::version_chip::read_only_words(h.state()).contains("8 Nov 14:02"), "not the date refused");
+        h.state_mut().settings = None;
+        assert!(h.state_mut().back_to_current_work());
+        opened_list(&mut h, &host);
+        let before = host.reads.lock().unwrap().len();
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        let at = rect_of(&h, "workspace.header.version.row.1").center();
+        click(&mut h, at);
+        assert!(list_shows(&h) && h.state().canvas.notice.as_deref() == words, "the list stays");
+        assert!(!h.state().is_held() && h.state().viewing().is_none() && host.reads.lock().unwrap().len() == before, "the row began nothing");
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        assert!(crate::version_chip::view(h.state_mut(), "h1".to_string(), "x".to_string()));
+        assert_eq!(h.state().canvas.notice, None, "the step that goes clears the reason");
+    });
+}
+
+/// A description being typed is written before leaving; one the model refuses stops it, kept and said.
+#[test]
+fn a_refused_description_stops_leaving_and_a_good_one_goes_first() {
+    use crate::{hold::HoldRefused::Description, panels::DescriptionDraft};
+    for (way, go) in ways() {
+        in_both(|mut h, host| {
+            let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "shop" })).unwrap()["id"].clone();
+            let table =
+                crate::panels::run(h.state_mut(), "er.entity.add", serde_json::json!({ "schema": schema, "name": "customer" })).unwrap()["id"]
+                    .clone();
+            let target = archforge_mof::Uuid::parse(table.as_str().unwrap()).unwrap();
+            h.state_mut().panels.description = Some(DescriptionDraft { target, text: "a\u{7}b".into(), refused: false });
+            assert_eq!(go(h.state_mut()), Err(Description), "{way}");
+            nothing_began(&h, &host, way);
+            assert!(h.state().panels.description.as_ref().is_some_and(|d| d.refused), "{way}: the draft stays");
+            crate::version_chip::view(h.state_mut(), "c1".to_string(), "x".to_string());
+            assert!(h.state().canvas.notice.is_some() && h.state().canvas.notice == h.state().panels.notice, "{way}: the model's refusal is said");
+            h.state_mut().panels.description = Some(DescriptionDraft { target, text: "A customer".into(), refused: false });
+            assert_eq!(go(h.state_mut()), Ok(()), "{way}");
+            assert!(h.state().is_held() && h.state().panels.description.is_none(), "{way}: written, then held");
+        });
+    }
+}
+
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
     let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();

@@ -32,6 +32,19 @@ fn opened(h: &mut Harness<'static, Shell>, row: &str) {
     h.run_steps(1);
 }
 
+/// View refused for an editor still open keeps the details and says why over them.
+#[test]
+fn a_refused_view_keeps_the_details_and_says_why() {
+    in_both(|h, host| {
+        opened(h, "c2");
+        h.state_mut().explorer.dragging = Some(archforge_mof::Uuid([7; 16]));
+        tap(h, VIEW);
+        assert!(h.state().versions.details.is_some(), "the details stay");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Finish or cancel your edit first."));
+        assert!(host.reads.lock().unwrap().is_empty() && !h.state().is_held());
+    });
+}
+
 /// The pointer on View shows `words`.
 fn said_on_hover(h: &mut Harness<'static, Shell>, words: &str) {
     let at = rect_of(h, VIEW).center();
