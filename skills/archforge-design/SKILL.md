@@ -490,6 +490,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   tree. Removals that take other things with them show a toast with Undo. The toast keeps clear
   of the minimap: at the canvas's foot, left of the minimap while there is room beside it,
   else above it; its text wraps to three lines rather than running under Undo.
+- A step between versions or a way out of current work that is refused or fails says why in a
+  raised card with an amber dot, centred over the toolbar and clear of the minimap and of a toast
+  with Undo (frame V2.4); it wraps and grows upwards, takes no clicks, and goes with the next
+  action. The notices of drawing and editing stay the amber caption at the canvas's top, and the
+  details, Compare and a change keep a refused step as a caption under their way back.
 
 ## Saving
 - Every edit is written to the project on its own a moment after it settles, so a crash loses

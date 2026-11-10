@@ -204,7 +204,7 @@ impl Shell {
     }
 
     /// Hands `answer` to what asked for the newest version. A step that failed stays on the version
-    /// in view and says why at the top of the centre.
+    /// in view and says why in the toast above the toolbar.
     fn deliver(&mut self, answer: Answer) {
         let Some(Wanted { commit, then, .. }) = self.loads.wanted.take() else { return };
         match then {
@@ -212,7 +212,7 @@ impl Shell {
             Then::Enter(to) => drop(to.send(answer)),
             Then::Step(label) => {
                 if let Err(why) = answer.and_then(|rows| self.show_step(&rows, commit, label)) {
-                    self.canvas.notice = Some(why);
+                    self.canvas.say_refused_step(Some(why));
                 }
             }
         }

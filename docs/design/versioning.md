@@ -313,7 +313,7 @@ what is set aside is whatever exists and nothing is transformed.
 | A save under way | Waits for its answer: `poll_save` marks the session shown as saved (`lib.rs:255-289`) |
 | Autosave failing | Viewing allowed, status keeps saying so. Switching refused, as the work could not be kept |
 | Description or skill text being typed | Committed to the document first (`lib.rs:849-850`). A refused description blocks leaving and shows the refusal |
-| Inline editor, a drawing under way, an open dialog, a drag | Refused: "Finish or cancel your edit first." |
+| Inline editor, a drawing under way, an open dialog, a drag | Refused: "Finish or cancel your edit first." The reason is the toast over the toolbar (frame V2.4); on the details, Compare and a change it stays under their way back |
 | Chat requests on their way | Settled first (below): a question answered later would start a turn on what replaced the session |
 | Chat turn running | Asks: "Chat is still changing the model. Stop it and go on?" **Stop and go on** / **Keep working** |
 | Agent with its own token, while viewing | `engine.*` and `app.save` are refused with an error naming the state and how to return. `document.inspect` reports what is shown. Nothing is queued |

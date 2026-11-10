@@ -793,6 +793,11 @@ pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
     }
 }
 
+/// Whether a deleted conversation's toast shows for the project shown.
+pub(crate) fn toast_up(shell: &Shell) -> bool {
+    shell.project.as_ref().is_some_and(|o| shell.chats.deletions.iter().any(|d| d.toast && d.project == o.path))
+}
+
 /// The toast of the newest deletion of the project shown, at the foot of the centre `r`, clear of
 /// the minimap: "<title> deleted · still in the project's saved history", with Undo. It stays
 /// [`TOAST_SECONDS`] after the pointer and the focus last left it.

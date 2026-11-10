@@ -208,12 +208,13 @@ fn step(shell: &mut Shell, older: bool) {
 }
 
 /// Shows the version `hash`, read `label`, from current work or from the version in view, staying
-/// on the diagram in view there; gives whether the version is on its way. A refusal is said at
-/// the top of the centre; one that goes through ends what was said before it. A refusal leaves
+/// on the diagram in view there; gives whether the version is on its way. A refusal is said as
+/// the toast above the toolbar; one that goes through ends what was said before it. A refusal leaves
 /// what the chip says of the version in view as it was. Chat's question counts as not on its way.
 pub(crate) fn view(shell: &mut Shell, hash: String, label: String) -> bool {
     let done = shell.move_to_version(&hash, Some(label));
-    shell.canvas.notice = done.err().and_then(|why| refused_words(shell, why));
+    let words = done.err().and_then(|why| refused_words(shell, why));
+    shell.canvas.say_refused_step(words);
     done.is_ok()
 }
 
