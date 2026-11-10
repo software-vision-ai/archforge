@@ -8611,6 +8611,8 @@ fn working_changes_say_so_when_the_read_after_a_save_fails() {
         let failed = "workspace.versions.changes.failed";
         assert!(has_id(&h, failed) && !no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
         assert!(h.state().versions.compared.is_none() && !crate::versions::settled(h.state()), "{theme:?}");
+        let off = crate::save_version::off_because(h.state());
+        assert_eq!(off, Some(crate::i18n::tr("The changes couldn't be compared.")), "{theme:?}: Save version says why it is off, not Loading");
         let now = revisions(&h).0;
         comparison_ends(&mut h, "c1", now);
         assert_eq!(h.state().versions.working, 0, "{theme:?}: the kept page is no last version to count against");
@@ -8859,9 +8861,33 @@ fn save_version_saves_what_was_reviewed_once() {
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(dialog_open(&h), "{theme:?}: a save under way is not called off");
         assert_eq!(*host.descriptions.lock().unwrap(), [Some("Added crm".to_string())], "{theme:?}");
+        let rows = rows_now(&h);
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);
-        assert!(!dialog_open(&h) && focused_on(&h, "workspace.versions.save"), "{theme:?}: done, and back on the button");
+        assert!(!dialog_open(&h) && h.state().versions.focus_save, "{theme:?}: done, the keyboard waiting for the read after the save");
+        add_schema(&mut h, "later");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(focused_on(&h, "workspace.versions.save"), "{theme:?}: and back on the button once it is on");
+    });
+}
+
+/// With nothing left to save the button stays off, so the keyboard stops waiting for it.
+#[test]
+fn save_version_lets_go_of_the_keyboard_when_nothing_is_left() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        h.event(egui::Event::Text("Added crm".into()));
+        h.run_steps(1);
+        click_id(&mut h, "workspace.versions.dialog.save");
+        let rows = rows_now(&h);
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(!dialog_open(&h) && !h.state().versions.focus_save && h.state().versions.working == 0, "{theme:?}");
     });
 }
 
@@ -8938,6 +8964,9 @@ fn a_failed_save_keeps_the_description_and_offers_retry() {
         assert_eq!(h.state().versions.dialog.as_ref().unwrap().text, "Kept", "{theme:?}");
         assert!(painted(&h).iter().any(|t| t == "Retry"), "{theme:?}");
         click_id(&mut h, "workspace.versions.dialog.description");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(host.descriptions.lock().unwrap().len(), 1, "{theme:?}: it may have made a version, so not before the list has been read");
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(*host.descriptions.lock().unwrap(), [Some("Kept".to_string()), Some("Kept".to_string())], "{theme:?}");
     });

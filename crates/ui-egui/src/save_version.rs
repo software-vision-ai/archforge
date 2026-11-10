@@ -39,13 +39,19 @@ fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }
 
+/// Whether Save version… is off only until the list has said: the project is held, or a comparison
+/// or the read after a save is still to answer. A comparison that failed has said.
+pub(crate) fn waiting(shell: &Shell) -> bool {
+    shell.is_held() || (!settled(shell) && shell.versions.compare_failed.is_none())
+}
+
 /// Why Save version… is off, when it is: it needs current work with settled changes to save.
 pub(crate) fn off_because(shell: &Shell) -> Option<String> {
     if shell.viewing.is_some() {
         Some(tr("Back to current work to save a version"))
     } else if shell.is_saving() {
         Some(tr("Saving…"))
-    } else if shell.is_held() || !settled(shell) {
+    } else if waiting(shell) {
         Some(tr("Loading"))
     } else if shell.versions.compare_failed.is_some() {
         Some(tr("The changes couldn't be compared."))

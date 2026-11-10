@@ -358,7 +358,9 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     if resp.clicked() {
         crate::save_version::open(shell);
     }
-    if std::mem::take(&mut shell.versions.focus_save) {
+    // The read after a save turns the button off for a moment, and an off button takes no keyboard.
+    if shell.versions.focus_save && !crate::save_version::waiting(shell) {
+        shell.versions.focus_save = false;
         resp.request_focus();
     }
     let next = y + HEADER;
