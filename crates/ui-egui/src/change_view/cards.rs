@@ -6,6 +6,7 @@ use archforge_mof::{PropId, TypeRef, Universe, Value};
 use archforge_notations::differences::ElementSides;
 use egui::{CornerRadius, Rect, Stroke, StrokeKind, pos2, vec2};
 
+use super::summary;
 use crate::Shell;
 use crate::explorer::scroll_tree;
 use crate::i18n::{fmt, tr};
@@ -18,6 +19,8 @@ use crate::versions::when;
 /// The room between the cards, and from a side's eyebrow to its card.
 const GUTTER: f32 = 24.0;
 const EYEBROW: f32 = 24.0;
+/// The room between the summary and the eyebrows.
+const UNDER_SUMMARY: f32 = 18.0;
 /// A card's head band, the top of its identity, where its rows start and the room under them.
 const BAND: f32 = 46.0;
 const IDENTITY: f32 = 52.0;
@@ -28,19 +31,26 @@ const ROW: f32 = 28.0;
 const INSET: f32 = 24.0;
 const MARK: f32 = 16.0;
 
-/// Draws the cards of `sides` from `top` to the end of `r`, scrolling as one, so a value stays level
-/// with itself across them. Everything comes from the sides already held: nothing here asks the host.
+/// Draws the summary and the cards of `sides` from `top` to the end of `r`, scrolling as one, so a value
+/// stays level with itself across them. Everything comes from the sides already held: nothing here asks the host.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, sides: &ElementSides) {
     let Some(universe) = shell.session.as_ref().map(|s| s.doc().universe().clone()) else { return };
     let head = head_before(shell);
+    let said = summary::words(&universe, sides, shell.versions.compare_failed.is_none());
+    let whole = (r.width() - 2.0 * MARGIN).max(0.0);
+    let body = summary::laid_out(ui.painter(), p, &said, whole);
+    let tall = summary::height(&body);
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
     let Some(o) = shell.versions.element.as_mut() else { return };
-    let offset = scroll_tree(ui, p, tree, top, sides.fields.len(), ROW, EYEBROW + ROWS_AT + BELOW, true, None, &mut o.scroll);
+    let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + BELOW;
+    let offset = scroll_tree(ui, p, tree, top, sides.fields.len(), ROW, tail, true, None, &mut o.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
-    let each = ((r.width() - 2.0 * MARGIN - GUTTER) / 2.0).max(0.0);
+    let at = pos2(r.left() + MARGIN, top - offset);
+    summary::draw(shell, &clip, p, Rect::from_min_size(at, vec2(whole, tall)), &said, body);
+    let each = ((whole - GUTTER) / 2.0).max(0.0);
     let size = vec2(each, ROWS_AT + sides.fields.len() as f32 * ROW + BELOW);
-    let before = Rect::from_min_size(pos2(r.left() + MARGIN, top - offset + EYEBROW), size);
+    let before = Rect::from_min_size(at + vec2(0.0, tall + UNDER_SUMMARY + EYEBROW), size);
     card(shell, &clip, p, &universe, (before, true), sides, &head);
     card(shell, &clip, p, &universe, (before.translate(vec2(each + GUTTER, 0.0)), false), sides, &tr("Current work"));
 }
@@ -128,7 +138,7 @@ fn mark(paint: &egui::Painter, p: &Palette, row: Rect, before: bool) {
 }
 
 /// `value` of `prop` for a person to read in the language shown; a literal the metamodel does not know is Unknown.
-fn worded(universe: &Universe, prop: PropId, value: &Value) -> String {
+pub(super) fn worded(universe: &Universe, prop: PropId, value: &Value) -> String {
     match value {
         Value::Null => tr("Not set"),
         Value::Bool(true) => tr("Yes"),

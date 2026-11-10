@@ -520,6 +520,21 @@ str		{name}, selected	{name}、選択中
 str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This element couldn't be compared.	この要素を比較できませんでした。
+str		This element was added	この要素は追加されました
+str		It is only on the After side, so there is nothing to compare.	変更後の側にのみ存在するため、比較するものはありません。
+str		This element was removed	この要素は削除されました
+str		It is only on the Before side, so there is nothing to compare.	変更前の側にのみ存在するため、比較するものはありません。
+plural		{n} value changed	{n} 件の値が変更されました
+str		Members, relationships and ownership aren't shown here yet.	メンバー、関連、所有関係はまだここには表示されません。
+str		Only members, relationships or ownership changed	メンバー、関連、または所有関係のみが変更されました
+str		The cards show the same on both sides, and these changes aren't shown here yet.	カードの内容は両側で同じです。これらの変更はまだここには表示されません。
+str		The cards show no difference	カードに違いはありません
+str		The name changed from {from} to {to}.	名前が {from} から {to} に変わりました。
+str		The kind changed from {from} to {to}.	種類が {from} から {to} に変わりました。
+str		{property} changed from {from} to {to}.	{property} が {from} から {to} に変わりました。
+str		{property} is only on the Before side.	{property} は変更前の側にのみあります。
+str		{property} is only on the After side.	{property} は変更後の側にのみあります。
+plural		{n} more value changed.	ほかに {n} 件の値が変更されました。
 str		Yes	はい
 str		Not set	未設定
 str		Nothing here yet	まだ何もありません

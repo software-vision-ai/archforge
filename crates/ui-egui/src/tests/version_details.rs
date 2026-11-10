@@ -719,6 +719,8 @@ const BEFORE: &str = "workspace.change-view.before";
 const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
+const SUMMARY: &str = "workspace.change-view.summary";
+const NOT_SHOWN: &str = "Members, relationships and ownership aren't shown here yet.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -1115,6 +1117,114 @@ fn a_side_without_the_element_is_a_tinted_card() {
     });
 }
 
+/// The summary says exactly this: painted once each and read whole.
+fn says(h: &Harness<'static, Shell>, head: &str, body: &str) {
+    assert_eq!((painted_times(h, head), painted_times(h, body)), (1, 1), "{:?}", painted(h));
+    assert_eq!(named(h, &format!("{head}, {body}")), 1, "read whole");
+}
+
+/// An element on one side says so, with nothing to count.
+#[test]
+fn the_summary_says_added_or_removed() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("gone"), after: None, fields: Vec::new() })));
+        says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
+    });
+}
+
+/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all;
+/// members are said not to be shown, so the count isn't read as all there is.
+#[test]
+fn the_summary_counts_and_says_each_difference() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let visibility = field(Some(Value::Null), Some(Value::Enum(1)), true);
+        let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
+        let fields = vec![visibility.clone(), same];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("kept"), after: schema("kept"), fields })));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None });
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("was"), after: entity, fields: vec![visibility] })));
+        let said = "The name changed from was to Unnamed. The kind changed from Schema to Entity. Visibility changed from Not set to Private.";
+        says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
+    });
+}
+
+/// Past three differences the rest are counted, in the plural the number takes; three are all written out.
+#[test]
+fn the_summary_counts_what_it_does_not_write_out() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let line = "Visibility changed from a to b.";
+        let three = format!("{line} {line} {line}");
+        for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
+            let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
+            landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+            says(h, &format!("{n} values changed"), &format!("{three}{more} {NOT_SHOWN}"));
+        }
+    });
+}
+
+/// A property only one side's class has is said to be there alone, not to have been empty.
+#[test]
+fn the_summary_says_a_property_is_on_one_side_alone() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        let said = "Visibility is only on the Before side. Visibility is only on the After side.";
+        says(h, "2 values changed", &format!("{said} {NOT_SHOWN}"));
+    });
+}
+
+/// Unmarked cards on a listed change say only members or ownership changed; a failed list can't vouch
+/// for a change, and neither reads as nothing having changed.
+#[test]
+fn unmarked_cards_never_read_as_nothing_changed() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        says(
+            h,
+            "Only members, relationships or ownership changed",
+            "The cards show the same on both sides, and these changes aren't shown here yet.",
+        );
+        h.state_mut().versions.compare_failed = Some("the list failed".into());
+        h.run_steps(1);
+        says(h, "The cards show no difference", NOT_SHOWN);
+    });
+}
+
+/// A long value is cut in the sentence and whole on its card.
+#[test]
+fn the_summary_cuts_a_long_value() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let long = "x".repeat(60);
+        let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields })));
+        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {NOT_SHOWN}", "x".repeat(40)));
+        assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
+    });
+}
+
+/// The summary sits as the frames place it: across both cards, above their eyebrows, on a surface.
+#[test]
+fn the_summary_sits_above_the_cards() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("k"), after: schema("k"), fields: Vec::new() })));
+        let (area, before, after) = (rect_of(h, SUMMARY), rect_of(h, BEFORE), rect_of(h, AFTER));
+        assert_eq!((area.left(), area.right()), (before.left(), after.right()), "as wide as the two cards");
+        assert_eq!(area.height(), 86.0, "one row of sentences, as the frame");
+        assert_eq!(before.top() - area.bottom(), 18.0 + 24.0, "the room and the eyebrow");
+        assert!(filled(h, SUMMARY, colours(h).surface));
+    });
+}
+
 /// The cards scroll as one, a row level with itself across them.
 #[test]
 fn the_cards_scroll_as_one() {
@@ -1124,6 +1234,7 @@ fn the_cards_scroll_as_one() {
         landed(h, id, key, Ok(Some(ElementSides { id, before: schema("long"), after: schema("long"), fields })));
         let (first, last) = (format!("{BEFORE}.field.0"), format!("{AFTER}.field.59"));
         assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of sight");
+        assert!(has_id(h, SUMMARY), "at the top the summary shows");
         assert!(painted_times(h, "Not set") < 120, "rows out of sight are not drawn");
         h.event(egui::Event::PointerMoved(rect_of(h, &first).center()));
         h.event(egui::Event::MouseWheel {
@@ -1136,6 +1247,8 @@ fn the_cards_scroll_as_one() {
         h.run_steps(12);
         assert!(!has_id(h, &first) && has_id(h, &last), "{:?}", ids(h));
         assert_eq!(rect_of(h, &format!("{BEFORE}.field.59")).top(), rect_of(h, &last).top(), "level across the cards");
+        assert!(!has_id(h, SUMMARY), "the summary scrolls away with the cards");
+        assert!(rect_of(h, BEFORE).bottom() <= h.ctx.content_rect().bottom(), "the scroll reaches the end of the cards");
     });
 }
 
