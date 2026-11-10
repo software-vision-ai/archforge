@@ -648,6 +648,8 @@ pub struct Shell {
     saves: std::collections::VecDeque<(u64, SaveState)>,
     /// The replacement of the session under way, if any.
     replacing: Option<replace::Replacing>,
+    /// Set while Stop and go on replays what its question held; see [`leaving`].
+    chat_answered: bool,
     /// The version shown read-only, and the real work set aside for going back.
     viewing: Option<Box<viewing::Viewing>>,
     /// The hold under way, and what waits for it to end.
@@ -738,6 +740,7 @@ impl Shell {
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
             replacing: None,
+            chat_answered: false,
             viewing: None,
             holding: hold::Holding::default(),
             opening: None,
@@ -1841,14 +1844,15 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About, Settings, New project, Save version or a menu of the bar is over the window, the one behind takes no
-        // keys: its tree, canvas and editors read keys directly, so the frame's keys are held back
-        // while it is drawn and given back for the dialogs.
+        // While About, Settings, New project, Save version, a menu of the bar or Chat's question is over the
+        // window, the one behind takes no keys: its tree, canvas and editors read keys directly, so the
+        // frame's keys are held back while it is drawn and given back for the dialogs.
         let dialog = self.about.is_some()
             || self.settings.is_some()
             || self.new_project.is_some()
             || self.versions.dialog.is_some()
-            || self.menu_bar.open.is_some();
+            || self.menu_bar.open.is_some()
+            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. }));
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

@@ -1674,3 +1674,7 @@ str		No newer version	これより新しいバージョンはありません
 str		Finish or cancel your edit first.	先に編集を完了するかキャンセルしてください。
 str		Wait for the change under way to finish.	進行中の変更が完了するまでお待ちください。
 str		There is no model to show a version of.	バージョンを表示できるモデルがありません。
+str		Chat is still changing the model. Stop it and go on?	Chat はまだモデルを変更しています。停止して続けますか？
+str		Its reply so far is kept.	これまでの返答は保持されます。
+str		Stop and go on	停止して続ける
+str		Keep working	作業を続ける

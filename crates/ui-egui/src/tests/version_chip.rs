@@ -585,7 +585,7 @@ type Way = (&'static str, fn(&mut Shell) -> Result<(), crate::hold::HoldRefused>
 fn ways() -> [Way; 5] {
     [
         ("view", |s| s.view_version("c1")),
-        ("step", |s| s.move_to_version("c1")),
+        ("step", |s| s.move_to_version("c1", None)),
         ("restore", |s| s.restore_version("c1", "d")),
         ("switch", |s| s.switch_branch("x".to_string())),
         ("replace", |s| s.begin_replacement(std::sync::mpsc::channel().1, None)),
@@ -649,10 +649,10 @@ fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
         let earlier = rows_now(&h);
         h.state_mut().panels.picker = picker();
         crate::settings::open(h.state_mut());
-        assert_eq!(h.state_mut().clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing));
+        assert_eq!(h.state_mut().clear_to_leave(None).err(), Some(crate::hold::HoldRefused::Editing));
         assert!(h.state().panels.picker.is_some(), "a refusal leaves it open");
         h.state_mut().settings = None;
-        assert!(h.state_mut().clear_to_leave().is_ok() && h.state().panels.picker.is_none(), "leaving closes it");
+        assert!(h.state_mut().clear_to_leave(None).is_ok() && h.state().panels.picker.is_none(), "leaving closes it");
         let read = start_replacing(&mut h, None);
         h.state_mut().panels.picker = picker();
         read.send(Ok(earlier)).unwrap();
@@ -708,13 +708,13 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
     in_both(|mut h, _| {
         let s = h.state_mut();
         s.panels.ends = Some(untouched());
-        assert!(s.clear_to_leave().is_ok(), "the panel filled them in and nothing was typed");
+        assert!(s.clear_to_leave(None).is_ok(), "the panel filled them in and nothing was typed");
         s.panels.ends.as_mut().unwrap().modifiers_open = [true, true];
-        assert!(s.clear_to_leave().is_ok(), "an open fold holds nothing");
+        assert!(s.clear_to_leave(None).is_ok(), "an open fold holds nothing");
         for (what, change) in typed {
             s.panels.ends = Some(untouched());
             change(s.panels.ends.as_mut().unwrap());
-            assert_eq!(s.clear_to_leave().err(), Some(Editing), "{what}");
+            assert_eq!(s.clear_to_leave(None).err(), Some(Editing), "{what}");
         }
     });
 }
@@ -747,7 +747,7 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
         let ends = h.state_mut().panels.ends.as_mut().unwrap();
         (ends.multiplicity[0], ends.refused[0]) = ("3".into(), Some("refused".into()));
         ends.multiplicity[1] = "5..2".into();
-        assert_eq!(h.state_mut().clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing), "selected, it holds work");
+        assert_eq!(h.state_mut().clear_to_leave(None).err(), Some(crate::hold::HoldRefused::Editing), "selected, it holds work");
         click(&mut h, away);
         assert!(h.state().panels.ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
         let read = start_replacing(&mut h, None);
@@ -852,6 +852,145 @@ fn a_refused_description_stops_leaving_and_a_good_one_goes_first() {
             assert!(h.state().is_held() && h.state().panels.description.is_none(), "{way}: written, then held");
         });
     }
+}
+
+/// A Chat turn running on a project a version can be read from.
+fn turn_running(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig, std::sync::Arc<SavingHost>) {
+    let (mut h, rig, host, _) = chat_and_a_version(theme);
+    ask_in_chat(&mut h, "A long question");
+    (h, rig, host)
+}
+
+/// That the turn is left running, not stopped, with no question up.
+#[track_caller]
+fn turn_left_alone(h: &Harness<'static, Shell>, rig: &crate::chat_fixture::Rig, what: &str) {
+    assert_eq!(
+        (h.state().ask.clone(), chat_calls(rig).2, chat_turns(h).last().unwrap().state.clone()),
+        (None, 0, crate::chat_panel::TurnState::Running),
+        "{what}"
+    );
+}
+
+/// A Chat turn running asks before each way that can be replayed: Keep working leaves everything
+/// as it was, Stop and go on runs what was asked for and the hold stops the turn; a switch asks the
+/// host for its check once Chat has settled, so it has neither a read nor a restore here. Keys go to
+/// the question, not the composer behind it.
+#[test]
+fn a_chat_turn_running_asks_first_and_the_answer_decides() {
+    use crate::{close_ask::Ask, hold::HoldRefused::ChatRunning, leaving::Leaving};
+    let cases: [(Way, Leaving, usize, usize, usize); 3] = [
+        (ways()[0], Leaving::View { commit: "c1".into(), label: None }, 1, 0, 0),
+        (ways()[2], Leaving::Restore { commit: "c1".into(), saved_at: "d".into() }, 1, 1, 0),
+        (ways()[3], Leaving::Switch("x".into()), 0, 0, 0),
+    ];
+    in_both_appearances(|theme| {
+        for ((way, go), then, reads, restores, switches) in cases.clone() {
+            let (mut h, rig, host) = turn_running(theme);
+            let at = rect_of(&h, "workspace.chat.composer").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text("y".into()));
+            h.run();
+            assert_eq!(go(h.state_mut()), Err(ChatRunning), "{way}");
+            let (path, generation) = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
+            assert_eq!(h.state().ask, Some(Ask::StopChat { path, generation, then: then.clone() }), "{way}");
+            h.run();
+            assert!(painted_has(&h, "Chat is still changing the model. Stop it and go on?") && painted_has(&h, "Its reply so far is kept."), "{way}");
+            h.event(egui::Event::Text("x".into()));
+            h.run();
+            assert_eq!(h.state().chat_panel.draft, "y", "{way}: the composer behind the question takes no keys");
+            let at = rect_of(&h, "close-ask.keep").center();
+            click(&mut h, at);
+            turn_left_alone(&h, &rig, way);
+            nothing_began(&h, &host, way);
+            assert_eq!(go(h.state_mut()), Err(ChatRunning), "{way}: asked again");
+            h.run();
+            let at = rect_of(&h, "close-ask.stop-chat").center();
+            click(&mut h, at);
+            assert!(h.state().ask.is_none() && h.state().is_held() && chat_calls(&rig).2 == 1, "{way}: the turn stops under the hold");
+            assert_eq!(
+                (host.reads.lock().unwrap().len(), host.restores.lock().unwrap().len(), host.switches.lock().unwrap().len()),
+                (reads, restores, switches),
+                "{way} runs its own operation"
+            );
+        }
+    });
+}
+
+/// `begin_replacement` holds a receiver and a job that cannot wait for an answer: it never asks,
+/// and the hold stops the turn.
+#[test]
+fn a_replacement_settles_a_running_turn_without_asking() {
+    in_both_appearances(|theme| {
+        let (mut h, rig, _host) = turn_running(theme);
+        assert_eq!(h.state_mut().begin_replacement(std::sync::mpsc::channel().1, None), Ok(()));
+        h.run();
+        assert!(h.state().ask.is_none() && h.state().is_held() && chat_calls(&rig).2 == 1);
+    });
+}
+
+/// The answer replays through the guards: an editor opened meanwhile refuses it where it is seen,
+/// nothing begins, the turn runs on, and the next try asks again.
+#[test]
+fn stop_and_go_on_goes_through_the_guards_again() {
+    use crate::hold::HoldRefused::ChatRunning;
+    in_both_appearances(|theme| {
+        let (mut h, rig, host) = turn_running(theme);
+        assert!(!crate::version_chip::view(h.state_mut(), "c1".to_string(), "x".to_string()), "asked, not yet on its way");
+        h.run();
+        crate::settings::open(h.state_mut());
+        let at = rect_of(&h, "close-ask.stop-chat").center();
+        click(&mut h, at);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some(EDITING));
+        turn_left_alone(&h, &rig, "refused");
+        nothing_began(&h, &host, "refused");
+        h.state_mut().settings = None;
+        assert_eq!(h.state_mut().view_version("c1"), Err(ChatRunning), "the answer does not carry over to the next try");
+    });
+}
+
+/// The chip's date goes with the question: Keep working leaves what the chip says, and Stop and go
+/// on says the date of the version it was asked about.
+#[test]
+fn the_question_carries_the_date_the_chip_will_say() {
+    in_both_appearances(|theme| {
+        let (mut h, _rig, _host) = turn_running(theme);
+        crate::version_chip::view(h.state_mut(), "c1".to_string(), "8 Nov 14:02".to_string());
+        assert_eq!(h.state().canvas.notice, None, "the question says it");
+        h.run();
+        let at = rect_of(&h, "close-ask.keep").center();
+        click(&mut h, at);
+        assert_eq!(h.state().version_list.shown, None, "kept working: nothing remembered");
+        crate::version_chip::view(h.state_mut(), "c1".to_string(), "8 Nov 14:02".to_string());
+        h.run();
+        let at = rect_of(&h, "close-ask.stop-chat").center();
+        click(&mut h, at);
+        assert_eq!(h.state().version_list.shown, Some(("c1".to_string(), "8 Nov 14:02".to_string())));
+    });
+}
+
+/// A session replaced while the question is up takes it along: nothing is replayed over what shows now.
+#[test]
+fn a_session_replaced_takes_the_question_along() {
+    in_both_appearances(|theme| {
+        let (mut h, rig, host) = turn_running(theme);
+        assert!(!crate::version_chip::view(h.state_mut(), "c1".to_string(), "x".to_string()));
+        h.state_mut().session_replaced();
+        h.run();
+        turn_left_alone(&h, &rig, "gone");
+        nothing_began(&h, &host, "gone");
+    });
+}
+
+/// A text already refused stops the leaving anyway, so Chat isn't asked about.
+#[test]
+fn a_refused_description_stops_leaving_before_the_question() {
+    in_both_appearances(|theme| {
+        let (mut h, rig, _host) = turn_running(theme);
+        let target = crate::chat_fixture::element(h.state(), archforge_uml::CLASS, "Customer").unwrap();
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target, text: "a\u{7}b".into(), refused: true });
+        assert_eq!(h.state_mut().view_version("c1"), Err(crate::hold::HoldRefused::Description));
+        turn_left_alone(&h, &rig, "no question");
+    });
 }
 
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
@@ -986,11 +1125,11 @@ fn nothing_is_carried_past_an_empty_view_or_a_dropped_read() {
         show_diagram(&mut h, b);
         enter(&mut h, &host, none, "c1");
         assert_eq!(centre(&h), (vec![], None));
-        h.state_mut().move_to_version("c2").unwrap();
+        h.state_mut().move_to_version("c2", None).unwrap();
         h.run_steps(3);
         answer_read(&mut h, &host, Ok(two.clone()));
         assert_eq!((h.state().viewing(), centre(&h)), (Some("c2"), (vec![a], Some(a))), "the version's first, not the work's");
-        h.state_mut().move_to_version("c3").unwrap();
+        h.state_mut().move_to_version("c3", None).unwrap();
         h.run_steps(3);
         assert!(h.state_mut().back_to_current_work(), "the read is dropped");
         host.reads.lock().unwrap().clear();

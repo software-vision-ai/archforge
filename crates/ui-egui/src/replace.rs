@@ -14,7 +14,7 @@ use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
-use crate::leaving::Cleared;
+use crate::leaving::{Cleared, Leaving};
 use crate::viewing::OpensOn;
 use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
 
@@ -99,7 +99,7 @@ impl Shell {
     /// gives way to current work first, and the project is held before the version is read. Refused
     /// as [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn restore_version(&mut self, commit: &str, saved_at: &str) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave()?;
+        let cleared = self.clear_to_leave(Some(Leaving::Restore { commit: commit.to_string(), saved_at: saved_at.to_string() }))?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
@@ -116,7 +116,7 @@ impl Shell {
     /// takes the session's place once the move has finished. Refused as
     /// [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn switch_branch(&mut self, branch: String) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave()?;
+        let cleared = self.clear_to_leave(Some(Leaving::Switch(branch.clone())))?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
@@ -139,9 +139,10 @@ impl Shell {
     }
 
     /// Holds the project and starts replacing its session with the model `read` answers, running
-    /// `job` once it is built. What happens is driven frame by frame.
+    /// `job` once it is built. What happens is driven frame by frame; a Chat turn running is settled
+    /// by the hold without a question, as its receiver and job can't be replayed after one.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave()?;
+        let cleared = self.clear_to_leave(None)?;
         self.begin_hold()?;
         self.start_replacing(read, job, None, cleared);
         Ok(())

@@ -1720,10 +1720,15 @@ pub(crate) fn settled(shell: &Shell) -> bool {
 
 // Project tabs.
 
+/// Whether a turn of the conversation shown is running, and so may still change the model.
+pub(crate) fn turn_running(shell: &Shell) -> bool {
+    shell.chat_panel.chat.as_ref().is_some_and(|c| c.turns.last().is_some_and(|t| t.state == TurnState::Running))
+}
+
 /// The tab shown is left: a running turn is stopped, as its control would now reach another
 /// project.
 pub(crate) fn leaving(shell: &mut Shell) {
-    if shell.chat_panel.chat.as_ref().is_some_and(|c| c.turns.last().is_some_and(|t| t.state == TurnState::Running)) {
+    if turn_running(shell) {
         stop(shell);
     }
     if let Some(c) = shell.chat_panel.chat.as_mut() {

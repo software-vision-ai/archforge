@@ -4,6 +4,7 @@
 //! writing, which asks once more before the changes not yet written are lost (owner decision);
 //! what was written stays, unsaved, for the next opening. Quitting asks about each unsaved
 //! project in turn; Cancel stops quitting.
+//! It also asks before current work is left while a Chat turn runs (`crate::leaving`).
 
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
@@ -23,13 +24,20 @@ pub enum Ask {
     ConfirmLoss { path: std::path::PathBuf },
     /// A close or a quit waited for a hold that failed, with nothing unsaved: the person looks first.
     HoldFailed { path: std::path::PathBuf, held: String },
+    /// A Chat turn runs while the work of `path`, as session `generation` holds it, is being left
+    /// for `then`.
+    StopChat { path: std::path::PathBuf, generation: u64, then: crate::leaving::Leaving },
 }
 
 impl Ask {
     /// The project the question is about.
     fn path(&self) -> &std::path::Path {
         match self {
-            Ask::Unsaved { path } | Ask::CannotWrite { path, .. } | Ask::ConfirmLoss { path } | Ask::HoldFailed { path, .. } => path,
+            Ask::Unsaved { path }
+            | Ask::CannotWrite { path, .. }
+            | Ask::ConfirmLoss { path }
+            | Ask::HoldFailed { path, .. }
+            | Ask::StopChat { path, .. } => path,
         }
     }
 }
@@ -42,6 +50,7 @@ enum Answer {
     CloseWithoutWriting,
     LoseChanges,
     GoOn,
+    StopAndGoOn,
     Cancel,
 }
 
@@ -53,6 +62,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         shell.ask = None;
         return;
     };
+    // Chat's question is about the session it was asked over; another showing now takes it along.
+    if matches!(ask, Ask::StopChat { generation, .. } if generation != shell.session_generation()) {
+        shell.ask = None;
+        return;
+    }
     let name = shell.tabs[i].name.clone();
     let quitting = shell.quitting();
     let (title, lines, buttons): (String, Vec<String>, Vec<(&str, String, Answer, bool)>) = match &ask {
@@ -89,6 +103,14 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
                 ("close-ask.keep", tr("Keep open"), Answer::Cancel, false),
             ],
         ),
+        Ask::StopChat { .. } => (
+            tr("Chat is still changing the model. Stop it and go on?"),
+            vec![tr("Its reply so far is kept.")],
+            vec![
+                ("close-ask.stop-chat", tr("Stop and go on"), Answer::StopAndGoOn, true),
+                ("close-ask.keep", tr("Keep working"), Answer::Cancel, false),
+            ],
+        ),
     };
     let p = *crate::ux::palette(ui.visuals().dark_mode);
     let window = ui.ctx().content_rect();
@@ -113,6 +135,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         // Quitting goes on by itself, with nothing left to ask about.
         Answer::GoOn if quitting => {}
         Answer::GoOn => shell.close_tab_now(i),
+        Answer::StopAndGoOn => {
+            if let Ask::StopChat { then, .. } = ask {
+                shell.go_on_leaving(then);
+            }
+        }
         Answer::Cancel => {
             shell.holding.forget_quit();
             if quitting {
