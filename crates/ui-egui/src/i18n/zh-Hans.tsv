@@ -493,6 +493,8 @@ str		Added	已添加
 str		Changed	已更改
 str		Removed	已移除
 str		The changes couldn't be compared.	无法比较这些更改。
+str		View this version	查看此版本
+str		First version: there is nothing earlier to compare it with.	第一个版本：没有更早的版本可供比较。
 str		All	全部
 str		With a description	有描述
 str		Show more	显示更多

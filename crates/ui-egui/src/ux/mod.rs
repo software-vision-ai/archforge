@@ -295,6 +295,8 @@ pub mod types {
     use super::Type;
 
     pub const DISPLAY: Type = Type::semibold(36.0, 52.0);
+    /// The title of a page in the centre, such as a version's details.
+    pub const PAGE_TITLE: Type = Type::semibold(26.0, 31.0);
     pub const SECTION: Type = Type::semibold(20.0, 29.0);
     pub const SUBSECTION: Type = Type::semibold(18.0, 26.0);
     pub const CARD_TITLE: Type = Type::semibold(17.0, 25.0);

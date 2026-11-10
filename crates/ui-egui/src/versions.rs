@@ -1,7 +1,7 @@
 //! The Versions explorer (AR-255, from page 09 of the design and sections 2, 10 and 11 of
 //! `docs/design/versioning.md`): Branches, Working changes and History, the versions read off the
 //! writer a page at a time. A read keeps what was shown until its answer comes, and one for
-//! another project or session is dropped by the next. Nothing here opens a version yet.
+//! another project or session is dropped by the next. A row opens the version's details.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -74,6 +74,8 @@ pub struct State {
     described_only: bool,
     /// The Save version dialog, while it is open.
     pub(crate) dialog: Option<crate::save_version::Dialog>,
+    /// The version whose details the centre shows.
+    pub(crate) details: Option<crate::version_details::Details>,
     pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
@@ -603,7 +605,7 @@ fn described(v: &VersionEntry) -> Option<&str> {
 
 /// A version's two lines: its description and when and by whom, or without a description its date
 /// and who asked when an agent did, else "No description".
-fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
+pub(crate) fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
     let date = when(&v.date, clock);
     let who = if v.by_agent { Some(tr("Saved by an agent")) } else { v.author.clone().filter(|a| !a.is_empty()) };
     match described(v) {
@@ -632,7 +634,7 @@ fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &V
     let resp = control(shell, ui, &id, "row", area, true);
     let _ = resp.clone().accessible_name(name);
     if resp.clicked() {
-        shell.versions.selected = Some(v.hash.clone());
+        crate::version_details::open(shell, v.clone());
     }
     let paint = ui.painter();
     if selected {

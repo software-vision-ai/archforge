@@ -334,6 +334,7 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_filled(Rect::from_min_max(pos2(r.right() - 1.0, r.top()), r.max), 0.0, p.border);
     // Before the rail says the count, so its words and its badge are of one frame.
     crate::versions::refresh(shell, ui.ctx());
+    crate::version_details::keep(shell);
     let active = shell.state.explorer;
     for (i, (id, which, icon, title)) in EXPLORERS.iter().enumerate() {
         let button = Rect::from_min_size(pos2(r.left() + 10.0, r.top() + 8.0 + i as f32 * RAIL_PITCH), RAIL_BUTTON);
@@ -388,10 +389,13 @@ fn resize(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, body: Rect, id:
     }
 }
 
-/// The centre: the diagram tabs over the canvas, drawn by the canvas module.
+/// The centre: a version's details when they are open, otherwise the diagram tabs over the
+/// canvas, drawn by the canvas module.
 fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let r = if shell.looking_only() { banner(shell, ui, p, r) } else { r };
-    crate::canvas::centre(shell, ui, p, r);
+    if !crate::version_details::draw(shell, ui, p, r) {
+        crate::canvas::centre(shell, ui, p, r);
+    }
 }
 
 /// The banner over the centre while a version shows, with the way back; gives the room left below.

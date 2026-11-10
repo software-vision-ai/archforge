@@ -252,6 +252,8 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
 /// view's open diagram follows, and the diagram is selected so Properties shows it. A skill opens
 /// in its own tab the same way, with its text in place of the canvas.
 pub fn open(shell: &mut Shell, id: Uuid) {
+    // What is opened shows in the centre, where a version's details would hide it.
+    shell.versions.details = None;
     if shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), id)) {
         crate::skill_tab::open(shell, id);
         return;

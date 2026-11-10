@@ -74,6 +74,7 @@ mod uml_templates;
 mod uml_ui;
 pub mod ux;
 pub mod version_chip;
+mod version_details;
 pub mod versions;
 mod viewing;
 pub mod widgets;

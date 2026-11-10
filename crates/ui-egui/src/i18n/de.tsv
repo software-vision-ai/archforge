@@ -493,6 +493,8 @@ str		Added	Hinzugefügt
 str		Changed	Geändert
 str		Removed	Entfernt
 str		The changes couldn't be compared.	Die Änderungen konnten nicht verglichen werden.
+str		View this version	Diese Version ansehen
+str		First version: there is nothing earlier to compare it with.	Erste Version: Es gibt nichts Früheres zum Vergleichen.
 str		All	Alle
 str		With a description	Mit Beschreibung
 str		Show more	Mehr anzeigen
