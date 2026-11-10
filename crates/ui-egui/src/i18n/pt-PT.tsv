@@ -519,7 +519,11 @@ str		{name}, selected	{name}, selecionada
 str		Compared with the version of {when}	Comparado com a versão de {when}
 str		There is no version to compare with yet.	Ainda não há nenhuma versão com que comparar.
 str		This element couldn't be compared.	Não foi possível comparar este elemento.
-str		What changed inside this element isn't shown here yet.	O que mudou dentro deste elemento ainda não é mostrado aqui.
+str		Yes	Sim
+str		Not set	Não definido
+str		Nothing here yet	Ainda não há nada
+str		Version of {when}	Versão de {when}
+str		Last version	Última versão
 str		No description	Sem descrição
 str		Saved by an agent	Guardado por um agente
 str		This version can't be shown	Esta versão não pode ser mostrada

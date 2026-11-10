@@ -1,13 +1,16 @@
-//! A changed element opened in the centre (frames V1.1 and V3.3 of page 09): its name, what happened to it
-//! and where. Its sides are built off the interface thread from rows already held, so a click reads nothing.
+//! A changed element opened in the centre (frames V1.1 and V3.3 of page 09): its name, what happened to it,
+//! where, and its two sides. Those are built off the interface thread from rows already held, so a click reads nothing.
+
+mod cards;
 
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use archforge_mof::{Uuid, rows::snapshot};
 use archforge_notations::differences::{ChangeKind, Difference, ElementSides, element_sides};
-use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
+use egui::{Rect, pos2, vec2};
 
 use crate::Shell;
+use crate::explorer::TreeScroll;
 use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button, control};
 use crate::state::Explorer;
@@ -20,6 +23,7 @@ pub(crate) struct OpenedElement {
     pub(crate) row: Difference,
     read_of: Option<Compared>,
     found: Option<Result<ElementSides, String>>,
+    scroll: TreeScroll,
 }
 
 /// The one read of an element's two sides under way, and what it is about.
@@ -34,7 +38,7 @@ pub(crate) fn open(shell: &mut Shell, row: Difference) {
     (shell.versions.details, shell.versions.selected, shell.canvas.notice) = (None, None, None);
     let v = &mut shell.versions;
     if v.element.as_ref().is_none_or(|o| o.row.id != row.id) {
-        v.element = Some(OpenedElement { row, read_of: None, found: None });
+        v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default() });
     }
 }
 
@@ -106,7 +110,7 @@ fn start_read(shell: &mut Shell) {
 }
 
 /// Draws the open element in `r` while Versions is the explorer; false leaves `r` to the canvas. Under
-/// the header: why it could not be read, bars, or for an element on both sides the not-shown-yet note.
+/// the header: why it could not be read, bars, or its two cards.
 pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> bool {
     let v = &shell.versions;
     let Some(o) = v.element.as_ref().filter(|_| shell.state.explorer == Explorer::SourceControl) else { return false };
@@ -153,16 +157,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
                 (o.read_of, o.found) = (None, None);
             }
         }
-        Some(Ok(sides)) if sides.before.is_some() && sides.after.is_some() => {
-            let words = tr("What changed inside this element isn't shown here yet.");
-            let g = ux::galley_rows(ui.painter(), &words, types::UI, p.text, Some((width - 40.0).max(0.0)), 3);
-            let at = Rect::from_min_size(pos2(left, y), vec2(width, g.size().y + 34.0));
-            let _ = control(shell, ui, "workspace.change-view.note", "status", at, false).accessible_name(words);
-            ui.painter().rect_filled(at, 8.0, p.surface);
-            ui.painter().rect_stroke(at, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-            ui.painter().galley(pos2(left + 20.0, y + 17.0), g, p.text);
-        }
-        Some(Ok(_)) => {}
+        Some(Ok(sides)) => cards::draw(shell, ui, p, r, y, &sides),
         None => {
             let _ = control(shell, ui, "workspace.change-view.loading", "status", Rect::from_min_size(pos2(left, y), vec2(width, 66.0)), false)
                 .accessible_name(tr("Loading"));

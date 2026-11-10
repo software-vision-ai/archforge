@@ -519,7 +519,11 @@ str		{name}, selected	{name}、選択中
 str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This element couldn't be compared.	この要素を比較できませんでした。
-str		What changed inside this element isn't shown here yet.	この要素の内部の変更はまだここに表示されません。
+str		Yes	はい
+str		Not set	未設定
+str		Nothing here yet	まだ何もありません
+str		Version of {when}	{when} のバージョン
+str		Last version	最新のバージョン
 str		No description	説明なし
 str		Saved by an agent	エージェントが保存
 str		This version can't be shown	このバージョンは表示できません

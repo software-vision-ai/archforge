@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
+use archforge_mof::{Uuid, Value};
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::versions::Compared;
-use archforge_notations::differences::{Area, ChangeKind, Difference, ElementCard, ElementSides};
+use archforge_notations::differences::{Area, CardField, ChangeKind, Difference, ElementCard, ElementSides};
 
 const VIEW: &str = "workspace.version-details.view";
 
@@ -688,7 +688,8 @@ fn a_new_session_does_not_wait_for_the_link_read_left() {
     });
 }
 
-const NOTE: &str = "workspace.change-view.note";
+const BEFORE: &str = "workspace.change-view.before";
+const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 
@@ -736,7 +737,11 @@ fn a_working_change_opens_in_the_centre_without_a_read() {
         h.state_mut().canvas.notice = Some("From earlier".into());
         open_change(h, "shop");
         assert!(!has_id(h, VIEW) && h.state().versions.selected.is_none() && asked(host).is_empty() && !painted_has(h, "From earlier"));
-        assert!(painted_has(h, "Added") && !has_id(h, NOTE) && painted_has(h, "Compared with the version of 7 Nov 17:15"), "{:?}", painted(h));
+        assert!(
+            painted_has(h, "Added") && painted_has(h, "Nothing here yet") && painted_has(h, "Compared with the version of 7 Nov 17:15"),
+            "{:?}",
+            painted(h)
+        );
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 1);
         let title = rect_of(h, "workspace.change-view.title").top();
         h.state_mut().canvas.notice = Some("Refused by a panel. ".repeat(60));
@@ -768,7 +773,7 @@ fn the_compared_line_keeps_to_the_end_of_the_header() {
         let (id, key) = element_open(h, host);
         landed(h, id, key, both_sides(id, "shop"));
         let (words, back) = (rect_of(h, COMPARED), rect_of(h, "workspace.change-view.close"));
-        assert!((words.right() - rect_of(h, NOTE).right()).abs() < 1.0, "{words:?}");
+        assert!((words.right() - rect_of(h, AFTER).right()).abs() < 1.0, "{words:?}");
         assert!((words.center().y - back.center().y).abs() < 1.0, "{words:?} {back:?}");
         assert_eq!(h.query_all_by_label("Compared with the version of 7 Nov 17:15").count(), 1);
         h.set_size(egui::vec2(600.0, 860.0));
@@ -817,9 +822,9 @@ fn a_read_lands_only_on_what_it_is_about() {
         assert!(h.ctx.has_requested_repaint(), "a read on its way wakes the window");
         landed(h, Uuid::v7(1, [1; 10]), key.clone(), both_sides(id, "another element"));
         landed(h, id, (Some("elsewhere".into()), key.1), both_sides(id, "another base"));
-        assert!(!painted_has(h, "another element") && !painted_has(h, "another base") && !has_id(h, NOTE), "{:?}", painted(h));
+        assert!(!painted_has(h, "another element") && !painted_has(h, "another base"), "{:?}", painted(h));
         landed(h, id, key.clone(), both_sides(id, "both"));
-        assert!(painted_has(h, "Changed") && has_id(h, NOTE) && painted_has(h, "both"), "{:?}", painted(h));
+        assert!(painted_has(h, "Changed") && has_id(h, AFTER) && painted_has(h, "both"), "{:?}", painted(h));
         let moved = (key.0.clone(), key.1.wrapping_sub(1));
         landed(h, id, moved.clone(), Err("transient".into()));
         assert!(!has_id(h, ELEMENT_FAILED), "a failure for rows moved on is not said");
@@ -836,7 +841,7 @@ fn a_failure_is_said_and_never_taken_for_no_change() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
         landed(h, id, key.clone(), Err("broken".into()));
-        assert!(has_id(h, ELEMENT_FAILED) && !has_id(h, NOTE) && !painted_has(h, "Added"), "{:?}", painted(h));
+        assert!(has_id(h, ELEMENT_FAILED) && !has_id(h, BEFORE) && !painted_has(h, "Added"), "{:?}", painted(h));
         assert!(!has_id(h, COMPARED), "nothing was compared, so no version is named");
         tap(h, "workspace.change-view.retry");
         frames_until(h, |h| painted_has(h, "Added"));
@@ -980,5 +985,129 @@ fn compare_gives_way_like_the_details() {
         h.state_mut().project.as_mut().unwrap().path.push("elsewhere");
         h.run_steps(2);
         assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "about the project left");
+    });
+}
+
+/// A side of `name`, a schema.
+fn schema(name: &str) -> Option<ElementCard> {
+    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) })
+}
+
+/// A field of the enumeration-typed Visibility with these values.
+fn field(before: Option<Value>, after: Option<Value>, changed: bool) -> CardField {
+    CardField { prop: archforge_uml::named_element::VISIBILITY, before, after, changed }
+}
+
+/// How many controls are named exactly `name`.
+fn named(h: &Harness<'static, Shell>, name: &str) -> usize {
+    h.query_all_by_label(name).count()
+}
+
+/// The palette the test is drawn in.
+fn colours(h: &Harness<'static, Shell>) -> &'static crate::ux::Palette {
+    crate::ux::palette(h.state().state.theme == ThemeKind::Dark)
+}
+
+/// Whether a rectangle exactly over the control `id` is filled with `fill`.
+fn filled(h: &Harness<'static, Shell>, id: &str, fill: egui::Color32) -> bool {
+    rect_shapes(h).iter().any(|(r, f, _)| *r == rect_of(h, id) && *f == fill)
+}
+
+/// Each type of value is worded as a person says it, a click reads nothing, and a label or
+/// literal the metamodel does not give is Unknown, never a dropped row.
+#[test]
+fn values_are_worded_per_type_without_a_read() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        assert!(asked(host).is_empty(), "the open reads nothing");
+        let shop = h.state().session.as_ref().unwrap().doc().by_uuid(id).unwrap();
+        let cases = [
+            (Value::Null, "Not set"),
+            (Value::str(""), "Not set"),
+            (Value::Bool(true), "Yes"),
+            (Value::Bool(false), "No"),
+            (Value::Int(-7), "-7"),
+            (Value::Real(1.5), "1.5"),
+            (Value::str("words"), "words"),
+            (Value::Unlimited(None), "*"),
+            (Value::Unlimited(Some(3)), "3"),
+            (Value::Enum(1), "Private"),
+            (Value::Enum(99), "Unknown"),
+            (Value::Ref(shop), "Unknown"),
+        ];
+        let mut fields: Vec<CardField> = cases.iter().map(|(v, _)| field(Some(v.clone()), None, false)).collect();
+        fields.push(CardField { prop: archforge_diagram::node::ELEMENT, ..field(Some(Value::str("odd")), None, false) });
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("a"), after: None, fields })));
+        for (_, want) in &cases {
+            let times = cases.iter().filter(|(_, w)| w == want).count();
+            assert_eq!(named(h, &format!("Visibility, {want}")), times, "{want}: {:?}", painted(h));
+        }
+        assert_eq!(named(h, "Unknown, odd"), 1, "a label the metamodel doesn't give");
+        assert!(asked(host).is_empty(), "drawing reads nothing");
+    });
+}
+
+/// What differs has a sign and a tint on each card; a rename or a new kind marks the name.
+#[test]
+fn what_differs_is_marked_with_a_sign_and_a_tint() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let p = colours(h);
+        let fields =
+            vec![field(Some(Value::str("old")), Some(Value::str("new")), true), field(Some(Value::str("same")), Some(Value::str("same")), false)];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("kept"), after: schema("kept"), fields })));
+        assert_eq!((named(h, "Visibility, old, Changed"), named(h, "Visibility, new, Changed"), named(h, "Visibility, same")), (1, 1, 2));
+        assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1), "{:?}", painted(h));
+        assert!(filled(h, &format!("{BEFORE}.field.0"), p.danger_tint) && filled(h, &format!("{AFTER}.field.0"), p.green_tint));
+        assert!(!filled(h, &format!("{BEFORE}.field.1"), p.danger_tint), "a same row is plain");
+        assert_eq!(named(h, "Schema, kept"), 2, "the same name is not marked");
+        landed(h, id, key.clone(), Ok(Some(ElementSides { id, before: schema("was"), after: schema("is"), fields: Vec::new() })));
+        assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
+        assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
+        assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()) });
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("kept"), after: entity, fields: Vec::new() })));
+        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Entity, kept, Changed")), (1, 1), "a new kind");
+    });
+}
+
+/// A side the element is not on is a tinted card saying which, and each head names its side.
+#[test]
+fn a_side_without_the_element_is_a_tinted_card() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let p = colours(h);
+        assert_eq!((named(h, "Before, Nothing here yet"), named(h, "After, Current work")), (1, 1), "added");
+        assert!(filled(h, BEFORE, p.field) && !has_id(h, &format!("{BEFORE}.name")));
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("gone"), after: None, fields: Vec::new() })));
+        assert_eq!((named(h, "After, Removed"), named(h, "Before, Version of 7 Nov 17:15")), (1, 1), "{:?}", painted(h));
+        assert!(filled(h, AFTER, p.field), "removed");
+        h.state_mut().versions.page.as_mut().unwrap().versions.clear();
+        h.run_steps(1);
+        assert_eq!(named(h, "Before, Last version"), 1, "the list no longer holds it");
+    });
+}
+
+/// The cards scroll as one, a row level with itself across them.
+#[test]
+fn the_cards_scroll_as_one() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let fields = vec![field(Some(Value::Null), Some(Value::Null), false); 60];
+        landed(h, id, key, Ok(Some(ElementSides { id, before: schema("long"), after: schema("long"), fields })));
+        let (first, last) = (format!("{BEFORE}.field.0"), format!("{AFTER}.field.59"));
+        assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of sight");
+        assert!(painted_times(h, "Not set") < 120, "rows out of sight are not drawn");
+        h.event(egui::Event::PointerMoved(rect_of(h, &first).center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -4000.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(12);
+        assert!(!has_id(h, &first) && has_id(h, &last), "{:?}", ids(h));
+        assert_eq!(rect_of(h, &format!("{BEFORE}.field.59")).top(), rect_of(h, &last).top(), "level across the cards");
     });
 }

@@ -23,8 +23,11 @@ An open project fills the window with its workspace.
   keeping what it has written so far, and **Keep working** leaves everything as it was.
   Clicking a model element under Working changes opens it in the centre: its name, whether it was
   added, changed or removed, where it is, and the version it is compared with, or that there is
-  no version to compare with yet. What changed inside the element isn't shown there yet. The
-  project's name at the top closes it.
+  no version to compare with yet. Two cards side by side, **Before** (the last version) and
+  **After** (current work), give the element's kind, name and values. A name or value that differs
+  is marked with − on the Before card and + on the After card as well as a tint. A side the
+  element isn't on says *Nothing here yet* or *Removed*. Its members and relationships aren't on
+  the cards yet. The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
