@@ -661,8 +661,8 @@ fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
     });
 }
 
-/// An association's ends stop leaving only while selected and holding something not yet written:
-/// the panel fills them in for any association, and an open fold or an old selection holds nothing.
+/// An association's ends stop leaving only while holding something not yet written: the panel
+/// fills them in for any association, and an open fold holds nothing.
 #[test]
 fn an_end_typed_on_the_selected_association_stops_leaving() {
     use crate::{
@@ -706,7 +706,6 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
     ];
     in_both(|mut h, _| {
         let s = h.state_mut();
-        s.panels.editors_for = Some(ID);
         s.panels.ends = Some(untouched());
         assert!(s.clear_to_leave().is_ok(), "the panel filled them in and nothing was typed");
         s.panels.ends.as_mut().unwrap().modifiers_open = [true, true];
@@ -715,10 +714,46 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
             s.panels.ends = Some(untouched());
             change(s.panels.ends.as_mut().unwrap());
             assert_eq!(s.clear_to_leave().err(), Some(Editing), "{what}");
-            s.panels.editors_for = Some(archforge_mof::Uuid([8; 16]));
-            assert!(s.clear_to_leave().is_ok(), "{what}, kept for another selection");
-            s.panels.editors_for = Some(ID);
         }
+    });
+}
+
+/// A click off an association ends its draft: what reads is written though its field never saw the
+/// click, the rest goes as Cancel, and a replacement without the association has nothing to lose.
+#[test]
+fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
+    in_both(|mut h, _| {
+        let earlier = rows_now(&h);
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let away = rect_of(&h, "workspace.canvas").left_top() + egui::vec2(30.0, 30.0);
+        for (field, typed) in [("role", "payer"), ("multiplicity", "2..5")] {
+            select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
+            let before = revision(&h);
+            retype(&mut h, &format!("workspace.properties.end.1.{field}"), typed);
+            assert_eq!(revision(&h), before, "{field}: still selected, it is only typed");
+            h.state_mut().panels.ends.as_mut().unwrap().modifiers[1].derived = true;
+            click(&mut h, away);
+            assert!(h.state().panels.ends.is_none(), "{field}");
+        }
+        let paid = select_named(&mut h, archforge_uml::ASSOCIATION, "paid by");
+        let st = h.state().session.as_ref().unwrap().doc();
+        let end = archforge_uml::figures::member_ends(st, st.by_uuid(paid).unwrap()).unwrap()[1];
+        let model = (archforge_core::name_of(st, end), archforge_uml::figures::multiplicity(st, end), archforge_uml::modifiers::is_derived(st, end));
+        assert_eq!(model, ("payer".to_string(), "2..5".to_string(), false), "what read is written, Modifiers not Applied are not");
+        let before = revision(&h);
+        let ends = h.state_mut().panels.ends.as_mut().unwrap();
+        (ends.multiplicity[0], ends.refused[0]) = ("3".into(), Some("refused".into()));
+        ends.multiplicity[1] = "5..2".into();
+        assert_eq!(h.state_mut().clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing), "selected, it holds work");
+        click(&mut h, away);
+        assert!(h.state().panels.ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
+        let read = start_replacing(&mut h, None);
+        read.send(Ok(earlier)).unwrap();
+        h.run_steps(4);
+        assert!(!h.state().is_held() && h.state().session.as_ref().unwrap().doc().by_uuid(paid).is_none(), "replaced without it");
+        assert!(h.state().panels.ends.is_none() && h.state().panels.notice.is_none());
     });
 }
 

@@ -767,6 +767,31 @@ impl EndsEdit {
     }
 }
 
+/// Ends the draft of an association that is no longer `subject`, the selection. A role or a
+/// multiplicity that reads and was not refused is written, one step for each end, as leaving its
+/// field would: the click that moves the selection draws the next subject before that field can
+/// see it lose the keyboard. The rest goes as Cancel: a refused multiplicity, Modifiers not Applied.
+pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
+    let Some(edit) = shell.panels.ends.take_if(|e| Some(e.association) != subject) else { return };
+    let parse = archforge_uml::members::parse_multiplicity;
+    for i in 0..2 {
+        // What is left out keeps what the end has.
+        let mut params = json!({ "association": edit.association.to_string(), "end": i });
+        if edit.role[i].trim() != edit.written_role[i] {
+            params["role"] = json!(edit.role[i].trim());
+        }
+        let typed = parse(&edit.multiplicity[i]);
+        if edit.refused[i].is_none() && typed.is_ok() && typed != parse(&edit.written[i]) {
+            params["multiplicity"] = json!(edit.multiplicity[i].trim());
+        }
+        if params.as_object().is_some_and(|fields| fields.len() > 2)
+            && let Err(e) = run(shell, "uml.association.set-end", params)
+        {
+            shell.panels.notice = Some(e);
+        }
+    }
+}
+
 /// An association end's static and modifiers as its editor holds them (AR-126).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EndModifiers {
