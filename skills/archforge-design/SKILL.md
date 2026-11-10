@@ -64,7 +64,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Clicking the open column's own rail icon folds it; any rail icon opens a folded column on its
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
-- A menu bar comes later; until then the search field and the designed chrome carry the commands.
+- On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
+  and Home's search rows share each action's availability; elsewhere a menu bar comes later, and until
+  then the search field and the designed chrome carry the commands.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
 

@@ -11,10 +11,13 @@ use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
 
 pub const ABOUT: &str = "app.about";
+pub const SETTINGS: &str = "app.settings";
 pub const QUIT: &str = "app.quit";
 pub const GENERATE: &str = "file.generate";
 pub const SAVE: &str = "file.save";
+pub const NEW: &str = "file.new";
 pub const OPEN: &str = "file.open";
+pub const CLOSE: &str = "file.close";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
@@ -32,14 +35,10 @@ pub struct Action {
     pub search: Option<InSearch>,
 }
 
-/// An action's keyboard shortcut.
+/// An action's keyboard shortcut, taken while the action is available.
 pub struct Keys {
     pub modifiers: Modifiers,
     pub key: Key,
-    /// Whether the keys are taken now. This differs from the action's availability on purpose: the
-    /// table moved each rule as it was (Open's keys are taken behind a dialog that keeps Open off,
-    /// and do nothing), and making them one rule is a change of its own (AR-154).
-    pub when: fn(&Shell) -> bool,
 }
 
 /// How an action shows in Home's search.
@@ -47,47 +46,66 @@ pub struct InSearch {
     pub icon: fn(&Shell) -> &'static Icon,
     /// Its wording there, when not the action's label.
     pub label: Option<fn() -> String>,
-    /// Whether the row shows now, when not the action's availability. Open's row differs on purpose
-    /// and is broader than its menu item, as with its keys (AR-154).
-    pub shown: Option<fn(&Shell) -> bool>,
 }
 
 /// Every action. Keys are looked at in this order, and Home's search lists its rows in it.
 pub static ACTIONS: &[Action] = &[
     Action { id: ABOUT, label: |_| tr("About Archforge…"), available: |_| true, run: Shell::open_about, keys: None, search: None },
-    Action { id: QUIT, label: |_| tr("Quit Archforge"), available: |_| true, run: Shell::request_quit, keys: None, search: None },
+    Action {
+        id: SETTINGS,
+        label: |_| tr("Settings…"),
+        available: free,
+        run: crate::settings::open,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::Comma }),
+        search: None,
+    },
+    Action {
+        id: QUIT,
+        label: |_| tr("Quit Archforge"),
+        available: |_| true,
+        run: Shell::request_quit,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::Q }),
+        search: None,
+    },
     Action {
         id: GENERATE,
         label: |_| tr("Generate…"),
-        available: Shell::can_generate,
+        available: |s| free(s) && s.can_generate(),
         run: Shell::open_generate,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::G, when: |s| s.can_generate() && s.ask.is_none() }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::G }),
         search: None,
     },
     Action {
         id: SAVE,
         label: |_| tr("Save"),
-        available: Shell::can_save,
+        available: |s| free(s) && s.can_save(),
         run: Shell::save,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::S, when: Shell::can_save }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::S }),
         search: None,
     },
-    // Its availability is its search row's; Home's start card has a test of its own.
     Action {
-        id: "file.new",
-        label: |_| tr("New project"),
-        available: |s| s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
+        id: NEW,
+        label: |_| tr("New project…"),
+        available: |s| free(s) && s.services.projects.is_some() && s.tabs.len() < crate::MAX_TABS,
         run: crate::new_project::open,
         keys: None,
-        search: Some(InSearch { icon: |_| &icons::PLUS, label: None, shown: None }),
+        search: Some(InSearch { icon: |_| &icons::PLUS, label: Some(|| tr("New project")) }),
     },
     Action {
         id: OPEN,
         label: |_| tr("Open…"),
-        available: Shell::can_open_project,
+        available: |s| free(s) && s.can_open_project(),
         run: Shell::open_from_picker,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O, when: |s| s.about.is_none() }),
-        search: Some(InSearch { icon: |_| &icons::FOLDER, label: Some(|| tr("Open project")), shown: Some(crate::home::can_open) }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O }),
+        search: Some(InSearch { icon: |_| &icons::FOLDER, label: Some(|| tr("Open project")) }),
+    },
+    Action {
+        id: CLOSE,
+        label: |_| tr("Close project"),
+        available: |s| free(s) && s.active.and_then(|i| s.tabs.get(i)).is_some_and(|t| t.closing.is_none()),
+        run: Shell::close_project,
+        keys: None,
+        search: None,
     },
     Action {
         id: "home.pin-folder",
@@ -95,7 +113,7 @@ pub static ACTIONS: &[Action] = &[
         available: |s| s.services.pick_folder.is_some() && s.state.pinned.len() < crate::state::MAX_PINNED,
         run: Shell::pin_from_picker,
         keys: None,
-        search: Some(InSearch { icon: |_| &icons::PLUS, label: None, shown: None }),
+        search: Some(InSearch { icon: |_| &icons::PLUS, label: None }),
     },
     Action {
         id: "home.appearance",
@@ -103,7 +121,7 @@ pub static ACTIONS: &[Action] = &[
         available: |_| true,
         run: switch_appearance,
         keys: None,
-        search: Some(InSearch { icon: |s| if s.state.theme.is_dark() { &icons::SUN } else { &icons::MOON }, label: None, shown: None }),
+        search: Some(InSearch { icon: |s| if s.state.theme.is_dark() { &icons::SUN } else { &icons::MOON }, label: None }),
     },
     Action {
         id: "home.recent-view",
@@ -114,11 +132,7 @@ pub static ACTIONS: &[Action] = &[
         available: |_| true,
         run: switch_recent_view,
         keys: None,
-        search: Some(InSearch {
-            icon: |s| if s.state.recent_view == RecentView::List { &icons::GRID } else { &icons::LIST },
-            label: None,
-            shown: None,
-        }),
+        search: Some(InSearch { icon: |s| if s.state.recent_view == RecentView::List { &icons::GRID } else { &icons::LIST }, label: None }),
     },
     Action {
         id: "home.recent-sort",
@@ -129,14 +143,14 @@ pub static ACTIONS: &[Action] = &[
         available: |_| true,
         run: switch_recent_sort,
         keys: None,
-        search: Some(InSearch { icon: |_| &icons::LIST, label: None, shown: None }),
+        search: Some(InSearch { icon: |_| &icons::LIST, label: None }),
     },
     Action {
         id: VERSIONS,
         label: |_| tr("Versions"),
         available: crate::version_chip::available,
         run: crate::version_chip::toggle,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H, when: crate::version_chip::available }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H }),
         search: None,
     },
     Action {
@@ -144,7 +158,7 @@ pub static ACTIONS: &[Action] = &[
         label: |_| tr("Older version"),
         available: crate::version_chip::available,
         run: crate::version_chip::older,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::OpenBracket, when: crate::version_chip::available }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::OpenBracket }),
         search: None,
     },
     Action {
@@ -152,7 +166,7 @@ pub static ACTIONS: &[Action] = &[
         label: |_| tr("Newer version"),
         available: crate::version_chip::available,
         run: crate::version_chip::newer,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket, when: crate::version_chip::available }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
         search: None,
     },
 ];
@@ -165,6 +179,11 @@ fn find(id: &str) -> Option<&'static Action> {
 /// The name of the action `id`; empty when the table has none.
 pub fn label(shell: &Shell, id: &str) -> String {
     find(id).map(|a| (a.label)(shell)).unwrap_or_default()
+}
+
+/// The keys of the action `id`, when it has any.
+pub fn keys(id: &str) -> Option<&'static Keys> {
+    find(id)?.keys.as_ref()
 }
 
 /// Whether the action `id` can act now; an action the table lacks cannot.
@@ -180,10 +199,23 @@ pub fn run(shell: &mut Shell, id: &str) {
     }
 }
 
-/// Runs the actions whose keys were pressed in this frame, on every platform.
+/// Whether nothing is up over the window that the menu or a key would reach behind: a question or
+/// a dialog, in the window or in a panel. One rule, since a native menu is outside every veil.
+fn free(shell: &Shell) -> bool {
+    let window = shell.ask.is_none()
+        && shell.about.is_none()
+        && shell.settings.is_none()
+        && shell.generate.is_none()
+        && shell.new_project.is_none()
+        && shell.versions.dialog.is_none();
+    window && shell.explorer.delete.is_none() && shell.chat_panel.ask.is_none() && shell.diagrams.new.is_none()
+}
+
+/// Runs the actions whose keys were pressed in this frame, on every platform, while each is
+/// available.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
-        if (keys.when)(shell) && ctx.input_mut(|i| i.consume_key(keys.modifiers, keys.key)) {
+        if (action.available)(shell) && ctx.input_mut(|i| i.consume_key(keys.modifiers, keys.key)) {
             (action.run)(shell);
         }
     }
@@ -220,14 +252,14 @@ pub(crate) mod tests {
     use super::*;
     use crate::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services, Tab};
 
-    const NEW: &str = "file.new";
     const PIN: &str = "home.pin-folder";
     const APPEARANCE: &str = "home.appearance";
     const VIEW: &str = "home.recent-view";
     const SORT: &str = "home.recent-sort";
-    const ALL: [&str; 10] = [ABOUT, QUIT, GENERATE, SAVE, NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
-    const WITH_KEYS: [&str; 3] = [GENERATE, SAVE, OPEN];
+    const ALL: [&str; 12] = [ABOUT, SETTINGS, QUIT, GENERATE, SAVE, NEW, OPEN, CLOSE, PIN, APPEARANCE, VIEW, SORT];
     const IN_SEARCH: [&str; 6] = [NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
+    /// What a dialog or a question over the window turns off.
+    const BEHIND_A_DIALOG: [&str; 6] = [SETTINGS, GENERATE, SAVE, NEW, OPEN, CLOSE];
 
     /// A host that counts the saves asked of it; the saves never finish.
     #[derive(Default)]
@@ -270,10 +302,12 @@ pub(crate) mod tests {
         let mut shell = Shell::new(Services { projects: Some(host.clone()), pick_project, pick_folder, ..Default::default() });
         shell.session = Some(session());
         shell.project = Some(Opened { name: "Shop".to_string(), path: "/shop.archforge".into(), model: None, unsaved: false, notice: None });
+        shell.tabs = vec![tab()];
+        shell.active = Some(0);
         (shell, host, picks)
     }
 
-    /// A question about the open project, which keeps Generate's keys off.
+    /// A question about the open project, which keeps everything behind it off.
     fn question() -> crate::close_ask::Ask {
         crate::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }
     }
@@ -288,43 +322,53 @@ pub(crate) mod tests {
         all.iter().copied().filter(|id| !off.contains(id)).collect()
     }
 
-    /// The ids of the rows of the table `on` answers yes for.
+    /// The ids of the rows of the table `on` answers yes for, the chip's rows aside.
     fn answering(on: impl Fn(&Action) -> bool) -> Vec<&'static str> {
         ACTIONS.iter().filter(|a| !a.id.starts_with("versions.") && on(a)).map(|a| a.id).collect()
     }
 
-    /// The whole table, state by state, written out by hand from what each menu item and key did
-    /// before there was a table: which actions are off, which keys are left alone and which search
-    /// rows go.
+    /// The whole table, state by state, written out by hand: which actions are off. Search rows and
+    /// the keys answer to the same rule, so they have no columns of their own.
     #[test]
-    fn every_action_is_available_when_it_was() {
+    fn every_action_follows_one_rule_in_every_state() {
         type Setup = fn(&mut Shell);
-        let states: [(&str, Setup, &[&str], &[&str], &[&str]); 15] = [
-            ("a project", |_| {}, &[], &[], &[]),
-            ("saving", |s| s.save(), &[SAVE], &[SAVE], &[]),
-            ("held", |s| s.begin_hold().unwrap(), &[SAVE], &[SAVE], &[]),
-            ("viewing a version", |s| s.show_version(session(), "c1".to_string(), crate::viewing::OpensOn::Showing), &[SAVE], &[SAVE], &[]),
-            ("About open", crate::support::open, &[GENERATE, OPEN], &[GENERATE, OPEN], &[]),
-            ("Generate open", Shell::open_generate, &[GENERATE], &[GENERATE], &[]),
-            ("New project open", crate::new_project::open, &[OPEN], &[], &[]),
-            ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN], &[], &[]),
-            ("a question open", |s| s.ask = Some(question()), &[], &[GENERATE], &[]),
-            ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN], &[], &[NEW, OPEN]),
-            ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN], &[], &[PIN]),
-            ("no folder picker", |s| s.services.pick_folder = None, &[PIN], &[], &[PIN]),
-            ("no model", |s| s.session = None, &[GENERATE, SAVE], &[GENERATE, SAVE], &[]),
-            ("no host", |s| s.services.projects = None, &[NEW, OPEN], &[], &[NEW, OPEN]),
-            ("no project picker", |s| s.services.pick_project = None, &[OPEN], &[], &[OPEN]),
+        let states: [(&str, Setup, &[&str]); 18] = [
+            ("a project", |_| {}, &[]),
+            ("saving", |s| s.save(), &[SAVE]),
+            ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
+            ("viewing a version", |s| s.show_version(session(), "c1".to_string(), crate::viewing::OpensOn::Showing), &[SAVE]),
+            ("About open", crate::support::open, &BEHIND_A_DIALOG),
+            ("Settings open", crate::settings::open, &BEHIND_A_DIALOG),
+            ("Generate open", Shell::open_generate, &BEHIND_A_DIALOG),
+            ("New project open", crate::new_project::open, &BEHIND_A_DIALOG),
+            ("a question open", |s| s.ask = Some(question()), &BEHIND_A_DIALOG),
+            ("a panel's dialog", |s| crate::diagrams::open_new_of(s, None), &BEHIND_A_DIALOG),
+            ("an opening under way", |s| s.opening = Some(channel().1), &[OPEN]),
+            ("every tab taken", |s| s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect(), &[NEW, OPEN]),
+            ("every pin taken", |s| s.state.pinned = (0..crate::state::MAX_PINNED).map(|i| i.to_string().into()).collect(), &[PIN]),
+            ("no folder picker", |s| s.services.pick_folder = None, &[PIN]),
+            ("no model", |s| s.session = None, &[GENERATE, SAVE]),
+            ("no host", |s| s.services.projects = None, &[NEW, OPEN]),
+            ("no project picker", |s| s.services.pick_project = None, &[OPEN]),
+            ("no project shown", |s| s.active = None, &[CLOSE]),
         ];
-        for (name, setup, off, keys_off, search_off) in states {
+        for (name, setup, off) in states {
             let (mut shell, ..) = shell();
             setup(&mut shell);
             let shell = &shell;
             assert_eq!(answering(|a| (a.available)(shell)), without(&ALL, off), "available, {name}");
-            assert_eq!(answering(|a| a.keys.as_ref().is_some_and(|k| (k.when)(shell))), without(&WITH_KEYS, keys_off), "keys, {name}");
-            let shown = |a: &Action| a.search.as_ref().is_some_and(|s| s.shown.unwrap_or(a.available)(shell));
-            assert_eq!(answering(shown), without(&IN_SEARCH, search_off), "search, {name}");
+            let in_search: Vec<&str> = without(&IN_SEARCH, off);
+            assert_eq!(answering(|a| a.search.is_some() && (a.available)(shell)), in_search, "search, {name}");
         }
+    }
+
+    /// Close project waits for a tab that is already closing, as its tab's button does.
+    #[test]
+    fn close_project_waits_for_a_closing_tab() {
+        let (mut shell, ..) = shell();
+        assert!(available(&shell, CLOSE));
+        shell.tabs[0].closing = Some(channel().1);
+        assert!(!available(&shell, CLOSE));
     }
 
     /// Availability is asked each time: the same row answers differently once the shell has changed.
@@ -347,6 +391,8 @@ pub(crate) mod tests {
             (GENERATE, shell.generate.is_some()),
             (SAVE, saves.0.load(Ordering::SeqCst) == 1),
             (NEW, shell.new_project.is_some()),
+            (SETTINGS, shell.settings.is_some()),
+            (CLOSE, shell.project.is_none()),
             (OPEN, picks.load(Ordering::SeqCst) == 1),
             (PIN, !shell.state.pinned.is_empty()),
             (APPEARANCE, shell.state.theme != fresh.theme),
@@ -392,11 +438,13 @@ pub(crate) mod tests {
         shell.state.recent_sort = RecentSort::LastOpened;
         let names = [
             "About Archforge…",
+            "Settings…",
             "Quit Archforge",
             "Generate…",
             "Save",
-            "New project",
+            "New project…",
             "Open…",
+            "Close project",
             "Pin a folder",
             "Switch to the dark appearance",
             "Show recent projects as a gallery",
@@ -410,25 +458,33 @@ pub(crate) mod tests {
         assert_eq!(flipped, ["Switch to the light appearance", "Show recent projects as a list", "Sort recent projects by last opened"]);
     }
 
+    /// Presses `key` with `modifiers`, the only input of a frame.
+    fn press(shell: &mut Shell, modifiers: Modifiers, key: Key) {
+        let event = egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        let input = egui::RawInput { events: vec![event], ..Default::default() };
+        let mut output = egui::Context::default().run_ui(input, |ui| run_shortcuts(shell, ui.ctx()));
+        output.textures_delta.clear();
+    }
+
     /// A shortcut pressed runs its own action, and a key left alone runs nothing.
     #[test]
     fn every_shortcut_runs_its_action() {
-        let press = |shell: &mut Shell, modifiers, key| {
-            let event = egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
-            let input = egui::RawInput { events: vec![event], ..Default::default() };
-            let mut output = egui::Context::default().run_ui(input, |ui| run_shortcuts(shell, ui.ctx()));
-            output.textures_delta.clear();
-        };
-        for (id, modifiers, key) in
-            [(GENERATE, Modifiers::COMMAND | Modifiers::SHIFT, Key::G), (SAVE, Modifiers::COMMAND, Key::S), (OPEN, Modifiers::COMMAND, Key::O)]
-        {
+        let shift_cmd = Modifiers::COMMAND | Modifiers::SHIFT;
+        let pressed = [
+            (GENERATE, shift_cmd, Key::G),
+            (SAVE, Modifiers::COMMAND, Key::S),
+            (OPEN, Modifiers::COMMAND, Key::O),
+            (SETTINGS, Modifiers::COMMAND, Key::Comma),
+        ];
+        for (id, modifiers, key) in pressed {
             let (mut shell, saves, picks) = shell();
             press(&mut shell, modifiers, key);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         let (mut shell, saves, picks) = shell();
         shell.ask = Some(question());
-        press(&mut shell, Modifiers::COMMAND | Modifiers::SHIFT, Key::G);
+        press(&mut shell, shift_cmd, Key::G);
+        press(&mut shell, Modifiers::COMMAND, Key::O);
         shell.ask = None;
         press(&mut shell, Modifiers::COMMAND, Key::G);
         press(&mut shell, Modifiers::NONE, Key::S);

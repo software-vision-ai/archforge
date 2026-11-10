@@ -533,6 +533,7 @@ str		Grid	Grelha
 str		Arrange diagram	Organizar o diagrama
 str		Move cardinality	Mover a cardinalidade
 str		Settings	Definições
+str		Settings…	Definições…
 str		About Archforge	Acerca do Archforge
 str		About Archforge…	Acerca do Archforge…
 str		Free and open source modelling of software systems.	Modelação livre e de código aberto de sistemas de software.
@@ -745,6 +746,7 @@ str		What’s new	Novidades
 str		Start something	Começar algo
 str		Choose a starting point. You can change direction at any time.	Escolha um ponto de partida. Pode mudar de direção a qualquer momento.
 str		New project	Novo projeto
+str		New project…	Novo projeto…
 str		A clean start for your next idea.	Um começo limpo para a sua próxima ideia.
 str		Create project	Criar projeto
 # Diálogo Novo projeto

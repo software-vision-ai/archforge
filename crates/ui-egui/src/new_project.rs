@@ -1,4 +1,4 @@
-//! The New project dialog, over Home: the design's Proposal 03. The project's name, the folder its
+//! The New project dialog, over Home or an open project: the design's Proposal 03. The project's name, the folder its
 //! file goes in, a line on diagrams, and what every project holds; Cancel and Create project.
 //!
 //! The geometry is the design's: a dialog 760 by 640 px, 32 px padding, centred over a veil that
