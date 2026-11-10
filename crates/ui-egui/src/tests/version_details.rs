@@ -716,7 +716,7 @@ fn a_working_change_opens_in_the_centre_without_a_read() {
         h.state_mut().canvas.notice = Some("From earlier".into());
         open_change(h, "shop");
         assert!(!has_id(h, VIEW) && h.state().versions.selected.is_none() && asked(host).is_empty() && !painted_has(h, "From earlier"));
-        assert!(painted_has(h, "Added") && !has_id(h, NOTE) && painted_has(h, "Compared with the version of 7 Nov 17:15"), "{:?}", painted(h));
+        assert!(painted_has(h, "Added") && !has_id(h, NOTE), "{:?}", painted(h));
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 1);
         let title = rect_of(h, "workspace.change-view.title").top();
         h.state_mut().canvas.notice = Some("Refused by a panel. ".repeat(60));
@@ -724,19 +724,6 @@ fn a_working_change_opens_in_the_centre_without_a_read() {
         assert!(has_id(h, "workspace.canvas.notice") && rect_of(h, "workspace.change-view.title").top() > title, "said, and the title makes room");
         tap(h, "workspace.change-view.close");
         assert!(h.state().versions.element.is_none() && has_id(h, "workspace.tabs.add"));
-    });
-}
-
-/// Before the first version the header says there is nothing to compare with.
-#[test]
-fn before_the_first_version_the_header_says_so() {
-    in_both_appearances(|theme| {
-        let (mut h, host) = versions_panel(theme);
-        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: Vec::new(), more: false }));
-        add_schema(&mut h, "shop");
-        list_still(&mut h);
-        open_change(&mut h, "shop");
-        assert!(painted_has(&h, "There is no version to compare with yet.") && painted_has(&h, "Added"), "{:?}", painted(&h));
     });
 }
 

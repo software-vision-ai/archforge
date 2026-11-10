@@ -181,7 +181,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         return false;
     }
     ui.painter().rect_filled(r, 0.0, p.page);
-    if breadcrumb(shell, ui, p, r, "workspace.version-details.close", &tr("History")).0 {
+    if breadcrumb(shell, ui, p, r, "workspace.version-details.close", &tr("History")) {
         shell.versions.details = None;
     }
     let clock = crate::chat_panel::clock(shell);
@@ -222,9 +222,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
 }
 
 /// The way back at the top of the centre `r`: the project's name, registered as `id`, and `place`,
-/// where the centre is. Gives whether the name was clicked, for the caller to close what it shows,
-/// and where the breadcrumb ends.
-pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, id: &str, place: &str) -> (bool, f32) {
+/// where the centre is. Gives whether the name was clicked, for the caller to close what it shows.
+pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, id: &str, place: &str) -> bool {
     let name = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
     let (mid, paint) = (r.top() + 34.0, ui.painter().clone());
     let g = ux::galley(&paint, &name, types::UI, p.text_secondary, Some((r.width() / 2.0).max(0.0)));
@@ -234,9 +233,9 @@ pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
     focus_ring(&paint, p, at, 3.0, &resp);
     paint.galley(at.min, g, p.text_secondary);
     ux::icon_mid(&paint, pos2(at.right() + 18.0, mid), &icons::CHEVRON_RIGHT, p.text_secondary);
-    let end = ux::text_mid(&paint, at.right() + 37.0, mid, place, types::UI, p.text, Some((r.width() / 3.0).max(0.0))).right();
+    ux::text_mid(&paint, at.right() + 37.0, mid, place, types::UI, p.text, Some((r.width() / 3.0).max(0.0)));
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + BAND - 1.0), vec2(r.width(), 1.0)), 0.0, p.border);
-    (resp.clicked(), end)
+    resp.clicked()
 }
 
 /// The changed items from `y`, or why they are not there: the first version has none, a comparison
