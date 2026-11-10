@@ -486,6 +486,7 @@ str		The model changed while this was open. The summary is up to date again.	開
 str		One line, at most 200 characters. It stays in the history.	1行、200文字以内。履歴に残ります。
 plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
+str		Filter versions…	バージョンを絞り込む…
 str		Model elements	モデル要素
 str		Unnamed	名前なし
 str		Added	追加

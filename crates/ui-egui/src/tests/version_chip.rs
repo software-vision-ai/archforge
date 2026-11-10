@@ -40,7 +40,9 @@ fn opened_list(h: &mut Harness<'static, Shell>, host: &SavingHost) {
     } else {
         key(h, egui::Key::H, MOVE[1]);
     }
-    assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "a read waited for wakes the window");
+    if h.state().version_list.steps.reading.is_some() {
+        assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "a read waited for wakes the window");
+    }
     answer_versions(host);
     h.run_steps(3);
 }
@@ -59,7 +61,7 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
             click(&mut h, at);
             assert_eq!(list_shows(&h), open);
         }
-        assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 7, "the newest versions, each one in reach");
+        assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 50, "the design's page");
         host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
         assert!(["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)));
@@ -84,7 +86,7 @@ fn the_keys_move_view_and_close() {
         answer_read(&mut h, &host, Ok(rows));
         assert!(h.query_by_label_contains("Viewing the version of 8 Nov").is_some());
         assert!(painted(&h).iter().any(|t| t.starts_with("Viewing the version of 8 Nov") && t.ends_with("· Read only")), "the banner names it");
-        assert!(h.state().version_list.steps.reading.is_some(), "a version shown reads what lies round it");
+        assert!(h.state().version_list.steps.reading.is_none(), "what the list read serves the steps round it");
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::Escape, MOVE[0]);
         assert!(!list_shows(&h) && h.state().viewing() == Some("h3"), "Esc never leaves the version");
@@ -151,7 +153,7 @@ fn the_list_closes_on_every_way_the_project_goes() {
             key(&mut h, egui::Key::H, MOVE[1]);
             route(h.state_mut());
             h.run_steps(2);
-            assert!(h.state().version_list.reading.is_none(), "no read left waiting");
+            assert!(h.state().version_list.steps.reading.is_none(), "no read left waiting");
             host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
             h.state_mut().open_project(commerce());
             h.run_steps(4);
@@ -269,6 +271,8 @@ fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
             press(&mut h, egui::Key::OpenBracket);
             assert!(host.reads.lock().unwrap().is_empty(), "no step through what was read before");
             assert!(h.state().version_list.steps.reading.is_some(), "the versions are read again");
+            key(&mut h, egui::Key::H, MOVE[1]);
+            assert!(!ids(&h).iter().any(|i| i == "workspace.header.version.row.1"), "the list, the same read, shows none of them");
         });
     }
 }
@@ -306,6 +310,177 @@ fn the_viewing_chip_steps_and_goes_back() {
         let at = rect_of(&h, "workspace.header.version.back").center();
         click(&mut h, at);
         assert_eq!(h.state().viewing(), None);
+    });
+}
+
+/// The versions `from..to`, newest first, each with a date of its own and a name to filter by.
+fn page(from: usize, to: usize, more: bool) -> crate::VersionsPage {
+    let entry = |n: usize| crate::VersionEntry {
+        hash: format!("v{n}"),
+        date: format!("2026-11-{:02}T14:{:02}:00Z", 28 - n / 60, 59 - n % 60),
+        description: Some(format!("Step {n}")),
+        ..Default::default()
+    };
+    crate::VersionsPage { versions: (from..to).map(entry).collect(), more }
+}
+
+/// Answers the reads waiting, the History panel's among them when a version has just shown.
+fn answer(h: &mut Harness<'static, Shell>, host: &SavingHost, reply: Result<crate::VersionsPage, String>) {
+    let waiting = host.version_reads.lock().unwrap().drain(..).collect::<Vec<_>>();
+    assert!(!waiting.is_empty(), "a read is waiting");
+    waiting.into_iter().for_each(|read| drop(read.send(reply.clone())));
+    h.run_steps(3);
+}
+
+/// Opens the list and answers its read with `first`.
+fn open_with(h: &mut Harness<'static, Shell>, host: &SavingHost, first: Result<crate::VersionsPage, String>) {
+    key(h, egui::Key::H, MOVE[1]);
+    answer(h, host, first);
+}
+
+/// Turns the wheel over the list to its end.
+fn wheel_to_end(h: &mut Harness<'static, Shell>) {
+    h.event(egui::Event::PointerMoved(rect_of(h, "workspace.header.version.filter").center() + egui::vec2(0.0, 60.0)));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -4000.0),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+    });
+    h.run_steps(8);
+}
+
+/// A page's worth reads at once; the wheel scrolls the list alone and the page after comes when the
+/// end shows, one read at a time and the window awake for it; at the end of the history none follows.
+#[test]
+fn the_list_reads_on_as_its_end_comes_into_view() {
+    in_both(|mut h, host| {
+        open_with(&mut h, &host, Ok(page(0, 50, true)));
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), None);
+        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing more while the end is out of view");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.header.version.row.20"), "the rows scroll");
+        let pan = h.state().canvas.pan;
+        wheel_to_end(&mut h);
+        assert!(ids(&h).iter().any(|i| i == "workspace.header.version.row.50"), "the wheel reached the last row");
+        assert_eq!(h.state().canvas.pan, pan, "the wheel moved the list, not the canvas under it");
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), Some("v49"), "the page after what is read");
+        assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 50);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "one read at a time");
+        answer(&mut h, &host, Ok(page(50, 52, false)));
+        wheel_to_end(&mut h);
+        assert!(ids(&h).iter().any(|i| i == "workspace.header.version.row.52"), "the next page is in the list");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "the history has ended");
+    });
+}
+
+/// The arrows bring the highlight into view and read on past the end of what shows.
+#[test]
+fn the_arrows_scroll_the_list() {
+    in_both(|mut h, host| {
+        open_with(&mut h, &host, Ok(page(0, 50, true)));
+        for _ in 0..49 {
+            key(&mut h, egui::Key::ArrowDown, MOVE[0]);
+        }
+        h.run_steps(2);
+        assert!(ids(&h).iter().any(|i| i == "workspace.header.version.row.49"), "the highlight is in view");
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "the end came into view");
+        key(&mut h, egui::Key::Enter, MOVE[0]);
+        assert_eq!(host.reads.lock().unwrap()[0].0, "v48", "row 0 is Current work");
+    });
+}
+
+/// A read that fails says which, keeps what was read, is not told as an empty list, asks nothing
+/// until Retry, and Retry reads what failed.
+#[test]
+fn a_failed_read_shows_its_row_and_retries() {
+    in_both(|mut h, host| {
+        open_with(&mut h, &host, Err("no".into()));
+        assert!(painted_has(&h, "The versions couldn't be read.") && list_shows(&h), "with current work still there");
+        h.run_steps(4);
+        assert!(host.version_reads.lock().unwrap().is_empty(), "no read again by itself");
+        let at = rect_of(&h, "workspace.header.version.retry").center();
+        click(&mut h, at);
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), None, "the newest again");
+        answer(&mut h, &host, Ok(page(0, 3, true)));
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), Some("v2"), "three rows leave the end in view");
+        answer(&mut h, &host, Err("no".into()));
+        assert!(painted_has(&h, "The next versions couldn't be read.") && painted_has(&h, "Step 1"), "what was read stays");
+        h.event(egui::Event::Text("zzz".into()));
+        h.run_steps(3);
+        assert!(
+            painted_has(&h, "The next versions couldn't be read.") && !painted_has(&h, "Nothing matches the filter"),
+            "a failure is not an empty result"
+        );
+        let at = rect_of(&h, "workspace.header.version.retry").center();
+        click(&mut h, at);
+        assert_eq!(host.version_asks.lock().unwrap().last().unwrap().as_deref(), Some("v2"), "that page only");
+    });
+}
+
+/// Typing narrows by what a row says, even with the keyboard taken off the field; nothing to pick
+/// is said once all is read; Enter then does nothing; closing lets the field and the keyboard go.
+#[test]
+fn the_filter_narrows_the_list() {
+    in_both(|mut h, host| {
+        open_with(&mut h, &host, Ok(page(0, 3, false)));
+        key(&mut h, egui::Key::ArrowDown, MOVE[0]);
+        let field = crate::widgets::egui_id("workspace.header.version.filter");
+        assert!(h.ctx.memory(|m| m.has_focus(field)), "it takes the keyboard");
+        h.ctx.memory_mut(|m| m.surrender_focus(field));
+        h.run_steps(2);
+        h.event(egui::Event::Text("STEP".into()));
+        h.run_steps(3);
+        assert!(
+            painted_has(&h, "Step 2") && !ids(&h).iter().any(|i| i == "workspace.header.version.row.2"),
+            "current work and the latest say no such thing"
+        );
+        key(&mut h, egui::Key::Enter, MOVE[0]);
+        assert_eq!(host.reads.lock().unwrap()[0].0, "v1", "the highlight starts again at the first row left");
+        h.state_mut().back_to_current_work();
+        h.run_steps(3);
+        key(&mut h, egui::Key::H, MOVE[1]);
+        assert!(painted_has(&h, "Same as current work"), "a new opening starts unfiltered, from what is read");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing is read again");
+        h.event(egui::Event::Text("zzz".into()));
+        h.run_steps(3);
+        assert!(painted_has(&h, "Nothing matches the filter"));
+        key(&mut h, egui::Key::Enter, MOVE[0]);
+        assert!(h.state().viewing().is_none() && h.query_by_label("Filter versions…").is_some(), "no row, no pick, and the list stays");
+        key(&mut h, egui::Key::Escape, MOVE[0]);
+        assert!(!ids(&h).iter().any(|i| i == "workspace.header.version.filter") && h.ctx.memory(|m| m.focused()).is_none());
+    });
+}
+
+/// A filter that holds nothing yet reads on to the end: an empty page ends it, however it answers.
+#[test]
+fn a_filter_reads_on_until_the_history_ends() {
+    in_both(|mut h, host| {
+        open_with(&mut h, &host, Ok(page(0, 60, true)));
+        h.event(egui::Event::Text("zzz".into()));
+        h.run_steps(3);
+        assert!(painted_has(&h, "Loading") && !painted_has(&h, "Nothing matches the filter"), "more may match");
+        answer(&mut h, &host, Ok(crate::VersionsPage { versions: Vec::new(), more: true }));
+        h.run_steps(3);
+        assert!(host.version_reads.lock().unwrap().is_empty() && painted_has(&h, "Nothing matches the filter"));
+    });
+}
+
+/// A chip whose read failed offers to read again rather than saying there is nothing older.
+#[test]
+fn a_failed_read_does_not_read_as_the_end_of_the_history() {
+    use egui_kittest::kittest::NodeT;
+    in_both(|mut h, host| {
+        h.state_mut().view_version("h9").unwrap();
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        h.run_steps(2);
+        answer(&mut h, &host, Err("no".into()));
+        assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "not told as the end");
+        let at = rect_of(&h, "workspace.header.version.older").center();
+        click(&mut h, at);
+        h.run_steps(2);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "it reads again");
     });
 }
 

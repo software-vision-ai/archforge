@@ -1,6 +1,6 @@
 //! The version chip in the project bar and its list (`docs/design/versioning.md`, section 2): what
-//! the project shows, the versions to view and the steps between them. AR-341 brings the filter
-//! and paging past the newest [`PAGE`].
+//! the project shows, the versions to view and the steps between them, both over one history that
+//! reads on a [`PAGE`] at a time.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -8,19 +8,22 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use egui::{Key, Modifiers, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::chat_words::{Clock, civil, clock_time, local, month};
+use crate::explorer::{TreeScroll, scroll_tree};
 use crate::hold::HoldRefused;
 use crate::home::{SEARCH_MIN, control};
 use crate::i18n::{fmt, tr};
+use crate::settings::{Look, button};
 use crate::ux::{self, Palette, icons, types};
 use crate::widgets;
 use crate::{Shell, VersionEntry, VersionsPage};
 
-/// The versions read: with Current work, eight rows, all in reach until AR-341 pages; a row; the list.
-const PAGE: usize = 7;
-/// The versions a step reads, apart from the list's until AR-341 folds them together.
-const STEP_PAGE: usize = 50;
+/// The versions one read brings, for the list and the steps alike.
+const PAGE: usize = 50;
+/// The rows the list shows before it scrolls; a row; the list; its filter field.
+const MOST_ROWS: usize = 10;
 const ROW: f32 = 30.0;
 const WIDTH: f32 = 360.0;
+const FIELD: f32 = 28.0;
 const ID: &str = "workspace.header.version";
 /// The chip at its narrowest: one icon.
 pub(crate) const NARROWEST: f32 = 32.0;
@@ -32,19 +35,25 @@ const SEARCH_GAP: f32 = 12.0;
 pub struct List {
     project: Option<PathBuf>,
     highlight: usize,
-    versions: Vec<VersionEntry>,
-    pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
+    filter: String,
+    scroll: TreeScroll,
     /// The version last picked, and how the chip says it.
     shown: Option<(String, String)>,
     pub(crate) steps: Steps,
 }
 
-/// What the steps between versions have read, for which project, and a step waiting for it.
+/// What the list and the steps between versions have read, for which project, and a step waiting
+/// for it.
 #[derive(Default)]
 pub struct Steps {
     project: Option<PathBuf>,
     history: Vec<VersionEntry>,
+    /// Whether older versions follow what is read.
+    more: bool,
+    /// The one read under way: the newest page, or the page after `history`.
     pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
+    /// The last read failed; what was read before it stays.
+    failed: bool,
     /// The step to take when the read arrives: older when true.
     waiting: Option<bool>,
 }
@@ -59,12 +68,16 @@ pub(crate) fn available(shell: &Shell) -> bool {
     shell.session.is_some() && shell.project.is_some() && !shell.is_held() && !dialog && !panel_dialog && shell.versions.dialog.is_none()
 }
 
-/// Opens the list and reads its versions again, when it can be asked for.
+/// Opens the list when it can be asked for: over what is read, which a save, a restore or a branch
+/// switch clears, reading only when nothing is. A list already open stays as it is.
 pub(crate) fn open(shell: &mut Shell) {
-    if available(shell) {
-        shell.version_list.project = shell.project.as_ref().map(|p| p.path.clone());
-        if let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.version_list.project.clone()) {
-            shell.version_list.reading = Some(host.versions(&path, None, PAGE));
+    if available(shell) && shell.version_list.project.is_none() {
+        let path = shell.project.as_ref().map(|p| p.path.clone());
+        shell.version_list.project.clone_from(&path);
+        let steps = &mut shell.version_list.steps;
+        steps.failed = false;
+        if steps.project != path || (steps.history.is_empty() && steps.reading.is_none()) {
+            read_steps(shell, None);
         }
     }
 }
@@ -118,31 +131,47 @@ pub(crate) fn newer(shell: &mut Shell) {
 /// are on their way is ignored.
 fn ask_step(shell: &mut Shell, older: bool) {
     let steps = &shell.version_list.steps;
-    if steps.reading.is_some() {
-        return;
-    }
-    if steps.history.is_empty() {
-        read_steps(shell, Some(older));
-    } else {
+    if !steps.history.is_empty() {
         step(shell, older);
+    } else if steps.reading.is_none() {
+        read_steps(shell, Some(older));
     }
 }
 
-/// Asks the host for the versions the steps go through.
+/// Asks the host for the newest versions, in place of all that is read.
 fn read_steps(shell: &mut Shell, waiting: Option<bool>) {
     if let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|p| p.path.clone())) {
-        let reading = Some(host.versions(&path, None, STEP_PAGE));
-        shell.version_list.steps = Steps { project: Some(path), history: Vec::new(), reading, waiting };
+        let reading = Some(host.versions(&path, None, PAGE));
+        shell.version_list.steps = Steps { project: Some(path), reading, waiting, ..Steps::default() };
     }
 }
 
-/// Takes the answer to the steps' read, and the step that waited for it.
+/// Asks the host for the page after what is read.
+fn read_on(shell: &mut Shell) {
+    let steps = &mut shell.version_list.steps;
+    if let (Some(host), Some(path), Some(after)) =
+        (shell.services.projects.clone(), steps.project.clone(), steps.history.last().map(|v| v.hash.clone()))
+    {
+        steps.failed = false;
+        steps.reading = Some(host.versions(&path, Some(after), PAGE));
+    }
+}
+
+/// Takes the answer to the read, and the step that waited for it. A failed read keeps what was
+/// read and marks the list.
 fn take_steps(shell: &mut Shell) {
     let steps = &mut shell.version_list.steps;
     match steps.reading.as_ref().map(Receiver::try_recv) {
         None | Some(Err(TryRecvError::Empty)) => return,
-        Some(Ok(Ok(page))) => steps.history = page.versions,
-        Some(failed) => log::warn!("the versions could not be read: {failed:?}"),
+        Some(Ok(Ok(page))) => {
+            // An empty page ends the list whatever it says, so reading on always stops.
+            steps.more = page.more && !page.versions.is_empty();
+            steps.history.extend(page.versions);
+        }
+        Some(failed) => {
+            log::warn!("the versions could not be read: {failed:?}");
+            steps.failed = true;
+        }
     }
     steps.reading = None;
     if let Some(older) = steps.waiting.take() {
@@ -191,17 +220,6 @@ fn refused_words(why: &HoldRefused) -> String {
     }
 }
 
-/// Takes the host's answer; a list that cannot be read shows current work alone until AR-341.
-fn take_page(shell: &mut Shell) {
-    let l = &mut shell.version_list;
-    match l.reading.as_ref().map(Receiver::try_recv) {
-        None | Some(Err(TryRecvError::Empty)) => return,
-        Some(Ok(Ok(page))) => l.versions = page.versions,
-        Some(failed) => log::warn!("the versions could not be read: {failed:?}"),
-    }
-    l.reading = None;
-}
-
 /// A stored time, RFC 3339 in UTC, as the list says it, `8 Nov 14:02`, local; else as it is.
 pub(crate) fn when(date: &str, clock: Clock) -> String {
     let parts: Vec<i64> = date.split(|c: char| !c.is_ascii_digit()).filter_map(|n| n.parse().ok()).collect();
@@ -214,11 +232,12 @@ pub(crate) fn when(date: &str, clock: Clock) -> String {
     fmt(&tr("{day} {month} {time}"), &[("day", &day.to_string()), ("month", &month(month_at)), ("time", &clock_time(secs, clock.offset))])
 }
 
-/// Current work, then the versions newest first, the latest reading as current work if nothing is unsaved.
+/// Current work, then the versions read, newest first, the latest reading as current work if
+/// nothing is unsaved; those the filter holds, by what a row says.
 fn rows(shell: &Shell) -> Vec<Row> {
     let (clock, unsaved) = (crate::chat_panel::clock(shell), shell.shown_unsaved());
     let mut out = vec![(None, tr("Current work"), if unsaved { tr("Unsaved changes") } else { tr("No unsaved changes") })];
-    for (i, v) in shell.version_list.versions.iter().enumerate() {
+    for (i, v) in shell.version_list.steps.history.iter().enumerate() {
         let detail = match v.description.as_deref().filter(|d| !d.is_empty()) {
             _ if i == 0 && !unsaved => tr("Same as current work"),
             Some(d) => d.to_string(),
@@ -227,6 +246,8 @@ fn rows(shell: &Shell) -> Vec<Row> {
         };
         out.push((Some(v.hash.clone()), when(&v.date, clock), detail));
     }
+    let needle = shell.version_list.filter.trim().to_lowercase();
+    out.retain(|(_, name, detail)| name.to_lowercase().contains(&needle) || detail.to_lowercase().contains(&needle));
     out
 }
 
@@ -267,7 +288,6 @@ fn chip_words(shell: &Shell) -> (String, String) {
 /// does: without room for the whole chip and search it is one icon, and without room for search as
 /// well it sits against Help.
 pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start: f32, end: f32) -> f32 {
-    take_page(shell);
     let width = match (shell.version_in_view(), shell.shown_unsaved()) {
         (Some(_), _) => 282.0,
         (None, true) => 147.0,
@@ -355,7 +375,8 @@ fn viewing_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (label, 
     }
 }
 
-/// ‹ or ›: muted, unavailable to a screen reader and doing nothing at the end of the history.
+/// ‹ or ›: muted, unavailable to a screen reader and doing nothing at the end of the history. When
+/// nothing could be read it stays live, to read again.
 fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, older: bool) {
     let (key, icon, name, none) = if older {
         ("older", &icons::CHEVRON_LEFT, tr("Older version"), tr("No older version"))
@@ -363,7 +384,8 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
         ("newer", &icons::CHEVRON_RIGHT, tr("Newer version"), tr("No newer version"))
     };
     let at = Rect::from_center_size(pos2(x, mid), vec2(24.0, 24.0));
-    let (live, id) = (target(shell, older).is_some() && available(shell), format!("{ID}.{key}"));
+    let unread = shell.version_list.steps.failed && shell.version_list.steps.history.is_empty();
+    let (live, id) = ((target(shell, older).is_some() || unread) && available(shell), format!("{ID}.{key}"));
     widgets::record_visible(ui, &mut shell.registry, &id, "button", at);
     let resp = ui.interact(at, widgets::egui_id(&id), if live { egui::Sense::click() } else { egui::Sense::hover() });
     ui.ctx().accesskit_node_builder(widgets::egui_id(&id), |node| {
@@ -375,7 +397,7 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
     });
     ux::icon_mid(ui.painter(), at.center(), icon, if live { p.text_secondary } else { p.text_muted });
     if resp.on_hover_text(if live { name } else { none }).clicked() {
-        step(shell, older);
+        ask_step(shell, older);
     }
 }
 
@@ -387,47 +409,118 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row]) -> bool {
         close(shell);
         return true;
     }
-    let last = rows.len() - 1;
+    let last = rows.len().saturating_sub(1);
     let l = &mut shell.version_list;
     l.highlight = (l.highlight + usize::from(down)).min(last).saturating_sub(usize::from(up));
-    if enter {
-        let row = rows[l.highlight.min(last)].clone();
-        pick(shell, row);
+    match rows.get(l.highlight).filter(|_| enter) {
+        Some(row) => {
+            pick(shell, row.clone());
+            true
+        }
+        None => false,
     }
-    enter
 }
 
-/// The list under the chip.
+/// The field that narrows the list as it is typed. It keeps the keyboard while the list is open,
+/// so no key meant for it reaches the window behind.
+fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) {
+    let paint = ui.painter().clone();
+    paint.rect_filled(field, 14.0, p.page);
+    paint.rect_stroke(field, 14.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    ux::icon_mid(&paint, pos2(field.left() + 17.0, field.center().y), &icons::SEARCH, p.text_secondary);
+    let id = format!("{ID}.filter");
+    widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
+    let inner = crate::panels::field_inner(ui, field.with_min_x(field.left() + 22.0));
+    let words = tr("Filter versions…");
+    let edit = egui::TextEdit::singleline(&mut shell.version_list.filter)
+        .id(widgets::egui_id(&id))
+        .frame(egui::Frame::NONE)
+        .margin(egui::Margin::ZERO)
+        .font(types::SMALL.font())
+        .text_color(p.text)
+        .hint_text(egui::RichText::new(words.clone()).color(p.text_secondary).font(types::SMALL.font()))
+        .char_limit(256)
+        .desired_width(inner.width());
+    let resp = ui.put(inner, edit);
+    resp.request_focus();
+    if resp.changed() {
+        (shell.version_list.highlight, shell.version_list.scroll) = (0, TreeScroll::default());
+    }
+    let _ = resp.accessible_name(words);
+}
+
+/// Under the rows: what could not be read, the newest versions or the next ones, and Retry for it.
+fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let first = shell.version_list.steps.history.is_empty();
+    let words = if first { tr("The versions couldn't be read.") } else { tr("The next versions couldn't be read.") };
+    let label = tr("Retry");
+    let width = (ux::galley(ui.painter(), &label, types::UI, p.text, None).size().x + 20.0).ceil();
+    let area = Rect::from_min_max(r.min, pos2(r.right() - width - 6.0, r.bottom()));
+    let _ = control(shell, ui, &format!("{ID}.failed"), "status", area, false).accessible_name(words.as_str());
+    ux::text_mid(ui.painter(), r.left() + 10.0, r.center().y, &words, types::SMALL, p.danger, Some((area.width() - 16.0).max(0.0)));
+    if button(shell, ui, p, &format!("{ID}.retry"), pos2(r.right() - width, r.top() + 1.0), &label, Look::Secondary, true, None).1.clicked() {
+        if first { read_steps(shell, None) } else { read_on(shell) }
+    }
+}
+
+/// The list under the chip: the filter, the rows the wheel and the keys move through, reading on
+/// as the end comes into view, and what could not be read.
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
     let rows = rows(shell);
-    let height = 12.0 + rows.len() as f32 * ROW;
-    let r = Rect::from_min_size(pos2(chip.right() - WIDTH, chip.bottom() + 4.0), vec2(WIDTH, height));
     if keys(shell, ui, &rows) {
         return;
     }
+    let failed = shell.version_list.steps.failed;
+    let footer = if failed { ROW } else { 0.0 };
+    let top = chip.bottom() + 4.0;
+    let wanted = 6.0 + FIELD + 6.0 + rows.len().clamp(1, MOST_ROWS) as f32 * ROW + footer + 8.0;
+    let room = (ui.ctx().content_rect().bottom() - 8.0 - top).max(6.0 + FIELD + 6.0 + ROW + footer + 8.0);
+    let r = Rect::from_min_size(pos2(chip.right() - WIDTH, top), vec2(WIDTH, wanted.min(room)));
     let highlight = shell.version_list.highlight;
     let picked = ux::overlay(ui, widgets::egui_id(&format!("{ID}.list")), r, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, r, 10.0, p.shadow);
         paint.rect_filled(r, 10.0, p.surface);
         paint.rect_stroke(r, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        filter_field(shell, ui, p, Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(WIDTH - 12.0, FIELD)));
+        let first = r.top() + 6.0 + FIELD + 6.0;
+        let bottom = r.bottom() - 8.0 - footer;
+        // The highlight's place stands for its row: scroll_tree follows a row when its id changes.
+        let follow = Some((shell.version_list.highlight, archforge_mof::Uuid((shell.version_list.highlight as u128).to_be_bytes())));
+        let tree = Rect::from_min_max(pos2(r.left(), first), pos2(r.right() - 1.0, bottom + 8.0));
+        let offset = scroll_tree(ui, p, tree, first, rows.len(), ROW, 0.0, true, follow, &mut shell.version_list.scroll);
+        let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
+        clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), first), pos2(r.right(), bottom)));
         let mut picked = None;
-        let mut y = r.top() + 6.0;
         for (n, row @ (_, label, detail)) in rows.iter().enumerate() {
+            let y = first + n as f32 * ROW - offset;
+            if y + ROW <= first || y >= bottom {
+                continue;
+            }
             let at = Rect::from_min_size(pos2(r.left() + 6.0, y), vec2(WIDTH - 12.0, ROW));
-            let resp = control(shell, ui, &format!("{ID}.row.{n}"), "menu-item", at, true);
+            let resp = control(shell, &clip, &format!("{ID}.row.{n}"), "menu-item", at, true);
             let _ = resp.clone().accessible_name(format!("{label}, {detail}"));
             if n == highlight || resp.hovered() {
-                paint.rect_filled(at, 6.0, p.accent_tint);
+                clip.painter().rect_filled(at, 6.0, p.accent_tint);
             }
-            let name = ux::text_mid(&paint, at.left() + 10.0, at.center().y, label, types::UI, p.text, Some(WIDTH * 0.45));
+            let name = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, label, types::UI, p.text, Some(WIDTH * 0.45));
             let room = (at.right() - 10.0 - (name.right() + 12.0)).max(0.0);
-            let g = ux::galley(&paint, detail, types::CAPTION, p.text_secondary, Some(room));
-            paint.galley(pos2(at.right() - 10.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary);
+            let g = ux::galley(clip.painter(), detail, types::CAPTION, p.text_secondary, Some(room));
+            clip.painter().galley(pos2(at.right() - 10.0 - g.size().x, at.center().y - g.size().y / 2.0), g, p.text_secondary);
             if resp.clicked() {
                 picked = Some(row.clone());
             }
-            y += ROW;
+        }
+        let steps = &shell.version_list.steps;
+        let reading_on = steps.more && !steps.failed;
+        if rows.is_empty() && !failed {
+            let words = if steps.reading.is_some() || reading_on { tr("Loading") } else { tr("Nothing matches the filter") };
+            ux::text_mid(&paint, r.left() + 16.0, first + ROW / 2.0, &words, types::SMALL, p.text_muted, Some(WIDTH - 32.0));
+        }
+        if failed {
+            failure_row(shell, ui, p, Rect::from_min_size(pos2(r.left() + 6.0, bottom), vec2(WIDTH - 12.0, ROW)));
+        } else if reading_on && steps.reading.is_none() && offset + (bottom - first) + ROW >= rows.len() as f32 * ROW {
+            read_on(shell);
         }
         picked
     });
