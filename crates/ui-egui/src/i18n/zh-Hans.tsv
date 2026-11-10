@@ -503,6 +503,12 @@ plural		{n} changed item	{n} 个已更改的项目
 str		Previous version	上一个版本
 str		The previous version couldn't be read.	无法读取上一个版本。
 str		View this version	查看此版本
+str		Compare	比较
+str		Compare…	比较…
+str		Before	之前
+str		After	之后
+str		Before → After	之前 → 之后
+str		Swap Before and After	交换之前和之后
 str		First version: there is nothing earlier to compare it with.	第一个版本：没有更早的版本可供比较。
 str		All	全部
 str		With a description	有描述

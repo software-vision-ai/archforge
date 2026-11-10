@@ -833,3 +833,113 @@ fn two_rows_of_one_element_open_it_once() {
         assert!(painted_has(h, "Added"), "the sides say Added, the row Removed: {:?}", painted(h));
     });
 }
+
+const COMPARE: &str = "workspace.version-details.compare";
+const COMPARE_CLOSE: &str = "workspace.version-compare.close";
+const SWAP: &str = "workspace.version-compare.swap";
+
+/// The Compare page of the version `row`, reached from its details.
+fn compared(h: &mut Harness<'static, Shell>, row: &str) {
+    opened(h, row);
+    tap(h, COMPARE);
+    h.run_steps(1);
+}
+
+/// What the select of `side` holds, read off its own node: "Before, " is no row's name.
+fn holds(h: &Harness<'static, Shell>, side: &str) -> String {
+    let wanted = format!("{side}, ");
+    let mut nodes = h.query_all_by_label_contains(&wanted);
+    let node = nodes.next().unwrap_or_else(|| panic!("no {side} select"));
+    assert!(nodes.next().is_none() && node.accesskit_node().is_disabled(), "one select, which cannot be used yet");
+    assert_eq!(node.accesskit_node().role(), egui::accesskit::Role::ComboBox, "{side}");
+    node.accesskit_node().label().unwrap_or_default().to_string()
+}
+
+/// Compare shows the chosen version before current work, says the direction, says the selects
+/// can't be used yet and reads nothing of its own.
+#[test]
+fn compare_opens_on_the_chosen_version_before_current_work() {
+    in_both(|h, host| {
+        compared(h, "c3");
+        assert_eq!(asked(host), ["c2", "c3"], "only the details' own reads");
+        assert!(!has_id(h, VIEW) && has_id(h, COMPARE_CLOSE) && has_id(h, SWAP), "the page has taken the details' place");
+        let before = holds(h, "Before");
+        assert!(before.contains("Payment methods split out") && before.ends_with(", Not available yet"), "{before}");
+        assert_eq!(holds(h, "After"), "After, Current work, Not available yet");
+        assert!(h.query_by_label("Before → After").is_some(), "the direction");
+        assert!(h.state().versions.selected.is_none(), "no row is marked, as in the frame");
+    });
+}
+
+/// A refusal from the details ends with them, and one said while the page shows is seen over it.
+#[test]
+fn compare_clears_an_old_refusal_and_shows_a_new_one() {
+    in_both(|h, _| {
+        opened(h, "c3");
+        h.state_mut().canvas.notice = Some("From the details".into());
+        h.run_steps(1);
+        tap(h, COMPARE);
+        h.run_steps(1);
+        assert_eq!(h.state().canvas.notice, None);
+        h.state_mut().canvas.notice = Some("Refused by a panel".into());
+        h.run_steps(1);
+        assert!(painted_has(h, "Refused by a panel"), "a notice for the canvas this covers");
+    });
+}
+
+/// Swap reverses the pair each time it is pressed, the direction stays, and opening the page again
+/// starts from the default pair.
+#[test]
+fn swap_reverses_the_pair() {
+    in_both(|h, host| {
+        compared(h, "c3");
+        let (before, after) = (holds(h, "Before"), holds(h, "After"));
+        host.reads.lock().unwrap().clear();
+        tap(h, SWAP);
+        h.run_steps(1);
+        assert_eq!(holds(h, "Before"), "Before, Current work, Not available yet");
+        assert!(holds(h, "After").contains("Payment methods split out"), "{}", holds(h, "After"));
+        assert!(h.query_by_label("Before → After").is_some(), "the direction stays");
+        tap(h, SWAP);
+        h.run_steps(1);
+        assert_eq!((holds(h, "Before"), holds(h, "After")), (before.clone(), after.clone()), "and back");
+        tap(h, SWAP);
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(1);
+        compared(h, "c3");
+        assert_eq!((holds(h, "Before"), holds(h, "After")), (before, after), "a new page starts over");
+        assert_eq!(asked(host), ["c2", "c3"], "Swap reads nothing; only the details opened again do");
+    });
+}
+
+/// The project's name closes the page; the rail gives the centre back and brings it again; a row,
+/// opening a diagram, another session or another project ends it.
+#[test]
+fn compare_gives_way_like_the_details() {
+    in_both(|h, _| {
+        compared(h, "c3");
+        tap(h, COMPARE_CLOSE);
+        assert!(!has_id(h, SWAP) && h.state().versions.details.is_none() && has_id(h, "workspace.tabs.add"));
+        compared(h, "c3");
+        tap(h, "workspace.explorers.models");
+        assert!(!has_id(h, SWAP) && has_id(h, "workspace.tabs.add"), "the Models explorer has the canvas");
+        tap(h, "workspace.explorers.source-control");
+        assert!(has_id(h, SWAP), "still open");
+        opened(h, "c2");
+        assert!(!has_id(h, SWAP) && has_id(h, VIEW), "a row opens its details instead");
+        compared(h, "c3");
+        crate::canvas::open(h.state_mut(), archforge_mof::Uuid::v7(0, [0; 10]));
+        h.run_steps(1);
+        assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "what was opened would be hidden");
+        compared(h, "c3");
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "about the session left");
+    });
+    in_both(|h, _| {
+        compared(h, "c3");
+        h.state_mut().project.as_mut().unwrap().path.push("elsewhere");
+        h.run_steps(2);
+        assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "about the project left");
+    });
+}

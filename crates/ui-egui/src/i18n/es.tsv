@@ -503,6 +503,12 @@ plural		{n} changed item	{n} elemento modificado|{n} elementos modificados
 str		Previous version	Versión anterior
 str		The previous version couldn't be read.	No se pudo leer la versión anterior.
 str		View this version	Ver esta versión
+str		Compare	Comparar
+str		Compare…	Comparar…
+str		Before	Antes
+str		After	Después
+str		Before → After	Antes → Después
+str		Swap Before and After	Intercambiar Antes y Después
 str		First version: there is nothing earlier to compare it with.	Primera versión: no hay nada anterior con que compararla.
 str		All	Todas
 str		With a description	Con descripción

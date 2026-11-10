@@ -643,6 +643,12 @@ pub(crate) fn described(v: &VersionEntry) -> Option<&str> {
     v.description.as_deref().filter(|d| !d.trim().is_empty())
 }
 
+/// A version as a select or a link names it: its date, then what it was described as when it was.
+pub(crate) fn dated(v: &VersionEntry, clock: Clock) -> String {
+    let date = when(&v.date, clock);
+    described(v).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", d)]))
+}
+
 /// A version's two lines: its description and when and by whom, or without a description its date
 /// and who asked when an agent did, else "No description".
 pub(crate) fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {

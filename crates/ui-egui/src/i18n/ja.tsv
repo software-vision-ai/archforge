@@ -503,6 +503,12 @@ plural		{n} changed item	{n} 件の変更された項目
 str		Previous version	前のバージョン
 str		The previous version couldn't be read.	前のバージョンを読み取れませんでした。
 str		View this version	このバージョンを表示
+str		Compare	比較
+str		Compare…	比較…
+str		Before	変更前
+str		After	変更後
+str		Before → After	変更前 → 変更後
+str		Swap Before and After	変更前と変更後を入れ替える
 str		First version: there is nothing earlier to compare it with.	最初のバージョンです。比較できる以前のものはありません。
 str		All	すべて
 str		With a description	説明あり
