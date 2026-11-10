@@ -180,7 +180,9 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         return false;
     }
     ui.painter().rect_filled(r, 0.0, p.page);
-    breadcrumb(shell, ui, p, r);
+    if breadcrumb(shell, ui, p, r, "workspace.version-details.close", &tr("History")) {
+        shell.versions.details = None;
+    }
     let clock = crate::chat_panel::clock(shell);
     let (title, meta) = lines(&entry, clock);
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
@@ -218,22 +220,21 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     true
 }
 
-/// The way back at the top: the project's name, which closes the details, and where they are.
-fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+/// The way back at the top of the centre `r`: the project's name, registered as `id`, and `place`,
+/// where the centre is. Gives whether the name was clicked, for the caller to close what it shows.
+fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, id: &str, place: &str) -> bool {
     let name = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
     let (mid, paint) = (r.top() + 34.0, ui.painter().clone());
     let g = ux::galley(&paint, &name, types::UI, p.text_secondary, Some((r.width() / 2.0).max(0.0)));
     let at = Rect::from_min_size(pos2(r.left() + MARGIN, mid - g.size().y / 2.0), g.size());
-    let resp = control(shell, ui, "workspace.version-details.close", "button", at, true).on_hover_text(tr("Close"));
+    let resp = control(shell, ui, id, "button", at, true).on_hover_text(tr("Close"));
     let _ = resp.clone().accessible_name(format!("{name}, {}", tr("Close")));
     focus_ring(&paint, p, at, 3.0, &resp);
     paint.galley(at.min, g, p.text_secondary);
     ux::icon_mid(&paint, pos2(at.right() + 18.0, mid), &icons::CHEVRON_RIGHT, p.text_secondary);
-    ux::text_mid(&paint, at.right() + 37.0, mid, &tr("History"), types::UI, p.text, Some((r.width() / 3.0).max(0.0)));
+    ux::text_mid(&paint, at.right() + 37.0, mid, place, types::UI, p.text, Some((r.width() / 3.0).max(0.0)));
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + BAND - 1.0), vec2(r.width(), 1.0)), 0.0, p.border);
-    if resp.clicked() {
-        shell.versions.details = None;
-    }
+    resp.clicked()
 }
 
 /// The changed items from `y`, or why they are not there: the first version has none, a comparison
@@ -293,7 +294,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         if card.intersects(tree) {
             clip.painter().rect_filled(card, 8.0, p.surface);
             clip.painter().rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-            change_row(shell, &clip, p, card, &format!("workspace.version-details.change.{}", item.id), item);
+            change_row(shell, &clip, p, card, &format!("workspace.version-details.change.{}", item.id), item, false);
         }
     }
     tree.bottom()
