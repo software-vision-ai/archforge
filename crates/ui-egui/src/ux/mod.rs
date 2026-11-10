@@ -314,6 +314,8 @@ pub mod types {
     pub const CAPTION_STRONG: Type = Type::semibold(11.0, 16.0);
     /// Small capitals above a heading, spaced out.
     pub const EYEBROW: Type = Type { size: 11.0, line: 16.0, semibold: true, spacing: 1.2 };
+    /// A smaller eyebrow, over a section below a list.
+    pub const EYEBROW_SMALL: Type = Type { size: 10.0, line: 12.0, semibold: true, spacing: 0.4 };
     pub const TINY: Type = Type::regular(10.0, 15.0);
 }
 
