@@ -3,7 +3,7 @@
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
-    Area, CardField, ChangeKind, ClassifyError, Difference, ElementCard, ElementSides, classified, element_sides,
+    Area, CardField, CardList, ChangeKind, ClassifyError, Difference, ElementCard, ElementSides, ListKind, Named, classified, element_sides,
 };
 use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
@@ -278,6 +278,70 @@ fn a_renamed_moved_or_unchanged_element_stays_one_element() {
     let moved = sides(&before, &state(&s), &order);
     assert_eq!((moved.before, moved.after.clone()), (moved.after, card(archforge_uml::CLASS, "Order")));
     assert!(moved.fields.iter().all(|f| !f.changed));
+}
+
+/// Each list on a side as its kind and rows, a row as its name and mark.
+fn lists(of: &[CardList]) -> Vec<(ListKind, Vec<(Named, Option<ChangeKind>)>)> {
+    of.iter().map(|l| (l.kind, l.rows.iter().map(|r| (r.name.clone(), r.change)).collect())).collect()
+}
+
+/// The name a row of `text` holds.
+fn said(text: &str) -> Named {
+    Named::Said(text.to_string())
+}
+
+/// A class's members group by kind; an added, a removed and a changed one are marked on the sides that have them.
+#[test]
+fn members_are_grouped_and_marked_on_their_own_side() {
+    let (mut s, shop, order, total) = uml_project();
+    let cut = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "cut" }));
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": shop, "name": "Status" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    let before = state(&s);
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "visibility": "public" }));
+    run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay" }));
+    run(&mut s, "element.remove", json!({ "ids": [cut] }));
+    let seen = sides(&before, &state(&s), &order);
+    let (was, is) = (lists(&seen.lists.before), lists(&seen.lists.after));
+    assert_eq!(was.iter().map(|l| l.0).collect::<Vec<_>>(), [ListKind::Attributes, ListKind::Ownership], "{was:?}");
+    assert_eq!(is.iter().map(|l| l.0).collect::<Vec<_>>(), [ListKind::Attributes, ListKind::Operations, ListKind::Ownership], "{is:?}");
+    assert_eq!(was[0].1[..2], [(said("- total"), Some(ChangeKind::Changed)), (said("+ cut"), Some(ChangeKind::Removed))], "{was:?}");
+    assert_eq!(is[0].1[0], (said("+ total"), Some(ChangeKind::Changed)), "{is:?}");
+    assert_eq!(is[1].1, [(said("+ pay()"), Some(ChangeKind::Added))], "added, on the after side only");
+    assert_eq!(lists(&sides(&before, &before, &status).lists.after)[0], (ListKind::Literals, vec![(said("open"), None)]));
+    assert_eq!(was.last().unwrap().1, [(said("shop"), None)], "the same owner is plain");
+}
+
+/// A move to another owner changes its one row on both sides, even one of the same name; an element
+/// with no owner says so, and a column writes its type. An element on one side has no marks.
+#[test]
+fn the_owner_is_one_row_and_a_side_alone_has_no_marks() {
+    let (mut s, _, order, _) = uml_project();
+    let outer = run(&mut s, "uml.package.add", json!({ "name": "outer" }));
+    let twin = run(&mut s, "uml.package.add", json!({ "name": "shop", "parent": outer }));
+    let before = state(&s);
+    run(&mut s, "uml.class.move", json!({ "class": order, "package": twin }));
+    let moved = sides(&before, &state(&s), &order);
+    let owner = |of: &[CardList]| lists(of).last().unwrap().1.clone();
+    assert_eq!(
+        (owner(&moved.lists.before), owner(&moved.lists.after)),
+        (vec![(said("shop"), Some(ChangeKind::Changed))], vec![(said("shop"), Some(ChangeKind::Changed))])
+    );
+    let mut at = sides(&before, &before, &order).lists.after.last().unwrap().rows[0].clone();
+    for _ in 0..8 {
+        if at.name != Named::Nothing {
+            at = sides(&before, &before, &at.id.to_string()).lists.after.last().unwrap().rows[0].clone();
+        }
+    }
+    assert_eq!(at.name, Named::Nothing, "the root says it has no owner");
+
+    let (mut s, _, customer, _) = project();
+    let before = state(&s);
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let after = state(&s);
+    let columns = lists(&sides(&before, &after, &customer).lists.after);
+    assert_eq!(columns[0].1, [(said("id : BIGINT"), None), (said("email : TEXT"), Some(ChangeKind::Added))], "{columns:?}");
+    assert!(lists(&sides(&before, &after, &email).lists.after).iter().all(|l| l.1.iter().all(|r| r.1.is_none())), "only on the after side");
 }
 
 /// A box a repair fits shows no false change on either side, and is named by what it shows.
