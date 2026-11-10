@@ -3,6 +3,11 @@
 # Programmmenü
 str		Quit Archforge	Archforge beenden
 str		File	Ablage
+str		Help	Hilfe
+str		Ctrl	Strg
+str		Shift	Umschalt
+str		The project is busy	Das Projekt ist beschäftigt
+str		Open or go back to a project first	Öffnen Sie zuerst ein Projekt oder wechseln Sie zu einem zurück
 str		Open…	Öffnen …
 str		Save	Sichern
 # Generieren

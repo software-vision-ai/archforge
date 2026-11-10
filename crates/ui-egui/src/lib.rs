@@ -39,6 +39,7 @@ pub mod keys;
 mod kinds;
 mod leaving;
 pub mod markdown;
+mod menu_bar;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;
@@ -602,6 +603,10 @@ pub struct Shell {
     last_title: String,
     /// Logical pixels at the top the host draws over (a full-size-content title bar).
     pub top_inset: f32,
+    /// Whether the window draws its own menu bar: on systems with no native one. Set by the application.
+    pub in_window_menu: bool,
+    /// The in-window menu bar: the menu open and a row chosen.
+    pub(crate) menu_bar: menu_bar::Bar,
     /// Home's search field and its list.
     pub home_search: home_search::Search,
     /// The New project dialog, while it is open over Home.
@@ -712,6 +717,8 @@ impl Shell {
             applied_theme: None,
             last_title: String::new(),
             top_inset: 0.0,
+            in_window_menu: false,
+            menu_bar: menu_bar::Bar::default(),
             home_search: home_search::Search::default(),
             new_project: None,
             settings: None,
@@ -1709,6 +1716,8 @@ impl Shell {
     /// Once per frame, before `ui`: the language, the fonts, the appearance and the exit.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.frames = self.frames.wrapping_add(1);
+        // First, so a row acts on the project it was chosen on: polling below can show another.
+        menu_bar::keep_valid(self);
         settings::note_keyboard(ctx);
         // The stored language, once registered, is the one drawn.
         if crate::i18n::language() != self.state.language && !crate::i18n::set_language(&self.state.language) {
@@ -1773,7 +1782,10 @@ impl Shell {
         // The table's keys, while each action is available; on macOS the menu bar takes an enabled
         // item's keys first.
         let now = ctx.input(|i| i.time);
-        actions::run_shortcuts(self, ctx);
+        // An open menu holds the keys, as a native one does.
+        if self.menu_bar.open.is_none() {
+            actions::run_shortcuts(self, ctx);
+        }
         // A skill's text is kept once its typing pauses, and all of it before quitting.
         skill_tab::sync(self, now, self.quit_requested, None);
         if skill_tab::waiting(self) {
@@ -1821,6 +1833,7 @@ impl Shell {
         self.registry.begin_frame();
         // Escape closes About before the window behind it is drawn, so no editor there reads it.
         support::dismiss_key(self, ui.ctx());
+        menu_bar::dismiss_key(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();
@@ -1828,10 +1841,14 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About, Settings, New project or Save version is over the window, the one behind takes no
+        // While About, Settings, New project, Save version or a menu of the bar is over the window, the one behind takes no
         // keys: its tree, canvas and editors read keys directly, so the frame's keys are held back
         // while it is drawn and given back for the dialogs.
-        let dialog = self.about.is_some() || self.settings.is_some() || self.new_project.is_some() || self.versions.dialog.is_some();
+        let dialog = self.about.is_some()
+            || self.settings.is_some()
+            || self.new_project.is_some()
+            || self.versions.dialog.is_some()
+            || self.menu_bar.open.is_some();
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

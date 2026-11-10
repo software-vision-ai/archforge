@@ -215,6 +215,7 @@ fn run() -> i32 {
                 }
                 shell.set_own_agent_access(server.borrow().is_some());
                 window.attach(cc.egui_ctx.clone());
+                choose_menu_bar(&mut shell);
                 #[cfg(target_os = "macos")]
                 let menu = native_menu(&mut shell, &cc.egui_ctx);
                 let saved = prefs::capture(&shell);
@@ -262,6 +263,11 @@ fn native_options() -> eframe::NativeOptions {
     eframe::NativeOptions { viewport, system_font_fallback: false, ..Default::default() }
 }
 
+/// Tells the shell to draw its own menu bar everywhere but macOS, whose menu is the system's.
+fn choose_menu_bar(shell: &mut Shell) {
+    shell.in_window_menu = !cfg!(target_os = "macos");
+}
+
 /// Reserves the title strip and builds the macOS menu bar, whose items wake the window through
 /// `ctx`; `None`, with a warning in the log, when it cannot be built.
 #[cfg(target_os = "macos")]
@@ -287,6 +293,14 @@ mod tests {
 
     fn args(list: &[&str]) -> Result<Args, String> {
         parse_args(list.iter().map(|s| s.to_string()))
+    }
+
+    /// The window draws its own menu bar only where the system has none.
+    #[test]
+    fn the_in_window_menu_bar_is_drawn_only_without_a_native_one() {
+        let mut shell = Shell::new(archforge_ui_egui::Services::default());
+        choose_menu_bar(&mut shell);
+        assert_eq!(shell.in_window_menu, !cfg!(target_os = "macos"));
     }
 
     #[test]

@@ -168,7 +168,7 @@ pub(crate) fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static
 }
 
 /// The title strip: the active Home button and Open project at the left, beside the traffic
-/// lights on macOS, and the theme switch at the right. On macOS the strip is the window's title
+/// lights on macOS, then the in-window menu bar where the app asks for it, and the theme switch at the right. On macOS the strip is the window's title
 /// bar, so dragging it moves the window and a double click zooms it.
 /// False when the Home button closed the project.
 pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, home_active: bool) -> bool {
@@ -209,6 +209,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     if control(shell, ui, "strip.open-project", "button", ghost_rect, live).clicked() && live {
         shell.open_from_picker();
     }
+    crate::menu_bar::show(shell, ui, p, r, ghost_rect.right() + 8.0);
     // The theme switch: the moon in Light, the sun in Dark; a click changes the appearance.
     let dark = shell.state.theme.is_dark();
     let switch = Rect::from_center_size(pos2(r.right() - 24.0, mid), Vec2::splat(24.0));

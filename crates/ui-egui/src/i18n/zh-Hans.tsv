@@ -3,6 +3,11 @@
 # 应用程序菜单
 str		Quit Archforge	退出 Archforge
 str		File	文件
+str		Help	帮助
+str		Ctrl	Ctrl
+str		Shift	Shift
+str		The project is busy	项目正忙
+str		Open or go back to a project first	请先打开或返回一个项目
 str		Open…	打开…
 str		Save	存储
 # 生成

@@ -201,7 +201,7 @@ pub fn run(shell: &mut Shell, id: &str) {
 
 /// Whether nothing is up over the window that the menu or a key would reach behind: a question or
 /// a dialog, in the window or in a panel. One rule, since a native menu is outside every veil.
-fn free(shell: &Shell) -> bool {
+pub(crate) fn free(shell: &Shell) -> bool {
     let window = shell.ask.is_none()
         && shell.about.is_none()
         && shell.settings.is_none()
@@ -313,7 +313,7 @@ pub(crate) mod tests {
     }
 
     /// A tab, to take up one of the places.
-    fn tab() -> Tab {
+    pub(crate) fn tab() -> Tab {
         Tab { path: "/shop.archforge".into(), name: "Shop".to_string(), parked: None, closing: None, close_error: None }
     }
 
