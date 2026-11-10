@@ -616,7 +616,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
         hold::HoldRefused::Editing,
         panels::NameEdit,
     };
-    let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
+    let open: [(&str, &dyn Fn(&mut Shell)); 9] = [
         ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
         ("panel card", &|s| {
             s.panels.check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
@@ -626,6 +626,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
         ("drawing", &draw),
         ("tree drag", &|s| s.explorer.dragging = Some(ID)),
         ("tree name", &|s| s.explorer.rename = Some(Rename { target: ID, text: "x".into(), fresh: false, refused: None, opened: false })),
+        ("colour picker", &|s| s.panels.picker = Some(crate::appearance::Picker::new(crate::appearance::Group::Fill, egui::Color32::RED))),
         ("dialog", &crate::settings::open),
     ];
     for (what, opens) in open {
@@ -637,6 +638,67 @@ fn an_open_editor_stops_every_way_of_leaving() {
             }
         });
     }
+}
+
+/// An association's ends stop leaving only while selected and holding something not yet written:
+/// the panel fills them in for any association, and an open fold or an old selection holds nothing.
+#[test]
+fn an_end_typed_on_the_selected_association_stops_leaving() {
+    use crate::{
+        hold::HoldRefused::Editing,
+        uml_relate::{EndModifiers, EndsEdit},
+    };
+    /// An end's modifiers as a plain end has them.
+    fn modifiers() -> EndModifiers {
+        EndModifiers {
+            is_static: false,
+            default: String::new(),
+            derived: false,
+            read_only: false,
+            ordered: false,
+            unique: true,
+            subsets: vec![],
+            redefines: vec![],
+        }
+    }
+    /// The ends as the panel fills them in with nothing typed.
+    fn untouched() -> EndsEdit {
+        let (none, written) = ([String::new(), String::new()], ["1".to_string(), "*".to_string()]);
+        EndsEdit {
+            association: ID,
+            role: none.clone(),
+            multiplicity: written.clone(),
+            written_role: none,
+            written,
+            refused: [None, None],
+            modifiers: [modifiers(), modifiers()],
+            written_modifiers: [modifiers(), modifiers()],
+            modifier_refused: [None, None],
+            modifiers_open: [false, false],
+        }
+    }
+    type Change = fn(&mut EndsEdit);
+    let typed: [(&str, Change); 3] = [
+        ("role", |e| e.role[0] = "x".into()),
+        ("multiplicity", |e| e.multiplicity[1] = "2..3".into()),
+        ("modifiers", |e| e.modifiers[1].derived = true),
+    ];
+    in_both(|mut h, _| {
+        let s = h.state_mut();
+        s.panels.editors_for = Some(ID);
+        s.panels.ends = Some(untouched());
+        assert!(s.clear_to_leave().is_ok(), "the panel filled them in and nothing was typed");
+        s.panels.ends.as_mut().unwrap().modifiers_open = [true, true];
+        assert!(s.clear_to_leave().is_ok(), "an open fold holds nothing");
+        for (what, change) in typed {
+            s.panels.ends = Some(untouched());
+            change(s.panels.ends.as_mut().unwrap());
+            assert_eq!(s.clear_to_leave().err(), Some(Editing), "{what}");
+            s.panels.editors_for = Some(archforge_mof::Uuid([8; 16]));
+            assert!(s.clear_to_leave().is_ok(), "{what}, kept for another selection");
+            s.panels.editors_for = Some(ID);
+        }
+    });
 }
 
 /// A refusal leaves the version in view with its date, says why, and keeps the list open for the

@@ -759,6 +759,14 @@ pub struct EndsEdit {
     pub modifiers_open: [bool; 2],
 }
 
+impl EndsEdit {
+    /// Whether an end holds a role, multiplicity or modifiers typed and not yet written: only what
+    /// differs from the model, as Properties fills this in for an association nothing has touched.
+    pub(crate) fn unwritten(&self) -> bool {
+        self.role != self.written_role || self.multiplicity != self.written || self.modifiers != self.written_modifiers
+    }
+}
+
 /// An association end's static and modifiers as its editor holds them (AR-126).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EndModifiers {

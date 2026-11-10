@@ -140,7 +140,8 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
 }
 
 /// Whether something being typed or an editor card is open in `s`: the fields that only show what is
-/// stored are not counted.
+/// stored are not counted. An association's ends count while it is the selection and they hold
+/// something not yet written, so an open Modifiers fold or a selection moved on stops nothing.
 pub(crate) fn editing(s: &State) -> bool {
     open_editors(s).iter().any(Option::is_some)
         || s.name.is_some()
@@ -148,6 +149,8 @@ pub(crate) fn editing(s: &State) -> bool {
         || s.binding.is_some()
         || s.nary_remove.is_some()
         || s.stereotypes.value.is_some()
+        || s.picker.is_some()
+        || s.ends.as_ref().is_some_and(|e| s.editors_for == Some(e.association) && e.unwritten())
 }
 
 /// Brings an editor card that just opened into the scrolled body's view: its foot if it fits,
