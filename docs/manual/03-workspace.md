@@ -51,7 +51,7 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
-On Windows and Linux the strip at the very top, on Home as well, also holds the **File** and
+On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit** and
 **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
@@ -145,7 +145,8 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
-one step.
+one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
+act on that field's text instead of the model.
 
 ## Removing from a diagram versus deleting from the model
 

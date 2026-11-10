@@ -747,6 +747,8 @@ str		Remove relationship	删除关系
 str		Relationship removed	已删除关系
 str		{name} removed	已删除 {name}
 str		Undo	撤销
+str		Redo	重做
+str		Nothing to act on here	这里没有可操作的内容
 plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图

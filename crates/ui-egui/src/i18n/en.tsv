@@ -746,6 +746,8 @@ str		Remove relationship	Remove relationship
 str		Relationship removed	Relationship removed
 str		{name} removed	{name} removed
 str		Undo	Undo
+str		Redo	Redo
+str		Nothing to act on here	Nothing to act on here
 plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap

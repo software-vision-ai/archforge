@@ -747,6 +747,8 @@ str		Remove relationship	Beziehung entfernen
 str		Relationship removed	Beziehung entfernt
 str		{name} removed	{name} entfernt
 str		Undo	Rückgängig
+str		Redo	Wiederholen
+str		Nothing to act on here	Hier gibt es nichts zu tun
 plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden

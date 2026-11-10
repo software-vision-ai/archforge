@@ -747,6 +747,8 @@ str		Remove relationship	Quitar relación
 str		Relationship removed	Relación eliminada
 str		{name} removed	{name} eliminada
 str		Undo	Deshacer
+str		Redo	Rehacer
+str		Nothing to act on here	Aquí no hay nada sobre lo que actuar
 plural		+ {n} more column	+ {n} columna más|+ {n} columnas más
 str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
