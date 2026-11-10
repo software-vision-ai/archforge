@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use archforge_mof::rows::Rows;
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
@@ -265,16 +268,155 @@ fn a_read_that_stops_is_a_failed_comparison() {
     });
 }
 
-/// An answer for details left cannot land on those shown now.
+/// The rows without and with a schema added, once the list has stopped moving and nothing is
+/// left to read for it: the answer about the edit would move the rows under a click.
+fn before_and_after(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Arc<Rows>, Arc<Rows>) {
+    let before = rows_now(h);
+    add_schema(h, "shop");
+    let after = rows_now(h);
+    list_still(h);
+    host.reads.lock().unwrap().clear();
+    (before, after)
+}
+
+/// Frames until the host has been asked for the next comparison's reads.
+fn next_reads(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    frames_until(h, |_| !asked(host).is_empty());
+}
+
+/// Past the host's limit of reads under way: rows clicked while a comparison runs read no more
+/// models. The answer for a row left is not shown, and the row clicked last is compared next.
 #[test]
-fn an_answer_for_details_left_is_dropped() {
+fn quick_clicks_run_one_comparison_at_a_time() {
     in_both(|h, host| {
-        let rows = rows_now(h);
+        let (before, after) = before_and_after(h, host);
         opened(h, "c3");
-        let older = host.reads.lock().unwrap().drain(..).map(|(_, tx)| tx).collect::<Vec<_>>();
+        for row in ["c2", "c3", "c2", "c3", "c2"] {
+            opened(h, row);
+        }
+        assert_eq!(asked(host), ["c2", "c3"], "only the first comparison's two reads");
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(after));
+        next_reads(h, host);
+        assert_eq!(asked(host), ["c1", "c2"], "for the row shown now");
+        assert!(has_id(h, "workspace.version-details.loading") && !painted_has(h, "1 changed item"), "c3's answer stays out: {:?}", painted(h));
+        answer(host, "c1", Ok(before.clone()));
+        answer(host, "c2", Ok(before));
+        settled(h);
+        assert!(painted_has(h, "0 changed items"), "{:?}", painted(h));
+    });
+}
+
+/// Back on the row whose comparison is running, that one's answer is used and nothing is read again.
+#[test]
+fn a_row_clicked_again_uses_the_comparison_running() {
+    in_both(|h, host| {
+        let (before, after) = before_and_after(h, host);
+        opened(h, "c3");
         opened(h, "c2");
-        older.iter().for_each(|tx| tx.send(Ok(rows.clone())).unwrap());
+        opened(h, "c3");
+        assert_eq!(asked(host), ["c2", "c3"], "still the first");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        settled(h);
+        assert!(painted_has(h, "1 changed item") && asked(host).is_empty(), "{:?}", painted(h));
+    });
+}
+
+/// An answer lands only on the two versions it compared: neither on another version with the same
+/// one before it, nor on the same version with another one before it.
+#[test]
+fn an_answer_lands_only_on_the_two_versions_it_compared() {
+    in_both(|h, host| {
+        let (before, after) = before_and_after(h, host);
+        for (hash, previous, reads) in [("c4", "c2", ["c2", "c4"]), ("c3", "c1", ["c1", "c3"])] {
+            opened(h, "c3");
+            crate::version_details::open(
+                h.state_mut(),
+                crate::VersionEntry { hash: hash.into(), previous: Some(previous.into()), ..history().remove(0) },
+            );
+            h.run_steps(1);
+            answer(host, "c2", Ok(before.clone()));
+            answer(host, "c3", Ok(after.clone()));
+            next_reads(h, host);
+            assert_eq!(asked(host), reads, "for the pair shown");
+            assert!(has_id(h, "workspace.version-details.loading") && !painted_has(h, "1 changed item"), "{:?}", painted(h));
+            answer(host, previous, Ok(before.clone()));
+            answer(host, hash, Ok(before.clone()));
+            settled(h);
+            assert!(painted_has(h, "0 changed items"), "{:?}", painted(h));
+        }
+    });
+}
+
+/// What `leave` puts in the session's place: the comparison from before neither lands on the same
+/// row shown again nor holds up that row's own reads.
+fn a_new_session_starts_its_own_comparison(leave: impl Fn(&mut Harness<'static, Shell>, &SavingHost, Arc<Rows>)) {
+    in_both(|h, host| {
+        let (before, after) = before_and_after(h, host);
+        opened(h, "c3");
+        let left: Vec<_> = host.reads.lock().unwrap().drain(..).map(|(_, tx)| tx).collect();
+        leave(h, host, before.clone());
         h.run_steps(2);
-        assert!(has_id(h, "workspace.version-details.loading") && asked(host) == ["c1", "c2"], "still c2's reads: {:?}", painted(h));
+        assert!(h.state().versions.details.is_none(), "about the session left");
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        answer_read(h, host, Ok(before.clone()));
+        list_still(h);
+        opened(h, "c3");
+        assert_eq!(asked(host), ["c2", "c3"], "its own reads, without waiting for those left");
+        left.iter().for_each(|tx| drop(tx.send(Ok(after.clone()))));
+        h.run_steps(2);
+        assert!(has_id(h, "workspace.version-details.loading") && !painted_has(h, "1 changed item"), "{:?}", painted(h));
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(before.clone()));
+        settled(h);
+        assert!(painted_has(h, "0 changed items"), "{:?}", painted(h));
+    });
+}
+
+/// Another session lets the comparison under way go.
+#[test]
+fn a_new_session_does_not_wait_for_the_comparison_left() {
+    a_new_session_starts_its_own_comparison(|h, _, _| h.state_mut().session_replaced());
+}
+
+/// A finished restore puts another session in place, so it lets the comparison go as well.
+#[test]
+fn a_finished_restore_does_not_wait_for_the_comparison_left() {
+    a_new_session_starts_its_own_comparison(|h, host, rows| {
+        h.state_mut().restore_version("c1", "2026-11-06T15:05:00Z").unwrap();
+        h.run_steps(3);
+        answer(host, "c1", Ok(rows));
+        h.run_steps(4);
+        let (ended, _reading) = host.restores.lock().unwrap().remove(0);
+        ended.send(Ok(())).unwrap();
+    });
+}
+
+/// A save and a refused restore leave the session as it is: the comparison running goes on, no
+/// second one starts, and its answer lands.
+#[test]
+fn a_save_or_a_refused_restore_keeps_the_comparison_running() {
+    in_both(|h, host| {
+        let (before, after) = before_and_after(h, host);
+        opened(h, "c3");
+        h.state_mut().save();
+        h.run_steps(2);
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        assert_eq!(asked(host), ["c2", "c3"], "a save starts no comparison");
+        h.state_mut().restore_version("c1", "2026-11-06T15:05:00Z").unwrap();
+        h.run_steps(3);
+        answer(host, "c1", Ok(before.clone()));
+        h.run_steps(4);
+        let (ended, _reading) = host.restores.lock().unwrap().remove(0);
+        ended.send(Err(crate::replace::JobFailure::Failed("refused".into()))).unwrap();
+        h.run_steps(4);
+        assert!(!h.state().is_held() && has_id(h, VIEW), "the details stay: {:?}", h.state().save_error);
+        assert_eq!(asked(host), ["c2", "c3"], "and the comparison is still the first");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        settled(h);
+        assert!(painted_has(h, "1 changed item") && asked(host).is_empty(), "{:?}", painted(h));
     });
 }

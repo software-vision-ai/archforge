@@ -33,8 +33,18 @@ type Found = Result<Arc<Vec<Difference>>, String>;
 
 /// What changed since the version before: on its way, then known.
 struct Comparison {
-    answer: Receiver<Found>,
+    /// The version compared with, which the answer has to be about.
+    before: String,
     found: Option<Found>,
+}
+
+/// The comparison under way. A version's two models cannot be called back once asked for, so one
+/// runs at a time however quickly rows are clicked: the next starts for the details shown by then.
+pub(crate) struct Running {
+    about: (PathBuf, u64),
+    /// The versions compared, the earlier first.
+    pair: (String, String),
+    answer: Receiver<Found>,
 }
 
 /// The details shown: of one version, for the project and session they were read in.
@@ -78,34 +88,45 @@ fn compare(before: Receiver<Result<Arc<Rows>, String>>, after: Receiver<Result<A
     rx
 }
 
-/// Selects `entry` and opens its details, reading the version before it and comparing the two. What
-/// was on its way for the details left is dropped with them. Without a host it is only selected.
+/// Selects `entry` and opens its details; [`keep`] compares it with the version before when no
+/// other comparison is running. Without a host it is only selected.
 pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
     shell.versions.selected = Some(entry.hash.clone());
-    let (Some(host), Some(about)) = (shell.services.projects.clone(), about(shell)) else { return };
-    let comparison = entry.previous.clone().map(|before| {
-        let (old, new) = (host.read_version(&about.0, before), host.read_version(&about.0, entry.hash.clone()));
-        Comparison { answer: compare(old, new), found: None }
-    });
+    let Some(about) = about(shell).filter(|_| shell.services.projects.is_some()) else { return };
+    let comparison = entry.previous.clone().map(|before| Comparison { before, found: None });
     shell.versions.details = Some(Details { about, entry, comparison, scroll: TreeScroll::default() });
 }
 
-/// Once a frame: details of another project or session close, the comparison's answer is taken
-/// when it has come, and one still on its way wakes the window. A comparison that ended without
-/// an answer has failed.
+/// Once a frame: what belongs to another project or session is let go, the answer that has come
+/// is taken, the details shown get their comparison when none runs, and an answer still awaited
+/// wakes the window. An answer lands only on the two versions it compared.
 pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     let about = about(shell);
+    let host = shell.services.projects.clone();
     let v = &mut shell.versions;
     if v.details.as_ref().is_some_and(|d| Some(&d.about) != about.as_ref()) {
         v.details = None;
     }
-    let Some(c) = v.details.as_mut().and_then(|d| d.comparison.as_mut()) else { return };
-    if c.found.is_none() {
-        c.found = match c.answer.try_recv() {
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(not_compared())),
-            Ok(found) => Some(found),
-        };
+    if v.details_comparing.as_ref().is_some_and(|c| Some(&c.about) != about.as_ref()) {
+        v.details_comparing = None;
+    }
+    let answered = v.details_comparing.as_ref().and_then(|c| match c.answer.try_recv() {
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => Some((c.pair.clone(), Err(not_compared()))),
+        Ok(found) => Some((c.pair.clone(), found)),
+    });
+    if answered.is_some() {
+        v.details_comparing = None;
+    }
+    let Some(d) = v.details.as_mut() else { return };
+    let Some(c) = d.comparison.as_mut() else { return };
+    let pair = (c.before.clone(), d.entry.hash.clone());
+    if let Some((_, found)) = answered.filter(|(compared, _)| *compared == pair) {
+        c.found = Some(found);
+    }
+    if let (true, None, Some(host), Some(about)) = (c.found.is_none(), &v.details_comparing, host, about) {
+        let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
+        v.details_comparing = Some(Running { about, pair, answer: compare(old, new) });
     }
     if c.found.is_none() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
