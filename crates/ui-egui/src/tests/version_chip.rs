@@ -1495,7 +1495,7 @@ fn a_failed_step_stays_on_the_version_in_view_and_says_why() {
     in_both(|mut h, host| {
         let _ = stepping(&mut h, &host);
         step_to(&mut h, "b");
-        answer_read(&mut h, &host, Err("not readable".into()));
+        answer_read(&mut h, &host, Err("not readable".to_string().into()));
         showing(&h, "v", (false, false));
         dated_as_before(&h);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("not readable"));
@@ -1716,5 +1716,89 @@ fn the_chip_has_the_designs_clock_and_label_size() {
         let chip = chip_at(&mut h, 1600.0);
         assert_eq!(text_size(&h, "Current work"), Some(12.0));
         assert!(versions_clock_at(&h, egui::pos2(chip.left() + 18.0, chip.center().y)), "the clock with its arrow, as the design has it");
+    });
+}
+
+/// A failure that may pass, the host's limit among them, marks no row; one that lasts marks its
+/// row, of the project shown only, and a newer Archforge's has no reason. Rows that cannot be built
+/// mark theirs too. A step to any of them stays on the version in view and says why; showing
+/// another version moves the session and keeps what is known.
+#[test]
+fn only_a_lasting_failure_marks_the_row() {
+    use crate::VersionReadError::{Failed, Shape, Unavailable};
+    let reason = |h: &Harness<'static, Shell>, hash: &str| h.state().versions.unavailable.get(hash).cloned();
+    in_both(|mut h, host| {
+        let [b, _] = stepping(&mut h, &host);
+        step_to(&mut h, "x");
+        answer_read(&mut h, &host, Err(Failed("Too many".into())));
+        assert_eq!((reason(&h, "x"), h.state().canvas.notice.as_deref()), (None, Some("Too many")), "it may pass");
+        step_to(&mut h, "x");
+        answer_read(&mut h, &host, Err(Unavailable));
+        assert_eq!(reason(&h, "x"), Some(Some(Unavailable.to_string())));
+        assert_ne!(Shape.to_string(), Unavailable.to_string(), "two reasons");
+        assert_eq!(h.state().canvas.notice, Some(Unavailable.to_string()), "says why");
+        showing(&h, "v", (false, false));
+        step_to(&mut h, "x");
+        assert_eq!(host.reads.lock().unwrap().remove(0).0, "x", "a marked version can still be stepped to");
+        h.run_steps(3);
+        assert!(h.state().canvas.notice.is_some(), "and that step says why");
+        step_to(&mut h, "n");
+        answer_read(&mut h, &host, Err(Shape));
+        assert_eq!((reason(&h, "n"), h.state().canvas.notice.clone()), (Some(None), Some(Shape.to_string())));
+        step_to(&mut h, "unbuilt");
+        answer_read(&mut h, &host, Ok(Default::default()));
+        showing(&h, "v", (false, false));
+        assert!(reason(&h, "unbuilt").is_some_and(|why| why.is_some()), "rows that cannot be built never will be");
+        step_to(&mut h, "b");
+        answer_read(&mut h, &host, Ok(b));
+        h.run_steps(2);
+        showing(&h, "b", (true, false));
+        assert!(reason(&h, "x").is_some(), "showing a version keeps what is known of the others");
+        step_to(&mut h, "other");
+        h.state_mut().project.as_mut().unwrap().path = "/elsewhere".into();
+        h.run_steps(2);
+        answer_read(&mut h, &host, Err(Unavailable));
+        assert_eq!(reason(&h, "other"), None, "another project's rows are not these");
+    });
+}
+
+/// Entering a version that cannot be read or built marks its row and leaves the work as it was.
+#[test]
+fn an_entry_that_fails_for_good_marks_the_row() {
+    use crate::VersionReadError::Unavailable;
+    in_both(|mut h, host| {
+        crate::version_chip::view(h.state_mut(), "gone".into(), "8 Nov".into());
+        h.run_steps(3);
+        answer_read(&mut h, &host, Err(Unavailable));
+        assert_eq!(h.state().viewing(), None);
+        crate::version_chip::view(h.state_mut(), "unbuilt".into(), "8 Nov".into());
+        h.run_steps(3);
+        answer_read(&mut h, &host, Ok(Default::default()));
+        h.run_steps(3);
+        assert_eq!(h.state().viewing(), None);
+        assert!(["gone", "unbuilt"].iter().all(|c| h.state().versions.unavailable[*c].is_some()));
+    });
+}
+
+/// What is known of a version ends with the workspace and with a restore or a branch switch, as
+/// it holds of a branch; entering a version touches neither.
+#[test]
+fn a_reason_ends_when_the_branch_may_differ() {
+    let enders: [fn(&mut Shell); 3] = [
+        |s| s.restore_version("c1", "2026-11-08T14:02:11Z").unwrap(),
+        |s| s.switch_branch("elsewhere".to_string()).unwrap(),
+        |s| s.clear_workspace(),
+    ];
+    for end in enders {
+        in_both(|mut h, _| {
+            h.state_mut().versions.unavailable.insert("a".into(), None);
+            end(h.state_mut());
+            assert!(h.state().versions.unavailable.is_empty());
+        });
+    }
+    in_both(|mut h, _| {
+        h.state_mut().versions.unavailable.insert("a".into(), None);
+        h.state_mut().view_version("b").unwrap();
+        assert_eq!(h.state().versions.unavailable.len(), 1, "an entry is no change of branch");
     });
 }

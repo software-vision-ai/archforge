@@ -39,7 +39,7 @@ use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
 use archforge_ui_egui::{
     BranchNotDeleted, BranchNotice, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry,
-    VersionsPage, Writing,
+    VersionRead, VersionReadError, VersionsPage, Writing,
 };
 
 /// How long the writer waits after a change for the next one before it writes.
@@ -828,18 +828,18 @@ impl Projects {
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
     /// reader has left the map, so a later read cannot reach it. An answer read across a change of
     /// the project's branch is dropped: the receiver sees no answer rather than another branch's.
-    fn on_a_reader<T: Send + 'static>(
+    fn on_a_reader<T: Send + 'static, E: From<String> + Send + 'static>(
         &self,
         project: &Path,
-        read: impl FnOnce(&VersionReader) -> Result<T, String> + Send + 'static,
-    ) -> Receiver<Result<T, String>> {
+        read: impl FnOnce(&VersionReader) -> Result<T, E> + Send + 'static,
+    ) -> Receiver<Result<T, E>> {
         let (tx, rx) = channel();
         let generation = generation_of(&self.inner, project);
         let (inner, path) = (self.inner.clone(), project.to_path_buf());
         let slot = match self.take_a_read(project) {
             Ok(slot) => slot,
             Err(why) => {
-                let _ = tx.send(Err(why));
+                let _ = tx.send(Err(why.into()));
                 return rx;
             }
         };
@@ -860,7 +860,7 @@ impl Projects {
                 closers.push(handle);
             }
             Err(e) => {
-                let _ = tx.send(Err(format!("the read could not start: {e}")));
+                let _ = tx.send(Err(format!("the read could not start: {e}").into()));
             }
         }
         rx
@@ -886,7 +886,7 @@ impl ProjectHost for Projects {
                 }
                 Err(error) => {
                     log::warn!("a branch check stopped: {error}");
-                    Err(error.words())
+                    Err(error.words().into())
                 }
             });
         };
@@ -982,11 +982,11 @@ impl ProjectHost for Projects {
     }
 
     /// The model a version of the project holds, read on a thread of its own ([`Projects::on_a_reader`]).
-    fn read_version(&self, project: &Path, commit: String) -> Receiver<Result<Arc<Rows>, String>> {
+    fn read_version(&self, project: &Path, commit: String) -> Receiver<VersionRead> {
         let inner = self.inner.clone();
         self.on_a_reader(project, move |reader| {
             let schema = schema(&inner).map_err(|e| format!("{e:?}"))?;
-            reader.read_model_at(&schema, &commit).map(Arc::new).map_err(|e| e.to_string())
+            reader.read_model_at(&schema, &commit).map(Arc::new).map_err(version_read_error)
         })
     }
 
@@ -2287,6 +2287,17 @@ fn settle_reads(inner: &Inner, path: &Path, budget: Duration) {
     }
 }
 
+/// A version's read refused, by whether asking again can help. Damage counts as a failure that may
+/// pass, as a connection lost while listing a version's tables reads as damage too.
+fn version_read_error(e: archforge_project::Error) -> VersionReadError {
+    log::warn!("a version could not be read: {e}");
+    match e {
+        archforge_project::Error::NotAVersion { .. } => VersionReadError::Unavailable,
+        archforge_project::Error::VersionShape { .. } => VersionReadError::Shape,
+        other => VersionReadError::Failed(other.to_string()),
+    }
+}
+
 /// A page of versions in the shell's terms.
 fn page_of(page: archforge_project::Versions) -> VersionsPage {
     let versions = page.versions.into_iter().map(|v| VersionEntry {
@@ -3125,8 +3136,8 @@ mod tests {
         host.write(&path, model("b"));
         assert_eq!(saved(host, &path), Ok(true));
         assert_eq!(*with_open_lock_held(host, || read(&first)).expect("the version, with the lock held"), model("a"));
-        assert!(read("0123456789abcdefghijklmnopqrstuv").unwrap_err().contains("not a version"), "a commit it does not hold");
-        let thread = host.on_a_reader(&path, |_| Ok(std::thread::current().name().map(str::to_string)));
+        assert_eq!(read("0123456789abcdefghijklmnopqrstuv").unwrap_err(), VersionReadError::Unavailable, "a commit it does not hold");
+        let thread = host.on_a_reader(&path, |_| Ok::<_, String>(std::thread::current().name().map(str::to_string)));
         assert_eq!(thread.recv_timeout(Duration::from_secs(30)).unwrap(), Ok(Some("archforge-versions".to_string())), "a thread of its own");
 
         // A reader kept past the closing, as a read still running would be, reads nothing more.
@@ -3134,9 +3145,19 @@ mod tests {
         close(host, &path).unwrap();
         let shape = schema(&host.inner).unwrap();
         assert!(matches!(stale.read_model_at(&shape, &first), Err(archforge_project::Error::Server(_) | archforge_project::Error::Sql { .. })));
-        assert_eq!(read(&first), Err(format!("{} is no longer open", path.display())), "and a new read does not reach it");
+        assert_eq!(read(&first), Err(format!("{} is no longer open", path.display()).into()), "and a new read does not reach it");
         wait(&host.open(&path)).unwrap();
         assert_eq!(*read(&first).unwrap(), model("a"), "the project opened again has a reader of its own");
+    }
+
+    /// Only what cannot pass counts as lasting: damage may be a connection lost while listing.
+    #[test]
+    fn a_read_failure_is_typed_by_whether_asking_again_can_help() {
+        use archforge_project::Error::{Damaged, NotAVersion, VersionShape};
+        assert_eq!(version_read_error(NotAVersion { commit: "c".into() }), VersionReadError::Unavailable);
+        assert_eq!(version_read_error(VersionShape { commit: "c".into(), why: "newer".into() }), VersionReadError::Shape);
+        let damage = version_read_error(Damaged { path: "/p".into(), why: "the tables cannot be listed".into() });
+        assert!(matches!(&damage, VersionReadError::Failed(why) if why.contains("cannot be listed")), "{damage:?}");
     }
 
     /// Reads past the cap are refused until one ends, and the cap is each project's own.
@@ -3151,7 +3172,11 @@ mod tests {
         let mut under_way: Vec<_> = (0..MOST_READS).map(|_| host.take_a_read(&path).expect("a place")).collect();
         let too_many = "Too many versions are being read at once. Try again in a moment.".to_string();
         assert_eq!(read(&path), Err(too_many.clone()));
-        assert_eq!(host.read_version(&path, "any".into()).recv_timeout(Duration::from_secs(30)).unwrap(), Err(too_many), "the models read count too");
+        assert_eq!(
+            host.read_version(&path, "any".into()).recv_timeout(Duration::from_secs(30)).unwrap(),
+            Err(too_many.into()),
+            "the models read count too"
+        );
         assert!(read(&other).is_ok(), "another project is not held back");
         under_way.pop();
         assert!(read(&path).is_ok(), "one ended, so one may start");
@@ -3304,11 +3329,11 @@ mod tests {
     fn a_read_across_a_switch_gives_no_answer() {
         let sandbox = Sandbox::new(None);
         let (host, path) = (&sandbox.host, sandbox.project());
-        assert_eq!(host.on_a_reader(&path, |_| Ok(1)).recv_timeout(Duration::from_secs(30)), Ok(Ok(1)));
+        assert_eq!(host.on_a_reader(&path, |_| Ok::<_, String>(1)).recv_timeout(Duration::from_secs(30)), Ok(Ok(1)));
         let (inner, moved) = (host.inner.clone(), path.clone());
         let across = host.on_a_reader(&path, move |_| {
             switched(&inner, &moved);
-            Ok(2)
+            Ok::<_, String>(2)
         });
         assert_eq!(across.recv_timeout(Duration::from_secs(30)), Err(std::sync::mpsc::RecvTimeoutError::Disconnected));
     }
@@ -4443,7 +4468,7 @@ mod tests {
         drop(read_back);
         assert_eq!(on(host), "elsewhere");
         let same = there("ELSEWHERE").unwrap();
-        assert_eq!(same.read.recv_timeout(wait).unwrap(), Err(SwitchError::AlreadyOnIt.words()));
+        assert_eq!(same.read.recv_timeout(wait).unwrap(), Err(SwitchError::AlreadyOnIt.words().into()));
         drop(same);
         let back = there("main").unwrap();
         assert!(back.read.recv_timeout(wait).unwrap().is_ok() && back.unsaved.load(Ordering::SeqCst), "main holds unsaved work");

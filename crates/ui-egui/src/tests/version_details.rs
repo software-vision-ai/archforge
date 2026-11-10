@@ -147,7 +147,7 @@ fn said_on_hover(h: &mut Harness<'static, Shell>, words: &str) {
 }
 
 /// Answers the read of `commit`.
-fn answer(host: &SavingHost, commit: &str, rows: Result<std::sync::Arc<archforge_mof::rows::Rows>, String>) {
+fn answer(host: &SavingHost, commit: &str, rows: crate::VersionRead) {
     let mut reads = host.reads.lock().unwrap();
     let at = reads.iter().position(|(c, _)| c == commit).unwrap_or_else(|| panic!("no read of {commit}"));
     reads.remove(at).1.send(rows).unwrap();
@@ -361,8 +361,8 @@ fn a_failed_comparison_is_said_and_retried() {
     in_both(|h, host| {
         let rows = rows_now(h);
         opened(h, "c3");
-        answer(host, "c2", Err("Too many".into()));
-        answer(host, "c3", Err("Too many".into()));
+        answer(host, "c2", Err("Too many".to_string().into()));
+        answer(host, "c3", Err("Too many".to_string().into()));
         settled(h);
         assert!(has_id(h, "workspace.version-details.failed") && painted_has(h, "The changes couldn't be compared."), "{:?}", painted(h));
         assert!(!painted(h).iter().any(|t| t.ends_with("changed items")), "no count for what is not known");
@@ -652,8 +652,8 @@ fn a_failed_read_of_the_version_before_is_said_and_retried_alone() {
 fn the_changes_retry_covers_the_version_before() {
     in_both_listing(history()[..1].to_vec(), |h, host| {
         opened(h, "c3");
-        answer(host, "c2", Err("gone".into()));
-        answer(host, "c3", Err("gone".into()));
+        answer(host, "c2", Err("gone".to_string().into()));
+        answer(host, "c3", Err("gone".to_string().into()));
         settled(h);
         drop(the_read(h, host));
         frames_until(h, |h| has_id(h, LINK_FAILED));

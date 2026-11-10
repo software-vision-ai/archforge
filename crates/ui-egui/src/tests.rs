@@ -387,7 +387,7 @@ struct SwitchEnds {
 type RestoreEnds = (std::sync::mpsc::Sender<Result<(), crate::replace::JobFailure>>, std::sync::mpsc::Sender<Result<bool, String>>);
 
 /// Where the answer to a read of a version goes.
-type ReadAnswer = std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>;
+type ReadAnswer = std::sync::mpsc::Sender<crate::VersionRead>;
 
 impl crate::ProjectHost for SavingHost {
     /// A job the test answers through what is kept in `restores`.
@@ -424,11 +424,7 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Answers nothing yet: the test answers later, through what is kept in `reads`.
-    fn read_version(
-        &self,
-        _project: &std::path::Path,
-        commit: String,
-    ) -> std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+    fn read_version(&self, _project: &std::path::Path, commit: String) -> std::sync::mpsc::Receiver<crate::VersionRead> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.reads.lock().unwrap().push((commit, tx));
         rx
@@ -1162,10 +1158,7 @@ fn held_until_closed(h: &mut Harness<'static, Shell>, schema: &str, during: impl
 }
 
 /// Starts replacing the session; gives where the model read goes.
-fn start_replacing(
-    h: &mut Harness<'static, Shell>,
-    job: Option<crate::replace::Job>,
-) -> std::sync::mpsc::Sender<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+fn start_replacing(h: &mut Harness<'static, Shell>, job: Option<crate::replace::Job>) -> std::sync::mpsc::Sender<crate::VersionRead> {
     let (read, answer) = std::sync::mpsc::channel();
     h.state_mut().begin_replacement(answer, job).unwrap();
     h.run_steps(4);
@@ -1187,7 +1180,7 @@ fn start_viewing(h: &mut Harness<'static, Shell>, commit: &str) {
 }
 
 /// Answers the oldest read waiting.
-fn answer_read(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: Result<std::sync::Arc<archforge_mof::rows::Rows>, String>) {
+fn answer_read(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: crate::VersionRead) {
     host.reads.lock().unwrap().remove(0).1.send(answer).unwrap();
     h.run_steps(4);
 }
@@ -1327,7 +1320,7 @@ fn a_read_that_fails_leaves_the_work_and_says_why() {
         let (mut h, host, _) = work_and_earlier();
         start_viewing(&mut h, "c1");
         if refused {
-            answer_read(&mut h, &host, Err("Too many versions".into()));
+            answer_read(&mut h, &host, Err("Too many versions".to_string().into()));
         } else {
             host.reads.lock().unwrap().clear();
             h.run_steps(4);
@@ -2142,7 +2135,7 @@ fn a_failed_check_says_why_and_the_work_stays() {
         h.run_steps(4);
         the_work_stays_saying(&h, "Another switch");
         let ends = switch_asked(&mut h, &host);
-        ends.check.send(Err("The reason".to_string())).unwrap();
+        ends.check.send(Err("The reason".to_string().into())).unwrap();
         h.run_steps(4);
         the_work_stays_saying(&h, "The reason");
         drop(switch_asked(&mut h, &host));
@@ -2232,7 +2225,7 @@ fn a_switch_lets_the_conversation_go_only_once_it_has_finished() {
         h.state_mut().chat_panel.draft = "Still typing".into();
         h.state_mut().chat_panel.load_error = Some("old".into());
         let ends = switch_asked(&mut h, &host);
-        ends.check.send(Err("The reason".to_string())).unwrap();
+        ends.check.send(Err("The reason".to_string().into())).unwrap();
         h.run_steps(4);
         assert_eq!(h.state().chat_panel.chat.as_ref().unwrap().id, old, "{theme:?}: the switch failed");
         let ended = chat_calls(&rig).3;
@@ -2361,7 +2354,7 @@ fn a_replacement_waits_for_a_save_then_takes_the_sessions_place() {
 /// One that cannot be read or built ends with nothing written and the session as it was.
 #[test]
 fn a_replacement_that_cannot_be_read_or_built_runs_no_job() {
-    for answer in [Some(Err("the commit is gone".to_string())), Some(Ok(std::sync::Arc::new(archforge_mof::rows::Rows::default()))), None] {
+    for answer in [Some(Err("the commit is gone".to_string().into())), Some(Ok(std::sync::Arc::new(archforge_mof::rows::Rows::default()))), None] {
         let (mut h, _) = saving_harness(Some(commerce()), None);
         add_schema(&mut h, "shop");
         let (job, started, ..) = test_job();
@@ -8639,7 +8632,7 @@ fn an_unavailable_version_says_so_and_why() {
     in_both_appearances(|theme| {
         let (mut h, _host) = versions_listed(theme, vec![version_row("a", Some("Add order status"), (None, false), "2026-11-08T15:30:00Z")]);
         let why = "its tables are damaged";
-        h.state_mut().versions.unavailable.insert("a".to_string(), why.to_string());
+        h.state_mut().versions.unavailable.insert("a".to_string(), Some(why.to_string()));
         h.run_steps(2);
         let texts = painted(&h);
         assert!(texts.iter().any(|t| t == "This version can't be shown") && !texts.iter().any(|t| t == "Add order status"), "{texts:?}");
@@ -8648,9 +8641,17 @@ fn an_unavailable_version_says_so_and_why() {
         h.event(egui::Event::PointerMoved(at));
         h.run_steps(4);
         assert!(painted(&h).iter().any(|t| t == why), "{theme:?}: on hover");
+        h.state_mut().versions.unavailable.insert("a".to_string(), None);
+        h.run_steps(2);
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "Made with a newer Archforge.") && !has_id(&h, "workspace.versions.row.a.why"), "{theme:?}: {texts:?}");
+        assert!(texts.iter().any(|t| t == "8 Nov 16:30") && !texts.iter().any(|t| t.ends_with('·')), "{theme:?}: its date alone: {texts:?}");
         h.state_mut().session_replaced();
         h.run_steps(2);
-        assert!(h.state().versions.unavailable.is_empty(), "{theme:?}: it was about the session left");
+        assert_eq!(h.state().versions.unavailable.len(), 1, "{theme:?}: showing a version moves the session, not the reason");
+        h.state_mut().project.as_mut().unwrap().path = "/elsewhere".into();
+        h.run_steps(2);
+        assert!(h.state().versions.unavailable.is_empty(), "{theme:?}: it was about the project left");
     });
 }
 
@@ -8856,7 +8857,7 @@ fn working_changes_belong_to_the_rows_compared() {
         let last = version_row("c1", None, (None, false), "2026-11-08T15:30:00Z");
         versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![last], more: false }));
         h.run_steps(2);
-        answer_read(&mut h, &host, Err("unreadable".to_string()));
+        answer_read(&mut h, &host, Err("unreadable".to_string().into()));
         h.run_steps(2);
         assert!(has_id(&h, "workspace.versions.changes.failed") && !no_changes_said(&h), "{theme:?}");
         assert!(host.reads.lock().unwrap().is_empty(), "{theme:?}: not asked again every frame");

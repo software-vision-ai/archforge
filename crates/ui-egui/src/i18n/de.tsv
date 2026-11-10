@@ -528,6 +528,8 @@ str		Last version	Letzte Version
 str		No description	Keine Beschreibung
 str		Saved by an agent	Von einem Agenten gespeichert
 str		This version can't be shown	Diese Version kann nicht angezeigt werden
+str		It isn't a version of this branch.	Das ist keine Version dieses Zweigs.
+str		Made with a newer Archforge.	Mit einer neueren Archforge-Version erstellt.
 str		Why?	Warum?
 str		Date not known	Datum unbekannt
 plural		Versions · {n} change	Versionen · {n} Änderung|Versionen · {n} Änderungen

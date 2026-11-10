@@ -154,10 +154,44 @@ pub struct Writing {
 
 /// The host's part in making projects. The shell never touches a project's files or its database:
 /// it asks, and draws the answer.
+/// Why a version could not be read, which decides what is said of its row from then on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VersionReadError {
+    /// It is no version of the branch shown, and asking again cannot change that.
+    Unavailable,
+    /// Its model tables are another or a newer Archforge's.
+    Shape,
+    /// Anything else, in words for a person: asking again may well work.
+    Failed(String),
+}
+
+impl std::fmt::Display for VersionReadError {
+    /// Says why in the language shown, which only the interface thread knows.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unavailable => f.write_str(&i18n::tr("It isn't a version of this branch.")),
+            Self::Shape => f.write_str(&i18n::tr("Made with a newer Archforge.")),
+            Self::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for VersionReadError {}
+
+impl From<String> for VersionReadError {
+    /// Words alone say nothing lasting of the version, so they are a failure to read it.
+    fn from(why: String) -> Self {
+        Self::Failed(why)
+    }
+}
+
+/// A version's model, or why it could not be read.
+pub type VersionRead = Result<std::sync::Arc<archforge_mof::rows::Rows>, VersionReadError>;
+
 /// A branch switch the host has started: its check under way, and its move still to run.
 pub struct BranchSwitch {
     /// The target's model, once checked; or, in words for a person, why the project stayed.
-    pub read: std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>>,
+    pub read: std::sync::mpsc::Receiver<VersionRead>,
     /// Set before `read` answers: the target holds work not saved as a version.
     pub unsaved: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub job: replace::Job,
@@ -250,13 +284,9 @@ pub trait ProjectHost: Send + Sync {
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
     /// Like [`ProjectHost::versions`], the read holds up neither the writing of any project nor the
     /// interface, and a project that is not open fails.
-    fn read_version(
-        &self,
-        _project: &std::path::Path,
-        _commit: String,
-    ) -> std::sync::mpsc::Receiver<Result<std::sync::Arc<archforge_mof::rows::Rows>, String>> {
+    fn read_version(&self, _project: &std::path::Path, _commit: String) -> std::sync::mpsc::Receiver<VersionRead> {
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = tx.send(Err("this host keeps no versions".into()));
+        let _ = tx.send(Err("this host keeps no versions".to_string().into()));
         rx
     }
 
@@ -1205,6 +1235,8 @@ impl Shell {
         // What was set aside belongs to the project going, and never passes to the next one shown.
         self.viewing = None;
         self.loads.call_off();
+        // A later opening of the project may be on another branch.
+        self.versions.unavailable.clear();
         self.session = None;
         self.session_error = None;
         self.adopted = None;

@@ -528,6 +528,8 @@ str		Last version	最新のバージョン
 str		No description	説明なし
 str		Saved by an agent	エージェントが保存
 str		This version can't be shown	このバージョンは表示できません
+str		It isn't a version of this branch.	このブランチのバージョンではありません。
+str		Made with a newer Archforge.	より新しい Archforge で作成されました。
 str		Why?	理由
 str		Date not known	日付不明
 plural		Versions · {n} change	バージョン · {n} 件の変更

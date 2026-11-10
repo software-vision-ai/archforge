@@ -17,7 +17,7 @@ use crate::explorer::{TreeScroll, scroll_tree};
 use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, button, control, focus_ring};
 use crate::ux::{self, Palette, icons, types};
-use crate::{Shell, VersionEntry, VersionsPage, widgets};
+use crate::{Shell, VersionEntry, VersionRead, VersionsPage, widgets};
 
 /// The versions read at a time.
 const PAGE: usize = 50;
@@ -53,11 +53,11 @@ pub struct State {
     last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
     pub(crate) working: usize,
-    /// Why a version cannot be shown, by its hash; AR-266 fills it in.
-    pub(crate) unavailable: BTreeMap<String, String>,
+    /// The versions that cannot be shown, by hash, with why; none for one of a newer Archforge.
+    pub(crate) unavailable: BTreeMap<String, Option<String>>,
     /// The last version's rows, by its hash; none before the first version.
     base: Option<(Option<String>, Arc<Rows>)>,
-    reading_base: Option<(String, Receiver<Result<Arc<Rows>, String>>)>,
+    reading_base: Option<(String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Compared, Receiver<Result<Vec<Difference>, String>>)>,
     /// What the changes shown are of, and why they could not be told.
     pub(crate) compared: Option<Compared>,
@@ -96,10 +96,14 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     let about = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
     let v = &mut shell.versions;
     if about != v.about {
+        // A version shown moves the session but not what can be shown: a reason holds of a hash.
+        if about.as_ref().map(|a| &a.0) != v.about.as_ref().map(|a| &a.0) {
+            v.unavailable.clear();
+        }
         (v.about, v.page, v.failed, v.reading, v.asked) = (about, None, None, None, false);
         v.scroll = TreeScroll::default();
         // Both were about what the panel has just left.
-        (v.working, v.unavailable, v.changes, v.compare_failed) = (0, BTreeMap::new(), Vec::new(), None);
+        (v.working, v.changes, v.compare_failed) = (0, Vec::new(), None);
         (v.base, v.reading_base, v.comparing, v.compared) = (None, None, None, None);
         (v.filter, v.changes_scroll) = (String::new(), TreeScroll::default());
         (v.more_reading, v.more_failed, v.selected, v.described_only, v.last_unsure) = (None, None, None, false, false);
@@ -200,7 +204,7 @@ fn take_change_answers(shell: &mut Shell) {
         let answer = match rx.try_recv() {
             Err(TryRecvError::Empty) => None,
             Ok(answer) => Some(answer),
-            Err(TryRecvError::Disconnected) => Some(Err("the read stopped without an answer".to_string())),
+            Err(TryRecvError::Disconnected) => Some(Err("the read stopped without an answer".to_string().into())),
         };
         let hash = hash.clone();
         match answer {
@@ -211,7 +215,7 @@ fn take_change_answers(shell: &mut Shell) {
                 shell.versions.reading_base = None;
                 // Only of the version the changes are counted against.
                 if last_known(&shell.versions) && last_version(&shell.versions).as_ref() == Some(&hash) {
-                    settle_changes(shell, (Some(hash), revision), Err(why));
+                    settle_changes(shell, (Some(hash), revision), Err(why.to_string()));
                 }
             }
         }
@@ -663,18 +667,20 @@ pub(crate) fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
 }
 
 /// One version at `y`: its two lines, or for one that cannot be shown that it cannot, with its
-/// reason behind "Why?", a warning at the right, and the reason in what a screen reader says.
+/// reason behind "Why?", a warning at the right, and the reason in what a screen reader says; one
+/// of a newer Archforge says that and its date, as no reason would add to it.
 fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &VersionEntry, clock: Clock) {
     let area = Rect::from_min_max(pos2(r.left() + 8.0, y), pos2(r.right() - 8.0, y + ROW));
     let why = shell.versions.unavailable.get(&v.hash).cloned();
     let (title, meta) = match &why {
-        Some(_) => {
+        Some(Some(_)) => {
             (tr("This version can't be shown"), fmt(&tr("{when} · {who}"), &[("when", &when(&v.date, clock)), ("who", "")]).trim_end().to_string())
         }
+        Some(None) => (tr("Made with a newer Archforge."), when(&v.date, clock)),
         None => lines(v, clock),
     };
     let room = (area.width() - 20.0 - if why.is_some() { 26.0 } else { 0.0 }).max(0.0);
-    let name = why.as_ref().map_or_else(|| format!("{title}, {meta}"), |why| format!("{title}, {meta} {why}"));
+    let name = why.as_ref().and_then(Option::as_ref).map_or_else(|| format!("{title}, {meta}"), |why| format!("{title}, {meta} {why}"));
     let id = format!("workspace.versions.row.{}", v.hash);
     let selected = shell.versions.selected.as_deref() == Some(v.hash.as_str());
     let name = if selected { fmt(&tr("{name}, selected"), &[("name", &name)]) } else { name };
@@ -701,6 +707,7 @@ fn row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (r, y): (Rect, f32), v: &V
     paint.galley(pos2(area.left() + 10.0, y + 25.0), g, p.text_muted);
     let Some(why) = why else { return };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.right() - 18.0, area.center().y), Vec2::splat(14.0)), &icons::WARNING, p.text_secondary);
+    let Some(why) = why else { return };
     let word = tr("Why?");
     let g = ux::galley(paint, &word, types::CAPTION, p.text_secondary, None);
     let hit = Rect::from_min_size(after + vec2(4.0, 0.0), g.size());

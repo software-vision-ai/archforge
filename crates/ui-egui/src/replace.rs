@@ -15,7 +15,7 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
 use crate::leaving::{Cleared, Leaving};
-use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
+use crate::{BranchSwitch, SavedBy, Shell, VersionRead, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
@@ -68,7 +68,7 @@ enum Stage {
 /// A replacement under way.
 pub(crate) struct Replacing {
     stage: Stage,
-    read: Receiver<Result<Arc<Rows>, String>>,
+    read: Receiver<VersionRead>,
     job: Option<Job>,
     read_back: Option<Box<dyn FnOnce() -> ReadBack>>,
     /// Whether the job has written, after which the operation can no longer simply stop.
@@ -140,7 +140,7 @@ impl Shell {
     /// Holds the project and starts replacing its session with the model `read` answers, running
     /// `job` once it is built. What happens is driven frame by frame; a Chat turn running is settled
     /// by the hold without a question, as its receiver and job can't be replayed after one.
-    pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
+    pub fn begin_replacement(&mut self, read: Receiver<VersionRead>, job: Option<Job>) -> Result<(), HoldRefused> {
         let cleared = self.clear_to_leave(None)?;
         self.begin_hold()?;
         self.start_replacing(read, job, None, cleared);
@@ -150,18 +150,13 @@ impl Shell {
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside. Without it the project's versions or branch
     /// may change, even if this later fails, so the steps between versions read them afresh and
-    /// the versions kept for viewing go. `_cleared` is the proof that [`Self::clear_to_leave`] let
-    /// it through.
-    pub(crate) fn start_replacing(
-        &mut self,
-        read: Receiver<Result<Arc<Rows>, String>>,
-        job: Option<Job>,
-        viewing: Option<String>,
-        _cleared: Cleared,
-    ) {
+    /// the versions kept for viewing and what was found of versions go, as they hold of a branch.
+    /// `_cleared` is the proof that [`Self::clear_to_leave`] let it through.
+    pub(crate) fn start_replacing(&mut self, read: Receiver<VersionRead>, job: Option<Job>, viewing: Option<String>, _cleared: Cleared) {
         if viewing.is_none() {
             self.version_list.steps = Default::default();
             self.loads.clear();
+            self.versions.unavailable.clear();
         }
         self.replacing = Some(Replacing {
             stage: Stage::Chat,
@@ -223,13 +218,19 @@ impl Shell {
                 Err(TryRecvError::Disconnected) => {
                     return self.give_up(Some(r.stopped(tr("The reading stopped without an answer, so nothing was changed."))));
                 }
-                Ok(Err(why)) => return self.give_up(Some(why)),
+                Ok(Err(why)) => return self.give_up(Some(why.to_string())),
                 Ok(Ok(rows)) => match self.build(&rows) {
                     Ok(session) => {
                         r.repaired = r.viewing.is_none() && differs_from(&session, &rows);
                         Stage::Ready(Box::new(session), None)
                     }
-                    Err(why) => return self.give_up(Some(why)),
+                    Err(why) => {
+                        // Rows that cannot be built never will be: the row says so.
+                        if let Some(commit) = r.viewing.take() {
+                            self.versions.unavailable.insert(commit, Some(why.clone()));
+                        }
+                        return self.give_up(Some(why));
+                    }
                 },
             },
             Stage::Ready(session, since) => {
