@@ -225,9 +225,8 @@ impl Shell {
                         Stage::Ready(Box::new(session), None)
                     }
                     Err(why) => {
-                        // Rows that cannot be built never will be: the row says so.
                         if let Some(commit) = r.viewing.take() {
-                            self.versions.unavailable.insert(commit, Some(why.clone()));
+                            self.mark_unbuilt(commit, &why);
                         }
                         return self.give_up(Some(why));
                     }

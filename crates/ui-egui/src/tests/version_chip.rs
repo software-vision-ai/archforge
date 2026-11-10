@@ -1780,6 +1780,27 @@ fn an_entry_that_fails_for_good_marks_the_row() {
     });
 }
 
+/// A host that gives no ids says nothing of a version's rows: entering or stepping still fails
+/// and says why, and no row is marked.
+#[test]
+fn a_host_without_ids_marks_no_row() {
+    in_both(|mut h, host| {
+        let _ = stepping(&mut h, &host);
+        h.state_mut().services.ids = None;
+        step_to(&mut h, "x");
+        answer_read(&mut h, &host, Ok(Default::default()));
+        assert!(h.state().canvas.notice.is_some(), "the step says why");
+        h.state_mut().back_to_current_work();
+        h.run_steps(2);
+        crate::version_chip::view(h.state_mut(), "y".into(), "8 Nov".into());
+        h.run_steps(3);
+        answer_read(&mut h, &host, Ok(Default::default()));
+        h.run_steps(3);
+        assert_eq!(h.state().viewing(), None);
+        assert!(h.state().versions.unavailable.is_empty());
+    });
+}
+
 /// What is known of a version ends with the workspace and with a restore or a branch switch, as
 /// it holds of a branch; entering a version touches neither.
 #[test]

@@ -210,6 +210,14 @@ impl Shell {
         }
     }
 
+    /// Notes on the row of `commit` that its rows cannot be built, which holds of them whoever
+    /// asks. A host that gives no ids says nothing of the rows, so that marks nothing.
+    pub(crate) fn mark_unbuilt(&mut self, commit: String, why: &str) {
+        if self.services.ids.is_some() {
+            self.versions.unavailable.insert(commit, Some(why.to_string()));
+        }
+    }
+
     /// Hands `answer` to what asked for the newest version. A step that failed stays on the version
     /// in view and says why in the toast above the toolbar; one that cannot be built cannot ever
     /// be, so its row says so.
@@ -221,7 +229,7 @@ impl Shell {
             (Then::Step(_), Err(why)) => self.canvas.say_refused_step(Some(why.to_string())),
             (Then::Step(label), Ok(rows)) => {
                 if let Err(why) = self.show_step(&rows, commit.clone(), label) {
-                    self.versions.unavailable.insert(commit, Some(why.clone()));
+                    self.mark_unbuilt(commit, &why);
                     self.canvas.say_refused_step(Some(why));
                 }
             }
