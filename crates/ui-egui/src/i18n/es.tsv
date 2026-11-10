@@ -493,6 +493,8 @@ str		Added	Añadido
 str		Changed	Cambiado
 str		Removed	Eliminado
 str		The changes couldn't be compared.	No se pudieron comparar los cambios.
+str		Changed items	Elementos modificados
+plural		{n} changed item	{n} elemento modificado|{n} elementos modificados
 str		View this version	Ver esta versión
 str		First version: there is nothing earlier to compare it with.	Primera versión: no hay nada anterior con que compararla.
 str		All	Todas
@@ -531,6 +533,7 @@ str		Grid	Cuadrícula
 str		Arrange diagram	Ordenar el diagrama
 str		Move cardinality	Mover la cardinalidad
 str		Settings	Ajustes
+str		Settings…	Ajustes…
 str		About Archforge	Acerca de Archforge
 str		About Archforge…	Acerca de Archforge…
 str		Free and open source modelling of software systems.	Modelado libre y de código abierto de sistemas de software.
@@ -743,6 +746,7 @@ str		What’s new	Novedades
 str		Start something	Empezar algo
 str		Choose a starting point. You can change direction at any time.	Elija un punto de partida. Puede cambiar de rumbo en cualquier momento.
 str		New project	Nuevo proyecto
+str		New project…	Nuevo proyecto…
 str		A clean start for your next idea.	Un comienzo limpio para su próxima idea.
 str		Create project	Crear proyecto
 # Diálogo Nuevo proyecto

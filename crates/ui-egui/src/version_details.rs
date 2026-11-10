@@ -1,26 +1,64 @@
 //! A version's details in the centre (frame V2.2 of page 09 of the design and sections 4 and 10 of
-//! `docs/design/versioning.md`): what it is, when and by whom, and the way to view it. Changed items
-//! and the version before come with AR-354; Compare and Restore join the actions when they can be
-//! carried out from here.
+//! `docs/design/versioning.md`): what it is, when and by whom, the way to view it and what
+//! changed since the version before. Compare and Restore join the actions when they can be carried
+//! out from here.
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use egui::{Rect, pos2, vec2};
+use archforge_mof::rows::Rows;
+use archforge_notations::differences::{Area, Difference, classified};
+use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
-use crate::i18n::tr;
+use crate::explorer::{TreeScroll, scroll_tree};
+use crate::i18n::{tr, trn};
 use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
-use crate::versions::lines;
+use crate::versions::{change_row, lines};
 use crate::{Shell, VersionEntry};
 
 const MARGIN: f32 = 32.0;
 const BAND: f32 = 72.0;
+/// A changed item's card, the distance between cards, and the room kept under them.
+const CARD: f32 = 52.0;
+const PITCH: f32 = 60.0;
+const BELOW_CARDS: f32 = 64.0;
+/// The bars a read in progress shows in place of the cards.
+const SKELETON_CARDS: usize = 3;
 
-/// The details shown: of one version, for the project and session it was chosen in.
+/// What a comparison of two versions found, or why it could not tell.
+type Found = Result<Arc<Vec<Difference>>, String>;
+
+/// What changed since the version before: on its way, then known.
+struct Comparison {
+    /// The version compared with, which the answer has to be about.
+    before: String,
+    found: Option<Found>,
+}
+
+/// The comparison under way. A version's two models cannot be called back once asked for, so one
+/// runs at a time however quickly rows are clicked: the next starts for the details shown by then.
+pub(crate) struct Running {
+    about: (PathBuf, u64),
+    /// The versions compared, the earlier first.
+    pair: (String, String),
+    answer: Receiver<Found>,
+}
+
+/// The details shown: of one version, for the project and session they were read in.
 pub struct Details {
     about: (PathBuf, u64),
     entry: VersionEntry,
+    /// None for the first version.
+    comparison: Option<Comparison>,
+    scroll: TreeScroll,
+}
+
+/// What the person is told when a comparison failed, and the reason when none is known.
+fn not_compared() -> String {
+    tr("The changes couldn't be compared.")
 }
 
 /// The project and session shown.
@@ -28,17 +66,70 @@ fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }
 
-/// Selects `entry` and opens its details in place of any shown.
-pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
-    shell.versions.selected = Some(entry.hash.clone());
-    shell.versions.details = about(shell).map(|about| Details { about, entry });
+/// Compares the two versions' models off the interface thread once both have been read. Answers
+/// why when either could not be read or compared; a dropped answer ends with nobody listening.
+fn compare(before: Receiver<Result<Arc<Rows>, String>>, after: Receiver<Result<Arc<Rows>, String>>) -> Receiver<Found> {
+    let (tx, rx) = channel();
+    let work = move || {
+        // A side read without an answer drops `tx`, which the taker reads as a failed comparison.
+        let (Ok(old), Ok(new)) = (before.recv(), after.recv()) else { return };
+        let found = old.and_then(|old| classified(&old, &*new?, crate::editing::fit_tables).map_err(|e| e.to_string()));
+        // The model's root is no change of its own; model elements come before diagrams.
+        let _ = tx.send(found.map(|mut items| {
+            items.retain(|d| d.class != archforge_core::MODEL);
+            items.sort_by_key(|d| d.area == Area::Diagram);
+            Arc::new(items)
+        }));
+    };
+    // A thread that cannot start drops `tx` too.
+    if let Err(e) = std::thread::Builder::new().name("archforge-version-details".into()).spawn(work) {
+        log::warn!("the version's changes could not be compared: {e}");
+    }
+    rx
 }
 
-/// Once a frame: details of another project or session close.
-pub(crate) fn keep(shell: &mut Shell) {
+/// Selects `entry` and opens its details; [`keep`] compares it with the version before when no
+/// other comparison is running. Without a host it is only selected.
+pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
+    shell.versions.selected = Some(entry.hash.clone());
+    let Some(about) = about(shell).filter(|_| shell.services.projects.is_some()) else { return };
+    let comparison = entry.previous.clone().map(|before| Comparison { before, found: None });
+    shell.versions.details = Some(Details { about, entry, comparison, scroll: TreeScroll::default() });
+}
+
+/// Once a frame: what belongs to another project or session is let go, the answer that has come
+/// is taken, the details shown get their comparison when none runs, and an answer still awaited
+/// wakes the window. An answer lands only on the two versions it compared.
+pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     let about = about(shell);
-    if shell.versions.details.as_ref().is_some_and(|d| Some(&d.about) != about.as_ref()) {
-        shell.versions.details = None;
+    let host = shell.services.projects.clone();
+    let v = &mut shell.versions;
+    if v.details.as_ref().is_some_and(|d| Some(&d.about) != about.as_ref()) {
+        v.details = None;
+    }
+    if v.details_comparing.as_ref().is_some_and(|c| Some(&c.about) != about.as_ref()) {
+        v.details_comparing = None;
+    }
+    let answered = v.details_comparing.as_ref().and_then(|c| match c.answer.try_recv() {
+        Err(TryRecvError::Empty) => None,
+        Err(TryRecvError::Disconnected) => Some((c.pair.clone(), Err(not_compared()))),
+        Ok(found) => Some((c.pair.clone(), found)),
+    });
+    if answered.is_some() {
+        v.details_comparing = None;
+    }
+    let Some(d) = v.details.as_mut() else { return };
+    let Some(c) = d.comparison.as_mut() else { return };
+    let pair = (c.before.clone(), d.entry.hash.clone());
+    if let Some((_, found)) = answered.filter(|(compared, _)| *compared == pair) {
+        c.found = Some(found);
+    }
+    if let (true, None, Some(host), Some(about)) = (c.found.is_none(), &v.details_comparing, host, about) {
+        let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
+        v.details_comparing = Some(Running { about, pair, answer: compare(old, new) });
+    }
+    if c.found.is_none() {
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 }
 
@@ -81,12 +172,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     }
     y += 45.0;
     ui.painter().rect_filled(Rect::from_min_size(pos2(left, y), vec2(width, 1.0)), 0.0, p.border);
-    if entry.previous.is_none() {
-        let card = Rect::from_min_size(pos2(left, y + 22.0), vec2(width, 52.0));
-        ui.painter().rect_filled(card, 8.0, p.surface);
-        let words = tr("First version: there is nothing earlier to compare it with.");
-        ux::text_mid(ui.painter(), left + 12.0, card.center().y, &words, types::UI, p.text, Some((width - 24.0).max(0.0)));
-    }
+    y += 22.0;
+    changes(shell, ui, p, r, y);
     true
 }
 
@@ -105,5 +192,66 @@ fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     paint.rect_filled(Rect::from_min_size(pos2(r.left(), r.top() + BAND - 1.0), vec2(r.width(), 1.0)), 0.0, p.border);
     if resp.clicked() {
         shell.versions.details = None;
+    }
+}
+
+/// The changed items from `y`, or why they are not there: the first version has none, a comparison
+/// under way shows bars, and one that failed says so beside Retry, never as no changes.
+fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
+    let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
+    let Some(found) = shell.versions.details.as_ref().and_then(|d| d.comparison.as_ref()).map(|c| c.found.clone()) else {
+        let card = Rect::from_min_size(pos2(left, y), vec2(width, CARD));
+        ui.painter().rect_filled(card, 8.0, p.surface);
+        ux::text_mid(
+            ui.painter(),
+            left + 12.0,
+            card.center().y,
+            &tr("First version: there is nothing earlier to compare it with."),
+            types::UI,
+            p.text,
+            Some((width - 24.0).max(0.0)),
+        );
+        return;
+    };
+    ux::text(ui.painter(), pos2(left, y), &tr("Changed items").to_uppercase(), types::EYEBROW, p.text_secondary, None);
+    if let Some(Ok(items)) = &found {
+        let g = ux::galley(ui.painter(), &trn("{n} changed item", "{n} changed items", items.len() as u64), types::CAPTION, p.text_secondary, None);
+        ui.painter().galley(pos2(r.right() - MARGIN - g.size().x, y), g, p.text_secondary);
+    }
+    let top = y + 25.0;
+    if let Some(Err(why)) = &found {
+        let words = not_compared();
+        let at = Rect::from_min_size(pos2(left, top), vec2((width - 80.0).max(0.0), 28.0));
+        let _ = control(shell, ui, "workspace.version-details.failed", "status", at, false).on_hover_text(why.as_str()).accessible_name(&words);
+        ux::text_mid(ui.painter(), left, at.center().y, &words, types::SMALL, p.danger, Some(at.width()));
+        if button(shell, ui, p, "workspace.version-details.retry", pos2(at.right() + 8.0, top), &tr("Retry"), Look::Secondary, true, None).1.clicked()
+            && let Some(entry) = shell.versions.details.as_ref().map(|d| d.entry.clone())
+        {
+            open(shell, entry);
+        }
+        return;
+    }
+    let Some(Ok(items)) = found else {
+        let area = Rect::from_min_size(pos2(left, top), vec2(width, SKELETON_CARDS as f32 * PITCH));
+        let _ = control(shell, ui, "workspace.version-details.loading", "status", area, false).accessible_name(tr("Loading"));
+        for i in 0..SKELETON_CARDS {
+            ui.painter().rect_filled(Rect::from_min_size(pos2(left, top + i as f32 * PITCH), vec2(width, CARD)), 8.0, p.border);
+        }
+        return;
+    };
+    // A little more than the cards: `scroll_tree` keeps that much of the area clear of a list that fits.
+    let height = (items.len() as f32 * PITCH + 8.0).min(r.bottom() - BELOW_CARDS - top).max(PITCH);
+    let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
+    let Some(d) = shell.versions.details.as_mut() else { return };
+    let offset = scroll_tree(ui, p, tree, top, items.len(), PITCH, 0.0, true, None, &mut d.scroll);
+    let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
+    clip.set_clip_rect(tree);
+    for (i, item) in items.iter().enumerate() {
+        let card = Rect::from_min_size(pos2(left, top + i as f32 * PITCH - offset), vec2(width, CARD));
+        if card.intersects(tree) {
+            clip.painter().rect_filled(card, 8.0, p.surface);
+            clip.painter().rect_stroke(card, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+            change_row(shell, &clip, p, card, &format!("workspace.version-details.change.{}", item.id), item);
+        }
     }
 }

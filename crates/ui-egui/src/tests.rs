@@ -18789,6 +18789,35 @@ fn the_removal_toast_keeps_clear_of_the_minimap_at_every_width_and_its_undo_stil
     assert_eq!(tables(&h), before, "Undo took the table back");
 }
 
+/// New project from the native menu, with a project open: the dialog draws over the workspace,
+/// and with nothing in it holding the keyboard no key reaches what is behind it.
+#[test]
+fn new_project_over_the_workspace_keeps_the_keys_from_it() {
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[0].id)).center();
+        click(&mut h, at);
+        h.state_mut().explorer.focused = true;
+        let revision = h.state().session.as_ref().unwrap().revision();
+        crate::actions::run(h.state_mut(), crate::actions::NEW);
+        h.run();
+        assert!(has_id(&h, "new-project.name"), "{theme:?}: the dialog shows");
+        // The keyboard off the dialog's field, so only the hold keeps the keys from what is behind.
+        h.ctx.memory_mut(|m| m.focused().into_iter().for_each(|id| m.surrender_focus(id)));
+        for (k, m) in
+            [(egui::Key::Delete, egui::Modifiers::NONE), (egui::Key::Backspace, egui::Modifiers::NONE), (egui::Key::Z, egui::Modifiers::COMMAND)]
+        {
+            key(&mut h, k, m);
+            assert!(h.state().new_project.is_some() && h.state().explorer.delete.is_none(), "{theme:?}: {k:?} goes nowhere");
+            assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: {k:?} did nothing");
+        }
+    });
+}
+
 #[test]
 fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behind_it() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));

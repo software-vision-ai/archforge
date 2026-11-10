@@ -1769,8 +1769,8 @@ impl Shell {
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
-        // Cmd+S (Ctrl+S) saves the open project and Cmd+O (Ctrl+O) opens one; on macOS the menu
-        // bar takes both first.
+        // The table's keys, while each action is available; on macOS the menu bar takes an enabled
+        // item's keys first.
         let now = ctx.input(|i| i.time);
         actions::run_shortcuts(self, ctx);
         // A skill's text is kept once its typing pauses, and all of it before quitting.
@@ -1815,10 +1815,9 @@ impl Shell {
     }
 
     /// Draws the window: the workspace when a project is open, otherwise Home, and the New project
-    /// dialog over Home while it is open.
+    /// dialog over either while it is open.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
-        settings::shortcut(self, ui.ctx());
         // Escape closes About before the window behind it is drawn, so no editor there reads it.
         support::dismiss_key(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
@@ -1828,10 +1827,11 @@ impl Shell {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.last_title = title;
         }
-        // While About, Settings or Save version is over the window, the one behind takes no keys: its tree,
-        // canvas and editors read keys directly, so the frame's keys are held back while it is
-        // drawn and given back for the dialogs.
-        let held = if self.about.is_some() || self.settings.is_some() || self.versions.dialog.is_some() { hold_keys(ui.ctx()) } else { Vec::new() };
+        // While About, Settings, New project or Save version is over the window, the one behind takes no
+        // keys: its tree, canvas and editors read keys directly, so the frame's keys are held back
+        // while it is drawn and given back for the dialogs.
+        let dialog = self.about.is_some() || self.settings.is_some() || self.new_project.is_some() || self.versions.dialog.is_some();
+        let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);
         } else {

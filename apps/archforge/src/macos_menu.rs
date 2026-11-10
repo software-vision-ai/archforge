@@ -1,6 +1,7 @@
-//! The native menu bar on macOS: the application menu (About Archforge…, Hide and Quit) and File
-//! (Open…, Save and Generate…, each enabled while it can act). Choosing an item wakes the window, so
-//! it acts with the pointer and keyboard still. When it cannot be built, the window works without it.
+//! The native menu bar on macOS, built from the table of actions: the application menu (with the
+//! system's Hide) and File, in the design's order. Each item is enabled while its action can
+//! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
+//! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
 
 use std::str::FromStr;
@@ -10,38 +11,66 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, GENERATE, OPEN, QUIT, SAVE};
+use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, SAVE, SETTINGS};
 use archforge_ui_egui::i18n::tr;
+
+/// A run of actions, set apart from the next by a separator.
+type Group = &'static [&'static str];
+
+const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
+const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
 
 pub struct NativeMenu {
     _menu: Menu,
     chosen: Receiver<MenuEvent>,
-    open: MenuItem,
-    save: MenuItem,
-    generate: MenuItem,
+    /// Every item, by the action it runs.
+    items: Vec<(&'static str, MenuItem)>,
+}
+
+/// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
+fn accelerator(keys: &Keys) -> Option<Accelerator> {
+    let shift = if keys.modifiers.shift { "Shift+" } else { "" };
+    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.name())).ok()
+}
+
+/// The table's item for action `id`, off until the first frame asks; recorded in `items`.
+fn item(shell: &Shell, id: &'static str, items: &mut Vec<(&'static str, MenuItem)>) -> MenuItem {
+    let new = MenuItem::with_id(id, actions::label(shell, id), false, actions::keys(id).and_then(accelerator));
+    items.push((id, new.clone()));
+    new
+}
+
+/// Appends `groups` to `menu`, with a separator between groups.
+fn append_groups(shell: &Shell, menu: &Submenu, groups: &[Group], items: &mut Vec<(&'static str, MenuItem)>) -> Result<(), muda::Error> {
+    for (n, group) in groups.iter().enumerate() {
+        if n > 0 {
+            menu.append(&PredefinedMenuItem::separator())?;
+        }
+        for id in *group {
+            menu.append(&item(shell, id, items))?;
+        }
+    }
+    Ok(())
 }
 
 /// Builds the menu bar and installs it for the application; `ctx` is the window a chosen item wakes.
 pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
+    let mut items = Vec::new();
     let app = Submenu::new("Archforge", true);
-    let quit = MenuItem::with_id(QUIT, actions::label(shell, QUIT), true, Accelerator::from_str("CmdOrCtrl+Q").ok());
-    let about = MenuItem::with_id(ABOUT, actions::label(shell, ABOUT), true, None);
-    app.append_items(&[&about, &PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])
-        .map_err(err)?;
+    append_groups(shell, &app, &APP, &mut items).map_err(err)?;
+    let quit = item(shell, QUIT, &mut items);
+    app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
     let file = Submenu::new(tr("File"), true);
-    let open = MenuItem::with_id(OPEN, actions::label(shell, OPEN), false, Accelerator::from_str("CmdOrCtrl+O").ok());
-    let save = MenuItem::with_id(SAVE, actions::label(shell, SAVE), false, Accelerator::from_str("CmdOrCtrl+S").ok());
-    let generate = MenuItem::with_id(GENERATE, actions::label(shell, GENERATE), false, Accelerator::from_str("CmdOrCtrl+Shift+G").ok());
-    file.append_items(&[&open, &PredefinedMenuItem::separator(), &save, &PredefinedMenuItem::separator(), &generate]).map_err(err)?;
+    append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
     menu.append_items(&[&app, &file]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
     menu.init_for_nsapp();
-    Ok(NativeMenu { _menu: menu, chosen, open, save, generate })
+    Ok(NativeMenu { _menu: menu, chosen, items })
 }
 
 /// What the menu bar calls for each chosen item: queues it for the next frame and wakes the window,
@@ -66,9 +95,9 @@ impl NativeMenu {
     /// Runs the items chosen since the last frame, then enables each for what the shell can do now.
     pub fn frame(&self, shell: &mut Shell) {
         run_chosen(&self.chosen, shell);
-        self.open.set_enabled(actions::available(shell, OPEN));
-        self.save.set_enabled(actions::available(shell, SAVE));
-        self.generate.set_enabled(actions::available(shell, GENERATE));
+        for (id, item) in &self.items {
+            item.set_enabled(actions::available(shell, id));
+        }
     }
 }
 
@@ -85,7 +114,7 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    const ITEMS: [&str; 5] = [ABOUT, QUIT, OPEN, SAVE, GENERATE];
+    const ITEMS: [&str; 8] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -138,6 +167,34 @@ mod tests {
         let (sender, chosen) = channel();
         forward(sender, egui::Context::default())(event(item));
         run_chosen(&chosen, shell);
+    }
+
+    /// The menus hold every item the table should give them, each with a name, and with the keys of
+    /// the design's map.
+    #[test]
+    fn the_menus_are_the_tables_with_the_designs_keys() {
+        let (shell, ..) = shell_with_project();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..]].concat().concat();
+        let mut sorted_items = ITEMS.to_vec();
+        sorted_items.sort_unstable();
+        let mut sorted = listed.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, sorted_items);
+        let keyed = [
+            (SETTINGS, Some("CmdOrCtrl+Comma")),
+            (QUIT, Some("CmdOrCtrl+Q")),
+            (OPEN, Some("CmdOrCtrl+O")),
+            (SAVE, Some("CmdOrCtrl+S")),
+            (GENERATE, Some("CmdOrCtrl+Shift+G")),
+            (ABOUT, None),
+            (NEW, None),
+            (CLOSE, None),
+        ];
+        for (id, wanted) in keyed {
+            assert!(!actions::label(&shell, id).is_empty(), "{id}");
+            let keys = actions::keys(id).and_then(accelerator);
+            assert_eq!(keys, wanted.map(|w| Accelerator::from_str(w).unwrap()), "{id}");
+        }
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read

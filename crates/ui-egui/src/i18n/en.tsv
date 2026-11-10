@@ -492,6 +492,8 @@ str		Added	Added
 str		Changed	Changed
 str		Removed	Removed
 str		The changes couldn't be compared.	The changes couldn't be compared.
+str		Changed items	Changed items
+plural		{n} changed item	{n} changed item|{n} changed items
 str		View this version	View this version
 str		First version: there is nothing earlier to compare it with.	First version: there is nothing earlier to compare it with.
 str		All	All
@@ -530,6 +532,7 @@ str		Grid	Grid
 str		Arrange diagram	Arrange diagram
 str		Move cardinality	Move cardinality
 str		Settings	Settings
+str		Settings…	Settings…
 str		About Archforge	About Archforge
 str		About Archforge…	About Archforge…
 str		Free and open source modelling of software systems.	Free and open source modelling of software systems.
@@ -742,6 +745,7 @@ str		What’s new	What’s new
 str		Start something	Start something
 str		Choose a starting point. You can change direction at any time.	Choose a starting point. You can change direction at any time.
 str		New project	New project
+str		New project…	New project…
 str		A clean start for your next idea.	A clean start for your next idea.
 str		Create project	Create project
 # New project dialog

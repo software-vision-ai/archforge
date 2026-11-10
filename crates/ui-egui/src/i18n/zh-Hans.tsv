@@ -493,6 +493,8 @@ str		Added	已添加
 str		Changed	已更改
 str		Removed	已移除
 str		The changes couldn't be compared.	无法比较这些更改。
+str		Changed items	已更改的项目
+plural		{n} changed item	{n} 个已更改的项目
 str		View this version	查看此版本
 str		First version: there is nothing earlier to compare it with.	第一个版本：没有更早的版本可供比较。
 str		All	全部
@@ -531,6 +533,7 @@ str		Grid	网格
 str		Arrange diagram	整理图
 str		Move cardinality	移动基数
 str		Settings	设置
+str		Settings…	设置…
 str		About Archforge	关于 Archforge
 str		About Archforge…	关于 Archforge…
 str		Free and open source modelling of software systems.	免费开源的软件系统建模工具。
@@ -743,6 +746,7 @@ str		What’s new	新功能
 str		Start something	开始
 str		Choose a starting point. You can change direction at any time.	选择一个起点。你可以随时改变方向。
 str		New project	新建项目
+str		New project…	新建项目…
 str		A clean start for your next idea.	从零开始，实现你的下一个想法。
 str		Create project	创建项目
 # 新建项目对话框

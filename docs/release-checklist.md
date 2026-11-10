@@ -65,10 +65,11 @@ project.
 **File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
 **Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again.
 
-**Expect:** File offers **Open…** (⌘O), **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled while it
-can act: Save and Generate… need an open project, and Save is disabled while a save runs. Each dialog
-opens within a second of choosing it, with the pointer still. While About is open, Open… and
-Generate… are disabled.
+**Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
+**New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
+while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
+save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog
+is up, every File item is disabled.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.

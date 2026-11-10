@@ -76,6 +76,8 @@ pub struct State {
     pub(crate) dialog: Option<crate::save_version::Dialog>,
     /// The version whose details the centre shows.
     pub(crate) details: Option<crate::version_details::Details>,
+    /// The one comparison of two versions the details have under way.
+    pub(crate) details_comparing: Option<crate::version_details::Running>,
     pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
@@ -412,7 +414,8 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         clip.painter().galley(pos2(r.right() - 16.0 - g.size().x, at), g, p.text_muted);
         at += GROUP;
         for d in group {
-            change_row(shell, &clip, p, r, at, d);
+            let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
+            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}", d.id), d);
             at += CHANGE_PITCH;
         }
     }
@@ -441,12 +444,12 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let _ = ui.put(inner, edit).accessible_name(words);
 }
 
-/// One change at `y`: its name, where it is, and a letter for what happened to it.
-fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, d: &Difference) {
-    if y + CHANGE < ui.clip_rect().top() || y > ui.clip_rect().bottom() {
+/// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
+/// to it. Nothing out of sight is drawn or registered.
+pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Rect, id: &str, d: &Difference) {
+    if !area.intersects(ui.clip_rect()) {
         return;
     }
-    let area = Rect::from_min_max(pos2(r.left() + 8.0, y), pos2(r.right() - 8.0, y + CHANGE));
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
     let (what, ink, tint) = match d.kind {
         ChangeKind::Added => (tr("Added"), p.green, p.green_tint),
@@ -454,13 +457,14 @@ fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, d:
         ChangeKind::Removed => (tr("Removed"), p.danger, p.danger_tint),
     };
     let path = d.path.join(" / ");
-    let _ = control(shell, ui, &format!("workspace.versions.change.{}", d.id), "row", area, false).accessible_name(format!("{name}, {path}, {what}"));
+    let _ = control(shell, ui, id, "row", area, false).accessible_name(format!("{name}, {path}, {what}"));
     let paint = ui.painter();
     let room = (area.width() - 76.0).max(0.0);
     let icon = if d.area == Area::Diagram { &icons::DIAGRAM } else { &icons::CUBE };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 20.0, area.center().y), Vec2::splat(16.0)), icon, p.text_secondary);
-    ux::text(paint, pos2(area.left() + 38.0, y + 5.0), &name, types::UI, p.text, Some(room));
-    ux::text(paint, pos2(area.left() + 38.0, y + 23.0), &path, types::CAPTION, p.text_muted, Some(room));
+    let mid = area.center().y;
+    ux::text(paint, pos2(area.left() + 38.0, mid - 17.0), &name, types::UI, p.text, Some(room));
+    ux::text(paint, pos2(area.left() + 38.0, mid + 1.0), &path, types::CAPTION, p.text_muted, Some(room));
     let letter = what.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
     let mark = Rect::from_center_size(pos2(area.right() - 20.0, area.center().y), Vec2::splat(20.0));
     paint.rect_filled(mark, 5.0, tint);
