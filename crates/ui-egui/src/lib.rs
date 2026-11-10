@@ -1792,6 +1792,7 @@ impl Shell {
         // The table's keys, while each action is available; on macOS the menu bar takes an enabled
         // item's keys first.
         let now = ctx.input(|i| i.time);
+        version_details::compare::keep(self);
         // An open menu or select list holds the keys, as a native one does.
         if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
             actions::run_shortcuts(self, ctx);

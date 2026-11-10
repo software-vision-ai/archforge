@@ -145,10 +145,10 @@ pub(crate) fn highlight(shell: &Shell) -> Option<usize> {
     Some(dropdown_of(shell)?.highlight)
 }
 
-/// Once a frame: a list closes when the page leaves the centre or a dialog covers it, as one
-/// nobody can see must not go on taking the keys.
-pub(super) fn keep(shell: &mut Shell) {
-    if (shell.state.explorer != Explorer::SourceControl || crate::version_chip::dialog_open(shell))
+/// Once a frame, before any key is read and on Home too: a list closes when the project or the
+/// page leaves the centre or a dialog covers it, as one nobody can see must not go on taking the keys.
+pub(crate) fn keep(shell: &mut Shell) {
+    if (shell.project.is_none() || shell.state.explorer != Explorer::SourceControl || crate::version_chip::dialog_open(shell))
         && let Some(pair) = pair_mut(shell)
     {
         pair.dropdown = None;

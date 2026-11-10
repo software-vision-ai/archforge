@@ -1192,6 +1192,13 @@ fn the_keyboard_moves_picks_closes_and_keeps_the_keys() {
         assert!(!focused_on(h, SELECT_BEFORE), "closed, Tab moves on again");
         press(h, F10);
         assert!(h.state().menu_bar.open.is_some(), "and the bar's key is free again");
+        press(h, Escape);
+        tap(h, SELECT_BEFORE);
+        // Not by a press, which would close the list anyway: the native menu's Close has none.
+        h.state_mut().close_project();
+        frames_until(h, |h| h.state().project.is_none());
+        press(h, F10);
+        assert!(at(h).is_none() && h.state().menu_bar.open.is_some(), "Home gets its keys back");
     });
 }
 
