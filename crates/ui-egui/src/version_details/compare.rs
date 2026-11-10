@@ -61,7 +61,7 @@ pub(super) fn open(shell: &mut Shell) {
 /// this covers the canvas that says it. The details go with the page, so whatever ends them ends it.
 pub(super) fn draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let Some(pair) = shell.versions.details.as_ref().and_then(|d| d.compare.clone()) else { return };
-    if breadcrumb(shell, ui, p, r, "workspace.version-compare.close", &tr("Compare")) {
+    if breadcrumb(shell, ui, p, r, "workspace.version-compare.close", &tr("Compare")).0 {
         shell.versions.details = None;
     }
     let clock = crate::chat_panel::clock(shell);

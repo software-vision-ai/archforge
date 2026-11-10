@@ -516,6 +516,8 @@ str		Show more	さらに表示
 str		None of these versions has a description.	これらのバージョンには説明がありません。
 str		The next versions couldn't be read.	次のバージョンを読み込めませんでした。
 str		{name}, selected	{name}、選択中
+str		Compared with the version of {when}	{when} のバージョンと比較
+str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This element couldn't be compared.	この要素を比較できませんでした。
 str		What changed inside this element isn't shown here yet.	この要素の内部の変更はまだここに表示されません。
 str		No description	説明なし
