@@ -77,7 +77,8 @@ impl Shell {
             Leaving::Restore { commit, saved_at } => self.restore_version(&commit, &saved_at),
             Leaving::Switch(branch) => self.switch_branch(branch),
         };
-        self.canvas.notice = done.err().and_then(|why| version_chip::refused_words(self, why));
+        let words = done.err().and_then(|why| version_chip::refused_words(self, why));
+        self.canvas.say_refused_step(words);
         if done.is_ok() {
             self.versions.details = None;
         }

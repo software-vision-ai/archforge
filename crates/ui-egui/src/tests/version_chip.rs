@@ -1,4 +1,4 @@
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::actions::{self, VERSIONS};
@@ -494,7 +494,7 @@ fn a_failed_read_does_not_read_as_the_end_of_the_history() {
     });
 }
 
-/// A version that cannot be shown says why at the top of the canvas.
+/// A version that cannot be shown says why.
 #[test]
 fn a_refused_view_says_why() {
     in_both(|mut h, _host| {
@@ -1002,6 +1002,196 @@ fn a_refused_description_stops_leaving_before_the_question() {
     });
 }
 
+/// Where the notice stands, the toast's card or the caption.
+const NOTICE: &str = "workspace.canvas.notice";
+
+/// Opens a diagram with its minimap folded, as frame V2.4 has it, and has a step refused over it;
+/// gives the canvas.
+fn refused_over_a_diagram(h: &mut Harness<'static, Shell>, host: &SavingHost) -> egui::Rect {
+    let id = add_diagram(h, "Alpha");
+    show_diagram(h, id);
+    h.state_mut().canvas.minimap_open = false;
+    refused_step(h, host);
+    rect_of(h, "workspace.canvas")
+}
+
+/// The centres of the amber dots the last frame painted within `area`.
+fn amber_dots(h: &Harness<'static, Shell>, area: egui::Rect) -> Vec<egui::Pos2> {
+    /// Adds the centre of every circle filled `amber` under `s` to `out`.
+    fn walk(s: &egui::Shape, amber: egui::Color32, out: &mut Vec<egui::Pos2>) {
+        match s {
+            egui::Shape::Circle(c) if c.fill == amber => out.push(c.center),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, amber, out)),
+            _ => {}
+        }
+    }
+    let amber = crate::ux::palette(h.state().state.theme == ThemeKind::Dark).amber;
+    let mut out = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, amber, &mut out));
+    out.retain(|at| area.contains(*at));
+    out
+}
+
+/// The colour the last frame painted `words` in.
+fn ink_of(h: &Harness<'static, Shell>, words: &str) -> Option<egui::Color32> {
+    /// The colour of the first text under `s` that reads `words`, if any does.
+    fn walk(s: &egui::Shape, words: &str) -> Option<egui::Color32> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == words => Some(t.galley.job.sections[0].format.color),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, words)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, words))
+}
+
+/// Where the last frame painted `words`.
+fn box_of(h: &Harness<'static, Shell>, words: &str) -> egui::Rect {
+    text_boxes(h).into_iter().find(|(t, _)| t == words).map(|(_, r)| r).unwrap_or_else(|| panic!("{:?}", painted(h)))
+}
+
+/// A refused step is frame V2.4's toast: the card centred over the toolbar, the surface colour,
+/// the amber dot, the words in the text colour and read out as a status.
+#[test]
+fn a_refused_step_is_the_toast_over_the_toolbar() {
+    in_both(|mut h, host| {
+        let canvas = refused_over_a_diagram(&mut h, &host);
+        let (card, p) = (rect_of(&h, NOTICE), crate::ux::palette(h.state().state.theme == ThemeKind::Dark));
+        assert_eq!(card.size(), egui::vec2(440.0, 40.0));
+        assert_eq!((card.center().x, card.bottom()), (canvas.center().x, canvas.bottom() - 80.0));
+        assert!(card.bottom() < rect_of(&h, "workspace.tools.arrange").top(), "above the toolbar");
+        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == card && *fill == p.surface), "the card");
+        assert_eq!(amber_dots(&h, card), vec![egui::pos2(card.left() + 17.0, card.center().y)]);
+        let words = box_of(&h, EDITING);
+        assert_eq!((words.left(), ink_of(&h, EDITING)), (card.left() + 30.0, Some(p.text)));
+        assert!(card.contains_rect(words), "{words:?} in {card:?}");
+        let status = h.get_by_label(EDITING);
+        assert_eq!(status.accesskit_node().role(), egui::accesskit::Role::Status);
+        assert_eq!(status.accesskit_node().live(), egui::accesskit::Live::Polite);
+    });
+}
+
+/// The toast stands at one place whatever the centre holds: nothing, a skill or a diagram.
+#[test]
+fn the_toast_stands_at_one_place_whatever_the_centre_holds() {
+    in_both(|mut h, host| {
+        refused_step(&mut h, &host);
+        let empty = rect_of(&h, NOTICE);
+        let root = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Sales" })).unwrap()["id"].clone();
+        let skill = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "subject": root, "name": "Naming", "body": "text" })).unwrap();
+        show_diagram(&mut h, skill["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap());
+        refused_step(&mut h, &host);
+        let over_skill = rect_of(&h, NOTICE);
+        refused_over_a_diagram(&mut h, &host);
+        assert_eq!((empty, over_skill), (rect_of(&h, NOTICE), rect_of(&h, NOTICE)));
+    });
+}
+
+/// A long reason wraps inside the card, which grows upwards from the same foot, and is read whole.
+#[test]
+fn a_long_refused_step_wraps_inside_the_toast() {
+    let long = "This reason takes several rows to say in the toast over the toolbar. ".repeat(4);
+    in_both(|mut h, host| {
+        let canvas = refused_over_a_diagram(&mut h, &host);
+        h.state_mut().canvas.say_refused_step(Some(long.clone()));
+        h.run_steps(2);
+        let (card, words) = (rect_of(&h, NOTICE), box_of(&h, &long));
+        assert!(words.height() > 2.0 * crate::ux::types::SMALL.line && card.contains_rect(words), "{words:?} in {card:?}");
+        assert_eq!((card.width(), card.bottom()), (440.0, canvas.bottom() - 80.0));
+        let status = h.get_by_label(&long);
+        assert_eq!(status.accesskit_node().role(), egui::accesskit::Role::Status);
+        assert_eq!(amber_dots(&h, card), vec![egui::pos2(card.left() + 17.0, words.top() + crate::ux::types::SMALL.line / 2.0)], "on the first row");
+        h.set_size(egui::vec2(h.ctx.content_rect().width(), 340.0));
+        h.run_steps(2);
+        assert_eq!(rect_of(&h, NOTICE).top(), rect_of(&h, "workspace.canvas").top() + 8.0, "kept inside a short canvas");
+    });
+}
+
+/// In a narrower window the toast keeps clear of the minimap and inside the canvas.
+#[test]
+fn the_toast_keeps_clear_of_the_minimap() {
+    in_both(|mut h, host| {
+        let canvas = refused_over_a_diagram(&mut h, &host);
+        h.state_mut().canvas.minimap_open = true;
+        let width = h.ctx.content_rect().width() - canvas.width() + 700.0;
+        h.set_size(egui::vec2(width, 860.0));
+        h.run_steps(2);
+        let (canvas, card) = (rect_of(&h, "workspace.canvas"), rect_of(&h, NOTICE));
+        let minimap = crate::canvas::minimap_box(h.state(), canvas).expect("the minimap shows");
+        assert!(card.right() <= minimap.left() - 16.0 && card.left() >= canvas.left() + 16.0, "{card:?} {minimap:?} {canvas:?}");
+    });
+}
+
+/// A toast with Undo at the same place, on the canvas or for a deleted conversation, stays
+/// readable: the refused step stands above it.
+#[test]
+fn the_toast_stands_above_a_toast_with_undo() {
+    in_both(|mut h, host| {
+        let canvas = refused_over_a_diagram(&mut h, &host);
+        let alone = rect_of(&h, NOTICE);
+        let undo_label = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        h.state_mut().canvas.toast = Some(crate::connect::Toast { text: "Removed".into(), until: u64::MAX, undo_label });
+        h.run_steps(2);
+        assert!(rect_of(&h, NOTICE).bottom() < rect_of(&h, "workspace.toast").top(), "over the canvas's toast");
+        h.state_mut().canvas.toast = None;
+        h.run_steps(2);
+        assert_eq!(rect_of(&h, NOTICE), alone, "and back down when it has gone");
+        let shown = h.state().project.as_ref().unwrap().path.clone();
+        h.state_mut().chats.deletions.push(crate::chat_delete::Deletion {
+            project: std::path::PathBuf::from("/another"),
+            chat: archforge_mof::Uuid([9; 16]),
+            key: "k".into(),
+            origin: "Chat 1".into(),
+            title: "A chat".into(),
+            stage: crate::chat_delete::Stage::Deleted { before: "c1".into() },
+            toast: true,
+            until: None,
+        });
+        h.run_steps(2);
+        assert_eq!(rect_of(&h, NOTICE), alone, "another project's toast is not up here");
+        h.state_mut().chats.deletions[0].project = shown;
+        h.run_steps(2);
+        assert!(rect_of(&h, NOTICE).bottom() < rect_of(&h, "workspace.chat.toast").top(), "over the deleted conversation's toast");
+        assert!(rect_of(&h, NOTICE).top() >= canvas.top());
+        // A deletion still under way with its toast closed keeps its row, and raises nothing.
+        let (_answer, rx) = std::sync::mpsc::channel();
+        let d = &mut h.state_mut().chats.deletions[0];
+        (d.toast, d.stage) = (false, crate::chat_delete::Stage::Deleting { rx });
+        h.run_steps(2);
+        assert_eq!(rect_of(&h, NOTICE), alone, "its toast has gone");
+    });
+}
+
+/// Stop and go on, refused once the question has gone, says why in the toast too.
+#[test]
+fn a_way_out_refused_after_the_question_is_the_toast() {
+    in_both(|mut h, _| {
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        h.state_mut().go_on_leaving(crate::leaving::Leaving::View { commit: "c1".into(), label: None });
+        h.run_steps(2);
+        assert_eq!((rect_of(&h, NOTICE).width(), painted_times(&h, EDITING)), (440.0, 1));
+    });
+}
+
+/// Anything else said after a refused step is the caption it always was, at the top left, and
+/// the same goes once the notice has ended: the toast is only ever the refusal it was raised for.
+#[test]
+fn what_is_said_after_a_refused_step_stays_the_caption() {
+    const SAID: &str = "Already on this diagram";
+    in_both(|mut h, host| {
+        let canvas = refused_over_a_diagram(&mut h, &host);
+        let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+        h.state_mut().canvas.notice = Some(SAID.into());
+        h.run_steps(2);
+        let caption = rect_of(&h, NOTICE);
+        assert_eq!((caption.left(), ink_of(&h, SAID)), (canvas.left() + 16.0, Some(p.amber)));
+        assert!(caption.bottom() < canvas.center().y && amber_dots(&h, canvas).is_empty(), "{caption:?}");
+        h.state_mut().canvas.notice = None;
+        h.run_steps(2);
+        assert!(!has_id(&h, NOTICE) && amber_dots(&h, canvas).is_empty(), "nothing is left of it");
+    });
+}
+
 /// Adds a diagram named `name` of a schema of its own, and gives its id.
 fn add_diagram(h: &mut Harness<'static, Shell>, name: &str) -> archforge_mof::Uuid {
     let schema = crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": name })).unwrap()["id"].clone();
@@ -1309,6 +1499,8 @@ fn a_failed_step_stays_on_the_version_in_view_and_says_why() {
         showing(&h, "v", (false, false));
         dated_as_before(&h);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("not readable"));
+        h.run_steps(1);
+        assert_eq!(rect_of(&h, NOTICE).size(), egui::vec2(440.0, 40.0), "said in the toast");
         assert!(!h.state().loads.waiting() && !h.state().is_held());
         step_to(&mut h, "b");
         assert_eq!(h.state().canvas.notice, None, "the step that goes clears the reason");

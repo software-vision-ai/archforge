@@ -43,6 +43,13 @@ const MINIMAP_GAP: Vec2 = vec2(16.0, 14.0);
 /// The toolbar's height (its width comes from the open diagram kind's tools).
 const TOOLBAR_HEIGHT: f32 = 50.0;
 const TOOLBAR_GAP: f32 = 14.0;
+/// The refused step's toast in frame V2.4: its width and least height, how far its foot is above
+/// the canvas's foot, and where its words start after the dot.
+const REFUSED_TOAST: Vec2 = vec2(440.0, 40.0);
+const REFUSED_TOAST_FOOT: f32 = 80.0;
+const REFUSED_TOAST_TEXT: f32 = 30.0;
+/// How much higher it stands over a toast with Undo at that place, three rows at the most.
+const OVER_UNDO_TOAST: f32 = 3.0 * types::SMALL.line + 22.0 + 8.0;
 /// An entity node: its header's height, its first row's baseline, the pitch between rows, the
 /// text inset and the badge column.
 pub(crate) const ENTITY_HEADER: f32 = archforge_diagram::figure::CARD_HEADER;
@@ -114,8 +121,12 @@ pub struct State {
     pub grid: bool,
     pub key_status: bool,
     /// The last refusal, shown at the top left of the centre, whatever it holds, until the next
-    /// action.
+    /// action; a refused step of versions shows as the toast instead (`refused_step`).
     pub notice: Option<String>,
+    /// The words of `notice` when they say why a step between versions or a way out of current
+    /// work did not go. Only ever read against `notice`, so whatever clears or replaces that ends
+    /// the toast as well.
+    pub refused_step: Option<String>,
     /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
     /// and whether the canvas has the keyboard.
     pub rename: Option<crate::editing::NodeRename>,
@@ -210,6 +221,7 @@ impl Default for State {
             grid: true,
             key_status: true,
             notice: None,
+            refused_step: None,
             rename: None,
             inline: None,
             gesture: None,
@@ -446,7 +458,22 @@ fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
     }
 }
 
-/// Draws the centre: the tab strip over the canvas or a skill, and over either the last refusal.
+impl State {
+    /// `notice` becomes why a step between versions or a way out of current work did not go,
+    /// which the centre says as the toast, or none, which ends what was said before.
+    pub(crate) fn say_refused_step(&mut self, words: Option<String>) {
+        self.notice.clone_from(&words);
+        self.refused_step = words;
+    }
+
+    /// Whether `notice` is still the words of a refused step, rather than something said since.
+    fn notice_is_refused_step(&self) -> bool {
+        self.notice.is_some() && self.notice == self.refused_step
+    }
+}
+
+/// Draws the centre: the tab strip over the canvas or a skill, and over either the last refusal,
+/// a refused step of versions as the toast and anything else as the caption.
 pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if std::mem::take(&mut shell.canvas.reopen_pending)
         && let Some(id) = shell.canvas.active
@@ -466,7 +493,11 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         None => canvas(shell, ui, p, canvas_rect),
     };
     if canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0 {
-        notice(shell, ui, p, canvas_rect.min + vec2(16.0, 12.0 + below_path), (canvas_rect.width() - 32.0).max(0.0));
+        if shell.canvas.notice_is_refused_step() {
+            refused_toast(shell, ui, p, canvas_rect);
+        } else {
+            notice(shell, ui, p, canvas_rect.min + vec2(16.0, 12.0 + below_path), (canvas_rect.width() - 32.0).max(0.0));
+        }
     }
 }
 
@@ -477,13 +508,43 @@ pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, wi
     let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
     let area = Rect::from_min_size(at, g.size());
     ui.painter().galley(at, g, p.amber);
+    announce_notice(shell, ui, area, &notice);
+    area.height()
+}
+
+/// Says the refused step in `canvas.notice` as frame V2.4 draws it: a raised card centred over the
+/// toolbar of the canvas `r`, clear of the minimap and of a toast with Undo, with an amber dot.
+/// Long words wrap to eight rows at most and the card grows upwards. It takes no clicks, as
+/// nothing but the next action ends it, and is read whole as a status.
+fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let Some(words) = shell.canvas.notice.clone() else { return };
+    let edge = 16.0;
+    let minimap = crate::kinds::active_kind(shell).and_then(|_| minimap_box(shell, r));
+    let right = minimap.map_or(r.right() - edge, |m| m.left() - edge);
+    let width = REFUSED_TOAST.x.min(right - r.left() - edge).max(0.0);
+    let paint = ui.painter();
+    let text = ux::galley_rows(paint, &words, types::SMALL, p.text, Some((width - REFUSED_TOAST_TEXT - 8.0).max(0.0)), 8);
+    let height = (text.size().y + 22.0).max(REFUSED_TOAST.y);
+    let other_toast = shell.canvas.toast.is_some() || crate::chat_delete::toast_up(shell);
+    let foot = r.bottom() - REFUSED_TOAST_FOOT - if other_toast { OVER_UNDO_TOAST } else { 0.0 };
+    let left = (r.center().x - width / 2.0).min(right - width).max(r.left() + edge);
+    let card = Rect::from_min_size(pos2(left, (foot - height).max(r.top() + 8.0)), vec2(width, height));
+    ux::shadow(paint, card, 8.0, p.shadow);
+    paint.rect_filled(card, 8.0, p.surface);
+    let at = pos2(card.left() + REFUSED_TOAST_TEXT, card.center().y - text.size().y / 2.0);
+    paint.circle_filled(pos2(card.left() + 17.0, at.y + types::SMALL.line / 2.0), 3.0, p.amber);
+    paint.galley(at, text, p.text);
+    announce_notice(shell, ui, card, &words);
+}
+
+/// Records `area` as the notice for automation and has a screen reader say `words` as a status.
+fn announce_notice(shell: &mut Shell, ui: &egui::Ui, area: Rect, words: &str) {
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.notice", "status", area);
     ui.ctx().accesskit_node_builder(widgets::egui_id("workspace.canvas.notice"), |node| {
         node.set_role(egui::accesskit::Role::Status);
         node.set_live(egui::accesskit::Live::Polite);
-        node.set_label(notice.as_str());
+        node.set_label(words);
     });
-    area.height()
 }
 
 /// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.

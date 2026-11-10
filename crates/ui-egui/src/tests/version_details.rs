@@ -60,6 +60,33 @@ fn a_refused_view_keeps_the_details_and_says_why() {
     });
 }
 
+/// The pages that cover the canvas keep a refused step as the caption under their way back, where
+/// the person pressed: no toast's dot, and no toast's width, on the details, Compare or a change.
+#[test]
+fn a_refused_step_stays_the_caption_on_the_pages_over_the_canvas() {
+    const WORDS: &str = "Finish or cancel your edit first.";
+    let says = |h: &mut Harness<'static, Shell>, page: &str| {
+        h.state_mut().canvas.say_refused_step(Some(WORDS.to_string()));
+        h.run_steps(2);
+        let notice = rect_of(h, "workspace.canvas.notice");
+        let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+        assert!(notice.width() < 440.0 && notice.height() == crate::ux::types::CAPTION.line, "{page}: {notice:?}");
+        assert!(notice.top() < h.ctx.content_rect().center().y, "{page}: near the top, {notice:?}");
+        assert!(!rect_shapes(h).iter().any(|(r, fill, _)| *fill == p.surface && r.contains_rect(notice) && r.width() == 440.0), "{page}");
+    };
+    in_both(|h, _| {
+        opened(h, "c2");
+        says(h, "details");
+        tap(h, COMPARE);
+        h.run_steps(1);
+        says(h, "Compare");
+    });
+    in_both(|h, host| {
+        element_open(h, host);
+        says(h, "change");
+    });
+}
+
 /// A long reason is wrapped, its room kept above the title, and read whole as a status, over the
 /// details and on the canvas alike.
 #[test]
