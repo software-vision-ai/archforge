@@ -528,6 +528,7 @@ str		Not available on this side	Not available on this side
 str		Relationships aren't shown here yet.	Relationships aren't shown here yet.
 str		Only what these cards don't show changed	Only what these cards don't show changed
 str		The cards show the same on both sides.	The cards show the same on both sides.
+str		The owner changed	The owner changed
 str		The owner changed.	The owner changed.
 plural		{n} member changed	{n} member changed|{n} members changed
 str		{values} · {members}	{values} · {members}

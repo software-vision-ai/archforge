@@ -1313,8 +1313,8 @@ fn a_long_list_draws_only_rows_in_view() {
     });
 }
 
-/// Members that differ are counted beside the values, the same count however many rows hold it,
-/// and a changed owner is said in words.
+/// Members that differ are counted beside the values, the same count however many rows hold it;
+/// a changed owner is said in words, past the sentences a summary cuts, and is no value in the count.
 #[test]
 fn the_summary_counts_members_and_says_the_owner() {
     in_both(|h, host| {
@@ -1326,8 +1326,16 @@ fn the_summary_counts_members_and_says_the_owner() {
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
         says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
-        landed(h, id, key, listed(id, "a", CardLists { before: moved(), after: moved(), member_changes: 0 }));
-        says(h, "1 value changed", &format!("The owner changed. {NOT_SHOWN}"));
+        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n };
+        landed(h, id, key.clone(), listed(id, "a", owned(0)));
+        says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
+        let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
+        let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
+        landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {NOT_SHOWN}"));
+        landed(h, id, key, with_owner(vec![changed; 4]));
+        let one = "Visibility changed from Not set to Private.";
+        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {NOT_SHOWN}"));
     });
 }
 

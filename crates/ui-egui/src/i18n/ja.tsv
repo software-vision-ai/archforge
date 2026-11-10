@@ -529,6 +529,7 @@ str		Not available on this side	この側では利用できません
 str		Relationships aren't shown here yet.	関連はまだここには表示されません。
 str		Only what these cards don't show changed	これらのカードに表示されないものだけが変更されました
 str		The cards show the same on both sides.	カードの内容は両側で同じです。
+str		The owner changed	所有者が変更されました
 str		The owner changed.	所有者が変更されました。
 plural		{n} member changed	{n} 件のメンバーが変更されました
 str		{values} · {members}	{values} · {members}

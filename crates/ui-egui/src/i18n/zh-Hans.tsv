@@ -529,6 +529,7 @@ str		Not available on this side	此侧不可用
 str		Relationships aren't shown here yet.	此处尚不显示关系。
 str		Only what these cards don't show changed	只有这些卡片未显示的内容发生了变化
 str		The cards show the same on both sides.	两侧卡片显示的内容相同。
+str		The owner changed	所属已更改
 str		The owner changed.	所属已更改。
 plural		{n} member changed	{n} 个成员已更改
 str		{values} · {members}	{values} · {members}

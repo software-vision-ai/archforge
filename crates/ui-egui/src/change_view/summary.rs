@@ -48,11 +48,9 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
         return Words { head, body: joined(&[body, not_shown]) };
     };
     let mut said = differences(universe, (was, is), &sides.fields);
-    if sides.lists.after.iter().any(|l| l.kind == ListKind::Ownership && l.rows.iter().any(|r| r.change.is_some())) {
-        said.push(tr("The owner changed."));
-    }
+    let owner = sides.lists.after.iter().any(|l| l.kind == ListKind::Ownership && l.rows.iter().any(|r| r.change.is_some()));
     let members = sides.lists.member_changes;
-    if said.is_empty() && members == 0 {
+    if said.is_empty() && !owner && members == 0 {
         return if listed {
             Words { head: tr("Only what these cards don't show changed"), body: joined(&[tr("The cards show the same on both sides."), not_shown]) }
         } else {
@@ -64,10 +62,14 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
     if count > MOST_SAID {
         said.push(trn("{n} more value changed.", "{n} more values changed.", count.saturating_sub(MOST_SAID) as u64));
     }
+    if owner {
+        said.push(tr("The owner changed."));
+    }
     said.push(not_shown);
     let member_head = trn("{n} member changed", "{n} members changed", members as u64);
     let value_head = trn("{n} value changed", "{n} values changed", count as u64);
     let head = match (count, members) {
+        (0, 0) => tr("The owner changed"),
         (_, 0) => value_head,
         (0, _) => member_head,
         _ => fmt(&tr("{values} · {members}"), &[("values", &value_head), ("members", &member_head)]),

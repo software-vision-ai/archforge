@@ -529,6 +529,7 @@ str		Not available on this side	Indisponible de ce côté
 str		Relationships aren't shown here yet.	Les relations ne sont pas encore affichées ici.
 str		Only what these cards don't show changed	Seul ce que ces cartes n’affichent pas a changé
 str		The cards show the same on both sides.	Les cartes affichent la même chose des deux côtés.
+str		The owner changed	Le propriétaire a changé
 str		The owner changed.	Le propriétaire a changé.
 plural		{n} member changed	{n} membre modifié|{n} membres modifiés
 str		{values} · {members}	{values} · {members}
