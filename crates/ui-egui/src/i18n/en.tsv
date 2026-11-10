@@ -492,6 +492,8 @@ str		Added	Added
 str		Changed	Changed
 str		Removed	Removed
 str		The changes couldn't be compared.	The changes couldn't be compared.
+str		Changed items	Changed items
+plural		{n} changed item	{n} changed item|{n} changed items
 str		View this version	View this version
 str		First version: there is nothing earlier to compare it with.	First version: there is nothing earlier to compare it with.
 str		All	All
