@@ -551,11 +551,13 @@ fn the_link_names_a_listed_version_without_a_read_and_opens_it() {
         answer(host, "c3", Ok(after.clone()));
         next_reads(h, host);
         assert_eq!(asked(host), ["c1", "c2"], "for the version shown");
-        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing read for what is listed");
         assert_eq!(dates(h), 2, "the row and, with no description, the link");
         answer(host, "c1", Ok(before));
         answer(host, "c2", Ok(after));
         settled(h);
+        // Asked only now: the version before is read once the comparison has answered, so earlier
+        // this holds whether or not the list has it.
+        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing read for what is listed");
         let card = h.state().widgets().iter().find(|w| w.id.starts_with("workspace.version-details.change.")).unwrap().id.clone();
         assert_eq!((rect_of(h, LINK).top() - rect_of(h, &card).bottom()).round(), 43.0, "the link's line box under the last card");
         tap(h, LINK);
@@ -928,6 +930,10 @@ fn swap_reverses_the_pair() {
         compared(h, "c3");
         let (before, after) = (holds(h, "Before"), holds(h, "After"));
         host.reads.lock().unwrap().clear();
+        // With its reads gone the comparison ends on its own thread. Until a frame has seen that it
+        // is still the one running, and the details opened again below would read nothing and
+        // take its failure, about the same two versions, as their own.
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
         tap(h, SWAP);
         h.run_steps(1);
         assert_eq!(holds(h, "Before"), "Before, Current work, Not available yet");
