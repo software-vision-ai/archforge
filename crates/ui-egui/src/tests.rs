@@ -3785,6 +3785,218 @@ fn an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it() {
     }
 }
 
+/// A key going down with `modifiers`, staying down: egui calls its next press a repeat.
+fn menu_hold(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifiers) {
+    h.event(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers });
+    h.run();
+}
+
+/// A key pressed and let go.
+fn menu_tap(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifiers) {
+    h.event(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers });
+    h.event(egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers });
+    h.run();
+}
+
+/// A key alone, pressed and let go.
+fn menu_press(h: &mut Harness<'static, Shell>, key: egui::Key) {
+    menu_tap(h, key, egui::Modifiers::NONE);
+}
+
+/// The menu open and the row the keys are on.
+fn menu_at(h: &Harness<'static, Shell>) -> (Option<&'static str>, Option<&'static str>) {
+    (h.state().menu_bar.open, h.state().menu_bar.row)
+}
+
+/// Only F10 with no modifier opens the bar, on its first live row, and only where the bar can open.
+/// Without a project host New and Open are off, so Settings is that row.
+#[test]
+fn only_bare_f10_opens_the_bar() {
+    use crate::actions::SETTINGS;
+    use egui::{Key::F10, Modifiers as M};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        for modifiers in [M::SHIFT, M::ALT, M::CTRL] {
+            menu_tap(&mut h, F10, modifiers);
+            assert_eq!(menu_at(&h), (None, None), "{theme:?}: {modifiers:?}");
+        }
+        menu_press(&mut h, F10);
+        assert_eq!(menu_at(&h), (Some("file"), Some(SETTINGS)), "{theme:?}");
+        menu_press(&mut h, F10);
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: F10 again closes");
+        menu_hold(&mut h, F10, M::NONE);
+        assert_eq!(h.state().menu_bar.open, Some("file"), "{theme:?}: down");
+        menu_hold(&mut h, F10, M::NONE);
+        assert_eq!(h.state().menu_bar.open, Some("file"), "{theme:?}: a held key does not flicker");
+        h.event(egui::Event::Key { key: F10, physical_key: None, pressed: false, repeat: false, modifiers: M::NONE });
+        menu_press(&mut h, F10);
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
+        // One frame each: the next one's clean-up would hide a menu that opened here.
+        let down = egui::Event::Key { key: F10, physical_key: None, pressed: true, repeat: false, modifiers: M::NONE };
+        crate::support::open(h.state_mut());
+        h.run();
+        h.event(down.clone());
+        h.step();
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: not under a dialog");
+        h.event(egui::Event::Key { key: F10, physical_key: None, pressed: false, repeat: false, modifiers: M::NONE });
+        h.state_mut().about = None;
+        h.state_mut().in_window_menu = false;
+        h.run();
+        h.event(down);
+        h.step();
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: not where the system has the menu");
+    }
+}
+
+/// Up and Down skip the rows that are off and wrap at both ends; the row under the keys is marked.
+#[test]
+fn up_and_down_walk_the_live_rows_and_wrap() {
+    use crate::actions::{GENERATE, QUIT, SAVE, SETTINGS};
+    use egui::Key::{ArrowDown, ArrowUp, F10};
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, F10);
+        for (key, row) in [(ArrowDown, QUIT), (ArrowDown, SETTINGS), (ArrowUp, QUIT), (ArrowUp, SETTINGS)] {
+            menu_press(&mut h, key);
+            assert_eq!(menu_at(&h), (Some("file"), Some(row)), "{theme:?}: {key:?}");
+        }
+        let selected = |h: &Harness<'static, Shell>, name: &str| h.get_by_label(name).accesskit_node().data().is_selected() == Some(true);
+        assert!(selected(&h, "Settings…") && !selected(&h, "Quit Archforge"), "{theme:?}");
+        menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}");
+        menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}: a held arrow goes on");
+        h.event(egui::Event::Key { key: ArrowDown, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+        menu_tap(&mut h, ArrowDown, egui::Modifiers::SHIFT);
+        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}: only the bare arrow moves");
+        // Three live rows or more tell Up from Down, which two that wrap cannot.
+        let mut h = menu_harness(theme, true);
+        menu_press(&mut h, F10);
+        assert_eq!(menu_at(&h).1, Some(SAVE), "{theme:?}");
+        for (key, row) in [(ArrowDown, GENERATE), (ArrowDown, SETTINGS), (ArrowUp, GENERATE), (ArrowUp, SAVE), (ArrowUp, QUIT), (ArrowDown, SAVE)] {
+            menu_press(&mut h, key);
+            assert_eq!(menu_at(&h).1, Some(row), "{theme:?}: {key:?} on a project");
+        }
+    }
+}
+
+/// Left and Right go between the groups, wrapping, each on its first live row.
+#[test]
+fn left_and_right_move_between_the_groups_and_wrap() {
+    use crate::actions::{ABOUT, SETTINGS};
+    use egui::Key::{ArrowLeft, ArrowRight, F10};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, F10);
+        for (key, at) in
+            [(ArrowRight, ("help", ABOUT)), (ArrowRight, ("file", SETTINGS)), (ArrowLeft, ("help", ABOUT)), (ArrowLeft, ("file", SETTINGS))]
+        {
+            menu_press(&mut h, key);
+            assert_eq!(menu_at(&h), (Some(at.0), Some(at.1)), "{theme:?}: {key:?}");
+        }
+    }
+}
+
+/// Enter and Space each run the row and close the menu; a row gone off, or no row, runs nothing.
+#[test]
+fn enter_and_space_run_the_row_while_it_can_act() {
+    use egui::Key::{ArrowUp, Enter, F10, Space};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for key in [Enter, Space] {
+            let mut h = menu_harness(theme, false);
+            menu_press(&mut h, F10);
+            assert!(h.state().settings.is_none(), "{theme:?}: {key:?}");
+            menu_press(&mut h, key);
+            assert!(h.state().menu_bar.open.is_none() && h.state().settings.is_some(), "{theme:?}: {key:?}");
+            let mut h = menu_harness(theme, false);
+            menu_press(&mut h, F10);
+            h.state_mut().menu_bar.row = Some(crate::actions::NEW);
+            menu_press(&mut h, key);
+            assert!(h.state().menu_bar.open.is_some() && h.state().menu_bar.chosen.is_none(), "{theme:?}: {key:?} on a row gone off");
+            let mut h = menu_harness(theme, false);
+            click_menu(&mut h, "strip.menu.file");
+            assert_eq!(menu_at(&h), (Some("file"), None), "{theme:?}");
+            menu_press(&mut h, key);
+            assert!(h.state().menu_bar.open.is_some() && h.state().settings.is_none(), "{theme:?}: {key:?} on no row");
+        }
+        let mut h = menu_harness(theme, false);
+        click_menu(&mut h, "strip.menu.file");
+        menu_press(&mut h, ArrowUp);
+        assert_eq!(menu_at(&h).1, Some(crate::actions::QUIT), "{theme:?}: from no row, Up starts at the end");
+    }
+}
+
+/// A row chosen from the keys closes the menu at once and runs on the next frame, as a click does.
+#[test]
+fn a_row_chosen_from_the_keys_closes_at_once_and_runs_next_frame() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, egui::Key::F10);
+        h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.step();
+        assert_eq!(h.state().menu_bar.chosen, Some(crate::actions::SETTINGS), "{theme:?}");
+        assert!(h.state().menu_bar.open.is_none() && h.state().settings.is_none(), "{theme:?}");
+        h.run();
+        assert!(h.state().settings.is_some(), "{theme:?}");
+    }
+}
+
+/// A row left under the keys doesn't survive a pointer moving over the menu, or a menu reopened.
+#[test]
+fn the_pointer_and_a_reopened_menu_clear_the_keys_row() {
+    use crate::actions::SETTINGS;
+    use egui::Key::F10;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, F10);
+        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}");
+        click_menu(&mut h, "strip.menu.help");
+        assert_eq!(menu_at(&h), (Some("help"), None), "{theme:?}: a click moves the menu without the row");
+        click_menu(&mut h, "strip.menu.help");
+        menu_press(&mut h, F10);
+        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}");
+        let over = rect_of(&h, "strip.menu.row.app.quit").center();
+        h.event(egui::Event::PointerMoved(over));
+        h.run();
+        assert_eq!(menu_at(&h), (Some("file"), None), "{theme:?}: the pointer has it now");
+    }
+}
+
+/// The keys never reach what is behind: not in the frame F10 opens, nor while open, nor in the frame
+/// the menu closes; the focus stays put under the arrows and Tab and Esc gives it back.
+#[test]
+fn the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus() {
+    use egui::Key::{ArrowDown, Escape, F10, K, Space, Tab};
+    // Key and text in one frame, as a real press arrives.
+    let with_text = |h: &mut Harness<'static, Shell>, key, text: &str| {
+        let event = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: egui::Modifiers::NONE };
+        h.input_mut().events.extend([event(true), egui::Event::Text(text.to_string()), event(false)]);
+        h.run();
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_tap(&mut h, K, egui::Modifiers::COMMAND);
+        let focus = |h: &Harness<'static, Shell>| h.ctx.memory(egui::Memory::focused);
+        let field = focus(&h);
+        assert!(field.is_some(), "{theme:?}: the search has the focus");
+        with_text(&mut h, F10, "a");
+        assert_eq!((h.state().menu_bar.open, h.state().home_search.query.as_str()), (Some("file"), ""), "{theme:?}: opening");
+        for key in [ArrowDown, Tab] {
+            menu_press(&mut h, key);
+            assert_eq!(focus(&h), field, "{theme:?}: {key:?}");
+        }
+        with_text(&mut h, Escape, "b");
+        assert_eq!((h.state().menu_bar.open, h.state().home_search.query.as_str()), (None, ""), "{theme:?}: closing");
+        assert_eq!(focus(&h), field, "{theme:?}: Esc gives it back");
+        assert!(h.state().home_search.open, "{theme:?}: and stops at the menu");
+        menu_press(&mut h, F10);
+        with_text(&mut h, Space, " ");
+        assert_eq!(h.state().home_search.query, "", "{theme:?}: Space ran the row and typed nothing");
+        assert!(h.state().settings.is_some(), "{theme:?}");
+    }
+}
+
 /// The groups and rows are named; a row off is disabled, and says why only on hover.
 #[test]
 fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {

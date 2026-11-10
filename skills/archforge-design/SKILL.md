@@ -70,7 +70,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   `Shell::in_window_menu`): the groups of its own table (File and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
-  open the frame's keys are held from the window behind, as under a dialog.
+  open the frame's keys are held from the window behind, as under a dialog. F10 with no modifier
+  opens the first menu on its first live row and closes it again (Shift+F10 stays with the row
+  menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
+  Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
 

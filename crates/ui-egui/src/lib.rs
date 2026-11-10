@@ -1844,7 +1844,8 @@ impl Shell {
         self.registry.begin_frame();
         // Escape closes About before the window behind it is drawn, so no editor there reads it.
         support::dismiss_key(self, ui.ctx());
-        menu_bar::dismiss_key(self, ui.ctx());
+        let menu_was_open = self.menu_bar.open.is_some();
+        menu_bar::keys(self, ui.ctx());
         // The OS window title follows the in-app title; on a host with a native title bar it is
         // the only title the user sees.
         let title = self.title();
@@ -1854,11 +1855,13 @@ impl Shell {
         }
         // While About, Settings, New project, Save version, a menu of the bar or Chat's question is over the
         // window, the one behind takes no keys: its tree, canvas and editors read keys directly, so the
-        // frame's keys are held back while it is drawn and given back for the dialogs.
+        // frame's keys are held back while it is drawn and given back for the dialogs. A menu the keys
+        // closed this frame counts: Space's typed text arrives beside the key that ran the row.
         let dialog = self.about.is_some()
             || self.settings.is_some()
             || self.new_project.is_some()
             || self.versions.dialog.is_some()
+            || menu_was_open
             || self.menu_bar.open.is_some()
             || matches!(self.ask, Some(close_ask::Ask::StopChat { .. }));
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
