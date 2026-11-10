@@ -8550,6 +8550,126 @@ fn working_changes_keep_up_while_an_agent_edits() {
     });
 }
 
+/// A page with `newest` over the version the panel was first read with.
+fn page_with(newest: &str) -> crate::VersionsPage {
+    let row = |hash: &str| version_row(hash, None, (None, false), "2026-11-08T15:30:00Z");
+    crate::VersionsPage { versions: vec![row(newest), row("c1")], more: false }
+}
+
+/// Makes the Save that follows an edit, and has it answered.
+fn saved(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    h.state_mut().save();
+    host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+}
+
+/// Ends a comparison of the last version `last` and rows `revision` with three changes that no real
+/// comparison could find, for the test to see whether they land.
+fn comparison_ends(h: &mut Harness<'static, Shell>, last: &str, revision: u64) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    h.state_mut().versions.comparing = Some(((Some(last.to_string()), revision), rx));
+    tx.send(Ok(vec![found(1), found(2), found(3)])).unwrap();
+    h.run_steps(1);
+}
+
+/// Until a read begun after a Save has answered, the listed last version may be the one before it:
+/// a comparison against it does not land and none starts. Then the new last version is compared.
+#[test]
+fn working_changes_wait_for_the_version_a_save_made() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        agent_adds(&mut h, "crm");
+        compared(&mut h);
+        let (behind, shown) = (revisions(&h).0, h.state().versions.compared.clone());
+        agent_adds(&mut h, "more");
+        saved(&mut h, &host);
+        h.run_steps(2);
+        assert!(h.state().versions.comparing.is_none(), "{theme:?}: none starts against the page kept meanwhile");
+        comparison_ends(&mut h, "c1", behind);
+        assert_eq!((h.state().versions.working, &h.state().versions.compared), (1, &shown), "{theme:?}: nor does one land");
+        assert!(!crate::versions::settled(h.state()), "{theme:?}");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        let v = &h.state().versions;
+        assert_eq!(v.compared.as_ref().map(|key| key.0.as_deref()), Some(Some("c2")), "{theme:?}");
+        assert!(v.working == 0 && crate::versions::settled(h.state()), "{theme:?}: what was saved is no working change");
+    });
+}
+
+/// A read for a Save's version that fails leaves no count from the version before: the list says
+/// the changes could not be compared, not "no changes", and Retry brings it back.
+#[test]
+fn working_changes_say_so_when_the_read_after_a_save_fails() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        agent_adds(&mut h, "crm");
+        compared(&mut h);
+        saved(&mut h, &host);
+        versions_answer(&mut h, &host, Err("the server stopped".to_string()));
+        h.run_steps(1);
+        let failed = "workspace.versions.changes.failed";
+        assert!(has_id(&h, failed) && !no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
+        assert!(h.state().versions.compared.is_none() && !crate::versions::settled(h.state()), "{theme:?}");
+        let now = revisions(&h).0;
+        comparison_ends(&mut h, "c1", now);
+        assert_eq!(h.state().versions.working, 0, "{theme:?}: the kept page is no last version to count against");
+        click_id(&mut h, "workspace.versions.retry");
+        versions_answer(&mut h, &host, Ok(page_with("c2")));
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        compared(&mut h);
+        assert!(!has_id(&h, failed) && h.state().versions.working == 0 && crate::versions::settled(h.state()), "{theme:?}");
+    });
+}
+
+/// A read begun before a Save ended may not list its version, however it answers: it is read again.
+#[test]
+fn a_read_from_before_a_save_ended_is_not_the_last_word() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        h.state_mut().versions.stale = true;
+        h.run_steps(2);
+        h.state_mut().versions.stale = true;
+        let reply = host.version_reads.lock().unwrap().pop().expect("a read was asked for");
+        reply.send(Ok(page_with("c1"))).unwrap();
+        h.run_steps(1);
+        assert!(!crate::versions::settled(h.state()), "{theme:?}");
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: read again at once");
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
+        assert!(crate::versions::settled(h.state()), "{theme:?}: a save that made no version leaves the comparison good");
+    });
+}
+
+/// A restore that does not replace the session may still have kept the work as a version, or
+/// not say whether it did: each such ending reads the versions again.
+#[test]
+fn a_restore_that_ends_without_replacing_reads_the_versions_again() {
+    use crate::replace::JobFailure;
+    type Ending = fn(RestoreEnds);
+    let endings: [Ending; 3] = [
+        |(answer, _)| answer.send(Err(JobFailure::WorkSaved("told".into()))).unwrap(),
+        |(answer, reading)| {
+            answer.send(Err(JobFailure::Unclear)).unwrap();
+            reading.send(Ok(false)).unwrap();
+        },
+        |(answer, reading)| {
+            answer.send(Err(JobFailure::Unclear)).unwrap();
+            drop(reading);
+        },
+    ];
+    for (ending, theme) in endings.into_iter().flat_map(|e| [(e, ThemeKind::Light), (e, ThemeKind::Dark)]) {
+        let (mut h, host, earlier) = work_and_earlier();
+        h.state_mut().state.theme = theme;
+        versions_answer(&mut h, &host, Ok(page_with("c1")));
+        // The last version's own rows, so the oldest read waiting is the restore's.
+        answer_read(&mut h, &host, Ok(earlier.clone()));
+        ending(restore_under_way(&mut h, &host, earlier));
+        h.run_steps(6);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: {:?}", h.state().save_error);
+    }
+}
+
 /// Before any version everything is added but the project's own root.
 #[test]
 fn before_the_first_version_everything_is_added_but_the_root() {

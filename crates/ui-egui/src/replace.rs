@@ -303,18 +303,22 @@ impl Shell {
         archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), editing::fit_tables)
     }
 
-    /// Ends the operation with the session as it was, saying `why` when given.
+    /// Ends the operation with the session as it was, saying `why` when given. The same session
+    /// stays, so nothing else tells the Versions panel to look: a job that failed may have kept
+    /// the work as a version first.
     pub(crate) fn give_up(&mut self, why: Option<String>) -> Option<Replacing> {
         if why.is_some() {
             self.save_error = why;
         }
+        self.versions.stale = true;
         self.fail_hold();
         None
     }
 
     /// Says that what happened cannot be told. Nothing is written back; the project stays held and
-    /// its closing offers only to close without writing.
+    /// its closing offers only to close without writing. Versions reads what the project holds.
     fn could_not_tell(&mut self) -> Stage {
+        self.versions.stale = true;
         let why = tr("Archforge could not tell whether the last change finished. Nothing more was written. Close the project and reopen it.");
         if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
             tab.close_error = Some(why.clone());
