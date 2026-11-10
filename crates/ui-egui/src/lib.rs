@@ -10,6 +10,7 @@ pub mod actions;
 pub mod ai_agents;
 pub mod appearance;
 pub mod canvas;
+mod change_view;
 pub mod chat;
 pub mod chat_delete;
 #[cfg(any(test, feature = "snapshot"))]

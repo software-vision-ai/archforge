@@ -19,6 +19,9 @@ An open project fills the window with its workspace.
   **View this version** shows it read-only; the project's name at the top closes the details.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
+  Clicking a model element under Working changes opens it in the centre: its name, whether it was
+  added, changed or removed, and where it is. What changed inside the element isn't shown there
+  yet. The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

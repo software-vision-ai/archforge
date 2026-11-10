@@ -80,6 +80,9 @@ pub struct State {
     pub(crate) details_comparing: Option<crate::version_details::Running<Arc<Vec<Difference>>>>,
     /// The one read of the version before the link has under way.
     pub(crate) details_reading: Option<crate::version_details::Running<VersionsPage>>,
+    /// The changed element the centre shows, and the one read of its two sides under way.
+    pub(crate) element: Option<crate::change_view::OpenedElement>,
+    pub(crate) element_reading: Option<crate::change_view::ElementReading>,
     pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
@@ -100,6 +103,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         (v.base, v.reading_base, v.comparing, v.compared) = (None, None, None, None);
         (v.filter, v.changes_scroll) = (String::new(), TreeScroll::default());
         (v.more_reading, v.more_failed, v.selected, v.described_only, v.last_unsure) = (None, None, None, false, false);
+        (v.element, v.element_reading) = (None, None);
     }
     let answer = match v.reading.as_ref().map(Receiver::try_recv) {
         Some(Ok(answer)) => Some(answer),
@@ -169,7 +173,7 @@ fn keep_changes(shell: &mut Shell) {
 
 /// What a comparison of current work is of now; none while a version is in view, the last version
 /// is in doubt or an edit is under way.
-fn working_key(shell: &Shell) -> Option<Compared> {
+pub(crate) fn working_key(shell: &Shell) -> Option<Compared> {
     let v = &shell.versions;
     let comparable = shell.viewing.is_none() && v.page.is_some() && last_known(v);
     let session = shell.session.as_ref().filter(|s| comparable && !s.interacting())?;
@@ -178,7 +182,7 @@ fn working_key(shell: &Shell) -> Option<Compared> {
 
 /// The rows of the last version `last`, when they are held. Before the first version there is no
 /// baseline, so they are empty rows and everything is added.
-fn base_held(v: &State, last: &Option<String>) -> Option<Arc<Rows>> {
+pub(crate) fn base_held(v: &State, last: &Option<String>) -> Option<Arc<Rows>> {
     match (&v.base, last) {
         (Some((hash, rows)), _) if hash == last => Some(rows.clone()),
         (_, Some(_)) => None,
@@ -285,13 +289,13 @@ pub(crate) fn last_saved(v: &State, clock: Clock) -> Option<String> {
 }
 
 /// The last version listed, by its hash; none before the first version or before the first read.
-fn last_version(v: &State) -> Option<String> {
+pub(crate) fn last_version(v: &State) -> Option<String> {
     v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone())
 }
 
 /// Whether the first row listed is known to be the last version: no save or restore has ended
 /// since the last read that succeeded began.
-fn last_known(v: &State) -> bool {
+pub(crate) fn last_known(v: &State) -> bool {
     !v.stale && !v.last_unsure
 }
 
@@ -431,7 +435,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         for d in group {
             let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
             // By class too: an element that changes table has two rows.
-            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, false);
+            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, d.area == Area::Model);
             at += CHANGE_PITCH;
         }
     }
@@ -461,7 +465,7 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 }
 
 /// What a change is called, and its ink and tint.
-fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Color32) {
+pub(crate) fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Color32) {
     match kind {
         ChangeKind::Added => (tr("Added"), p.green, p.green_tint),
         ChangeKind::Changed => (tr("Changed"), p.accent, p.accent_tint),
@@ -470,8 +474,8 @@ fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Color32) {
 }
 
 /// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
-/// to it. `live` says whether the row takes clicks; so far nothing asks it to. Nothing out of sight
-/// is drawn or registered.
+/// to it; `live` makes it open the element in the centre and marks the open one as selected.
+/// Nothing out of sight is drawn or registered.
 pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Rect, id: &str, d: &Difference, live: bool) {
     if !area.intersects(ui.clip_rect()) {
         return;
@@ -479,17 +483,27 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
     let (what, ink, tint) = kind_look(d.kind, p);
     let path = d.path.join(" / ");
-    let _ = control(shell, ui, id, "row", area, live).accessible_name(format!("{name}, {path}, {what}"));
+    let selected = live && shell.versions.element.as_ref().is_some_and(|o| o.row.id == d.id);
+    let words = format!("{name}, {path}, {what}");
+    let resp = control(shell, ui, id, "row", area, live);
+    let _ = resp.clone().accessible_name(if selected { fmt(&tr("{name}, selected"), &[("name", &words)]) } else { words });
+    if resp.clicked() && live {
+        crate::change_view::open(shell, d.clone());
+    }
     let paint = ui.painter();
+    if selected {
+        paint.rect_filled(area, 8.0, p.accent_tint);
+    }
+    focus_ring(paint, p, area, 8.0, &resp);
     let room = (area.width() - 76.0).max(0.0);
     let icon = if d.area == Area::Diagram { &icons::DIAGRAM } else { &icons::CUBE };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 20.0, area.center().y), Vec2::splat(16.0)), icon, p.text_secondary);
     let mid = area.center().y;
-    ux::text(paint, pos2(area.left() + 38.0, mid - 17.0), &name, types::UI, p.text, Some(room));
+    ux::text(paint, pos2(area.left() + 38.0, mid - 17.0), &name, types::UI, if selected { p.accent } else { p.text }, Some(room));
     ux::text(paint, pos2(area.left() + 38.0, mid + 1.0), &path, types::CAPTION, p.text_muted, Some(room));
     let letter = what.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
     let mark = Rect::from_center_size(pos2(area.right() - 20.0, area.center().y), Vec2::splat(20.0));
-    paint.rect_filled(mark, 5.0, tint);
+    paint.rect_filled(mark, 5.0, if selected { p.surface } else { tint });
     let g = ux::galley(paint, &letter, types::CAPTION_STRONG, ink, None);
     paint.galley(mark.center() - g.size() / 2.0, g, ink);
 }

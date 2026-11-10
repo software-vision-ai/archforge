@@ -510,6 +510,8 @@ str		Show more	さらに表示
 str		None of these versions has a description.	これらのバージョンには説明がありません。
 str		The next versions couldn't be read.	次のバージョンを読み込めませんでした。
 str		{name}, selected	{name}、選択中
+str		This element couldn't be compared.	この要素を比較できませんでした。
+str		What changed inside this element isn't shown here yet.	この要素の内部の変更はまだここに表示されません。
 str		No description	説明なし
 str		Saved by an agent	エージェントが保存
 str		This version can't be shown	このバージョンは表示できません

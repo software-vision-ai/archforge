@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
+use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
+use crate::versions::Compared;
+use archforge_notations::differences::{Area, ChangeKind, Difference, ElementCard, ElementSides};
 
 const VIEW: &str = "workspace.version-details.view";
 
@@ -680,5 +683,153 @@ fn a_new_session_does_not_wait_for_the_link_read_left() {
         host.reads.lock().unwrap().clear();
         opened(h, "c3");
         assert_eq!(asked(host), ["c2", "c3"], "its own reads, without waiting for the one left");
+    });
+}
+
+const NOTE: &str = "workspace.change-view.note";
+const ELEMENT_FAILED: &str = "workspace.change-view.failed";
+
+/// Clicks the row of the change named `name` and frames until its read has answered.
+fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
+    let d = h.state().versions.changes.iter().find(|d| d.name.as_deref() == Some(name)).unwrap();
+    let row = format!("workspace.versions.change.{}.{}", d.id, d.class.0);
+    tap(h, &row);
+    frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+}
+
+/// The sides of an element called `name` on both sides of the comparison.
+fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
+    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) };
+    Ok(Some(ElementSides { id, before: Some(card.clone()), after: Some(card), fields: Vec::new() }))
+}
+
+/// Puts a read of `id` about `key` under way, the test holding its answer.
+fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<ElementSides>, String>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { id, key, answer: rx });
+    tx
+}
+
+/// Lands `answer` as such a read.
+fn landed(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared, answer: Result<Option<ElementSides>, String>) {
+    reading(h, id, key).send(answer).unwrap();
+    h.run_steps(1);
+}
+
+/// A schema added since the last version, opened; gives its id and what the list was compared at.
+fn element_open(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Uuid, Compared) {
+    before_and_after(h, host);
+    open_change(h, "shop");
+    (h.state().versions.changes[0].id, h.state().versions.compared.clone().unwrap())
+}
+
+/// A row opens its element in place of the details, reading nothing; the project's name closes it.
+#[test]
+fn a_working_change_opens_in_the_centre_without_a_read() {
+    in_both(|h, host| {
+        before_and_after(h, host);
+        opened(h, "c3");
+        host.reads.lock().unwrap().clear();
+        h.state_mut().canvas.notice = Some("From earlier".into());
+        open_change(h, "shop");
+        assert!(!has_id(h, VIEW) && h.state().versions.selected.is_none() && asked(host).is_empty() && !painted_has(h, "From earlier"));
+        assert!(painted_has(h, "Added") && !has_id(h, NOTE), "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label_contains(", selected").count(), 1);
+        let title = rect_of(h, "workspace.change-view.title").top();
+        h.state_mut().canvas.notice = Some("Refused by a panel. ".repeat(60));
+        h.run_steps(1);
+        assert!(has_id(h, "workspace.canvas.notice") && rect_of(h, "workspace.change-view.title").top() > title, "said, and the title makes room");
+        tap(h, "workspace.change-view.close");
+        assert!(h.state().versions.element.is_none() && has_id(h, "workspace.tabs.add"));
+    });
+}
+
+/// It ends when the list drops it, a diagram or version takes the centre or the session changes.
+#[test]
+fn an_opened_element_ends_with_what_it_is_about() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let open = |h: &Harness<'static, Shell>| h.state().versions.element.is_some();
+        tap(h, "workspace.explorers.models");
+        assert!(open(h) && has_id(h, "workspace.tabs.add"), "the Models explorer has the canvas");
+        tap(h, "workspace.explorers.source-control");
+        crate::canvas::open(h.state_mut(), Uuid::v7(0, [0; 10]));
+        assert!(!open(h), "what was opened would be hidden");
+        open_change(h, "shop");
+        opened(h, "c3");
+        assert!(has_id(h, VIEW) && !open(h), "the details replace it");
+        tap(h, "workspace.version-details.close");
+        open_change(h, "shop");
+        h.state_mut().session.as_mut().unwrap().execute("edit.undo", &serde_json::Value::Null).unwrap();
+        list_still(h);
+        assert!(!open(h), "undone, it has left the list");
+        h.state_mut().session.as_mut().unwrap().execute("edit.redo", &serde_json::Value::Null).unwrap();
+        list_still(h);
+        open_change(h, "shop");
+        let _left = reading(h, id, key);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        assert!(!open(h) && h.state().versions.element_reading.is_none(), "about the session left");
+    });
+}
+
+/// A read lands only on what it is about; a failure for rows moved on waits, but their sides land.
+#[test]
+fn a_read_lands_only_on_what_it_is_about() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let _waiting = reading(h, id, key.clone());
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint(), "a read on its way wakes the window");
+        landed(h, Uuid::v7(1, [1; 10]), key.clone(), both_sides(id, "another element"));
+        landed(h, id, (Some("elsewhere".into()), key.1), both_sides(id, "another base"));
+        assert!(!painted_has(h, "another element") && !painted_has(h, "another base") && !has_id(h, NOTE), "{:?}", painted(h));
+        landed(h, id, key.clone(), both_sides(id, "both"));
+        assert!(painted_has(h, "Changed") && has_id(h, NOTE) && painted_has(h, "both"), "{:?}", painted(h));
+        let moved = (key.0.clone(), key.1.wrapping_sub(1));
+        landed(h, id, moved.clone(), Err("transient".into()));
+        assert!(!has_id(h, ELEMENT_FAILED), "a failure for rows moved on is not said");
+        landed(h, id, moved, both_sides(id, "edited since"));
+        assert!(painted_has(h, "edited since"), "rows moved on still land: {:?}", painted(h));
+        landed(h, id, key, Ok(None));
+        assert!(h.state().versions.element.is_none(), "on neither side of the rows of now");
+    });
+}
+
+/// A failed read says so beside Retry; a failed list closes nothing and has no Retry here.
+#[test]
+fn a_failure_is_said_and_never_taken_for_no_change() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        landed(h, id, key.clone(), Err("broken".into()));
+        assert!(has_id(h, ELEMENT_FAILED) && !has_id(h, NOTE) && !painted_has(h, "Added"), "{:?}", painted(h));
+        tap(h, "workspace.change-view.retry");
+        frames_until(h, |h| painted_has(h, "Added"));
+        tap(h, "workspace.change-view.close");
+        let _waiting = reading(h, id, key.clone());
+        let row = h.state().versions.changes[0].clone();
+        crate::change_view::open(h.state_mut(), row);
+        crate::versions::settle_changes(h.state_mut(), key, Err("list broken".into()));
+        h.run_steps(2);
+        assert!(h.state().versions.element.is_some() && has_id(h, ELEMENT_FAILED) && !has_id(h, "workspace.change-view.retry"), "{:?}", painted(h));
+    });
+}
+
+/// An element with two rows is selected on both, and its pill comes from its sides, not a row.
+#[test]
+fn two_rows_of_one_element_open_it_once() {
+    in_both(|h, host| {
+        before_and_after(h, host);
+        let (mut row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
+        let mut gone = row.clone();
+        (gone.class, gone.kind, gone.name, row.name) = (archforge_er::ENTITY, ChangeKind::Removed, Some("old".into()), Some("new".into()));
+        let sheet = Difference { area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
+        crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, gone, sheet]));
+        h.run_steps(2);
+        open_change(h, "sheet");
+        assert!(h.state().versions.element.is_none(), "a diagram's row does not open");
+        open_change(h, "old");
+        assert_eq!(h.query_all_by_label_contains(", selected").count(), 2, "both rows are the element");
+        assert!(painted_has(h, "Added"), "the sides say Added, the row Removed: {:?}", painted(h));
     });
 }

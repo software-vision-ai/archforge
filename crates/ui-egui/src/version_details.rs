@@ -19,8 +19,8 @@ use crate::ux::{self, Palette, icons, types};
 use crate::versions::{change_row, described, lines, when};
 use crate::{Shell, VersionEntry};
 
-const MARGIN: f32 = 32.0;
-const BAND: f32 = 72.0;
+pub(crate) const MARGIN: f32 = 32.0;
+pub(crate) const BAND: f32 = 72.0;
 /// A changed item's card, the distance between cards, and the room kept under them.
 const CARD: f32 = 52.0;
 const PITCH: f32 = 60.0;
@@ -114,6 +114,7 @@ fn compare(before: Receiver<Result<Arc<Rows>, String>>, after: Receiver<Result<A
 /// Selects `entry` and opens its details; [`keep`] compares it with the version before when no
 /// other comparison is running. Without a host it is only selected.
 pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
+    shell.versions.element = None;
     shell.versions.selected = Some(entry.hash.clone());
     let Some(about) = about(shell).filter(|_| shell.services.projects.is_some()) else { return };
     let comparison = entry.previous.clone().map(|before| Comparison { before, found: None, earlier: None });
@@ -224,7 +225,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
 
 /// The way back at the top of the centre `r`: the project's name, registered as `id`, and `place`,
 /// where the centre is. Gives whether the name was clicked, for the caller to close what it shows.
-fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, id: &str, place: &str) -> bool {
+pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, id: &str, place: &str) -> bool {
     let name = shell.project.as_ref().map(|o| o.name.clone()).unwrap_or_default();
     let (mid, paint) = (r.top() + 34.0, ui.painter().clone());
     let g = ux::galley(&paint, &name, types::UI, p.text_secondary, Some((r.width() / 2.0).max(0.0)));
