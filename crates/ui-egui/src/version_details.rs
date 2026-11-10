@@ -19,7 +19,7 @@ use crate::ux::{self, Palette, icons, types};
 use crate::versions::{change_row, dated, lines};
 use crate::{Shell, VersionEntry};
 
-mod compare;
+pub(crate) mod compare;
 
 pub(crate) const MARGIN: f32 = 32.0;
 pub(crate) const BAND: f32 = 72.0;
@@ -130,6 +130,7 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
 /// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
 /// the two versions it is about, the link only for the version it names.
 pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    compare::keep(shell);
     let about = about(shell);
     let host = shell.services.projects.clone();
     let v = &mut shell.versions;

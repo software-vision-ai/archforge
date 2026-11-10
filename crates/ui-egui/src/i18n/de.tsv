@@ -473,6 +473,7 @@ str		Name	Name
 str		Models	Modelle
 str		Versions	Versionen
 str		Branches	Zweige
+str		This branch	Dieser Zweig
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
 str		Retry	Erneut versuchen

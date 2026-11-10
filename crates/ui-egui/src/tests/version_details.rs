@@ -890,13 +890,13 @@ fn holds(h: &Harness<'static, Shell>, side: &str) -> String {
     let wanted = format!("{side}, ");
     let mut nodes = h.query_all_by_label_contains(&wanted);
     let node = nodes.next().unwrap_or_else(|| panic!("no {side} select"));
-    assert!(nodes.next().is_none() && node.accesskit_node().is_disabled(), "one select, which cannot be used yet");
+    assert!(nodes.next().is_none() && !node.accesskit_node().is_disabled(), "one select, which can be used");
     assert_eq!(node.accesskit_node().role(), egui::accesskit::Role::ComboBox, "{side}");
     node.accesskit_node().label().unwrap_or_default().to_string()
 }
 
-/// Compare shows the chosen version before current work, says the direction, says the selects
-/// can't be used yet and reads nothing of its own.
+/// Compare shows the chosen version before current work, says the direction and reads nothing of
+/// its own.
 #[test]
 fn compare_opens_on_the_chosen_version_before_current_work() {
     in_both(|h, host| {
@@ -904,8 +904,8 @@ fn compare_opens_on_the_chosen_version_before_current_work() {
         assert_eq!(asked(host), ["c2", "c3"], "only the details' own reads");
         assert!(!has_id(h, VIEW) && has_id(h, COMPARE_CLOSE) && has_id(h, SWAP), "the page has taken the details' place");
         let before = holds(h, "Before");
-        assert!(before.contains("Payment methods split out") && before.ends_with(", Not available yet"), "{before}");
-        assert_eq!(holds(h, "After"), "After, Current work, Not available yet");
+        assert!(before.contains("Payment methods split out"), "{before}");
+        assert_eq!(holds(h, "After"), "After, Current work");
         assert!(h.query_by_label("Before → After").is_some(), "the direction");
         assert!(h.state().versions.selected.is_none(), "no row is marked, as in the frame");
     });
@@ -941,7 +941,7 @@ fn swap_reverses_the_pair() {
         frames_until(h, |h| h.state().versions.details_comparing.is_none());
         tap(h, SWAP);
         h.run_steps(1);
-        assert_eq!(holds(h, "Before"), "Before, Current work, Not available yet");
+        assert_eq!(holds(h, "Before"), "Before, Current work");
         assert!(holds(h, "After").contains("Payment methods split out"), "{}", holds(h, "After"));
         assert!(h.query_by_label("Before → After").is_some(), "the direction stays");
         tap(h, SWAP);
@@ -1109,5 +1109,120 @@ fn the_cards_scroll_as_one() {
         h.run_steps(12);
         assert!(!has_id(h, &first) && has_id(h, &last), "{:?}", ids(h));
         assert_eq!(rect_of(h, &format!("{BEFORE}.field.59")).top(), rect_of(h, &last).top(), "level across the cards");
+    });
+}
+
+const SELECT_BEFORE: &str = "workspace.version-compare.before";
+const SELECT_AFTER: &str = "workspace.version-compare.after";
+
+/// The id of row `n` of a select's list, 0 being current work.
+fn row_id(n: usize) -> String {
+    format!("workspace.version-compare.list.row.{n}")
+}
+
+/// The row the keys are on, none with the list closed.
+fn at(h: &Harness<'static, Shell>) -> Option<usize> {
+    crate::version_details::compare::highlight(h.state())
+}
+
+/// A select lists This branch, current work and each version, marks what it holds and reads
+/// nothing; a pick sets only its side and closes it, and a press elsewhere closes it too.
+#[test]
+fn a_select_lists_the_versions_and_a_pick_sets_its_side() {
+    in_both(|h, host| {
+        compared(h, "c3");
+        let reads = (asked(host), host.version_asks.lock().unwrap().len());
+        tap(h, SELECT_AFTER);
+        assert!(painted_has(h, "THIS BRANCH") && has_id(h, &row_id(3)) && !has_id(h, &row_id(4)), "{:?}", ids(h));
+        let marked: Vec<_> =
+            h.query_all_by_role(egui::accesskit::Role::ListBoxOption).filter(|n| n.accesskit_node().is_selected() == Some(true)).collect();
+        assert!(marked.len() == 1 && marked[0].accesskit_node().label().unwrap_or_default().starts_with("Current work"), "the one held");
+        tap(h, &row_id(2));
+        assert!(at(h).is_none() && holds(h, "After").contains("First classes") && holds(h, "Before").contains("Payment"), "its side");
+        tap(h, SELECT_BEFORE);
+        assert_eq!(at(h), Some(1), "it opens on the row it holds");
+        tap(h, &row_id(0));
+        assert_eq!(holds(h, "Before"), "Before, Current work");
+        assert!(!has_id(h, VIEW) && !has_id(h, "workspace.version-details.failed"), "nothing compared yet");
+        assert_eq!((asked(host), host.version_asks.lock().unwrap().len()), reads, "the list reads nothing");
+        tap(h, SELECT_AFTER);
+        tap(h, SELECT_AFTER);
+        assert_eq!(at(h), None, "its own select closes it");
+        tap(h, SELECT_AFTER);
+        tap(h, SWAP);
+        assert_eq!(at(h), None, "a press elsewhere closes it");
+        tap(h, SELECT_AFTER);
+        h.state_mut().state.explorer = crate::state::Explorer::Models;
+        h.run_steps(2);
+        h.state_mut().state.explorer = crate::state::Explorer::SourceControl;
+        h.run_steps(2);
+        assert_eq!(at(h), None, "it goes with the page, or its keys would stay taken");
+    });
+}
+
+/// The arrows stay in the list, Enter and Space pick or open, Esc closes, the keyboard stays on the
+/// select until a closed list lets Tab move on, and an open list keeps keys from the window behind.
+#[test]
+fn the_keyboard_moves_picks_closes_and_keeps_the_keys() {
+    use egui::Key::{ArrowDown, ArrowUp, Enter, Escape, F10, Space, Tab};
+    let press = |h: &mut Harness<'static, Shell>, k| key(h, k, egui::Modifiers::NONE);
+    let shortcut = |h: &mut Harness<'static, Shell>| key(h, egui::Key::H, egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT));
+    in_both(|h, _| {
+        h.state_mut().in_window_menu = true;
+        compared(h, "c3");
+        tap(h, SELECT_BEFORE);
+        for (k, row) in [(ArrowDown, 2), (ArrowDown, 3), (ArrowDown, 3), (ArrowUp, 2)] {
+            press(h, k);
+            assert!(at(h) == Some(row) && focused_on(h, SELECT_BEFORE), "{k:?}");
+        }
+        shortcut(h);
+        press(h, F10);
+        assert!(at(h) == Some(2) && !has_id(h, "workspace.header.version.filter") && h.state().menu_bar.open.is_none(), "held behind the list");
+        press(h, Enter);
+        assert!(at(h).is_none() && holds(h, "Before").contains("First classes"), "{}", holds(h, "Before"));
+        press(h, Enter);
+        press(h, Escape);
+        assert!(at(h).is_none() && holds(h, "Before").contains("First classes") && focused_on(h, SELECT_BEFORE), "Esc changes nothing");
+        press(h, Space);
+        assert_eq!(at(h), Some(2), "Space opens it too");
+        press(h, ArrowUp);
+        press(h, Space);
+        assert!(at(h).is_none() && holds(h, "Before").contains("Payment"), "Space picks: {}", holds(h, "Before"));
+        press(h, Tab);
+        assert!(!focused_on(h, SELECT_BEFORE), "closed, Tab moves on again");
+        press(h, F10);
+        assert!(h.state().menu_bar.open.is_some(), "and the bar's key is free again");
+    });
+}
+
+/// A long list scrolls with the keys, reads the next page only when its end shows, says when that
+/// failed with Retry, adds what it read, and stops on an empty page whatever that says.
+#[test]
+fn the_list_reads_on_at_its_end_and_says_when_that_failed() {
+    let press = |h: &mut Harness<'static, Shell>| key(h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+    let row = |i: usize| version_row(&format!("v{i}"), Some("A version"), (None, false), &format!("2026-11-{:02}T10:00:00Z", 20 - i));
+    let send = |h: &mut Harness<'static, Shell>, host: &SavingHost, answer| {
+        host.version_reads.lock().unwrap().pop().expect("a read is on its way").send(answer).unwrap();
+        h.run_steps(2);
+    };
+    in_both_listing((0..15).map(row).collect(), |h, host| {
+        h.state_mut().versions.page.as_mut().unwrap().more = true;
+        h.run_steps(1);
+        compared(h, "v3");
+        let asks = || host.version_asks.lock().unwrap().iter().filter(|a| a.is_some()).count();
+        tap(h, SELECT_AFTER);
+        (0..11).for_each(|_| press(h));
+        assert!(at(h) == Some(11) && has_id(h, &row_id(11)) && asks() == 0, "the row followed the keys; nothing read before the end shows");
+        (0..4).for_each(|_| press(h));
+        assert_eq!((at(h), asks()), (Some(15), 1), "the end shows: one read");
+        send(h, host, Err("disk gone".into()));
+        assert!(h.query_by_label("The next versions couldn't be read.").is_some() && asks() == 1, "no read after a failure until Retry");
+        tap(h, "workspace.version-compare.list.retry");
+        assert!(asks() == 2 && at(h).is_some(), "Retry asks again and keeps the list");
+        send(h, host, Ok(crate::VersionsPage { versions: vec![row(16)], more: true }));
+        press(h);
+        assert!(at(h) == Some(16) && asks() == 3, "the page read is a row, and its end shows");
+        send(h, host, Ok(crate::VersionsPage { versions: Vec::new(), more: true }));
+        assert!(asks() == 3 && !h.state().versions.page.as_ref().unwrap().more, "an empty page ends it");
     });
 }

@@ -473,6 +473,7 @@ str		Name	Nome
 str		Models	Modelos
 str		Versions	Versões
 str		Branches	Ramos
+str		This branch	Este ramo
 str		Working changes	Alterações em curso
 str		History	Histórico
 str		Retry	Tentar novamente
