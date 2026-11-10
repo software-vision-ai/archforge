@@ -493,6 +493,8 @@ str		Added	Añadido
 str		Changed	Cambiado
 str		Removed	Eliminado
 str		The changes couldn't be compared.	No se pudieron comparar los cambios.
+str		Changed items	Elementos modificados
+plural		{n} changed item	{n} elemento modificado|{n} elementos modificados
 str		View this version	Ver esta versión
 str		First version: there is nothing earlier to compare it with.	Primera versión: no hay nada anterior con que compararla.
 str		All	Todas
