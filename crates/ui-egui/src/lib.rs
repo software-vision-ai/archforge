@@ -1506,7 +1506,7 @@ impl Shell {
             done.extend(poll_save(&mut p.saving, p.session.as_mut(), &mut p.save_error));
         }
         for (ticket, outcome) in done {
-            version_chip::close(self);
+            version_chip::saved(self);
             self.finished_save(ticket, outcome);
         }
         if let Some(rx) = &self.dolt_check {
@@ -1762,6 +1762,7 @@ impl Shell {
             || chat_panel::waiting(self)
             || chat_delete::waiting(self)
             || self.version_list.reading.is_some()
+            || self.version_list.steps.reading.is_some()
         {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }

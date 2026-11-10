@@ -149,8 +149,12 @@ impl Shell {
     }
 
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
-    /// as that version and the session is set aside.
+    /// as that version and the session is set aside. Without it the project's versions or branch
+    /// may change, even if this later fails, so the steps between versions read them afresh.
     pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<String>) {
+        if viewing.is_none() {
+            self.version_list.steps = Default::default();
+        }
         self.replacing = Some(Replacing {
             stage: Stage::Chat,
             read,

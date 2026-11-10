@@ -1467,3 +1467,10 @@ str		Read only while viewing a version	Schreibgeschützt, solange eine Version a
 str		Back to current work	Zurück zur aktuellen Arbeit
 str		Back to current work to chat	Zurück zur aktuellen Arbeit, um zu chatten
 str		Viewing the version of {date} · Read only	Version vom {date} wird angezeigt · Schreibgeschützt
+str		Older version	Ältere Version
+str		Newer version	Neuere Version
+str		No older version	Keine ältere Version
+str		No newer version	Keine neuere Version
+str		Finish or cancel your edit first.	Schließen Sie zuerst Ihre Bearbeitung ab oder brechen Sie sie ab.
+str		Wait for the change under way to finish.	Warten Sie, bis die laufende Änderung abgeschlossen ist.
+str		There is no model to show a version of.	Es gibt kein Modell, von dem eine Version angezeigt werden könnte.
