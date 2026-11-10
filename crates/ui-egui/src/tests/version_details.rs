@@ -43,6 +43,47 @@ fn opened(h: &mut Harness<'static, Shell>, row: &str) {
     h.run_steps(1);
 }
 
+/// View refused for an editor still open keeps the details and says why over them.
+#[test]
+fn a_refused_view_keeps_the_details_and_says_why() {
+    in_both(|h, host| {
+        opened(h, "c2");
+        host.reads.lock().unwrap().clear();
+        h.state_mut().explorer.dragging = Some(archforge_mof::Uuid([7; 16]));
+        tap(h, VIEW);
+        assert!(h.state().versions.details.is_some(), "the details stay");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Finish or cancel your edit first."));
+        assert!(host.reads.lock().unwrap().is_empty() && !h.state().is_held());
+    });
+}
+
+/// A long reason is wrapped, its room kept above the title, and read whole as a status, over the
+/// details and on the canvas alike.
+#[test]
+fn a_long_notice_is_wrapped_and_read_whole() {
+    const NOTICE: &str = "workspace.canvas.notice";
+    let long = "This reason takes several rows to say in the centre of the window. ".repeat(5);
+    in_both(|h, _| {
+        let said = |h: &mut Harness<'static, Shell>, long: &str| {
+            h.state_mut().canvas.notice = Some(long.to_string());
+            h.run_steps(2);
+            let status = h.get_by_label(long);
+            let status = status.accesskit_node();
+            assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "read whole");
+            let height = rect_of(h, NOTICE).height();
+            assert!(height > 2.0 * crate::ux::types::CAPTION.line, "wrapped: {height}");
+            height
+        };
+        opened(h, "c2");
+        let before = rect_of(h, VIEW).top();
+        let height = said(h, &long);
+        let moved = rect_of(h, VIEW).top() - before;
+        assert!((moved - (height - crate::ux::types::CAPTION.line)).abs() < 0.5, "room kept: {moved} for {height}");
+        h.state_mut().versions.details = None;
+        said(h, &long);
+    });
+}
+
 /// The pointer on View shows `words`.
 fn said_on_hover(h: &mut Harness<'static, Shell>, words: &str) {
     let at = rect_of(h, VIEW).center();
@@ -123,9 +164,11 @@ fn view_shows_the_version_from_its_details() {
         h.run_steps(3);
         opened(h, "c2");
         host.reads.lock().unwrap().clear();
+        h.state_mut().canvas.notice = Some("Refused earlier".into());
         tap(h, VIEW);
         assert!(!has_id(h, VIEW) && host.reads.lock().unwrap().is_empty(), "nothing read again");
         assert_eq!(h.state().viewing(), Some("c2"));
+        assert_eq!(h.state().canvas.notice, None, "the reason from an earlier try goes too");
     });
 }
 

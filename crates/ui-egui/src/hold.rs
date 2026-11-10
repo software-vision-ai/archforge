@@ -29,6 +29,10 @@ pub enum HoldRefused {
     NoProject,
     /// A gesture runs, which would still end in a change.
     Gesture,
+    /// An editor, a drawing under way, a drag or a dialog is open: finished or cancelled first.
+    Editing,
+    /// A description or a skill's text could not be written, and is kept for the person to see.
+    Description,
 }
 
 /// A hold under way: whether the session was read-only before it, and whether the latest rows have

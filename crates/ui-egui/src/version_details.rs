@@ -185,10 +185,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let (title, meta) = lines(&entry, clock);
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     // Panels still report on the canvas, which this covers.
-    if let Some(notice) = shell.canvas.notice.clone() {
-        ux::text(ui.painter(), pos2(left, r.top() + BAND + 6.0), &notice, types::CAPTION, p.amber, Some(width));
-    }
-    let mut y = r.top() + BAND + 24.0;
+    let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
+    let mut y = r.top() + BAND + 24.0 + (said - types::CAPTION.line).max(0.0);
     let g = ux::galley_rows(ui.painter(), &title, types::PAGE_TITLE, p.text, Some(width), 3);
     let height = g.size().y;
     ui.painter().galley(pos2(left, y), g, p.text);
@@ -202,10 +200,13 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     };
     let id = "workspace.version-details.view";
     if button(shell, ui, p, id, pos2(left, y), &tr("View this version"), Look::Primary, off.is_none(), off.as_deref()).1.clicked() {
-        // Off above whatever would refuse it, so no refusal is left to say on the canvas this hides.
-        shell.versions.details = None;
-        if shell.viewing() != Some(entry.hash.as_str()) {
-            crate::version_chip::view(shell, entry.hash.clone(), crate::version_chip::when(&entry.date, clock));
+        // Refused, these details stay and say why, above: an editor still open is one of the reasons.
+        if shell.viewing() == Some(entry.hash.as_str()) {
+            // Already showing, so nothing can refuse: a reason from an earlier try goes with these.
+            shell.canvas.notice = None;
+            shell.versions.details = None;
+        } else if crate::version_chip::view(shell, entry.hash.clone(), crate::version_chip::when(&entry.date, clock)) {
+            shell.versions.details = None;
         }
         return true;
     }

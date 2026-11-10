@@ -749,6 +749,9 @@ pub struct EndsEdit {
     pub written: [String; 2],
     /// Why an end's typed multiplicity was refused, shown under its field until it changes.
     pub refused: [Option<String>; 2],
+    /// The role last sent to the model for each end, until the model's own changes: a draft still
+    /// equal to it had its answer, so the selection moving on does not send it again.
+    pub role_tried: [Option<String>; 2],
     /// Each end's static and modifiers as edited, and as the model last had them (AR-126): Apply
     /// writes the edited ones, Cancel and Escape bring the model's back.
     pub modifiers: [EndModifiers; 2],
@@ -757,6 +760,41 @@ pub struct EndsEdit {
     pub modifier_refused: [Option<(&'static str, String)>; 2],
     /// Whether each end's Modifiers are open: closed, a line sums them up.
     pub modifiers_open: [bool; 2],
+}
+
+impl EndsEdit {
+    /// Whether an end holds a role, multiplicity or modifiers typed and not yet written: only what
+    /// differs from the model, as Properties fills this in for an association nothing has touched.
+    pub(crate) fn unwritten(&self) -> bool {
+        self.role != self.written_role || self.multiplicity != self.written || self.modifiers != self.written_modifiers
+    }
+}
+
+/// Ends the draft of an association that is no longer `subject`, the selection. A role or a
+/// multiplicity that reads and was not refused is written, one step for each end, as leaving its
+/// field would: the click that moves the selection draws the next subject before that field can
+/// see it lose the keyboard. The rest goes as Cancel: a refused role or multiplicity, Modifiers
+/// not Applied.
+pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
+    let Some(edit) = shell.panels.ends.take_if(|e| Some(e.association) != subject) else { return };
+    let parse = archforge_uml::members::parse_multiplicity;
+    for i in 0..2 {
+        // What is left out keeps what the end has.
+        let mut params = json!({ "association": edit.association.to_string(), "end": i });
+        let role = edit.role[i].trim();
+        if role != edit.written_role[i] && edit.role_tried[i].as_deref() != Some(role) {
+            params["role"] = json!(role);
+        }
+        let typed = parse(&edit.multiplicity[i]);
+        if edit.refused[i].is_none() && typed.is_ok() && typed != parse(&edit.written[i]) {
+            params["multiplicity"] = json!(edit.multiplicity[i].trim());
+        }
+        if params.as_object().is_some_and(|fields| fields.len() > 2)
+            && let Err(e) = run(shell, "uml.association.set-end", params)
+        {
+            shell.panels.notice = Some(e);
+        }
+    }
 }
 
 /// An association end's static and modifiers as its editor holds them (AR-126).
@@ -817,6 +855,7 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
         role,
         multiplicity,
         refused: [None, None],
+        role_tried: [None, None],
         written_modifiers: modifiers.clone(),
         modifiers,
         modifier_refused: [None, None],
@@ -984,6 +1023,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         if edit.written_role[i] != roles[i] {
             edit.role[i] = roles[i].clone();
             edit.written_role[i] = roles[i].clone();
+            edit.role_tried[i] = None;
         }
         if edit.written[i] != written[i] {
             edit.multiplicity[i] = written[i].clone();
@@ -1157,6 +1197,9 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
                 apply_end_modifiers(shell, id, ends[i], i, &roles[i], &written[i], navigable[i] && !whole, aggregations[i]);
                 return y;
             }
+        }
+        if role && let Some(e) = shell.panels.ends.as_mut() {
+            e.role_tried[i] = Some(edit.role[i].trim().to_string());
         }
         // An association class's end takes no role one of its attributes is named, as they share
         // its names: said in the user's words, and nothing is written.

@@ -61,11 +61,15 @@ pub struct Steps {
 /// A row of the list: the version it views, none for current work; its name; the words beside it.
 type Row = (Option<String>, String, String);
 
+/// Whether a dialog or question is open over the window.
+pub(crate) fn dialog_open(shell: &Shell) -> bool {
+    let dialog = shell.ask.is_some() || shell.about.is_some() || shell.generate.is_some() || shell.new_project.is_some() || shell.settings.is_some();
+    dialog || shell.explorer.delete.is_some() || shell.chat_panel.ask.is_some() || shell.diagrams.new.is_some() || shell.versions.dialog.is_some()
+}
+
 /// Whether the list can be asked for: a model shows, and no hold or dialog is up.
 pub(crate) fn available(shell: &Shell) -> bool {
-    let dialog = shell.ask.is_some() || shell.about.is_some() || shell.generate.is_some() || shell.new_project.is_some() || shell.settings.is_some();
-    let panel_dialog = shell.explorer.delete.is_some() || shell.chat_panel.ask.is_some() || shell.diagrams.new.is_some();
-    shell.session.is_some() && shell.project.is_some() && !shell.is_held() && !dialog && !panel_dialog && shell.versions.dialog.is_none()
+    shell.session.is_some() && shell.project.is_some() && !shell.is_held() && !dialog_open(shell)
 }
 
 /// Opens the list when it can be asked for: over what is read, which a save, a restore or a branch
@@ -203,19 +207,26 @@ fn step(shell: &mut Shell, older: bool) {
 }
 
 /// Shows the version `hash`, read `label`, from current work or from the version in view, staying
-/// on the diagram in view there; a refusal is said at the top of the centre, and one that goes
-/// through ends what was said before it.
-pub(crate) fn view(shell: &mut Shell, hash: String, label: String) {
-    shell.version_list.shown = Some((hash.clone(), label));
-    shell.canvas.notice = shell.move_to_version(&hash).err().map(|why| refused_words(&why));
+/// on the diagram in view there; gives whether the version is on its way. A refusal is said at
+/// the top of the centre; one that goes through ends what was said before it. A refusal leaves
+/// what the chip says of the version in view as it was.
+pub(crate) fn view(shell: &mut Shell, hash: String, label: String) -> bool {
+    let done = shell.move_to_version(&hash);
+    shell.canvas.notice = done.err().map(|why| refused_words(shell, why));
+    if done.is_ok() {
+        shell.version_list.shown = Some((hash, label));
+    }
+    done.is_ok()
 }
 
 /// What a person is told when a version cannot be shown.
-fn refused_words(why: &HoldRefused) -> String {
+fn refused_words(shell: &Shell, why: HoldRefused) -> String {
     match why {
-        HoldRefused::Gesture => tr("Finish or cancel your edit first."),
+        HoldRefused::Gesture | HoldRefused::Editing => tr("Finish or cancel your edit first."),
         HoldRefused::Another => tr("Wait for the change under way to finish."),
         HoldRefused::NoProject => tr("There is no model to show a version of."),
+        HoldRefused::Description if crate::panels::refused_description(&shell.panels) => shell.panels.notice.clone().unwrap_or_default(),
+        HoldRefused::Description => crate::skill_tab::unkept_reason(),
     }
 }
 
@@ -252,10 +263,17 @@ fn rows(shell: &Shell) -> Vec<Row> {
 
 /// Runs a row and closes the list.
 fn pick(shell: &mut Shell, (hash, label, _): Row) {
-    close(shell);
     match hash {
-        Some(hash) => view(shell, hash, label),
-        None => drop(shell.back_to_current_work()),
+        Some(hash) => {
+            // The list stays on a refusal, as the row can be tried again.
+            if view(shell, hash, label) {
+                close(shell);
+            }
+        }
+        None => {
+            close(shell);
+            shell.back_to_current_work();
+        }
     }
 }
 

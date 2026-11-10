@@ -10,6 +10,7 @@ use archforge_mof::Uuid;
 use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
+use crate::leaving::Cleared;
 use crate::{Shell, canvas, diagrams, explorer, panels};
 
 /// Which diagram a version opens on, when it holds it.
@@ -59,32 +60,33 @@ impl Shell {
     }
 
     /// Starts viewing the version `commit`: the project is held while it is read and built, and it
-    /// shows once it has been. Refused while a version shows or another hold runs, and without a
-    /// model or a host. A read that fails ends the hold and says why, with the real work as it was.
+    /// shows once it has been. Refused while a version shows and as [`Self::clear_to_leave`] says.
+    /// A read that fails ends the hold and says why, with the real work as it was.
     pub fn view_version(&mut self, commit: &str) -> Result<(), HoldRefused> {
         if self.viewing.is_some() {
             return Err(HoldRefused::Another);
         }
-        self.read_to_view(commit, OpensOn::Showing)
+        self.move_to_version(commit)
     }
 
     /// Goes from the version shown, if one is, to the version `commit`, staying on the diagram in
     /// view there rather than the one current work has open. A refusal, as for
-    /// [`Self::view_version`], comes once the version has been left, so current work then shows.
+    /// [`Self::view_version`], leaves the version in view as it was.
     pub(crate) fn move_to_version(&mut self, commit: &str) -> Result<(), HoldRefused> {
+        let cleared = self.clear_to_leave()?;
         let opens_on = if self.viewing.is_some() { OpensOn::Carried(self.canvas.active) } else { OpensOn::Showing };
         self.leave_version();
-        self.read_to_view(commit, opens_on)
+        self.read_to_view(commit, opens_on, cleared)
     }
 
     /// Holds the project and has `commit` read to be shown. The diagram to open goes with the read,
     /// so a read dropped or refused leaves nothing behind for the next.
-    fn read_to_view(&mut self, commit: &str, opens_on: OpensOn) -> Result<(), HoldRefused> {
+    fn read_to_view(&mut self, commit: &str, opens_on: OpensOn, cleared: Cleared) -> Result<(), HoldRefused> {
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
         self.begin_hold()?;
-        self.start_replacing(host.read_version(&path, commit.to_string()), None, Some((commit.to_string(), opens_on)));
+        self.start_replacing(host.read_version(&path, commit.to_string()), None, Some((commit.to_string(), opens_on)), cleared);
         Ok(())
     }
 

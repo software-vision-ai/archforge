@@ -14,6 +14,7 @@ use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
+use crate::leaving::Cleared;
 use crate::viewing::OpensOn;
 use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
 
@@ -96,11 +97,9 @@ impl Replacing {
 impl Shell {
     /// Restores the version `commit`, saved at `saved_at`, as a new version: the version in view
     /// gives way to current work first, and the project is held before the version is read. Refused
-    /// while another hold runs, or without a model or a host, with nothing changed.
+    /// as [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn restore_version(&mut self, commit: &str, saved_at: &str) -> Result<(), HoldRefused> {
-        if self.holding.pending() {
-            return Err(HoldRefused::Another);
-        }
+        let cleared = self.clear_to_leave()?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
@@ -108,24 +107,22 @@ impl Shell {
         self.begin_hold()?;
         let by = SavedBy::Person(self.state.user_name.clone());
         let job = host.restore_job(&path, commit.to_string(), saved_at.to_string(), by, editing::fit_tables);
-        self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None);
+        self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None, cleared);
         Ok(())
     }
 
     /// Moves the project to `branch` under the hold: the version in view gives way to current work
     /// first, the check is asked for once the latest rows have gone over, and the branch's model
-    /// takes the session's place once the move has finished. Refused while another hold runs, or
-    /// without a model or a host, with nothing changed.
+    /// takes the session's place once the move has finished. Refused as
+    /// [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn switch_branch(&mut self, branch: String) -> Result<(), HoldRefused> {
-        if self.holding.pending() {
-            return Err(HoldRefused::Another);
-        }
+        let cleared = self.clear_to_leave()?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
         self.leave_version();
         self.begin_hold()?;
-        self.start_replacing(channel().1, None, None);
+        self.start_replacing(channel().1, None, None, cleared);
         if let Some(r) = self.replacing.as_mut() {
             r.switching_to = Some((path.clone(), branch.clone()));
             r.switch = Some(Box::new(move || host.begin_branch_switch(&path, branch)));
@@ -144,15 +141,23 @@ impl Shell {
     /// Holds the project and starts replacing its session with the model `read` answers, running
     /// `job` once it is built. What happens is driven frame by frame.
     pub fn begin_replacement(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>) -> Result<(), HoldRefused> {
+        let cleared = self.clear_to_leave()?;
         self.begin_hold()?;
-        self.start_replacing(read, job, None);
+        self.start_replacing(read, job, None, cleared);
         Ok(())
     }
 
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside. Without it the project's versions or branch
     /// may change, even if this later fails, so the steps between versions read them afresh.
-    pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<(String, OpensOn)>) {
+    /// `_cleared` is the proof that [`Self::clear_to_leave`] let it through.
+    pub(crate) fn start_replacing(
+        &mut self,
+        read: Receiver<Result<Arc<Rows>, String>>,
+        job: Option<Job>,
+        viewing: Option<(String, OpensOn)>,
+        _cleared: Cleared,
+    ) {
         if viewing.is_none() {
             self.version_list.steps = Default::default();
         }
@@ -352,6 +357,8 @@ impl Shell {
             session.mark_unsaved();
         }
         self.refused = None;
+        // One opened while held would write to the replacement's selection.
+        self.panels.picker = None;
         self.session = Some(session);
         self.session_replaced();
         self.end_hold();

@@ -139,6 +139,20 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
     ]
 }
 
+/// Whether something being typed or an editor card is open in `s`: the fields that only show what is
+/// stored are not counted. An association's ends count while they hold something not yet written,
+/// so an open Modifiers fold stops nothing; a selection moved on has ended them
+/// ([`crate::uml_relate::finish_ends`]).
+pub(crate) fn editing(s: &State) -> bool {
+    open_editors(s).iter().any(Option::is_some)
+        || s.name.is_some()
+        || s.role.is_some()
+        || s.binding.is_some()
+        || s.nary_remove.is_some()
+        || s.stereotypes.value.is_some()
+        || s.ends.as_ref().is_some_and(crate::uml_relate::EndsEdit::unwritten)
+}
+
 /// Brings an editor card that just opened into the scrolled body's view: its foot if it fits,
 /// else its top. Editors call it with their card once drawn.
 pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {
@@ -2235,6 +2249,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     let s = subject(shell, project);
     // A description typed on the element selected before goes to it first.
     flush_description(shell, s.id);
+    crate::uml_relate::finish_ends(shell, s.id);
     match panel {
         Panel::Agent => {
             crate::chat_view::draw(shell, ui, p, r, y);
