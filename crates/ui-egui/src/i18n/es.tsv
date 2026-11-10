@@ -517,7 +517,11 @@ str		None of these versions has a description.	Ninguna de estas versiones tiene 
 str		The next versions couldn't be read.	No se pudieron leer las siguientes versiones.
 str		{name}, selected	{name}, seleccionada
 str		This element couldn't be compared.	No se ha podido comparar este elemento.
-str		What changed inside this element isn't shown here yet.	Lo que ha cambiado dentro de este elemento aún no se muestra aquí.
+str		Yes	Sí
+str		Not set	Sin definir
+str		Nothing here yet	Aún no hay nada
+str		Version of {when}	Versión del {when}
+str		Last version	Última versión
 str		No description	Sin descripción
 str		Saved by an agent	Guardado por un agente
 str		This version can't be shown	Esta versión no se puede mostrar

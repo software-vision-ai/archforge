@@ -517,7 +517,11 @@ str		None of these versions has a description.	这些版本都没有描述。
 str		The next versions couldn't be read.	无法读取后续版本。
 str		{name}, selected	{name}，已选中
 str		This element couldn't be compared.	无法比较此元素。
-str		What changed inside this element isn't shown here yet.	此元素内部的更改尚未在此处显示。
+str		Yes	是
+str		Not set	未设置
+str		Nothing here yet	尚无内容
+str		Version of {when}	{when} 的版本
+str		Last version	最新版本
 str		No description	无描述
 str		Saved by an agent	由代理保存
 str		This version can't be shown	无法显示此版本
