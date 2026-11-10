@@ -22,11 +22,12 @@ An open project fills the window with its workspace.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
   Clicking a model element under Working changes opens it in the centre: its name, whether it was
-  added, changed or removed, where it is, and two cards side by side, **Before** (the last version)
-  and **After** (current work), each with the element's kind, name and values. A name or value
-  that differs is marked with − on the Before card and + on the After card as well as a tint. A
-  side the element isn't on says *Nothing here yet* or *Removed*. Its members and relationships
-  aren't on the cards yet. The project's name at the top closes it.
+  added, changed or removed, where it is, and the version it is compared with, or that there is
+  no version to compare with yet. Two cards side by side, **Before** (the last version) and
+  **After** (current work), give the element's kind, name and values. A name or value that differs
+  is marked with − on the Before card and + on the After card as well as a tint. A side the
+  element isn't on says *Nothing here yet* or *Removed*. Its members and relationships aren't on
+  the cards yet. The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
@@ -39,6 +40,9 @@ On Windows and Linux the strip at the very top, on Home as well, also holds the 
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
+F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
+the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
+ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was.
 
 ## New diagram
 

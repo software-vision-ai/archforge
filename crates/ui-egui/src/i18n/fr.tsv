@@ -516,6 +516,8 @@ str		Show more	Afficher plus
 str		None of these versions has a description.	Aucune de ces versions n'a de description.
 str		The next versions couldn't be read.	Les versions suivantes n'ont pas pu être lues.
 str		{name}, selected	{name}, sélectionnée
+str		Compared with the version of {when}	Comparé à la version du {when}
+str		There is no version to compare with yet.	Il n’y a pas encore de version à comparer.
 str		This element couldn't be compared.	Impossible de comparer cet élément.
 str		Yes	Oui
 str		Not set	Non défini

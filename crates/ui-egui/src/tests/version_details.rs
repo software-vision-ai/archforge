@@ -689,6 +689,7 @@ fn a_new_session_does_not_wait_for_the_link_read_left() {
 const BEFORE: &str = "workspace.change-view.before";
 const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
+const COMPARED: &str = "workspace.change-view.compared";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -734,7 +735,11 @@ fn a_working_change_opens_in_the_centre_without_a_read() {
         h.state_mut().canvas.notice = Some("From earlier".into());
         open_change(h, "shop");
         assert!(!has_id(h, VIEW) && h.state().versions.selected.is_none() && asked(host).is_empty() && !painted_has(h, "From earlier"));
-        assert!(painted_has(h, "Added") && painted_has(h, "Nothing here yet"), "{:?}", painted(h));
+        assert!(
+            painted_has(h, "Added") && painted_has(h, "Nothing here yet") && painted_has(h, "Compared with the version of 7 Nov 17:15"),
+            "{:?}",
+            painted(h)
+        );
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 1);
         let title = rect_of(h, "workspace.change-view.title").top();
         h.state_mut().canvas.notice = Some("Refused by a panel. ".repeat(60));
@@ -742,6 +747,37 @@ fn a_working_change_opens_in_the_centre_without_a_read() {
         assert!(has_id(h, "workspace.canvas.notice") && rect_of(h, "workspace.change-view.title").top() > title, "said, and the title makes room");
         tap(h, "workspace.change-view.close");
         assert!(h.state().versions.element.is_none() && has_id(h, "workspace.tabs.add"));
+    });
+}
+
+/// Before the first version the header says there is nothing to compare with.
+#[test]
+fn before_the_first_version_the_header_says_so() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: Vec::new(), more: false }));
+        add_schema(&mut h, "shop");
+        list_still(&mut h);
+        open_change(&mut h, "shop");
+        assert!(painted_has(&h, "There is no version to compare with yet.") && painted_has(&h, "Added"), "{:?}", painted(&h));
+    });
+}
+
+/// The line ends at the header's right margin, on the breadcrumb's line, is read out as it says,
+/// and in a narrow window is cut rather than reach the breadcrumb.
+#[test]
+fn the_compared_line_keeps_to_the_end_of_the_header() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        landed(h, id, key, both_sides(id, "shop"));
+        let (words, back) = (rect_of(h, COMPARED), rect_of(h, "workspace.change-view.close"));
+        assert!((words.right() - rect_of(h, AFTER).right()).abs() < 1.0, "{words:?}");
+        assert!((words.center().y - back.center().y).abs() < 1.0, "{words:?} {back:?}");
+        assert_eq!(h.query_all_by_label("Compared with the version of 7 Nov 17:15").count(), 1);
+        h.set_size(egui::vec2(600.0, 860.0));
+        h.run_steps(2);
+        let (cut, back) = (rect_of(h, COMPARED), rect_of(h, "workspace.change-view.close"));
+        assert!(cut.width() < words.width() && cut.left() > back.right() + 37.0 + 80.0, "{cut:?} {back:?}");
     });
 }
 
@@ -804,6 +840,7 @@ fn a_failure_is_said_and_never_taken_for_no_change() {
         let (id, key) = element_open(h, host);
         landed(h, id, key.clone(), Err("broken".into()));
         assert!(has_id(h, ELEMENT_FAILED) && !has_id(h, BEFORE) && !painted_has(h, "Added"), "{:?}", painted(h));
+        assert!(!has_id(h, COMPARED), "nothing was compared, so no version is named");
         tap(h, "workspace.change-view.retry");
         frames_until(h, |h| painted_has(h, "Added"));
         tap(h, "workspace.change-view.close");

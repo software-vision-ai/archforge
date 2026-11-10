@@ -11,12 +11,12 @@ use egui::{Rect, pos2, vec2};
 
 use crate::Shell;
 use crate::explorer::TreeScroll;
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button, control};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, types};
 use crate::version_details::{BAND, MARGIN, breadcrumb};
-use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, working_key};
+use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, when, working_key};
 
 /// The changed element the centre shows: its row, which speaks for it until its sides are known, and what was last read of them.
 pub(crate) struct OpenedElement {
@@ -117,9 +117,23 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let row = v.changes.iter().filter(|d| d.id == o.row.id).max_by_key(|d| d.kind != ChangeKind::Removed).unwrap_or(&o.row).clone();
     let retry = matches!(o.found, Some(Err(_)));
     let found = o.found.clone().or_else(|| v.compare_failed.clone().map(Err));
+    let clock = crate::chat_panel::clock(shell);
+    let listed = |h: &String| v.page.iter().flat_map(|l| &l.versions).find(|e| e.hash == *h);
+    // A read that failed compared nothing, so the header names no version.
+    let against = o.read_of.as_ref().filter(|_| !retry).and_then(|key| match &key.0 {
+        None => Some(tr("There is no version to compare with yet.")),
+        Some(hash) => listed(hash).map(|e| fmt(&tr("Compared with the version of {when}"), &[("when", &when(&e.date, clock))])),
+    });
     ui.painter().rect_filled(r, 0.0, p.page);
-    if breadcrumb(shell, ui, p, r, "workspace.change-view.close", &tr("Working changes")) {
+    let (closed, crumb_end) = breadcrumb(shell, ui, p, r, "workspace.change-view.close", &tr("Working changes"));
+    if closed {
         shell.versions.element = None;
+    }
+    if let Some(words) = against {
+        let g = ux::galley(ui.painter(), &words, types::SMALL, p.text_secondary, Some((r.right() - MARGIN - crumb_end - 16.0).max(0.0)));
+        let at = Rect::from_min_size(pos2(r.right() - MARGIN - g.size().x, r.top() + 34.0 - g.size().y / 2.0), g.size());
+        let _ = control(shell, ui, "workspace.change-view.compared", "status", at, false).on_hover_text(&words).accessible_name(&words);
+        ui.painter().galley(at.min, g, p.text_secondary);
     }
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);

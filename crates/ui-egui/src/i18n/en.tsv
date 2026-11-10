@@ -515,6 +515,8 @@ str		Show more	Show more
 str		None of these versions has a description.	None of these versions has a description.
 str		The next versions couldn't be read.	The next versions couldn't be read.
 str		{name}, selected	{name}, selected
+str		Compared with the version of {when}	Compared with the version of {when}
+str		There is no version to compare with yet.	There is no version to compare with yet.
 str		This element couldn't be compared.	This element couldn't be compared.
 str		Yes	Yes
 str		Not set	Not set
