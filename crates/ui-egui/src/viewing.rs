@@ -10,7 +10,7 @@ use archforge_mof::Uuid;
 use archforge_notations::Session;
 
 use crate::hold::HoldRefused;
-use crate::leaving::Cleared;
+use crate::leaving::{Cleared, Leaving};
 use crate::{Shell, canvas, diagrams, explorer, panels};
 
 /// Which diagram a version opens on, when it holds it.
@@ -66,17 +66,22 @@ impl Shell {
         if self.viewing.is_some() {
             return Err(HoldRefused::Another);
         }
-        self.move_to_version(commit)
+        self.move_to_version(commit, None)
     }
 
     /// Goes from the version shown, if one is, to the version `commit`, staying on the diagram in
     /// view there rather than the one current work has open. A refusal, as for
-    /// [`Self::view_version`], leaves the version in view as it was.
-    pub(crate) fn move_to_version(&mut self, commit: &str) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave()?;
+    /// [`Self::view_version`], leaves the version in view as it was. Once it goes ahead the chip
+    /// says `label` of the version, when it has one to say.
+    pub(crate) fn move_to_version(&mut self, commit: &str, label: Option<String>) -> Result<(), HoldRefused> {
+        let cleared = self.clear_to_leave(Some(Leaving::View { commit: commit.to_string(), label: label.clone() }))?;
         let opens_on = if self.viewing.is_some() { OpensOn::Carried(self.canvas.active) } else { OpensOn::Showing };
         self.leave_version();
-        self.read_to_view(commit, opens_on, cleared)
+        self.read_to_view(commit, opens_on, cleared)?;
+        if let Some(label) = label {
+            self.version_list.shown = Some((commit.to_string(), label));
+        }
+        Ok(())
     }
 
     /// Holds the project and has `commit` read to be shown. The diagram to open goes with the read,

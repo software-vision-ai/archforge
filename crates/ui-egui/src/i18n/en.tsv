@@ -1673,3 +1673,7 @@ str		No newer version	No newer version
 str		Finish or cancel your edit first.	Finish or cancel your edit first.
 str		Wait for the change under way to finish.	Wait for the change under way to finish.
 str		There is no model to show a version of.	There is no model to show a version of.
+str		Chat is still changing the model. Stop it and go on?	Chat is still changing the model. Stop it and go on?
+str		Its reply so far is kept.	Its reply so far is kept.
+str		Stop and go on	Stop and go on
+str		Keep working	Keep working

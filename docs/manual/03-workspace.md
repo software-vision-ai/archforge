@@ -17,6 +17,8 @@ An open project fills the window with its workspace.
   Versions are compared one at a time, so when you click through the history quickly, the
   changes of the version you stop on appear once the comparison under way has ended.
   **View this version** shows it read-only; the project's name at the top closes the details.
+  While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
+  keeping what it has written so far, and **Keep working** leaves everything as it was.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

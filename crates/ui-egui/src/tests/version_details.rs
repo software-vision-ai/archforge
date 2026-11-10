@@ -84,6 +84,30 @@ fn a_long_notice_is_wrapped_and_read_whole() {
     });
 }
 
+/// View with a Chat turn running keeps the details while the question waits and when its answer is
+/// refused; Stop and go on closes them once it goes ahead.
+#[test]
+fn the_details_stay_until_chats_question_is_answered() {
+    in_both_appearances(|theme| {
+        let (mut h, _rig, _host, _) = chat_and_a_version(theme);
+        h.state_mut().state.explorer = crate::state::Explorer::SourceControl;
+        crate::version_details::open(h.state_mut(), history().remove(1));
+        ask_in_chat(&mut h, "A long question");
+        h.run_steps(2);
+        tap(&mut h, VIEW);
+        assert!(h.state().versions.details.is_some() && h.state().ask.is_some(), "asked, not yet on its way");
+        crate::settings::open(h.state_mut());
+        tap(&mut h, "close-ask.stop-chat");
+        assert!(h.state().versions.details.is_some() && !h.state().is_held(), "refused now: they stay to say why");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Finish or cancel your edit first."));
+        h.state_mut().settings = None;
+        tap(&mut h, VIEW);
+        tap(&mut h, "close-ask.stop-chat");
+        assert!(h.state().versions.details.is_none() && h.state().is_held());
+        assert_eq!(h.state().version_being_read(), Some("c2"), "this version is the one it reads");
+    });
+}
+
 /// The pointer on View shows `words`.
 fn said_on_hover(h: &mut Harness<'static, Shell>, words: &str) {
     let at = rect_of(h, VIEW).center();

@@ -38,7 +38,7 @@ pub struct List {
     filter: String,
     scroll: TreeScroll,
     /// The version last picked, and how the chip says it.
-    shown: Option<(String, String)>,
+    pub(crate) shown: Option<(String, String)>,
     pub(crate) steps: Steps,
 }
 
@@ -209,25 +209,23 @@ fn step(shell: &mut Shell, older: bool) {
 /// Shows the version `hash`, read `label`, from current work or from the version in view, staying
 /// on the diagram in view there; gives whether the version is on its way. A refusal is said at
 /// the top of the centre; one that goes through ends what was said before it. A refusal leaves
-/// what the chip says of the version in view as it was.
+/// what the chip says of the version in view as it was. Chat's question counts as not on its way.
 pub(crate) fn view(shell: &mut Shell, hash: String, label: String) -> bool {
-    let done = shell.move_to_version(&hash);
-    shell.canvas.notice = done.err().map(|why| refused_words(shell, why));
-    if done.is_ok() {
-        shell.version_list.shown = Some((hash, label));
-    }
+    let done = shell.move_to_version(&hash, Some(label));
+    shell.canvas.notice = done.err().and_then(|why| refused_words(shell, why));
     done.is_ok()
 }
 
-/// What a person is told when a version cannot be shown.
-fn refused_words(shell: &Shell, why: HoldRefused) -> String {
-    match why {
+/// What a person is told when a version cannot be shown; nothing for Chat, whose question says it.
+pub(crate) fn refused_words(shell: &Shell, why: HoldRefused) -> Option<String> {
+    Some(match why {
+        HoldRefused::ChatRunning => return None,
         HoldRefused::Gesture | HoldRefused::Editing => tr("Finish or cancel your edit first."),
         HoldRefused::Another => tr("Wait for the change under way to finish."),
         HoldRefused::NoProject => tr("There is no model to show a version of."),
         HoldRefused::Description if crate::panels::refused_description(&shell.panels) => shell.panels.notice.clone().unwrap_or_default(),
         HoldRefused::Description => crate::skill_tab::unkept_reason(),
-    }
+    })
 }
 
 /// A stored time, RFC 3339 in UTC, as the list says it, `8 Nov 14:02`, local; else as it is.

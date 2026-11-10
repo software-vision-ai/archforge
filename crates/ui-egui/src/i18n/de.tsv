@@ -1674,3 +1674,7 @@ str		No newer version	Keine neuere Version
 str		Finish or cancel your edit first.	Schließen Sie zuerst Ihre Bearbeitung ab oder brechen Sie sie ab.
 str		Wait for the change under way to finish.	Warten Sie, bis die laufende Änderung abgeschlossen ist.
 str		There is no model to show a version of.	Es gibt kein Modell, von dem eine Version angezeigt werden könnte.
+str		Chat is still changing the model. Stop it and go on?	Chat ändert das Modell noch. Stoppen und fortfahren?
+str		Its reply so far is kept.	Die bisherige Antwort bleibt erhalten.
+str		Stop and go on	Stoppen und fortfahren
+str		Keep working	Weiterarbeiten

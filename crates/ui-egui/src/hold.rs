@@ -33,6 +33,8 @@ pub enum HoldRefused {
     Editing,
     /// A description or a skill's text could not be written, and is kept for the person to see.
     Description,
+    /// A Chat turn runs: the question is up, and what was asked for runs if the answer goes on.
+    ChatRunning,
 }
 
 /// A hold under way: whether the session was read-only before it, and whether the latest rows have

@@ -1674,3 +1674,7 @@ str		No newer version	没有更新的版本
 str		Finish or cancel your edit first.	请先完成或取消您的编辑。
 str		Wait for the change under way to finish.	请等待正在进行的更改完成。
 str		There is no model to show a version of.	没有可显示版本的模型。
+str		Chat is still changing the model. Stop it and go on?	Chat 仍在更改模型。要停止并继续吗？
+str		Its reply so far is kept.	它到目前为止的回复会保留。
+str		Stop and go on	停止并继续
+str		Keep working	继续工作
