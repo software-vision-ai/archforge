@@ -159,10 +159,10 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields }))
 }
 
-/// Whether `prop` belongs on a card: one data value, not the element's id or name. Derived
-/// properties never reach this: it is asked of a class's stored ones.
-fn on_a_card(prop: &Property) -> bool {
-    !prop.is_many() && matches!(prop.ty, TypeRef::Data(_)) && !prop.is_id && !prop.is_name
+/// Whether `prop` belongs on a card: one stored data value, not the element's id or name. The
+/// words a card shows are made for these same properties.
+pub fn on_a_card(prop: &Property) -> bool {
+    prop.is_stored() && !prop.is_many() && matches!(prop.ty, TypeRef::Data(_)) && !prop.is_id && !prop.is_name
 }
 
 /// The card and field values of the element `id` in `store`; none when it is not there. A value

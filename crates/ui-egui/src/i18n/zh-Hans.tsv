@@ -1,5 +1,5 @@
 # 简体中文目录。列：kind、context、key、text（参见 i18n/mod.rs）。各行与相关条目放在一起。
-# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # 应用程序菜单
 str		Quit Archforge	退出 Archforge
 str		File	文件
@@ -1453,6 +1453,182 @@ str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	关联类 · {package}
 str		{name} removed; what it held moved to {parent}	已移除 {name}；其内容已移至 {parent}
+# 元模型所命名之物的词语
+str		Alias	别名
+str		Allow substitutable	允许替换
+str		Alt	备选
+str		Applies to	适用于
+str		Assembly	装配
+str		Assert	断言
+str		Associative	关联型
+str		Asynch call	异步调用
+str		Asynch signal	异步信号
+str		Body	正文
+str		Break	中断
+str		Check constraint	检查约束
+str		Choice	选择
+str		Classifier template parameter	分类器模板参数
+str		Comment	注释
+str		Computed stored	计算列，存储
+str		Computed virtual	计算列，虚拟
+str		Concurrency	并发
+str		Concurrent	并发
+str		Consider	考虑
+str		Content	内容
+str		Create message	创建消息
+str		Critical	临界
+str		Deep history	深历史
+str		Delegation	委托
+str		Delete message	删除消息
+str		Deployment location	部署位置
+str		Derivation	派生
+str		Direction	方向
+str		Domain check	域检查约束
+str		Drawing	绘图
+str		Effect	效果
+str		Entry point	入口点
+str		Enumeration literal	枚举字面量
+str		Exactly one	恰好一个
+str		Execution location	执行位置
+str		Exit point	出口点
+str		Export	导出
+str		Extension	扩展
+str		Extension end	扩展端
+str		External	外部
+str		FIFO	FIFO
+str		File name	文件名
+str		First	最先
+str		First event	首个事件
+str		Fork	分叉
+str		Format	格式
+str		Found	发现
+str		From end	起始端
+str		From role	起始角色
+str		Guarded	受保护
+str		Identity always	标识列，始终
+str		Identity by default	标识列，默认
+str		Ignore	忽略
+str		In	输入
+str		Index column	索引列
+str		Initial	初始
+str		Initially deferred	初始延迟
+str		Initially immediate	初始立即
+str		Inout	输入输出
+str		Instance specification	实例规范
+str		Instance value	实例值
+str		Interaction operator	交互操作符
+str		Internal	内部
+str		Is ID	标识
+str		Is abstract	抽象
+str		Is active	活动
+str		Is assured	已保证
+str		Is behavior	行为
+str		Is combine duplicate	合并重复
+str		Is conjugated	共轭
+str		Is control	控制
+str		Is control type	控制类型
+str		Is covering	完全
+str		Is derived	派生
+str		Is derived union	派生并集
+str		Is destroy duplicates	销毁重复
+str		Is destroy links	销毁链接
+str		Is destroy owned objects	销毁所属对象
+str		Is determinate	确定性
+str		Is dimension	维度
+str		Is direct	直接
+str		Is disjoint	互斥
+str		Is exception	异常
+str		Is external	外部
+str		Is final specialization	最终特化
+str		Is indirectly instantiated	间接实例化
+str		Is leaf	叶
+str		Is locally reentrant	局部可重入
+str		Is multicast	多播
+str		Is multireceive	多接收
+str		Is ordered	有序
+str		Is query	查询
+str		Is read only	只读
+str		Is reentrant	可重入
+str		Is relative	相对
+str		Is remove duplicates	移除重复
+str		Is replace all	全部替换
+str		Is service	服务
+str		Is single execution	单次执行
+str		Is static	静态
+str		Is stream	流
+str		Is strict	严格
+str		Is substitutable	可替换
+str		Is synchronous	同步
+str		Is tested first	先测试
+str		Is unique	唯一
+str		Is unmarshall	解组
+str		Iterative	迭代
+str		Join	汇合
+str		Junction	连接点
+str		LIFO	LIFO
+str		Last	最后
+str		Literal boolean	布尔字面量
+str		Literal integer	整数字面量
+str		Literal real	实数字面量
+str		Literal string	字符串字面量
+str		Literal unlimited natural	无限自然数字面量
+str		Local	本地
+str		Loop	循环
+str		Lost	丢失
+str		Message sort	消息类型
+str		Mode	模式
+str		Modelling	建模
+str		Must isolate	必须隔离
+str		Naming	命名
+str		Neg	否定
+str		Not deferrable	不可延迟
+str		Nullable	可为空
+str		Nulls	空值
+str		One or more	一个或多个
+str		Opaque expression	不透明表达式
+str		Opt	可选
+str		Ordering	顺序
+str		Out	输出
+str		Par	并行
+str		Parallel	并行
+str		Persistence	持久化
+str		Profile application	配置文件应用
+str		Property	属性
+str		Read	读取
+str		Realization	实现
+str		Redefinable template signature	可重定义模板签名
+str		Refinement	精化
+str		Reply	回复
+str		Return	返回
+str		Satisfaction	满足
+str		Seq	弱顺序
+str		Sequential	顺序
+str		Setting	设定
+str		Shallow history	浅历史
+str		Slot	槽
+str		Stream	流
+str		Strict	严格顺序
+str		Subtype mapping	子类型映射
+str		Subtypes complete	子类型完全
+str		Subtypes disjoint	子类型互斥
+str		Symbol	符号
+str		Synch call	同步调用
+str		Table index	表索引
+str		Tag	标签
+str		Template parameter substitution	模板参数替换
+str		Terminate	终止
+str		To end	目标端
+str		To role	目标角色
+str		Trace	跟踪
+str		Type pattern	类型模式
+str		URI	URI
+str		Unique constraint	唯一约束
+str		Unknown	未知
+str		Unordered	无序
+str		Update	更新
+str		Viewpoint	视点
+str		Zero or more	零个或多个
+str		Zero or one	零个或一个
 # 关闭时未保存的更改
 str		Close and lose changes	关闭并丢弃更改
 str		Close without writing	不写入就关闭

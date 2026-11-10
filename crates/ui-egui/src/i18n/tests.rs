@@ -105,6 +105,7 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::uml_nesting::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_profiles::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_stereotypes::texts().map(|s| (String::new(), s.to_string())));
+    strings.extend(crate::model_words::texts().into_iter().map(|s| (String::new(), s)));
     // The plurals the notations' cards say, which `trn` takes through their descriptions.
     plurals.extend(archforge_er::figures::PLURALS.iter().chain(archforge_uml::PLURALS).map(|s| s.to_string()));
     strings.sort();
@@ -151,6 +152,136 @@ fn every_catalogue_row_is_read() {
             })
             .collect();
         assert!(unread.is_empty(), "{} has {} row(s) nothing reads:\n{}", lang.code, unread.len(), unread.join("\n"));
+    }
+}
+
+/// The word rule splits at each capital, keeps a run of capitals whole and capitalises only the
+/// first word.
+#[test]
+fn metamodel_names_become_words() {
+    let cases = [
+        ("isAbstract", "Is abstract"),
+        ("tablePerConcreteType", "Table per concrete type"),
+        ("InterfaceRealization", "Interface realization"),
+        ("isID", "Is ID"),
+        ("URI", "URI"),
+        ("FIFO", "FIFO"),
+        ("URIName", "URI name"),
+        ("public", "Public"),
+    ];
+    for (name, expected) in cases {
+        assert_eq!(crate::model_words::words(name), expected, "{name}");
+    }
+}
+
+/// A label is its catalogue row in the thread's language; what has no row is refused, not worded.
+#[test]
+fn model_words_are_the_catalogues_rows_in_the_language_shown() {
+    use crate::model_words::{kind_label, literal_label, property_label};
+    use archforge_mof::{DataId, DataKind, TypeRef};
+    let universe = archforge_notations::universe().unwrap();
+    let row = |lang: &str, context: &str, key: &str| {
+        let language = LANGUAGES.iter().find(|l| l.code == lang).unwrap();
+        parse(&catalogue_text(language)).strings[&(context.to_string(), key.to_string())].clone()
+    };
+    let data = |prop| match universe.prop(prop).unwrap().ty {
+        TypeRef::Data(ty) => ty,
+        other => panic!("{other:?} is no data type"),
+    };
+    let visibility: DataId = data(archforge_uml::named_element::VISIBILITY);
+    let DataKind::Enumeration(literals) = &universe.data_type(visibility).unwrap().kind else { panic!("VisibilityKind is an enumeration") };
+    let package = u32::try_from(literals.iter().position(|l| &**l == "package").unwrap()).unwrap();
+    set_language("de");
+    let german = |key: &str| row("de", "", key);
+    assert_eq!(property_label(&universe, archforge_uml::classifier::IS_ABSTRACT), Some(german("Is abstract")));
+    assert_ne!(german("Is abstract"), "Is abstract", "the row checked is really a translation");
+    assert_eq!(property_label(&universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
+    assert_eq!(literal_label(&universe, visibility, package), Some(german("Package")));
+    assert_eq!(kind_label(&universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
+    assert_eq!(kind_label(&universe, archforge_er::ENTITY), german("Entity"));
+    // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
+    assert_eq!(kind_label(&universe, archforge_uml::ACTOR), german("Element"));
+    assert_eq!(kind_label(&universe, archforge_diagram::NODE), german("Element"));
+    // What the words have no row for is told apart from a word.
+    assert_eq!(literal_label(&universe, visibility, u32::MAX), None);
+    assert_eq!(literal_label(&universe, data(archforge_uml::comment::BODY), 0), None, "a string is no enumeration");
+    assert_eq!(property_label(&universe, archforge_diagram::style::FILL), None);
+    assert_eq!(literal_label(&universe, data(archforge_diagram::style::ROUTING), 0), None);
+    // The class Profile says the modeller's word, not the row of a person's profile.
+    set_language("ja");
+    assert_eq!(kind_label(&universe, archforge_uml::PROFILE), row("ja", "uml", "Profile"));
+    assert_ne!(row("ja", "uml", "Profile"), row("ja", "", "Profile"), "the two rows differ here, so the check can tell them apart");
+    set_language("en");
+}
+
+/// The walk of the universe holds what a card can show and drops each kind of property it must not.
+#[test]
+fn the_labels_cover_what_a_card_shows_and_nothing_else() {
+    use archforge_mof::TypeRef;
+    let universe = archforge_notations::universe().unwrap();
+    let texts = crate::model_words::texts();
+    for wanted in ["Is abstract", "On delete", "Package", "Exactly one", "Interface realization", "Enum type"] {
+        assert!(texts.iter().any(|t| t == wanted), "{wanted} is missing");
+    }
+    // Each is a word nothing that belongs on a card also makes, with the property it stands for
+    // checked to really be of the kind the walk must drop.
+    let dropped = [
+        ("Language", archforge_uml::opaque_expression::LANGUAGE, "many-valued data"),
+        ("Lower", archforge_uml::multiplicity_element::LOWER, "derived"),
+        ("Bound element", archforge_uml::template_binding::BOUND_ELEMENT, "typed by a class"),
+        ("Name", archforge_uml::named_element::NAME, "the name"),
+        ("Fill", archforge_diagram::style::FILL, "a diagram's own"),
+    ];
+    for (word, prop, why) in dropped {
+        let p = universe.prop(prop).unwrap();
+        let of_its_kind = match why {
+            "many-valued data" => p.is_many() && matches!(p.ty, TypeRef::Data(_)) && p.is_stored(),
+            "derived" => !p.is_stored() && !p.is_many() && matches!(p.ty, TypeRef::Data(_)),
+            "typed by a class" => matches!(p.ty, TypeRef::Class(_)) && !p.is_many() && p.is_stored(),
+            "the name" => p.is_name,
+            _ => prop.metamodel() == archforge_diagram::INDEX && archforge_notations::differences::on_a_card(p),
+        };
+        assert!(of_its_kind, "{word} is not {why}");
+        assert!(!texts.iter().any(|t| t == word), "{word} ({why}) has no business on a card");
+    }
+    assert!(!texts.iter().any(|t| t == "As diagram"), "a diagram's literals are not model words");
+}
+
+/// Every class a notation creates by constant name is one of the kinds, each of them concrete and
+/// of the model area.
+#[test]
+fn every_class_the_notations_create_has_a_kind_word() {
+    let universe = archforge_notations::universe().unwrap();
+    let word = |constant: &str| {
+        let mut parts = constant.split('_').map(|p| p.to_lowercase());
+        let first = parts.next().unwrap_or_default();
+        std::iter::once(first[..1].to_uppercase() + &first[1..]).chain(parts).collect::<Vec<_>>().join(" ")
+    };
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files = Vec::new();
+    for dir in ["crates/uml/src", "crates/er/src", "crates/core/src"] {
+        sources(&root.join(dir), &mut files);
+    }
+    let mut created = std::collections::BTreeSet::new();
+    for file in &files {
+        let text = std::fs::read_to_string(file).unwrap();
+        for (at, _) in text.match_indices(".create(") {
+            let argument: String = text[at + ".create(".len()..].chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':').collect();
+            let constant = argument.rsplit("::").next().unwrap_or_default();
+            if !constant.is_empty() && constant.chars().all(|c| c.is_ascii_uppercase() || c == '_') {
+                created.insert(word(constant));
+            }
+        }
+    }
+    assert!(created.contains("Interface realization"), "the scan found {created:?}; the scanner is broken");
+    let kinds: Vec<String> = crate::model_words::KINDS.iter().map(|c| crate::model_words::words(&universe.class(*c).unwrap().name)).collect();
+    // What a notation draws is the diagram metamodel's: boxes, lines and their labels.
+    for class in created.iter().filter(|c| !["Node", "Edge", "Label"].contains(&c.as_str())) {
+        assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to KINDS");
+    }
+    for class in crate::model_words::KINDS {
+        let known = universe.class(*class).unwrap();
+        assert!(!known.is_abstract && class.metamodel() != archforge_diagram::INDEX, "{} cannot be an element's kind", known.name);
     }
 }
 
@@ -509,7 +640,7 @@ fn screen(line: &str, english: Option<&str>) -> Vec<String> {
 /// The provenance every translated catalogue records as its second line: who translated
 /// it, when, and from which revision of the English source. A row added later records its own in
 /// the commit that adds it.
-const PROVENANCE: &str = "# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.";
+const PROVENANCE: &str = "# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.";
 
 type Rows = std::collections::BTreeMap<(String, String, String), String>;
 

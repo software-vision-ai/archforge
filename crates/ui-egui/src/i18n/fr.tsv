@@ -1,5 +1,5 @@
 # Catalogue français. Colonnes : kind, context, key, text (voir i18n/mod.rs). Les lignes se placent à côté des entrées apparentées.
-# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # Menu de l’application
 str		Quit Archforge	Quitter Archforge
 str		File	Fichier
@@ -1453,6 +1453,182 @@ str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	Classe d’association · {package}
 str		{name} removed; what it held moved to {parent}	{name} supprimé ; son contenu a été déplacé vers {parent}
+# Mots pour ce que nomme le métamodèle
+str		Alias	Alias
+str		Allow substitutable	Autoriser la substitution
+str		Alt	Alternative
+str		Applies to	S’applique à
+str		Assembly	Assemblage
+str		Assert	Assertion
+str		Associative	Associative
+str		Asynch call	Appel asynchrone
+str		Asynch signal	Signal asynchrone
+str		Body	Texte
+str		Break	Interruption
+str		Check constraint	Contrainte de contrôle
+str		Choice	Choix
+str		Classifier template parameter	Paramètre de modèle de classificateur
+str		Comment	Commentaire
+str		Computed stored	Calculée, stockée
+str		Computed virtual	Calculée, virtuelle
+str		Concurrency	Concurrence
+str		Concurrent	Concurrente
+str		Consider	Considérer
+str		Content	Contenu
+str		Create message	Message de création
+str		Critical	Critique
+str		Deep history	Historique profond
+str		Delegation	Délégation
+str		Delete message	Message de suppression
+str		Deployment location	Emplacement de déploiement
+str		Derivation	Dérivation
+str		Direction	Direction
+str		Domain check	Contrainte de contrôle de domaine
+str		Drawing	Dessin
+str		Effect	Effet
+str		Entry point	Point d’entrée
+str		Enumeration literal	Littéral d’énumération
+str		Exactly one	Exactement un
+str		Execution location	Emplacement d’exécution
+str		Exit point	Point de sortie
+str		Export	Export
+str		Extension	Extension
+str		Extension end	Extrémité d’extension
+str		External	Externe
+str		FIFO	FIFO
+str		File name	Nom de fichier
+str		First	En premier
+str		First event	Premier événement
+str		Fork	Bifurcation
+str		Format	Format
+str		Found	Trouvé
+str		From end	Extrémité de départ
+str		From role	Rôle de départ
+str		Guarded	Gardée
+str		Identity always	Identité, toujours
+str		Identity by default	Identité, par défaut
+str		Ignore	Ignorer
+str		In	Entrée
+str		Index column	Colonne d’index
+str		Initial	Initial
+str		Initially deferred	Initialement différé
+str		Initially immediate	Initialement immédiat
+str		Inout	Entrée-sortie
+str		Instance specification	Spécification d’instance
+str		Instance value	Valeur d’instance
+str		Interaction operator	Opérateur d’interaction
+str		Internal	Interne
+str		Is ID	Est un ID
+str		Is abstract	Est abstrait
+str		Is active	Est actif
+str		Is assured	Est assuré
+str		Is behavior	Est un comportement
+str		Is combine duplicate	Combine les doublons
+str		Is conjugated	Est conjugué
+str		Is control	Est de contrôle
+str		Is control type	Est de type contrôle
+str		Is covering	Est complet
+str		Is derived	Est dérivé
+str		Is derived union	Est une union dérivée
+str		Is destroy duplicates	Détruit les doublons
+str		Is destroy links	Détruit les liens
+str		Is destroy owned objects	Détruit les objets possédés
+str		Is determinate	Est déterminé
+str		Is dimension	Est une dimension
+str		Is direct	Est direct
+str		Is disjoint	Est disjoint
+str		Is exception	Est une exception
+str		Is external	Est externe
+str		Is final specialization	Est une spécialisation finale
+str		Is indirectly instantiated	Instancié indirectement
+str		Is leaf	Est une feuille
+str		Is locally reentrant	Localement réentrant
+str		Is multicast	Est une multidiffusion
+str		Is multireceive	Est une réception multiple
+str		Is ordered	Est ordonné
+str		Is query	Est une requête
+str		Is read only	Est en lecture seule
+str		Is reentrant	Est réentrant
+str		Is relative	Est relatif
+str		Is remove duplicates	Supprime les doublons
+str		Is replace all	Remplace tout
+str		Is service	Est un service
+str		Is single execution	Exécution unique
+str		Is static	Est statique
+str		Is stream	Est un flux
+str		Is strict	Est strict
+str		Is substitutable	Est substituable
+str		Is synchronous	Est synchrone
+str		Is tested first	Testé en premier
+str		Is unique	Est unique
+str		Is unmarshall	Désérialise
+str		Iterative	Itératif
+str		Join	Jointure
+str		Junction	Jonction
+str		LIFO	LIFO
+str		Last	En dernier
+str		Literal boolean	Littéral booléen
+str		Literal integer	Littéral entier
+str		Literal real	Littéral réel
+str		Literal string	Littéral de chaîne
+str		Literal unlimited natural	Littéral naturel illimité
+str		Local	Locale
+str		Loop	Boucle
+str		Lost	Perdu
+str		Message sort	Type de message
+str		Mode	Mode
+str		Modelling	Modélisation
+str		Must isolate	Doit isoler
+str		Naming	Nommage
+str		Neg	Négatif
+str		Not deferrable	Non différable
+str		Nullable	Accepte les nuls
+str		Nulls	Nuls
+str		One or more	Un ou plusieurs
+str		Opaque expression	Expression opaque
+str		Opt	Option
+str		Ordering	Ordre
+str		Out	Sortie
+str		Par	Parallèle
+str		Parallel	Parallèle
+str		Persistence	Persistance
+str		Profile application	Application de profil
+str		Property	Propriété
+str		Read	Lire
+str		Realization	Réalisation
+str		Redefinable template signature	Signature de modèle redéfinissable
+str		Refinement	Raffinement
+str		Reply	Réponse
+str		Return	Retour
+str		Satisfaction	Satisfaction
+str		Seq	Séquence faible
+str		Sequential	Séquentielle
+str		Setting	Définition
+str		Shallow history	Historique superficiel
+str		Slot	Emplacement
+str		Stream	Flux
+str		Strict	Séquence stricte
+str		Subtype mapping	Mappage des sous-types
+str		Subtypes complete	Sous-types complets
+str		Subtypes disjoint	Sous-types disjoints
+str		Symbol	Symbole
+str		Synch call	Appel synchrone
+str		Table index	Index de table
+str		Tag	Étiquette
+str		Template parameter substitution	Substitution de paramètre de modèle
+str		Terminate	Terminaison
+str		To end	Extrémité d’arrivée
+str		To role	Rôle d’arrivée
+str		Trace	Trace
+str		Type pattern	Motif de type
+str		URI	URI
+str		Unique constraint	Contrainte d’unicité
+str		Unknown	Inconnu
+str		Unordered	Non ordonné
+str		Update	Mettre à jour
+str		Viewpoint	Point de vue
+str		Zero or more	Zéro ou plusieurs
+str		Zero or one	Zéro ou un
 # Modifications non enregistrées à la fermeture
 str		Close and lose changes	Fermer et perdre les modifications
 str		Close without writing	Fermer sans écrire

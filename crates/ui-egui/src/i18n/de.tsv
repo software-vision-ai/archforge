@@ -1,5 +1,5 @@
 # Deutscher Katalog. Spalten: kind, context, key, text (siehe i18n/mod.rs). Zeilen stehen neben verwandten Einträgen.
-# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # Programmmenü
 str		Quit Archforge	Archforge beenden
 str		File	Ablage
@@ -1453,6 +1453,182 @@ str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	Assoziationsklasse · {package}
 str		{name} removed; what it held moved to {parent}	{name} entfernt; der Inhalt wurde nach {parent} verschoben
+# Wörter für das, was das Metamodell benennt
+str		Alias	Alias
+str		Allow substitutable	Ersetzbarkeit erlauben
+str		Alt	Alternative
+str		Applies to	Gilt für
+str		Assembly	Montage
+str		Assert	Zusicherung
+str		Associative	Assoziativ
+str		Asynch call	Asynchroner Aufruf
+str		Asynch signal	Asynchrones Signal
+str		Body	Text
+str		Break	Abbruch
+str		Check constraint	Prüfbedingung
+str		Choice	Auswahl
+str		Classifier template parameter	Klassifizierer-Template-Parameter
+str		Comment	Kommentar
+str		Computed stored	Berechnet, gespeichert
+str		Computed virtual	Berechnet, virtuell
+str		Concurrency	Nebenläufigkeit
+str		Concurrent	Nebenläufig
+str		Consider	Berücksichtigen
+str		Content	Inhalt
+str		Create message	Erzeugungsnachricht
+str		Critical	Kritisch
+str		Deep history	Tiefe Historie
+str		Delegation	Delegation
+str		Delete message	Löschnachricht
+str		Deployment location	Bereitstellungsort
+str		Derivation	Ableitung
+str		Direction	Richtung
+str		Domain check	Domänen-Prüfbedingung
+str		Drawing	Zeichnen
+str		Effect	Effekt
+str		Entry point	Eintrittspunkt
+str		Enumeration literal	Aufzählungsliteral
+str		Exactly one	Genau eins
+str		Execution location	Ausführungsort
+str		Exit point	Austrittspunkt
+str		Export	Exportieren
+str		Extension	Erweiterung
+str		Extension end	Erweiterungsende
+str		External	Extern
+str		FIFO	FIFO
+str		File name	Dateiname
+str		First	Zuerst
+str		First event	Erstes Ereignis
+str		Fork	Gabelung
+str		Format	Format
+str		Found	Gefunden
+str		From end	Startende
+str		From role	Startrolle
+str		Guarded	Überwacht
+str		Identity always	Identität, immer
+str		Identity by default	Identität, standardmäßig
+str		Ignore	Ignorieren
+str		In	Eingabe
+str		Index column	Indexspalte
+str		Initial	Anfangszustand
+str		Initially deferred	Anfangs aufgeschoben
+str		Initially immediate	Anfangs sofort
+str		Inout	Ein-/Ausgabe
+str		Instance specification	Instanzspezifikation
+str		Instance value	Instanzwert
+str		Interaction operator	Interaktionsoperator
+str		Internal	Intern
+str		Is ID	Ist ID
+str		Is abstract	Ist abstrakt
+str		Is active	Ist aktiv
+str		Is assured	Ist zugesichert
+str		Is behavior	Ist Verhalten
+str		Is combine duplicate	Duplikate zusammenführen
+str		Is conjugated	Ist konjugiert
+str		Is control	Ist Steuerung
+str		Is control type	Ist Steuerungstyp
+str		Is covering	Ist vollständig
+str		Is derived	Ist abgeleitet
+str		Is derived union	Ist abgeleitete Vereinigung
+str		Is destroy duplicates	Duplikate zerstören
+str		Is destroy links	Verknüpfungen zerstören
+str		Is destroy owned objects	Eigene Objekte zerstören
+str		Is determinate	Ist deterministisch
+str		Is dimension	Ist Dimension
+str		Is direct	Ist direkt
+str		Is disjoint	Ist disjunkt
+str		Is exception	Ist Ausnahme
+str		Is external	Ist extern
+str		Is final specialization	Ist finale Spezialisierung
+str		Is indirectly instantiated	Indirekt instanziiert
+str		Is leaf	Ist Blatt
+str		Is locally reentrant	Lokal ablaufinvariant
+str		Is multicast	Ist Multicast
+str		Is multireceive	Ist Mehrfachempfang
+str		Is ordered	Ist geordnet
+str		Is query	Ist Abfrage
+str		Is read only	Ist schreibgeschützt
+str		Is reentrant	Ist ablaufinvariant
+str		Is relative	Ist relativ
+str		Is remove duplicates	Duplikate entfernen
+str		Is replace all	Alle ersetzen
+str		Is service	Ist Dienst
+str		Is single execution	Einzelausführung
+str		Is static	Ist statisch
+str		Is stream	Ist Strom
+str		Is strict	Ist strikt
+str		Is substitutable	Ist ersetzbar
+str		Is synchronous	Ist synchron
+str		Is tested first	Zuerst prüfen
+str		Is unique	Ist eindeutig
+str		Is unmarshall	Entpacken
+str		Iterative	Iterativ
+str		Join	Zusammenführung
+str		Junction	Kreuzung
+str		LIFO	LIFO
+str		Last	Zuletzt
+str		Literal boolean	Boolesches Literal
+str		Literal integer	Ganzzahl-Literal
+str		Literal real	Reelles Literal
+str		Literal string	Zeichenketten-Literal
+str		Literal unlimited natural	Literal für unbegrenzte natürliche Zahl
+str		Local	Lokal
+str		Loop	Schleife
+str		Lost	Verloren
+str		Message sort	Nachrichtenart
+str		Mode	Modus
+str		Modelling	Modellieren
+str		Must isolate	Muss isolieren
+str		Naming	Benennen
+str		Neg	Negativ
+str		Not deferrable	Nicht aufschiebbar
+str		Nullable	Null zulässig
+str		Nulls	Nullwerte
+str		One or more	Eins oder mehr
+str		Opaque expression	Opaker Ausdruck
+str		Opt	Option
+str		Ordering	Reihenfolge
+str		Out	Ausgabe
+str		Par	Parallel
+str		Parallel	Parallel
+str		Persistence	Persistenz
+str		Profile application	Profilanwendung
+str		Property	Eigenschaft
+str		Read	Lesen
+str		Realization	Realisierung
+str		Redefinable template signature	Redefinierbare Template-Signatur
+str		Refinement	Verfeinerung
+str		Reply	Antwort
+str		Return	Rückgabe
+str		Satisfaction	Erfüllung
+str		Seq	Schwache Reihenfolge
+str		Sequential	Sequenziell
+str		Setting	Setzend
+str		Shallow history	Flache Historie
+str		Slot	Slot
+str		Stream	Strom
+str		Strict	Strikte Reihenfolge
+str		Subtype mapping	Untertyp-Abbildung
+str		Subtypes complete	Untertypen vollständig
+str		Subtypes disjoint	Untertypen disjunkt
+str		Symbol	Symbol
+str		Synch call	Synchroner Aufruf
+str		Table index	Tabellenindex
+str		Tag	Tag
+str		Template parameter substitution	Template-Parameter-Ersetzung
+str		Terminate	Beendigung
+str		To end	Zielende
+str		To role	Zielrolle
+str		Trace	Nachverfolgung
+str		Type pattern	Typmuster
+str		URI	URI
+str		Unique constraint	Eindeutigkeitsbedingung
+str		Unknown	Unbekannt
+str		Unordered	Ungeordnet
+str		Update	Aktualisieren
+str		Viewpoint	Standpunkt
+str		Zero or more	Null oder mehr
+str		Zero or one	Null oder eins
 # Ungesicherte Änderungen beim Schließen
 str		Close and lose changes	Schließen und Änderungen verwerfen
 str		Close without writing	Ohne Schreiben schließen

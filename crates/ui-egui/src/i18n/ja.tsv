@@ -1,5 +1,5 @@
 # 日本語カタログ。列: kind、context、key、text（i18n/mod.rs を参照）。行は関連する項目の隣に置きます。
-# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit.
+# Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # アプリケーションメニュー
 str		Quit Archforge	Archforge を終了
 str		File	ファイル
@@ -1453,6 +1453,182 @@ str		«dataType» · {package}	«dataType» · {package}
 str		«primitive» · {package}	«primitive» · {package}
 str		Association class · {package}	関連クラス · {package}
 str		{name} removed; what it held moved to {parent}	{name} を削除しました。中身は {parent} に移動しました
+# メタモデルが名付けるものの言葉
+str		Alias	別名
+str		Allow substitutable	置換を許可
+str		Alt	代替
+str		Applies to	適用先
+str		Assembly	アセンブリ
+str		Assert	アサート
+str		Associative	連関
+str		Asynch call	非同期呼び出し
+str		Asynch signal	非同期シグナル
+str		Body	本文
+str		Break	ブレーク
+str		Check constraint	チェック制約
+str		Choice	選択
+str		Classifier template parameter	分類子テンプレートパラメーター
+str		Comment	コメント
+str		Computed stored	計算列、保存
+str		Computed virtual	計算列、仮想
+str		Concurrency	並行性
+str		Concurrent	並行
+str		Consider	考慮
+str		Content	内容
+str		Create message	生成メッセージ
+str		Critical	クリティカル
+str		Deep history	深い履歴
+str		Delegation	委譲
+str		Delete message	削除メッセージ
+str		Deployment location	配置場所
+str		Derivation	導出
+str		Direction	方向
+str		Domain check	ドメインチェック制約
+str		Drawing	描画
+str		Effect	効果
+str		Entry point	入口点
+str		Enumeration literal	列挙リテラル
+str		Exactly one	ちょうど 1
+str		Execution location	実行場所
+str		Exit point	出口点
+str		Export	エクスポート
+str		Extension	拡張
+str		Extension end	拡張端
+str		External	外部
+str		FIFO	FIFO
+str		File name	ファイル名
+str		First	先頭
+str		First event	最初のイベント
+str		Fork	フォーク
+str		Format	形式
+str		Found	発見
+str		From end	開始側
+str		From role	開始側ロール
+str		Guarded	ガード付き
+str		Identity always	識別列、常に
+str		Identity by default	識別列、既定で
+str		Ignore	無視
+str		In	入力
+str		Index column	インデックス列
+str		Initial	開始
+str		Initially deferred	初期状態で遅延
+str		Initially immediate	初期状態で即時
+str		Inout	入出力
+str		Instance specification	インスタンス仕様
+str		Instance value	インスタンス値
+str		Interaction operator	相互作用オペレーター
+str		Internal	内部
+str		Is ID	ID
+str		Is abstract	抽象
+str		Is active	アクティブ
+str		Is assured	保証済み
+str		Is behavior	振る舞い
+str		Is combine duplicate	重複を結合
+str		Is conjugated	共役
+str		Is control	制御
+str		Is control type	制御型
+str		Is covering	完全
+str		Is derived	派生
+str		Is derived union	派生和集合
+str		Is destroy duplicates	重複を破棄
+str		Is destroy links	リンクを破棄
+str		Is destroy owned objects	所有オブジェクトを破棄
+str		Is determinate	決定的
+str		Is dimension	次元
+str		Is direct	直接
+str		Is disjoint	排他
+str		Is exception	例外
+str		Is external	外部
+str		Is final specialization	最終特化
+str		Is indirectly instantiated	間接インスタンス化
+str		Is leaf	リーフ
+str		Is locally reentrant	局所再入可能
+str		Is multicast	マルチキャスト
+str		Is multireceive	マルチレシーブ
+str		Is ordered	順序付き
+str		Is query	クエリ
+str		Is read only	読み取り専用
+str		Is reentrant	再入可能
+str		Is relative	相対
+str		Is remove duplicates	重複を削除
+str		Is replace all	すべて置換
+str		Is service	サービス
+str		Is single execution	単一実行
+str		Is static	静的
+str		Is stream	ストリーム
+str		Is strict	厳密
+str		Is substitutable	置換可能
+str		Is synchronous	同期
+str		Is tested first	先に判定
+str		Is unique	一意
+str		Is unmarshall	アンマーシャル
+str		Iterative	反復
+str		Join	ジョイン
+str		Junction	ジャンクション
+str		LIFO	LIFO
+str		Last	末尾
+str		Literal boolean	ブールリテラル
+str		Literal integer	整数リテラル
+str		Literal real	実数リテラル
+str		Literal string	文字列リテラル
+str		Literal unlimited natural	無制限自然数リテラル
+str		Local	ローカル
+str		Loop	ループ
+str		Lost	紛失
+str		Message sort	メッセージ種別
+str		Mode	モード
+str		Modelling	モデリング
+str		Must isolate	隔離必須
+str		Naming	命名
+str		Neg	否定
+str		Not deferrable	遅延不可
+str		Nullable	NULL 許容
+str		Nulls	NULL
+str		One or more	1 以上
+str		Opaque expression	不透明式
+str		Opt	オプション
+str		Ordering	順序
+str		Out	出力
+str		Par	並列
+str		Parallel	並列
+str		Persistence	永続化
+str		Profile application	プロファイル適用
+str		Property	プロパティ
+str		Read	読み取り
+str		Realization	実現
+str		Redefinable template signature	再定義可能テンプレートシグネチャ
+str		Refinement	詳細化
+str		Reply	応答
+str		Return	戻り値
+str		Satisfaction	充足
+str		Seq	弱順序
+str		Sequential	逐次
+str		Setting	設定
+str		Shallow history	浅い履歴
+str		Slot	スロット
+str		Stream	ストリーム
+str		Strict	強順序
+str		Subtype mapping	サブタイプマッピング
+str		Subtypes complete	サブタイプ完全
+str		Subtypes disjoint	サブタイプ排他
+str		Symbol	記号
+str		Synch call	同期呼び出し
+str		Table index	テーブルインデックス
+str		Tag	タグ
+str		Template parameter substitution	テンプレートパラメーター置換
+str		Terminate	終了
+str		To end	終了側
+str		To role	終了側ロール
+str		Trace	トレース
+str		Type pattern	型パターン
+str		URI	URI
+str		Unique constraint	一意制約
+str		Unknown	不明
+str		Unordered	順序なし
+str		Update	更新
+str		Viewpoint	ビューポイント
+str		Zero or more	0 以上
+str		Zero or one	0 または 1
 # 閉じるときの未保存の変更
 str		Close and lose changes	閉じて変更を破棄
 str		Close without writing	書き込まずに閉じる
