@@ -16,6 +16,9 @@ An open project fills the window with its workspace.
   to that version, which opens its details the same way.
   Versions are compared one at a time, so when you click through the history quickly, the
   changes of the version you stop on appear once the comparison under way has ended.
+  A version that turns out not to be readable stays in the list, marked **This version can't be
+  shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
+  Archforge saved it.
   **View this version** shows it read-only; the project's name at the top closes the details.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work

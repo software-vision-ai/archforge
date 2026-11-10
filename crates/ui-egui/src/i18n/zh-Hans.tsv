@@ -543,6 +543,8 @@ str		Last version	最新版本
 str		No description	无描述
 str		Saved by an agent	由代理保存
 str		This version can't be shown	无法显示此版本
+str		It isn't a version of this branch.	这不是此分支的版本。
+str		Made with a newer Archforge.	由更新版本的 Archforge 创建。
 str		Why?	原因
 str		Date not known	日期未知
 plural		Versions · {n} change	版本 · {n} 处更改

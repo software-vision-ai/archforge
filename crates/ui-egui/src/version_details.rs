@@ -7,7 +7,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use archforge_mof::rows::Rows;
 use archforge_notations::differences::{Area, Difference, classified};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
@@ -17,7 +16,7 @@ use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
 use crate::versions::{change_row, dated, lines};
-use crate::{Shell, VersionEntry};
+use crate::{Shell, VersionEntry, VersionRead};
 
 pub(crate) mod compare;
 
@@ -95,12 +94,18 @@ fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
 
 /// Compares the two versions' models off the interface thread once both have been read. Answers
 /// why when either could not be read or compared; a dropped answer ends with nobody listening.
-fn compare(before: Receiver<Result<Arc<Rows>, String>>, after: Receiver<Result<Arc<Rows>, String>>) -> Receiver<Found> {
+fn compare(before: Receiver<VersionRead>, after: Receiver<VersionRead>) -> Receiver<Found> {
     let (tx, rx) = channel();
+    let language = crate::i18n::language();
     let work = move || {
+        // Reasons are worded in the language shown, which each thread keeps for itself.
+        crate::i18n::set_language(language);
         // A side read without an answer drops `tx`, which the taker reads as a failed comparison.
         let (Ok(old), Ok(new)) = (before.recv(), after.recv()) else { return };
-        let found = old.and_then(|old| classified(&old, &*new?, crate::editing::fit_tables).map_err(|e| e.to_string()));
+        let found = old
+            .and_then(|old| Ok((old, new?)))
+            .map_err(|e| e.to_string())
+            .and_then(|(old, new)| classified(&old, &new, crate::editing::fit_tables).map_err(|e| e.to_string()));
         // The model's root is no change of its own; model elements come before diagrams.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);

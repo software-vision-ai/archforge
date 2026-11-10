@@ -12,9 +12,9 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
 use archforge_mof::rows::{Cell, Rows};
 
-use crate::Shell;
 use crate::hold::HoldRefused;
 use crate::i18n::tr;
+use crate::{Shell, VersionRead, VersionReadError};
 
 /// The most versions the cache holds: the design's last few.
 const MOST_KEPT: usize = 8;
@@ -22,7 +22,7 @@ const MOST_KEPT: usize = 8;
 const MOST_KEPT_BYTES: usize = 256 << 20;
 
 /// What a read answers: a version's rows, or why they could not be read.
-type Answer = Result<Arc<Rows>, String>;
+type Answer = VersionRead;
 
 /// Where a version goes once it has been read.
 enum Then {
@@ -179,7 +179,7 @@ impl Shell {
     pub(crate) fn drive_loads(&mut self) {
         let answer = self.loads.reading.as_ref().and_then(|r| match r.answer.try_recv() {
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err(tr("The reading stopped without an answer, so nothing was changed."))),
+            Err(TryRecvError::Disconnected) => Some(Err(tr("The reading stopped without an answer, so nothing was changed.").into())),
             Ok(answer) => Some(answer),
         });
         if let Some(answer) = answer {
@@ -192,26 +192,44 @@ impl Shell {
     }
 
     /// The read under way answered. Unless a restore or a branch switch has started since, its rows
-    /// are kept, and they or the failure go on only when this is still the version asked for.
+    /// are kept, or a lasting reason is noted on its row, of the project shown only, as that holds
+    /// whoever asked. They or the failure go on only when this is still the version asked for.
     fn take_answer(&mut self, answer: Answer) {
         let Some(read) = self.loads.reading.take().filter(|r| r.keep) else { return };
-        if let Ok(rows) = &answer {
-            self.loads.keep(&read.project, &read.commit, rows.clone(), bytes_of(rows));
+        let shown = self.project.as_ref().is_some_and(|o| o.path == read.project);
+        match &answer {
+            Ok(rows) => self.loads.keep(&read.project, &read.commit, rows.clone(), bytes_of(rows)),
+            Err(why) if shown && !matches!(why, VersionReadError::Failed(_)) => {
+                let reason = (*why != VersionReadError::Shape).then(|| why.to_string());
+                self.versions.unavailable.insert(read.commit.clone(), reason);
+            }
+            Err(_) => {}
         }
         if self.loads.wanted.as_ref().is_some_and(|w| w.project == read.project && w.commit == read.commit) {
             self.deliver(answer);
         }
     }
 
+    /// Notes on the row of `commit` that its rows cannot be built, which holds of them whoever
+    /// asks. A host that gives no ids says nothing of the rows, so that marks nothing.
+    pub(crate) fn mark_unbuilt(&mut self, commit: String, why: &str) {
+        if self.services.ids.is_some() {
+            self.versions.unavailable.insert(commit, Some(why.to_string()));
+        }
+    }
+
     /// Hands `answer` to what asked for the newest version. A step that failed stays on the version
-    /// in view and says why in the toast above the toolbar.
+    /// in view and says why in the toast above the toolbar; one that cannot be built cannot ever
+    /// be, so its row says so.
     fn deliver(&mut self, answer: Answer) {
         let Some(Wanted { commit, then, .. }) = self.loads.wanted.take() else { return };
-        match then {
+        match (then, answer) {
             // Nothing receives this once the person has gone back, and the rows are kept anyway.
-            Then::Enter(to) => drop(to.send(answer)),
-            Then::Step(label) => {
-                if let Err(why) = answer.and_then(|rows| self.show_step(&rows, commit, label)) {
+            (Then::Enter(to), answer) => drop(to.send(answer)),
+            (Then::Step(_), Err(why)) => self.canvas.say_refused_step(Some(why.to_string())),
+            (Then::Step(label), Ok(rows)) => {
+                if let Err(why) = self.show_step(&rows, commit.clone(), label) {
+                    self.mark_unbuilt(commit, &why);
                     self.canvas.say_refused_step(Some(why));
                 }
             }
