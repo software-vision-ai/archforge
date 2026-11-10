@@ -7,6 +7,7 @@ use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
 mod read_only;
+mod switch_ask;
 /// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
 mod version_details;

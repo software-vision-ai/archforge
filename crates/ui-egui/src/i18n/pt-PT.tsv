@@ -451,6 +451,15 @@ str		You are already on this branch.	Já está neste ramo.
 str		The project stayed on its branch because it changed or was busy.	O projeto ficou no seu ramo porque mudou ou estava ocupado.
 str		Your latest changes could not be written, so the project stayed on its branch.	Não foi possível escrever as suas últimas alterações, por isso o projeto ficou no seu ramo.
 str		The project stayed on its branch: {why}	O projeto ficou no seu ramo: {why}
+str		Switch to {branch}?	Mudar para {branch}?
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} tem alterações por guardar. Ficam em {branch} e estarão lá quando voltar. Não poderá anular passos anteriores.
+str		Save version and switch	Guardar versão e mudar
+str		Switch	Mudar
+str		Couldn't switch to {branch}	Não foi possível mudar para {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} Continua em {branch} e o seu trabalho não mudou.
+str		{why} You are still on {branch}. Your work is saved.	{why} Continua em {branch}. O seu trabalho está guardado.
+str		Switching is refused	Mudança recusada
+str		Your work could not be kept, so the switch was not made.	Não foi possível manter o seu trabalho, por isso a mudança não foi feita.
 str		The switch did not finish, so the project stayed on its branch.	A mudança não terminou, por isso o projeto ficou no seu ramo.
 str		The version could not be restored: {why}	Não foi possível restaurar a versão: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Esta versão é igual ao seu trabalho atual. O seu trabalho não guardado foi mantido como uma versão.

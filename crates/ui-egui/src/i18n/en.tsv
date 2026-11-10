@@ -450,6 +450,15 @@ str		You are already on this branch.	You are already on this branch.
 str		The project stayed on its branch because it changed or was busy.	The project stayed on its branch because it changed or was busy.
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
+str		Switch to {branch}?	Switch to {branch}?
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.
+str		Save version and switch	Save version and switch
+str		Switch	Switch
+str		Couldn't switch to {branch}	Couldn't switch to {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} You are still on {branch} and your work is unchanged.
+str		{why} You are still on {branch}. Your work is saved.	{why} You are still on {branch}. Your work is saved.
+str		Switching is refused	Switching is refused
+str		Your work could not be kept, so the switch was not made.	Your work could not be kept, so the switch was not made.
 str		The switch did not finish, so the project stayed on its branch.	The switch did not finish, so the project stayed on its branch.
 str		The version could not be restored: {why}	The version could not be restored: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	This version is the same as your current work. Your unsaved work was kept as a version.

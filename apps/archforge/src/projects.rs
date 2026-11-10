@@ -894,6 +894,11 @@ impl ProjectHost for Projects {
         Ok(BranchSwitch { read, unsaved, job: moving.into_job() })
     }
 
+    /// As it was typed where Archforge made it.
+    fn branch_shown(&self, stored: &str) -> String {
+        SafeBranch::found(stored).map_or_else(|_| stored.to_string(), |b| b.shown())
+    }
+
     /// Worded on the wait's own thread in the language shown when the job runs.
     fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
         self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)

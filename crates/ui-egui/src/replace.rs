@@ -15,7 +15,7 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
 use crate::leaving::{Cleared, Leaving};
-use crate::{BranchSwitch, SavedBy, Shell, VersionRead, chat_panel, editing};
+use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
@@ -83,6 +83,8 @@ pub(crate) struct Replacing {
     arrives_unsaved: Option<Arc<AtomicBool>>,
     /// The project and branch a switch moves to, kept once it has arrived.
     switching_to: Option<(PathBuf, String)>,
+    /// The ordinary Save this switch does first: its ticket once asked for, gone once it is done.
+    save_first: Option<Option<u64>>,
 }
 
 impl Replacing {
@@ -115,7 +117,14 @@ impl Shell {
     /// takes the session's place once the move has finished. Refused as
     /// [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn switch_branch(&mut self, branch: String) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave(Some(Leaving::Switch(branch.clone())))?;
+        self.start_switch(branch, false)
+    }
+
+    /// [`Self::switch_branch`], saving first when `save_first` says so: an ordinary Save inside the
+    /// hold with the automatic description, and one that fails or can't be told ends the switch there.
+    pub(crate) fn start_switch(&mut self, branch: String, save_first: bool) -> Result<(), HoldRefused> {
+        // Chat's question can't carry the Save, so with one the hold settles a running turn without asking.
+        let cleared = self.clear_to_leave((!save_first).then(|| Leaving::Switch(branch.clone())))?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
@@ -125,6 +134,7 @@ impl Shell {
         if let Some(r) = self.replacing.as_mut() {
             r.switching_to = Some((path.clone(), branch.clone()));
             r.switch = Some(Box::new(move || host.begin_branch_switch(&path, branch)));
+            r.save_first = save_first.then_some(None);
         }
         Ok(())
     }
@@ -169,6 +179,7 @@ impl Shell {
             switch: None,
             arrives_unsaved: None,
             switching_to: None,
+            save_first: None,
         });
     }
 
@@ -182,6 +193,7 @@ impl Shell {
         if let Some(r) = self.replacing.take() {
             self.replacing = self.advance(r);
         }
+        crate::switch_ask::keep(self);
     }
 
     /// Takes `r` one stage on; none once it has ended.
@@ -200,6 +212,16 @@ impl Shell {
                 if !self.hand_over_held() {
                     // The rows could not be made, and the status bar already says why.
                     return self.give_up(None);
+                }
+                match r.save_first.take() {
+                    Some(None) => {
+                        r.save_first = Some(Some(self.save_held()));
+                        r.stage = Stage::Save;
+                        return Some(r);
+                    }
+                    // The save's own error, which says whether a version was made, is what is told.
+                    Some(Some(ticket)) if !matches!(self.save_state(ticket), SaveState::Saved(_)) => return self.give_up(None),
+                    _ => {}
                 }
                 if let Some(start) = r.switch.take() {
                     match start() {
@@ -255,6 +277,7 @@ impl Shell {
                         // On another branch: the status bar's reasons about the branch left go, and
                         // the project reopens here.
                         self.save_error = None;
+                        self.versions.switching = None;
                         if let Some(o) = self.project.as_mut() {
                             o.notice = None;
                         }
@@ -307,6 +330,17 @@ impl Shell {
             Stage::Unknown => Stage::Unknown,
         };
         Some(r)
+    }
+
+    /// Asks the host for an ordinary Save inside the hold, once the latest rows are over; gives its ticket.
+    fn save_held(&mut self) -> u64 {
+        self.save_ticket += 1;
+        if let (Some(host), Some(project), Some(revision)) = (&self.services.projects, &self.project, self.written) {
+            let by = SavedBy::Person(self.state.user_name.clone());
+            self.saving = Some((host.save(&project.path, None, by), revision, self.save_ticket));
+            self.save_error = None;
+        }
+        self.save_ticket
     }
 
     /// A session of `rows`, repaired as an opening repairs it.
