@@ -8443,8 +8443,8 @@ fn working_changes_filter_a_long_list() {
     });
 }
 
-/// An answer for rows that have moved on is dropped, a version in view is not compared, a change
-/// of session lets go of what was found, and rows that cannot be read say so, not "no changes".
+/// An answer for rows that have moved on shows for what it read, a version in view is not compared,
+/// a change of session lets go of what was found, and rows that cannot be read say so, not "no changes".
 #[test]
 fn working_changes_belong_to_the_rows_compared() {
     in_both_appearances(|theme| {
@@ -8459,9 +8459,9 @@ fn working_changes_belong_to_the_rows_compared() {
         assert_eq!(h.state().versions.comparing.as_ref().map(|(key, _)| key.1), Some(revision), "{theme:?}: one at a time");
         tx.send(Ok(Vec::new())).unwrap();
         h.run_steps(1);
-        assert_eq!(h.state().versions.working, 1, "{theme:?}: the old answer is dropped");
+        assert_eq!(h.state().versions.working, 0, "{theme:?}: what that answer read, shown until the newest rows are compared");
         compared(&mut h);
-        assert_eq!(h.state().versions.working, 2, "{theme:?}: the old answer is dropped, the newest rows compared");
+        assert_eq!(h.state().versions.working, 2, "{theme:?}: the newest rows compared");
         h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
         h.state_mut().versions.compared = Some((Some("older".to_string()), 0));
         h.run_steps(2);
@@ -8482,6 +8482,71 @@ fn working_changes_belong_to_the_rows_compared() {
         h.run_steps(2);
         assert!(has_id(&h, "workspace.versions.changes.failed") && !no_changes_said(&h), "{theme:?}");
         assert!(host.reads.lock().unwrap().is_empty(), "{theme:?}: not asked again every frame");
+    });
+}
+
+/// An agent's edit, through the road the control channel takes: answered in the window's own frame.
+fn agent_adds(h: &mut Harness<'static, Shell>, name: &str) {
+    let add = accepted(h, "engine.execute", serde_json::json!({ "command": "er.schema.add", "params": { "name": name } }), false);
+    assert!(crate::control::answer_request(h.state_mut(), &add).is_ok(), "{name}");
+}
+
+/// The session's revision now, and which rows the comparison on its way is of.
+fn revisions(h: &Harness<'static, Shell>) -> (u64, Option<u64>) {
+    (h.state().session.as_ref().unwrap().revision(), h.state().versions.comparing.as_ref().map(|(key, _)| key.1))
+}
+
+/// A difference that no real comparison of these rows could find.
+fn found(n: u8) -> archforge_notations::differences::Difference {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: Area::Model,
+        kind: ChangeKind::Changed,
+        name: None,
+        path: vec![],
+    }
+}
+
+/// While an agent keeps editing, the list still follows: an answer for rows that have moved on
+/// lands for what it read and is not called current, the newest rows are compared next, and one
+/// comparison runs at a time. A failure for moved rows says nothing, and an answer against a version
+/// that is no longer the last is dropped.
+#[test]
+fn working_changes_keep_up_while_an_agent_edits() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        let ((first, _), (tx, rx)) = (revisions(&h), std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("c1".to_string()), first), rx));
+        agent_adds(&mut h, "crm");
+        h.run_steps(2);
+        assert_eq!(revisions(&h).1, Some(first), "{theme:?}: one at a time, whatever the agent does");
+        tx.send(Ok(vec![found(1), found(2), found(3)])).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.state().versions.working, 3, "{theme:?}: what it read lands, though the rows moved on");
+        assert_eq!(h.state().versions.compared, Some((Some("c1".to_string()), first)), "{theme:?}: pinned to the rows it read");
+        assert!(!crate::versions::settled(h.state()), "{theme:?}: and it is not called current");
+        let (now, comparing) = revisions(&h);
+        assert_eq!(comparing, Some(now), "{theme:?}: the newest rows are next, in that same frame");
+        assert_ne!(now, first, "{theme:?}");
+        compared(&mut h);
+        assert!(h.state().versions.working == 1 && crate::versions::settled(h.state()), "{theme:?}: crm");
+
+        let (behind, (tx, rx)) = (revisions(&h).0, std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("c1".to_string()), behind), rx));
+        agent_adds(&mut h, "more");
+        tx.send(Err("the comparison stopped".to_string())).unwrap();
+        h.run_steps(1);
+        assert!(!has_id(&h, "workspace.versions.changes.failed"), "{theme:?}: a failure for rows that moved on says nothing of the newest");
+        compared(&mut h);
+        assert!(h.state().versions.working == 2 && crate::versions::settled(h.state()), "{theme:?}: crm and more");
+
+        let (now, (tx, rx)) = (revisions(&h).0, std::sync::mpsc::channel());
+        h.state_mut().versions.comparing = Some(((Some("older".to_string()), now), rx));
+        tx.send(Ok(vec![found(9)])).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.state().versions.working, 2, "{theme:?}: against a version no longer the last it says nothing");
     });
 }
 

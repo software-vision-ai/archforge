@@ -112,13 +112,15 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
 }
 
 /// Takes the answers about the changes that have come, then compares the session's newest rows
-/// with the last version's when either has moved, off the interface thread. An answer for rows
-/// that have moved on is dropped by what it was of. A version in view is not current work.
+/// with the last version's when either has moved, off the interface thread. One comparison runs at
+/// a time, so revisions that move while it runs fold into the next, which reads the newest rows;
+/// edits an agent makes through the control channel move the revision like any other. A version
+/// in view is not current work.
 fn keep_changes(shell: &mut Shell) {
     take_change_answers(shell);
-    let session = shell.session.as_ref().filter(|s| shell.viewing.is_none() && !s.interacting());
-    let (Some(session), Some(page)) = (session, shell.versions.page.as_ref()) else { return };
-    let last = page.versions.first().map(|v| v.hash.clone());
+    let session = shell.session.as_ref().filter(|s| shell.viewing.is_none() && !s.interacting() && shell.versions.page.is_some());
+    let Some(session) = session else { return };
+    let last = last_version(&shell.versions);
     let key = (last.clone(), session.revision());
     if shell.versions.compared.as_ref() == Some(&key) || shell.versions.comparing.is_some() {
         return;
@@ -181,8 +183,11 @@ fn take_change_answers(shell: &mut Shell) {
     };
     let key = key.clone();
     shell.versions.comparing = None;
-    // Of rows that have moved on: the next look compares the newest.
-    if shell.session.as_ref().map(|s| s.revision()) == Some(key.1) {
+    let moved = shell.session.as_ref().map(|s| s.revision()) != Some(key.1);
+    // Against another last version it says nothing of these rows. Rows that have only moved on
+    // still show what they were, or edits in a steady stream would hide every answer until they
+    // stop; a failure for them says nothing of the newest rows, which the next look compares.
+    if key.0 == last_version(&shell.versions) && (!moved || answer.is_ok()) {
         settle_changes(shell, key, answer);
     }
 }
@@ -234,11 +239,16 @@ fn read(shell: &mut Shell) {
     v.reading = Some(host.versions(&path, None, PAGE));
 }
 
-/// Whether a comparison of what is shown now has finished, and none is on its way.
+/// The last version listed, by its hash; none before the first version or before the first read.
+fn last_version(v: &State) -> Option<String> {
+    v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone())
+}
+
+/// Whether a comparison of what is shown now has finished, and none is on its way: an answer for
+/// rows that have moved on may be on the list, but it does not say the list is current.
 pub(crate) fn settled(shell: &Shell) -> bool {
     let v = &shell.versions;
-    let last = v.page.as_ref().and_then(|page| page.versions.first()).map(|version| version.hash.clone());
-    let now = shell.session.as_ref().map(|s| (last, s.revision()));
+    let now = shell.session.as_ref().map(|s| (last_version(v), s.revision()));
     v.compared.is_some() && v.compared == now && v.comparing.is_none() && v.reading_base.is_none()
 }
 

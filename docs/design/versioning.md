@@ -373,8 +373,10 @@ tab. A request from an earlier generation is refused, so it cannot land on a ses
 
 The live side comes from the session, not the database, so a comparison is pinned to one
 `session.revision()` and
-refreshes when that moves. Direction is Before → After, shown in the header; Swap reverses it
-deliberately. One
+refreshes when that moves, an agent's edits like the person's. One comparison runs at a time: revisions that
+move while it runs fold into the next, which reads the newest rows, and an answer for rows that have moved on
+stays on the list until it does, so a steady stream of edits never freezes it. Direction is Before → After,
+shown in the header; Swap reverses it deliberately. One
 comparison engine feeds the lists, element cards and diagram cards, so counts agree.
 
 Differences are found by comparing rows by identity, not from Dolt's diff output:
