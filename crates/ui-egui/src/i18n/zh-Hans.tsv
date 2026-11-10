@@ -486,6 +486,7 @@ str		The model changed while this was open. The summary is up to date again.	此
 str		One line, at most 200 characters. It stays in the history.	一行，最多 200 个字符。它会保留在历史记录中。
 plural		{n} model element	{n} 个模型元素
 str		Filter changes…	筛选更改…
+str		Filter versions…	筛选版本…
 str		Model elements	模型元素
 str		Unnamed	未命名
 str		Added	已添加

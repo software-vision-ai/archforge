@@ -486,6 +486,7 @@ str		The model changed while this was open. The summary is up to date again.	El 
 str		One line, at most 200 characters. It stays in the history.	Una línea, 200 caracteres como máximo. Queda en el historial.
 plural		{n} model element	{n} elemento del modelo|{n} elementos del modelo
 str		Filter changes…	Filtrar cambios…
+str		Filter versions…	Filtrar versiones…
 str		Model elements	Elementos del modelo
 str		Unnamed	Sin nombre
 str		Added	Añadido
