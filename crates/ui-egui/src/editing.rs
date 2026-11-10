@@ -1972,7 +1972,8 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
         rows.push(("collapse", "Collapse into a relationship", "", true, false));
     }
     // The handoff to an agent, on every platform.
-    rows.push(("generate", "Generate…", if mac { "⇧⌘G" } else { "Ctrl Shift G" }, true, false));
+    let generate_chord = crate::actions::keys(crate::actions::GENERATE).map(crate::menu_bar::chord).unwrap_or_default();
+    rows.push(("generate", "Generate…", if mac { "⇧⌘G" } else { generate_chord.as_str() }, true, false));
     rows.push(("remove", "Remove from this diagram", delete_chord, true, false));
     rows.push(("delete", "Delete from the model…", model_chord, true, true));
     let separators: Vec<usize> = if table { vec![1, rows.len() - 2] } else { vec![rows.len() - 2] };

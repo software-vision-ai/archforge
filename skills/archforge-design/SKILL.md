@@ -65,14 +65,18 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
-  and Home's search rows share each action's availability; elsewhere a menu bar comes later, and until
-  then the search field and the designed chrome carry the commands.
+  and Home's search rows share each action's availability. On Windows and Linux the same actions are
+  an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
+  `Shell::in_window_menu`): the groups of its own table (File and Help for now, others join by a
+  row), popups 300 wide of rows 30 high and dividers 9, each row off saying why on hover. Choosing
+  a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
+  open the frame's keys are held from the window behind, as under a dialog.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
 
 ## Home and projects
-- Home fills the window on its own, without menu bar, toolbar or status bar. Its welcome has no
-  button: a project opens from the Open a project card or the title strip's + Open project.
+- Home fills the window on its own, without toolbar or status bar; the only menu bar it shows is
+  the in-window one in the title strip, on Windows and Linux. Its welcome has no button: a project opens from the Open a project card or the title strip's + Open project.
 - Archforge looks for Dolt when it starts. Without a Dolt it can keep projects in, Home shows a
   card in the banner's place (2026-11-03): an amber database tile, "Install Dolt to keep your
   projects" and why, Install Dolt (Dolt's installation page, in the browser) and Look again; it has

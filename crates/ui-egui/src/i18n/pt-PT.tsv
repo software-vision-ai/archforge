@@ -3,6 +3,11 @@
 # Menu da aplicação
 str		Quit Archforge	Sair do Archforge
 str		File	Ficheiro
+str		Help	Ajuda
+str		Ctrl	Ctrl
+str		Shift	Shift
+str		The project is busy	O projeto está ocupado
+str		Open or go back to a project first	Abra primeiro um projeto ou volte a um projeto
 str		Open…	Abrir…
 str		Save	Guardar
 # Gerar

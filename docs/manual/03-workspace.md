@@ -24,6 +24,12 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
+On Windows and Linux the strip at the very top, on Home as well, also holds the **File** and
+**Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
+it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
+click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
+
 ## New diagram
 
 The **+** of the tab strip, or of **Diagrams**, opens **New diagram** in two steps.

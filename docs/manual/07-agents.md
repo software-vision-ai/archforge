@@ -676,7 +676,7 @@ primary key and a foreign key to Order."* The table appears on screen as the age
 To have an agent generate something from the model, such as SQL DDL for a schema:
 
 1. Select a schema, table, class or diagram (or none, for the open diagram).
-2. Open **Generate…**: ⇧⌘G (Ctrl Shift G), **File ▸ Generate…** on macOS, or **Generate…** in a
+2. Open **Generate…**: ⇧⌘G (Ctrl+Shift+G), **File ▸ Generate…** in the menu bar, or **Generate…** in a
    table's or class's right-click menu.
 3. Choose the output, **SQL DDL** with its dialect or **Documentation**. The dialog lists the export
    skills that apply, where each comes from, and which one overrides another.

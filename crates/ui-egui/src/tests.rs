@@ -3665,6 +3665,134 @@ fn rect_of(h: &Harness<'static, Shell>, id: &str) -> egui::Rect {
     egui::Rect::from_min_max(egui::pos2(w.rect[0], w.rect[1]), egui::pos2(w.rect[2], w.rect[3]))
 }
 
+/// The real shell, Home or a project, with the bar drawn as on Windows and Linux.
+fn menu_harness(theme: ThemeKind, project: bool) -> Harness<'static, Shell> {
+    let mut h = if project { workspace_harness(theme, egui::vec2(1600.0, 1000.0)) } else { harness(theme) };
+    h.state_mut().in_window_menu = true;
+    h.run();
+    h
+}
+
+/// Clicks the bar's control `id`.
+fn click_menu(h: &mut Harness<'static, Shell>, id: &str) {
+    let at = rect_of(h, id).center();
+    click(h, at);
+}
+
+/// The bar's controls in the frame.
+fn menu_ids(h: &Harness<'static, Shell>) -> Vec<String> {
+    ids(h).into_iter().filter(|i| i.starts_with("strip.menu.")).collect()
+}
+
+/// Told of a native menu, the shell draws no bar; otherwise the groups sit after Open project,
+/// centred on the strip, and File opens under its button at the design's sizes and order.
+#[test]
+fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
+    for (theme, project) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = menu_harness(theme, project);
+        h.state_mut().in_window_menu = false;
+        h.run();
+        assert!(menu_ids(&h).is_empty(), "{theme:?}: no bar on macOS");
+        h.state_mut().in_window_menu = true;
+        h.run();
+        let (file, help, mid) = (rect_of(&h, "strip.menu.file"), rect_of(&h, "strip.menu.help"), rect_of(&h, "strip.theme").center().y);
+        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.help"], "{theme:?}");
+        assert!(
+            file.left() >= rect_of(&h, "strip.open-project").right() && file.height() == 24.0 && help.left() > file.right() && file.center().y == mid,
+            "{theme:?}"
+        );
+        click_menu(&mut h, "strip.menu.file");
+        let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
+            .map(|id| format!("strip.menu.row.{id}"));
+        assert_eq!(menu_ids(&h)[2..], want, "{theme:?}");
+        let rows = want.each_ref().map(|id| rect_of(&h, id));
+        assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
+        assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
+        assert_eq!(
+            (rows[3].top() - rows[2].bottom(), rows[4].top() - rows[3].bottom(), rows[6].top() - rows[5].bottom()),
+            (0.0, 9.0, 9.0),
+            "{theme:?}"
+        );
+    }
+}
+
+/// A live row runs on the next frame and closes the menu; a row that is off takes no click.
+#[test]
+fn a_row_runs_its_action_and_a_row_off_takes_no_click() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        click_menu(&mut h, "strip.menu.file");
+        click_menu(&mut h, "strip.menu.row.file.save");
+        assert!(h.state().menu_bar.open.is_some() && h.state().settings.is_none(), "{theme:?}: Home has nothing to save");
+        click_menu(&mut h, "strip.menu.row.app.settings");
+        assert!(h.state().menu_bar.open.is_none() && h.state().settings.is_some(), "{theme:?}: it ran and closed");
+    }
+}
+
+/// A click on another group moves the open menu there; a click on the open one closes it.
+#[test]
+fn a_click_moves_the_menu_or_closes_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, true);
+        click_menu(&mut h, "strip.menu.file");
+        click_menu(&mut h, "strip.menu.help");
+        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[2..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
+        click_menu(&mut h, "strip.menu.help");
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
+    }
+}
+
+/// While a menu is open the keys stay from the window behind and the shortcuts; Esc closes it and
+/// stops there; a press elsewhere and a dialog over the window close it too.
+#[test]
+fn an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it() {
+    let press = |h: &mut Harness<'static, Shell>, key, modifiers| {
+        h.event(egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers });
+        h.run();
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        click_menu(&mut h, "strip.menu.file");
+        press(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
+        assert!(!h.state().home_search.open, "{theme:?}: nothing behind reads it");
+        press(&mut h, egui::Key::Comma, egui::Modifiers::COMMAND);
+        assert!(h.state().settings.is_none(), "{theme:?}: nor the shortcuts");
+        h.state_mut().home_search.open = true;
+        press(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().menu_bar.open.is_none() && h.state().home_search.open, "{theme:?}: Esc stops at the menu");
+        h.state_mut().home_search.open = false;
+        click_menu(&mut h, "strip.menu.help");
+        click(&mut h, egui::pos2(800.0, 600.0));
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: a press elsewhere");
+        click_menu(&mut h, "strip.menu.help");
+        crate::support::open(h.state_mut());
+        h.run();
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: a dialog");
+    }
+}
+
+/// The groups and rows are named; a row off is disabled, and says why only on hover.
+#[test]
+fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        h.state_mut().tabs = (0..crate::MAX_TABS).map(|_| crate::actions::tests::tab()).collect();
+        click_menu(&mut h, "strip.menu.file");
+        let off = "Close a project to open another";
+        let data = h.get_by_label("New project…").accesskit_node().data().clone();
+        assert!(data.is_disabled() && data.description() == Some(off), "{theme:?}");
+        assert!(h.get_by_label("Quit Archforge").accesskit_node().data().description().is_none(), "{theme:?}");
+        assert!(
+            h.query_by_label("File").is_some() && h.query_by_label("Help").is_some() && h.query_by_label(off).is_none(),
+            "{theme:?}: shown only on hover"
+        );
+        h.event(egui::Event::PointerMoved(rect_of(&h, "strip.menu.row.file.new").center()));
+        h.run();
+        assert!(h.query_by_label(off).is_some(), "{theme:?}");
+    }
+}
+
 #[test]
 fn an_open_project_shows_the_workspace_with_its_session_and_every_control() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -6189,6 +6317,7 @@ fn the_entity_menu_removes_from_the_diagram_and_the_dialog_deletes_from_the_mode
     }
     h.run();
     assert!(h.state().canvas.menu.is_some(), "the menu opened");
+    assert!(painted(&h).iter().any(|t| t == "Ctrl+Shift+G"), "Generate's keys as the menu bar writes them");
     let at = rect_of(&h, "workspace.canvas.menu.remove").center();
     click(&mut h, at);
     assert_eq!(node_ids(&h).len(), 1, "the node went; notice {:?}, active {:?}, ids {:?}", h.state().canvas.notice, h.state().canvas.active, ids(&h));
