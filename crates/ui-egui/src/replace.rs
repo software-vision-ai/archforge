@@ -14,6 +14,7 @@ use archforge_notations::Session;
 
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
+use crate::viewing::OpensOn;
 use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
@@ -72,8 +73,8 @@ pub(crate) struct Replacing {
     read_back: Option<Box<dyn FnOnce() -> ReadBack>>,
     /// Whether the job has written, after which the operation can no longer simply stop.
     wrote: bool,
-    /// The version to show in place of the session, set aside rather than replaced.
-    viewing: Option<String>,
+    /// The version to show in place of the session, set aside rather than replaced, and the diagram it opens on.
+    viewing: Option<(String, OpensOn)>,
     /// The session built differs from the rows read: a repair made while building it.
     repaired: bool,
     /// A branch switch still to be asked of the host, once the latest rows have gone over.
@@ -151,7 +152,7 @@ impl Shell {
     /// Starts the replacement under the hold already taken; with `viewing`, what is built shows
     /// as that version and the session is set aside. Without it the project's versions or branch
     /// may change, even if this later fails, so the steps between versions read them afresh.
-    pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<String>) {
+    pub(crate) fn start_replacing(&mut self, read: Receiver<Result<Arc<Rows>, String>>, job: Option<Job>, viewing: Option<(String, OpensOn)>) {
         if viewing.is_none() {
             self.version_list.steps = Default::default();
         }
@@ -171,7 +172,7 @@ impl Shell {
 
     /// The version being read to be shown.
     pub(crate) fn version_being_read(&self) -> Option<&str> {
-        self.replacing.as_ref()?.viewing.as_deref()
+        self.replacing.as_ref()?.viewing.as_ref().map(|(commit, _)| commit.as_str())
     }
 
     /// One frame of the replacement under way.
@@ -240,7 +241,7 @@ impl Shell {
                     Stage::Writing(session, (job.run)())
                 } else {
                     match r.viewing.take() {
-                        Some(commit) => self.show_version(*session, commit),
+                        Some((commit, opens_on)) => self.show_version(*session, commit, opens_on),
                         None => self.install(*session, r.repaired),
                     }
                     if let Some(unsaved) = r.arrives_unsaved {

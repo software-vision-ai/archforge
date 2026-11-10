@@ -303,7 +303,7 @@ pub(crate) mod tests {
             ("a project", |_| {}, &[], &[], &[]),
             ("saving", |s| s.save(), &[SAVE], &[SAVE], &[]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE], &[SAVE], &[]),
-            ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE], &[SAVE], &[]),
+            ("viewing a version", |s| s.show_version(session(), "c1".to_string(), crate::viewing::OpensOn::Showing), &[SAVE], &[SAVE], &[]),
             ("About open", crate::support::open, &[GENERATE, OPEN], &[GENERATE, OPEN], &[]),
             ("Generate open", Shell::open_generate, &[GENERATE], &[GENERATE], &[]),
             ("New project open", crate::new_project::open, &[OPEN], &[], &[]),

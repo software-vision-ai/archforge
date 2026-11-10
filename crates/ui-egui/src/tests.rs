@@ -12275,7 +12275,7 @@ fn a_cards_undo_goes_by_the_history_its_turn_was_made_in() {
         assert!(ids(&h).iter().any(|i| i == undo));
         // A version in view: the history is only set aside, and comes back with current work.
         let preview = another(&mut h);
-        h.state_mut().show_version(preview, "c1".into());
+        h.state_mut().show_version(preview, "c1".into(), crate::viewing::OpensOn::Showing);
         h.run();
         assert_eq!(refusal(&h), Some(UndoRefusal::Viewing), "{theme:?}");
         assert!(painted_has(&h, &UndoRefusal::Viewing.words()), "{theme:?}: {:?}", painted(&h));

@@ -202,8 +202,8 @@ so nobody meets an error on a click.
 
 | Action | How | Effect |
 |---|---|---|
-| Enter | Chip, list, **View this version**, or ‹ from Current work | Current state is set aside, the version loads and shows |
-| Apply | None: moving between versions is only looking | |
+| Enter | Chip, list, **View this version**, or ‹ from Current work | Current state is set aside, the version loads and shows, on the diagram that was showing if it has it, otherwise its first |
+| Apply | None: moving between versions is only looking | Stays on the diagram in view if the next version has it, otherwise that version's first |
 | Cancel | A load can be overtaken or dropped | The last valid state stays |
 | Return | **Back to current work** | The set-aside state returns as it was: selection, tabs, pan, zoom, undo history |
 | Restore | Separate, explicit, confirmed (section 7) | Never reached by navigating |
