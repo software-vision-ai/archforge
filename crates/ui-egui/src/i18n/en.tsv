@@ -474,6 +474,16 @@ str		No changes since the last version.	No changes since the last version.
 str		No versions yet.	No versions yet.
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
+str		Save version…	Save version…
+str		Save version	Save version
+str		Back to current work to save a version	Back to current work to save a version
+str		Archforge could not tell whether a version was made. Look at History before trying again.	Archforge could not tell whether a version was made. Look at History before trying again.
+str		{what} changed since {when}.	{what} changed since {when}.
+str		{what} changed.	{what} changed.
+str		These changes become a new version of {name}.	These changes become a new version of {name}.
+str		The model changed while this was open. The summary is up to date again.	The model changed while this was open. The summary is up to date again.
+str		One line, at most 200 characters. It stays in the history.	One line, at most 200 characters. It stays in the history.
+plural		{n} model element	{n} model element|{n} model elements
 str		Filter changes…	Filter changes…
 str		Model elements	Model elements
 str		Unnamed	Unnamed

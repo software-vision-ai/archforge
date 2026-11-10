@@ -8635,6 +8635,184 @@ fn versions_answer_none(h: &mut Harness<'static, Shell>, host: &SavingHost) {
     versions_answer(h, host, Ok(crate::VersionsPage { versions: odd, more: true }));
 }
 
+/// A project with a change on top of its last version, Save version open on it.
+fn save_dialog(theme: ThemeKind) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = changes_panel(theme);
+    add_schema(&mut h, "crm");
+    compared(&mut h);
+    click_id(&mut h, "workspace.versions.save");
+    assert!(dialog_open(&h), "{theme:?}: it opens");
+    (h, host)
+}
+
+/// Whether the dialog is open.
+fn dialog_open(h: &Harness<'static, Shell>) -> bool {
+    h.state().versions.dialog.is_some()
+}
+
+/// Whether the keyboard is on the control `id`.
+fn focused_on(h: &Harness<'static, Shell>, id: &str) -> bool {
+    h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(id)))
+}
+
+/// Save asks for what was reviewed under what was typed, once, and needs a description; on success
+/// the dialog goes and the keyboard is back on the button that opened it.
+#[test]
+fn save_version_saves_what_was_reviewed_once() {
+    let save = "workspace.versions.dialog.save";
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        assert!(focused_on(&h, "workspace.versions.dialog.description"), "{theme:?}: the keyboard starts in the field");
+        assert!(painted(&h).iter().any(|t| t.starts_with("1 model element changed since")), "{:?}", painted(&h));
+        click_id(&mut h, save);
+        assert!(host.saves.lock().unwrap().is_empty(), "{theme:?}: a description is needed");
+        click_id(&mut h, "workspace.versions.dialog.description");
+        h.event(egui::Event::Text("Added crm".into()));
+        click_id(&mut h, save);
+        click_id(&mut h, save);
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: once");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(dialog_open(&h), "{theme:?}: a save under way is not called off");
+        assert_eq!(*host.descriptions.lock().unwrap(), [Some("Added crm".to_string())], "{theme:?}");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        assert!(!dialog_open(&h) && focused_on(&h, "workspace.versions.save"), "{theme:?}: done, and back on the button");
+    });
+}
+
+/// A model that moves while the dialog is open holds Save back until the summary is of it, and
+/// says so; what is then saved is the new state.
+#[test]
+fn save_version_says_when_the_model_moved_and_waits_for_the_summary() {
+    let (save, warning) = ("workspace.versions.dialog.save", "workspace.versions.dialog.warning");
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        h.event(egui::Event::Text("Two schemas".into()));
+        let (_tx, rx) = std::sync::mpsc::channel();
+        let key = h.state().versions.compared.clone().unwrap();
+        h.state_mut().versions.comparing = Some((key, rx));
+        add_schema(&mut h, "billing");
+        click_id(&mut h, save);
+        assert!(host.saves.lock().unwrap().is_empty() && !has_id(&h, warning), "{theme:?}: not before the summary is of the new rows");
+        h.state_mut().versions.comparing = None;
+        compared(&mut h);
+        assert!(has_id(&h, warning) && painted(&h).iter().any(|t| t.starts_with("2 model elements changed")), "{theme:?}: {:?}", painted(&h));
+        click_id(&mut h, save);
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: now it can");
+    });
+}
+
+/// Changes undone leave nothing to save and say so; a comparison that failed says that instead.
+#[test]
+fn a_dialog_whose_changes_are_undone_has_nothing_to_save() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        h.event(egui::Event::Text("Gone".into()));
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        compared(&mut h);
+        assert!(no_changes_said(&h) && h.state().versions.working == 0, "{theme:?}: {:?}", painted(&h));
+        let key = h.state().versions.compared.clone().unwrap();
+        crate::versions::settle_changes(h.state_mut(), key, Err("no reply".into()));
+        click_id(&mut h, "workspace.versions.dialog.save");
+        assert!(host.saves.lock().unwrap().is_empty() && painted(&h).iter().filter(|t| t.starts_with("The changes c")).count() == 2, "{theme:?}");
+        assert!(crate::save_version::off_because(h.state()).is_some_and(|w| w.starts_with("The changes couldn't")), "{theme:?}");
+    });
+}
+
+/// Enter with no description keeps the field; with the keyboard elsewhere nothing behind the dialog acts.
+#[test]
+fn the_save_dialog_keeps_the_keys_from_what_is_behind_it() {
+    let field = "workspace.versions.dialog.description";
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(dialog_open(&h) && focused_on(&h, field), "{theme:?}: Enter with no description keeps the field");
+        h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id(field)));
+        let revision = h.state().session.as_ref().unwrap().revision();
+        key(&mut h, egui::Key::Z, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::S, egui::Modifiers::COMMAND);
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: no undo behind it");
+        assert!(host.saves.lock().unwrap().is_empty() && dialog_open(&h), "{theme:?}: no Save behind it");
+        assert!(
+            ![crate::actions::GENERATE, crate::actions::OPEN, crate::actions::VERSIONS].iter().any(|a| crate::actions::available(h.state(), a)),
+            "{theme:?}"
+        );
+    });
+}
+
+/// A save that fails or goes unanswered keeps what was typed and offers Retry.
+#[test]
+fn a_failed_save_keeps_the_description_and_offers_retry() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = save_dialog(theme);
+        h.event(egui::Event::Text("Kept".into()));
+        click_id(&mut h, "workspace.versions.dialog.save");
+        drop(host.saves.lock().unwrap().pop());
+        h.run_steps(3);
+        assert!(has_id(&h, "workspace.versions.dialog.warning"), "{theme:?}");
+        assert_eq!(h.state().versions.dialog.as_ref().unwrap().text, "Kept", "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Retry"), "{theme:?}");
+        click_id(&mut h, "workspace.versions.dialog.description");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(*host.descriptions.lock().unwrap(), [Some("Kept".to_string()), Some("Kept".to_string())], "{theme:?}");
+    });
+}
+
+/// The dialog goes with its project, its session or a hold, on Esc, which gives the keyboard back
+/// to the button, and on Cancel.
+#[test]
+fn the_save_dialog_goes_with_what_it_reviews() {
+    let goes: [(&str, fn(&mut Shell)); 3] = [
+        ("project", |s| s.project.as_mut().unwrap().path = "/tmp/Other.archforge".into()),
+        ("session", |s| s.session_replaced()),
+        ("hold", |s| s.begin_hold().unwrap()),
+    ];
+    in_both_appearances(|theme| {
+        for (what, step) in goes {
+            let (mut h, _host) = save_dialog(theme);
+            step(h.state_mut());
+            h.run_steps(2);
+            assert!(!dialog_open(&h), "{theme:?}: {what}");
+        }
+        let (mut h, _host) = save_dialog(theme);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(!dialog_open(&h) && focused_on(&h, "workspace.versions.save"), "{theme:?}: Esc");
+        click_id(&mut h, "workspace.versions.save");
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        assert!(!dialog_open(&h) && h.state().versions.working == 1, "{theme:?}: Cancel changes nothing");
+    });
+}
+
+/// The button is off with nothing to save, before it is known, during a save and with a version in
+/// view, and opens nothing then.
+#[test]
+fn save_version_is_off_unless_there_is_settled_work_to_save() {
+    let button = "workspace.versions.save";
+    in_both_appearances(|theme| {
+        let (mut h, host) = changes_panel(theme);
+        click_id(&mut h, button);
+        assert!(!dialog_open(&h), "{theme:?}: no changes");
+        h.state_mut().versions.compared = None;
+        assert_eq!(crate::save_version::off_because(h.state()), Some(crate::i18n::tr("Loading")), "{theme:?}: not yet compared");
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        assert!(crate::save_version::off_because(h.state()).is_none(), "{theme:?}: on");
+        h.state_mut().save();
+        h.run_steps(2);
+        click_id(&mut h, button);
+        assert!(!dialog_open(&h), "{theme:?}: a save under way");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        start_viewing(&mut h, "c1");
+        let earlier = rows_now(&h);
+        answer_read(&mut h, &host, Ok(earlier));
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        click_id(&mut h, button);
+        assert!(!dialog_open(&h), "{theme:?}: a version in view");
+        assert!(crate::save_version::off_because(h.state()).is_some_and(|w| w.starts_with("Back to current work")), "{theme:?}");
+    });
+}
+
 #[test]
 fn a_second_notations_cards_and_lines_draw_route_arrange_and_take_their_look_on_the_same_canvas() {
     let (mut h, d, a, b, e) = sketch_harness();

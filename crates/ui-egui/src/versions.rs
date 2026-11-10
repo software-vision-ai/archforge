@@ -59,8 +59,8 @@ pub struct State {
     pub(crate) comparing: Option<(Compared, Receiver<Result<Vec<Difference>, String>>)>,
     /// What the changes shown are of, and why they could not be told.
     pub(crate) compared: Option<Compared>,
-    changes: Vec<Difference>,
-    compare_failed: Option<String>,
+    pub(crate) changes: Vec<Difference>,
+    pub(crate) compare_failed: Option<String>,
     pub(crate) filter: String,
     changes_scroll: TreeScroll,
     /// The next page, on its way, and why the last one could not be read.
@@ -70,6 +70,9 @@ pub struct State {
     pub(crate) selected: Option<String>,
     /// Only versions with a description are listed.
     described_only: bool,
+    /// The Save version dialog, while it is open.
+    pub(crate) dialog: Option<crate::save_version::Dialog>,
+    pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
     scroll: TreeScroll,
@@ -234,6 +237,11 @@ fn read(shell: &mut Shell) {
     v.reading = Some(host.versions(&path, None, PAGE));
 }
 
+/// When the last version was saved, as the list says it; none before the first.
+pub(crate) fn last_saved(v: &State, clock: Clock) -> Option<String> {
+    v.page.as_ref()?.versions.first().map(|version| when(&version.date, clock))
+}
+
 /// Whether a comparison of what is shown now has finished, and none is on its way.
 pub(crate) fn settled(shell: &Shell) -> bool {
     let v = &shell.versions;
@@ -272,7 +280,8 @@ fn header(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, sectio
         let chevron = Rect::from_center_size(pos2(r.left() + 24.0, row.center().y), Vec2::splat(12.0));
         ux::icon_in(paint, chevron, if open { &icons::CHEVRON_DOWN } else { &icons::CHEVRON_RIGHT }, p.text_secondary);
     }
-    ux::text(paint, pos2(r.left() + 38.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - 80.0).max(0.0)));
+    let beside = if id == "working" { 150.0 } else { 80.0 };
+    ux::text(paint, pos2(r.left() + 38.0, row.center().y - 9.5), label, types::UI, p.text, Some((r.width() - beside).max(0.0)));
     if let Some(n) = count {
         let g = ux::galley(paint, &n, types::CAPTION, p.text_muted, None);
         paint.galley(pos2(r.right() - 16.0 - g.size().x, row.center().y - g.size().y / 2.0), g, p.text_muted);
@@ -305,6 +314,18 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     let open = !shell.versions.working_folded;
     if header(shell, ui, p, r, y, ("working", &tr("Working changes"), Some(open), None)) {
         shell.versions.working_folded = open;
+    }
+    let label = tr("Save version…");
+    let width = (ux::galley(ui.painter(), &label, types::UI, p.text, None).size().x + 20.0).ceil();
+    let off = crate::save_version::off_because(shell);
+    let at = pos2(r.right() - 16.0 - width, y + 6.0);
+    let look = if off.is_none() { Look::Primary } else { Look::Secondary };
+    let (_, resp) = button(shell, ui, p, "workspace.versions.save", at, &label, look, off.is_none(), off.as_deref());
+    if resp.clicked() {
+        crate::save_version::open(shell);
+    }
+    if std::mem::take(&mut shell.versions.focus_save) {
+        resp.request_focus();
     }
     let next = y + HEADER;
     if !open {

@@ -52,7 +52,7 @@ type Row = (Option<String>, String, String);
 pub(crate) fn available(shell: &Shell) -> bool {
     let dialog = shell.ask.is_some() || shell.about.is_some() || shell.generate.is_some() || shell.new_project.is_some() || shell.settings.is_some();
     let panel_dialog = shell.explorer.delete.is_some() || shell.chat_panel.ask.is_some() || shell.diagrams.new.is_some();
-    shell.session.is_some() && shell.project.is_some() && !shell.is_held() && !dialog && !panel_dialog
+    shell.session.is_some() && shell.project.is_some() && !shell.is_held() && !dialog && !panel_dialog && shell.versions.dialog.is_none()
 }
 
 /// Opens the list and reads its versions again, when it can be asked for.
