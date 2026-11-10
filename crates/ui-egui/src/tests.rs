@@ -8014,6 +8014,7 @@ fn drawn_alone(
             selection: &[],
             overrides,
             key_status: false,
+            looking_only: false,
             renaming: None,
             problems,
             hovered: None,

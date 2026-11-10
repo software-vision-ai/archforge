@@ -614,6 +614,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
             selection: &selection,
             overrides: &overrides,
             key_status: shell.canvas.key_status,
+            looking_only: shell.looking_only(),
             renaming,
             problems: &shell.problems,
             // A line under the pointer, while no gesture runs and the pointer is on the canvas.
@@ -707,6 +708,8 @@ pub(crate) struct Live<'a> {
     pub(crate) selection: &'a [Obj],
     pub(crate) overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
     pub(crate) key_status: bool,
+    /// A version shows: the corner handles, which resize, are not drawn.
+    pub(crate) looking_only: bool,
     pub(crate) renaming: Option<Uuid>,
     pub(crate) problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
     pub(crate) hovered: Option<Obj>,
@@ -749,6 +752,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         selection: live.selection,
         overrides,
         key_status: live.key_status,
+        looking_only: live.looking_only,
         renaming: live.renaming,
         problems: live.problems,
         diagram: d,
@@ -813,6 +817,7 @@ struct Drawing<'a> {
     selection: &'a [Obj],
     overrides: &'a std::collections::BTreeMap<Uuid, Rect>,
     key_status: bool,
+    looking_only: bool,
     renaming: Option<Uuid>,
     /// The problems the rules find, by the element they sit on.
     problems: &'a std::collections::BTreeMap<Obj, Vec<String>>,
@@ -1041,7 +1046,7 @@ fn draw_node(
         }
     }
     if selected {
-        selection_ring(paint, p, rect);
+        selection_ring(paint, p, rect, d.looking_only);
     }
     // A template's signature over the card's top-right corner (AR-130).
     if let Some(rows) = signature
@@ -1593,10 +1598,13 @@ fn dashed_rect(paint: &egui::Painter, rect: Rect, stroke: Stroke, dash: f32, gap
     paint.extend(egui::Shape::dashed_line(&path, stroke, dash.max(1.0), gap.max(1.0)));
 }
 
-/// The accent ring and the four corner handles of a selected node.
-fn selection_ring(paint: &egui::Painter, p: &Palette, rect: Rect) {
+/// The accent ring of a selected node and its four corner handles, none while only `looking`.
+fn selection_ring(paint: &egui::Painter, p: &Palette, rect: Rect, looking: bool) {
     let ring = rect.expand(4.0);
     paint.rect_stroke(ring, 4.0, Stroke::new(1.5, p.accent), StrokeKind::Inside);
+    if looking {
+        return;
+    }
     for corner in [ring.left_top(), ring.right_top(), ring.left_bottom(), ring.right_bottom()] {
         let h = Rect::from_center_size(corner, Vec2::splat(6.0));
         paint.rect_filled(h, 1.0, p.surface);

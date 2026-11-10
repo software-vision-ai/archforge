@@ -464,3 +464,143 @@ fn nothing_is_carried_past_an_empty_view_or_a_dropped_read() {
         assert_eq!(centre(&h), (vec![b], Some(b)), "what the dropped read carried is gone");
     });
 }
+
+/// The window at `width`, and the chip's rectangle there.
+fn chip_at(h: &mut Harness<'static, Shell>, width: f32) -> egui::Rect {
+    h.set_size(egui::vec2(width, 860.0));
+    h.run_steps(3);
+    rect_of(h, "workspace.header.version")
+}
+
+/// The icon drawn centred on `centre`: its picture's rectangle, padding included.
+fn icon_at(h: &Harness<'static, Shell>, centre: egui::Pos2) -> Option<egui::Rect> {
+    /// The bounds of the first textured mesh under `s` centred on `centre`.
+    fn walk(s: &egui::Shape, centre: egui::Pos2) -> Option<egui::Rect> {
+        match s {
+            egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() && m.calc_bounds().center().distance(centre) < 1.0 => {
+                Some(m.calc_bounds())
+            }
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, centre)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, centre))
+}
+
+/// The size the first text reading `text` is painted at.
+fn text_size(h: &Harness<'static, Shell>, text: &str) -> Option<f32> {
+    /// The first font size under `s` of a text reading `text`.
+    fn walk(s: &egui::Shape, text: &str) -> Option<f32> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == text => t.galley.job.sections.first().map(|s| s.format.font_id.size),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, text)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, text))
+}
+
+/// Whether the versions' clock is drawn at `centre`: its 14-point picture, not the plain clock's 17.
+fn versions_clock_at(h: &Harness<'static, Shell>, centre: egui::Pos2) -> bool {
+    icon_at(h, centre).is_some_and(|r| r.width() < 17.0 + 2.0)
+}
+
+/// Whether the unsaved dot is drawn on the chip's icon.
+fn icon_dot(h: &Harness<'static, Shell>, chip: egui::Rect) -> bool {
+    let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+    /// Whether a 3-point circle of `fill` is drawn at `at` under `s`.
+    fn walk(s: &egui::Shape, at: egui::Pos2, fill: egui::Color32) -> bool {
+        match s {
+            egui::Shape::Circle(c) => c.center.distance(at) < 0.5 && c.fill == fill && (c.radius - 3.0).abs() < 0.01,
+            egui::Shape::Vec(v) => v.iter().any(|s| walk(s, at, fill)),
+            _ => false,
+        }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, chip.min + egui::vec2(24.0, 8.0), p.amber))
+}
+
+/// The label goes before search does: with room for search but not the whole chip, one icon beside
+/// it; without room for search, the icon against Help and no search. The tabs leave it room.
+#[test]
+fn the_chip_narrows_to_an_icon_before_search_hides() {
+    in_both(|mut h, _host| {
+        h.state_mut().tabs[0].name = "A project with a rather long name indeed".to_string();
+        let wide = chip_at(&mut h, 1600.0);
+        assert_eq!(wide.size(), egui::vec2(135.0, 32.0));
+        let beside = chip_at(&mut h, 900.0);
+        assert_eq!(beside.size(), egui::vec2(32.0, 32.0), "the label went");
+        assert_eq!(rect_of(&h, "workspace.header.search").left() - beside.right(), 12.0, "search is still there, beside it");
+        let icon = chip_at(&mut h, 640.0);
+        assert_eq!(icon.size(), egui::vec2(32.0, 32.0));
+        let help = rect_of(&h, "workspace.header.help");
+        assert_eq!(help.left() - icon.right(), 12.0, "against Help");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.header.search"), "search hid");
+        let tab = rect_of(&h, "workspace.header.project.0");
+        assert!(tab.right() <= icon.left(), "the tab {tab:?} keeps clear of the chip {icon:?}");
+    });
+}
+
+/// At 640 the viewing chip is the icon, untinted, with a dot for work unsaved and no steps; its
+/// tooltip and accessible name say what it views, and a click opens the list.
+#[test]
+fn the_narrow_viewing_chip_names_the_version_it_shows() {
+    in_both(|mut h, host| {
+        let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+        press(&mut h, egui::Key::OpenBracket);
+        answer_versions(&host);
+        h.run_steps(3);
+        shown(&mut h, &host, "h2");
+        let icon = chip_at(&mut h, 640.0);
+        assert_eq!(icon.size(), egui::vec2(32.0, 32.0));
+        assert!(rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == p.surface), "untinted");
+        assert!(!rect_shapes(&h).iter().any(|(r, fill, _)| *r == icon && *fill == p.accent_tint));
+        assert!(versions_clock_at(&h, icon.center()), "the clock with its counter-clockwise arrow");
+        assert!(!icon_dot(&h, icon), "nothing is unsaved");
+        let band = rect_shapes(&h).into_iter().find(|(r, fill, _)| *fill == p.accent_tint && r.height() == 44.0).unwrap().0;
+        assert!(versions_clock_at(&h, egui::pos2(band.left() + 20.0, band.center().y)), "the banner's clock is the same one");
+        assert!(!ids(&h).iter().any(|i| i == "workspace.header.version.back" || i == "workspace.header.version.older"), "one icon, no steps");
+        let read_only = |h: &Harness<'static, Shell>| {
+            painted(h).iter().filter(|t| t.starts_with("Viewing the version of 8 Nov") && t.ends_with("· Read only")).count()
+        };
+        let on_the_chip = h.query_all_by_label_contains("Viewing the version of 8 Nov").any(|n| icon.contains(n.rect().center()));
+        assert!(on_the_chip, "its accessible name says what it views");
+        let before = read_only(&h);
+        h.event(egui::Event::PointerMoved(icon.center()));
+        for _ in 0..90 {
+            h.step();
+        }
+        assert_eq!(read_only(&h), before + 1, "its tooltip says what it views");
+        click(&mut h, icon.center());
+        h.run_steps(2);
+        assert!(list_shows(&h), "it opens the list");
+    });
+}
+
+/// Work left unsaved while a version shows puts the dot on the narrow chip, as on current work.
+#[test]
+fn the_narrow_chip_shows_a_dot_for_unsaved_work() {
+    in_both(|mut h, host| {
+        let icon = chip_at(&mut h, 640.0);
+        assert!(!icon_dot(&h, icon) && h.query_by_label("Current work").is_some(), "nothing unsaved");
+        add_schema(&mut h, "shop");
+        h.run_steps(2);
+        assert!(icon_dot(&h, icon) && h.query_by_label("Current work · unsaved changes").is_some(), "work unsaved");
+        h.state_mut().view_version("h1").unwrap();
+        h.run_steps(3);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        assert_eq!(h.state().viewing(), Some("h1"));
+        h.run_steps(2);
+        assert!(icon_dot(&h, icon), "the work still unsaved shows while a version does");
+    });
+}
+
+/// The whole chip at the design's measures: the clock with its arrow and the label at 12 points.
+#[test]
+fn the_chip_has_the_designs_clock_and_label_size() {
+    in_both(|mut h, _host| {
+        let chip = chip_at(&mut h, 1600.0);
+        assert_eq!(text_size(&h, "Current work"), Some(12.0));
+        assert!(versions_clock_at(&h, egui::pos2(chip.left() + 18.0, chip.center().y)), "the clock with its arrow, as the design has it");
+    });
+}

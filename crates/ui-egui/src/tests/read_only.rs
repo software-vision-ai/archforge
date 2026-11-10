@@ -32,6 +32,34 @@ fn centre_of(h: &Harness<'static, Shell>, prefix: &str) -> egui::Pos2 {
     rect_of(h, &id).center()
 }
 
+/// The small squares of a node's corner handles, drawn in the accent.
+fn corner_squares(h: &Harness<'static, Shell>) -> usize {
+    let accent = crate::ux::palette(h.state().state.theme == ThemeKind::Dark).accent;
+    rect_shapes(h).iter().filter(|(r, fill, stroke)| *stroke == accent && *fill != accent && r.size() == egui::vec2(6.0, 6.0)).count()
+}
+
+/// A selected node's corners, which resize, are not drawn while a version shows; its ring is.
+#[test]
+fn a_selected_node_has_no_corners_while_a_version_shows() {
+    in_both(viewing, |mut h, _rig, _host| {
+        let node = centre_of(&h, "workspace.canvas.node.");
+        let (rect, accent) = (
+            rect_of(&h, ids(&h).iter().find(|i| i.starts_with("workspace.canvas.node.")).unwrap()),
+            crate::ux::palette(h.state().state.theme == ThemeKind::Dark).accent,
+        );
+        click(&mut h, node);
+        h.run_steps(2);
+        assert!(rect_shapes(&h).iter().any(|(r, _, stroke)| *stroke == accent && r.contains_rect(rect.shrink(1.0))), "the ring shows it is selected");
+        assert_eq!(corner_squares(&h), 0, "no corners while a version shows");
+        h.state_mut().back_to_current_work();
+        h.run_steps(3);
+        let node = centre_of(&h, "workspace.canvas.node.");
+        click(&mut h, node);
+        h.run_steps(2);
+        assert_eq!(corner_squares(&h), 4, "current work has its corners");
+    });
+}
+
 /// That nothing changed, nothing was refused, and nothing that edits has opened.
 #[track_caller]
 fn still_only_looking(h: &Harness<'static, Shell>, rows: &archforge_mof::rows::Rows, what: &str) {

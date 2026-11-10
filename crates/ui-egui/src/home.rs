@@ -269,6 +269,9 @@ pub(crate) fn brand(paint: &egui::Painter, p: &Palette, r: Rect) -> Rect {
     arch.union(forge)
 }
 
+/// The narrowest the search field shows at; with less room it hides.
+pub(crate) const SEARCH_MIN: f32 = 160.0;
+
 /// The bar's right: the search field from `start` at the earliest, help and the avatar, all on
 /// the bar's middle line. The controls' ids start with `prefix`.
 #[allow(clippy::too_many_arguments, reason = "the bar's two screens differ in their ids, placeholder and search kind")]
@@ -310,7 +313,7 @@ pub(crate) fn bar_tail(
     // The search field keeps its distance from the left part when the window is narrow.
     let end = help.left() - 12.0;
     let start = if prefix == "workspace.header" { crate::version_chip::bar(shell, ui, p, mid, start, end) } else { (end - 300.0).max(start) };
-    if end - start >= 160.0 {
+    if end - start >= SEARCH_MIN {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
         // Home's field searches projects; a project's, its diagrams and elements.
         if prefix == "home.header" || prefix == "workspace.header" {
