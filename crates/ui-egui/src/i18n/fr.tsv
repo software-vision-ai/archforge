@@ -510,6 +510,10 @@ str		Show more	Afficher plus
 str		None of these versions has a description.	Aucune de ces versions n'a de description.
 str		The next versions couldn't be read.	Les versions suivantes n'ont pas pu être lues.
 str		{name}, selected	{name}, sélectionnée
+str		Compared with the version of {when}	Comparé à la version du {when}
+str		There is no version to compare with yet.	Il n’y a pas encore de version à comparer.
+str		This element couldn't be compared.	Impossible de comparer cet élément.
+str		What changed inside this element isn't shown here yet.	Ce qui a changé dans cet élément n’est pas encore affiché ici.
 str		No description	Aucune description
 str		Saved by an agent	Enregistré par un agent
 str		This version can't be shown	Cette version ne peut pas être affichée

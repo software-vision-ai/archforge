@@ -335,6 +335,7 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     // Before the rail says the count, so its words and its badge are of one frame.
     crate::versions::refresh(shell, ui.ctx());
     crate::version_details::keep(shell, ui.ctx());
+    crate::change_view::keep(shell, ui.ctx());
     let active = shell.state.explorer;
     for (i, (id, which, icon, title)) in EXPLORERS.iter().enumerate() {
         let button = Rect::from_min_size(pos2(r.left() + 10.0, r.top() + 8.0 + i as f32 * RAIL_PITCH), RAIL_BUTTON);
@@ -389,11 +390,11 @@ fn resize(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, body: Rect, id:
     }
 }
 
-/// The centre: a version's details when they are open, otherwise the diagram tabs over the
-/// canvas, drawn by the canvas module.
+/// The centre: a version's details or a changed element when one is open, otherwise the diagram
+/// tabs over the canvas, drawn by the canvas module.
 fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let r = if shell.looking_only() { banner(shell, ui, p, r) } else { r };
-    if !crate::version_details::draw(shell, ui, p, r) {
+    if !crate::version_details::draw(shell, ui, p, r) && !crate::change_view::draw(shell, ui, p, r) {
         crate::canvas::centre(shell, ui, p, r);
     }
 }

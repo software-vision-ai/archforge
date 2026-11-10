@@ -509,6 +509,10 @@ str		Show more	Show more
 str		None of these versions has a description.	None of these versions has a description.
 str		The next versions couldn't be read.	The next versions couldn't be read.
 str		{name}, selected	{name}, selected
+str		Compared with the version of {when}	Compared with the version of {when}
+str		There is no version to compare with yet.	There is no version to compare with yet.
+str		This element couldn't be compared.	This element couldn't be compared.
+str		What changed inside this element isn't shown here yet.	What changed inside this element isn't shown here yet.
 str		No description	No description
 str		Saved by an agent	Saved by an agent
 str		This version can't be shown	This version can't be shown

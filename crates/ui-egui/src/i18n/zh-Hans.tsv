@@ -510,6 +510,10 @@ str		Show more	显示更多
 str		None of these versions has a description.	这些版本都没有描述。
 str		The next versions couldn't be read.	无法读取后续版本。
 str		{name}, selected	{name}，已选中
+str		Compared with the version of {when}	与 {when} 的版本比较
+str		There is no version to compare with yet.	还没有可比较的版本。
+str		This element couldn't be compared.	无法比较此元素。
+str		What changed inside this element isn't shown here yet.	此元素内部的更改尚未在此处显示。
 str		No description	无描述
 str		Saved by an agent	由代理保存
 str		This version can't be shown	无法显示此版本
