@@ -149,7 +149,6 @@ pub(crate) fn editing(s: &State) -> bool {
         || s.binding.is_some()
         || s.nary_remove.is_some()
         || s.stereotypes.value.is_some()
-        || s.picker.is_some()
         || s.ends.as_ref().is_some_and(|e| s.editors_for == Some(e.association) && e.unwritten())
 }
 

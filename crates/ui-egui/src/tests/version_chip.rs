@@ -616,7 +616,7 @@ fn an_open_editor_stops_every_way_of_leaving() {
         hold::HoldRefused::Editing,
         panels::NameEdit,
     };
-    let open: [(&str, &dyn Fn(&mut Shell)); 9] = [
+    let open: [(&str, &dyn Fn(&mut Shell)); 8] = [
         ("panel name", &|s| s.panels.name = Some(NameEdit { target: ID, text: "x".into() })),
         ("panel card", &|s| {
             s.panels.check = Some(CheckEdit { target: None, entity: ID, name: "x".into(), expression: "1".into(), refused: None, opened: false })
@@ -626,7 +626,6 @@ fn an_open_editor_stops_every_way_of_leaving() {
         ("drawing", &draw),
         ("tree drag", &|s| s.explorer.dragging = Some(ID)),
         ("tree name", &|s| s.explorer.rename = Some(Rename { target: ID, text: "x".into(), fresh: false, refused: None, opened: false })),
-        ("colour picker", &|s| s.panels.picker = Some(crate::appearance::Picker::new(crate::appearance::Group::Fill, egui::Color32::RED))),
         ("dialog", &crate::settings::open),
     ];
     for (what, opens) in open {
@@ -638,6 +637,25 @@ fn an_open_editor_stops_every_way_of_leaving() {
             }
         });
     }
+}
+
+/// A colour picker stops leaving only while Appearance shows it: hidden, it has nothing to lose.
+#[test]
+fn a_colour_picker_stops_leaving_only_while_appearance_shows_it() {
+    use crate::{
+        appearance::{Group, Picker},
+        state::Panel,
+    };
+    in_both(|mut h, _| {
+        let s = h.state_mut();
+        s.panels.picker = Some(Picker::new(Group::Fill, egui::Color32::RED));
+        s.state.panel = Panel::Appearance;
+        assert_eq!(s.clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing), "it shows");
+        s.state.panel_collapsed = true;
+        assert!(s.clear_to_leave().is_ok(), "the panel is folded away");
+        (s.state.panel_collapsed, s.state.panel) = (false, Panel::Properties);
+        assert!(s.clear_to_leave().is_ok(), "another panel shows");
+    });
 }
 
 /// An association's ends stop leaving only while selected and holding something not yet written:
