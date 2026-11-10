@@ -113,7 +113,8 @@ pub struct State {
     pub minimap_drag: Option<MinimapDrag>,
     pub grid: bool,
     pub key_status: bool,
-    /// The last refusal, shown at the canvas's top left until the next action.
+    /// The last refusal, shown at the top left of the centre, whatever it holds, until the next
+    /// action.
     pub notice: Option<String>,
     /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
     /// and whether the canvas has the keyboard.
@@ -269,8 +270,9 @@ pub fn open(shell: &mut Shell, id: Uuid) {
     shell.canvas.active = Some(id);
 }
 
-/// Closes a tab; when it was the active one, the tab before it (else after it) takes over. A
-/// skill's tab whose text the store refused stays open on it, showing why, so nothing typed is lost.
+/// Closes a tab; when it was the active one, the tab before it (else after it) takes over and
+/// what was said about it ends. A skill's tab whose text the store refused stays open on it,
+/// showing why, so nothing typed is lost.
 pub fn close_tab(shell: &mut Shell, id: Uuid) {
     let Some(i) = shell.canvas.tabs.iter().position(|t| *t == id) else { return };
     crate::skill_tab::sync(shell, 0.0, true, Some(id));
@@ -282,18 +284,21 @@ pub fn close_tab(shell: &mut Shell, id: Uuid) {
     if shell.canvas.active == Some(id) {
         let next = shell.canvas.tabs.get(i.saturating_sub(1)).or_else(|| shell.canvas.tabs.get(i)).copied();
         shell.canvas.active = None;
+        shell.canvas.notice = None;
         if let Some(n) = next {
             open(shell, n);
         }
     }
 }
 
-/// Drops the tabs of diagrams the store no longer has.
+/// Drops the tabs of diagrams the store no longer has; what was said about the one showing goes
+/// with it.
 pub fn retain_valid(state: &mut State, store: &Store) {
     state.tabs.retain(|id| store.by_uuid(*id).is_some_and(|o| store.is_alive(o)));
     if state.active.is_some_and(|a| !state.tabs.contains(&a)) {
         state.active = state.tabs.last().copied();
         state.reopen_pending = state.active.is_some();
+        state.notice = None;
     }
     crate::editing::retain_valid(state, store);
     crate::uml_nary::retain(state, store);
@@ -439,7 +444,7 @@ fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
     }
 }
 
-/// Draws the centre: the tab strip over the canvas.
+/// Draws the centre: the tab strip over the canvas or a skill, and over either the last refusal.
 pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     if std::mem::take(&mut shell.canvas.reopen_pending)
         && let Some(id) = shell.canvas.active
@@ -449,13 +454,18 @@ pub fn centre(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let tabs = Rect::from_min_size(r.min, vec2(r.width(), TABS));
     let canvas_rect = Rect::from_min_max(pos2(r.left(), tabs.bottom()), r.max);
     tab_strip(shell, ui, p, tabs);
-    match shell.canvas.active.filter(|id| shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), *id))) {
+    let below_path = match shell.canvas.active.filter(|id| shell.session.as_ref().is_some_and(|s| crate::skill_tab::is_skill(s.doc(), *id))) {
         Some(skill) => {
             ui.scope(|ui| {
                 ui.add_enabled_ui(!shell.looking_only(), |ui| crate::skill_tab::draw(shell, ui, p, canvas_rect, skill));
             });
+            0.0
         }
         None => canvas(shell, ui, p, canvas_rect),
+    };
+    if let Some(notice) = shell.canvas.notice.as_deref().filter(|_| canvas_rect.width() > 0.0 && canvas_rect.height() > 0.0) {
+        let at = canvas_rect.min + vec2(16.0, 12.0 + below_path);
+        ux::text(ui.painter(), at, notice, types::CAPTION, p.amber, Some((canvas_rect.width() - 32.0).max(0.0)));
     }
 }
 
@@ -532,15 +542,16 @@ fn tab_strip(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
 }
 
 /// The canvas: plain when no diagram is open; else the grid, the diagram, the minimap and the
-/// toolbar, with the pointer panning, zooming and selecting.
-fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
+/// toolbar, with the pointer panning, zooming and selecting. Gives the room the path bar takes at
+/// its top.
+fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let paint = ui.painter().clone();
     paint.rect_filled(r, 0.0, p.canvas);
     if r.width() <= 0.0 || r.height() <= 0.0 {
-        return;
+        return 0.0;
     }
     let Some(d) = active_diagram(shell) else {
-        return;
+        return 0.0;
     };
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas", "canvas", r);
     let bounds = shell.session.as_ref().map(|s| diagram_bounds(s.doc(), d)).unwrap_or_default();
@@ -684,9 +695,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     toolbar(shell, ui, p, r);
     // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
     crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
-    if let Some(notice) = shell.canvas.notice.clone() {
-        ux::text(&paint, r.min + vec2(16.0, 12.0 + below_path), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
-    }
+    below_path
 }
 
 /// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
