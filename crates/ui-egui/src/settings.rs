@@ -75,15 +75,6 @@ pub fn open_at(shell: &mut Shell, section: Section) {
     }
 }
 
-/// Opens Settings with the command key and comma, unless a text is being typed.
-pub(crate) fn shortcut(shell: &mut Shell, ctx: &egui::Context) {
-    if !ctx.egui_wants_keyboard_input()
-        && ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::Comma)))
-    {
-        open(shell);
-    }
-}
-
 /// A control of the dialog, recorded under `id`; one that is not `live` only shows its tooltip.
 pub(crate) fn control(shell: &mut Shell, ui: &egui::Ui, id: &str, kind: &'static str, rect: Rect, live: bool) -> Response {
     widgets::record_visible(ui, &mut shell.registry, id, kind, rect);

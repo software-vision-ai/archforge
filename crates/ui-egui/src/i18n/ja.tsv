@@ -533,6 +533,7 @@ str		Grid	グリッド
 str		Arrange diagram	ダイアグラムを整列
 str		Move cardinality	多重度を移動
 str		Settings	設定
+str		Settings…	設定…
 str		About Archforge	Archforge について
 str		About Archforge…	Archforge について…
 str		Free and open source modelling of software systems.	ソフトウェアシステムのための、無料のオープンソース モデリング。
@@ -745,6 +746,7 @@ str		What’s new	新機能
 str		Start something	始める
 str		Choose a starting point. You can change direction at any time.	出発点を選んでください。方向はいつでも変えられます。
 str		New project	新規プロジェクト
+str		New project…	新規プロジェクト…
 str		A clean start for your next idea.	次のアイデアを、まっさらな状態から。
 str		Create project	プロジェクトを作成
 # 新規プロジェクトのダイアログ

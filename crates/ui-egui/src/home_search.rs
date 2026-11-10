@@ -230,7 +230,7 @@ fn hits(shell: &Shell, query: &str) -> Vec<(String, Vec<Hit>)> {
 /// What Home can do now, worded for the state it is in.
 fn actions(shell: &Shell) -> Vec<Hit> {
     let rows = crate::actions::ACTIONS.iter().filter_map(|a| Some((a, a.search.as_ref()?)));
-    rows.filter(|(a, search)| search.shown.unwrap_or(a.available)(shell))
+    rows.filter(|(a, _)| (a.available)(shell))
         .map(|(a, search)| {
             let label = search.label.map_or_else(|| (a.label)(shell), |own| own());
             Hit { target: Target::Action(a.id), icon: (search.icon)(shell), label, detail: String::new() }
@@ -448,15 +448,17 @@ mod tests {
         assert_eq!(flipped, wanted);
     }
 
-    /// A row shows by search's own rule: Open behind the dialog that turns off its menu item, and
-    /// neither New project nor Open without a host.
+    /// A row shows while its action is available: Open not behind a dialog that turns off its menu
+    /// item, and neither New project nor Open without a host.
     #[test]
-    fn the_list_shows_a_row_by_searchs_own_rule() {
+    fn the_list_shows_a_row_while_its_action_is_available() {
         let open = Target::Action("file.open");
         let shown = |shell: &Shell| rows(shell).into_iter().map(|(target, ..)| target).collect::<Vec<_>>();
         let (mut shell, ..) = shell();
         crate::new_project::open(&mut shell);
-        assert!(shown(&shell).contains(&open) && !crate::actions::available(&shell, "file.open"));
+        assert!(!shown(&shell).contains(&open) && !crate::actions::available(&shell, "file.open"));
+        shell.new_project = None;
+        assert!(shown(&shell).contains(&open) && crate::actions::available(&shell, "file.open"));
         shell.services.projects = None;
         assert!(!shown(&shell).contains(&open) && !shown(&shell).contains(&Target::Action("file.new")));
     }
