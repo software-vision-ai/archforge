@@ -153,6 +153,8 @@ impl Shell {
         let was_read_only = session.read_only();
         session.set_read_only(true).map_err(|_| HoldRefused::Gesture)?;
         self.holding.hold = Some(Hold { was_read_only, handed_over: false, chat_since: None, until_closed: false });
+        // Whatever follows replaces what shows, so no step may land on it.
+        self.loads.call_off();
         Ok(())
     }
 

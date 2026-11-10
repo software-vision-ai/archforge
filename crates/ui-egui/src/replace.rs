@@ -15,7 +15,6 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::tr;
 use crate::leaving::{Cleared, Leaving};
-use crate::viewing::OpensOn;
 use crate::{BranchSwitch, SavedBy, Shell, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
@@ -74,8 +73,8 @@ pub(crate) struct Replacing {
     read_back: Option<Box<dyn FnOnce() -> ReadBack>>,
     /// Whether the job has written, after which the operation can no longer simply stop.
     wrote: bool,
-    /// The version to show in place of the session, set aside rather than replaced, and the diagram it opens on.
-    viewing: Option<(String, OpensOn)>,
+    /// The version to show in place of the session, set aside rather than replaced.
+    viewing: Option<String>,
     /// The session built differs from the rows read: a repair made while building it.
     repaired: bool,
     /// A branch switch still to be asked of the host, once the latest rows have gone over.
@@ -156,7 +155,7 @@ impl Shell {
         &mut self,
         read: Receiver<Result<Arc<Rows>, String>>,
         job: Option<Job>,
-        viewing: Option<(String, OpensOn)>,
+        viewing: Option<String>,
         _cleared: Cleared,
     ) {
         if viewing.is_none() {
@@ -178,7 +177,7 @@ impl Shell {
 
     /// The version being read to be shown.
     pub(crate) fn version_being_read(&self) -> Option<&str> {
-        self.replacing.as_ref()?.viewing.as_ref().map(|(commit, _)| commit.as_str())
+        self.replacing.as_ref()?.viewing.as_deref()
     }
 
     /// One frame of the replacement under way.
@@ -247,7 +246,7 @@ impl Shell {
                     Stage::Writing(session, (job.run)())
                 } else {
                     match r.viewing.take() {
-                        Some((commit, opens_on)) => self.show_version(*session, commit, opens_on),
+                        Some(commit) => self.show_version(*session, commit),
                         None => self.install(*session, r.repaired),
                     }
                     if let Some(unsaved) = r.arrives_unsaved {
@@ -309,7 +308,7 @@ impl Shell {
     }
 
     /// A session of `rows`, repaired as an opening repairs it.
-    fn build(&self, rows: &Rows) -> Result<Session, String> {
+    pub(crate) fn build(&self, rows: &Rows) -> Result<Session, String> {
         let Some(source) = self.services.ids.clone() else { return Err(tr("The host gives no ids for the model's elements")) };
         archforge_notations::session_from_rows_repaired(rows, Box::new(move || source()), editing::fit_tables)
     }

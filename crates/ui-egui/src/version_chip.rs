@@ -183,11 +183,12 @@ fn take_steps(shell: &mut Shell) {
     }
 }
 
-/// The version a step goes to: from a version, the one beside it; from current work, going older,
-/// the latest when work is unsaved and otherwise the one before it, the first that differs.
+/// The version a step goes to: from a version, or one on its way, the one beside it; from current
+/// work, going older, the latest when work is unsaved and otherwise the one before it, the first
+/// that differs.
 fn target(shell: &Shell, older: bool) -> Option<&VersionEntry> {
     let history = &shell.version_list.steps.history;
-    let to = match shell.viewing() {
+    let to = match shell.stepping_from() {
         Some(commit) => {
             let at = history.iter().position(|v| v.hash == commit)?;
             if older { at + 1 } else { at.checked_sub(1)? }

@@ -204,7 +204,9 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     if button(shell, ui, p, id, pos2(left, y), &tr("View this version"), Look::Primary, off.is_none(), off.as_deref()).1.clicked() {
         // Refused, these details stay and say why, above: an editor still open is one of the reasons.
         if shell.viewing() == Some(entry.hash.as_str()) {
-            // Already showing, so nothing can refuse: a reason from an earlier try goes with these.
+            // Already showing, so nothing can refuse: a reason from an earlier try goes with these,
+            // and so does a step on its way to another.
+            shell.loads.call_off();
             shell.canvas.notice = None;
             shell.versions.details = None;
         } else if crate::version_chip::view(shell, entry.hash.clone(), crate::version_chip::when(&entry.date, clock)) {

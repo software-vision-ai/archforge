@@ -197,6 +197,23 @@ fn view_shows_the_version_from_its_details() {
     });
 }
 
+/// View on the version already in view closes the details and calls off a step on its way.
+#[test]
+fn view_on_the_version_in_view_calls_off_a_step() {
+    in_both(|h, host| {
+        let preview = h.state().build(&rows_now(h)).unwrap();
+        h.state_mut().show_version(preview, "c2".into());
+        h.run_steps(3);
+        host.version_reads.lock().unwrap().drain(..).for_each(|read| drop(read.send(Ok(crate::VersionsPage { versions: history(), more: false }))));
+        h.run_steps(3);
+        opened(h, "c2");
+        h.state_mut().move_to_version("c1", None).unwrap();
+        tap(h, VIEW);
+        assert_eq!((h.state().viewing(), h.state().stepping_from()), (Some("c2"), Some("c2")));
+        assert!(h.state().versions.details.is_none());
+    });
+}
+
 /// View is off while a hold runs: it starts nothing and the details stay.
 #[test]
 fn view_waits_for_a_change_under_way() {

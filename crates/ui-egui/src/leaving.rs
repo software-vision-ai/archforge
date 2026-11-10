@@ -35,7 +35,7 @@ impl Shell {
     /// while a hold runs; without a model; while an editor, a drawing, a drag or a dialog is open.
     /// Past those, with `then` given, a Chat turn running opens the question for it, unless a text
     /// already refused stops it anyway or the question has just been answered; without `then`
-    /// nothing can be replayed after a question, and the hold settles the turn. Only past the
+    /// nothing is asked, as a hold settles the turn or a step leaves no current work. Only past the
     /// question are the description and skill texts being typed written, and one refused stops it,
     /// kept and said. Only then does a colour picker close, so a refusal leaves it open.
     pub(crate) fn clear_to_leave(&mut self, then: Option<Leaving>) -> Result<Cleared, HoldRefused> {
