@@ -4,11 +4,11 @@
 
 use egui::{Key, Modifiers};
 
-use crate::Shell;
 use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
+use crate::{Shell, edit_menu};
 
 pub const ABOUT: &str = "app.about";
 pub const SETTINGS: &str = "app.settings";
@@ -21,6 +21,8 @@ pub const CLOSE: &str = "file.close";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
+pub const UNDO: &str = "edit.undo";
+pub const REDO: &str = "edit.redo";
 
 /// One application action.
 pub struct Action {
@@ -169,6 +171,22 @@ pub static ACTIONS: &[Action] = &[
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
         search: None,
     },
+    Action {
+        id: UNDO,
+        label: |_| tr("Undo"),
+        available: edit_menu::can_undo,
+        run: edit_menu::undo,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::Z }),
+        search: None,
+    },
+    Action {
+        id: REDO,
+        label: |_| tr("Redo"),
+        available: edit_menu::can_redo,
+        run: edit_menu::redo,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::Z }),
+        search: None,
+    },
 ];
 
 /// The action `id`.
@@ -211,13 +229,25 @@ pub(crate) fn free(shell: &Shell) -> bool {
     window && shell.explorer.delete.is_none() && shell.chat_panel.ask.is_none() && shell.diagrams.new.is_none()
 }
 
+/// Whether `keys` were pressed in this frame, and takes them. Undo's and Redo's are matched exactly:
+/// `consume_key` lets an extra Shift through, which with Redo off would make ⇧⌘Z undo.
+fn pressed(ctx: &egui::Context, id: &str, keys: &Keys) -> bool {
+    let exact = |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers));
+    ctx.input_mut(|i| (!id.starts_with("edit.") || i.events.iter().any(exact)) && i.consume_key(keys.modifiers, keys.key))
+}
+
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
-/// available.
+/// available. A field reads Undo's and Redo's keys itself, so they stay in the input while it has
+/// the keyboard. ⌘Y (Ctrl Y) is Redo's second key.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
+    let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
-        if (action.available)(shell) && ctx.input_mut(|i| i.consume_key(keys.modifiers, keys.key)) {
+        if !(field && action.id.starts_with("edit.")) && (action.available)(shell) && pressed(ctx, action.id, keys) {
             (action.run)(shell);
         }
+    }
+    if !field && available(shell, REDO) && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Y)) {
+        run(shell, REDO);
     }
 }
 
@@ -322,9 +352,9 @@ pub(crate) mod tests {
         all.iter().copied().filter(|id| !off.contains(id)).collect()
     }
 
-    /// The ids of the rows of the table `on` answers yes for, the chip's rows aside.
+    /// The ids of the rows of the table `on` answers yes for, the chip's rows and the Edit menu's aside.
     fn answering(on: impl Fn(&Action) -> bool) -> Vec<&'static str> {
-        ACTIONS.iter().filter(|a| !a.id.starts_with("versions.") && on(a)).map(|a| a.id).collect()
+        ACTIONS.iter().filter(|a| !a.id.starts_with("versions.") && !a.id.starts_with("edit.") && on(a)).map(|a| a.id).collect()
     }
 
     /// The whole table, state by state, written out by hand: which actions are off. Search rows and
@@ -407,9 +437,9 @@ pub(crate) mod tests {
     #[test]
     fn every_action_runs_its_handler_and_only_that() {
         assert_eq!(
-            ACTIONS.iter().map(|a| a.id).filter(|id| !id.starts_with("versions.")).collect::<Vec<_>>(),
+            ACTIONS.iter().map(|a| a.id).filter(|id| !id.starts_with("versions.") && !id.starts_with("edit.")).collect::<Vec<_>>(),
             ALL,
-            "the chip's tests walk its own row"
+            "the chip's tests walk its own row, and the Edit menu's are in edit_menu"
         );
         for id in ALL {
             let (mut shell, saves, picks) = shell();
@@ -489,5 +519,7 @@ pub(crate) mod tests {
         press(&mut shell, Modifiers::COMMAND, Key::G);
         press(&mut shell, Modifiers::NONE, Key::S);
         assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "not behind a question, nor with the wrong modifiers");
+        press(&mut shell, shift_cmd, Key::S);
+        assert_eq!(effects(&shell, &saves, &picks), [SAVE], "only the Edit rows match exactly");
     }
 }

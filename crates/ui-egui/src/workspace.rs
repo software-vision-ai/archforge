@@ -132,7 +132,6 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             return;
         }
         activity_rail(shell, ui, &p, Rect::from_min_size(body.min, vec2(ACTIVITY, body.height())));
-        undo_redo(shell, ui);
         if let Some(r) = cols.explorer {
             explorer(shell, ui, &p, r);
             resize(shell, ui, &p, r.right(), body, "workspace.explorer.resize", true);
@@ -300,31 +299,6 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
         None => {}
     }
     (x, changed)
-}
-
-/// Undo and redo from the keyboard, through the engine, while no field has the keyboard.
-fn undo_redo(shell: &mut Shell, ui: &egui::Ui) {
-    if ui.memory(|m| m.focused().is_some())
-        || shell.chat_panel.row_menu.is_some()
-        || shell.chat_panel.ask.is_some()
-        || shell.explorer.delete.is_some()
-        || shell.diagrams.new.is_some()
-        || shell.generate.is_some()
-        || shell.about.is_some()
-    {
-        return;
-    }
-    let (undo, redo) = ui.input(|i| {
-        let z = i.key_pressed(egui::Key::Z) && i.modifiers.command;
-        (z && !i.modifiers.shift, (z && i.modifiers.shift) || (i.key_pressed(egui::Key::Y) && i.modifiers.command))
-    });
-    if let Some(session) = shell.session.as_mut() {
-        if undo && session.can_undo() {
-            let _ = session.execute("edit.undo", &serde_json::Value::Null);
-        } else if redo && session.can_redo() {
-            let _ = session.execute("edit.redo", &serde_json::Value::Null);
-        }
-    }
 }
 
 /// The activity rail: the explorers, the active one marked with the tint and a bar at the left.
