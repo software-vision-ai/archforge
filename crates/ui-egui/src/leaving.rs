@@ -5,7 +5,6 @@
 //! asks about it first.
 
 use crate::hold::HoldRefused;
-use crate::state::Panel;
 use crate::{Shell, panels, skill_tab, version_chip};
 
 /// The proof that the guards let an operation through; only [`Shell::clear_to_leave`] makes one.
@@ -17,15 +16,13 @@ impl Shell {
         let (c, e) = (&self.canvas, &self.explorer);
         let canvas =
             c.rename.is_some() || c.inline.is_some() || c.note_edit.is_some() || c.gesture.is_some() || c.nary.is_some() || c.minimap_drag.is_some();
-        // Only while it shows: hidden, it has nothing to lose, as the picker writes only on Apply.
-        let picker = self.panels.picker.is_some() && self.state.panel == Panel::Appearance && !self.state.panel_collapsed;
-        canvas || picker || e.rename.is_some() || e.dragging.is_some() || panels::editing(&self.panels) || version_chip::dialog_open(self)
+        canvas || e.rename.is_some() || e.dragging.is_some() || panels::editing(&self.panels) || version_chip::dialog_open(self)
     }
 
     /// The one gate before the work shown is left. Refused, in this order and with nothing changed:
     /// while a hold runs; without a model; while an editor, a drawing, a drag or a dialog is open.
     /// Past those the description and skill texts being typed are written, and one refused stops it,
-    /// kept and said.
+    /// kept and said. Only then does a colour picker close, so a refusal leaves it open.
     pub(crate) fn clear_to_leave(&mut self) -> Result<Cleared, HoldRefused> {
         if self.holding.pending() {
             return Err(HoldRefused::Another);
@@ -43,6 +40,8 @@ impl Shell {
                 return Err(HoldRefused::Description);
             }
         }
+        // As Cancel does: it holds nothing unwritten, and writes only on Apply.
+        self.panels.picker = None;
         Ok(Cleared(()))
     }
 }

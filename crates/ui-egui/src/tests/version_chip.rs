@@ -639,22 +639,25 @@ fn an_open_editor_stops_every_way_of_leaving() {
     }
 }
 
-/// A colour picker stops leaving only while Appearance shows it: hidden, it has nothing to lose.
+/// Leaving closes a colour picker as Cancel does: a refusal keeps it, and one opened under the hold
+/// does not outlast the replacement.
 #[test]
-fn a_colour_picker_stops_leaving_only_while_appearance_shows_it() {
-    use crate::{
-        appearance::{Group, Picker},
-        state::Panel,
-    };
+fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
+    use crate::appearance::{Group, Picker};
+    let picker = || Some(Picker::new(Group::Fill, egui::Color32::RED));
     in_both(|mut h, _| {
-        let s = h.state_mut();
-        s.panels.picker = Some(Picker::new(Group::Fill, egui::Color32::RED));
-        s.state.panel = Panel::Appearance;
-        assert_eq!(s.clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing), "it shows");
-        s.state.panel_collapsed = true;
-        assert!(s.clear_to_leave().is_ok(), "the panel is folded away");
-        (s.state.panel_collapsed, s.state.panel) = (false, Panel::Properties);
-        assert!(s.clear_to_leave().is_ok(), "another panel shows");
+        let earlier = rows_now(&h);
+        h.state_mut().panels.picker = picker();
+        crate::settings::open(h.state_mut());
+        assert_eq!(h.state_mut().clear_to_leave().err(), Some(crate::hold::HoldRefused::Editing));
+        assert!(h.state().panels.picker.is_some(), "a refusal leaves it open");
+        h.state_mut().settings = None;
+        assert!(h.state_mut().clear_to_leave().is_ok() && h.state().panels.picker.is_none(), "leaving closes it");
+        let read = start_replacing(&mut h, None);
+        h.state_mut().panels.picker = picker();
+        read.send(Ok(earlier)).unwrap();
+        h.run_steps(4);
+        assert!(!h.state().is_held() && h.state().panels.picker.is_none(), "the replacement closes it");
     });
 }
 

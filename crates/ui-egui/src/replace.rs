@@ -357,6 +357,8 @@ impl Shell {
             session.mark_unsaved();
         }
         self.refused = None;
+        // One opened while held would write to the replacement's selection.
+        self.panels.picker = None;
         self.session = Some(session);
         self.session_replaced();
         self.end_hold();
