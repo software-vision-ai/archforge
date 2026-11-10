@@ -1,7 +1,9 @@
 //! What differs between two states of a project, classified and named for a person to follow: in
 //! the model or a diagram, added, changed or removed, with the names and path of the item. Each
 //! side is restored into a store of its own and repaired as an opening repairs it, so a box an
-//! opening fits shows no false change. Nothing here writes: the stores are thrown away.
+//! opening fits shows no false change. One selected element's two sides are read the same way, as
+//! typed cards with their fields aligned, for a view to word later. Nothing here writes: the stores
+//! are thrown away.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -9,7 +11,7 @@ use std::fmt;
 use archforge_mof::compare::{CompareError, MAX_COMPARED, RowChange, compare};
 use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot};
 use archforge_mof::schema::{Junction, Table};
-use archforge_mof::{ClassId, Obj, Store, Uuid};
+use archforge_mof::{ClassId, Invalid, Obj, PropId, Property, Store, TypeRef, Uuid, Value};
 
 use crate::{storage, store};
 
@@ -41,6 +43,40 @@ pub struct Difference {
     pub name: Option<String>,
     /// The names of what contains the item, outermost first, from the same side as its name.
     pub path: Vec<String>,
+}
+
+/// What an element is and is called on one side of a comparison.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ElementCard {
+    pub class: ClassId,
+    /// Its name on this side, or for a box or line that of the element it shows; none when it has neither.
+    pub name: Option<String>,
+}
+
+/// One property of a compared element, in the same place on both cards.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CardField {
+    pub prop: PropId,
+    /// The value before: none when that side has no such property, `Some(Value::Null)` when it has
+    /// one left empty.
+    pub before: Option<Value>,
+    /// The value after, read as `before` is.
+    pub after: Option<Value>,
+    /// Whether the element is on both sides and this field differs between them, a property only
+    /// one side's class has included. An added or removed element has nothing to differ from.
+    pub changed: bool,
+}
+
+/// One element's two sides, found by its id, so a rename or move stays one element. A side is none
+/// when the element is not there: added elements have no `before`, removed ones no `after`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ElementSides {
+    pub id: Uuid,
+    pub before: Option<ElementCard>,
+    pub after: Option<ElementCard>,
+    /// The stored, single-valued, data-typed properties of its class in the metamodel's order, id
+    /// and name left out; when the classes differ, the after side's own ones follow.
+    pub fields: Vec<CardField>,
 }
 
 /// Why two states could not be classified. There is never a partial answer.
@@ -104,6 +140,57 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
         Difference { id, class, area, kind, name, path }
     };
     Ok(kinds.into_iter().map(named).collect())
+}
+
+/// The two sides of the element `id` between `before` and `after`, each restored and repaired as
+/// [`classified`] does it, so a card and the list read the same states. Built for one selected
+/// element from rows the caller holds; `Ok(None)` when neither side has the element.
+pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<ElementSides>, ClassifyError> {
+    let (tables, junctions) = storage();
+    let (old, _) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, _) = repaired("after", after, &tables, &junctions, &repair)?;
+    let (card_before, was) = read_side("before", &old, id)?.unzip();
+    let (card_after, is) = read_side("after", &new, id)?.unzip();
+    if card_before.is_none() && card_after.is_none() {
+        return Ok(None);
+    }
+    let on_both = card_before.is_some() && card_after.is_some();
+    let fields = aligned(&was.unwrap_or_default(), &is.unwrap_or_default(), on_both);
+    Ok(Some(ElementSides { id, before: card_before, after: card_after, fields }))
+}
+
+/// Whether `prop` belongs on a card: one data value, not the element's id or name. Derived
+/// properties never reach this: it is asked of a class's stored ones.
+fn on_a_card(prop: &Property) -> bool {
+    !prop.is_many() && matches!(prop.ty, TypeRef::Data(_)) && !prop.is_id && !prop.is_name
+}
+
+/// The card and field values of the element `id` in `store`; none when it is not there. A value
+/// that cannot be read refuses the side, naming it.
+fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(ElementCard, Vec<(PropId, Value)>)>, ClassifyError> {
+    let unreadable = |e: Invalid| ClassifyError::Unreadable { side, why: e.to_string() };
+    let Some(obj) = store.by_uuid(id) else { return Ok(None) };
+    let class = store.class_of(obj).map_err(unreadable)?;
+    let universe = store.universe();
+    let info = universe.info(class).ok_or_else(|| unreadable(Invalid::Internal(format!("there is no class {}", class.0))))?;
+    let mut values = Vec::new();
+    for prop in info.stored.iter().filter(|p| universe.prop(**p).is_some_and(on_a_card)) {
+        values.push((*prop, store.get(obj, *prop).map_err(unreadable)?));
+    }
+    Ok(Some((ElementCard { class, name: shown_name(store, obj) }, values)))
+}
+
+/// The fields of both sides lined up by property, `was`'s order first; `on_both` says whether the
+/// element is on both sides, so a difference can mean a change.
+fn aligned(was: &[(PropId, Value)], is: &[(PropId, Value)], on_both: bool) -> Vec<CardField> {
+    let value = |side: &[(PropId, Value)], prop: PropId| side.iter().find(|(p, _)| *p == prop).map(|(_, v)| v.clone());
+    let only_after = is.iter().map(|(p, _)| *p).filter(|p| value(was, *p).is_none());
+    let props = was.iter().map(|(p, _)| *p).chain(only_after);
+    let field = |prop| {
+        let (before, after) = (value(was, prop), value(is, prop));
+        CardField { prop, changed: on_both && before != after, before, after }
+    };
+    props.map(field).collect()
 }
 
 /// `rows` restored into a store of their own and repaired, with the rows of the repaired store.
