@@ -76,6 +76,8 @@ pub struct State {
     pub(crate) dialog: Option<crate::save_version::Dialog>,
     /// The version whose details the centre shows.
     pub(crate) details: Option<crate::version_details::Details>,
+    /// The one comparison of two versions the details have under way.
+    pub(crate) details_comparing: Option<crate::version_details::Running>,
     pub(crate) focus_save: bool,
     working_folded: bool,
     history_folded: bool,
