@@ -63,13 +63,19 @@ project.
 
 **Do:** with a project open, look through the **Archforge** and **File** menus; choose
 **File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
-**Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again.
+**Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again. Close
+About, type into a name field and, with the field still active, press ⌘Z and then ⇧⌘Z, and choose
+**Edit ▸ Undo**. Click the canvas so the field lets go, make a change, press ⌘Z and then ⇧⌘Z. With the
+field active again, press ⌘C, ⌘V and ⌘A.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
 while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
 save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog
-is up, every File item is disabled.
+is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (⇧⌘Z). While a field has the
+keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the
+change back and bring it again, and are disabled when there is no step to take. ⌘C, ⌘V and ⌘A act on the
+field, as they always have.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.

@@ -540,14 +540,24 @@ str		{name}, selected	{name}, ausgewählt
 str		Compared with the version of {when}	Verglichen mit der Version vom {when}
 str		There is no version to compare with yet.	Es gibt noch keine Version zum Vergleichen.
 str		This element couldn't be compared.	Dieses Element konnte nicht verglichen werden.
+str		Attributes	Attribute
+str		Operations	Operationen
+str		Literals	Literale
+str		Members	Elemente
+str		Ownership	Besitz
+str		Not available on this side	Auf dieser Seite nicht verfügbar
+str		Relationships aren't shown here yet.	Beziehungen werden hier noch nicht angezeigt.
+str		Only what these cards don't show changed	Nur etwas, das diese Karten nicht zeigen, hat sich geändert
+str		The cards show the same on both sides.	Die Karten zeigen auf beiden Seiten dasselbe.
+str		The owner changed	Der Besitzer hat sich geändert
+str		The owner changed.	Der Besitzer hat sich geändert.
+plural		{n} member changed	{n} Element geändert|{n} Elemente geändert
+str		{values} · {members}	{values} · {members}
 str		This element was added	Dieses Element wurde hinzugefügt
 str		It is only on the After side, so there is nothing to compare.	Es ist nur auf der Seite Nachher vorhanden, daher gibt es nichts zu vergleichen.
 str		This element was removed	Dieses Element wurde entfernt
 str		It is only on the Before side, so there is nothing to compare.	Es ist nur auf der Seite Vorher vorhanden, daher gibt es nichts zu vergleichen.
 plural		{n} value changed	{n} Wert geändert|{n} Werte geändert
-str		Members, relationships and ownership aren't shown here yet.	Elemente, Beziehungen und Besitz werden hier noch nicht angezeigt.
-str		Only members, relationships or ownership changed	Nur Elemente, Beziehungen oder Besitz wurden geändert
-str		The cards show the same on both sides, and these changes aren't shown here yet.	Die Karten zeigen auf beiden Seiten dasselbe; diese Änderungen werden hier noch nicht angezeigt.
 str		The cards show no difference	Die Karten zeigen keinen Unterschied
 str		The name changed from {from} to {to}.	Der Name hat sich von {from} zu {to} geändert.
 str		The kind changed from {from} to {to}.	Die Art hat sich von {from} zu {to} geändert.
@@ -563,6 +573,8 @@ str		Last version	Letzte Version
 str		No description	Keine Beschreibung
 str		Saved by an agent	Von einem Agenten gespeichert
 str		This version can't be shown	Diese Version kann nicht angezeigt werden
+str		This version couldn't be read.	Diese Version konnte nicht gelesen werden.
+str		{from} can't be shown. Skipped to {to}.	{from} kann nicht angezeigt werden. Weiter zu {to}.
 str		It isn't a version of this branch.	Das ist keine Version dieses Zweigs.
 str		Made with a newer Archforge.	Mit einer neueren Archforge-Version erstellt.
 str		Why?	Warum?
@@ -756,6 +768,8 @@ str		Remove relationship	Beziehung entfernen
 str		Relationship removed	Beziehung entfernt
 str		{name} removed	{name} entfernt
 str		Undo	Rückgängig
+str		Redo	Wiederholen
+str		Nothing to act on here	Hier gibt es nichts zu tun
 plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden

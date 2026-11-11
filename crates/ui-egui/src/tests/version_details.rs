@@ -6,7 +6,9 @@ use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
 use crate::versions::Compared;
-use archforge_notations::differences::{Area, CardField, ChangeKind, Difference, ElementCard, ElementSides};
+use archforge_notations::differences::{
+    Area, CardField, CardList, CardLists, ChangeKind, Difference, ElementCard, ElementSides, ListKind, ListRow, Named,
+};
 
 const VIEW: &str = "workspace.version-details.view";
 
@@ -720,7 +722,7 @@ const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 const SUMMARY: &str = "workspace.change-view.summary";
-const NOT_SHOWN: &str = "Members, relationships and ownership aren't shown here yet.";
+const NOT_SHOWN: &str = "Relationships aren't shown here yet.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -1133,9 +1135,9 @@ fn says(h: &Harness<'static, Shell>, head: &str, body: &str) {
 fn the_summary_says_added_or_removed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
+        says(h, "This element was added", &format!("It is only on the After side, so there is nothing to compare. {NOT_SHOWN}"));
         landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
-        says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
+        says(h, "This element was removed", &format!("It is only on the Before side, so there is nothing to compare. {NOT_SHOWN}"));
     });
 }
 
@@ -1192,11 +1194,7 @@ fn unmarked_cards_never_read_as_nothing_changed() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(
-            h,
-            "Only members, relationships or ownership changed",
-            "The cards show the same on both sides, and these changes aren't shown here yet.",
-        );
+        says(h, "Only what these cards don't show changed", &format!("The cards show the same on both sides. {NOT_SHOWN}"));
         h.state_mut().versions.compare_failed = Some("the list failed".into());
         h.run_steps(1);
         says(h, "The cards show no difference", NOT_SHOWN);
@@ -1227,6 +1225,117 @@ fn the_summary_sits_above_the_cards() {
         assert_eq!(area.height(), 86.0, "one row of sentences, as the frame");
         assert_eq!(before.top() - area.bottom(), 18.0 + 24.0, "the room and the eyebrow");
         assert!(filled(h, SUMMARY, colours(h).surface));
+    });
+}
+
+/// The sides of `id`, called `name` on both sides, holding `lists` and no values.
+fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>, String> {
+    Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, schema(name), schema(name), Vec::new()) }))
+}
+
+/// A list of `kind` holding rows that say each `(words, change)`.
+fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, change };
+    CardList { kind, rows: rows.into_iter().map(row).collect() }
+}
+
+/// Lists are headed and grouped; what came, went or differs carries a sign and a tint and says so.
+#[test]
+fn lists_are_headed_and_their_changes_marked() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let p = colours(h);
+        let before = vec![
+            list(ListKind::Attributes, vec![(Named::Said("id".into()), None), (Named::Said("status : String".into()), Some(ChangeKind::Changed))]),
+            list(ListKind::Operations, vec![(Named::Said("old()".into()), Some(ChangeKind::Removed))]),
+        ];
+        let after = vec![
+            list(ListKind::Attributes, vec![(Named::Said("id".into()), None), (Named::Said("status : Kind".into()), Some(ChangeKind::Changed))]),
+            list(ListKind::Operations, vec![(Named::Said("new()".into()), Some(ChangeKind::Added))]),
+        ];
+        let lists = CardLists { before, after, ..CardLists::default() };
+        landed(h, id, key, listed(id, "kept", lists));
+        assert_eq!(named(h, "Attributes, id"), 2);
+        assert_eq!(named(h, "Attributes, status : String, Changed"), 1, "{:?}", painted(h));
+        assert_eq!(named(h, "Attributes, status : Kind, Changed"), 1);
+        assert_eq!(named(h, "Operations, old(), Removed"), 1);
+        assert_eq!(named(h, "Operations, new(), Added"), 1);
+        assert!(!painted_has(h, "The owner changed."), "a member is not the owner");
+        assert_eq!((painted_times(h, "ATTRIBUTES"), painted_times(h, "OPERATIONS")), (2, 2));
+        assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (2, 2), "text marks as well as colour: {:?}", painted(h));
+        assert!(filled(h, &format!("{BEFORE}.list.0.1"), p.danger_tint) && filled(h, &format!("{AFTER}.list.0.1"), p.green_tint));
+        assert!(!filled(h, &format!("{BEFORE}.list.0.0"), p.danger_tint), "a same row is plain");
+        let order = |h: &Harness<'static, Shell>, list: usize, row: usize| rect_of(h, &format!("{AFTER}.list.{list}.{row}")).top();
+        assert!(order(h, 0, 1) < order(h, 1, 0), "grouped in order");
+        assert!(rect_of(h, AFTER).bottom() >= rect_of(h, &format!("{AFTER}.list.1.0")).bottom(), "the card holds its rows");
+    });
+}
+
+/// What isn't named says so in words: an owner that can't be read, no owner, and a nameless row by its kind.
+#[test]
+fn a_missing_name_is_said_in_words() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let owner = |name| vec![list(ListKind::Ownership, vec![(name, None)])];
+        let lists = CardLists { before: owner(Named::Unavailable), after: owner(Named::Nothing), ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "a", lists));
+        assert_eq!(named(h, "Ownership, Not available on this side"), 1, "{:?}", painted(h));
+        assert_eq!(named(h, "Ownership, None"), 1);
+        let lists = CardLists { before: owner(Named::Unnamed), after: owner(Named::Said(String::new())), ..CardLists::default() };
+        landed(h, id, key, listed(id, "a", lists));
+        assert_eq!(named(h, "Ownership, Attribute"), 2, "a nameless row goes by its kind");
+    });
+}
+
+/// A list far longer than the view draws only what shows, and scrolling reaches its last row.
+#[test]
+fn a_long_list_draws_only_rows_in_view() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let rows = |tail: &str| vec![list(ListKind::Members, (0..20_000).map(|i| (Named::Said(format!("{tail}{i}")), None)).collect())];
+        let lists = CardLists { before: rows("a"), after: rows("b"), ..CardLists::default() };
+        landed(h, id, key, listed(id, "long", lists));
+        let (first, last) = (format!("{BEFORE}.list.0.0"), format!("{BEFORE}.list.0.19999"));
+        assert!(has_id(h, &first) && !has_id(h, &last));
+        let drawn = |h: &Harness<'static, Shell>| painted(h).iter().filter(|t| t.starts_with('a') && t[1..].parse::<u32>().is_ok()).count();
+        assert!((1..=100).contains(&drawn(h)), "rows out of sight are not drawn: {}", drawn(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, &first).center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -600_000.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(40);
+        assert!(!has_id(h, &first) && has_id(h, &last), "the end is reached: {:?}", ids(h));
+        assert!(drawn(h) <= 100, "still only what shows");
+    });
+}
+
+/// Members that differ are counted beside the values, the same count however many rows hold it;
+/// a changed owner is said in words, past the sentences a summary cuts, and is no value in the count.
+#[test]
+fn the_summary_counts_members_and_says_the_owner() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let some = |n| CardLists { member_changes: n, ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "a", some(2)));
+        says(h, "2 members changed", NOT_SHOWN);
+        let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
+        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n };
+        landed(h, id, key.clone(), listed(id, "a", owned(0)));
+        says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
+        let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
+        let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
+        landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {NOT_SHOWN}"));
+        landed(h, id, key, with_owner(vec![changed; 4]));
+        let one = "Visibility changed from Not set to Private.";
+        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {NOT_SHOWN}"));
     });
 }
 

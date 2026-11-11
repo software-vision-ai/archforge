@@ -308,6 +308,7 @@ fn members_are_grouped_and_marked_on_their_own_side() {
     assert_eq!(was[0].1[..2], [(said("- total"), Some(ChangeKind::Changed)), (said("+ cut"), Some(ChangeKind::Removed))], "{was:?}");
     assert_eq!(is[0].1[0], (said("+ total"), Some(ChangeKind::Changed)), "{is:?}");
     assert_eq!(is[1].1, [(said("+ pay()"), Some(ChangeKind::Added))], "added, on the after side only");
+    assert_eq!(seen.lists.member_changes, 3, "the changed one once, the owner not at all");
     assert_eq!(lists(&sides(&before, &before, &status).lists.after)[0], (ListKind::Literals, vec![(said("open"), None)]));
     assert_eq!(was.last().unwrap().1, [(said("shop"), None)], "the same owner is plain");
 }
@@ -321,11 +322,20 @@ fn the_owner_is_one_row_and_a_side_alone_has_no_marks() {
     let twin = run(&mut s, "uml.package.add", json!({ "name": "shop", "parent": outer }));
     let before = state(&s);
     run(&mut s, "uml.class.move", json!({ "class": order, "package": twin }));
-    let moved = sides(&before, &state(&s), &order);
+    let at_twin = state(&s);
+    let moved = sides(&before, &at_twin, &order);
     let owner = |of: &[CardList]| lists(of).last().unwrap().1.clone();
+    assert_eq!(moved.lists.member_changes, 0, "an owner is not a member");
     assert_eq!(
         (owner(&moved.lists.before), owner(&moved.lists.after)),
         (vec![(said("shop"), Some(ChangeKind::Changed))], vec![(said("shop"), Some(ChangeKind::Changed))])
+    );
+    run(&mut s, "uml.package.rename", json!({ "package": twin, "name": "store" }));
+    let renamed = sides(&at_twin, &state(&s), &order);
+    assert_eq!(
+        (owner(&renamed.lists.before), owner(&renamed.lists.after)),
+        (vec![(said("shop"), None)], vec![(said("store"), None)]),
+        "the same owner"
     );
     let mut at = sides(&before, &before, &order).lists.after.last().unwrap().rows[0].clone();
     for _ in 0..8 {

@@ -57,6 +57,9 @@ pub struct State {
     pub(crate) working: usize,
     /// The versions that cannot be shown, by hash, with why; none for one of a newer Archforge.
     pub(crate) unavailable: BTreeMap<String, Option<String>>,
+    /// The version whose read failed in a way that may pass, while its banner stands: asking for
+    /// a version ends it, as do going back from one, a restore, a branch switch and a project change.
+    pub(crate) load_failed: Option<LoadFailed>,
     /// The last version's rows, by its hash; none before the first version.
     base: Option<(Option<String>, Arc<Rows>)>,
     reading_base: Option<(String, Receiver<VersionRead>)>,
@@ -93,6 +96,15 @@ pub struct State {
     scroll: TreeScroll,
 }
 
+/// A read of a version that failed in a way that may pass: what Retry asks for again.
+#[derive(Clone)]
+pub(crate) struct LoadFailed {
+    pub(crate) commit: String,
+    /// What the chip then says of it, when it was asked for with a date.
+    pub(crate) label: Option<String>,
+    pub(crate) why: String,
+}
+
 /// Keeps the panel to the project and session shown, takes the answer that has come, and asks for
 /// the versions when they are due. A change of either lets go of all that belonged to the old one,
 /// the read on its way among it, so an answer for it cannot land, whether or not a host is there.
@@ -103,6 +115,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         // A version shown moves the session but not what can be shown: a reason holds of a hash.
         if about.as_ref().map(|a| &a.0) != v.about.as_ref().map(|a| &a.0) {
             v.unavailable.clear();
+            v.load_failed = None;
         }
         (v.about, v.page, v.failed, v.reading, v.asked) = (about, None, None, None, false);
         v.scroll = TreeScroll::default();
@@ -532,7 +545,12 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     }
     let mut top = y + HEADER;
     if let Some(why) = shell.versions.failed.clone() {
-        top = banner(shell, ui, p, r, top, &why);
+        let ids = ["workspace.versions.failed", "workspace.versions.retry"];
+        top = banner(shell, ui, p, (r, top), ids, (&tr("The versions couldn't be read."), &why), read);
+    }
+    if let Some(failed) = shell.versions.load_failed.clone() {
+        let (ids, why) = (["workspace.versions.load.failed", "workspace.versions.load.retry"], failed.why.clone());
+        top = banner(shell, ui, p, (r, top), ids, (&tr("This version couldn't be read."), &why), |s| retry_load(s, failed));
     }
     match shell.versions.page.as_ref().map(|page| page.versions.clone()) {
         None if shell.versions.reading.is_some() => skeleton(shell, ui, p, r, top),
@@ -551,21 +569,37 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) {
     }
 }
 
-/// The banner of a read that failed, with Retry; what was shown stays under it. Gives where the
-/// rows start.
-fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, why: &str) -> f32 {
+/// Asks again for the version whose read failed. Asking ends its banner, so a refusal leaves it
+/// standing and says why.
+fn retry_load(shell: &mut Shell, failed: LoadFailed) {
+    let done = shell.move_to_version(&failed.commit, failed.label);
+    let words = done.err().and_then(|why| crate::version_chip::refused_words(shell, why));
+    shell.canvas.say_refused_step(words);
+}
+
+/// A banner of a read that failed, saying `words` with `why` on hover, and a Retry that runs
+/// `retry`; what was shown stays under it. `ids` are its own and its button's. Gives where the rows
+/// start.
+fn banner(
+    shell: &mut Shell,
+    ui: &egui::Ui,
+    p: &Palette,
+    (r, y): (Rect, f32),
+    ids: [&str; 2],
+    (words, why): (&str, &str),
+    retry: impl FnOnce(&mut Shell),
+) -> f32 {
     let area = Rect::from_min_max(pos2(r.left() + 8.0, y), pos2(r.right() - 8.0, y + 44.0));
     let paint = ui.painter();
     paint.rect_filled(area, 8.0, p.danger_tint);
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 18.0, area.center().y), Vec2::splat(14.0)), &icons::WARNING, p.danger);
     let label = tr("Retry");
     let width = (ux::galley(paint, &label, types::UI, p.text, None).size().x + 20.0).ceil();
-    let words = tr("The versions couldn't be read.");
-    ux::text(paint, pos2(area.left() + 34.0, area.center().y - 9.5), &words, types::UI, p.danger, Some((area.width() - 52.0 - width).max(0.0)));
-    control(shell, ui, "workspace.versions.failed", "status", area, false).on_hover_text(why);
+    ux::text(paint, pos2(area.left() + 34.0, area.center().y - 9.5), words, types::UI, p.danger, Some((area.width() - 52.0 - width).max(0.0)));
+    let _ = control(shell, ui, ids[0], "status", area, false).on_hover_text(why).accessible_name(words);
     let at = pos2(area.right() - 8.0 - width, area.top() + 8.0);
-    if button(shell, ui, p, "workspace.versions.retry", at, &label, Look::Secondary, true, None).1.clicked() {
-        read(shell);
+    if button(shell, ui, p, ids[1], at, &label, Look::Secondary, true, None).1.clicked() {
+        retry(shell);
     }
     y + 52.0
 }

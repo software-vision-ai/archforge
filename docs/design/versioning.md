@@ -600,9 +600,9 @@ Checks against what exists:
 | Identical pair | Compare | "These two versions are the same." |
 | Restoring a version equal to current work | Details, banner | Not offered; found only when it runs: "This version is the same as your current work." No version is made |
 | Loading | Chip, list, centre | Skeleton rows; the previous state stays usable |
-| Version unavailable | Row | "This version can't be shown", with the reason behind a "Why?" in the meta text. Stays listed; stepping skips it and says so (AR-375). What is known holds of a branch: showing another version keeps it, and a project change, a restore or a branch switch ends it |
+| Version unavailable | Row | "This version can't be shown", with the reason behind a "Why?" in the meta text. Stays listed; stepping skips it and says so in the toast over the canvas, naming the first passed. What is known holds of a branch: showing another version keeps it, and a project change, a restore or a branch switch ends it |
 | Newer or foreign model shape | Row | "Made with a newer Archforge." |
-| Read failed | Banner | The previous state stays, Retry offered; never half a model |
+| Read failed | Banner in History | The previous state stays, Retry offered; never half a model. It ends when any version is asked for, on going back from a version, and with a restore or a change of branch or project |
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
 | Long history | List | Pages of 50, selection held by hash, Show more, filter All / With a description |
 | Metadata missing | Details | The row is left out; no invented author |

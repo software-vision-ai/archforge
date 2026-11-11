@@ -6,7 +6,7 @@
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
-use crate::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, SAVE, SETTINGS};
+use crate::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
 use crate::home::{control, off_words};
 use crate::i18n::tr;
 use crate::ux::{self, Palette, types};
@@ -24,6 +24,7 @@ struct Group {
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: &[&[NEW, OPEN, SAVE, GENERATE], &[SETTINGS, CLOSE], &[QUIT]] },
+    Group { id: "edit", title: || tr("Edit"), sections: &[&[UNDO, REDO]] },
     Group { id: "help", title: || tr("Help"), sections: &[&[ABOUT]] },
 ];
 
@@ -43,12 +44,19 @@ pub(crate) struct Bar {
     /// The row the keys are on; none leaves the highlight to the pointer.
     pub(crate) row: Option<&'static str>,
     /// What had the keyboard focus before the menu opened: egui drops the focus on Esc, so it comes back here.
-    back: Option<egui::Id>,
+    pub(crate) back: Option<egui::Id>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
-pub(crate) fn keep_valid(shell: &mut Shell) {
+pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
     if let Some(id) = shell.menu_bar.chosen.take() {
+        // A pointer's click on the row took the keyboard from the field the menu was opened on.
+        if id.starts_with("edit.")
+            && let Some(back) = shell.menu_bar.back
+        {
+            ctx.memory_mut(|m| m.request_focus(back));
+            crate::edit_menu::note(shell, ctx);
+        }
         actions::run(shell, id);
     }
     if shell.menu_bar.open.is_some() && !(shell.in_window_menu && actions::free(shell)) {
@@ -256,6 +264,8 @@ fn why_off(shell: &Shell, id: &str) -> String {
         SAVE if shell.saving.is_some() => tr("Saving…"),
         SAVE if shell.is_held() => tr("The project is busy"),
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
+        _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
+        _ if id.starts_with("edit.") && !shell.looking_only() => tr("Nothing to act on here"),
         _ => off_words(shell),
     }
 }
@@ -295,5 +305,9 @@ mod tests {
         assert_eq!(why_off(&s, SAVE), "Open or go back to a project first");
         s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect();
         assert_eq!(why_off(&s, NEW), "Close a project to open another");
+        let (mut s, ..) = shell();
+        assert_eq!(why_off(&s, UNDO), "Nothing to act on here");
+        s.begin_hold().unwrap();
+        assert_eq!(why_off(&s, UNDO), "The project is busy");
     }
 }

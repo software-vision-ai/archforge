@@ -1,5 +1,5 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide) and File, in the design's order. Each item is enabled while its action can
+//! system's Hide), File and Edit, in the design's order. Each item is enabled while its action can
 //! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
 //! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -11,7 +11,7 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, SAVE, SETTINGS};
+use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
 use archforge_ui_egui::i18n::tr;
 
 /// A run of actions, set apart from the next by a separator.
@@ -19,6 +19,7 @@ type Group = &'static [&'static str];
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
+const EDIT: [Group; 1] = [&[UNDO, REDO]];
 
 pub struct NativeMenu {
     _menu: Menu,
@@ -64,7 +65,9 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
     let file = Submenu::new(tr("File"), true);
     append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
-    menu.append_items(&[&app, &file]).map_err(err)?;
+    let edit = Submenu::new(tr("Edit"), true);
+    append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
+    menu.append_items(&[&app, &file, &edit]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
@@ -114,7 +117,7 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    const ITEMS: [&str; 8] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE];
+    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -174,7 +177,7 @@ mod tests {
     #[test]
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..]].concat().concat();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..]].concat().concat();
         let mut sorted_items = ITEMS.to_vec();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
@@ -186,6 +189,8 @@ mod tests {
             (OPEN, Some("CmdOrCtrl+O")),
             (SAVE, Some("CmdOrCtrl+S")),
             (GENERATE, Some("CmdOrCtrl+Shift+G")),
+            (UNDO, Some("CmdOrCtrl+Z")),
+            (REDO, Some("CmdOrCtrl+Shift+Z")),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),

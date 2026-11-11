@@ -18,7 +18,10 @@ An open project fills the window with its workspace.
   changes of the version you stop on appear once the comparison under way has ended.
   A version that turns out not to be readable stays in the list, marked **This version can't be
   shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
-  Archforge saved it.
+  Archforge saved it. The steps between versions pass it and say which one they passed.
+  A read that fails for now shows **This version couldn't be read.** in History, with **Retry**;
+  that goes when any version is asked for, on going back from a version, and with a restore or a
+  change of branch or project.
   **View this version** shows it read-only; the project's name at the top closes the details.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
@@ -41,9 +44,11 @@ An open project fills the window with its workspace.
   **After** (current work), give the element's kind, name and values. A name or value that differs
   is marked with − on the Before card and + on the After card as well as a tint. A side the
   element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
-  that differ and says the first three in words, or that the element was added or removed. Its
-  members, relationships and ownership aren't on the cards yet, and the summary says so, as when
-  only those changed. The project's name at the top closes it.
+  and members that differ and says the first three values in words, or that the element was added
+  or removed. Below the values the cards group the element's attributes, operations, literals,
+  other members and owner under headings, marked the same way when one came, went or changed; a
+  long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
+  The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
@@ -51,7 +56,7 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
-On Windows and Linux the strip at the very top, on Home as well, also holds the **File** and
+On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit** and
 **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
@@ -145,7 +150,8 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
-one step.
+one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
+act on that field's text instead of the model.
 
 ## Removing from a diagram versus deleting from the model
 

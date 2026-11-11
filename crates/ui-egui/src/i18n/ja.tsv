@@ -540,14 +540,24 @@ str		{name}, selected	{name}、選択中
 str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
 str		This element couldn't be compared.	この要素を比較できませんでした。
+str		Attributes	属性
+str		Operations	操作
+str		Literals	リテラル
+str		Members	メンバー
+str		Ownership	所有関係
+str		Not available on this side	この側では利用できません
+str		Relationships aren't shown here yet.	関連はまだここには表示されません。
+str		Only what these cards don't show changed	これらのカードに表示されないものだけが変更されました
+str		The cards show the same on both sides.	カードの内容は両側で同じです。
+str		The owner changed	所有者が変更されました
+str		The owner changed.	所有者が変更されました。
+plural		{n} member changed	{n} 件のメンバーが変更されました
+str		{values} · {members}	{values} · {members}
 str		This element was added	この要素は追加されました
 str		It is only on the After side, so there is nothing to compare.	変更後の側にのみ存在するため、比較するものはありません。
 str		This element was removed	この要素は削除されました
 str		It is only on the Before side, so there is nothing to compare.	変更前の側にのみ存在するため、比較するものはありません。
 plural		{n} value changed	{n} 件の値が変更されました
-str		Members, relationships and ownership aren't shown here yet.	メンバー、関連、所有関係はまだここには表示されません。
-str		Only members, relationships or ownership changed	メンバー、関連、または所有関係のみが変更されました
-str		The cards show the same on both sides, and these changes aren't shown here yet.	カードの内容は両側で同じです。これらの変更はまだここには表示されません。
 str		The cards show no difference	カードに違いはありません
 str		The name changed from {from} to {to}.	名前が {from} から {to} に変わりました。
 str		The kind changed from {from} to {to}.	種類が {from} から {to} に変わりました。
@@ -563,6 +573,8 @@ str		Last version	最新のバージョン
 str		No description	説明なし
 str		Saved by an agent	エージェントが保存
 str		This version can't be shown	このバージョンは表示できません
+str		This version couldn't be read.	このバージョンを読み込めませんでした。
+str		{from} can't be shown. Skipped to {to}.	{from} は表示できません。{to} に移動しました。
 str		It isn't a version of this branch.	このブランチのバージョンではありません。
 str		Made with a newer Archforge.	より新しい Archforge で作成されました。
 str		Why?	理由
@@ -756,6 +768,8 @@ str		Remove relationship	リレーションシップを削除
 str		Relationship removed	リレーションシップを削除しました
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
+str		Redo	やり直す
+str		Nothing to act on here	ここで操作できるものはありません
 plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す

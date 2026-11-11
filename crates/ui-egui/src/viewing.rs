@@ -156,6 +156,9 @@ impl Shell {
     /// when neither applies. Any step on its way is called off.
     pub fn back_to_current_work(&mut self) -> bool {
         self.loads.call_off();
+        if self.version_in_view().is_some() {
+            self.versions.load_failed = None;
+        }
         if self.version_being_read().is_some() {
             self.replacing = None;
             self.end_hold();

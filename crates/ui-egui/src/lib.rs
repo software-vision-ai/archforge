@@ -25,6 +25,7 @@ pub mod close_ask;
 pub mod connect;
 pub mod control;
 pub mod diagrams;
+mod edit_menu;
 pub mod editing;
 mod er_kind;
 mod er_ui;
@@ -652,6 +653,8 @@ pub struct Shell {
     pub new_project: Option<new_project::Dialog>,
     /// The Settings dialog while it is open.
     pub settings: Option<settings::Dialog>,
+    /// Who has the keyboard and what the Edit menu asked of a field.
+    pub(crate) edit: edit_menu::Edit,
     /// About Archforge, with how to support it, while it is open.
     pub about: Option<support::Dialog>,
     /// AI Agents as this run knows it: the programs and keys found, the sign-in, what is under way.
@@ -765,6 +768,7 @@ impl Shell {
             home_search: home_search::Search::default(),
             new_project: None,
             settings: None,
+            edit: edit_menu::Edit::default(),
             about: None,
             agents: ai_agents::State::default(),
             chats: chat::State::default(),
@@ -1244,6 +1248,7 @@ impl Shell {
         self.loads.call_off();
         // A later opening of the project may be on another branch.
         self.versions.unavailable.clear();
+        self.versions.load_failed = None;
         self.session = None;
         self.session_error = None;
         self.adopted = None;
@@ -1765,7 +1770,7 @@ impl Shell {
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.frames = self.frames.wrapping_add(1);
         // First, so a row acts on the project it was chosen on: polling below can show another.
-        menu_bar::keep_valid(self);
+        menu_bar::keep_valid(self, ctx);
         settings::note_keyboard(ctx);
         // The stored language, once registered, is the one drawn.
         if crate::i18n::language() != self.state.language && !crate::i18n::set_language(&self.state.language) {
@@ -1831,6 +1836,7 @@ impl Shell {
         // The table's keys, while each action is available; on macOS the menu bar takes an enabled
         // item's keys first.
         let now = ctx.input(|i| i.time);
+        edit_menu::deliver(self, ctx);
         version_details::compare::keep(self);
         // An open menu or select list holds the keys, as a native one does.
         if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
@@ -1864,6 +1870,7 @@ impl Shell {
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
+        self.say_skip();
     }
 
     /// The window title: the open project's name and the application's, or the application's alone.
@@ -1923,6 +1930,7 @@ impl Shell {
         support::show(self, ui);
         generate::show(self, ui);
         close_ask::show(self, ui);
+        edit_menu::note(self, ui.ctx());
         // A project shown in this frame (made, opened or recalled from its tab) gets its model on
         // the next: that frame is asked for now, not left to the pointer's next move.
         if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {

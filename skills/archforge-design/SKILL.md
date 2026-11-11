@@ -67,7 +67,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
   and Home's search rows share each action's availability. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
-  `Shell::in_window_menu`): the groups of its own table (File and Help for now, others join by a
+  `Shell::in_window_menu`): the groups of its own table (File, Edit and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
   open the frame's keys are held from the window behind, as under a dialog. F10 with no modifier
