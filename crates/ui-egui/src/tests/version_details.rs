@@ -940,8 +940,9 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         super::compared(&mut h);
         edit(&mut h, "diagram.unplace", serde_json::json!({ "nodes": [gone] }));
         let fresh = place(&mut h, &d, 560, 200);
-        // Far above every top-level box, and a bend far right of them: neither fits unless it is counted itself.
-        let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -4000 }));
+        // Far above every top-level box, and a bend far right of them: neither fits unless it is counted
+        // itself, and the box only below the canvas's least zoom.
+        let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -9000 }));
         let joins = edit(&mut h, "er.relationship.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "create_foreign_key": false }));
         let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
         edit(&mut h, "diagram.route", serde_json::json!({ "edge": line, "points": [{ "x": 1400, "y": 100 }] }));
@@ -965,7 +966,8 @@ fn a_diagrams_two_sides_share_one_framing() {
         let at = |h: &Harness<'static, Shell>, thing: &str, id: &str| rect_of(h, &format!("workspace.change-view.{thing}.{id}"));
         let (before, after, was) = (rect_of(h, BEFORE), rect_of(h, AFTER), at(h, "before.node", kept));
         assert_eq!(h.query_all_by_label("Billing, Commerce platform, Changed").count(), 1, "the diagram's title, not its box's");
-        assert_eq!(at(h, "after.node", kept), was.translate(egui::vec2(after.left() - before.left(), 0.0)));
+        let moved = at(h, "after.node", kept).translate(egui::vec2(before.left() - after.left(), 0.0));
+        assert!((moved.min - was.min).length() < 0.01 && (moved.max - was.max).length() < 0.01, "{moved:?} {was:?}");
         assert!(before.contains_rect(at(h, "before.node", gone)) && after.contains_rect(at(h, "after.node", fresh)));
         assert!(after.contains_rect(at(h, "after.node", nested)) && after.contains_rect(at(h, "after.edge", line)));
         (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.4, egui::vec2(90.0, 70.0));

@@ -36,7 +36,8 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
 /// Neither comes from the project or the canvas, so how someone last looked at it is never a difference.
 fn framing(sides: &DiagramSides, size: Vec2) -> (f32, Vec2) {
     let mut fitted = State::default();
-    fit(&mut fitted, size, [&sides.before, &sides.after].into_iter().flatten().filter_map(extent).reduce(Rect::union));
+    // Below the canvas's least zoom too, as nothing here pans or zooms to what it would leave out.
+    fit(&mut fitted, size, [&sides.before, &sides.after].into_iter().flatten().filter_map(extent).reduce(Rect::union), f32::MIN_POSITIVE);
     (fitted.zoom, fitted.pan)
 }
 
@@ -98,8 +99,9 @@ fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&
     };
     let mut drawn = Registry::default();
     let _ = draw_scene(clip, clip.painter(), &scene, live, &mut drawn);
+    let prefix = format!("workspace.change-view.{side}");
     for e in drawn.entries() {
         let at = Rect::from_min_max(pos2(e.rect[0], e.rect[1]), pos2(e.rect[2], e.rect[3]));
-        shell.registry.record(&e.id.replacen("workspace.canvas", &format!("workspace.change-view.{side}"), 1), e.kind, at);
+        shell.registry.record(&e.id.replacen("workspace.canvas", &prefix, 1), e.kind, at);
     }
 }
