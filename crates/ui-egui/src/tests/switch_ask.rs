@@ -111,11 +111,11 @@ fn a_failed_save_or_switch_says_what_became_of_the_work() {
     });
 }
 
-/// A switch that fails behind another question says so, as it stood then, once that one closes;
-/// kept for a project no longer shown, it is dropped.
+/// A switch that fails behind another question says so, as it stood then, once that one closes and
+/// its project shows again; once another session has replaced the one it ended on, it is dropped.
 #[test]
 fn a_failure_waits_for_the_question_up_when_it_ends() {
-    in_both(work_and_earlier, |mut h, host, _| {
+    in_both(work_and_earlier, |mut h, host, earlier| {
         let fail_behind_a_question = |h: &mut Harness<'static, Shell>| {
             answered(h, &host, SWITCH);
             h.state_mut().ask = Some(Ask::Unsaved { path: h.state().project.as_ref().unwrap().path.clone() });
@@ -124,16 +124,47 @@ fn a_failure_waits_for_the_question_up_when_it_ends() {
             assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })) && !h.state().is_held());
         };
         fail_behind_a_question(&mut h);
-        h.state_mut().save_error = Some("Later.".into());
-        click_id(&mut h, "close-ask.cancel");
+        let tab = h.state().active.unwrap();
+        (h.state_mut().save_error, h.state_mut().ask) = (Some("Later.".into()), None);
+        h.state_mut().stash();
+        h.run_steps(2);
+        assert!(h.state().ask.is_none() && h.state().versions.switching.is_some(), "kept while another project shows");
+        h.state_mut().activate(tab);
         h.run_steps(3);
         assert!(painted_has(&h, "Gone. You are still on main and your work is unchanged."), "{:?}", painted(&h));
         click_id(&mut h, CLOSE);
         h.run_steps(2);
         fail_behind_a_question(&mut h);
-        (h.state_mut().project.as_mut().unwrap().path, h.state_mut().ask) = ("elsewhere".into(), None);
+        (h.state_mut().session, h.state_mut().ask) = (Some(h.state().build(&earlier).unwrap()), None);
         crate::switch_ask::keep(h.state_mut());
         assert!(h.state().ask.is_none() && h.state().versions.switching.is_none());
+    });
+}
+
+/// Save answered to another tab's question shows that tab and closes it: a switch failure kept
+/// meanwhile isn't shown over that tab's session, and is shown once its own session shows again.
+#[test]
+fn a_failure_outlasts_saving_and_closing_another_tab() {
+    in_both(work_and_earlier, |mut h, host, _| {
+        let (library, commerce) = (std::path::PathBuf::from("/tmp/Library.archforge"), commerce().path);
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+        h.run_steps(2);
+        add_schema(&mut h, "books");
+        let ended_on = h.state().session.as_ref().unwrap().history();
+        answered(&mut h, &host, SWITCH);
+        h.state_mut().ask = Some(Ask::Unsaved { path: commerce.clone() });
+        host.switches.lock().unwrap().remove(0).check.send(Err("Gone.".to_string().into())).unwrap();
+        h.run_steps(4);
+        click_id(&mut h, "close-ask.save");
+        h.run_steps(3);
+        assert!(h.state().project.as_ref().is_some_and(|p| p.path == commerce) && h.state().ask.is_none(), "not over Commerce");
+        assert!(h.state().versions.switching.is_some(), "kept");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state().session.as_ref().map(|s| s.history()), Some(ended_on), "Library's own session shows again");
+        assert!(painted_has(&h, "Gone. You are still on main and your work is unchanged."), "{:?}", painted(&h));
     });
 }
 

@@ -34,6 +34,8 @@ pub(crate) struct Switching {
     confirm: Confirm,
     /// It saves the work first.
     save_first: bool,
+    /// The session it ended on, the only one its failure is about.
+    ended_on: Option<u64>,
 }
 
 impl Shell {
@@ -62,20 +64,26 @@ fn go(shell: &mut Shell, confirm: Confirm, save_first: bool) -> Result<(), HoldR
     let Some(path) = shell.project.as_ref().map(|p| p.path.clone()) else { return Err(HoldRefused::NoProject) };
     shell.chat_answered = confirm.after_chat;
     shell.start_switch(confirm.branch.clone(), save_first)?;
-    shell.versions.switching = Some(Switching { path, confirm, save_first });
+    shell.versions.switching = Some(Switching { path, confirm, save_first, ended_on: None });
     Ok(())
 }
 
 /// Once a frame, after the replacement's step: a switch that began and has ended without arriving
-/// comes back saying how it stood when it ended, waiting while another question is up. One that
-/// arrived is no longer kept, nor is one whose project no longer shows.
+/// comes back saying how it stood when it ended, over the session it ended on, once no other
+/// question is up and its project shows again. One that arrived is no longer kept, nor is one whose
+/// session another has replaced.
 pub(crate) fn keep(shell: &mut Shell) {
     if shell.replacing.is_some() {
         return;
     }
     let Some(mut s) = shell.versions.switching.take() else { return };
-    let Some(path) = shell.project.as_ref().map(|o| o.path.clone()).filter(|p| *p == s.path) else { return };
+    let shown = shell.project.as_ref().is_some_and(|o| o.path == s.path);
+    let history = shell.session.as_ref().map(|x| x.history());
     if s.confirm.failure.is_none() {
+        if !shown {
+            return;
+        }
+        s.ended_on = history;
         let refused = shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision());
         let why = shell.save_error.clone().unwrap_or_else(|| tr("The switch did not finish, so the project stayed on its branch."));
         // A Save that answered marked the session saved; one that failed left it unsaved.
@@ -88,11 +96,14 @@ pub(crate) fn keep(shell: &mut Shell) {
         };
         s.confirm.failure = Some((refused, fmt(&template, &[("why", &why), ("branch", &s.confirm.from)])));
     }
-    if shell.ask.is_some() {
+    if shown && s.ended_on != history {
+        return;
+    }
+    if !shown || shell.ask.is_some() {
         shell.versions.switching = Some(s);
         return;
     }
-    shell.ask = Some(Ask::Switch { path, generation: shell.session_generation(), confirm: s.confirm });
+    shell.ask = Some(Ask::Switch { path: s.path, generation: shell.session_generation(), confirm: s.confirm });
 }
 
 /// Draws the question or the failure over the window and acts on the answer. Enter does nothing
