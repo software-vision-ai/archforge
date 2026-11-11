@@ -142,7 +142,8 @@ border width, and for lines their colour, width and routing (straight, right-ang
 ## Selecting and the canvas
 
 - Click a box or a line to select it; Shift-click adds to the selection; drag on empty canvas to
-  select everything in a rectangle.
+  select everything in a rectangle. **Edit ▸ Select all** (⌘A, or Ctrl A) after a click on the
+  canvas selects everything the diagram draws, also while you look at a saved version.
 - Drag selected boxes to move them; the arrow keys nudge them.
 - Double-click a box's name to rename it in place.
 - The tools float at the bottom of the diagram: **Select**, **Pan**, the diagram's own tools,
@@ -164,7 +165,9 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
 one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
-act on that field's text instead of the model. Undo is not the same as going back to a saved version:
+act on that field's text instead of the model. **Cut**, **Copy** and **Paste** work on the text of
+the field you are typing in, as their keys do; Copy also copies text you have selected in a skill's
+preview. Undo is not the same as going back to a saved version:
 [Versions](09-versions.md#autosave-a-saved-version-and-undo) says how they differ.
 
 ## Removing from a diagram versus deleting from the model

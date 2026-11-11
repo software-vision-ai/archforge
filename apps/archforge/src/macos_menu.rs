@@ -11,7 +11,7 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
+use archforge_ui_egui::actions::{self, ABOUT, CLOSE, COPY, CUT, GENERATE, Keys, NEW, OPEN, PASTE, QUIT, REDO, SAVE, SELECT_ALL, SETTINGS, UNDO};
 use archforge_ui_egui::i18n::tr;
 use archforge_ui_egui::model_menu;
 
@@ -22,7 +22,7 @@ type Items = Vec<(&'static str, MenuItem)>;
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
-const EDIT: [Group; 1] = [&[UNDO, REDO]];
+const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 
 pub struct NativeMenu {
     _menu: Menu,
@@ -149,7 +149,7 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
+    const ITEMS: [&str; 14] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, CUT, COPY, PASTE, SELECT_ALL];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -223,6 +223,10 @@ mod tests {
             (GENERATE, Some("CmdOrCtrl+Shift+G")),
             (UNDO, Some("CmdOrCtrl+Z")),
             (REDO, Some("CmdOrCtrl+Shift+Z")),
+            (CUT, Some("CmdOrCtrl+X")),
+            (COPY, Some("CmdOrCtrl+C")),
+            (PASTE, Some("CmdOrCtrl+V")),
+            (SELECT_ALL, Some("CmdOrCtrl+A")),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),

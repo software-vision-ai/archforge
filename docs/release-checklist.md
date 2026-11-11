@@ -65,10 +65,12 @@ project.
 **File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
 **Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again. Close
 About, type into a name field and, with the field still active, press ⌘Z and then ⇧⌘Z, and choose
-**Edit ▸ Undo**. Click the canvas so the field lets go, make a change, press ⌘Z and then ⇧⌘Z. With the
-field active again, press ⌘C, ⌘V and ⌘A. Open a class diagram and look through **Model**, choose
-**Model ▸ Interface** and click the canvas; open an ER diagram and look through **Model** again; go to Home
-and look once more.
+**Edit ▸ Undo**. Click the canvas so the field lets go, make a change, press ⌘Z and then ⇧⌘Z, then
+press ⌘A and look at **Edit**. With the field active again, press ⌘A, ⌘C, ⌘X and ⌘V, then choose
+**Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and **Edit ▸ Paste** in turn. Select a few words
+in a skill's preview, look at **Edit** and press ⌘C; paste them into a name field. Open a class diagram
+and look through **Model**, choose **Model ▸ Interface** and click the canvas; open an ER diagram and
+look through **Model** again; go to Home and look once more.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
@@ -76,10 +78,13 @@ while it can act: Save, Close project and Generate… need an open project, and 
 save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog
 is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (⇧⌘Z). While a field has the
 keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the
-change back and bring it again, and are disabled when there is no step to take. ⌘C, ⌘V and ⌘A act on the
-field, as they always have. Model on a class diagram lists Class to Package, the kinds of the Relationship
-tool, then **Note** and **Link note**, and Interface places an interface where you click. On an ER diagram
-it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled.
+change back and bring it again, and are disabled when there is no step to take. Edit also offers **Cut**
+(⌘X), **Copy** (⌘C), **Paste** (⌘V) and **Select all** (⌘A). On the canvas Cut, Copy and Paste are
+disabled, and Select all selects everything the diagram draws. On the field all four are enabled, and
+the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
+Copy is enabled and Cut and Paste are not, and the words paste into the field. Model on a class
+diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
+and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.

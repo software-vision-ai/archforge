@@ -771,6 +771,10 @@ str		Relationship removed	Relação removida
 str		{name} removed	{name} removida
 str		Undo	Anular
 str		Redo	Refazer
+str		Cut	Cortar
+str		Copy	Copiar
+str		Paste	Colar
+str		Select all	Selecionar tudo
 str		Nothing to act on here	Aqui não há nada em que atuar
 plural		+ {n} more column	+ {n} coluna mais|+ {n} colunas mais
 str		Minimap	Minimapa

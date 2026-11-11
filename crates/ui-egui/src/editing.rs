@@ -173,6 +173,23 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
+/// Selects every element drawn on diagram `d`, or the diagram itself when it draws nothing, as a
+/// marquee over the whole of it would.
+pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let mut ids: Vec<Uuid> = Vec::new();
+    for id in nodes_of(store, d).into_iter().filter_map(|n| uuid(store, element_of(store, n).unwrap_or(n))) {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    if ids.is_empty() {
+        ids.extend(uuid(store, d));
+    }
+    select(shell, ids);
+}
+
 fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
     store.uuid(o).ok()
 }

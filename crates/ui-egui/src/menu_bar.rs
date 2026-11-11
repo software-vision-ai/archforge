@@ -6,7 +6,7 @@
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
-use crate::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
+use crate::actions::{self, ABOUT, CLOSE, COPY, CUT, GENERATE, Keys, NEW, OPEN, PASTE, QUIT, REDO, SAVE, SELECT_ALL, SETTINGS, UNDO};
 use crate::home::{control, off_words};
 use crate::i18n::tr;
 use crate::ux::{self, Palette, types};
@@ -24,7 +24,7 @@ struct Group {
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
-    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO]] },
+    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
     Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
 ];
@@ -269,8 +269,10 @@ fn why_off(shell: &Shell, id: &str) -> String {
         SAVE if shell.is_held() => tr("The project is busy"),
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
         _ if id.starts_with("model.") => crate::model_menu::why_off(shell),
+        // Off only for want of a field or of selected text, held or viewing a version as well.
+        CUT | COPY | PASTE => tr("Nothing to act on here"),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
-        _ if id.starts_with("edit.") && !shell.looking_only() => tr("Nothing to act on here"),
+        _ if id.starts_with("edit.") && (id == SELECT_ALL || !shell.looking_only()) => tr("Nothing to act on here"),
         _ => off_words(shell),
     }
 }
@@ -311,9 +313,19 @@ mod tests {
         s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect();
         assert_eq!(why_off(&s, NEW), "Close a project to open another");
         let (mut s, ..) = shell();
-        assert_eq!(why_off(&s, UNDO), "Nothing to act on here");
+        let no = "Nothing to act on here".to_string();
+        assert_eq!(why_off(&s, UNDO), no);
         assert_eq!(why_off(&s, "model.note"), "Show a diagram first");
+        let (mut viewing, ..) = shell();
+        viewing.show_version(crate::actions::tests::session(), "v".into());
+        assert_eq!((why_off(&viewing, SELECT_ALL), why_off(&viewing, CUT)), (no.clone(), no.clone()), "viewing a version keeps neither off");
+        assert_eq!(why_off(&viewing, UNDO), "Read only while viewing a version");
         s.begin_hold().unwrap();
         assert_eq!(why_off(&s, UNDO), "The project is busy");
+        assert_eq!(
+            (why_off(&s, SELECT_ALL), why_off(&s, PASTE)),
+            ("The project is busy".to_string(), no),
+            "Paste is off for want of a field, not for the hold"
+        );
     }
 }

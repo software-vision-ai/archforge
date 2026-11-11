@@ -23,6 +23,10 @@ pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
 pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
+pub const CUT: &str = "edit.cut";
+pub const COPY: &str = "edit.copy";
+pub const PASTE: &str = "edit.paste";
+pub const SELECT_ALL: &str = "edit.select-all";
 
 /// One application action.
 pub struct Action {
@@ -41,6 +45,11 @@ pub struct Action {
 pub struct Keys {
     pub modifiers: Modifiers,
     pub key: Key,
+}
+
+/// The shortcut of the command key and `key`.
+const fn command(key: Key) -> Option<Keys> {
+    Some(Keys { modifiers: Modifiers::COMMAND, key })
 }
 
 /// How an action shows in Home's search.
@@ -187,6 +196,17 @@ pub static ACTIONS: &[Action] = &[
         keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::Z }),
         search: None,
     },
+    Action { id: CUT, label: |_| tr("Cut"), available: edit_menu::on_field, run: edit_menu::cut, keys: command(Key::X), search: None },
+    Action { id: COPY, label: |_| tr("Copy"), available: edit_menu::can_copy, run: edit_menu::copy, keys: command(Key::C), search: None },
+    Action { id: PASTE, label: |_| tr("Paste"), available: edit_menu::on_field, run: edit_menu::paste, keys: command(Key::V), search: None },
+    Action {
+        id: SELECT_ALL,
+        label: |_| tr("Select all"),
+        available: edit_menu::can_select_all,
+        run: edit_menu::select_all,
+        keys: command(Key::A),
+        search: None,
+    },
 ];
 
 /// The action `id`.
@@ -229,7 +249,7 @@ pub(crate) fn free(shell: &Shell) -> bool {
     window && shell.explorer.delete.is_none() && shell.chat_panel.ask.is_none() && shell.diagrams.new.is_none()
 }
 
-/// Whether `keys` were pressed in this frame, and takes them. Undo's and Redo's are matched exactly:
+/// Whether `keys` were pressed in this frame, and takes them. The Edit menu's are matched exactly:
 /// `consume_key` lets an extra Shift through, which with Redo off would make ⇧⌘Z undo.
 fn pressed(ctx: &egui::Context, id: &str, keys: &Keys) -> bool {
     let exact = |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers));
@@ -237,8 +257,8 @@ fn pressed(ctx: &egui::Context, id: &str, keys: &Keys) -> bool {
 }
 
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
-/// available. A field reads Undo's and Redo's keys itself, so they stay in the input while it has
-/// the keyboard. ⌘Y (Ctrl Y) is Redo's second key.
+/// available. A field reads the Edit menu's keys itself, so they stay in the input while it has the
+/// keyboard. ⌘Y (Ctrl Y) is Redo's second key.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
@@ -309,7 +329,7 @@ pub(crate) mod tests {
     }
 
     /// A new model named Shop, as a project holds one.
-    fn session() -> archforge_notations::Session {
+    pub(crate) fn session() -> archforge_notations::Session {
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;

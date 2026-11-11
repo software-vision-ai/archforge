@@ -771,6 +771,10 @@ str		Relationship removed	リレーションシップを削除しました
 str		{name} removed	{name} を削除しました
 str		Undo	元に戻す
 str		Redo	やり直す
+str		Cut	カット
+str		Copy	コピー
+str		Paste	ペースト
+str		Select all	すべてを選択
 str		Nothing to act on here	ここで操作できるものはありません
 plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
