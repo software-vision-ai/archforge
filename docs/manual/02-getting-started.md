@@ -55,9 +55,10 @@ location you chose.
 ## Saving
 
 You do not lose work between saves: every change is written to the project a moment after you
-make it. Saving makes a version of the project: press ⌘S (Ctrl S), or on macOS choose
-**File ▸ Save**. Until you save, the status bar at the bottom says *Unsaved changes · ⌘S saves*, and
-a dot shows before the project's name in the window title; afterwards it says *Saved*.
+make it. Saving makes a version of the project: press ⌘S (Ctrl S), or choose **File ▸ Save**. Until
+you save, the status bar at the bottom says *Unsaved changes · ⌘S saves*, and a dot shows before the
+project's name in the window title; afterwards it says *Saved*. [Versions](09-versions.md) says what
+a version is and how to save one with a description.
 
 ## Closing and reopening
 

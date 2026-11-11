@@ -32,4 +32,4 @@ public issue.
 - The repository's README says how to build Archforge and run its checks.
 - `CONTRIBUTING.md` says how to propose a change.
 
-Back to the [contents](README.md).
+Next: [Versions](09-versions.md).
