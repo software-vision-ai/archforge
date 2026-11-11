@@ -212,7 +212,8 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
         .unwrap()
         .value);
     s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": lives, "source": table, "target": at })).unwrap();
-    s.execute("view.open-diagram", &serde_json::json!({ "diagram": d })).unwrap();
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&d).unwrap());
+    let s = h.state_mut().session.as_mut().unwrap();
     s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
     h.state_mut().edit.keyboard = Keyboard::Nobody;
     h.run_steps(2);
@@ -249,7 +250,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         s.services.projects = Some(std::sync::Arc::new(crate::actions::tests::CountingHost::default()));
         crate::version_details::open(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
     }
-    let states: [(&str, Setup, &[&str]); 14] = [
+    let states: [(&str, Setup, &[&str]); 16] = [
         ("a field", field, &CLIP),
         ("the model", |_| {}, &[]),
         ("the canvas", canvas, &[SELECT_ALL]),
@@ -264,6 +265,8 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("a version's details over the canvas", details, &[]),
         ("a gesture", |s| (canvas(s), s.canvas.gesture = Some(crate::editing::Gesture::Marquee { from: egui::Pos2::ZERO })).1, &[]),
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
+        ("no diagram on the canvas, the model's view still on one", |s| (canvas(s), s.canvas.active = None).1, &[]),
+        ("a line's menu open on the canvas", |s| (canvas(s), s.canvas.line_menu = Some(egui::Pos2::ZERO)).1, &[]),
     ];
     let select_all = Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
     for ((name, setup, on), theme) in states.into_iter().zip([ThemeKind::Light, ThemeKind::Dark].into_iter().cycle()) {
@@ -346,7 +349,7 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
             .as_str()
             .unwrap()
             .to_string();
-        s.execute("view.open-diagram", &serde_json::json!({ "diagram": empty })).unwrap();
+        crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&empty).unwrap());
         key(&mut h, Key::A, Modifiers::COMMAND);
         assert_eq!(selection(&h), [empty], "a diagram that draws nothing selects itself");
     }
@@ -440,5 +443,39 @@ fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
         h.event(Event::Paste("New".into()));
         h.run();
         assert_eq!(name(&h), "New", "the pasted text took the selection's place");
+    }
+}
+
+/// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
+/// though the selection holds a relationship or a generalization set beside the boxes.
+#[test]
+fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
+    let alive = |h: &Harness<'static, Shell>, id: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).is_some_and(|o| st.is_alive(o))
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, all) = drawn(theme);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        assert_eq!(selection(&h), all);
+        key(&mut h, Key::Delete, Modifiers::NONE);
+        let s = h.state().session.as_ref().unwrap();
+        let count = |class| s.doc().alive().filter(|o| s.doc().class_of(*o).ok() == Some(class)).count();
+        assert_eq!((count(archforge_er::ENTITY), count(archforge_er::RELATIONSHIP)), (3, 1), "nothing left the model");
+        let d = s.view().open_diagram.unwrap();
+        assert!(s.doc().list(d, archforge_diagram::diagram::NODE).unwrap().is_empty(), "the boxes are off the diagram");
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [payment, set] })).unwrap();
+        h.state_mut().canvas.focused = true;
+        h.run();
+        key(&mut h, Key::Delete, Modifiers::NONE);
+        assert!(alive(&h, &set), "the set stays in the model");
     }
 }

@@ -2071,6 +2071,19 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     }
 }
 
+/// Whether something open on the canvas holds its keys: an editor, a menu or the Stereotypes
+/// picker, which takes typing, Backspace, the arrows and Enter (AR-135).
+pub(crate) fn canvas_busy(shell: &Shell) -> bool {
+    let c = &shell.canvas;
+    c.rename.is_some()
+        || c.inline.is_some()
+        || c.note_edit.is_some()
+        || c.menu.is_some()
+        || c.line_menu.is_some()
+        || c.nary_menu.is_some()
+        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
+}
+
 /// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
 /// from the diagram (with Shift, asks before deleting from the model), the arrows nudge, ⌘↩ opens
 /// a new row on a card that takes one.
@@ -2078,19 +2091,12 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
         || shell.about.is_some()
-        || shell.canvas.rename.is_some()
-        || shell.canvas.inline.is_some()
-        || shell.canvas.note_edit.is_some()
-        || shell.canvas.menu.is_some()
-        || shell.canvas.line_menu.is_some()
-        || shell.canvas.nary_menu.is_some()
+        || canvas_busy(shell)
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
         // A Chat history row's menu or the confirmation of a deletion takes the keys (AR-217).
         || shell.chat_panel.row_menu.is_some()
         || shell.chat_panel.ask.is_some()
-        // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
-        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
     {
         return;
     }
@@ -2136,16 +2142,6 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.mapping = None;
         return;
     }
-    // A selected generalization set goes from the model, its generalizations kept (AR-129).
-    if delete && crate::uml_sets::remove_selected_set(shell) {
-        return;
-    }
-    if delete
-        && !shift
-        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || crate::connect::remove_selected_line(shell))
-    {
-        return;
-    }
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
         Some(s) => {
@@ -2159,6 +2155,19 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         }
         None => Vec::new(),
     };
+    // A selection that holds boxes, such as Select all's, takes the boxes off below: a set or a
+    // line selected beside them is never deleted from the model on its own.
+    // A selected generalization set goes from the model, its generalizations kept (AR-129).
+    if delete && selected.is_empty() && crate::uml_sets::remove_selected_set(shell) {
+        return;
+    }
+    if delete
+        && !shift
+        && selected.is_empty()
+        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || crate::connect::remove_selected_line(shell))
+    {
+        return;
+    }
     if selected.is_empty() {
         // A line whose element has its card on another diagram only, or on none (an association
         // class's, drawn here with its classes): Delete takes the line from this diagram, and
