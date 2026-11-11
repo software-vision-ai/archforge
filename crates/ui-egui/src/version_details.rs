@@ -33,7 +33,7 @@ const LINK: f32 = 27.0;
 const SKELETON_CARDS: usize = 3;
 
 /// What a comparison of two versions found, or why it could not tell.
-type Found = Result<Arc<Vec<Difference>>, String>;
+pub(crate) type Found = Result<Arc<Vec<Difference>>, String>;
 
 /// What changed since the version before, and that version for the link: on their way, then known.
 struct Comparison {
@@ -169,7 +169,9 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     {
         c.earlier = Some(Ok(listed.clone()));
     }
-    if let (true, None, Some(host), Some(about)) = (v.details_comparing.is_none(), &v.details_reading, host, about) {
+    // The Compare page's read takes turns with these too.
+    let idle = v.details_comparing.is_none() && v.compare_results.reading.is_none();
+    if let (true, None, Some(host), Some(about)) = (idle, &v.details_reading, host, about) {
         if c.found.is_none() {
             let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
             v.details_comparing = Some(Running { about, pair, answer: compare(old, new) });

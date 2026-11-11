@@ -1,7 +1,7 @@
 //! The Compare page in the centre, in place of a version's details (frames V3.1 and V3.2 of page 09
 //! of the design and section 6 of `docs/design/versioning.md`): Before and After in a band, in the
 //! direction Swap reverses. Each select opens a list of the versions already read, under the band;
-//! AR-280 draws what the pair compares, so nothing is under the band yet.
+//! [`results`] finds what a version and current work differ by; nothing is drawn under the band yet.
 
 use egui::accesskit::Role;
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
@@ -15,6 +15,8 @@ use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
 use crate::versions::{dated, described, read_more, when};
 use crate::{Shell, VersionEntry, widgets};
+
+pub(crate) mod results;
 
 /// The band's height, a select's size at its widest and its narrowest.
 const STRIP: f32 = 56.0;

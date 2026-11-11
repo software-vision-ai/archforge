@@ -19,7 +19,7 @@ use crate::{Shell, VersionRead, VersionReadError};
 /// The most versions the cache holds: the design's last few.
 const MOST_KEPT: usize = 8;
 /// The most bytes the versions in the cache come to, as a single read may be 384 MiB.
-const MOST_KEPT_BYTES: usize = 256 << 20;
+pub(crate) const MOST_KEPT_BYTES: usize = 256 << 20;
 
 /// What a read answers: a version's rows, or why they could not be read.
 type Answer = VersionRead;
@@ -70,7 +70,7 @@ pub(crate) struct Loads {
 }
 
 /// What `rows` come to in memory, counted as the read's own budget counts them.
-fn bytes_of(rows: &Rows) -> usize {
+pub(crate) fn bytes_of(rows: &Rows) -> usize {
     let text = |c: &Cell| if let Cell::Text(t) = c { t.len() + 16 } else { 0 };
     let tables = rows.tables.iter().flatten().map(|row| size_of::<Vec<Cell>>() + row.iter().map(|c| size_of::<Cell>() + text(c)).sum::<usize>());
     let junctions = rows.junctions.iter().flatten().map(|entry| size_of_val(entry) + text(&entry.2));

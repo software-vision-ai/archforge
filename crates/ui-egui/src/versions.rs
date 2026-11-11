@@ -85,6 +85,8 @@ pub struct State {
     pub(crate) details_comparing: Option<crate::version_details::Running<Arc<Vec<Difference>>>>,
     /// The one read of the version before the link has under way.
     pub(crate) details_reading: Option<crate::version_details::Running<VersionsPage>>,
+    /// What the Compare page has read and found, and its one read and comparison under way.
+    pub(crate) compare_results: crate::version_details::compare::results::Results,
     /// The changed element the centre shows, and the one read of its two sides under way.
     pub(crate) element: Option<crate::change_view::OpenedElement>,
     pub(crate) element_reading: Option<crate::change_view::ElementReading>,
