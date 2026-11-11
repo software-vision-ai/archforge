@@ -67,8 +67,8 @@ Undo remembers up to 500 steps, and only while the project stays open. A
 Do this when you want to look over your changes and say what they are.
 
 1. In the left rail, choose **Versions**. A number on its icon says how many things have changed.
-   **Working changes** lists them, model elements first and then diagrams. Click a model element to
-   see how it differs from your last version.
+   **Working changes** lists them, model elements first and then diagrams. Click a model element or a
+   diagram to see how it differs from your last version.
 2. Choose **Save version…**, at the right of the **Working changes** heading. The **Save version**
    dialog opens and says how many model elements and diagrams changed since your last version.
 3. In **Description**, type what this version is, such as *Added email*. A description is one line

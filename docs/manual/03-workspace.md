@@ -19,6 +19,8 @@ An open project fills the window with its workspace.
   A version that turns out not to be readable stays in the list, marked **This version can't be
   shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
   Archforge saved it. The steps between versions pass it and say which one they passed.
+  Past the versions read so far, a step reads the next ones and goes on; if that read fails, a
+  message says so, the version you are on stays, and the next step reads again.
   A read that fails for now shows **This version couldn't be read.** in History, with **Retry**;
   that goes when any version is asked for, on going back from a version, and with a restore or a
   change of branch or project.
@@ -53,6 +55,9 @@ An open project fills the window with its workspace.
   that also differ in this comparison: what it or its members refer to, what refers to them, and
   its owner. **Go to** and the name opens that element against the same version.
   The project's name at the top closes it.
+  Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
+  way: **Before** and **After** side by side, each drawn as it was on its side and both at one
+  zoom, so a box that stayed is in the same place on both. A side the diagram isn't on says so.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

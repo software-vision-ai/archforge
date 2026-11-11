@@ -744,7 +744,7 @@ fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
 }
 
 /// Puts a read of `id` about `key` under way, the test holding its answer.
-fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<ElementSides>, String>> {
+fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<crate::change_view::Sides>, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { id, key, answer: rx });
     tx
@@ -752,7 +752,7 @@ fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::syn
 
 /// Lands `answer` as such a read.
 fn landed(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared, answer: Result<Option<ElementSides>, String>) {
-    reading(h, id, key).send(answer).unwrap();
+    reading(h, id, key).send(answer.map(|s| s.map(crate::change_view::Sides::Element))).unwrap();
     h.run_steps(1);
 }
 
@@ -899,11 +899,11 @@ fn two_rows_of_one_element_open_it_once() {
         let (mut row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
         let mut gone = row.clone();
         (gone.class, gone.kind, gone.name, row.name) = (archforge_er::ENTITY, ChangeKind::Removed, Some("old".into()), Some("new".into()));
-        let sheet = Difference { area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
+        let sheet = Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
         crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, gone, sheet]));
         h.run_steps(2);
         open_change(h, "sheet");
-        assert!(h.state().versions.element.is_none(), "a diagram's row does not open");
+        assert!(h.state().versions.element.is_none(), "a row in no diagram closes once that is known");
         open_change(h, "old");
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 2, "both rows are the element");
         assert!(painted_has(h, "Added"), "the sides say Added, the row Removed: {:?}", painted(h));
@@ -1054,6 +1054,109 @@ fn the_keys_reach_and_open_a_related_link_out_of_view() {
         h.key_press(Enter);
         frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
         assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id), "the one reached opens");
+    });
+}
+
+/// The ids a diagram comparison holds: the schema, the diagram, the boxes kept, gone, fresh and
+/// nested, and the line.
+type Items = [String; 7];
+
+/// Runs the command `cmd` on the session; gives the id it answers with, if any.
+fn edit(h: &mut Harness<'static, Shell>, cmd: &str, args: serde_json::Value) -> String {
+    h.state_mut().session.as_mut().unwrap().execute(cmd, &args).unwrap().value["id"].as_str().unwrap_or_default().to_string()
+}
+
+/// Runs `test` once in each appearance, with Billing in the last version, these changes in current
+/// work and the box `fresh` opened from the list. Opening asks the host for nothing and leaves the session.
+fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let shop = edit(&mut h, "er.schema.add", serde_json::json!({ "name": "shop" }));
+        let entity = |h: &mut _, name: &str| edit(h, "er.entity.add", serde_json::json!({ "schema": shop, "name": name }));
+        let (a, c, d) = (entity(&mut h, "kept"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
+        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Billing" }));
+        let place = |h: &mut _, e: &str, x: i32, y: i32| {
+            edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
+        };
+        // Only the Before side reaches far below, so fitting one side alone would differ.
+        let (kept, gone) = (place(&mut h, &a, 300, 0), place(&mut h, &c, 0, 20000));
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        super::compared(&mut h);
+        edit(&mut h, "diagram.unplace", serde_json::json!({ "nodes": [gone] }));
+        let fresh = place(&mut h, &d, 560, 200);
+        // Far above every top-level box: it fits only if it is counted itself, and only below the
+        // canvas's least zoom.
+        let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -60000 }));
+        let joins = edit(&mut h, "er.relationship.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "create_foreign_key": false }));
+        let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
+        list_still(&mut h);
+        host.reads.lock().unwrap().clear();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let row = h.state().versions.changes.iter().find(|r| r.area == Area::Diagram && r.id.to_string() == fresh).unwrap();
+        let row = format!("workspace.versions.change.{}.{}", row.id, row.class.0);
+        tap(&mut h, &row);
+        frames_until(&mut h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        assert!(asked(&host).is_empty() && h.state().session.as_ref().unwrap().revision() == revision, "it only reads what is held");
+        test(&mut h, &[shop.clone(), diagram.clone(), kept, gone, fresh, nested, line]);
+    });
+}
+
+/// A box that stayed is in the same place on both sides, however the canvas was last left, and
+/// the framing takes in what only one side holds.
+#[test]
+fn a_diagrams_two_sides_share_one_framing() {
+    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line]| {
+        let at = |h: &Harness<'static, Shell>, thing: &str, id: &str| rect_of(h, &format!("workspace.change-view.{thing}.{id}"));
+        let (before, after, was) = (rect_of(h, BEFORE), rect_of(h, AFTER), at(h, "before.node", kept));
+        assert_eq!(h.query_all_by_label("Billing, Commerce platform, Changed").count(), 1, "the diagram's title, not its box's");
+        let moved = at(h, "after.node", kept).translate(egui::vec2(before.left() - after.left(), 0.0));
+        assert!((moved.min - was.min).length() < 0.01 && (moved.max - was.max).length() < 0.01, "{moved:?} {was:?}");
+        assert!(before.contains_rect(at(h, "before.node", gone)) && after.contains_rect(at(h, "after.node", fresh)));
+        assert!(after.contains_rect(at(h, "after.node", nested)) && after.contains_rect(at(h, "after.edge", line)));
+        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.4, egui::vec2(90.0, 70.0));
+        h.run_steps(2);
+        assert_eq!(at(h, "before.node", kept), was, "how the canvas was left is no part of it");
+        let put = |h: &Harness<'static, Shell>, text: &str| {
+            h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == text && after.contains(t.pos)))
+        };
+        // Then wide: a bend far right, and the near end's text put far left from that end, which is
+        // further than from the line's middle; then tall the same way, with the far end's text.
+        edit(h, "diagram.unplace", serde_json::json!({ "nodes": [nested] }));
+        edit(h, "diagram.route", serde_json::json!({ "edge": line, "points": [{ "x": 60000, "y": 100 }] }));
+        edit(h, "diagram.label", serde_json::json!({ "edge": line, "kind": "from_end", "at": "source", "dx": -60000 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, &format!("workspace.change-view.after.node.{nested}")));
+        let wide = at(h, "after.edge", line);
+        assert!(after.contains_rect(wide) && put(h, "1"), "the bend and the near end's text");
+        edit(h, "diagram.route", serde_json::json!({ "edge": line, "points": [{ "x": 0, "y": -120000 }] }));
+        edit(h, "diagram.label", serde_json::json!({ "edge": line, "kind": "to_end", "at": "target", "dy": 120000 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && at(h, "after.edge", line) != wide);
+        assert!(after.contains_rect(at(h, "after.edge", line)) && put(h, "0..*"), "the bend and the far end's text");
+    });
+}
+
+/// A side the diagram is not on says so, the title says what happened to it, and a failed read names a diagram.
+#[test]
+fn a_side_the_diagram_is_not_on_says_so() {
+    diagram_compared(|h, [shop, diagram, ..]| {
+        edit(h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Extra" }));
+        list_still(h);
+        open_change(h, "Extra");
+        assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
+        assert_eq!(h.query_all_by_label("Extra, Commerce platform, Added").count(), 1, "the title");
+        edit(h, "diagram.remove", serde_json::json!({ "diagram": diagram }));
+        list_still(h);
+        open_change(h, "Billing");
+        assert_eq!(h.query_all_by_label("After, Removed").count(), 1);
+        assert_eq!(h.query_all_by_label("Billing, Commerce platform, Removed").count(), 1, "the title");
+        let (id, key) = (h.state().versions.element.as_ref().unwrap().row.id, h.state().versions.compared.clone().unwrap());
+        reading(h, id, key).send(Err("broken".into())).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.query_all_by_label("This diagram couldn't be compared.").count(), 1);
     });
 }
 
