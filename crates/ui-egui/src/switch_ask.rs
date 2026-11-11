@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
-use crate::close_ask::Ask;
+use crate::close_ask::{Ask, Due, due};
 use crate::hold::HoldRefused;
 use crate::i18n::{fmt, tr};
 use crate::leaving::Leaving;
@@ -77,13 +77,11 @@ pub(crate) fn keep(shell: &mut Shell) {
         return;
     }
     let Some(mut s) = shell.versions.switching.take() else { return };
-    let shown = shell.project.as_ref().is_some_and(|o| o.path == s.path);
-    let history = shell.session.as_ref().map(|x| x.history());
     if s.confirm.failure.is_none() {
-        if !shown {
+        if shell.project.as_ref().is_none_or(|o| o.path != s.path) {
             return;
         }
-        s.ended_on = history;
+        s.ended_on = shell.session.as_ref().map(|x| x.history());
         let refused = shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision());
         let why = shell.save_error.clone().unwrap_or_else(|| tr("The switch did not finish, so the project stayed on its branch."));
         // A Save that answered marked the session saved; one that failed left it unsaved.
@@ -96,14 +94,11 @@ pub(crate) fn keep(shell: &mut Shell) {
         };
         s.confirm.failure = Some((refused, fmt(&template, &[("why", &why), ("branch", &s.confirm.from)])));
     }
-    if shown && s.ended_on != history {
-        return;
+    match due(shell, &s.path, s.ended_on) {
+        Due::Now => shell.ask = Some(Ask::Switch { path: s.path, generation: shell.session_generation(), confirm: s.confirm }),
+        Due::Later => shell.versions.switching = Some(s),
+        Due::Never => {}
     }
-    if !shown || shell.ask.is_some() {
-        shell.versions.switching = Some(s);
-        return;
-    }
-    shell.ask = Some(Ask::Switch { path: s.path, generation: shell.session_generation(), confirm: s.confirm });
 }
 
 /// Draws the question or the failure over the window and acts on the answer. Enter does nothing

@@ -30,7 +30,8 @@ pub enum Ask {
     /// Switching away from the unsaved work of `path`, as session `generation` holds it, or how
     /// that switch ended.
     Switch { path: std::path::PathBuf, generation: u64, confirm: crate::switch_ask::Confirm },
-    /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed.
+    /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed,
+    /// or how that restore ended.
     Restore { path: std::path::PathBuf, generation: u64, confirm: crate::restore_ask::Confirm },
 }
 
@@ -46,6 +47,29 @@ impl Ask {
             | Ask::Switch { path, .. }
             | Ask::Restore { path, .. } => path,
         }
+    }
+}
+
+/// When a failure kept until it can be told (`crate::switch_ask`, `crate::restore_ask`) is told.
+pub(crate) enum Due {
+    Now,
+    Later,
+    Never,
+}
+
+/// When the failure of an operation on the project at `path`, which ended on the session whose
+/// undo history is `ended_on`, is told: now when that project shows with that session and no other
+/// question is up, later while another project shows or a question is, and never once another
+/// session shows for that project.
+pub(crate) fn due(shell: &Shell, path: &std::path::Path, ended_on: Option<u64>) -> Due {
+    if shell.project.as_ref().is_none_or(|o| o.path != path) {
+        Due::Later
+    } else if shell.session.as_ref().map(|s| s.history()) != ended_on {
+        Due::Never
+    } else if shell.ask.is_some() {
+        Due::Later
+    } else {
+        Due::Now
     }
 }
 

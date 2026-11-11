@@ -1627,6 +1627,75 @@ fn a_failure_comes_back_and_says_what_happened() {
     });
 }
 
+/// A restore that fails behind another question says so, in the words it ended with, once that one
+/// closes and its project shows again; once another session has replaced the one it ended on, it
+/// is dropped.
+#[test]
+fn a_restore_failure_waits_for_the_question_up_when_it_ends() {
+    use crate::close_ask::Ask;
+    use crate::replace::JobFailure::Failed;
+    in_both(|h, host| {
+        let fail_behind_a_question = |h: &mut Harness<'static, Shell>| {
+            crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+            h.run_steps(2);
+            let (ended, _reading) = restoring(h, host, "c2");
+            h.state_mut().ask = Some(Ask::Unsaved { path: h.state().project.as_ref().unwrap().path.clone() });
+            ended.send(Err(Failed("Gone.".into()))).unwrap();
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })) && !h.state().is_held());
+        };
+        fail_behind_a_question(h);
+        let tab = h.state().active.unwrap();
+        h.state_mut().ask = None;
+        // Another ending meanwhile changes neither the failure's words nor the session it ended on.
+        h.state_mut().give_up(Some("Later.".into()));
+        h.state_mut().stash();
+        h.run_steps(2);
+        assert!(h.state().ask.is_none() && h.state().versions.restoring.is_some(), "kept while another project shows");
+        h.state_mut().activate(tab);
+        h.run_steps(3);
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
+        tap(h, CLOSE);
+        h.run_steps(2);
+        fail_behind_a_question(h);
+        let rows = rows_now(h);
+        (h.state_mut().session, h.state_mut().ask) = (Some(h.state().build(&rows).unwrap()), None);
+        crate::restore_ask::keep(h.state_mut());
+        assert!(h.state().ask.is_none() && h.state().versions.restoring.is_none());
+    });
+}
+
+/// Save answered to another tab's question shows that tab and closes it: a restore failure kept
+/// meanwhile isn't shown over that tab's session, and is shown once its own session shows again.
+#[test]
+fn a_restore_failure_outlasts_saving_and_closing_another_tab() {
+    use crate::close_ask::Ask;
+    in_both(|h, host| {
+        add_schema(h, "shop");
+        let (library, commerce) = (std::path::PathBuf::from("/tmp/Library.archforge"), commerce().path);
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library, ..Default::default() });
+        h.run_steps(2);
+        add_schema(h, "books");
+        let ended_on = h.state().session.as_ref().unwrap().history();
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        let (ended, _reading) = restoring(h, host, "c2");
+        h.state_mut().ask = Some(Ask::Unsaved { path: commerce.clone() });
+        ended.send(Err(crate::replace::JobFailure::Failed("Gone.".into()))).unwrap();
+        h.run_steps(4);
+        tap(h, "close-ask.save");
+        h.run_steps(3);
+        assert!(h.state().project.as_ref().is_some_and(|p| p.path == commerce) && h.state().ask.is_none(), "not over Commerce");
+        assert!(h.state().versions.restoring.is_some(), "kept");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state().session.as_ref().map(|s| s.history()), Some(ended_on), "Library's own session shows again");
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
+    });
+}
+
 /// With a Chat turn running, Restore asks about it next and Keep working ends it; typing goes
 /// nowhere behind the question, and Escape cancels it.
 #[test]
@@ -1641,7 +1710,7 @@ fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
         click(&mut h, at);
         h.event(egui::Event::Text("y".into()));
         h.run();
-        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
         h.run_steps(2);
         h.event(egui::Event::Text("x".into()));
         h.run();
@@ -1658,7 +1727,7 @@ fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
             assert_eq!(h.state().is_held(), answer == "close-ask.stop-chat", "{answer}");
             assert_eq!(h.state().versions.restoring.is_some(), h.state().is_held());
         }
-        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(h.state().ask.is_none(), "about the session left");

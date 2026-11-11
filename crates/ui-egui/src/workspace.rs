@@ -404,7 +404,7 @@ fn restore_in_banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, back: Rect) 
     let _ = resp.clone().accessible_name(&words);
     ux::icon_in(ui.painter(), at, &icons::RESTORE, if live { p.text_secondary } else { p.text_muted });
     if resp.clicked() {
-        crate::restore_ask::ask(shell, (commit, saved.clone(), saved), None);
+        crate::restore_ask::ask(shell, (commit, saved.clone(), saved));
     }
     at.left()
 }
