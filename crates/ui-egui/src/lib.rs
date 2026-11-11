@@ -201,6 +201,19 @@ pub struct BranchSwitch {
     pub job: replace::Job,
 }
 
+/// One branch of a project, as the Branches section lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchEntry {
+    /// The name as stored, which a switch asks for, and as shown.
+    pub name: String,
+    pub shown: String,
+    pub current: bool,
+    /// It holds changes to the model not saved as a version; conversations don't count.
+    pub unsaved: bool,
+    /// When its latest version was saved, as the project stores it; none before the first.
+    pub latest: Option<String>,
+}
+
 pub trait ProjectHost: Send + Sync {
     /// Starts creating the project `name` in `folder` and returns at once; the host works on its
     /// own thread and sends one answer. The project created is open afterwards.
@@ -283,6 +296,15 @@ pub trait ProjectHost: Send + Sync {
     /// why it could not be asked for, in words for a person.
     fn begin_branch_switch(&self, _project: &std::path::Path, _branch: String) -> Result<BranchSwitch, String> {
         Err("this host keeps no branches".to_string())
+    }
+
+    /// Reads the branches of the project at `project`, by name, and whether more exist than were
+    /// listed, and returns at once, as [`ProjectHost::versions`] does. A host that keeps no
+    /// branches lists none.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok((Vec::new(), false)));
+        rx
     }
 
     /// How the branch stored as `stored` is shown to a person: as it was typed, where it can be told.

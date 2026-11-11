@@ -117,6 +117,11 @@ impl Project {
     pub fn versions(&self, after: Option<&str>, limit: usize) -> Result<Versions, Error> {
         self.version_reader().versions(after, limit)
     }
+
+    /// [`VersionReader::branches`], on this project.
+    pub fn branches(&self, max: usize) -> Result<crate::Branches, Error> {
+        self.version_reader().branches(max)
+    }
 }
 
 /// What deleting a branch would take with it, as its confirmation says.
@@ -264,10 +269,15 @@ impl VersionReader {
     /// for is too large, when `after` is not a version of this line, or when the line is too long
     /// to read whole.
     pub fn versions(&self, after: Option<&str>, limit: usize) -> Result<Versions, Error> {
+        self.versions_on(&branch_now(&self.branch), after, limit)
+    }
+
+    /// [`VersionReader::versions`] of `branch`, whichever branch is current.
+    pub fn versions_on(&self, branch: &SafeBranch, after: Option<&str>, limit: usize) -> Result<Versions, Error> {
         if limit > MOST_IN_A_PAGE {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
-        let mut c = database_connection(&self.connector, &branch_now(&self.branch))?;
+        let mut c = database_connection(&self.connector, branch)?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \
              FROM dolt_log LIMIT {}",

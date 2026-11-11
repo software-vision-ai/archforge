@@ -495,6 +495,10 @@ str		Models	模型
 str		Versions	版本
 str		Branches	分支
 str		This branch	此分支
+str	branch	Current	当前
+str		Branches can't be merged yet.	分支暂不能合并。
+str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。
+str		The branches couldn't be read.	无法读取分支。
 str		Working changes	工作更改
 str		History	历史记录
 str		Retry	重试

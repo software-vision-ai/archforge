@@ -495,6 +495,10 @@ str		Models	Modelos
 str		Versions	Versiones
 str		Branches	Ramas
 str		This branch	Esta rama
+str	branch	Current	Actual
+str		Branches can't be merged yet.	Las ramas aún no se pueden fusionar.
+str		Only the first {n} branches are listed.	Solo se muestran las primeras {n} ramas.
+str		The branches couldn't be read.	No se pudieron leer las ramas.
 str		Working changes	Cambios en curso
 str		History	Historial
 str		Retry	Reintentar

@@ -495,6 +495,10 @@ str		Models	モデル
 str		Versions	バージョン
 str		Branches	ブランチ
 str		This branch	このブランチ
+str	branch	Current	現在
+str		Branches can't be merged yet.	ブランチはまだマージできません。
+str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
+str		The branches couldn't be read.	ブランチを読み込めませんでした。
 str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行

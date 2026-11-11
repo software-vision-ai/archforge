@@ -32,14 +32,14 @@ use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
-    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem, Hooks, ModelSchema, Project,
-    RenameBranchError, SafeBranch, VersionReader, check_description,
+    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem, Hooks, MAX_BRANCHES,
+    ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
 use archforge_ui_egui::{
-    BranchNotDeleted, BranchNotice, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry,
-    VersionRead, VersionReadError, VersionsPage, Writing,
+    BranchEntry, BranchNotDeleted, BranchNotice, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter,
+    VersionEntry, VersionRead, VersionReadError, VersionsPage, Writing,
 };
 
 /// How long the writer waits after a change for the next one before it writes.
@@ -984,6 +984,12 @@ impl ProjectHost for Projects {
     /// A page of the project's versions, read on a thread of its own ([`Projects::on_a_reader`]).
     fn versions(&self, project: &Path, after: Option<String>, limit: usize) -> Receiver<Result<VersionsPage, String>> {
         self.on_a_reader(project, move |reader| reader.versions(after.as_deref(), limit).map(page_of).map_err(|e| e.to_string()))
+    }
+
+    /// The project's first [`MAX_BRANCHES`] branches, read on a thread of its own
+    /// ([`Projects::on_a_reader`]); see [`branch_entries`].
+    fn branches(&self, project: &Path) -> Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        self.on_a_reader(project, |reader| branch_entries(reader, MAX_BRANCHES))
     }
 
     /// The model a version of the project holds, read on a thread of its own ([`Projects::on_a_reader`]).
@@ -2301,6 +2307,22 @@ fn version_read_error(e: archforge_project::Error) -> VersionReadError {
         archforge_project::Error::VersionShape { .. } => VersionReadError::Shape,
         other => VersionReadError::Failed(other.to_string()),
     }
+}
+
+/// The branches `reader` lists, at most `max`, each with when its latest version was saved, and
+/// whether more exist. A name that can't be used has no versions to read.
+fn branch_entries(reader: &VersionReader, max: usize) -> Result<(Vec<BranchEntry>, bool), String> {
+    let found = reader.branches(max).map_err(|e| e.to_string())?;
+    let entry = |b: archforge_project::ListedBranch| {
+        let latest = match &b.usable {
+            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
+            Err(_) => None,
+        };
+        // Changes that can't be looked at may be the model's.
+        let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
+        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
+    };
+    Ok((found.listed.into_iter().map(entry).collect::<Result<_, String>>()?, found.cut))
 }
 
 /// A page of versions in the shell's terms.
@@ -5016,6 +5038,31 @@ mod tests {
         assert_eq!(saved(&sandbox.host, &path), Ok(true));
         let counts = sandbox.host.branch_counts(&path, branch("main")).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!(counts, BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false });
+    }
+
+    /// Each branch comes with when its own latest version was saved, a later chat commit being no
+    /// version, and the one in use is marked; a name outside the safe set has no versions read, and
+    /// a list cut short says so.
+    #[test]
+    fn each_branch_is_listed_with_its_latest_version() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let on_it = |name: &str, statement: &str| lock(&host.inner.open)[0].run_on_branch(name, statement).unwrap();
+        let commit = |author: &str, date: &str| {
+            on_it("elsewhere", &format!("CALL DOLT_COMMIT('--allow-empty', '-m', 'x', '--author', '{author}', '--date', '{date}')"));
+        };
+        commit("A Person <a@person>", "2030-01-02T03:04:05");
+        commit(archforge_project::CHAT_AUTHOR, "2031-01-01T00:00:00");
+        on_it("main", "CALL DOLT_BRANCH('odd+name')");
+        let (listed, cut) = host.branches(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let reader = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
+        let (two, two_cut) = branch_entries(&reader, 2).unwrap();
+        assert!(!cut && two.len() == 2 && two_cut, "only a list cut short says so");
+        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].date.clone();
+        let seen: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.current, b.latest.as_deref())).collect();
+        let main = ("main", true, Some(main_latest.as_str()));
+        assert!(seen.contains(&("elsewhere", false, Some("2030-01-02T03:04:05Z"))) && seen.contains(&main), "{seen:?}");
+        assert!(seen.contains(&("odd+name", false, None)), "{seen:?}");
     }
 
     /// A chat seeded on `name`, a branch of its own, with the project back on `main`.
