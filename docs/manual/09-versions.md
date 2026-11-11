@@ -191,8 +191,9 @@ There are three ways to show a version in place of your current work:
   while you have unsaved changes. Its list starts with **Current work**, then the versions, newest
   first, by date and description; the latest reads *Same as current work* when nothing is unsaved.
   Click a version to view it, or type to narrow the list, move with ↑ and ↓ and press Enter; Escape
-  closes the list. ⇧⌘H (Ctrl Shift H) opens the list too, and scrolling to its end lists older
-  versions.
+  closes the list. Scrolling to its end lists older versions. From your current work,
+  ⇧⌘H (Ctrl Shift H) opens the list too; while a version shows, it takes you
+  [back to current work](#back-to-current-work) instead.
 - Press ⌘[ (Ctrl [). From your current work this goes to the latest version when you have unsaved
   changes, and otherwise to the one before it, the newest version that differs from what you see.
 
