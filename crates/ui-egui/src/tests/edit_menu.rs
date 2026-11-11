@@ -230,7 +230,14 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         s.show_version(preview, "v".into());
         canvas(s);
     }
-    let states: [(&str, Setup, &[&str]); 13] = [
+    /// Opens a version's details over the canvas, which keeps the keyboard.
+    fn details(s: &mut Shell) {
+        canvas(s);
+        s.state.explorer = crate::state::Explorer::SourceControl;
+        s.services.projects = Some(std::sync::Arc::new(crate::actions::tests::CountingHost::default()));
+        crate::version_details::open(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
+    }
+    let states: [(&str, Setup, &[&str]); 14] = [
         ("a field", field, &CLIP),
         ("the model", |_| {}, &[]),
         ("the canvas", canvas, &[SELECT_ALL]),
@@ -242,6 +249,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("viewing a version", viewing, &[SELECT_ALL]),
         ("a dialog over the window", |s| (canvas(s), crate::support::open(s)).1, &[]),
         ("a field in a dialog", |s| (field(s), crate::support::open(s)).1, &CLIP),
+        ("a version's details over the canvas", details, &[]),
         ("a gesture", |s| (canvas(s), s.canvas.gesture = Some(crate::editing::Gesture::Marquee { from: egui::Pos2::ZERO })).1, &[]),
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
     ];
@@ -338,7 +346,7 @@ fn copy_takes_text_selected_on_a_label() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
         let mut shell = Shell::new(Services::default());
-        shell.state.theme = theme;
+        (shell.state.theme, shell.in_window_menu) = (theme, true);
         let words = "Selected words";
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -362,10 +370,63 @@ fn copy_takes_text_selected_on_a_label() {
         }
         assert!(actions::available(h.state(), COPY), "the selection turns Copy on");
         assert!(!actions::available(h.state(), CUT), "but no field's row");
-        run(h.state_mut(), COPY);
-        h.step();
-        assert!(h.output().platform_output.commands.contains(&OutputCommand::CopyText(words.into())), "{:?}", h.output().platform_output.commands);
-        click(&mut h, egui::pos2(300.0, 900.0));
-        assert!(!actions::available(h.state(), COPY), "a press elsewhere ends it");
+        // From the keys: F10, over to Edit, whose first live row is Copy, and Enter.
+        for k in [Key::F10, Key::ArrowRight] {
+            key(&mut h, k, Modifiers::NONE);
+        }
+        assert_eq!(h.state().menu_bar.row, Some(COPY));
+        h.key_press(Key::Enter);
+        assert!((0..4).any(|_| (h.step(), copied(&h, words)).1), "the row copied the words");
+        let at = rect_of(&h, "strip.menu.edit").center();
+        click(&mut h, at);
+        assert!(!actions::available(h.state(), COPY), "the press that opens the menu ends the selection");
+    }
+}
+
+/// Whether the frame just drawn copied `text`.
+fn copied(h: &Harness<'static, Shell>, text: &str) -> bool {
+    h.output().platform_output.commands.contains(&OutputCommand::CopyText(text.into()))
+}
+
+/// Rows chosen by the pointer act on the text the field had selected when the menu opened, though
+/// the click took the keyboard, and with it the selection, from the field. Each step asserted.
+#[test]
+fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = project(theme);
+        h.state_mut().in_window_menu = true;
+        h.run();
+        for id in ["workspace.properties.columns.add", "workspace.properties.column.name"] {
+            let at = rect_of(&h, id).center();
+            click(&mut h, at);
+        }
+        let name = |h: &Harness<'static, Shell>| h.state().panels.column.as_ref().unwrap().name.clone();
+        // Selects all of the field's text by its keys, then chooses the Edit row `row` by the pointer;
+        // whether the frames after it copied "Shop", and asked for the clipboard.
+        let choose = |h: &mut Harness<'static, Shell>, row: &str| {
+            key(h, Key::A, Modifiers::COMMAND);
+            let at = rect_of(h, "strip.menu.edit").center();
+            click(h, at);
+            let at = rect_of(h, &format!("strip.menu.row.edit.{row}")).center();
+            h.event(Event::PointerMoved(at));
+            h.run();
+            for pressed in [true, false] {
+                h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+            }
+            let paste = |h: &Harness<'static, Shell>| h.output().viewport_output[&ViewportId::ROOT].commands.contains(&ViewportCommand::RequestPaste);
+            (0..4).map(|_| (h.step(), (copied(h, "Shop"), paste(h))).1).fold((false, false), |a, b| (a.0 || b.0, a.1 || b.1))
+        };
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        h.event(Event::Text("Shop".into()));
+        h.run();
+        assert_eq!(name(&h), "Shop");
+        assert_eq!((choose(&mut h, "copy"), name(&h)), ((true, false), "Shop".into()), "Copy copied the selection");
+        assert_eq!((choose(&mut h, "cut"), name(&h)), ((true, false), String::new()), "Cut took it");
+        h.event(Event::Text("Old".into()));
+        h.run();
+        assert_eq!(choose(&mut h, "paste"), (false, true), "Paste asked for the clipboard");
+        h.event(Event::Paste("New".into()));
+        h.run();
+        assert_eq!(name(&h), "New", "the pasted text took the selection's place");
     }
 }

@@ -133,11 +133,12 @@ pub(crate) fn paste(shell: &mut Shell) {
     shell.edit.paste |= on_field(shell);
 }
 
-/// The diagram Select all takes: the open one, while the canvas has the keyboard, the window is
-/// free, no gesture runs and the project is not held. Viewing a version may select, as a click there
-/// does.
+/// The diagram Select all takes: the open one, while the canvas has the keyboard and shows, the
+/// window is free, no gesture runs and the project is not held. Viewing a version may select, as a
+/// click there does.
 fn canvas_diagram(shell: &Shell) -> Option<archforge_mof::Obj> {
-    let ready = window_free(shell) && shell.canvas.focused && !shell.explorer.focused && shell.canvas.gesture.is_none() && !shell.is_held();
+    let shows = shell.canvas.focused && !shell.explorer.focused && !crate::model_menu::centre_covered(shell);
+    let ready = window_free(shell) && shows && shell.canvas.gesture.is_none() && !shell.is_held();
     shell.session.as_ref().filter(|_| ready).and_then(|s| s.view().open_diagram)
 }
 

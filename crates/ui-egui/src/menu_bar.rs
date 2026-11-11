@@ -3,6 +3,7 @@
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
 //! F10 reaches the bar from the keys: the arrows walk groups and live rows, wrapping, Enter or Space runs the row.
 
+use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
@@ -46,15 +47,22 @@ pub(crate) struct Bar {
     pub(crate) row: Option<&'static str>,
     /// What had the keyboard focus before the menu opened: egui drops the focus on Esc, so it comes back here.
     pub(crate) back: Option<egui::Id>,
+    /// The text `back` had selected, when it is a field: a field that loses the focus drops it.
+    pub(crate) selected: Option<egui::text::CCursorRange>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
 pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
     if let Some(id) = shell.menu_bar.chosen.take() {
-        // A pointer's click on the row took the keyboard from the field the menu was opened on.
+        // A pointer's click on the row took the keyboard, and its selection, from the field the
+        // menu was opened on.
         if id.starts_with("edit.")
             && let Some(back) = shell.menu_bar.back
         {
+            if let (Some(range), Some(mut field)) = (shell.menu_bar.selected, TextEditState::load(ctx, back)) {
+                field.cursor.set_char_range(Some(range));
+                field.store(ctx, back);
+            }
             ctx.memory_mut(|m| m.request_focus(back));
             crate::edit_menu::note(shell, ctx);
         }
@@ -95,6 +103,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Enter, Escape, F10, Space};
     let Some(at) = GROUPS.iter().position(|g| shell.menu_bar.open == Some(g.id)) else {
         shell.menu_bar.back = ctx.memory(egui::Memory::focused);
+        shell.menu_bar.selected = shell.menu_bar.back.and_then(|id| TextEditState::load(ctx, id)?.cursor.char_range());
         if shell.in_window_menu && actions::free(shell) && press(ctx, F10, false) {
             shell.menu_bar.open = Some(GROUPS[0].id);
             shell.menu_bar.row = step(shell, &GROUPS[0], None, true);
