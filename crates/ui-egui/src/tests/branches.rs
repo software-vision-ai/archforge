@@ -143,18 +143,23 @@ fn every_branch_control_has_an_id_of_its_own() {
     });
 }
 
-/// Many branches, or many changes, in the shortest window still leave History's first row in the
-/// column.
+/// Many branches, or many changes, in the shortest window still leave History's header in the
+/// column, and a branch row in reach, under a failed read too.
 #[test]
 fn history_keeps_its_room_under_many_branches_or_changes() {
     let in_column = |h: &mut Harness<'static, Shell>| {
         h.set_size(egui::vec2(1600.0, 400.0));
         h.run_steps(2);
-        has_id(h, "workspace.versions.row.aa") && rect_of(h, "workspace.versions.row.aa").bottom() <= 400.0
+        rect_of(h, "workspace.versions.history").bottom() <= 400.0 - 40.0
     };
     in_both_appearances(|theme| {
-        let (mut h, _host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
-        assert!(in_column(&mut h), "{theme:?}: under many branches");
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        assert!(in_column(&mut h) && has_id(&h, "workspace.versions.branch.row.b00"), "{theme:?}: under many branches");
+        (*host.branch_list.lock().unwrap(), h.state_mut().versions.stale) = (Some(Err("the server stopped".into())), true);
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        click_id(&mut h, "workspace.versions.branch.row.b00");
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: and under a failed read");
         let (mut h, host) = branches_read(theme, Ok(listed(true)));
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));

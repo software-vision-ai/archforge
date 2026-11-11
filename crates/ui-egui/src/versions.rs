@@ -28,7 +28,7 @@ const PITCH: f32 = 50.0;
 /// A branch's row and the distance between rows.
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
-/// What a list leaves under it: below Branches, the line, Working changes' header and words and
+/// What a list leaves under it: below Branches, Working changes' header and words and
 /// History's header and two rows; below Working changes, History's header and two rows.
 const UNDER_BRANCHES: f32 = 3.0 * HEADER + 2.0 * PITCH;
 const UNDER_CHANGES: f32 = HEADER + 2.0 * PITCH;
@@ -453,10 +453,13 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         let ids = ["workspace.versions.branches.failed", "workspace.versions.branches.retry"];
         y = banner(shell, ui, p, (r, y), ids, (&tr("The branches couldn't be read."), &why), |s| s.versions.branches_asked = false);
     }
-    let content = listed.len() as f32 * BRANCH_PITCH;
-    let height = (content + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(0.0));
+    // The line scrolls with the rows, so a short column keeps a row in reach and History's header.
+    let words = tr("Branches can't be merged yet.");
+    let g = ux::galley_rows(ui.painter(), &words, types::CAPTION, p.text_muted, Some((r.width() - 40.0).max(1.0)), 2);
+    let (tail, rows) = (g.size().y + 12.0, listed.len() as f32 * BRANCH_PITCH);
+    let height = (rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(BRANCH_PITCH.min(rows)));
     let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
-    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, 0.0, true, None, &mut shell.versions.branches_scroll);
+    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, tail, true, None, &mut shell.versions.branches_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     for (i, b) in listed.iter().enumerate() {
@@ -465,11 +468,8 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
             branch_row(shell, &clip, p, (area, i), b);
         }
     }
-    let words = tr("Branches can't be merged yet.");
-    let g = ux::galley_rows(ui.painter(), &words, types::CAPTION, p.text_muted, Some((r.width() - 40.0).max(1.0)), 2);
-    let h = g.size().y;
-    ui.painter().galley(pos2(r.left() + 20.0, tree.bottom() + 4.0), g, p.text_muted);
-    tree.bottom() + 4.0 + h + 14.0
+    clip.painter().galley(pos2(r.left() + 20.0, y + rows - offset + 4.0), g, p.text_muted);
+    tree.bottom() + 8.0
 }
 
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
