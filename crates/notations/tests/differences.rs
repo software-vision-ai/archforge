@@ -401,7 +401,6 @@ fn er_elements_without_a_name_go_by_what_they_join() {
     assert_eq!(rows_of(&sides(&before, &before, &by_column), ListKind::Members), [made("email")]);
     assert_eq!(rows_of(&sides(&before, &before, &money), ListKind::Members), [made("value >= 0")]);
     assert_eq!(rows_of(&sides(&before, &before, &order), ListKind::Members), [made("order → customer")]);
-
     run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
     let after = state(&s);
     let line = sides(&before, &after, &places);
@@ -409,22 +408,26 @@ fn er_elements_without_a_name_go_by_what_they_join() {
     assert!(!line.after.as_ref().unwrap().renamed_from(line.before.as_ref().unwrap()), "but nothing renamed the line");
     let seen = sides(&before, &after, &order);
     assert_eq!((rows_of(&seen, ListKind::Members), seen.lists.member_changes), (vec![made("order → client")], 0), "{seen:?}");
-
     run(&mut s, "er.relationship.rename", json!({ "relationship": places, "name": "places" }));
     let named = sides(&after, &state(&s), &places);
     assert!(named.after.as_ref().unwrap().renamed_from(named.before.as_ref().unwrap()), "given a name of its own, it was named");
 }
 
-/// A member whose words are made is marked when its own row changed, not only when they differ.
+/// A member whose words are made is marked when its own row or a part of it changed, not only when they differ.
 #[test]
 fn a_made_row_is_marked_by_its_own_change() {
     let (mut s, _, customer, id) = project();
     let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
     let key = run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [email] }));
+    run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "attribute": id }, { "attribute": email }] }));
     let before = state(&s);
     run(&mut s, "er.unique.set", json!({ "unique": key, "columns": [id], "name": "", "nulls_distinct": false }));
-    let rows = rows_of(&sides(&before, &state(&s), &customer), ListKind::Members);
+    let after = state(&s);
+    let rows = rows_of(&sides(&before, &after, &customer), ListKind::Members);
     assert!(rows.contains(&(Named::Made("uq_customer_id".into()), Some(ChangeKind::Changed))), "{rows:?}");
+    run(&mut s, "element.remove", json!({ "ids": [email] }));
+    let rows = rows_of(&sides(&after, &state(&s), &customer), ListKind::Members);
+    assert!(rows.contains(&(Named::Made("ix_customer_id".into()), Some(ChangeKind::Changed))), "a part gone is on the before side only: {rows:?}");
 }
 
 /// An ER enum's literals are its rows, told apart by their text.
@@ -486,11 +489,12 @@ fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
     assert_eq!(told_card(&before, &rule), (Some("{total > 0}".into()), true));
     run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": "total >= 0" }));
     run(&mut s, "uml.class.rename", json!({ "class": payment, "name": "Charge" }));
+    run(&mut s, "element.describe", json!({ "element": realizes, "text": "A part only the after side has." }));
     let seen = sides(&before, &state(&s), &order);
     let rows = rows_of(&seen, ListKind::Members);
     assert!(rows.contains(&(Named::Made("{total >= 0}".into()), Some(ChangeKind::Changed))), "{rows:?}");
     assert!(rows.contains(&made("Order → Charge")), "{rows:?}");
-    assert_eq!(seen.lists.member_changes, 1, "{rows:?}");
+    assert_eq!(seen.lists.member_changes, 2, "the constraint and the described realization: {rows:?}");
 }
 
 /// A box a repair fits shows no false change on either side, and is named by what it shows.

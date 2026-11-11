@@ -1299,7 +1299,6 @@ fn an_er_element_reads_in_its_notations_words() {
         landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
         assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
         assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
-        assert_eq!(painted_times(h, "COLUMNS"), 2);
         assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
     });
 }

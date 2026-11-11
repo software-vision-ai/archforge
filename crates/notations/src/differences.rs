@@ -254,8 +254,9 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let ((was, mut before_lists), (is, mut after_lists)) = (was.unwrap_or_default(), is.unwrap_or_default());
     if on_both {
         let mut changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
-        // A part's row is its own, so a change there, such as a constraint's expression, is its holder's too.
-        let held: Vec<Uuid> = changed.iter().filter_map(|id| new.container(new.by_uuid(*id)?).ok()?.and_then(|(up, _)| new.uuid(up).ok())).collect();
+        // A part's row is its own, so a change there, such as a constraint's expression, is its holder's too, on whichever side holds it.
+        let holder = |store: &Store, id: Uuid| store.container(store.by_uuid(id)?).ok()?.and_then(|(up, _)| store.uuid(up).ok());
+        let held: Vec<Uuid> = changed.iter().flat_map(|id| [holder(&old, *id), holder(&new, *id)]).flatten().collect();
         changed.extend(held);
         marked(&mut before_lists, &after_lists, ChangeKind::Removed, &changed);
         marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
