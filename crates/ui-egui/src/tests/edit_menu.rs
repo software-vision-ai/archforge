@@ -187,8 +187,8 @@ fn selection(h: &Harness<'static, Shell>) -> Vec<String> {
     ids
 }
 
-/// The harness's project with Customer, a note and a note nested in Customer's box drawn on an
-/// open diagram, Order left off it,
+/// The harness's project with Customer, a note, a note nested in Customer's box, Address and the
+/// relationship's line between them drawn on an open diagram, Order left off it,
 /// Customer selected and the keyboard on nothing; and the ids of what the diagram draws.
 fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     let (mut h, customer) = table_harness();
@@ -205,11 +205,18 @@ fn drawn(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
         .value);
     let note = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "Why", "x": 900, "y": 40 })).unwrap().value);
     let inner = id(s.execute("diagram.note", &serde_json::json!({ "diagram": d, "text": "How", "parent": table, "x": 8, "y": 8 })).unwrap().value);
+    let address = id(s.execute("er.entity.add", &serde_json::json!({ "schema": schema, "name": "Address" })).unwrap().value);
+    let at = id(s.execute("diagram.place", &serde_json::json!({ "diagram": d, "element": address, "x": 400, "y": 0 })).unwrap().value);
+    let lives = id(s
+        .execute("er.relationship.add", &serde_json::json!({ "from": customer, "to": address, "name": "lives at", "create_foreign_key": false }))
+        .unwrap()
+        .value);
+    s.execute("diagram.connect", &serde_json::json!({ "diagram": d, "element": lives, "source": table, "target": at })).unwrap();
     s.execute("view.open-diagram", &serde_json::json!({ "diagram": d })).unwrap();
     s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
     h.state_mut().edit.keyboard = Keyboard::Nobody;
     h.run_steps(2);
-    let mut all = vec![customer, note, inner];
+    let mut all = vec![customer, note, inner, address, lives];
     all.sort();
     (h, all)
 }
@@ -331,7 +338,7 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
         let (mut h, all) = drawn(theme);
         h.state_mut().canvas.focused = true;
         key(&mut h, Key::A, Modifiers::COMMAND);
-        assert_eq!(selection(&h), all, "Customer and both notes, never Order");
+        assert_eq!(selection(&h), all, "every box and the line, never Order");
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();

@@ -173,14 +173,15 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
-/// Selects every element drawn on diagram `d`, boxes nested in others included, or the diagram
-/// itself when it draws nothing.
+/// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
+/// nested in others included, or the diagram itself when it draws nothing.
 pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
-    let drawn = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top));
-    for id in drawn.filter_map(|n| uuid(store, element_of(store, n).unwrap_or(n))) {
+    let boxes = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| element_of(store, n).unwrap_or(n));
+    let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, e)).collect();
+    for id in boxes.chain(lines).filter_map(|o| uuid(store, o)) {
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -189,6 +190,12 @@ pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
         ids.extend(uuid(store, d));
     }
     select(shell, ids);
+}
+
+/// What a click on line `e` selects: the element it draws, a leg of an n-ary association its
+/// association (AR-128), and a note link itself.
+fn line_target(store: &Store, e: Obj) -> Obj {
+    crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
 }
 
 fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
@@ -671,10 +678,7 @@ fn decide(
                 };
                 let target = match (on_top(shell, store, grid, card, pos), hit) {
                     (Some(n), _) => element_of(store, n).unwrap_or(n),
-                    // A leg of an n-ary association selects the association (AR-128).
-                    (None, Some(Hit::Edge(e))) => {
-                        crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
-                    }
+                    (None, Some(Hit::Edge(e))) => line_target(store, e),
                     (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };

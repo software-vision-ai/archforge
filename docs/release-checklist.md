@@ -80,7 +80,7 @@ is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (�
 keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the
 change back and bring it again, and are disabled when there is no step to take. Edit also offers **Cut**
 (⌘X), **Copy** (⌘C), **Paste** (⌘V) and **Select all** (⌘A). On the canvas Cut, Copy and Paste are
-disabled, and Select all selects everything the diagram draws. On the field all four are enabled, and
+disabled, and Select all selects every box and line the diagram draws. On the field all four are enabled, and
 the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
 Copy is enabled and Cut and Paste are not, and the words paste into the field. Model on a class
 diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
