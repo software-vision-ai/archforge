@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
-use archforge_diagram::{EDGE, Grid, LABEL, NODE, POINT, STYLE, diagram, diagram_of, edge, node};
+use archforge_diagram::{Grid, LABEL, POINT, STYLE, diagram, diagram_of, edge, node, node_tree};
 use archforge_mof::compare::{CompareError, MAX_COMPARED, RowChange, compare};
 use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot};
 use archforge_mof::schema::{Junction, Table};
@@ -148,8 +148,8 @@ pub struct DiagramSides {
     pub path: Vec<String>,
     pub before: Option<DiagramSide>,
     pub after: Option<DiagramSide>,
-    /// What happened to each box and line of this diagram that differs, by its id. One that stayed
-    /// is Changed when it or what it draws differs: its element, or a member listed on it.
+    /// What happened to each box and line of this diagram that differs, by its id: Added or Removed
+    /// when it is on one side only, Changed when it or what it draws differs: its element, or a member listed on it.
     pub marks: BTreeMap<Uuid, ChangeKind>,
 }
 
@@ -261,41 +261,45 @@ pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
     let holder = |store: &Store| store.by_uuid(id).and_then(|o| diagram_of(store, o)).and_then(|d| store.uuid(d).ok());
     let Some(diagram) = holder(&new).or_else(|| holder(&old)) else { return Ok(None) };
-    let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
+    let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
     let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
     let side = |store: Store| store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build(&store, d), diagram: d, store });
     let (before, after) = (side(old), side(new));
-    let marks = marks_of(&kinds, [("before", before.as_ref()), ("after", after.as_ref())])?;
+    let marks = marks_of(&changed, [("before", before.as_ref()), ("after", after.as_ref())])?;
     Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks }))
 }
 
-/// What each box and line of `sides` is marked with: its own change, or Changed when something it
-/// draws differs on either side, as a member gone is only on the side that still has it.
-fn marks_of(
-    kinds: &BTreeMap<(Uuid, ClassId), ChangeKind>,
-    sides: [(&'static str, Option<&DiagramSide>); 2],
-) -> Result<BTreeMap<Uuid, ChangeKind>, ClassifyError> {
-    let changed: BTreeSet<Uuid> = kinds.keys().map(|(id, _)| *id).collect();
-    let own = |id: Uuid| kinds.get(&(id, NODE)).or_else(|| kinds.get(&(id, EDGE))).copied().unwrap_or(ChangeKind::Changed);
-    let mut marks = BTreeMap::new();
-    for (name, side) in sides {
-        let Some(side) = side else { continue };
-        let found = changed_items(side, &changed).map_err(|e| ClassifyError::Unreadable { side: name, why: e.to_string() })?;
-        marks.extend(found.into_iter().map(|id| (id, own(id))));
+/// What each box and line of `sides` is marked with. One on a single side was added or removed
+/// there, whether or not its own row differs, as a box can move between diagrams. One on both is
+/// Changed when something it draws differs on either, as a member gone is only on the side that still has it.
+fn marks_of(changed: &BTreeSet<Uuid>, sides: [(&'static str, Option<&DiagramSide>); 2]) -> Result<BTreeMap<Uuid, ChangeKind>, ClassifyError> {
+    let items = |(name, side): (&'static str, Option<&DiagramSide>)| {
+        side.map_or(Ok(BTreeMap::new()), |s| items_of(s, changed)).map_err(|e| ClassifyError::Unreadable { side: name, why: e.to_string() })
+    };
+    let [was, is] = sides.map(items);
+    let (was, is) = (was?, is?);
+    let mut marks: BTreeMap<Uuid, ChangeKind> = is.keys().filter(|id| !was.contains_key(id)).map(|id| (*id, ChangeKind::Added)).collect();
+    for (id, differs) in &was {
+        match is.get(id) {
+            None => drop(marks.insert(*id, ChangeKind::Removed)),
+            Some(now) if *differs || *now => drop(marks.insert(*id, ChangeKind::Changed)),
+            Some(_) => {}
+        }
     }
     Ok(marks)
 }
 
-/// The boxes and lines of `side` that draw something in `changed`.
-fn changed_items(side: &DiagramSide, changed: &BTreeSet<Uuid>) -> Result<Vec<Uuid>, Invalid> {
-    let (store, mut found) = (&side.store, Vec::new());
-    for (list, shows) in [(diagram::NODE, node::ELEMENT), (diagram::EDGE, edge::ELEMENT)] {
-        for item in store.list(side.diagram, list)?.iter().filter_map(Value::as_ref) {
-            let element = store.get(item, shows)?.as_ref().filter(|e| store.is_alive(*e));
-            if draws_a_change(store, item, changed, MAX_NESTING)? || element.map_or(Ok(false), |e| draws_a_change(store, e, changed, MAX_NESTING))? {
-                found.push(store.uuid(item)?);
-            }
-        }
+/// Every box of `side`, nested ones too, and every line, with whether it draws something in `changed`.
+fn items_of(side: &DiagramSide, changed: &BTreeSet<Uuid>) -> Result<BTreeMap<Uuid, bool>, Invalid> {
+    let store = &side.store;
+    let refs = |list| Ok::<_, Invalid>(store.list(side.diagram, list)?.iter().filter_map(Value::as_ref).collect::<Vec<Obj>>());
+    let boxes = refs(diagram::NODE)?.into_iter().flat_map(|top| node_tree(store, top)).map(|n| (n, node::ELEMENT));
+    let mut found = BTreeMap::new();
+    for (item, shows) in boxes.chain(refs(diagram::EDGE)?.into_iter().map(|e| (e, edge::ELEMENT))) {
+        let element = store.get(item, shows)?.as_ref().filter(|e| store.is_alive(*e));
+        let differs =
+            draws_a_change(store, item, changed, MAX_NESTING)? || element.map_or(Ok(false), |e| draws_a_change(store, e, changed, MAX_NESTING))?;
+        found.insert(store.uuid(item)?, differs);
     }
     Ok(found)
 }

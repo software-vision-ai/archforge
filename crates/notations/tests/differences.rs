@@ -536,6 +536,34 @@ fn a_member_on_one_side_marks_the_box_that_lists_it() {
     assert_eq!(drawn(&before, &state(&s), &diagram).marks, Default::default(), "a neighbour no box draws");
 }
 
+/// A box handed from one diagram to another changes no row of its own, yet it is gone from one and
+/// new on the other. One that stays on the diagram is marked for neither.
+#[test]
+fn a_box_moved_between_diagrams_is_removed_from_one_and_added_to_the_other() {
+    let Placed { mut s, shop, diagram, first, second, .. } = placed();
+    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let before = state(&s);
+    let mut after = before.clone();
+    let (from, to, moved) = (Uuid::parse(&diagram).unwrap(), Uuid::parse(&other).unwrap(), Uuid::parse(&second).unwrap());
+    let row = after.junctions.iter_mut().flatten().find(|r| r.0 == from && matches!(r.2, Cell::Id(id) if id == moved)).unwrap();
+    (row.0, row.1) = (to, 0);
+    assert!(!differences(&before, &after).iter().any(|d| d.id == moved), "its own row is the same");
+    let left = drawn(&before, &after, &diagram);
+    assert_eq!((mark(&left, &second), mark(&left, &first)), (Some(ChangeKind::Removed), None));
+    assert_eq!(mark(&drawn(&before, &after, &other), &second), Some(ChangeKind::Added));
+}
+
+/// A box nested in another is marked like any other, and its change doesn't mark the box around it.
+#[test]
+fn a_nested_box_is_marked_on_its_own() {
+    let Placed { mut s, diagram, first, .. } = placed();
+    let nested = run(&mut s, "diagram.note", json!({ "diagram": diagram, "text": "check", "parent": first, "x": 10, "y": 10 }));
+    let before = state(&s);
+    run(&mut s, "diagram.resize", json!({ "node": nested, "width": 100, "height": 60 }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &nested), mark(&seen, &first)), (Some(ChangeKind::Changed), None));
+}
+
 /// A parameter is written on its operation's line, so it marks the box; a generalization the class
 /// owns isn't written on the box, so with no line for it nothing is marked.
 #[test]
