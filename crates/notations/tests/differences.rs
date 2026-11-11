@@ -441,6 +441,20 @@ fn an_er_enums_literals_are_listed_and_marked_by_their_text() {
     assert_eq!(seen.lists.member_changes, 2);
 }
 
+/// A constraint is marked by its whole expression, even an edit its shortened words don't show.
+#[test]
+fn a_constraint_is_marked_by_more_than_its_words() {
+    let (mut s, _, order, _) = uml_project();
+    let long = "x".repeat(100);
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": format!("{long} a") }));
+    for edit in [format!("{long} b"), format!("{long}  b")] {
+        let before = state(&s);
+        run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": edit }));
+        let seen = sides(&before, &state(&s), &order);
+        assert_eq!((rows_of(&seen, ListKind::Members)[0].1, seen.lists.member_changes), (Some(ChangeKind::Changed), 1), "{seen:?}");
+    }
+}
+
 /// UML: an unnamed relationship goes by its ends and a constraint by its braces, whose edit marks
 /// its row though the text is held in a part of it; a class's rename leaves a row that mentions it.
 #[test]
@@ -474,7 +488,7 @@ fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
     run(&mut s, "uml.class.rename", json!({ "class": payment, "name": "Charge" }));
     let seen = sides(&before, &state(&s), &order);
     let rows = rows_of(&seen, ListKind::Members);
-    assert!(rows.contains(&(said("{total >= 0}"), Some(ChangeKind::Changed))), "{rows:?}");
+    assert!(rows.contains(&(Named::Made("{total >= 0}".into()), Some(ChangeKind::Changed))), "{rows:?}");
     assert!(rows.contains(&made("Order → Charge")), "{rows:?}");
     assert_eq!(seen.lists.member_changes, 1, "{rows:?}");
 }
@@ -715,7 +729,7 @@ fn lines_are_marked_like_boxes() {
     let before = state(&s);
     let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": first, "target": second }));
     let connected = state(&s);
-    assert_eq!(told_card(&connected, &line).0.as_deref(), Some("customer → invoice"), "a line goes by what it shows");
+    assert_eq!(told_card(&connected, &line), (Some("customer → invoice".into()), true), "a line goes by what it shows");
     assert_eq!(mark(&drawn(&before, &connected, &diagram), &line), Some(ChangeKind::Added));
     run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
     let seen = drawn(&connected, &state(&s), &diagram);
@@ -727,6 +741,11 @@ fn lines_are_marked_like_boxes() {
     let restyled = state(&s);
     run(&mut s, "diagram.label", json!({ "edge": line, "kind": "name", "dx": 9 }));
     assert_eq!(mark(&drawn(&restyled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "so is its label");
+    let labelled = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": invoice, "name": "bill" }));
+    let shown = sides(&labelled, &state(&s), &line);
+    assert_eq!(shown.after.as_ref().unwrap().name.as_deref(), Some("customer → bill"));
+    assert!(!shown.after.as_ref().unwrap().renamed_from(shown.before.as_ref().unwrap()), "words it shows aren't its name");
 }
 
 /// What an opening repairs marks nothing, on either side.

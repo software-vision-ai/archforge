@@ -253,7 +253,10 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let on_both = card_before.is_some() && card_after.is_some();
     let ((was, mut before_lists), (is, mut after_lists)) = (was.unwrap_or_default(), is.unwrap_or_default());
     if on_both {
-        let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
+        let mut changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
+        // A part's row is its own, so a change there, such as a constraint's expression, is its holder's too.
+        let held: Vec<Uuid> = changed.iter().filter_map(|id| new.container(new.by_uuid(*id)?).ok()?.and_then(|(up, _)| new.uuid(up).ok())).collect();
+        changed.extend(held);
         marked(&mut before_lists, &after_lists, ChangeKind::Removed, &changed);
         marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
     }
@@ -360,13 +363,13 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
     for prop in info.stored.iter().filter(|p| universe.prop(**p).is_some_and(on_a_card)) {
         values.push((*prop, store.get(obj, *prop).map_err(unreadable)?));
     }
-    let made = archforge_core::name_of(store, obj).is_empty() && labels::unnamed(store, obj).is_some();
-    Ok(Some((ElementCard { class, name: shown_name(store, obj), made }, (values, lists_of(store, obj).map_err(unreadable)?))))
+    let (name, made) = resolved_name(store, obj).map_or((None, false), |(name, made)| (Some(name), made));
+    Ok(Some((ElementCard { class, name, made }, (values, lists_of(store, obj).map_err(unreadable)?))))
 }
 
 /// Marks each row of `side` against the rows of `other`: `gone` when `other` has no such row,
-/// Changed when it says something else, or for words made from what it joins when its own row is in
-/// `changed`. A row is one member by its id, an ER enum's literal by its text; a
+/// Changed when it says something else, or for words made from what it joins when it or a part of it
+/// is in `changed`. A row is one member by its id, an ER enum's literal by its text; a
 /// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
 fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: &BTreeSet<Uuid>) {
     let key = |kind: ListKind, row: &ListRow| {
@@ -411,11 +414,9 @@ fn plain_row(store: &Store, obj: Obj, class: ClassId) -> ListRow {
     ListRow { id: store.uuid(obj).unwrap_or(Uuid([0; 16])), class, name: named(store, obj), change: None }
 }
 
-/// `obj`'s name, the words made for it, or that it has none. A constraint's words are its own
-/// expression, held in a part of it that its row doesn't count, so they are compared as written.
+/// `obj`'s name, the words made for it, or that it has none.
 fn named(store: &Store, obj: Obj) -> Named {
-    let made = archforge_core::name_of(store, obj).is_empty() && store.class_of(obj).ok() != Some(archforge_uml::CONSTRAINT);
-    match labels::unnamed(store, obj).filter(|_| made) {
+    match labels::unnamed(store, obj).filter(|_| archforge_core::name_of(store, obj).is_empty()) {
         Some(words) => Named::Made(words),
         None => shown_name(store, obj).map_or(Named::Unnamed, Named::Said),
     }
@@ -490,7 +491,15 @@ fn repaired(
 
 /// The name of `obj` or the words made for it, or those of the element it shows; none when there are neither.
 fn shown_name(store: &Store, obj: Obj) -> Option<String> {
-    let called = |o: Obj| Some(archforge_core::name_of(store, o)).filter(|name| !name.is_empty()).or_else(|| labels::unnamed(store, o));
+    resolved_name(store, obj).map(|(name, _)| name)
+}
+
+/// What [`shown_name`] finds, with whether those are words made rather than a name of its own.
+fn resolved_name(store: &Store, obj: Obj) -> Option<(String, bool)> {
+    let called = |o: Obj| {
+        let own = Some(archforge_core::name_of(store, o)).filter(|name| !name.is_empty()).map(|name| (name, false));
+        own.or_else(|| labels::unnamed(store, o).map(|words| (words, true)))
+    };
     called(obj).or_else(|| {
         called([archforge_diagram::node::ELEMENT, archforge_diagram::edge::ELEMENT].iter().find_map(|p| store.get(obj, *p).ok()?.as_ref())?)
     })
