@@ -59,7 +59,8 @@ pub struct Steps {
 }
 
 /// A step waiting for a read: older when true, and the version it goes from, none for current work.
-/// Once the person has moved from there, it is no longer the step they asked for.
+/// Once the person has moved from there, it is no longer the step they asked for, even if they
+/// come back: [`view`] ends it.
 type Waiting = (bool, Option<String>);
 
 /// A row of the list: the version it views, none for current work; its name; the words beside it.
@@ -180,9 +181,11 @@ pub(crate) fn failure_words(first: bool) -> String {
     if first { tr("The versions couldn't be read.") } else { tr("The next versions couldn't be read.") }
 }
 
-/// Ends what a failed step said, if that still stands: what is read is about to change.
+/// Ends what a failed step said, if that still stands and nothing has been said since: what is
+/// read is about to change.
 fn end_failure_said(shell: &mut Shell) {
-    if shell.canvas.refused_step.as_ref().is_some_and(|said| [true, false].map(failure_words).contains(said)) {
+    let canvas = &shell.canvas;
+    if canvas.notice == canvas.refused_step && canvas.notice.as_ref().is_some_and(|said| [true, false].map(failure_words).contains(said)) {
         shell.canvas.say_refused_step(None);
     }
 }
@@ -264,10 +267,14 @@ fn step(shell: &mut Shell, older: bool) {
 
 /// Shows the version `hash`, read `label`, from current work or from the version in view, staying
 /// on the diagram in view there; gives whether the version is on its way. A refusal is said as
-/// the toast above the toolbar; one that goes through ends what was said before it. A refusal leaves
-/// what the chip says of the version in view as it was. Chat's question counts as not on its way.
+/// the toast above the toolbar; one that goes through ends what was said before it and any step
+/// still waiting for a read. A refusal leaves what the chip says of the version in view as it was.
+/// Chat's question counts as not on its way.
 pub(crate) fn view(shell: &mut Shell, hash: String, label: String) -> bool {
     let done = shell.move_to_version(&hash, Some(label));
+    if done.is_ok() {
+        shell.version_list.steps.waiting = None;
+    }
     let words = done.err().and_then(|why| refused_words(shell, why));
     shell.canvas.say_refused_step(words);
     done.is_ok()

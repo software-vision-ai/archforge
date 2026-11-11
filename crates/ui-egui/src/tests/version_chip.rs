@@ -2121,6 +2121,37 @@ fn a_step_waiting_ends_when_the_person_moves() {
     }
 }
 
+/// A step that waited stays over when the person comes back to where they asked it from: the read
+/// then takes them nowhere without another press.
+#[test]
+fn a_step_waiting_stays_over_after_leaving_and_coming_back() {
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::CloseBracket);
+        assert_eq!(h.state().loads.wanted_commit(), Some("v0"), "it left");
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!((h.state().viewing(), h.state().loads.wanted_commit()), (Some("v1"), None), "and came back");
+        answer(&mut h, &host, Ok(page(2, 3, false)));
+        assert_eq!((h.state().viewing(), h.state().loads.wanted_commit()), (Some("v1"), None), "nothing further was asked for");
+    });
+}
+
+/// Words said since the failure, which leave the toast's own field behind, outlast a new read.
+#[test]
+fn a_new_read_leaves_what_was_said_since_a_failed_step() {
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Err("no".into()));
+        toast_says(&h, &crate::version_chip::failure_words(false));
+        h.state_mut().canvas.notice = Some("Said since".into());
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(last_asked(&host).as_deref(), Some("v1"), "a new read began");
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Said since"));
+    });
+}
+
 /// The failed-load banner and its Retry, by the ids `versions` gives them.
 const LOAD_FAILED: &str = "workspace.versions.load.failed";
 const LOAD_RETRY: &str = "workspace.versions.load.retry";

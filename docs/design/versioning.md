@@ -186,8 +186,8 @@ before it, which is the first that differs. In the list that latest row reads "S
 A step past the versions read so far reads the next page and goes on, by the one read the list and
 the steps share, so a press while it runs starts no other; ‹ says "No older version" only at the end
 of the history. A read that fails says so in the toast over the canvas, or above what covers the
-canvas, and the version in view stays. The next step reads again. A step waits only while the person
-stays where they asked it from.
+canvas, and the version in view stays. The next step reads again. A step waits only until the person
+moves, and coming back does not revive it.
 
 ---
 
