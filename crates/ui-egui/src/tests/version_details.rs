@@ -924,10 +924,10 @@ fn land_related(h: &mut Harness<'static, Shell>, key: Compared, related: Vec<Uui
     h.run_steps(1);
 }
 
-/// Turns the wheel far down over the control `over`.
-fn wheel_down(h: &mut Harness<'static, Shell>, over: &str) {
+/// Turns the wheel far over the control `over`, down when `down`.
+fn wheel(h: &mut Harness<'static, Shell>, over: &str, down: bool) {
     h.event(egui::Event::PointerMoved(rect_of(h, over).center()));
-    let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, -40000.0), egui::Modifiers::NONE);
+    let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, if down { -40000.0 } else { 40000.0 }), egui::Modifiers::NONE);
     h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
     h.run_steps(8);
 }
@@ -1004,25 +1004,25 @@ fn related_rows_are_drawn_only_in_view() {
         crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
         land_related(h, key, related);
         assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of view");
-        wheel_down(h, SUMMARY);
+        wheel(h, SUMMARY, true);
         assert!(has_id(h, &last) && !has_id(h, &first), "the wheel reached the last row");
     });
 }
 
 /// The keys reach a link out of view and bring it in: Tab from the way back finds the first after
 /// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, the wheel may move away
-/// from it again, and Enter opens it.
+/// from it again, and Enter still opens a link wheeled out of view.
 #[test]
 fn the_keys_reach_and_open_a_related_link_out_of_view() {
     use egui::Key::{Enter, Tab};
     in_both(|h, host| {
         let (row, key) = shop_and_warehouse(h, host);
-        let many: Vec<_> = [row.clone()].into_iter().chain((0..60u8).map(|n| Difference { id: Uuid([n + 1; 16]), ..row.clone() })).collect();
+        let many: Vec<_> = (0..60u8).map(|n| Difference { id: Uuid([n + 1; 16]), ..row.clone() }).chain([row.clone()]).collect();
         let links: Vec<_> = many.iter().map(|d| related_link(d.id)).collect();
         let rows = [h.state().versions.changes.clone(), many.clone()].concat();
         crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
         land_related(h, key, many.iter().map(|d| d.id).collect());
-        wheel_down(h, SUMMARY);
+        wheel(h, SUMMARY, true);
         assert!(!has_id(h, &links[0]), "the first is out of view");
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.change-view.close")));
         h.run_steps(1);
@@ -1036,8 +1036,12 @@ fn the_keys_reach_and_open_a_related_link_out_of_view() {
             h.run_steps(3);
             assert!(focused_on(h, link) && has_id(h, link), "link {i} reached back and shown");
         }
-        wheel_down(h, &links[0]);
+        wheel(h, &links[0], true);
         assert!(focused_on(h, &links[0]) && !has_id(h, &links[0]), "the wheel moves away from the link that keeps the keys");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[60])));
+        h.run_steps(2);
+        wheel(h, &links[60], false);
+        assert!(focused_on(h, &links[60]) && !has_id(h, &links[60]), "a later link wheeled away keeps the keys");
         h.key_press(Enter);
         frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
         assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id), "the one reached opens");
