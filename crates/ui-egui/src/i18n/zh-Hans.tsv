@@ -502,6 +502,10 @@ str	branch	Current	当前
 str		Branches can't be merged yet.	分支暂不能合并。
 str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。
 str		The branches couldn't be read.	无法读取分支。
+str		At most {n} characters.	最多 {n} 个字符。
+str		Enter a name.	请输入名称。
+str		A name has to be one line.	名称必须只有一行。
+str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
 str		Retry	重试

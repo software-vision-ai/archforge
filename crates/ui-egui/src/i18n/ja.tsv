@@ -502,6 +502,10 @@ str	branch	Current	現在
 str		Branches can't be merged yet.	ブランチはまだマージできません。
 str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
 str		The branches couldn't be read.	ブランチを読み込めませんでした。
+str		At most {n} characters.	{n} 文字以内。
+str		Enter a name.	名前を入力してください。
+str		A name has to be one line.	名前は 1 行にしてください。
+str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行
