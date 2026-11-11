@@ -4,8 +4,8 @@ You are about to rework part of a model and want a way back to it as it is now. 
 a point worth naming, such as what the team agreed on. A *version* is that point: the whole project
 as it stood at one moment, with a line that says what it is, kept in the project's history.
 
-This chapter explains what a version is and how to save one. [The workspace](03-workspace.md) says
-how to look at the versions you have saved.
+This chapter explains what a version is, how to save one, and how to
+[look back at one](#look-back-at-a-version) and come back to your work.
 
 ## Current work and versions
 
@@ -134,7 +134,7 @@ Point at **Save version…** while it is off to see why:
 | *Loading* | Archforge is still working out what changed | Wait a moment |
 | *Saving…* | A save is running | Wait for it to finish |
 | *The changes couldn't be compared.* | Archforge couldn't work out what changed | ⌘S still saves, without a review |
-| *Back to current work to save a version* | You are viewing an earlier version | Choose **Back to current work** |
+| *Back to current work to save a version* | You are [viewing an earlier version](#view-an-earlier-version) | Choose **Back to current work** |
 
 ## When a save fails
 
@@ -152,5 +152,121 @@ read it, and you press ⌘S again to retry.
 | *The project changed after you reviewed it, so nothing was saved.* | The model moved on after the review | Read the summary again, then save |
 | *This description holds one of your saved API keys, so nothing was saved.* | The history would have kept your key | Change the description, then choose **Retry** |
 | *This description could not be checked against your saved API keys, so nothing was saved.* | Archforge couldn't read your keys to compare them | Choose **Retry**. If it keeps failing, choose **Cancel** and press ⌘S, which saves with no description |
+
+## Look back at a version
+
+You can read what each version changed, show the project in the window as it was then, and come
+back to your current work. Looking changes neither your current work nor your versions.
+
+### History and a version's details
+
+**History**, under **Working changes** in **Versions**, lists the project's versions, newest first.
+A row gives the description and, below it, the date and time and, if you had entered your name, your
+name. A version saved with ⌘S gives its date and *No description*. In a long history, **Show more**
+at the end lists older versions, and **With a description** above the list leaves out the versions
+that have none; **All** shows them again.
+
+Click a version to open its details in the centre:
+
+- its description, when it was saved and, where that is recorded, by whom;
+- **View this version**, which [shows it in the window](#view-an-earlier-version);
+- under **Changed items**, what changed since the version before it, model elements first and then
+  diagrams. The first version says *First version: there is nothing earlier to compare it with.*;
+- under **Previous version**, the version before it, which opens its details the same way.
+
+Versions are compared one at a time, so when you click through History quickly, the changes of the
+version you stop on appear once the comparison under way has ended. The top of the centre reads the
+project's name and **History**: click the project's name to close the details.
+
+In the example, History lists *Added email* above *Added Customer*. The details of *Added email*
+show what it changed, with *Added Customer* as its previous version. *Added Customer* is the first
+version.
+
+### View an earlier version
+
+There are three ways to show a version in place of your current work:
+
+- In its details, choose **View this version**.
+- Click the version chip, in the bar at the top, left of search. It says *Current work*, with a dot
+  while you have unsaved changes. Its list starts with **Current work**, then the versions, newest
+  first, by date and description; the latest reads *Same as current work* when nothing is unsaved.
+  Click a version to view it, or type to narrow the list, move with ↑ and ↓ and press Enter; Escape
+  closes the list. Scrolling to its end lists older versions. From your current work,
+  ⇧⌘H (Ctrl Shift H) opens the list too; while a version shows, it takes you
+  [back to current work](#back-to-current-work) instead.
+- Press ⌘[ (Ctrl [). From your current work this goes to the latest version when you have unsaved
+  changes, and otherwise to the one before it, the newest version that differs from what you see.
+
+The version opens on the diagram you were looking at, if it has that diagram, and otherwise on its
+first diagram. Over the centre a banner says *Viewing the version of*, its date, and *· Read only*,
+and the status bar says the same. The chip is tinted and shows the date between ‹ and ›, with
+**Back to current work** beside it. In a narrow window the chip is one icon, and pointing at it says
+which version shows.
+
+To step from one version to the next, press ⌘[ (Ctrl [) for an older one and ⌘] (Ctrl ]) for a newer
+one, or click ‹ and › on the chip. A step stays on the diagram you are looking at when the next
+version has it. At the oldest version ‹ is greyed out and says *No older version*; at the latest, ›
+says *No newer version*, since your current work is not a step away: use
+[Back to current work](#back-to-current-work). Click the date on the chip to open its list.
+
+In the example, with nothing unsaved, ⌘[ shows *Added Customer*: the class *Customer* without
+*email*. ⌘] then shows *Added email*, the same as your current work, and a second ⌘] goes no
+further.
+
+### While a version shows
+
+A version you view is read only. You look at it as it was saved, and Archforge turns off everything
+that would change it. A control that is off says why when you point at it, usually *Read only while
+viewing a version*.
+
+| You can | Off until you go back |
+|---|---|
+| Open its diagrams and skills, select, pan and zoom | Every tool but Select and Pan, the **Model** menu, deleting, renaming, dragging and typing into the model |
+| Read Properties, Appearance and Skills, marked *Read only* | Undo and redo |
+| Use History, a version's details and the steps to other versions | Saving: ⌘S does nothing, **File ▸ Save** is off, and **Save version…** says *Back to current work to save a version* |
+| Read your Chat conversations | Asking Chat: its message field says *Back to current work to chat*. Undoing a turn's changes from Chat is off too |
+
+An agent you connected through the command-line tool can still read what shows. Anything it asks
+that would change the model or save is refused, with a message telling it to go back to current work
+first.
+
+### Back to current work
+
+Choose **Back to current work** in the banner or on the chip, choose **Current work** at the top of
+the chip's list, or press ⇧⌘H (Ctrl Shift H). Escape doesn't take you back, so a stray key can't lose
+your place.
+
+Your current work comes back as you left it: your unsaved changes, the open tabs, the selection, pan
+and zoom, and the steps you can undo. Archforge also takes you back to your current work first when
+you show another project's tab or Home, close the project or quit; closing and quitting then ask
+about unsaved changes as usual.
+
+**Your unsaved work is kept.** Looking at versions doesn't change it: it waits, set aside, until you
+come back. Before a version shows, Archforge makes sure nothing is left half done:
+
+| When | What happens |
+|---|---|
+| A name or note is open for typing, or you are drawing or dragging something | The version doesn't show, and Archforge says *Finish or cancel your edit first.* Finish or cancel it, then try again |
+| You were typing a description in Properties | It is written to the model first. If the model refuses it, the version doesn't show and the reason is said |
+| Chat is changing the model | Archforge asks *Chat is still changing the model. Stop it and go on?* **Stop and go on** ends its reply, keeping what it has written so far, and shows the version; **Keep working** leaves everything as it was |
+| A restore or another change of the whole project is under way | The version doesn't show, and Archforge says *Wait for the change under way to finish.* |
+
+Stepping from one version to another leaves no current work on screen, so Chat is not asked about.
+
+### When a version can't be shown
+
+| What you see | What happened | What to do |
+|---|---|---|
+| In History, **This version can't be shown**, with the reason behind **Why?** | Archforge can't read or build this version | Nothing. The steps pass it and say so, such as *8 Nov 14:02 can't be shown. Skipped to 7 Nov 09:30.* |
+| In History, **Made with a newer Archforge.** | A later Archforge saved this version | Nothing. The steps pass it the same way |
+| In History, **This version couldn't be read.**, with **Retry** | Reading it failed, and may work another time | Choose **Retry** to ask for it again. The message goes when you ask for any version, go back to current work, restore, or change branch or project |
+| After a step, the reason in the centre | The step failed, and the version you were on stays | Step again, which reads again |
+| *The versions couldn't be read.* or *The next versions couldn't be read.*, with **Retry**, in History or the chip's list | The list itself couldn't be read | Choose **Retry** |
+
+If a version can't be shown when you leave your current work for it, your current work stays as it
+was and the status bar gives the reason.
+
+**Compare…** and **Restore this version…** in a version's details, and the restore button beside
+**Back to current work** in the banner, are described in [The workspace](03-workspace.md).
 
 Back to the [contents](README.md).

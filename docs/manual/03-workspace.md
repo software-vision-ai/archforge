@@ -11,20 +11,9 @@ An open project fills the window with its workspace.
   which lists what has changed since the last version and the project's history, newest first.
   **Save version…** there saves what changed as a new version:
   [Versions](09-versions.md#save-a-version) goes through it step by step.
-  Clicking a version in the history opens its details in the centre: its description, when it
-  was saved and, where that is recorded, by whom, what changed since the version before and a link
-  to that version, which opens its details the same way.
-  Versions are compared one at a time, so when you click through the history quickly, the
-  changes of the version you stop on appear once the comparison under way has ended.
-  A version that turns out not to be readable stays in the list, marked **This version can't be
-  shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
-  Archforge saved it. The steps between versions pass it and say which one they passed.
-  Past the versions read so far, a step reads the next ones and goes on; if that read fails, a
-  message says so, the version you are on stays, and the next step reads again.
-  A read that fails for now shows **This version couldn't be read.** in History, with **Retry**;
-  that goes when any version is asked for, on going back from a version, and with a restore or a
-  change of branch or project.
-  **View this version** shows it read-only; the project's name at the top closes the details.
+  Clicking a version in the history opens its details in the centre, and **View this version**
+  there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
+  through History, viewing an earlier version and coming back to your current work.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
   and this branch's versions, reading further ones as you reach the end. What differs between the
