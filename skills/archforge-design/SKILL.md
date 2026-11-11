@@ -185,7 +185,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   its chevron opens the kinds and ends it draws, and the choice stays for the next line.
 - A placing or drawing tool hands back to Select after it has made one thing.
 - Selecting is by click, Shift-click and marquee; Edit ▸ Select all (⌘A) with the canvas holding the
-  keyboard takes what the open diagram draws, as a marquee over all of it would, while viewing a
+  keyboard takes what the open diagram draws, boxes nested in others included, while viewing a
   version as well, never while the project is held. A selected box shows handles and buttons beside
   it: connect, and the notation's add (for ER, add column). Dragging moves the whole selection as
   one undo step; arrow keys nudge. Two or more selected boxes show an arrange bar under them.

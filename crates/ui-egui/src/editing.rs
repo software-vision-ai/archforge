@@ -173,13 +173,14 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
-/// Selects every element drawn on diagram `d`, or the diagram itself when it draws nothing, as a
-/// marquee over the whole of it would.
+/// Selects every element drawn on diagram `d`, boxes nested in others included, or the diagram
+/// itself when it draws nothing.
 pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
-    for id in nodes_of(store, d).into_iter().filter_map(|n| uuid(store, element_of(store, n).unwrap_or(n))) {
+    let drawn = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top));
+    for id in drawn.filter_map(|n| uuid(store, element_of(store, n).unwrap_or(n))) {
         if !ids.contains(&id) {
             ids.push(id);
         }
