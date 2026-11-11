@@ -507,6 +507,7 @@ str		History	历史记录
 str		Retry	重试
 str		No changes since the last version.	自上一版本以来没有更改。
 str		No versions yet.	还没有版本。
+str		Shared with main up to here	到此为止与 main 共有
 str		No versions yet. Save version records your first one.	还没有版本。“保存版本”会记录第一个版本。
 str		Loading	正在加载
 str		Save version…	保存版本…

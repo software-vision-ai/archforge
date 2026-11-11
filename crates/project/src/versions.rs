@@ -38,6 +38,9 @@ pub struct Version {
     /// The nearest earlier version on this line, which is not the Dolt parent when a chat commit
     /// lies between; none for the first version.
     pub previous: Option<String>,
+    /// Whether it comes at or after the branch's merge base with `main` in the branch's log, which
+    /// on a line without merges means `main` has it too; never on `main` itself.
+    pub shared: bool,
 }
 
 /// A page of versions, newest first.
@@ -74,11 +77,17 @@ struct Gathering<'a> {
     after: Option<&'a str>,
     limit: usize,
     page: Versions,
+    /// The newest commit this line shares with `main`; none on `main`.
+    base: Option<String>,
+    /// Whether the base has gone by.
+    shared: bool,
 }
 
 impl Gathering<'_> {
     /// Takes the next commit of the line, older than the last; true once the page is complete.
     fn take(&mut self, commit: Commit) -> bool {
+        // Any commit, a chat commit too: the log is the line's own, newest first.
+        self.shared |= self.base.as_deref() == Some(commit.hash.as_str());
         if !is_version(&commit.email) {
             return false;
         }
@@ -101,6 +110,7 @@ impl Gathering<'_> {
             description: (!is_automatic(&commit.message)).then_some(commit.message),
             date: commit.date,
             previous: None,
+            shared: self.shared,
             hash: commit.hash,
         });
         false
@@ -278,6 +288,7 @@ impl VersionReader {
             return Err(Error::TooLarge { what: "a page of versions", size: limit, max: MOST_IN_A_PAGE, unit: "versions" });
         }
         let mut c = database_connection(&self.connector, branch)?;
+        let base = self.shared_with_main(&mut c, branch)?;
         let query = format!(
             "SELECT commit_hash, LEFT(committer, {TEXT_CHARS}), email, DATE_FORMAT(date, '%Y-%m-%dT%H:%i:%sZ'), LEFT(message, {TEXT_CHARS}) \
              FROM dolt_log LIMIT {}",
@@ -286,7 +297,7 @@ impl VersionReader {
         let rows = c.query_iter(query).map_err(sql("cannot read the project's versions"))?;
         // A commit is known not to be one of the oldest only once that many have come after it.
         let mut held = VecDeque::with_capacity(NOT_VERSIONS + 1);
-        let mut gathering = Gathering { after, limit, page: Versions::default() };
+        let mut gathering = Gathering { after, limit, page: Versions::default(), base, shared: false };
         for (seen, row) in rows.enumerate() {
             if seen == MOST_COMMITS {
                 return Err(Error::TooLarge { what: "the project's history", size: seen + 1, max: MOST_COMMITS, unit: "commits" });
@@ -303,6 +314,25 @@ impl VersionReader {
         match gathering.after {
             Some(commit) => Err(Error::NotAVersion { commit: commit.to_string() }),
             None => Ok(gathering.page),
+        }
+    }
+
+    /// The newest commit the line `c` is on shares with `main`: their merge base. None on `main`
+    /// itself, where nothing is marked, and in a project without `main`. Dolt does not record which
+    /// branch a branch was made from, so this says only what the two share.
+    fn shared_with_main(&self, c: &mut mysql::Conn, branch: &SafeBranch) -> Result<Option<String>, Error> {
+        if branch.same_branch(&SafeBranch::main()) {
+            return Ok(None);
+        }
+        // Asked only when the row exists, so a project without `main` reads as sharing nothing.
+        let base: Option<mysql::Row> = c
+            .query_first("SELECT LEFT(CAST(DOLT_MERGE_BASE('main', 'HEAD') AS CHAR), 64) FROM dolt_branches WHERE name = 'main'")
+            .map_err(sql("cannot find what the branch shares with main"))?;
+        // No common commit, which Dolt answers with NULL, shares nothing either.
+        match base {
+            None => Ok(None),
+            Some(row) if matches!(row.as_ref(0), Some(mysql::Value::NULL)) => Ok(None),
+            Some(row) => text_at(&row, 0).filter(|hash| is_commit(hash)).map(Some).ok_or_else(|| self.damaged_log()),
         }
     }
 

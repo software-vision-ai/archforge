@@ -398,6 +398,8 @@ pub struct VersionEntry {
     pub date: String,
     /// The nearest earlier version; none for the first.
     pub previous: Option<String>,
+    /// Whether `main` has it too; never on `main` itself. History marks where these start.
+    pub shared: bool,
 }
 
 /// A page of a project's versions, newest first.

@@ -507,6 +507,7 @@ str		History	Verlauf
 str		Retry	Erneut versuchen
 str		No changes since the last version.	Keine Änderungen seit der letzten Version.
 str		No versions yet.	Noch keine Versionen.
+str		Shared with main up to here	Bis hier mit main gemeinsam
 str		No versions yet. Save version records your first one.	Noch keine Versionen. „Version speichern“ legt die erste an.
 str		Loading	Wird geladen
 str		Save version…	Version speichern…

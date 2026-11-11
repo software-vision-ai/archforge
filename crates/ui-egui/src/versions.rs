@@ -25,6 +25,9 @@ const PAGE: usize = 50;
 const HEADER: f32 = 40.0;
 const ROW: f32 = 48.0;
 const PITCH: f32 = 50.0;
+/// The divider where the versions shared with `main` start, and the room it takes in the list.
+const SHARED: f32 = 16.0;
+const SHARED_PITCH: f32 = 18.0;
 /// A branch's row and the distance between rows.
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
@@ -840,7 +843,8 @@ fn skeleton(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
 }
 
 /// The versions, newest first, scrolling under the headers: a long list has the filter over it
-/// and Show more, or why the next page could not be read, under it.
+/// and Show more, or why the next page could not be read, under it. Over the first version `main`
+/// has too, a divider says the line is shared from there; until a page holds one, there is none.
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, rows: &[VersionEntry]) {
     let more = shell.versions.page.as_ref().is_some_and(|page| page.more);
     let mut top = top;
@@ -857,13 +861,20 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
     let described_only = shell.versions.described_only;
     let shown: Vec<&VersionEntry> = rows.iter().filter(|v| !described_only || described(v).is_some()).collect();
     let footer = if more || shell.versions.more_failed.is_some() { 52.0 } else { 8.0 };
+    let split = shown.iter().position(|v| v.shared);
+    let divider = if split.is_some() { SHARED_PITCH } else { 0.0 };
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom()));
-    let offset = scroll_tree(ui, p, tree, top, shown.len(), PITCH, footer, true, None, &mut shell.versions.scroll);
+    let offset = scroll_tree(ui, p, tree, top, shown.len(), PITCH, footer + divider, true, None, &mut shell.versions.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     let clock = crate::chat_panel::clock(shell);
+    // The rows from the split on sit under the divider.
+    let at = |i: usize| top + i as f32 * PITCH - offset + if split.is_some_and(|s| i >= s) { SHARED_PITCH } else { 0.0 };
+    if let Some(s) = split {
+        shared_divider(shell, &clip, p, r, at(s) - SHARED_PITCH);
+    }
     for (i, v) in shown.iter().enumerate() {
-        let y = top + i as f32 * PITCH - offset;
+        let y = at(i);
         if y + ROW >= tree.top() && y <= tree.bottom() {
             row(shell, &clip, p, (r, y), v, clock);
         }
@@ -872,8 +883,25 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
         let words = tr("None of these versions has a description.");
         ux::text(clip.painter(), pos2(r.left() + 20.0, top + 6.0), &words, types::SMALL, p.text_muted, Some((r.width() - 40.0).max(0.0)));
     }
-    let y = top + shown.len().max(1) as f32 * PITCH - offset;
+    let y = top + shown.len().max(1) as f32 * PITCH + divider - offset;
     footer_row(shell, &clip, p, r, y, more);
+}
+
+/// The divider at `y`: its words, then a line to the column's edge. It claims no more than what is
+/// shared, as Dolt does not record which branch a branch was made from.
+fn shared_divider(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
+    if y + SHARED < ui.clip_rect().top() || y > ui.clip_rect().bottom() {
+        return;
+    }
+    let words = tr("Shared with main up to here");
+    let at = pos2(r.left() + 20.0, y + 1.5);
+    let text = ux::text(ui.painter(), at, &words, types::CAPTION, p.text_muted, Some((r.width() - 48.0).max(0.0)));
+    let area = Rect::from_min_max(pos2(at.x, y), pos2(r.right() - 20.0, y + SHARED));
+    let _ = control(shell, ui, "workspace.versions.shared", "status", area, false).accessible_name(words.as_str());
+    if text.right() + 8.0 < area.right() {
+        let line = Rect::from_min_max(pos2(text.right() + 8.0, y + SHARED / 2.0 - 0.5), pos2(area.right(), y + SHARED / 2.0 + 0.5));
+        ui.painter().rect_filled(line, 0.0, p.border);
+    }
 }
 
 /// Under the list: why the next page could not be read, with Retry for that page; or Show more.
