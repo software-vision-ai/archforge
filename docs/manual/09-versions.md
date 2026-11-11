@@ -44,11 +44,11 @@ Three things look after your work, and each does a different job.
 | Adds a row to **History** | No | Yes | No |
 | After you close the project | Still there, unless you choose **Don't save** | Still there | The steps are gone |
 
-**Autosave** is why *Customer* is safe the moment you add it. Archforge writes each change to the
+**Autosave** is why *Customer* is kept without your saving it. Archforge writes each change to the
 project a moment after you make it. If Archforge or your computer stops, the changes it had written
-are there when you open the project again, and the status bar says *Unsaved changes*. If a write
-fails, the status bar says *Changes could not be written to the project*, and Archforge tries again
-with your next change or save.
+are there when you open the project again, and the status bar says *Unsaved changes*. A change made
+just before the stop, and not yet written, is lost. If a write fails, the status bar says *Changes
+could not be written to the project*, and Archforge tries again with your next change or save.
 
 What autosave writes is not a version. When you close a project with unsaved changes, Archforge asks
 what to do with them, and **Don't save** throws away what you changed since your last version. A
@@ -147,8 +147,8 @@ read it, and you press ⌘S again to retry.
 |---|---|---|
 | *No version was made:* and a reason | The save failed, and **History** is as it was | Choose **Retry** |
 | *A version was made, even though saving reported an error:* and a reason | Your version is in **History** | Choose **Cancel**. ⌘S then sets the status bar right without a second version |
-| *Archforge can't tell whether a version was made:* and a reason, or *The save stopped without an answer…* | The save may or may not have finished | Choose **Retry**: it makes no second version. If **Retry** stays off, look in **History**, then choose **Cancel** |
-| *Archforge could not tell whether a version was made. Look at History before trying again.* | The answer was lost | Look in **History**. If your version is there, choose **Cancel** |
+| *Archforge can't tell whether a version was made:* and a reason, or *The save stopped without an answer…* | The save may or may not have finished | Choose **Retry**: it makes no second version. If **Retry** stays off, choose **Cancel** and look in **History** |
+| *Archforge could not tell whether a version was made. Look at History before trying again.* | The answer was lost | Choose **Cancel**, since **History** can't be used behind the dialog, and look there. If your version isn't there, save again |
 | *The project changed after you reviewed it, so nothing was saved.* | The model moved on after the review | Read the summary again, then save |
 | *This description holds one of your saved API keys, so nothing was saved.* | The history would have kept your key | Change the description, then choose **Retry** |
 | *This description could not be checked against your saved API keys, so nothing was saved.* | Archforge couldn't read your keys to compare them | Choose **Retry**. If it keeps failing, choose **Cancel** and press ⌘S, which saves with no description |
