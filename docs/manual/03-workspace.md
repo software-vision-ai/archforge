@@ -25,8 +25,12 @@ An open project fills the window with its workspace.
   **View this version** shows it read-only; the project's name at the top closes the details.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
-  and this branch's versions, reading further ones as you reach the end. What differs between the
-  two is not shown there yet.
+  and this branch's versions, reading further ones as you reach the end. Under them the page says
+  how many differences there are between the version and your current work, and lists them in
+  groups, keeping up as the work changes. Your current work stays your own work while another
+  version is shown, not the version in view. If the two are the same the page says so, and if
+  they can't be compared it says so, with **Retry**. Comparing two saved versions says **Not
+  available yet**.
   **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed

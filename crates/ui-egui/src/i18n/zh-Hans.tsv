@@ -446,6 +446,8 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		This version is the same as your current work.	此版本与您当前的工作相同。
+str		Both sides are your current work.	两侧都是您当前的工作。
+str		Choose another pair above.	请在上方选择另一组。
 str		Restore this version…	恢复此版本…
 str		Restore this version?	要恢复此版本吗？
 str		The version of {what}	{what} 的版本
@@ -501,6 +503,7 @@ str		{what} changed.	{what}已更改。
 str		These changes become a new version of {name}.	这些更改将成为 {name} 的新版本。
 str		The model changed while this was open. The summary is up to date again.	此窗口打开期间模型已更改。摘要已重新更新。
 str		One line, at most 200 characters. It stays in the history.	一行，最多 200 个字符。它会保留在历史记录中。
+plural		{n} difference	{n} 处差异
 plural		{n} model element	{n} 个模型元素
 str		Filter changes…	筛选更改…
 str		Filter versions…	筛选版本…

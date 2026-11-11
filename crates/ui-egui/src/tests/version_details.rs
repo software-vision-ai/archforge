@@ -1220,6 +1220,115 @@ fn an_edit_under_way_holds_the_comparison() {
     });
 }
 
+/// While a version shows, current work is the session set aside, not the one in view, and its
+/// revision is what a failure is told by.
+#[test]
+fn current_work_is_the_session_set_aside_while_a_version_shows() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        opened(h, "c2");
+        tap(h, VIEW);
+        h.run_steps(3);
+        while asked(host).iter().any(|c| c == "c2") {
+            answer(host, "c2", Ok(before.clone()));
+        }
+        frames_until(h, |h| h.state().viewing() == Some("c2"));
+        host.reads.lock().unwrap().clear();
+        crate::version_details::open(h.state_mut(), history().remove(2));
+        h.run_steps(2);
+        tap(h, COMPARE);
+        frames_until(h, |_| asked(host) == ["c1"]);
+        answer(host, "c1", Ok(before));
+        found_many(h, 1);
+        let now = h.state().current_work().unwrap().revision();
+        landing(h, ("c1", false), now, Err("Now".into()));
+        assert_eq!(found(h), Some(Err("Now".to_string())));
+    });
+}
+
+/// A page waiting behind a comparison the details have left still wakes the window.
+#[test]
+fn a_page_waiting_its_turn_wakes_the_window() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        compared(h, "c1");
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && asked(host) == ["c2", "c3"], "{:?}", asked(host));
+    });
+}
+
+const COMPARE_LOADING: &str = "workspace.version-compare.loading";
+
+/// The page says how many differences there are and by area, and lists them in groups as cards;
+/// bars stand in until the first answer, and the band stays over all of it.
+#[test]
+fn the_differences_are_counted_and_grouped() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !painted(h).iter().any(|t| t.ends_with("differences")), "{:?}", painted(h));
+        let the_panels = painted_times(h, "MODEL ELEMENTS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        h.run_steps(1);
+        assert!(painted_has(h, "1 difference") && painted_has(h, "1 model element") && painted_times(h, "MODEL ELEMENTS") == the_panels + 1);
+        assert!(!painted_has(h, "DIAGRAMS") && !has_id(h, COMPARE_LOADING) && has_id(h, SWAP), "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label_contains(", Added").count(), 2, "the list's row and the page's card");
+    });
+}
+
+/// A list of other sides starts at its top.
+#[test]
+fn a_new_pair_lists_from_the_top() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.state_mut().versions.compare_results.scroll.offset = 40.0;
+        h.run_steps(1);
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 40.0, "a list longer than the page");
+        tap(h, SWAP);
+        frames_until(h, |h| matches!(found(h), Some(Ok(items)) if items[0].1 == ChangeKind::Removed));
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 0.0);
+    });
+}
+
+/// A failure is said with Retry, and no count; Retry reads again.
+#[test]
+fn a_failed_comparison_on_the_page_is_said_and_retried() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.failed"));
+        assert!(!painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, "workspace.version-compare.failed"));
+    });
+}
+
+/// Nothing to list is said in words, and two saved versions are not compared yet.
+#[test]
+fn an_empty_result_and_two_versions_are_said() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Ok(rows_now(h)));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+        assert!(painted_has(h, "This version is the same as your current work.") && !painted_has(h, "0 differences"), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(2));
+        h.run_steps(1);
+        assert!(painted_has(h, "Not available yet") && asked(host).is_empty(), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(0));
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(0));
+        h.run_steps(1);
+        assert!(painted_has(h, "Both sides are your current work."), "{:?}", painted(h));
+    });
+}
+
 /// A side of `name`, a schema.
 fn schema(name: &str) -> Option<ElementCard> {
     Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) })

@@ -445,6 +445,8 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
+str		Both sides are your current work.	Both sides are your current work.
+str		Choose another pair above.	Choose another pair above.
 str		Restore this version…	Restore this version…
 str		Restore this version?	Restore this version?
 str		The version of {what}	The version of {what}
@@ -500,6 +502,7 @@ str		{what} changed.	{what} changed.
 str		These changes become a new version of {name}.	These changes become a new version of {name}.
 str		The model changed while this was open. The summary is up to date again.	The model changed while this was open. The summary is up to date again.
 str		One line, at most 200 characters. It stays in the history.	One line, at most 200 characters. It stays in the history.
+plural		{n} difference	{n} difference|{n} differences
 plural		{n} model element	{n} model element|{n} model elements
 str		Filter changes…	Filter changes…
 str		Filter versions…	Filter versions…
