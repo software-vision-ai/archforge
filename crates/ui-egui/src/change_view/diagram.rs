@@ -1,13 +1,13 @@
 //! A changed diagram's Before and After (frame V3.4 of page 09): each side drawn from its own state
-//! in one shared framing, so a box that stayed is in the same place on both.
+//! in one shared framing, so a box that stayed is in the same place on both, with what differs marked.
 
 use std::collections::BTreeMap;
 
 use archforge_diagram::grid::{bounds_of, middle_of};
 use archforge_diagram::{LabelPlace, diagram, edge, label, node_tree};
-use archforge_mof::Value;
-use archforge_notations::differences::{DiagramSide, DiagramSides};
-use egui::{CornerRadius, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use archforge_mof::{Obj, Uuid, Value};
+use archforge_notations::differences::{ChangeKind, DiagramSide, DiagramSides, shown_name};
+use egui::{Align2, CornerRadius, Pos2, Rect, Shape, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use super::cards::{self, BAND, EYEBROW, GUTTER};
 use crate::Shell;
@@ -16,7 +16,13 @@ use crate::i18n::tr;
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
 use crate::version_details::MARGIN;
+use crate::versions::kind_look;
 use crate::widgets::Registry;
+
+/// A mark's width around a box or along a line.
+const MARK: f32 = 2.0;
+/// A mark's label's room around its word.
+const LABEL_PAD: Vec2 = vec2(6.0, 2.0);
 
 /// Draws the two sides side by side from `top` to the end of `r`. Everything comes from the sides
 /// already held: nothing here asks the host or touches the session.
@@ -89,6 +95,7 @@ fn pane(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, (card, before): (Rect
     clip.set_clip_rect(body.intersect(ui.clip_rect()));
     let view = View { origin: body.min, pan: framing.1, zoom: framing.0 };
     scene(shell, &clip, p, (side, body, &view), on_it);
+    marks(shell, &clip, p, (side, &view), on_it, sides);
 }
 
 /// Draws the side's diagram read-only: no selection, gesture or problem. It records under the side's
@@ -117,4 +124,53 @@ fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&
         let at = Rect::from_min_max(pos2(e.rect[0], e.rect[1]), pos2(e.rect[2], e.rect[3]));
         shell.registry.record(&e.id.replacen("workspace.canvas", &prefix, 1), e.kind, at);
     }
+}
+
+/// Marks what differs on this side: an outline round a box, the line drawn over in the change's
+/// colour, and the change in words on each.
+fn marks(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, view): (&str, &View), on_it: &DiagramSide, sides: &DiagramSides) {
+    let store = &on_it.store;
+    let kind_of = |o: Obj| store.uuid(o).ok().and_then(|id| Some((id, *sides.marks.get(&id)?)));
+    for (e, points) in on_it.grid.lines() {
+        let Some((id, kind)) = kind_of(e) else { continue };
+        let ink = kind_look(kind, p).1;
+        let line: Vec<Pos2> = points.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
+        clip.painter().add(Shape::line(line, Stroke::new(MARK, ink)));
+        let (x, y) = middle_of(points);
+        label(shell, clip, p, (side, on_it, e, id), kind, (Align2::CENTER_CENTER, view.to_screen(x, y)));
+    }
+    for n in refs(store, on_it.diagram, diagram::NODE).into_iter().flat_map(|top| node_tree(store, top)) {
+        let Some((id, kind)) = kind_of(n) else { continue };
+        let area = view.rect(&bounds_of(store, n));
+        // As the canvas draws no such box.
+        if !area.is_finite() || area.width() <= 0.0 || area.height() <= 0.0 {
+            continue;
+        }
+        clip.painter().rect_stroke(area, 6.0, Stroke::new(MARK, kind_look(kind, p).1), StrokeKind::Outside);
+        label(shell, clip, p, (side, on_it, n, id), kind, (Align2::LEFT_BOTTOM, area.left_top() - vec2(0.0, MARK + 2.0)));
+    }
+}
+
+/// The change in words, placed by its `corner` at `at`, naming `o`, whose id is `id`, to whoever
+/// reads it out or hovers.
+fn label(
+    shell: &mut Shell,
+    clip: &egui::Ui,
+    p: &Palette,
+    (side, on_it, o, id): (&str, &DiagramSide, Obj, Uuid),
+    kind: ChangeKind,
+    (corner, at): (Align2, Pos2),
+) {
+    let (word, ink, tint) = kind_look(kind, p);
+    let g = ux::galley(clip.painter(), &word, types::CAPTION, ink, None);
+    let area = corner.anchor_size(at, g.size() + 2.0 * LABEL_PAD);
+    // The framing's margin holds a label above the topmost box or half one past a line's middle,
+    // but not one running right from a box narrowed at the right edge, and nothing here pans.
+    let area = area.translate(vec2((clip.max_rect().right() - area.right()).min(0.0), 0.0));
+    let said = format!("{}, {word}", shown_name(&on_it.store, o).unwrap_or_else(|| tr("Unnamed")));
+    let _ =
+        control(shell, clip, &format!("workspace.change-view.{side}.mark.{id}"), "status", area, false).on_hover_text(&said).accessible_name(said);
+    clip.painter().rect_filled(area, 4.0, tint);
+    clip.painter().rect_stroke(area, 4.0, Stroke::new(1.0, ink), StrokeKind::Inside);
+    clip.painter().galley(area.center() - g.size() / 2.0, g, ink);
 }

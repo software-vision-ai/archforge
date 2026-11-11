@@ -911,8 +911,8 @@ fn two_rows_of_one_element_open_it_once() {
 }
 
 /// The ids a diagram comparison holds: the schema, the diagram, the boxes kept, gone, fresh and
-/// nested, and the line.
-type Items = [String; 7];
+/// nested, the line and the box renamed.
+type Items = [String; 8];
 
 /// Runs the command `cmd` on the session; gives the id it answers with, if any.
 fn edit(h: &mut Harness<'static, Shell>, cmd: &str, args: serde_json::Value) -> String {
@@ -926,18 +926,19 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         let (mut h, host) = versions_panel(theme);
         let shop = edit(&mut h, "er.schema.add", serde_json::json!({ "name": "shop" }));
         let entity = |h: &mut _, name: &str| edit(h, "er.entity.add", serde_json::json!({ "schema": shop, "name": name }));
-        let (a, c, d) = (entity(&mut h, "kept"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
+        let (a, b, c, d) = (entity(&mut h, "kept"), entity(&mut h, "renamed"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
         let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Billing" }));
         let place = |h: &mut _, e: &str, x: i32, y: i32| {
             edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
         };
         // Only the Before side reaches far below, so fitting one side alone would differ.
-        let (kept, gone) = (place(&mut h, &a, 300, 0), place(&mut h, &c, 0, 20000));
+        let (kept, renamed, gone) = (place(&mut h, &a, 300, 0), place(&mut h, &b, 560, 0), place(&mut h, &c, 0, 20000));
         versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: history(), more: false }));
         h.run_steps(2);
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
         super::compared(&mut h);
+        edit(&mut h, "er.entity.rename", serde_json::json!({ "entity": b, "name": "client" }));
         edit(&mut h, "diagram.unplace", serde_json::json!({ "nodes": [gone] }));
         let fresh = place(&mut h, &d, 560, 200);
         // Far above every top-level box: it fits only if it is counted itself, and only below the
@@ -953,15 +954,24 @@ fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
         tap(&mut h, &row);
         frames_until(&mut h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
         assert!(asked(&host).is_empty() && h.state().session.as_ref().unwrap().revision() == revision, "it only reads what is held");
-        test(&mut h, &[shop.clone(), diagram.clone(), kept, gone, fresh, nested, line]);
+        test(&mut h, &[shop.clone(), diagram.clone(), kept, gone, fresh, nested, line, renamed]);
     });
+}
+
+/// Whether a shape `test` takes was painted.
+fn shape_painted(h: &Harness<'static, Shell>, test: &dyn Fn(&egui::Shape) -> bool) -> bool {
+    /// Whether `s`, or a shape it holds, is one `test` takes.
+    fn walk(s: &egui::Shape, test: &dyn Fn(&egui::Shape) -> bool) -> bool {
+        if let egui::Shape::Vec(v) = s { v.iter().any(|s| walk(s, test)) } else { test(s) }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, test))
 }
 
 /// A box that stayed is in the same place on both sides, however the canvas was last left, and
 /// the framing takes in what only one side holds.
 #[test]
 fn a_diagrams_two_sides_share_one_framing() {
-    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line]| {
+    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line, _]| {
         let at = |h: &Harness<'static, Shell>, thing: &str, id: &str| rect_of(h, &format!("workspace.change-view.{thing}.{id}"));
         let (before, after, was) = (rect_of(h, BEFORE), rect_of(h, AFTER), at(h, "before.node", kept));
         assert_eq!(h.query_all_by_label("Billing, Commerce platform, Changed").count(), 1, "the diagram's title, not its box's");
@@ -989,6 +999,46 @@ fn a_diagrams_two_sides_share_one_framing() {
         list_still(h);
         frames_until(h, |h| h.state().versions.element_reading.is_none() && at(h, "after.edge", line) != wide);
         assert!(after.contains_rect(at(h, "after.edge", line)) && put(h, "0..*"), "the bend and the far end's text");
+    });
+}
+
+/// Each side marks what it holds that differs, nested boxes and lines too, and only that.
+#[test]
+fn each_side_of_a_diagram_marks_what_differs_on_it() {
+    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line, renamed]| {
+        let on = |side: &str, id: &str| has_id(h, &format!("workspace.change-view.{side}.mark.{id}"));
+        assert!(
+            on("before", renamed) && on("after", renamed) && on("before", gone) && on("after", fresh) && on("after", nested) && on("after", line)
+        );
+        assert!(
+            !on("before", kept) && !on("after", kept) && !on("after", gone) && !on("before", fresh) && !on("before", nested) && !on("before", line)
+        );
+        for said in ["renamed, Changed", "client, Changed", "gone, Removed", "fresh, Added"] {
+            assert_eq!(h.query_all_by_label(said).count(), 1, "{said}");
+        }
+        let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+        let ink = |kind| crate::versions::kind_look(kind, p).1;
+        let outlined = |side: &str, id: &str, kind| {
+            let area = rect_of(h, &format!("workspace.change-view.{side}.node.{id}"));
+            shape_painted(
+                h,
+                &|s| matches!(s, egui::Shape::Rect(r) if r.rect == area && r.stroke == egui::Stroke::new(2.0, ink(kind)) && r.stroke_kind == egui::StrokeKind::Outside),
+            )
+        };
+        assert!(outlined("after", fresh, ChangeKind::Added) && outlined("after", nested, ChangeKind::Added));
+        assert!(outlined("before", gone, ChangeKind::Removed) && outlined("before", renamed, ChangeKind::Changed));
+        assert!(!outlined("after", kept, ChangeKind::Added) && !outlined("after", kept, ChangeKind::Changed));
+        let added = egui::epaint::ColorMode::Solid(ink(ChangeKind::Added));
+        assert!(shape_painted(h, &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && l.stroke.color == added)), "the line");
+        let mark = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.change-view.after.mark.{id}"));
+        let (put, boxed) = (mark(h, fresh), rect_of(h, &format!("workspace.change-view.after.node.{fresh}")));
+        assert!((put.left() - boxed.left()).abs() < 0.01 && put.bottom() < boxed.top(), "above its box, from its left: {put:?} {boxed:?}");
+        // So far right that the box is narrowed at the edge, and its label would run past it.
+        let was = mark(h, renamed);
+        edit(h, "diagram.move", serde_json::json!({ "nodes": [renamed], "dx": 200000, "dy": 0 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && mark(h, renamed) != was);
+        assert!(rect_of(h, AFTER).contains_rect(mark(h, renamed)), "{:?} {:?}", mark(h, renamed), rect_of(h, AFTER));
     });
 }
 
