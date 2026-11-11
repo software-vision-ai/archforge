@@ -564,6 +564,8 @@ str		Last version	Última versão
 str		No description	Sem descrição
 str		Saved by an agent	Guardado por um agente
 str		This version can't be shown	Esta versão não pode ser mostrada
+str		This version couldn't be read.	Não foi possível ler esta versão.
+str		{from} can't be shown. Skipped to {to}.	Não é possível mostrar {from}. Saltou-se para {to}.
 str		It isn't a version of this branch.	Não é uma versão deste ramo.
 str		Made with a newer Archforge.	Criada com uma versão mais recente do Archforge.
 str		Why?	Porquê?

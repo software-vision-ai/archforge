@@ -64,6 +64,9 @@ pub(crate) struct Loads {
     /// Least recently used first.
     kept: VecDeque<Kept>,
     bytes: usize,
+    /// The version a step is on its way to past one that can't be shown, and what to say then:
+    /// its arrival replaces the canvas and whatever was said on it.
+    pub(crate) skipped: Option<(String, String)>,
 }
 
 /// What `rows` come to in memory, counted as the read's own budget counts them.
@@ -141,6 +144,7 @@ impl Shell {
     /// Asks for the version `commit` from the version in view, overtaking the one asked for before;
     /// the version in view itself calls that one off. Refused without a host or a project.
     pub(crate) fn step_to(&mut self, commit: &str, label: Option<String>) -> Result<(), HoldRefused> {
+        self.versions.load_failed = None;
         if self.viewing() == Some(commit) {
             self.loads.call_off();
             return Ok(());
@@ -157,6 +161,7 @@ impl Shell {
     /// same one read as a step. What is returned answers the replacement that enters it.
     pub(crate) fn read_for_entry(&mut self, project: PathBuf, commit: &str) -> Receiver<Answer> {
         let (to, from) = channel();
+        self.versions.load_failed = None;
         self.loads.wanted = Some(Wanted { project, commit: commit.to_string(), then: Then::Enter(to) });
         self.read_wanted();
         from
@@ -220,9 +225,19 @@ impl Shell {
 
     /// Hands `answer` to what asked for the newest version. A step that failed stays on the version
     /// in view and says why in the toast above the toolbar; one that cannot be built cannot ever
-    /// be, so its row says so.
+    /// be, so its row says so. A failure that may pass, of the project shown, offers to read it
+    /// again with the date the chip would then say.
     fn deliver(&mut self, answer: Answer) {
-        let Some(Wanted { commit, then, .. }) = self.loads.wanted.take() else { return };
+        let Some(Wanted { project, commit, then }) = self.loads.wanted.take() else { return };
+        if let Err(VersionReadError::Failed(why)) = &answer
+            && self.project.as_ref().is_some_and(|o| o.path == project)
+        {
+            let label = match &then {
+                Then::Step(label) => label.clone(),
+                Then::Enter(_) => self.version_list.shown.as_ref().filter(|(c, _)| *c == commit).map(|(_, l)| l.clone()),
+            };
+            self.versions.load_failed = Some(crate::versions::LoadFailed { commit: commit.clone(), label, why: why.clone() });
+        }
         match (then, answer) {
             // Nothing receives this once the person has gone back, and the rows are kept anyway.
             (Then::Enter(to), answer) => drop(to.send(answer)),
@@ -233,6 +248,19 @@ impl Shell {
                     self.canvas.say_refused_step(Some(why));
                 }
             }
+        }
+    }
+
+    /// Once a frame, after what can show a version: says what a step passed when the version it
+    /// went to shows. The words last only while that step is on its way, so a failure, a step
+    /// elsewhere or going back ends them unsaid.
+    pub(crate) fn say_skip(&mut self) {
+        let Some((commit, _)) = &self.loads.skipped else { return };
+        if self.viewing() == Some(commit) {
+            let words = self.loads.skipped.take().map(|(_, words)| words);
+            self.canvas.say_refused_step(words);
+        } else if self.loads.wanted_commit() != Some(commit) && self.version_being_read() != Some(commit) {
+            self.loads.skipped = None;
         }
     }
 }

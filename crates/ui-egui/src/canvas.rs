@@ -124,8 +124,8 @@ pub struct State {
     /// action; a refused step of versions shows as the toast instead (`refused_step`).
     pub notice: Option<String>,
     /// The words of `notice` when they say why a step between versions or a way out of current
-    /// work did not go. Only ever read against `notice`, so whatever clears or replaces that ends
-    /// the toast as well.
+    /// work did not go, or what a step passed. Only ever read against `notice`, so whatever
+    /// clears or replaces that ends the toast as well.
     pub refused_step: Option<String>,
     /// Editing (slice E1): a name typed in a node, the pointer gesture under way, the entity menu,
     /// and whether the canvas has the keyboard.
@@ -459,8 +459,9 @@ fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
 }
 
 impl State {
-    /// `notice` becomes why a step between versions or a way out of current work did not go,
-    /// which the centre says as the toast, or none, which ends what was said before.
+    /// `notice` becomes why a step between versions or a way out of current work did not go, or
+    /// what a step passed, which the centre says as the toast, or none, which ends what was said
+    /// before.
     pub(crate) fn say_refused_step(&mut self, words: Option<String>) {
         self.notice.clone_from(&words);
         self.refused_step = words;

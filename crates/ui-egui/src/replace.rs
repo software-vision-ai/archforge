@@ -163,6 +163,7 @@ impl Shell {
             self.version_list.steps = Default::default();
             self.loads.clear();
             self.versions.unavailable.clear();
+            self.versions.load_failed = None;
         }
         self.replacing = Some(Replacing {
             stage: Stage::Chat,

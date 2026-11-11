@@ -1242,6 +1242,7 @@ impl Shell {
         self.loads.call_off();
         // A later opening of the project may be on another branch.
         self.versions.unavailable.clear();
+        self.versions.load_failed = None;
         self.session = None;
         self.session_error = None;
         self.adopted = None;
@@ -1863,6 +1864,7 @@ impl Shell {
         self.drive_loads();
         self.drive_replacement();
         self.run_after_hold(ctx);
+        self.say_skip();
     }
 
     /// The window title: the open project's name and the application's, or the application's alone.
