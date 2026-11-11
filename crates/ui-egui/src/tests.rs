@@ -375,6 +375,8 @@ struct SavingHost {
     branch_now: std::sync::Mutex<Option<String>>,
     branch_list: std::sync::Mutex<Option<Result<Vec<crate::BranchEntry>, String>>>,
     branch_cut: std::sync::Mutex<bool>,
+    /// While set, each read of the branches waits there for the test to answer it.
+    branch_held: std::sync::Mutex<Option<Vec<std::sync::mpsc::Sender<Result<(Vec<crate::BranchEntry>, bool), String>>>>>,
     branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
@@ -425,6 +427,10 @@ impl crate::ProjectHost for SavingHost {
     fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<crate::BranchEntry>, bool), String>> {
         *self.branch_reads.lock().unwrap() += 1;
         let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(held) = self.branch_held.lock().unwrap().as_mut() {
+            held.push(tx);
+            return rx;
+        }
         let listed = self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new()));
         let _ = tx.send(listed.map(|l| (l, *self.branch_cut.lock().unwrap())));
         rx

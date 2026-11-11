@@ -29,10 +29,10 @@ const PITCH: f32 = 50.0;
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
 /// What a list leaves under it: below Branches, Working changes' header and words and History's
-/// header and two rows; below Working changes and its words, History's header and a row. The
+/// header and two rows; below Working changes and its words, History's header and two rows. The
 /// least a branch list keeps, so a row stays in reach.
 const UNDER_BRANCHES: f32 = 3.0 * HEADER + 2.0 * PITCH;
-const UNDER_CHANGES: f32 = 8.0 + HEADER + PITCH;
+const UNDER_CHANGES: f32 = 8.0 + HEADER + 2.0 * PITCH;
 const LEAST_BRANCHES: f32 = BRANCH + 4.0;
 /// A change's row, its pitch and a group's heading; the list that gets a filter; its share of the column.
 const CHANGE: f32 = 44.0;
@@ -59,8 +59,6 @@ pub struct State {
     pub(crate) branches: Option<Vec<BranchEntry>>,
     /// More branches exist than were listed.
     branches_cut: bool,
-    /// The row the arrow keys moved to, which the list keeps in view.
-    branch_keyed: Option<usize>,
     branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
     branches_asked: bool,
@@ -140,7 +138,7 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
             (v.load_failed, v.branches, v.branches_open, v.branches_cut) = (None, None, None, false);
         }
         // A menu's row is by its place in the list, which the next read may change.
-        (v.branches_reading, v.branches_failed, v.branches_asked, v.branch_keyed) = (None, None, false, None);
+        (v.branches_reading, v.branches_failed, v.branches_asked) = (None, None, false);
         if matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
             shell.panels.menu = None;
         }
@@ -180,9 +178,11 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
     if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
     }
-    // Once the versions are read, so the two reads don't take two of the host's places at once.
+    // Once the versions are read, so two reads don't take two of the host's places at once, and
+    // once a read on its way has answered: the one asked for meanwhile follows it.
     let v = &mut shell.versions;
-    if let (false, None, Some(host), Some((path, _))) = (v.branches_asked, &v.reading, &shell.services.projects, &v.about) {
+    let reads = (&v.reading, &v.branches_reading);
+    if let (false, (None, None), Some(host), Some((path, _))) = (v.branches_asked, reads, &shell.services.projects, &v.about) {
         (v.branches_asked, v.branches_reading) = (true, Some(host.branches(path)));
     }
     keep_changes(shell);
@@ -468,8 +468,13 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let least = LEAST_BRANCHES.min(above + rows);
     let height = (above + rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(least));
     let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
-    let follow = key_branches(shell, ui, &listed).map(|i| (i, archforge_mof::Uuid((i as u128).to_be_bytes())));
-    let offset = scroll_tree(ui, p, tree, y + above, listed.len(), BRANCH_PITCH, tail, true, follow, &mut shell.versions.branches_scroll);
+    // The row the keys moved to comes whole into view, under the banner too.
+    let scroll = &mut shell.versions.branches_scroll;
+    if let Some(i) = key_branches(ui, &listed) {
+        let top = above + i as f32 * BRANCH_PITCH;
+        scroll.offset = scroll.offset.min(top).max(top + BRANCH - height);
+    }
+    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, above + tail, true, None, scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     if let Some(why) = failed {
@@ -486,28 +491,31 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     tree.bottom() + 8.0
 }
 
-/// ↑ and ↓ on a focused branch row move the focus to the next or previous other branch, which the
-/// list then keeps in view; gives the row last moved to.
-fn key_branches(shell: &mut Shell, ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
-    let row = |b: &BranchEntry| widgets::egui_id(&format!("workspace.versions.branch.row.{}", b.name));
+/// ↑ and ↓ on a focused branch row move the focus to the next or previous other branch, and ↓ on
+/// a failed read's Retry to the first; gives the row moved to.
+fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
+    let row = |i: usize| widgets::egui_id(&format!("workspace.versions.branch.row.{}", listed[i].name));
+    let retry = widgets::egui_id("workspace.versions.branches.retry");
     let live: Vec<usize> = (0..listed.len()).filter(|&i| !listed[i].current).collect();
-    let at = live.iter().position(|&i| ui.memory(|m| m.has_focus(row(&listed[i]))));
+    let on_retry = ui.memory(|m| m.has_focus(retry));
+    let at = live.iter().position(|&i| ui.memory(|m| m.has_focus(row(i))));
     let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
     let next = match at {
-        Some(at) if pressed(egui::Key::ArrowDown) => live.get(at + 1),
-        Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1).and_then(|before| live.get(before)),
+        _ if on_retry && pressed(egui::Key::ArrowDown) => live.first().copied(),
+        Some(at) if pressed(egui::Key::ArrowDown) => live.get(at + 1).copied(),
+        Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1).and_then(|before| live.get(before).copied()),
         _ => None,
     };
-    if let Some(&i) = next {
-        ui.memory_mut(|m| m.request_focus(row(&listed[i])));
-        shell.versions.branch_keyed = Some(i);
+    if let Some(i) = next {
+        ui.memory_mut(|m| m.request_focus(row(i)));
     }
-    // The keys are the list's, not egui's to move focus by place; only a focused row takes this.
+    // The keys are the list's, not egui's to move focus by place; only what has focus takes this.
     let arrows = egui::EventFilter { vertical_arrows: true, ..Default::default() };
-    if let Some(&i) = next.or(at.and_then(|at| live.get(at))) {
-        ui.memory_mut(|m| m.set_focus_lock_filter(row(&listed[i]), arrows));
+    let held = next.or(at.and_then(|at| live.get(at).copied())).map(row).or(on_retry.then_some(retry));
+    if let Some(id) = held {
+        ui.memory_mut(|m| m.set_focus_lock_filter(id, arrows));
     }
-    shell.versions.branch_keyed
+    next
 }
 
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
@@ -628,8 +636,9 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         ux::text(ui.painter(), area.min, &words, types::SMALL, p.danger, Some(area.width()));
         return y + 29.0;
     }
-    // Nothing, not even the filter, where no change would fit over History's header and a row.
-    if r.bottom() - y - UNDER_CHANGES < CHANGE_PITCH {
+    // Nothing, not even the filter, where it, a heading and a change wouldn't fit over History.
+    let filter = if shell.versions.changes.len() > FILTER_FROM { 38.0 } else { 0.0 };
+    if r.bottom() - y - UNDER_CHANGES < filter + GROUP + CHANGE_PITCH {
         return y;
     }
     let mut top = y;

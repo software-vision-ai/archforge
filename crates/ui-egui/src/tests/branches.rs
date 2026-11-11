@@ -90,6 +90,7 @@ fn a_row_says_what_its_branch_holds() {
         versions_answer(&mut h, &host, Ok(two_versions()));
         assert_eq!(*host.branch_reads.lock().unwrap(), 2, "read again after the versions");
         assert!(has_id(&h, OTHER) && has_id(&h, "workspace.versions.branches.failed"), "{theme:?}: the rows stay");
+        assert!(rect_of(&h, MAIN).top() >= rect_of(&h, "workspace.versions.branches.failed").bottom(), "{theme:?}: under the banner");
         assert!(painted_has(&h, "The branches couldn't be read."), "{theme:?}");
         *host.branch_list.lock().unwrap() = Some(Ok(with(["other".to_string()])));
         click_id(&mut h, "workspace.versions.branches.retry");
@@ -155,34 +156,66 @@ fn every_branch_control_has_an_id_of_its_own() {
     });
 }
 
-/// In the shortest window and a taller one, many branches or many changes leave History's header
-/// and first row in the column and a branch row in reach; a failed read's banner scrolls with the rows above them.
+/// In the shortest window, many branches or many changes leave History's header and first row in
+/// the column and a branch row in reach, by the keys too under a failed read's banner, which scrolls
+/// with the rows; a taller one keeps two History rows, and shows the filter only with a change under
+/// it.
 #[test]
 fn history_keeps_its_room_under_many_branches_or_changes() {
-    const B00: &str = "workspace.versions.branch.row.b00";
-    let in_column = |h: &mut Harness<'static, Shell>, height: f32| {
+    let in_column = |h: &mut Harness<'static, Shell>, height: f32, row: &str| {
         h.set_size(egui::vec2(1600.0, height));
         h.run_steps(2);
-        has_id(h, "workspace.versions.row.aa") && rect_of(h, "workspace.versions.row.aa").bottom() <= height - 40.0
+        let id = format!("workspace.versions.row.{row}");
+        has_id(h, &id) && rect_of(h, &id).bottom() <= height - 40.0
+    };
+    let fail = |h: &mut Harness<'static, Shell>, host: &SavingHost| {
+        (*host.branch_list.lock().unwrap(), h.state_mut().versions.stale) = (Some(Err("the server stopped".into())), true);
+        versions_answer(h, host, Ok(two_versions()));
     };
     in_both_appearances(|theme| {
-        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
-        assert!(in_column(&mut h, 400.0) && has_id(&h, B00), "{theme:?}: under many branches");
-        (*host.branch_list.lock().unwrap(), h.state_mut().versions.stale) = (Some(Err("the server stopped".into())), true);
-        versions_answer(&mut h, &host, Ok(two_versions()));
-        assert!(in_column(&mut h, 400.0) && has_id(&h, "workspace.versions.branches.retry"), "{theme:?}: and a failed read");
-        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.versions.branches.retry").center()));
-        let (unit, phase, source) = (egui::MouseWheelUnit::Point, egui::TouchPhase::Move, egui::MouseWheelSource::Wheel);
-        h.event(egui::Event::MouseWheel { unit, delta: egui::vec2(0.0, -60.0), modifiers: egui::Modifiers::NONE, phase, source });
-        h.run_steps(20);
-        click_id(&mut h, B00);
+        let many = || Ok(with((0..20).map(|i| format!("b{i:02}"))));
+        let (mut h, host) = branches_read(theme, many());
+        assert!(in_column(&mut h, 400.0, "aa"), "{theme:?}: under many branches");
+        click_id(&mut h, "workspace.versions.branch.row.b00");
         h.run_steps(4);
-        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: the rows scroll under it");
+        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: a row in reach");
+        let (mut h, host) = branches_read(theme, many());
+        fail(&mut h, &host);
+        assert!(in_column(&mut h, 400.0, "aa"), "{theme:?}: and a failed read");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.versions.branches.retry")));
+        h.run_steps(1);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: ↓ from Retry reaches a row");
         let (mut h, host) = branches_read(theme, Ok(listed(true)));
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
         (0..30).for_each(|i| add_schema(&mut h, &format!("s{i}")));
         compared(&mut h);
-        assert!(h.state().versions.working == 30 && in_column(&mut h, 400.0) && in_column(&mut h, 560.0), "{theme:?}: under many changes");
+        assert!(h.state().versions.working == 30 && in_column(&mut h, 400.0, "aa"), "{theme:?}: under many changes");
+        assert!(in_column(&mut h, 640.0, "aa") && !has_id(&h, "workspace.versions.filter"), "{theme:?}: no filter over nothing");
+        let listing = |h: &Harness<'static, Shell>| ids(h).iter().any(|i| i.starts_with("workspace.versions.change."));
+        assert!(in_column(&mut h, 700.0, "bb") && listing(&h), "{theme:?}: two History rows under the changes");
+        fail(&mut h, &host);
+        assert!(in_column(&mut h, 400.0, "aa"), "{theme:?}: under a failed read and many changes");
+    });
+}
+
+/// A read of the branches on its way is not asked for again, and the one wanted meanwhile follows.
+#[test]
+fn a_branch_read_waits_for_the_one_on_its_way() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        *host.branch_held.lock().unwrap() = Some(Vec::new());
+        for _ in 0..2 {
+            h.state_mut().versions.stale = true;
+            versions_answer(&mut h, &host, Ok(two_versions()));
+        }
+        assert_eq!(*host.branch_reads.lock().unwrap(), 2, "{theme:?}: one read on its way");
+        let held = host.branch_held.lock().unwrap().take().unwrap();
+        held[0].send(Ok((listed(true), false))).unwrap();
+        h.run_steps(3);
+        assert_eq!(*host.branch_reads.lock().unwrap(), 3, "{theme:?}: then the one wanted meanwhile");
     });
 }
