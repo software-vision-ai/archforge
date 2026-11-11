@@ -250,7 +250,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         s.services.projects = Some(std::sync::Arc::new(crate::actions::tests::CountingHost::default()));
         crate::version_details::open(s, version_row("c1", None, (None, false), "2026-11-06T15:05:00Z"));
     }
-    let states: [(&str, Setup, &[&str]); 16] = [
+    let states: [(&str, Setup, &[&str]); 17] = [
         ("a field", field, &CLIP),
         ("the model", |_| {}, &[]),
         ("the canvas", canvas, &[SELECT_ALL]),
@@ -267,6 +267,7 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
         ("no project shown", |s| (canvas(s), s.active = None).1, &[]),
         ("no diagram on the canvas, the model's view still on one", |s| (canvas(s), s.canvas.active = None).1, &[]),
         ("a line's menu open on the canvas", |s| (canvas(s), s.canvas.line_menu = Some(egui::Pos2::ZERO)).1, &[]),
+        ("the classifier's menu of kinds open", |s| (canvas(s), s.canvas.popover = Some(crate::uml_classifier::KINDS)).1, &[]),
     ];
     let select_all = Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND };
     for ((name, setup, on), theme) in states.into_iter().zip([ThemeKind::Light, ThemeKind::Dark].into_iter().cycle()) {
