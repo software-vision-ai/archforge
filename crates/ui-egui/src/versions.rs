@@ -171,12 +171,14 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         None => {}
     }
     take_more(v);
-    // A row of an open menu may now hold another branch, and the chip, drawn before, name one.
-    if take_branches(v) {
+    let waiting = v.branches_reading.is_some();
+    // A row of an open menu may now hold another branch.
+    if take_branches(v) && matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
+        shell.panels.menu = None;
+    }
+    // The chip and its list, drawn before, may now say another branch, date or limit.
+    if waiting && v.branches_reading.is_none() {
         ctx.request_repaint();
-        if matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
-            shell.panels.menu = None;
-        }
     }
     if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
@@ -490,7 +492,9 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
             branch_row(shell, &clip, p, (area, i), b);
         }
     }
-    clip.painter().galley(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g, p.text_muted);
+    let note = Rect::from_min_size(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g.size());
+    let _ = control(shell, &clip, "workspace.versions.branches.note", "status", note, false).accessible_name(words.as_str());
+    clip.painter().galley(note.min, g, p.text_muted);
     tree.bottom() + 8.0
 }
 
@@ -587,13 +591,14 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     }
 }
 
-/// Asks to go to the branch stored as `name`, as a branch row here and in the chip's list do; a
-/// refusal says why over the canvas. Gives whether it went ahead.
+/// Asks to go to the branch stored as `name`; a refusal says why over the canvas. Gives whether it went ahead.
 pub(crate) fn switch_to(shell: &mut Shell, name: String) -> bool {
-    let Err(why) = shell.ask_switch_branch(name) else { return true };
-    let words = crate::version_chip::refused_words(shell, why);
-    shell.canvas.say_refused_step(words);
-    false
+    if let Err(why) = shell.ask_switch_branch(name) {
+        let words = crate::version_chip::refused_words(shell, why);
+        shell.canvas.say_refused_step(words);
+        return false;
+    }
+    true
 }
 
 /// Working changes from `y`: its header and what can be said so far. Gives where the next

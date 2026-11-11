@@ -29,8 +29,7 @@ const ID: &str = "workspace.header.version";
 pub(crate) const NARROWEST: f32 = 32.0;
 /// Between the chip and search.
 const SEARCH_GAP: f32 = 12.0;
-/// What a branch's name adds beside its own width, the separator and its gaps; the least of the
-/// name shown before the label goes.
+/// What a branch's name adds beside its width, the separator and gaps; the least of it shown before the label goes.
 const BRANCH_GAP: f32 = 16.0;
 const NAME_MIN: f32 = 40.0;
 
@@ -444,8 +443,7 @@ pub(crate) fn bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, mid: f32, start
         (None, false) => 135.0,
     };
     let (whole, room) = (width, end - start - SEARCH_GAP - SEARCH_MIN);
-    // The name's width as drawn within `limit`, cut at a word as it is, which can pass the limit by
-    // a fraction; drawn, it is given a point more, so it is not cut again.
+    // The name's width cut at a word within `limit`, which it can pass by a fraction; drawn with a point more, as is.
     let fit = |n: &str, limit: f32| ux::galley(ui.painter(), n, types::SMALL, p.text, Some(limit)).size().x.min(limit);
     // With no label: the icon, the name, the dot and the chevron.
     let bare = 31.0 + if shell.shown_unsaved() { 41.0 } else { 29.0 };
@@ -720,6 +718,8 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
             failure_row(shell, ui, p, Rect::from_min_size(pos2(r.left() + 6.0, bottom), vec2(WIDTH - 12.0, ROW)));
         } else if let Some(n) = &cut {
             let words = fmt(&tr("Only the first {n} branches are listed."), &[("n", n)]);
+            let area = Rect::from_min_size(pos2(r.left() + 6.0, bottom), vec2(WIDTH - 12.0, ROW));
+            let _ = control(shell, ui, &format!("{ID}.cut"), "status", area, false).accessible_name(words.as_str());
             ux::text_mid(&paint, r.left() + 16.0, bottom + ROW / 2.0, &words, types::SMALL, p.text_muted, Some(WIDTH - 32.0));
         } else if reading_on && steps.reading.is_none() && offset + (bottom - first) + ROW >= rows.len() as f32 * ROW {
             read_on(shell, None);

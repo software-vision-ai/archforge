@@ -66,7 +66,8 @@ fn branches_fold_with_only_main() {
         assert!(!painted_has(&h, "Only the first"), "{theme:?}");
         (*host.branch_cut.lock().unwrap(), h.state_mut().versions.stale) = (true, true);
         versions_answer(&mut h, &host, Ok(two_versions()));
-        assert!(painted_has(&h, "Only the first 2 branches are listed."), "{theme:?}: a list cut short says so");
+        let cut = "Only the first 2 branches are listed.";
+        assert!(painted_has(&h, cut) && h.query_by_label_contains(cut).is_some(), "{theme:?}: a list cut short says so");
         let (h, _host) = branches_read(theme, Err("the server stopped".into()));
         assert!(has_id(&h, "workspace.versions.branches.failed"), "{theme:?}: a failed first read opens it to say so");
     });
@@ -298,8 +299,7 @@ fn drawn_in(h: &Harness<'static, Shell>, area: egui::Rect, text: &str) -> Option
     text_boxes(h).into_iter().find(|(t, b)| t == text && area.contains(b.min)).map(|(_, b)| b.width())
 }
 
-/// Opens the chip's list with ⇧⌘H, or ⇧⌘B for the branches, and answers its read of the versions,
-/// more of them to come.
+/// Opens the chip's list with ⇧⌘H, or ⇧⌘B for the branches, and answers its read: more to come.
 fn chip_list(h: &mut Harness<'static, Shell>, host: &SavingHost, branches: bool) {
     key(h, if branches { egui::Key::B } else { egui::Key::H }, egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT));
     let page = crate::VersionsPage { more: true, ..two_versions() };
@@ -328,6 +328,14 @@ fn the_chip_and_the_status_bar_name_the_branch_once_there_are_two() {
         let delay = h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay;
         assert!(delay.is_zero() && h.query_by_label("Current work").is_some(), "{theme:?}: drawn before, it asks for a frame");
         h.step();
+        click_id(&mut h, MORE);
+        *host.branch_held.lock().unwrap() = Some(Vec::new());
+        h.state_mut().versions.stale = true;
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        host.branch_held.lock().unwrap().take().unwrap()[0].send(Ok((listed(true), true))).unwrap();
+        h.step();
+        let delay = h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+        assert!(delay.is_zero() && has_id(&h, MENU), "{theme:?}: only the limit changed: a frame, and the menu stays");
         let chip = rect_of(&h, "workspace.header.version");
         assert!(h.query_by_label("main · Current work").is_some() && drawn_in(&h, chip, "main").is_some(), "{theme:?}");
         assert!(painted(&h).iter().any(|t| t.starts_with("On main · ")), "{theme:?}: {:?}", painted(&h));
@@ -383,7 +391,9 @@ fn the_chip_s_list_switches_branch() {
         h.state_mut().versions.branches_cut = true;
         h.run_steps(1);
         let list = rect_of(&h, "workspace.header.version.row.0").expand2(egui::vec2(10.0, 120.0));
-        assert!(drawn_in(&h, list, "Only the first 2 branches are listed.").is_some(), "{theme:?}: a list cut short says so");
+        let said = h.query_by_label("Only the first 2 branches are listed.").is_some()
+            && list.contains(rect_of(&h, "workspace.header.version.cut").center());
+        assert!(said && drawn_in(&h, list, "Only the first 2 branches are listed.").is_some(), "{theme:?}: a list cut short says so");
         h.event(egui::Event::Text("try".into()));
         h.run_steps(2);
         assert!(h.query_by_label("main, Current").is_none() && h.query_by_label(&other(&h)).is_some(), "{theme:?}: narrowed");
