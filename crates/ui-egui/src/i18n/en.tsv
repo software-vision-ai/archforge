@@ -493,6 +493,9 @@ str		Models	Models
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	This branch
+str	branch	Current	Current
+str		Branches can't be merged yet.	Branches can't be merged yet.
+str		The branches couldn't be read.	The branches couldn't be read.
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry

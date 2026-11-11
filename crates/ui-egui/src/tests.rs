@@ -6,6 +6,7 @@ use egui_kittest::Harness;
 use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
+mod branches;
 mod edit_menu;
 mod read_only;
 mod switch_ask;
@@ -368,8 +369,11 @@ struct SavingHost {
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// The version each read of the versions started after.
     version_asks: std::sync::Mutex<Vec<Option<String>>>,
-    /// The branch the project is on.
+    /// The branch the project is on, what a read of the branches answers (none for no branches),
+    /// and how many reads were asked for.
     branch_now: std::sync::Mutex<Option<String>>,
+    branch_list: std::sync::Mutex<Option<Result<Vec<crate::BranchEntry>, String>>>,
+    branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
     /// When each version restored was saved, as its job was told.
@@ -413,6 +417,14 @@ impl crate::ProjectHost for SavingHost {
     /// The branch the test says the project is on.
     fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
         self.branch_now.lock().unwrap().clone()
+    }
+
+    /// Answers at once with what the test has set.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Vec<crate::BranchEntry>, String>> {
+        *self.branch_reads.lock().unwrap() += 1;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new())));
+        rx
     }
 
     /// A switch the test answers through what is kept in `switches`.

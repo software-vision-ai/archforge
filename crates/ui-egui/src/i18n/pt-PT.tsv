@@ -494,6 +494,9 @@ str		Models	Modelos
 str		Versions	Versões
 str		Branches	Ramos
 str		This branch	Este ramo
+str	branch	Current	Atual
+str		Branches can't be merged yet.	Ainda não é possível juntar ramos.
+str		The branches couldn't be read.	Não foi possível ler os ramos.
 str		Working changes	Alterações em curso
 str		History	Histórico
 str		Retry	Tentar novamente
