@@ -14,9 +14,11 @@ An open project fills the window with its workspace.
   **Branches**, above it, lists the project's branches, each with when its latest version was saved;
   it stays folded while the project has only `main`. The branch you are on says *Current*, and a dot
   marks a branch with unsaved changes to the model (conversations don't count). Click another
-  branch, press Enter on it, or choose **Switch** from its **More** menu to switch to it. If your
-  work has unsaved changes, Archforge first asks whether to save a version and switch, or switch
-  and leave them on this branch for when you come back. Branches can't be merged yet.
+  branch, press Enter on it, or choose **Switch** from its **More** menu to switch to it; ↑ and ↓
+  move between branches. If your work has unsaved changes, Archforge first asks whether to save a
+  version and switch, or switch and leave them on this branch for when you come back. Branches
+  can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
+  so under the list.
   Clicking a version in the history opens its details in the centre: its description, when it
   was saved and, where that is recorded, by whom, what changed since the version before and a link
   to that version, which opens its details the same way.

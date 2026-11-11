@@ -496,6 +496,7 @@ str		Branches	Branches
 str		This branch	Cette branche
 str	branch	Current	Actuelle
 str		Branches can't be merged yet.	Les branches ne peuvent pas encore être fusionnées.
+str		Only the first {n} branches are listed.	Seules les {n} premières branches sont listées.
 str		The branches couldn't be read.	Les branches n'ont pas pu être lues.
 str		Working changes	Modifications en cours
 str		History	Historique

@@ -297,11 +297,12 @@ pub trait ProjectHost: Send + Sync {
         Err("this host keeps no branches".to_string())
     }
 
-    /// Reads the branches of the project at `project`, by name, and returns at once, as
-    /// [`ProjectHost::versions`] does. A host that keeps no branches lists none.
-    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Vec<BranchEntry>, String>> {
+    /// Reads the branches of the project at `project`, by name, and whether more exist than were
+    /// listed, and returns at once, as [`ProjectHost::versions`] does. A host that keeps no
+    /// branches lists none.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<BranchEntry>, bool), String>> {
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = tx.send(Ok(Vec::new()));
+        let _ = tx.send(Ok((Vec::new(), false)));
         rx
     }
 

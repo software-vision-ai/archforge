@@ -28,10 +28,12 @@ const PITCH: f32 = 50.0;
 /// A branch's row and the distance between rows.
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
-/// What a list leaves under it: below Branches, Working changes' header and words and
-/// History's header and two rows; below Working changes, History's header and two rows.
+/// What a list leaves under it: below Branches, Working changes' header and words and History's
+/// header and two rows; below Working changes and its words, History's header and a row. The
+/// least a branch list keeps, so a row stays in reach.
 const UNDER_BRANCHES: f32 = 3.0 * HEADER + 2.0 * PITCH;
-const UNDER_CHANGES: f32 = HEADER + 2.0 * PITCH;
+const UNDER_CHANGES: f32 = 8.0 + HEADER + PITCH;
+const LEAST_BRANCHES: f32 = BRANCH + 4.0;
 /// A change's row, its pitch and a group's heading; the list that gets a filter; its share of the column.
 const CHANGE: f32 = 44.0;
 const CHANGE_PITCH: f32 = 46.0;
@@ -55,7 +57,11 @@ pub struct State {
     /// The branches, the read of them on its way, why the last failed, and whether one is asked
     /// for since the versions were last read.
     pub(crate) branches: Option<Vec<BranchEntry>>,
-    branches_reading: Option<Receiver<Result<Vec<BranchEntry>, String>>>,
+    /// More branches exist than were listed.
+    branches_cut: bool,
+    /// The row the arrow keys moved to, which the list keeps in view.
+    branch_keyed: Option<usize>,
+    branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
     branches_asked: bool,
     /// Whether Branches was opened or folded by hand; until then it is open with two or more.
@@ -131,10 +137,10 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         // A version shown moves the session but not what can be shown: a reason holds of a hash.
         if about.as_ref().map(|a| &a.0) != v.about.as_ref().map(|a| &a.0) {
             v.unavailable.clear();
-            (v.load_failed, v.branches, v.branches_open) = (None, None, None);
+            (v.load_failed, v.branches, v.branches_open, v.branches_cut) = (None, None, None, false);
         }
         // A menu's row is by its place in the list, which the next read may change.
-        (v.branches_reading, v.branches_failed, v.branches_asked) = (None, None, false);
+        (v.branches_reading, v.branches_failed, v.branches_asked, v.branch_keyed) = (None, None, false, None);
         if matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
             shell.panels.menu = None;
         }
@@ -324,9 +330,9 @@ fn take_branches(v: &mut State) -> bool {
         _ => return false,
     };
     v.branches_reading = None;
-    let Ok(listed) = answer.map_err(|why| v.branches_failed = Some(why)) else { return false };
+    let Ok((listed, cut)) = answer.map_err(|why| v.branches_failed = Some(why)) else { return false };
     let moved = v.branches.as_ref().is_none_or(|old| old.iter().map(|b| &b.name).ne(listed.iter().map(|b| &b.name)));
-    (v.branches, v.branches_failed) = (Some(listed), None);
+    (v.branches, v.branches_cut, v.branches_failed) = (Some(listed), cut, None);
     moved
 }
 
@@ -445,31 +451,63 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     if header(shell, ui, p, r, y, ("branches", &tr("Branches"), Some(open), count)) {
         shell.versions.branches_open = Some(!open);
     }
-    let mut y = y + HEADER;
+    let y = y + HEADER;
     if !open {
         return y;
     }
-    if let Some(why) = shell.versions.branches_failed.clone() {
-        let ids = ["workspace.versions.branches.failed", "workspace.versions.branches.retry"];
-        y = banner(shell, ui, p, (r, y), ids, (&tr("The branches couldn't be read."), &why), |s| s.versions.branches_asked = false);
-    }
-    // The line scrolls with the rows, so a short column keeps a row in reach and History's header.
-    let words = tr("Branches can't be merged yet.");
-    let g = ux::galley_rows(ui.painter(), &words, types::CAPTION, p.text_muted, Some((r.width() - 40.0).max(1.0)), 2);
+    // A failed read's banner and the lines under the rows scroll with them, so a short column keeps
+    // the list's first row in reach and History's header and a row under it.
+    let failed = shell.versions.branches_failed.clone();
+    let above = if failed.is_some() { 52.0 } else { 0.0 };
+    let merged = tr("Branches can't be merged yet.");
+    let n = listed.len().to_string();
+    let cut = fmt(&tr("Only the first {n} branches are listed."), &[("n", &n)]);
+    let words = if shell.versions.branches_cut { format!("{cut}\n{merged}") } else { merged };
+    let g = ux::galley_rows(ui.painter(), &words, types::CAPTION, p.text_muted, Some((r.width() - 40.0).max(1.0)), 4);
     let (tail, rows) = (g.size().y + 12.0, listed.len() as f32 * BRANCH_PITCH);
-    let height = (rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(BRANCH_PITCH.min(rows)));
+    let least = LEAST_BRANCHES.min(above + rows);
+    let height = (above + rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(least));
     let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
-    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, tail, true, None, &mut shell.versions.branches_scroll);
+    let follow = key_branches(shell, ui, &listed).map(|i| (i, archforge_mof::Uuid((i as u128).to_be_bytes())));
+    let offset = scroll_tree(ui, p, tree, y + above, listed.len(), BRANCH_PITCH, tail, true, follow, &mut shell.versions.branches_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
+    if let Some(why) = failed {
+        let ids = ["workspace.versions.branches.failed", "workspace.versions.branches.retry"];
+        banner(shell, &clip, p, (r, y - offset), ids, (&tr("The branches couldn't be read."), &why), |s| s.versions.branches_asked = false);
+    }
     for (i, b) in listed.iter().enumerate() {
-        let area = Rect::from_min_size(pos2(r.left() + 8.0, y + i as f32 * BRANCH_PITCH - offset), vec2(r.width() - 16.0, BRANCH));
+        let area = Rect::from_min_size(pos2(r.left() + 8.0, y + above + i as f32 * BRANCH_PITCH - offset), vec2(r.width() - 16.0, BRANCH));
         if area.intersects(tree) {
             branch_row(shell, &clip, p, (area, i), b);
         }
     }
-    clip.painter().galley(pos2(r.left() + 20.0, y + rows - offset + 4.0), g, p.text_muted);
+    clip.painter().galley(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g, p.text_muted);
     tree.bottom() + 8.0
+}
+
+/// ↑ and ↓ on a focused branch row move the focus to the next or previous other branch, which the
+/// list then keeps in view; gives the row last moved to.
+fn key_branches(shell: &mut Shell, ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
+    let row = |b: &BranchEntry| widgets::egui_id(&format!("workspace.versions.branch.row.{}", b.name));
+    let live: Vec<usize> = (0..listed.len()).filter(|&i| !listed[i].current).collect();
+    let at = live.iter().position(|&i| ui.memory(|m| m.has_focus(row(&listed[i]))));
+    let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    let next = match at {
+        Some(at) if pressed(egui::Key::ArrowDown) => live.get(at + 1),
+        Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1).and_then(|before| live.get(before)),
+        _ => None,
+    };
+    if let Some(&i) = next {
+        ui.memory_mut(|m| m.request_focus(row(&listed[i])));
+        shell.versions.branch_keyed = Some(i);
+    }
+    // The keys are the list's, not egui's to move focus by place; only a focused row takes this.
+    let arrows = egui::EventFilter { vertical_arrows: true, ..Default::default() };
+    if let Some(&i) = next.or(at.and_then(|at| live.get(at))) {
+        ui.memory_mut(|m| m.set_focus_lock_filter(row(&listed[i]), arrows));
+    }
+    shell.versions.branch_keyed
 }
 
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
@@ -572,6 +610,10 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     let Some(words) = working_words(shell) else { return next };
     let g = ux::galley_rows(ui.painter(), &words, types::SMALL, p.text_secondary, Some((r.width() - 40.0).max(1.0)), 3);
     let h = g.size().y;
+    // Only where History's header and a row still fit under them.
+    if r.bottom() - next - h - 21.0 < UNDER_CHANGES {
+        return next;
+    }
     ui.painter().galley(pos2(r.left() + 20.0, next), g, p.text_secondary);
     next + h + 21.0
 }
@@ -585,6 +627,10 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         let _ = control(shell, ui, "workspace.versions.changes.failed", "status", area, false).on_hover_text(why).accessible_name(&words);
         ux::text(ui.painter(), area.min, &words, types::SMALL, p.danger, Some(area.width()));
         return y + 29.0;
+    }
+    // Nothing, not even the filter, where no change would fit over History's header and a row.
+    if r.bottom() - y - UNDER_CHANGES < CHANGE_PITCH {
+        return y;
     }
     let mut top = y;
     if shell.versions.changes.len() > FILTER_FROM {

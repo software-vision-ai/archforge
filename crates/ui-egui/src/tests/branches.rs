@@ -49,7 +49,7 @@ fn when(h: &Harness<'static, Shell>, date: &str) -> String {
 }
 
 /// With only `main` the section is folded, and opens by hand until another project shows; with two,
-/// or when the read failed, it is open.
+/// or when the read failed, it is open; a list cut short says so.
 #[test]
 fn branches_fold_with_only_main() {
     in_both_appearances(|theme| {
@@ -61,8 +61,12 @@ fn branches_fold_with_only_main() {
         h.state_mut().project.as_mut().unwrap().path = "/tmp/Other.archforge".into();
         versions_answer(&mut h, &host, Ok(two_versions()));
         assert!(!has_id(&h, MAIN), "{theme:?}: folded again in another project");
-        let (h, _host) = branches_read(theme, Ok(listed(true)));
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
         assert!(has_id(&h, MAIN) && has_id(&h, OTHER) && painted_has(&h, "Branches can't be merged yet."), "{theme:?}");
+        assert!(!painted_has(&h, "Only the first"), "{theme:?}");
+        (*host.branch_cut.lock().unwrap(), h.state_mut().versions.stale) = (true, true);
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        assert!(painted_has(&h, "Only the first 2 branches are listed."), "{theme:?}: a list cut short says so");
         let (h, _host) = branches_read(theme, Err("the server stopped".into()));
         assert!(has_id(&h, "workspace.versions.branches.failed"), "{theme:?}: a failed first read opens it to say so");
     });
@@ -103,7 +107,7 @@ fn a_row_says_what_its_branch_holds() {
 }
 
 /// A click, Enter or the menu's Switch on another branch asks to switch to it; the branch in use
-/// has no menu, and a click on it does nothing.
+/// has no menu, and a click on it does nothing; ↑ and ↓ move between rows, out of view too.
 #[test]
 fn a_row_switches_to_its_branch() {
     in_both_appearances(|theme| {
@@ -129,6 +133,14 @@ fn a_row_switches_to_its_branch() {
         h.run_steps(1);
         click_id(&mut h, MENU);
         assert_eq!(switched(&mut h, &host), ["try-cancellations"], "{theme:?}: the menu");
+
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.versions.branch.row.b00")));
+        h.run_steps(1);
+        (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(switched(&mut h, &host), ["b11"], "{theme:?}: the arrow keys reach a row out of view");
     });
 }
 
@@ -143,28 +155,34 @@ fn every_branch_control_has_an_id_of_its_own() {
     });
 }
 
-/// Many branches, or many changes, in the shortest window still leave History's header in the
-/// column, and a branch row in reach, under a failed read too.
+/// In the shortest window and a taller one, many branches or many changes leave History's header
+/// and first row in the column and a branch row in reach; a failed read's banner scrolls with the rows above them.
 #[test]
 fn history_keeps_its_room_under_many_branches_or_changes() {
-    let in_column = |h: &mut Harness<'static, Shell>| {
-        h.set_size(egui::vec2(1600.0, 400.0));
+    const B00: &str = "workspace.versions.branch.row.b00";
+    let in_column = |h: &mut Harness<'static, Shell>, height: f32| {
+        h.set_size(egui::vec2(1600.0, height));
         h.run_steps(2);
-        rect_of(h, "workspace.versions.history").bottom() <= 400.0 - 40.0
+        has_id(h, "workspace.versions.row.aa") && rect_of(h, "workspace.versions.row.aa").bottom() <= height - 40.0
     };
     in_both_appearances(|theme| {
         let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
-        assert!(in_column(&mut h) && has_id(&h, "workspace.versions.branch.row.b00"), "{theme:?}: under many branches");
+        assert!(in_column(&mut h, 400.0) && has_id(&h, B00), "{theme:?}: under many branches");
         (*host.branch_list.lock().unwrap(), h.state_mut().versions.stale) = (Some(Err("the server stopped".into())), true);
         versions_answer(&mut h, &host, Ok(two_versions()));
-        click_id(&mut h, "workspace.versions.branch.row.b00");
+        assert!(in_column(&mut h, 400.0) && has_id(&h, "workspace.versions.branches.retry"), "{theme:?}: and a failed read");
+        h.event(egui::Event::PointerMoved(rect_of(&h, "workspace.versions.branches.retry").center()));
+        let (unit, phase, source) = (egui::MouseWheelUnit::Point, egui::TouchPhase::Move, egui::MouseWheelSource::Wheel);
+        h.event(egui::Event::MouseWheel { unit, delta: egui::vec2(0.0, -60.0), modifiers: egui::Modifiers::NONE, phase, source });
+        h.run_steps(20);
+        click_id(&mut h, B00);
         h.run_steps(4);
-        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: and under a failed read");
+        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "b00"), "{theme:?}: the rows scroll under it");
         let (mut h, host) = branches_read(theme, Ok(listed(true)));
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
         (0..30).for_each(|i| add_schema(&mut h, &format!("s{i}")));
         compared(&mut h);
-        assert!(h.state().versions.working == 30 && in_column(&mut h), "{theme:?}: under many changes");
+        assert!(h.state().versions.working == 30 && in_column(&mut h, 400.0) && in_column(&mut h, 560.0), "{theme:?}: under many changes");
     });
 }

@@ -986,22 +986,10 @@ impl ProjectHost for Projects {
         self.on_a_reader(project, move |reader| reader.versions(after.as_deref(), limit).map(page_of).map_err(|e| e.to_string()))
     }
 
-    /// The project's branches, each with when its latest version was saved, read on a thread of
-    /// its own ([`Projects::on_a_reader`]). A name that can't be used has no versions to read.
-    fn branches(&self, project: &Path) -> Receiver<Result<Vec<BranchEntry>, String>> {
-        self.on_a_reader(project, |reader| {
-            let listed = reader.branches(MAX_BRANCHES).map_err(|e| e.to_string())?.listed;
-            let entry = |b: archforge_project::ListedBranch| {
-                let latest = match &b.usable {
-                    Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
-                    Err(_) => None,
-                };
-                // Changes that can't be looked at may be the model's.
-                let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
-                Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
-            };
-            listed.into_iter().map(entry).collect()
-        })
+    /// The project's first [`MAX_BRANCHES`] branches, read on a thread of its own
+    /// ([`Projects::on_a_reader`]); see [`branch_entries`].
+    fn branches(&self, project: &Path) -> Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        self.on_a_reader(project, |reader| branch_entries(reader, MAX_BRANCHES))
     }
 
     /// The model a version of the project holds, read on a thread of its own ([`Projects::on_a_reader`]).
@@ -2319,6 +2307,22 @@ fn version_read_error(e: archforge_project::Error) -> VersionReadError {
         archforge_project::Error::VersionShape { .. } => VersionReadError::Shape,
         other => VersionReadError::Failed(other.to_string()),
     }
+}
+
+/// The branches `reader` lists, at most `max`, each with when its latest version was saved, and
+/// whether more exist. A name that can't be used has no versions to read.
+fn branch_entries(reader: &VersionReader, max: usize) -> Result<(Vec<BranchEntry>, bool), String> {
+    let found = reader.branches(max).map_err(|e| e.to_string())?;
+    let entry = |b: archforge_project::ListedBranch| {
+        let latest = match &b.usable {
+            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
+            Err(_) => None,
+        };
+        // Changes that can't be looked at may be the model's.
+        let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
+        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
+    };
+    Ok((found.listed.into_iter().map(entry).collect::<Result<_, String>>()?, found.cut))
 }
 
 /// A page of versions in the shell's terms.
@@ -5037,7 +5041,8 @@ mod tests {
     }
 
     /// Each branch comes with when its own latest version was saved, a later chat commit being no
-    /// version, and the one in use is marked; a name outside the safe set has no versions read.
+    /// version, and the one in use is marked; a name outside the safe set has no versions read, and
+    /// a list cut short says so.
     #[test]
     fn each_branch_is_listed_with_its_latest_version() {
         let (sandbox, path) = branched();
@@ -5049,7 +5054,10 @@ mod tests {
         commit("A Person <a@person>", "2030-01-02T03:04:05");
         commit(archforge_project::CHAT_AUTHOR, "2031-01-01T00:00:00");
         on_it("main", "CALL DOLT_BRANCH('odd+name')");
-        let listed = host.branches(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let (listed, cut) = host.branches(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let reader = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
+        let (two, two_cut) = branch_entries(&reader, 2).unwrap();
+        assert!(!cut && two.len() == 2 && two_cut, "only a list cut short says so");
         let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].date.clone();
         let seen: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.current, b.latest.as_deref())).collect();
         let main = ("main", true, Some(main_latest.as_str()));

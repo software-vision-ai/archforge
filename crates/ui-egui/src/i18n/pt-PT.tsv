@@ -496,6 +496,7 @@ str		Branches	Ramos
 str		This branch	Este ramo
 str	branch	Current	Atual
 str		Branches can't be merged yet.	Ainda não é possível juntar ramos.
+str		Only the first {n} branches are listed.	Apenas os primeiros {n} ramos são apresentados.
 str		The branches couldn't be read.	Não foi possível ler os ramos.
 str		Working changes	Alterações em curso
 str		History	Histórico

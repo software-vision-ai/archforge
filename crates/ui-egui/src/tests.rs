@@ -370,9 +370,10 @@ struct SavingHost {
     /// The version each read of the versions started after.
     version_asks: std::sync::Mutex<Vec<Option<String>>>,
     /// The branch the project is on, what a read of the branches answers (none for no branches),
-    /// and how many reads were asked for.
+    /// whether it says more exist, and how many reads were asked for.
     branch_now: std::sync::Mutex<Option<String>>,
     branch_list: std::sync::Mutex<Option<Result<Vec<crate::BranchEntry>, String>>>,
+    branch_cut: std::sync::Mutex<bool>,
     branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
@@ -420,10 +421,11 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Answers at once with what the test has set.
-    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<Vec<crate::BranchEntry>, String>> {
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<crate::BranchEntry>, bool), String>> {
         *self.branch_reads.lock().unwrap() += 1;
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = tx.send(self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new())));
+        let listed = self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new()));
+        let _ = tx.send(listed.map(|l| (l, *self.branch_cut.lock().unwrap())));
         rx
     }
 
