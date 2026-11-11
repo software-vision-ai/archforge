@@ -13,6 +13,7 @@ use crate::i18n::{fmt, tr, trn};
 use crate::model_words::kind_label;
 use crate::settings::{control, focus_ring};
 use crate::ux::{self, Palette, types};
+use crate::widgets::egui_id;
 
 /// The room above the card, its inset, the middle of its heading and of its first row, and the distance between rows.
 const ABOVE: f32 = 14.0;
@@ -52,9 +53,9 @@ pub(super) fn height(count: usize) -> f32 {
 }
 
 /// Draws the card of `links` in `area`, its room above included. Only rows in view, a row past each
-/// end of it, the first and the link that has the keys are worded and drawn, so a long list costs a
-/// frame only what shows while Tab and Shift+Tab still find the next link, from wherever the cards
-/// are scrolled, and bring it into view, and Enter still opens a link wheeled out of view.
+/// end of it, the first, and the link that has the keys with its neighbours are worded and drawn, so a
+/// long list costs a frame only what shows while Tab and Shift+Tab still find the next link, from
+/// wherever the cards are scrolled, and bring it into view, and Enter still opens a link wheeled out of view.
 pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, area: Rect, links: &[Link]) {
     if links.is_empty() {
         return;
@@ -67,15 +68,15 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
     let head = ux::text_mid(&paint, left, card.top() + HEAD_MID, &heading, types::SMALL, p.text_secondary, Some((right - left).max(0.0)));
     let _ = control(shell, clip, "workspace.change-view.related", "status", head, false).accessible_name(&heading);
     let (room, view, keys) = ((right - left - BETWEEN).max(0.0), clip.clip_rect(), clip.ctx().memory(|m| m.focused()));
+    // Ids are made only while something has the keys, to keep the link that has them and its neighbours.
+    let keyed = keys.and_then(|k| links.iter().position(|(at, _)| shell.versions.changes.get(*at).is_some_and(|d| k == egui_id(&link_id(d.id)))));
     for (i, (at, kind)) in links.iter().enumerate() {
         let mid = card.top() + FIRST_MID + i as f32 * ROW;
         let line = Rect::from_min_max(pos2(left, mid - ROW / 2.0), pos2(right, mid + ROW / 2.0));
-        let Some(found) = shell.versions.changes.get(*at) else { continue };
-        // A row's id is made only while something has the keys, to keep the link that has them.
-        if !(i == 0 || line.intersects(view.expand2(vec2(0.0, ROW))) || keys.is_some_and(|k| k == crate::widgets::egui_id(&link_id(found.id)))) {
+        if !(i == 0 || line.intersects(view.expand2(vec2(0.0, ROW))) || keyed.is_some_and(|k| i.abs_diff(k) <= 1)) {
             continue;
         }
-        let row = found.clone();
+        let Some(row) = shell.versions.changes.get(*at).cloned() else { continue };
         let name = row.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| kind_label(universe, row.class));
         let (said, go) = (sentence(*kind, &name), fmt(&tr("Go to {name}"), &[("name", &name)]));
         let g = ux::galley(&paint, &go, types::UI_STRONG, p.accent, Some(LINK.min(room / 2.0)));

@@ -1011,7 +1011,7 @@ fn related_rows_are_drawn_only_in_view() {
 
 /// The keys reach a link out of view and bring it in: Tab from the way back finds the first after
 /// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, the wheel may move away
-/// from it again, and Enter still opens a link wheeled out of view.
+/// from it again and the keys still go on to its neighbours, and Enter still opens a link wheeled out of view.
 #[test]
 fn the_keys_reach_and_open_a_related_link_out_of_view() {
     use egui::Key::{Enter, Tab};
@@ -1038,6 +1038,15 @@ fn the_keys_reach_and_open_a_related_link_out_of_view() {
         }
         wheel(h, &links[0], true);
         assert!(focused_on(h, &links[0]) && !has_id(h, &links[0]), "the wheel moves away from the link that keeps the keys");
+        for (shift, to) in [(false, 1), (false, 2), (true, 1)] {
+            if shift {
+                wheel(h, &links[2], true);
+            }
+            h.key_press_modifiers(if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE }, Tab);
+            h.run_steps(3);
+            assert!(focused_on(h, &links[to]) && has_id(h, &links[to]), "the link next to one wheeled away, {to}");
+        }
+        wheel(h, &links[1], true);
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[60])));
         h.run_steps(2);
         wheel(h, &links[60], false);
