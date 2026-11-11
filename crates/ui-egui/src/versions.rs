@@ -28,6 +28,10 @@ const PITCH: f32 = 50.0;
 /// A branch's row and the distance between rows.
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
+/// What a list leaves under it: below Branches, the line, Working changes' header and words and
+/// History's header and two rows; below Working changes, History's header and two rows.
+const UNDER_BRANCHES: f32 = 3.0 * HEADER + 2.0 * PITCH;
+const UNDER_CHANGES: f32 = HEADER + 2.0 * PITCH;
 /// A change's row, its pitch and a group's heading; the list that gets a filter; its share of the column.
 const CHANGE: f32 = 44.0;
 const CHANGE_PITCH: f32 = 46.0;
@@ -163,7 +167,10 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         None => {}
     }
     take_more(v);
-    take_branches(v);
+    // A row of an open menu may now hold another branch.
+    if take_branches(v) && matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
+        shell.panels.menu = None;
+    }
     if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
     }
@@ -308,18 +315,19 @@ fn take_more(v: &mut State) {
     }
 }
 
-/// Takes the branches when they have come; a failure keeps those shown and says why.
-fn take_branches(v: &mut State) {
+/// Takes the branches when they have come; a failure keeps those shown and says why. Gives whether
+/// the list that came holds other names, or them in another order, than the one it replaced.
+fn take_branches(v: &mut State) -> bool {
     let answer = match v.branches_reading.as_ref().map(Receiver::try_recv) {
         Some(Ok(answer)) => answer,
         Some(Err(TryRecvError::Disconnected)) => Err("the read stopped without an answer".to_string()),
-        _ => return,
+        _ => return false,
     };
     v.branches_reading = None;
-    match answer {
-        Ok(listed) => (v.branches, v.branches_failed) = (Some(listed), None),
-        Err(why) => v.branches_failed = Some(why),
-    }
+    let Ok(listed) = answer.map_err(|why| v.branches_failed = Some(why)) else { return false };
+    let moved = v.branches.as_ref().is_none_or(|old| old.iter().map(|b| &b.name).ne(listed.iter().map(|b| &b.name)));
+    (v.branches, v.branches_failed) = (Some(listed), None);
+    moved
 }
 
 /// Asks for the page after the versions listed; its button is off while a read is on its way.
@@ -431,7 +439,8 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     if let Some(now) = host.and_then(|(host, (path, _))| host.current_branch(path)) {
         listed.iter_mut().for_each(|b| b.current = b.name.eq_ignore_ascii_case(&now));
     }
-    let open = shell.versions.branches_open.unwrap_or(listed.len() > 1);
+    // A failed read opens it, so that it says so.
+    let open = shell.versions.branches_open.unwrap_or(listed.len() > 1 || shell.versions.branches_failed.is_some());
     let count = (!listed.is_empty()).then(|| listed.len().to_string());
     if header(shell, ui, p, r, y, ("branches", &tr("Branches"), Some(open), count)) {
         shell.versions.branches_open = Some(!open);
@@ -441,14 +450,12 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         return y;
     }
     if let Some(why) = shell.versions.branches_failed.clone() {
-        let words = tr("The branches couldn't be read.");
-        let area = Rect::from_min_size(pos2(r.left() + 20.0, y), vec2((r.width() - 40.0).max(0.0), 21.0));
-        let _ = control(shell, ui, "workspace.versions.branches.failed", "status", area, false).on_hover_text(why).accessible_name(&words);
-        ux::text(ui.painter(), area.min, &words, types::SMALL, p.danger, Some(area.width()));
-        y += 29.0;
+        let ids = ["workspace.versions.branches.failed", "workspace.versions.branches.retry"];
+        y = banner(shell, ui, p, (r, y), ids, (&tr("The branches couldn't be read."), &why), |s| s.versions.branches_asked = false);
     }
     let content = listed.len() as f32 * BRANCH_PITCH;
-    let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, (content + 8.0).min(r.height() * 0.3)));
+    let height = (content + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(0.0));
+    let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
     let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, 0.0, true, None, &mut shell.versions.branches_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -474,8 +481,9 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     let date = b.latest.as_deref().map(|d| when(d, crate::chat_panel::clock(shell)));
     let current = tr_ctx("branch", "Current");
     let said = [Some(b.shown.clone()), b.current.then(|| current.clone()), unsaved.then(|| tr("Unsaved changes")), date.clone()];
-    let id = format!("workspace.versions.branch.{}", b.name);
-    let resp = control(shell, ui, &id, "row", area, !b.current);
+    // The name last, as a name may hold a dot.
+    let id = |part: &str| format!("workspace.versions.branch.{part}.{}", b.name);
+    let resp = control(shell, ui, &id("row"), "row", area, !b.current);
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
     let menu = crate::panels::Menu::Branch(i);
     let paint = ui.painter();
@@ -510,7 +518,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     }
     let more = Rect::from_center_size(pos2(area.right() - 18.0, mid), Vec2::splat(28.0));
     let open = shell.panels.menu == Some(menu);
-    let more_resp = control(shell, ui, &format!("{id}.more"), "button", more, true).on_hover_text(tr("More"));
+    let more_resp = control(shell, ui, &id("more"), "button", more, true).on_hover_text(tr("More"));
     if more_resp.hovered() || open {
         ui.painter().rect_filled(more, 6.0, p.page);
     }
@@ -520,7 +528,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     }
     // Rename and Delete join Switch with AR-292.
     let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
-    if shell.panels.menu == Some(menu) && crate::panels::menu(shell, ui, p, anchor, &format!("{id}.menu"), &[tr("Switch")]) == Some(0) {
+    if shell.panels.menu == Some(menu) && crate::panels::menu(shell, ui, p, anchor, &id("menu"), &[tr("Switch")]) == Some(0) {
         switch_to(shell, b.name.clone());
     }
 }
@@ -589,7 +597,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     let group = |area: Area| shell.versions.changes.iter().filter(|d| d.area == area).filter(holds).cloned().collect::<Vec<_>>();
     let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram))];
     let content: f32 = groups.iter().filter(|(_, g)| !g.is_empty()).map(|(_, g)| GROUP + g.len() as f32 * CHANGE_PITCH).sum();
-    let height = (content + 8.0).min(r.height() * MOST_OF_COLUMN);
+    let height = (content + 8.0).min(r.height() * MOST_OF_COLUMN).min((r.bottom() - top - UNDER_CHANGES).max(0.0));
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
     let offset = scroll_tree(ui, p, tree, top, content as usize, 1.0, 0.0, true, None, &mut shell.versions.changes_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
