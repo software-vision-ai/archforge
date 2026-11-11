@@ -279,6 +279,8 @@ str		Saving…	Wird gesichert…
 str		Opening…	Wird geöffnet…
 str		Saved	Gesichert
 str		Unsaved changes · {chord} saves	Ungesicherte Änderungen · {chord} sichert
+str		On {branch} · {status}	Auf {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat nutzt das Modell
 str		Agent access off	Agentenzugriff aus
 # Chat-Bereich
@@ -464,6 +466,7 @@ str		The project stayed on its branch because it changed or was busy.	Das Projek
 str		Your latest changes could not be written, so the project stayed on its branch.	Ihre letzten Änderungen konnten nicht geschrieben werden, daher ist das Projekt auf seinem Zweig geblieben.
 str		The project stayed on its branch: {why}	Das Projekt ist auf seinem Zweig geblieben: {why}
 str		Switch to {branch}?	Zu {branch} wechseln?
+str		Switch branch	Zweig wechseln
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} hat nicht gespeicherte Änderungen. Sie bleiben auf {branch} und sind da, wenn Sie zurückkommen. Frühere Schritte können Sie dann nicht mehr rückgängig machen.
 str		Save version and switch	Version speichern und wechseln
 str		Switch	Wechseln
@@ -518,6 +521,7 @@ str		One line, at most 200 characters. It stays in the history.	Eine Zeile, höc
 plural		{n} model element	{n} Modellelement|{n} Modellelemente
 str		Filter changes…	Änderungen filtern…
 str		Filter versions…	Versionen filtern…
+str		Filter branches…	Zweige filtern…
 str		Model elements	Modellelemente
 str		Unnamed	Unbenannt
 str		Added	Hinzugefügt

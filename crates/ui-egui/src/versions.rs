@@ -49,7 +49,7 @@ const SKELETON_ROWS: usize = 6;
 #[derive(Default)]
 pub struct State {
     /// The project and session the panel is about.
-    about: Option<(PathBuf, u64)>,
+    pub(crate) about: Option<(PathBuf, u64)>,
     /// Whether a read has started for them.
     asked: bool,
     pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
@@ -58,7 +58,7 @@ pub struct State {
     /// for since the versions were last read.
     pub(crate) branches: Option<Vec<BranchEntry>>,
     /// More branches exist than were listed.
-    branches_cut: bool,
+    pub(crate) branches_cut: bool,
     branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
     branches_asked: bool,
@@ -171,9 +171,14 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         None => {}
     }
     take_more(v);
+    let waiting = v.branches_reading.is_some();
     // A row of an open menu may now hold another branch.
     if take_branches(v) && matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
         shell.panels.menu = None;
+    }
+    // The chip and its list, drawn before, may now say another branch, date or limit.
+    if waiting && v.branches_reading.is_none() {
+        ctx.request_repaint();
     }
     if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
@@ -487,7 +492,9 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
             branch_row(shell, &clip, p, (area, i), b);
         }
     }
-    clip.painter().galley(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g, p.text_muted);
+    let note = Rect::from_min_size(pos2(r.left() + 20.0, y + above + rows - offset + 4.0), g.size());
+    let _ = control(shell, &clip, "workspace.versions.branches.note", "status", note, false).accessible_name(words.as_str());
+    clip.painter().galley(note.min, g, p.text_muted);
     tree.bottom() + 8.0
 }
 
@@ -584,12 +591,14 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     }
 }
 
-/// Asks to go to the branch stored as `name`; a refusal says why over the canvas.
-fn switch_to(shell: &mut Shell, name: String) {
+/// Asks to go to the branch stored as `name`; a refusal says why over the canvas. Gives whether it went ahead.
+pub(crate) fn switch_to(shell: &mut Shell, name: String) -> bool {
     if let Err(why) = shell.ask_switch_branch(name) {
         let words = crate::version_chip::refused_words(shell, why);
         shell.canvas.say_refused_step(words);
+        return false;
     }
+    true
 }
 
 /// Working changes from `y`: its header and what can be said so far. Gives where the next

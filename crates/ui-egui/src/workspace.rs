@@ -538,6 +538,11 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         }
         Some(_) => (p.green, tr("Saved")),
     };
+    // Which line of work it is about, once the project has a second branch.
+    let text = match crate::version_chip::branch_name(shell).filter(|_| shell.session.is_some()) {
+        Some(branch) => crate::i18n::fmt(&tr("On {branch} · {status}"), &[("branch", &branch), ("status", &text)]),
+        None => text,
+    };
     // Beside the status, not in its place: it stays true however the status changes.
     let detail = detail.or_else(|| shell.project.as_ref().and_then(|o| o.notice.as_ref()).map(crate::BranchNotice::words));
     paint.circle_filled(pos2(r.left() + 24.0, r.center().y), 3.0, dot);

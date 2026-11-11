@@ -279,6 +279,8 @@ str		Saving…	保存中…
 str		Opening…	開いています…
 str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
+str		On {branch} · {status}	{branch} 上 · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
 # チャットパネル
@@ -464,6 +466,7 @@ str		The project stayed on its branch because it changed or was busy.	プロジ�
 str		Your latest changes could not be written, so the project stayed on its branch.	最新の変更を書き込めなかったため、プロジェクトは現在のブランチのままです。
 str		The project stayed on its branch: {why}	プロジェクトは現在のブランチのままです: {why}
 str		Switch to {branch}?	{branch} に切り替えますか？
+str		Switch branch	ブランチを切り替え
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} には未保存の変更があります。変更は {branch} に残り、戻ったときにそのままあります。以前の操作は元に戻せなくなります。
 str		Save version and switch	バージョンを保存して切り替え
 str		Switch	切り替え
@@ -518,6 +521,7 @@ str		One line, at most 200 characters. It stays in the history.	1行、200文字
 plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
 str		Filter versions…	バージョンを絞り込む…
+str		Filter branches…	ブランチを絞り込む…
 str		Model elements	モデル要素
 str		Unnamed	名前なし
 str		Added	追加

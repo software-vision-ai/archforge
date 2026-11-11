@@ -782,9 +782,12 @@ fn every_catalogue_in_the_folder_is_registered() {
     assert_eq!((names.len(), codes.len()), (LANGUAGES.len(), LANGUAGES.len()), "each language has a code and a name of its own");
 }
 
+/// A translation may put the placeholders in another order, and each is filled once.
 #[test]
 fn placeholders_can_be_reordered() {
     assert_eq!(fmt("{b} before {a}", &[("a", "1"), ("b", "2")]), "2 before 1");
+    // A value is not read for placeholders, and what names no argument stays.
+    assert_eq!(fmt("On {branch} · {status} {x} {", &[("branch", "fix {status}"), ("status", "Saved")]), "On fix {status} · Saved {x} {");
 }
 
 #[test]
