@@ -49,6 +49,9 @@ An open project fills the window with its workspace.
   other members and owner under headings, marked the same way when one came, went or changed; a
   long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
   The project's name at the top closes it.
+  Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
+  way: **Before** and **After** side by side, each drawn as it was on its side and both at one
+  zoom, so a box that stayed is in the same place on both. A side the diagram isn't on says so.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

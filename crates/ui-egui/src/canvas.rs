@@ -339,7 +339,8 @@ fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
     store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
-fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+/// The live objects the list `prop` of `o` refers to.
+pub(crate) fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
     store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|r| store.is_alive(*r)).collect()
 }
 
@@ -440,7 +441,7 @@ pub(crate) fn zoom_by(state: &mut State, factor: f32, at: Vec2) {
 }
 
 /// Fits the whole diagram into the canvas, or shows an empty one at 100 % from its top left.
-fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
+pub(crate) fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
     match bounds {
         Some(b) if b.width() > 0.0 && b.height() > 0.0 => {
             let room = (size - Vec2::splat(2.0 * FIT_MARGIN)).max(Vec2::splat(1.0));
