@@ -531,14 +531,24 @@ str		{name}, selected	{name}，已选中
 str		Compared with the version of {when}	与 {when} 的版本比较
 str		There is no version to compare with yet.	还没有可比较的版本。
 str		This element couldn't be compared.	无法比较此元素。
+str		Attributes	属性
+str		Operations	操作
+str		Literals	字面量
+str		Members	成员
+str		Ownership	所属
+str		Not available on this side	此侧不可用
+str		Relationships aren't shown here yet.	此处尚不显示关系。
+str		Only what these cards don't show changed	只有这些卡片未显示的内容发生了变化
+str		The cards show the same on both sides.	两侧卡片显示的内容相同。
+str		The owner changed	所属已更改
+str		The owner changed.	所属已更改。
+plural		{n} member changed	{n} 个成员已更改
+str		{values} · {members}	{values} · {members}
 str		This element was added	此元素已添加
 str		It is only on the After side, so there is nothing to compare.	它仅存在于“之后”一侧，因此无可比较。
 str		This element was removed	此元素已移除
 str		It is only on the Before side, so there is nothing to compare.	它仅存在于“之前”一侧，因此无可比较。
 plural		{n} value changed	{n} 个值已更改
-str		Members, relationships and ownership aren't shown here yet.	成员、关系和所有权暂未在此显示。
-str		Only members, relationships or ownership changed	仅成员、关系或所有权发生了更改
-str		The cards show the same on both sides, and these changes aren't shown here yet.	两侧卡片显示的内容相同，这些更改暂未在此显示。
 str		The cards show no difference	卡片未显示任何差异
 str		The name changed from {from} to {to}.	名称从 {from} 变为 {to}。
 str		The kind changed from {from} to {to}.	种类从 {from} 变为 {to}。

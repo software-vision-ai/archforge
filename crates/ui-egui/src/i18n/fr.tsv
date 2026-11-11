@@ -531,14 +531,24 @@ str		{name}, selected	{name}, sélectionnée
 str		Compared with the version of {when}	Comparé à la version du {when}
 str		There is no version to compare with yet.	Il n’y a pas encore de version à comparer.
 str		This element couldn't be compared.	Impossible de comparer cet élément.
+str		Attributes	Attributs
+str		Operations	Opérations
+str		Literals	Littéraux
+str		Members	Membres
+str		Ownership	Appartenance
+str		Not available on this side	Indisponible de ce côté
+str		Relationships aren't shown here yet.	Les relations ne sont pas encore affichées ici.
+str		Only what these cards don't show changed	Seul ce que ces cartes n’affichent pas a changé
+str		The cards show the same on both sides.	Les cartes affichent la même chose des deux côtés.
+str		The owner changed	Le propriétaire a changé
+str		The owner changed.	Le propriétaire a changé.
+plural		{n} member changed	{n} membre modifié|{n} membres modifiés
+str		{values} · {members}	{values} · {members}
 str		This element was added	Cet élément a été ajouté
 str		It is only on the After side, so there is nothing to compare.	Il ne se trouve que du côté Après : il n’y a donc rien à comparer.
 str		This element was removed	Cet élément a été supprimé
 str		It is only on the Before side, so there is nothing to compare.	Il ne se trouve que du côté Avant : il n’y a donc rien à comparer.
 plural		{n} value changed	{n} valeur modifiée|{n} valeurs modifiées
-str		Members, relationships and ownership aren't shown here yet.	Les membres, les relations et l’appartenance ne sont pas encore affichés ici.
-str		Only members, relationships or ownership changed	Seuls des membres, des relations ou l’appartenance ont changé
-str		The cards show the same on both sides, and these changes aren't shown here yet.	Les cartes affichent la même chose des deux côtés, et ces modifications ne sont pas encore affichées ici.
 str		The cards show no difference	Les cartes n’affichent aucune différence
 str		The name changed from {from} to {to}.	Le nom a changé de {from} à {to}.
 str		The kind changed from {from} to {to}.	Le genre a changé de {from} à {to}.

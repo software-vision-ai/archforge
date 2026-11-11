@@ -127,6 +127,8 @@ pub struct CardList {
 pub struct CardLists {
     pub before: Vec<CardList>,
     pub after: Vec<CardList>,
+    /// How many members differ, counted once when read, so a summary doesn't walk the lists each frame.
+    pub member_changes: usize,
 }
 
 /// Why two states could not be classified. There is never a partial answer.
@@ -210,7 +212,16 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
         marked(&mut before_lists, &after_lists, ChangeKind::Removed);
         marked(&mut after_lists, &before_lists, ChangeKind::Added);
     }
-    let lists = Arc::new(CardLists { before: before_lists, after: after_lists });
+    let marks = |of: &[CardList], only: Option<ChangeKind>| {
+        of.iter()
+            .filter(|l| l.kind != ListKind::Ownership)
+            .flat_map(|l| &l.rows)
+            .filter(|r| r.change.is_some() && (only.is_none() || r.change == only))
+            .count()
+    };
+    // A changed row is on both sides, so it counts once, on the before side.
+    let member_changes = marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added));
+    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, member_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
 }
 
@@ -237,16 +248,18 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
 
 /// Marks each row of `side` against the rows of `other`: `gone` when `other` has no such row,
 /// Changed when it says something else. A row is one member by its id; a
-/// card's owner is one row whatever the owner's id, so a move reads as a changed owner.
+/// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
 fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind) {
     let key = |kind: ListKind, row: &ListRow| (kind, if kind == ListKind::Ownership { None } else { Some(row.id) });
-    let differ = |a: &ListRow, b: &ListRow| (a.id, a.class, &a.name) != (b.id, b.class, &b.name);
+    let differ = |kind: ListKind, a: &ListRow, b: &ListRow| {
+        if kind == ListKind::Ownership { a.id != b.id } else { (a.id, a.class, &a.name) != (b.id, b.class, &b.name) }
+    };
     let held: HashMap<_, _> = other.iter().flat_map(|l| l.rows.iter().map(move |r| (key(l.kind, r), r))).collect();
     for list in side {
         for row in &mut list.rows {
             row.change = match held.get(&key(list.kind, row)) {
                 None => Some(gone),
-                Some(theirs) if differ(theirs, row) => Some(ChangeKind::Changed),
+                Some(theirs) if differ(list.kind, theirs, row) => Some(ChangeKind::Changed),
                 Some(_) => None,
             };
         }

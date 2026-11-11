@@ -41,9 +41,11 @@ An open project fills the window with its workspace.
   **After** (current work), give the element's kind, name and values. A name or value that differs
   is marked with − on the Before card and + on the After card as well as a tint. A side the
   element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
-  that differ and says the first three in words, or that the element was added or removed. Its
-  members, relationships and ownership aren't on the cards yet, and the summary says so, as when
-  only those changed. The project's name at the top closes it.
+  and members that differ and says the first three values in words, or that the element was added
+  or removed. Below the values the cards group the element's attributes, operations, literals,
+  other members and owner under headings, marked the same way when one came, went or changed; a
+  long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
+  The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
