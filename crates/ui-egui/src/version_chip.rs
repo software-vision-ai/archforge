@@ -55,12 +55,12 @@ pub struct Steps {
     /// The last read failed; what was read before it stays.
     failed: bool,
     /// The step to take when the read arrives.
-    waiting: Option<Waiting>,
+    pub(crate) waiting: Option<Waiting>,
 }
 
 /// A step waiting for a read: older when true, and the version it goes from, none for current work.
 /// Once the person has moved from there, it is no longer the step they asked for, even if they
-/// come back: [`view`] ends it.
+/// come back: any move to a version ends it ([`Shell::move_to_version`]).
 type Waiting = (bool, Option<String>);
 
 /// A row of the list: the version it views, none for current work; its name; the words beside it.
@@ -272,9 +272,6 @@ fn step(shell: &mut Shell, older: bool) {
 /// Chat's question counts as not on its way.
 pub(crate) fn view(shell: &mut Shell, hash: String, label: String) -> bool {
     let done = shell.move_to_version(&hash, Some(label));
-    if done.is_ok() {
-        shell.version_list.steps.waiting = None;
-    }
     let words = done.err().and_then(|why| refused_words(shell, why));
     shell.canvas.say_refused_step(words);
     done.is_ok()

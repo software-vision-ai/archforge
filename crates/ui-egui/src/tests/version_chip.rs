@@ -2205,6 +2205,24 @@ fn the_load_banner_retries_the_same_version() {
     });
 }
 
+/// Retry is a move too: a step waiting for a read is over, even when the retry fails and leaves the
+/// person where they asked the step from.
+#[test]
+fn a_retry_ends_a_step_waiting_for_a_read() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = load_failed(theme, true);
+        let page = |hash: &str| crate::VersionsPage { versions: vec![version_row(hash, None, (None, false), "2026-11-08T15:30:00Z")], more: true };
+        answer(&mut h, &host, Ok(page("a")));
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(last_asked(&host).as_deref(), Some("a"), "{theme:?}: the step reads on");
+        click_id(&mut h, LOAD_RETRY);
+        answer_read(&mut h, &host, Err("again".to_string().into()));
+        assert_eq!((h.state().viewing(), h.state().loads.wanted_commit()), (Some("a"), None), "{theme:?}: back where the step was asked");
+        answer(&mut h, &host, Ok(page("c")));
+        assert!(h.state().loads.wanted_commit().is_none() && host.reads.lock().unwrap().is_empty(), "{theme:?}: no step taken");
+    });
+}
+
 /// A refused Retry leaves the banner up and says why as a step refused.
 #[test]
 fn a_refused_retry_leaves_the_banner() {
