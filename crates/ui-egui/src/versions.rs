@@ -49,6 +49,8 @@ pub struct State {
     failed: Option<String>,
     /// A save or a restore may have made a version since the read.
     pub(crate) stale: bool,
+    /// A branch switch started from the question, until it arrives or says why not.
+    pub(crate) switching: Option<crate::switch_ask::Switching>,
     /// A read begun for that has yet to succeed, so the first row may not be the last version.
     last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.

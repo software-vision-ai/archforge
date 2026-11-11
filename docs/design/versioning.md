@@ -614,7 +614,7 @@ Checks against what exists:
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
 | Stored branch can't be opened on reopening | Status bar | Opens `main` and gives the reason |
-| Switch failed | Branch list | The reason; current branch and work unchanged |
+| Switch failed | Dialog over the window (frame V5.9's words) | The reason, then that the project stayed on its branch and what became of the work: unchanged, or saved by **Save version and switch** before the switch failed |
 | Delete refused | Dialog | The reason; the branch stays |
 
 ---
