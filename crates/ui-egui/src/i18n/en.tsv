@@ -279,6 +279,7 @@ str		Opening…	Opening…
 str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
 str		On {branch} · {status}	On {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
 # Chat panel

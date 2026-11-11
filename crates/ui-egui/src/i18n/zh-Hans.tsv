@@ -280,6 +280,7 @@ str		Opening…	正在打开…
 str		Saved	已保存
 str		Unsaved changes · {chord} saves	有未保存的更改 · {chord} 保存
 str		On {branch} · {status}	在 {branch} 上 · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
 # 聊天面板

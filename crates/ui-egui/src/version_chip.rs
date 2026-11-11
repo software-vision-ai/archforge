@@ -72,14 +72,13 @@ type Waiting = (bool, Option<String>);
 /// A row of the list: what picking it does; its name; the words beside it.
 type Row = (Pick, String, String);
 
-/// What a row of the list does.
+/// What a row of the list does: back to current work, view a version, list the branches, or
+/// switch to the branch stored by that name, none for the one in use.
 #[derive(Clone)]
 enum Pick {
     Work,
     Version(String),
-    /// Lists the branches.
     Branches,
-    /// Switches to the branch stored by that name; none for the one in use.
     Branch(Option<String>),
 }
 
@@ -381,11 +380,11 @@ fn rows(shell: &Shell) -> Vec<Row> {
     out
 }
 
-/// Runs a row and closes the list; the branch row lists the branches instead. The list stays on a
-/// refusal, as the row can be tried again.
+/// Runs a row and closes the list, or lists the branches.
 fn pick(shell: &mut Shell, (pick, label, _): Row) {
     match pick {
         Pick::Version(hash) => {
+            // The list stays on a refusal, as the row can be tried again.
             if view(shell, hash, label) {
                 close(shell);
             }
@@ -395,13 +394,9 @@ fn pick(shell: &mut Shell, (pick, label, _): Row) {
             shell.back_to_current_work();
         }
         Pick::Branches => show_branches(shell),
-        Pick::Branch(None) => close(shell),
-        // As a branch row in the Versions panel switches.
-        Pick::Branch(Some(name)) => {
-            if crate::versions::switch_to(shell, name) {
-                close(shell);
-            }
-        }
+        // A switch as a branch row in the Versions panel asks for it, and the same of a refusal.
+        Pick::Branch(Some(name)) if !crate::versions::switch_to(shell, name.clone()) => {}
+        Pick::Branch(_) => close(shell),
     }
 }
 
@@ -422,7 +417,7 @@ pub(crate) fn read_only_words(shell: &Shell) -> String {
 /// `words` after the name of the branch in use, once there are two or more.
 fn on_branch(shell: &Shell, words: String) -> String {
     match branch_name(shell) {
-        Some(branch) => format!("{branch} · {words}"),
+        Some(branch) => fmt(&tr("{branch} · {status}"), &[("branch", &branch), ("status", &words)]),
         None => words,
     }
 }
@@ -672,7 +667,9 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
     }
     // What failed or is still to read is of the versions, not shown while the branches are.
     let failed = shell.version_list.steps.failed && !shell.version_list.branches;
-    let footer = if failed { ROW } else { 0.0 };
+    // A branch list cut short says so under its rows, as the Versions panel does.
+    let cut = (shell.version_list.branches && shell.versions.branches_cut).then(|| branches(shell).map_or(0, |(_, l)| l.len()).to_string());
+    let footer = if failed || cut.is_some() { ROW } else { 0.0 };
     let top = chip.bottom() + 4.0;
     let wanted = 6.0 + FIELD + 6.0 + rows.len().clamp(1, MOST_ROWS) as f32 * ROW + footer + 8.0;
     let room = (ui.ctx().content_rect().bottom() - 8.0 - top).max(6.0 + FIELD + 6.0 + ROW + footer + 8.0);
@@ -721,6 +718,9 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
         }
         if failed {
             failure_row(shell, ui, p, Rect::from_min_size(pos2(r.left() + 6.0, bottom), vec2(WIDTH - 12.0, ROW)));
+        } else if let Some(n) = &cut {
+            let words = fmt(&tr("Only the first {n} branches are listed."), &[("n", n)]);
+            ux::text_mid(&paint, r.left() + 16.0, bottom + ROW / 2.0, &words, types::SMALL, p.text_muted, Some(WIDTH - 32.0));
         } else if reading_on && steps.reading.is_none() && offset + (bottom - first) + ROW >= rows.len() as f32 * ROW {
             read_on(shell, None);
         }

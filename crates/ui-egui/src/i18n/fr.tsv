@@ -280,6 +280,7 @@ str		Opening…	Ouverture…
 str		Saved	Enregistré
 str		Unsaved changes · {chord} saves	Modifications non enregistrées · {chord} enregistre
 str		On {branch} · {status}	Sur {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Discussion utilise le modèle
 str		Agent access off	Accès des agents désactivé
 # Panneau Discussion

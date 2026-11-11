@@ -280,6 +280,7 @@ str		Opening…	開いています…
 str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
 str		On {branch} · {status}	{branch} 上 · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
 # チャットパネル

@@ -280,6 +280,7 @@ str		Opening…	A abrir…
 str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Alterações por guardar · {chord} guarda
 str		On {branch} · {status}	No ramo {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	A Conversa está a usar o modelo
 str		Agent access off	Acesso de agentes desligado
 # Painel da Conversa

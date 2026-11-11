@@ -295,15 +295,7 @@ fn the_keys_reach_the_list_through_the_current_row() {
 
 /// The width of `text` where it is drawn starting inside `area`.
 fn drawn_in(h: &Harness<'static, Shell>, area: egui::Rect, text: &str) -> Option<f32> {
-    /// The first text under `s` reading `text` that starts inside `area`.
-    fn walk(s: &egui::Shape, area: egui::Rect, text: &str) -> Option<f32> {
-        match s {
-            egui::Shape::Text(t) if t.galley.text() == text && area.contains(t.pos) => Some(t.galley.size().x),
-            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, area, text)),
-            _ => None,
-        }
-    }
-    h.output().shapes.iter().find_map(|c| walk(&c.shape, area, text))
+    text_boxes(h).into_iter().find(|(t, b)| t == text && area.contains(b.min)).map(|(_, b)| b.width())
 }
 
 /// Opens the chip's list with ⇧⌘H, or ⇧⌘B for the branches, and answers its read of the versions,
@@ -388,6 +380,10 @@ fn the_chip_s_list_switches_branch() {
         chip_list(&mut h, &host, true);
         let reads = host.version_reads.lock().unwrap().len();
         assert!(h.query_by_label("main, Current").is_some() && reads == 0, "{theme:?}: ⇧⌘B, reading no more versions");
+        h.state_mut().versions.branches_cut = true;
+        h.run_steps(1);
+        let list = rect_of(&h, "workspace.header.version.row.0").expand2(egui::vec2(10.0, 120.0));
+        assert!(drawn_in(&h, list, "Only the first 2 branches are listed.").is_some(), "{theme:?}: a list cut short says so");
         h.event(egui::Event::Text("try".into()));
         h.run_steps(2);
         assert!(h.query_by_label("main, Current").is_none() && h.query_by_label(&other(&h)).is_some(), "{theme:?}: narrowed");

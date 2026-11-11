@@ -58,7 +58,7 @@ pub struct State {
     /// for since the versions were last read.
     pub(crate) branches: Option<Vec<BranchEntry>>,
     /// More branches exist than were listed.
-    branches_cut: bool,
+    pub(crate) branches_cut: bool,
     branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
     branches_asked: bool,

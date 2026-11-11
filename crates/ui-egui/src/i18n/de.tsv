@@ -280,6 +280,7 @@ str		Opening…	Wird geöffnet…
 str		Saved	Gesichert
 str		Unsaved changes · {chord} saves	Ungesicherte Änderungen · {chord} sichert
 str		On {branch} · {status}	Auf {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat nutzt das Modell
 str		Agent access off	Agentenzugriff aus
 # Chat-Bereich

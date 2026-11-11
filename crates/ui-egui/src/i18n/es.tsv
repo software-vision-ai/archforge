@@ -280,6 +280,7 @@ str		Opening…	Abriendo…
 str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Cambios sin guardar · {chord} guarda
 str		On {branch} · {status}	En {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat está usando el modelo
 str		Agent access off	Acceso de agentes desactivado
 # Panel de Chat
