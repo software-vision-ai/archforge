@@ -227,3 +227,68 @@ fn a_branch_read_waits_for_the_one_on_its_way() {
         assert_eq!(*host.branch_reads.lock().unwrap(), 3, "{theme:?}: then the one wanted meanwhile");
     });
 }
+
+/// In the shortest window, with the branches and the versions both failing to read, folding
+/// Branches and Working changes brings History's error and Retry whole into the column, clear of
+/// everything else, and Tab reaches Retry, which reads the versions again.
+#[test]
+fn history_s_failure_is_in_reach_once_the_sections_above_fold() {
+    let (failed, retry) = ("workspace.versions.failed", "workspace.versions.retry");
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        h.set_size(egui::vec2(1600.0, 400.0));
+        (*host.branch_list.lock().unwrap(), h.state_mut().versions.stale) = (Some(Err("down".into())), true);
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        h.state_mut().versions.stale = true;
+        versions_answer(&mut h, &host, Err("the server stopped".into()));
+        click_id(&mut h, "workspace.versions.branches");
+        click_id(&mut h, "workspace.versions.working");
+        h.run_steps(2);
+        let banner = rect_of(&h, failed);
+        let column = rect_of(&h, "workspace.versions.history").left_top().y..=400.0 - 40.0;
+        assert!(column.contains(&banner.top()) && column.contains(&banner.bottom()), "{theme:?}: {banner:?} in the column");
+        let others = h.state().widgets().iter().filter(|w| ![failed, retry].contains(&w.id.as_str()) && w.id.starts_with("workspace.versions."));
+        let clear = others.map(|w| egui::Rect::from_min_max(egui::pos2(w.rect[0], w.rect[1]), egui::pos2(w.rect[2], w.rect[3])));
+        assert!(clear.clone().all(|o| !o.intersects(banner.shrink(1.0))), "{theme:?}: {:?}", clear.collect::<Vec<_>>());
+        h.ctx.memory_mut(|m| m.focused().map(|id| m.surrender_focus(id)));
+        let id = crate::widgets::egui_id(retry);
+        for _ in 0..80 {
+            if h.ctx.memory(|m| m.has_focus(id)) {
+                break;
+            }
+            key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        }
+        let asked = host.version_asks.lock().unwrap().len();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert_eq!(host.version_asks.lock().unwrap().len(), asked + 1, "{theme:?}: Tab and Enter on Retry read again");
+    });
+}
+
+/// In the shortest window after a good read, with the branch in use first and the next row out of
+/// view, Tab alone reaches the list on the current row, where Enter switches to nothing, and ↓ and
+/// Enter switch to the next branch.
+#[test]
+fn the_keys_reach_the_list_through_the_current_row() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("n{i:02}")))));
+        h.set_size(egui::vec2(1600.0, 400.0));
+        h.run_steps(2);
+        assert!(!has_id(&h, "workspace.versions.branch.row.n00"), "{theme:?}: only the current row in view");
+        let main = crate::widgets::egui_id(MAIN);
+        h.ctx.memory_mut(|m| m.focused().map(|id| m.surrender_focus(id)));
+        for _ in 0..80 {
+            if h.ctx.memory(|m| m.has_focus(main)) {
+                break;
+            }
+            key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        }
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        assert!(h.ctx.memory(|m| m.has_focus(main)) && host.switches.lock().unwrap().is_empty(), "{theme:?}: Tab reaches it");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "n00"), "{theme:?}: ↓ and Enter switch to the next");
+    });
+}

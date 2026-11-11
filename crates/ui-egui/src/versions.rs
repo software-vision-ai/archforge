@@ -491,19 +491,18 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     tree.bottom() + 8.0
 }
 
-/// ↑ and ↓ on a focused branch row move the focus to the next or previous other branch, and ↓ on
-/// a failed read's Retry to the first; gives the row moved to.
+/// ↑ and ↓ on a focused branch row, the current one included, move the focus to the next or
+/// previous row, and ↓ on a failed read's Retry to the first; gives the row moved to.
 fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
     let row = |i: usize| widgets::egui_id(&format!("workspace.versions.branch.row.{}", listed[i].name));
     let retry = widgets::egui_id("workspace.versions.branches.retry");
-    let live: Vec<usize> = (0..listed.len()).filter(|&i| !listed[i].current).collect();
     let on_retry = ui.memory(|m| m.has_focus(retry));
-    let at = live.iter().position(|&i| ui.memory(|m| m.has_focus(row(i))));
+    let at = (0..listed.len()).find(|&i| ui.memory(|m| m.has_focus(row(i))));
     let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
     let next = match at {
-        _ if on_retry && pressed(egui::Key::ArrowDown) => live.first().copied(),
-        Some(at) if pressed(egui::Key::ArrowDown) => live.get(at + 1).copied(),
-        Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1).and_then(|before| live.get(before).copied()),
+        _ if on_retry && pressed(egui::Key::ArrowDown) => (!listed.is_empty()).then_some(0),
+        Some(at) if pressed(egui::Key::ArrowDown) => (at + 1 < listed.len()).then_some(at + 1),
+        Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1),
         _ => None,
     };
     if let Some(i) = next {
@@ -511,7 +510,7 @@ fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
     }
     // The keys are the list's, not egui's to move focus by place; only what has focus takes this.
     let arrows = egui::EventFilter { vertical_arrows: true, ..Default::default() };
-    let held = next.or(at.and_then(|at| live.get(at).copied())).map(row).or(on_retry.then_some(retry));
+    let held = next.or(at).map(row).or(on_retry.then_some(retry));
     if let Some(id) = held {
         ui.memory_mut(|m| m.set_focus_lock_filter(id, arrows));
     }
@@ -529,7 +528,13 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     let said = [Some(b.shown.clone()), b.current.then(|| current.clone()), unsaved.then(|| tr("Unsaved changes")), date.clone()];
     // The name last, as a name may hold a dot.
     let id = |part: &str| format!("workspace.versions.branch.{part}.{}", b.name);
-    let resp = control(shell, ui, &id("row"), "row", area, !b.current);
+    // The current row takes focus too, as the keys' way into the list, but switches to nothing.
+    let resp = if b.current {
+        widgets::record_visible(ui, &mut shell.registry, &id("row"), "row", area);
+        ui.interact(area, widgets::egui_id(&id("row")), egui::Sense::focusable_noninteractive())
+    } else {
+        control(shell, ui, &id("row"), "row", area, true)
+    };
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
     let menu = crate::panels::Menu::Branch(i);
     let paint = ui.painter();
