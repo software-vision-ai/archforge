@@ -1,5 +1,5 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File and Edit, in the design's order. Each item is enabled while its action can
+//! system's Hide), File, Edit and Model, in the design's order. Each item is enabled while its action can
 //! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
 //! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -13,9 +13,12 @@ use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use archforge_ui_egui::Shell;
 use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
 use archforge_ui_egui::i18n::tr;
+use archforge_ui_egui::model_menu;
 
 /// A run of actions, set apart from the next by a separator.
 type Group = &'static [&'static str];
+/// Every item, by the action it runs.
+type Items = Vec<(&'static str, MenuItem)>;
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
@@ -26,6 +29,9 @@ pub struct NativeMenu {
     chosen: Receiver<MenuEvent>,
     /// Every item, by the action it runs.
     items: Vec<(&'static str, MenuItem)>,
+    model: Submenu,
+    /// The rows `model` holds, by section; none until the first frame fills it.
+    model_rows: Vec<Vec<&'static str>>,
 }
 
 /// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
@@ -42,12 +48,12 @@ fn item(shell: &Shell, id: &'static str, items: &mut Vec<(&'static str, MenuItem
 }
 
 /// Appends `groups` to `menu`, with a separator between groups.
-fn append_groups(shell: &Shell, menu: &Submenu, groups: &[Group], items: &mut Vec<(&'static str, MenuItem)>) -> Result<(), muda::Error> {
+fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups: &[G], items: &mut Items) -> Result<(), muda::Error> {
     for (n, group) in groups.iter().enumerate() {
         if n > 0 {
             menu.append(&PredefinedMenuItem::separator())?;
         }
-        for id in *group {
+        for id in group.as_ref() {
             menu.append(&item(shell, id, items))?;
         }
     }
@@ -67,13 +73,14 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
-    menu.append_items(&[&app, &file, &edit]).map_err(err)?;
+    let model = Submenu::new(tr("Model"), true);
+    menu.append_items(&[&app, &file, &edit, &model]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
     menu.init_for_nsapp();
-    Ok(NativeMenu { _menu: menu, chosen, items })
+    Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new() })
 }
 
 /// What the menu bar calls for each chosen item: queues it for the next frame and wakes the window,
@@ -95,12 +102,27 @@ fn run_chosen(chosen: &Receiver<MenuEvent>, shell: &mut Shell) {
 }
 
 impl NativeMenu {
-    /// Runs the items chosen since the last frame, then enables each for what the shell can do now.
-    pub fn frame(&self, shell: &mut Shell) {
+    /// Runs the items chosen since the last frame, then fits Model to the diagram and enables each for what the shell can do now.
+    pub fn frame(&mut self, shell: &mut Shell) {
         run_chosen(&self.chosen, shell);
+        self.follow_diagram(shell);
         for (id, item) in &self.items {
             item.set_enabled(actions::available(shell, id));
         }
+    }
+
+    /// Rebuilds the Model menu when the diagram's rows have changed, once for each change.
+    fn follow_diagram(&mut self, shell: &Shell) {
+        let rows = model_menu::sections(shell);
+        if rows == self.model_rows {
+            return;
+        }
+        while self.model.remove_at(0).is_some() {}
+        self.items.retain(|(id, _)| !id.starts_with("model."));
+        if let Err(e) = append_groups(shell, &self.model, &rows, &mut self.items) {
+            log::warn!("the Model menu could not be rebuilt: {e}");
+        }
+        self.model_rows = rows;
     }
 }
 

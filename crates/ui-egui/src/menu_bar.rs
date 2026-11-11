@@ -17,15 +17,16 @@ struct Group {
     /// Part of its automation id, never shown.
     id: &'static str,
     title: fn() -> String,
-    /// Runs of actions, set apart by a divider.
-    sections: &'static [&'static [&'static str]],
+    /// Runs of actions now, set apart by a divider.
+    sections: fn(&Shell) -> Vec<Vec<&'static str>>,
 }
 
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
-    Group { id: "file", title: || tr("File"), sections: &[&[NEW, OPEN, SAVE, GENERATE], &[SETTINGS, CLOSE], &[QUIT]] },
-    Group { id: "edit", title: || tr("Edit"), sections: &[&[UNDO, REDO]] },
-    Group { id: "help", title: || tr("Help"), sections: &[&[ABOUT]] },
+    Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
+    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO]] },
+    Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
+    Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
 ];
 
 const GROUP_HEIGHT: f32 = 24.0;
@@ -79,7 +80,7 @@ pub(crate) fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool 
 /// The next live row of `group` after `from`, going down or up and wrapping; from no row, the first
 /// live one that way. None when every row is off.
 fn step(shell: &Shell, group: &Group, from: Option<&str>, down: bool) -> Option<&'static str> {
-    let mut rows: Vec<&'static str> = group.sections.iter().flat_map(|s| s.iter().copied()).collect();
+    let mut rows: Vec<&'static str> = (group.sections)(shell).concat();
     if !down {
         rows.reverse();
     }
@@ -185,8 +186,11 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
 
 /// The menu of `group` at `at`, kept inside the window: its rectangle and the row picked this frame.
 fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui::Pos2) -> (Rect, Option<&'static str>) {
-    let height = 2.0 * MENU_PAD + group.sections.iter().map(|s| s.len() as f32 * ROW + DIVIDER).sum::<f32>() - DIVIDER;
+    let sections = (group.sections)(shell);
     let window = ui.ctx().content_rect();
+    let (count, dividers) = (sections.iter().map(Vec::len).sum::<usize>() as f32, sections.len().saturating_sub(1) as f32 * DIVIDER);
+    let pitch = ((window.bottom() - at.y - 8.0 - 2.0 * MENU_PAD - dividers) / count).clamp(types::SMALL.line, ROW);
+    let height = 2.0 * MENU_PAD + count * pitch + dividers;
     let x = at.x.min(window.right() - MENU_WIDTH - 8.0).max(window.left() + 8.0);
     let m = Rect::from_min_size(pos2(x, at.y), vec2(MENU_WIDTH, height));
     // A pointer moving over the menu takes the highlight back from the keys.
@@ -200,15 +204,15 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
         paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         let mut picked = None;
         let mut y = m.top() + MENU_PAD;
-        for (n, section) in group.sections.iter().enumerate() {
+        for (n, section) in sections.iter().enumerate() {
             if n > 0 {
                 let line = pos2(m.left() + MENU_PAD + 8.0, y + 4.0);
                 paint.rect_filled(Rect::from_min_size(line, vec2(MENU_WIDTH - 2.0 * (MENU_PAD + 8.0), 1.0)), 0.0, p.border);
                 y += DIVIDER;
             }
-            for id in *section {
-                let row = Rect::from_min_size(pos2(m.left() + MENU_PAD, y), vec2(MENU_WIDTH - 2.0 * MENU_PAD, ROW));
-                y += ROW;
+            for id in section {
+                let row = Rect::from_min_size(pos2(m.left() + MENU_PAD, y), vec2(MENU_WIDTH - 2.0 * MENU_PAD, pitch));
+                y += pitch;
                 if draw_row(shell, ui, p, id, row) {
                     picked = Some(*id);
                 }
@@ -264,6 +268,7 @@ fn why_off(shell: &Shell, id: &str) -> String {
         SAVE if shell.saving.is_some() => tr("Saving…"),
         SAVE if shell.is_held() => tr("The project is busy"),
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
+        _ if id.starts_with("model.") => crate::model_menu::why_off(shell),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
         _ if id.starts_with("edit.") && !shell.looking_only() => tr("Nothing to act on here"),
         _ => off_words(shell),
@@ -307,6 +312,7 @@ mod tests {
         assert_eq!(why_off(&s, NEW), "Close a project to open another");
         let (mut s, ..) = shell();
         assert_eq!(why_off(&s, UNDO), "Nothing to act on here");
+        assert_eq!(why_off(&s, "model.note"), "Show a diagram first");
         s.begin_hold().unwrap();
         assert_eq!(why_off(&s, UNDO), "The project is busy");
     }
