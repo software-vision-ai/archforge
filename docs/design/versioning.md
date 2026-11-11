@@ -398,6 +398,10 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
   the two, which gives "model
   changed, layout did not".
 
+A diagram's two sides are each drawn from their own state in one framing: the zoom and pan that fit
+every box, line and line label on either side, wherever a label was put, from neither the project nor
+the canvas, so how someone last looked at it is never a difference.
+
 ---
 
 ## 7. Restore

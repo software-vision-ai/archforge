@@ -540,6 +540,7 @@ str		The next versions couldn't be read.	Die nächsten Versionen konnten nicht g
 str		{name}, selected	{name}, ausgewählt
 str		Compared with the version of {when}	Verglichen mit der Version vom {when}
 str		There is no version to compare with yet.	Es gibt noch keine Version zum Vergleichen.
+str		This diagram couldn't be compared.	Dieses Diagramm konnte nicht verglichen werden.
 str		This element couldn't be compared.	Dieses Element konnte nicht verglichen werden.
 str		Attributes	Attribute
 str		Operations	Operationen

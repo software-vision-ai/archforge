@@ -457,7 +457,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         for d in group {
             let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
             // By class too: an element that changes table has two rows.
-            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, d.area == Area::Model);
+            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, true);
             at += CHANGE_PITCH;
         }
     }
