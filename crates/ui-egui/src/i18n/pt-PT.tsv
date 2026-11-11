@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	O projeto está ocupado
 str		Open or go back to a project first	Abra primeiro um projeto ou volte a um projeto
+str		Show a diagram first	Mostre primeiro um diagrama
 str		Open…	Abrir…
 str		Save	Guardar
 # Gerar
@@ -543,6 +544,7 @@ str		The next versions couldn't be read.	Não foi possível ler as versões segu
 str		{name}, selected	{name}, selecionada
 str		Compared with the version of {when}	Comparado com a versão de {when}
 str		There is no version to compare with yet.	Ainda não há nenhuma versão com que comparar.
+str		This diagram couldn't be compared.	Não foi possível comparar este diagrama.
 str		This element couldn't be compared.	Não foi possível comparar este elemento.
 str		Attributes	Atributos
 str		Operations	Operações

@@ -19,18 +19,9 @@ An open project fills the window with its workspace.
   version and switch, or switch and leave them on this branch for when you come back. Branches
   can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
   so under the list.
-  Clicking a version in the history opens its details in the centre: its description, when it
-  was saved and, where that is recorded, by whom, what changed since the version before and a link
-  to that version, which opens its details the same way.
-  Versions are compared one at a time, so when you click through the history quickly, the
-  changes of the version you stop on appear once the comparison under way has ended.
-  A version that turns out not to be readable stays in the list, marked **This version can't be
-  shown** with the reason behind **Why?**, or **Made with a newer Archforge.** when a later
-  Archforge saved it. The steps between versions pass it and say which one they passed.
-  A read that fails for now shows **This version couldn't be read.** in History, with **Retry**;
-  that goes when any version is asked for, on going back from a version, and with a restore or a
-  change of branch or project.
-  **View this version** shows it read-only; the project's name at the top closes the details.
+  Clicking a version in the history opens its details in the centre, and **View this version**
+  there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
+  through History, viewing an earlier version and coming back to your current work.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
   and this branch's versions, reading further ones as you reach the end. What differs between the
@@ -58,6 +49,9 @@ An open project fills the window with its workspace.
   other members and owner under headings, marked the same way when one came, went or changed; a
   long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
   The project's name at the top closes it.
+  Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
+  way: **Before** and **After** side by side, each drawn as it was on its side and both at one
+  zoom, so a box that stayed is in the same place on both. A side the diagram isn't on says so.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
@@ -65,14 +59,21 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
-On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit** and
-**Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
+**Model** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
 ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was.
+
+**Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
+as a click on the tool does: click the canvas to place the element, or drag between two elements to
+draw the relationship. **Note** and **Link note** are always listed; the rest follow the open
+diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram the kinds of the
+classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
+the diagram can't be changed, the rows are greyed out.
 
 ## New diagram
 

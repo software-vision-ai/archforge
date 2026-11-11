@@ -17,12 +17,12 @@ use crate::version_details::MARGIN;
 use crate::versions::{kind_look, when};
 
 /// The room between the cards, and from a side's eyebrow to its card.
-const GUTTER: f32 = 24.0;
-const EYEBROW: f32 = 24.0;
+pub(super) const GUTTER: f32 = 24.0;
+pub(super) const EYEBROW: f32 = 24.0;
 /// The room between the summary and the eyebrows.
 const UNDER_SUMMARY: f32 = 18.0;
 /// A card's head band, the top of its identity, where its rows start and the room under them.
-const BAND: f32 = 46.0;
+pub(super) const BAND: f32 = 46.0;
 const IDENTITY: f32 = 52.0;
 const ROWS_AT: f32 = 116.0;
 const BELOW: f32 = 16.0;
@@ -61,7 +61,7 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
 
 /// What the Before card's head calls its side: the version compared with, by its date while the
 /// history holds it, as a version further down the list is not read for this.
-fn head_before(shell: &Shell) -> String {
+pub(super) fn head_before(shell: &Shell) -> String {
     let v = &shell.versions;
     let hash = v.element.as_ref().and_then(|o| o.read_of.as_ref()).and_then(|key| key.0.as_ref());
     let listed = hash.and_then(|hash| v.page.iter().flat_map(|page| &page.versions).find(|e| e.hash == *hash));

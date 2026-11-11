@@ -7,6 +7,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
 str		Open or go back to a project first	Open or go back to a project first
+str		Show a diagram first	Show a diagram first
 str		Open…	Open…
 str		Save	Save
 # Generate
@@ -542,6 +543,7 @@ str		The next versions couldn't be read.	The next versions couldn't be read.
 str		{name}, selected	{name}, selected
 str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
+str		This diagram couldn't be compared.	This diagram couldn't be compared.
 str		This element couldn't be compared.	This element couldn't be compared.
 str		Attributes	Attributes
 str		Operations	Operations

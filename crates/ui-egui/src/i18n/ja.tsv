@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
+str		Show a diagram first	先に図を表示してください
 str		Open…	開く…
 str		Save	保存
 # 生成
@@ -543,6 +544,7 @@ str		The next versions couldn't be read.	次のバージョンを読み込めま
 str		{name}, selected	{name}、選択中
 str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
+str		This diagram couldn't be compared.	この図を比較できませんでした。
 str		This element couldn't be compared.	この要素を比較できませんでした。
 str		Attributes	属性
 str		Operations	操作

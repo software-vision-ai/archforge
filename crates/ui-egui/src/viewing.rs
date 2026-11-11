@@ -63,10 +63,12 @@ impl Shell {
 
     /// Goes to the version `commit`, the chip then saying `label` of it when it has one. From current
     /// work it enters under a hold, Chat's question first. From a version it is a step, with no hold
-    /// or question as no current work is left. A refusal leaves what shows as it was.
+    /// or question as no current work is left, and it ends a step still waiting for a read, which a
+    /// hold ends from current work. A refusal leaves what shows as it was.
     pub(crate) fn move_to_version(&mut self, commit: &str, label: Option<String>) -> Result<(), HoldRefused> {
         if self.viewing.is_some() {
             self.clear_to_leave(None)?;
+            self.version_list.steps.waiting = None;
             return self.step_to(commit, label);
         }
         let cleared = self.clear_to_leave(Some(Leaving::View { commit: commit.to_string(), label: label.clone() }))?;

@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	项目正忙
 str		Open or go back to a project first	请先打开或返回一个项目
+str		Show a diagram first	请先显示一个图
 str		Open…	打开…
 str		Save	存储
 # 生成
@@ -543,6 +544,7 @@ str		The next versions couldn't be read.	无法读取后续版本。
 str		{name}, selected	{name}，已选中
 str		Compared with the version of {when}	与 {when} 的版本比较
 str		There is no version to compare with yet.	还没有可比较的版本。
+str		This diagram couldn't be compared.	无法比较此图。
 str		This element couldn't be compared.	无法比较此元素。
 str		Attributes	属性
 str		Operations	操作

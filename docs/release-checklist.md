@@ -66,7 +66,9 @@ project.
 **Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again. Close
 About, type into a name field and, with the field still active, press ⌘Z and then ⇧⌘Z, and choose
 **Edit ▸ Undo**. Click the canvas so the field lets go, make a change, press ⌘Z and then ⇧⌘Z. With the
-field active again, press ⌘C, ⌘V and ⌘A.
+field active again, press ⌘C, ⌘V and ⌘A. Open a class diagram and look through **Model**, choose
+**Model ▸ Interface** and click the canvas; open an ER diagram and look through **Model** again; go to Home
+and look once more.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
@@ -75,7 +77,9 @@ save runs. Each dialog opens within a second of choosing it, with the pointer st
 is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (⇧⌘Z). While a field has the
 keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the
 change back and bring it again, and are disabled when there is no step to take. ⌘C, ⌘V and ⌘A act on the
-field, as they always have.
+field, as they always have. Model on a class diagram lists Class to Package, the kinds of the Relationship
+tool, then **Note** and **Link note**, and Interface places an interface where you click. On an ER diagram
+it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.

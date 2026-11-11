@@ -8,7 +8,7 @@ use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
-use crate::{Shell, edit_menu};
+use crate::{Shell, edit_menu, model_menu};
 
 pub const ABOUT: &str = "app.about";
 pub const SETTINGS: &str = "app.settings";
@@ -191,7 +191,7 @@ pub static ACTIONS: &[Action] = &[
 
 /// The action `id`.
 fn find(id: &str) -> Option<&'static Action> {
-    ACTIONS.iter().find(|a| a.id == id)
+    ACTIONS.iter().chain(model_menu::rows()).find(|a| a.id == id)
 }
 
 /// The name of the action `id`; empty when the table has none.
