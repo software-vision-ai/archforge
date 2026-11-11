@@ -182,8 +182,16 @@ fn history_keeps_its_room_under_many_branches_or_changes() {
         let (mut h, host) = branches_read(theme, many());
         fail(&mut h, &host);
         assert!(in_column(&mut h, 400.0, "aa"), "{theme:?}: and a failed read");
-        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.versions.branches.retry")));
-        h.run_steps(1);
+        // By the keys alone: from nothing focused, Tab until Retry, then ↓.
+        let retry = crate::widgets::egui_id("workspace.versions.branches.retry");
+        h.ctx.memory_mut(|m| m.focused().map(|id| m.surrender_focus(id)));
+        for _ in 0..80 {
+            if h.ctx.memory(|m| m.has_focus(retry)) {
+                break;
+            }
+            key(&mut h, egui::Key::Tab, egui::Modifiers::NONE);
+        }
+        assert!(h.ctx.memory(|m| m.has_focus(retry)), "{theme:?}: Tab reaches Retry");
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         h.run_steps(4);
