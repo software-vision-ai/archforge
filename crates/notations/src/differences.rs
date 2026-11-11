@@ -16,7 +16,7 @@ use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot}
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Property, Store, TypeRef, Uuid, Value};
 
-use crate::{storage, store};
+use crate::{labels, storage, store};
 
 /// Where a difference lies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,8 +41,8 @@ pub struct Difference {
     pub class: ClassId,
     pub area: Area,
     pub kind: ChangeKind,
-    /// The item's name, or for a box or line in a diagram that of the element it shows; none when
-    /// it has neither. A removed item's comes from the before side, any other's from the after side.
+    /// The item's name, or what it joins or states when it has none, or for a box or line in a
+    /// diagram that of the element it shows; none when it has nothing to go by. A removed item's comes from the before side, any other's from the after side.
     pub name: Option<String>,
     /// The names of what contains the item, outermost first, from the same side as its name.
     pub path: Vec<String>,
@@ -52,8 +52,19 @@ pub struct Difference {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElementCard {
     pub class: ClassId,
-    /// Its name on this side, or for a box or line that of the element it shows; none when it has neither.
+    /// Its name on this side, what it joins or states when it has none, or for a box or line that
+    /// of the element it shows; none when it has nothing to go by.
     pub name: Option<String>,
+    /// Whether `name` is made from what it joins or states rather than being a name of its own.
+    pub made: bool,
+}
+
+impl ElementCard {
+    /// Whether the element was renamed between `other` and this card. Words made from what it joins
+    /// or states follow those, so they differ without any renaming.
+    pub fn renamed_from(&self, other: &ElementCard) -> bool {
+        !(self.made && other.made) && self.name != other.name
+    }
 }
 
 /// One property of a compared element, in the same place on both cards.
@@ -88,6 +99,8 @@ pub struct ElementSides {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ListKind {
     Attributes,
+    /// A table's columns, which are an ER notation's attributes.
+    Columns,
     Operations,
     Literals,
     Members,
@@ -95,9 +108,12 @@ pub enum ListKind {
 }
 
 /// What a row names, typed so a view words it in the language shown.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Named {
     Said(String),
+    /// Words made from what a nameless element joins or states, which follow those: a rename of
+    /// what it joins leaves its own row as it was.
+    Made(String),
     Unnamed,
     /// There is no owner to name.
     Nothing,
@@ -227,8 +243,8 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
 /// element from rows the caller holds; `Ok(None)` when neither side has the element.
 pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<ElementSides>, ClassifyError> {
     let (tables, junctions) = storage();
-    let (old, _) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, _) = repaired("after", after, &tables, &junctions, &repair)?;
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
     let (card_before, was) = read_side("before", &old, id)?.unzip();
     let (card_after, is) = read_side("after", &new, id)?.unzip();
     if card_before.is_none() && card_after.is_none() {
@@ -237,8 +253,9 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let on_both = card_before.is_some() && card_after.is_some();
     let ((was, mut before_lists), (is, mut after_lists)) = (was.unwrap_or_default(), is.unwrap_or_default());
     if on_both {
-        marked(&mut before_lists, &after_lists, ChangeKind::Removed);
-        marked(&mut after_lists, &before_lists, ChangeKind::Added);
+        let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
+        marked(&mut before_lists, &after_lists, ChangeKind::Removed, &changed);
+        marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
     }
     let marks = |of: &[CardList], only: Option<ChangeKind>| {
         of.iter()
@@ -343,16 +360,23 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
     for prop in info.stored.iter().filter(|p| universe.prop(**p).is_some_and(on_a_card)) {
         values.push((*prop, store.get(obj, *prop).map_err(unreadable)?));
     }
-    Ok(Some((ElementCard { class, name: shown_name(store, obj) }, (values, lists_of(store, obj).map_err(unreadable)?))))
+    let made = archforge_core::name_of(store, obj).is_empty() && labels::unnamed(store, obj).is_some();
+    Ok(Some((ElementCard { class, name: shown_name(store, obj), made }, (values, lists_of(store, obj).map_err(unreadable)?))))
 }
 
 /// Marks each row of `side` against the rows of `other`: `gone` when `other` has no such row,
-/// Changed when it says something else. A row is one member by its id; a
+/// Changed when it says something else, or for words made from what it joins when its own row is in
+/// `changed`. A row is one member by its id, an ER enum's literal by its text; a
 /// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
-fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind) {
-    let key = |kind: ListKind, row: &ListRow| (kind, if kind == ListKind::Ownership { None } else { Some(row.id) });
-    let differ = |kind: ListKind, a: &ListRow, b: &ListRow| {
-        if kind == ListKind::Ownership { a.id != b.id } else { (a.id, a.class, &a.name) != (b.id, b.class, &b.name) }
+fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: &BTreeSet<Uuid>) {
+    let key = |kind: ListKind, row: &ListRow| {
+        let text = (kind == ListKind::Literals && row.class == archforge_er::ENUM_TYPE).then(|| row.name.clone());
+        (kind, if kind == ListKind::Ownership { None } else { Some(row.id) }, text)
+    };
+    let differ = |kind: ListKind, a: &ListRow, b: &ListRow| match (&a.name, &b.name) {
+        _ if kind == ListKind::Ownership => a.id != b.id,
+        (Named::Made(_), Named::Made(_)) => changed.contains(&a.id),
+        _ => (a.id, a.class, &a.name) != (b.id, b.class, &b.name),
     };
     let held: HashMap<_, _> = other.iter().flat_map(|l| l.rows.iter().map(move |r| (key(l.kind, r), r))).collect();
     for list in side {
@@ -374,6 +398,10 @@ fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
         let class = store.class_of(member)?;
         lists.entry(kind_of(class)).or_default().push(ListRow { name: member_name(store, member, class), ..plain_row(store, member, class) });
     }
+    if store.class_of(obj)? == archforge_er::ENUM_TYPE {
+        let literal = |text: String| ListRow { name: Named::Said(text), ..plain_row(store, obj, archforge_er::ENUM_TYPE) };
+        lists.entry(ListKind::Literals).or_default().extend(archforge_er::rules::literals_of(store, obj).into_iter().map(literal));
+    }
     lists.entry(ListKind::Ownership).or_default().push(owner_row(store, obj));
     Ok(lists.into_iter().map(|(kind, rows)| CardList { kind, rows }).collect())
 }
@@ -383,9 +411,14 @@ fn plain_row(store: &Store, obj: Obj, class: ClassId) -> ListRow {
     ListRow { id: store.uuid(obj).unwrap_or(Uuid([0; 16])), class, name: named(store, obj), change: None }
 }
 
-/// `obj`'s name, or that it has none.
+/// `obj`'s name, the words made for it, or that it has none. A constraint's words are its own
+/// expression, held in a part of it that its row doesn't count, so they are compared as written.
 fn named(store: &Store, obj: Obj) -> Named {
-    shown_name(store, obj).map_or(Named::Unnamed, Named::Said)
+    let made = archforge_core::name_of(store, obj).is_empty() && store.class_of(obj).ok() != Some(archforge_uml::CONSTRAINT);
+    match labels::unnamed(store, obj).filter(|_| made) {
+        Some(words) => Named::Made(words),
+        None => shown_name(store, obj).map_or(Named::Unnamed, Named::Said),
+    }
 }
 
 /// The row of the owner of `obj`; an element with no owner says so, and one whose owner cannot be read says that.
@@ -401,14 +434,15 @@ fn owner_row(store: &Store, obj: Obj) -> ListRow {
 /// The list a member of `class` belongs to.
 fn kind_of(class: ClassId) -> ListKind {
     match class {
-        c if c == archforge_uml::PROPERTY || c == archforge_er::ATTRIBUTE => ListKind::Attributes,
+        c if c == archforge_uml::PROPERTY => ListKind::Attributes,
+        c if c == archforge_er::ATTRIBUTE => ListKind::Columns,
         c if c == archforge_uml::OPERATION => ListKind::Operations,
         c if c == archforge_uml::ENUMERATION_LITERAL => ListKind::Literals,
         _ => ListKind::Members,
     }
 }
 
-/// What a member's row writes: a feature as its element box lists it, a column with its type, anything else its name.
+/// What a member's row writes: a feature as its element box lists it, a column with its type, anything else what [`named`] gives.
 fn member_name(store: &Store, m: Obj, class: ClassId) -> Named {
     match class {
         c if c == archforge_uml::PROPERTY || c == archforge_uml::OPERATION => Named::Said(archforge_uml::figures::member_text(store, m)),
@@ -454,14 +488,12 @@ fn repaired(
     Ok((restored, rows))
 }
 
-/// The name of `obj`, or of the element it shows; none when there is neither.
+/// The name of `obj` or the words made for it, or those of the element it shows; none when there are neither.
 fn shown_name(store: &Store, obj: Obj) -> Option<String> {
-    let own = archforge_core::name_of(store, obj);
-    if !own.is_empty() {
-        return Some(own);
-    }
-    let shown = [archforge_diagram::node::ELEMENT, archforge_diagram::edge::ELEMENT].iter().find_map(|p| store.get(obj, *p).ok()?.as_ref())?;
-    Some(archforge_core::name_of(store, shown)).filter(|name| !name.is_empty())
+    let called = |o: Obj| Some(archforge_core::name_of(store, o)).filter(|name| !name.is_empty()).or_else(|| labels::unnamed(store, o));
+    called(obj).or_else(|| {
+        called([archforge_diagram::node::ELEMENT, archforge_diagram::edge::ELEMENT].iter().find_map(|p| store.get(obj, *p).ok()?.as_ref())?)
+    })
 }
 
 /// The name of the item `id` and the names of what contains it, outermost first.

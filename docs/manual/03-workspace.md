@@ -42,10 +42,11 @@ An open project fills the window with its workspace.
   added, changed or removed, where it is, and the version it is compared with, or that there is
   no version to compare with yet. Two cards side by side, **Before** (the last version) and
   **After** (current work), give the element's kind, name and values. A name or value that differs
-  is marked with − on the Before card and + on the After card as well as a tint. A side the
-  element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
+  is marked with − on the Before card and + on the After card as well as a tint. An element with
+  no name goes by what it joins or says, such as *Customer → Order*, and those words following a
+  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
   and members that differ and says the first three values in words, or that the element was added
-  or removed. Below the values the cards group the element's attributes, operations, literals,
+  or removed. Below the values the cards group the element's attributes or columns, operations, literals,
   other members and owner under headings, marked the same way when one came, went or changed; a
   long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
   The project's name at the top closes it.

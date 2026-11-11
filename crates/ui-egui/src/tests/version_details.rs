@@ -739,7 +739,7 @@ fn sided(id: Uuid, before: Option<ElementCard>, after: Option<ElementCard>, fiel
 
 /// The sides of an element called `name` on both sides of the comparison.
 fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
-    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) };
+    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false };
     Ok(Some(sided(id, Some(card.clone()), Some(card), Vec::new())))
 }
 
@@ -1026,7 +1026,7 @@ fn compare_gives_way_like_the_details() {
 
 /// A side of `name`, a schema.
 fn schema(name: &str) -> Option<ElementCard> {
-    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) })
+    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false })
 }
 
 /// A field of the enumeration-typed Visibility with these values.
@@ -1101,9 +1101,9 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
         assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()) });
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()), made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("kept"), entity, Vec::new()))));
-        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Entity, kept, Changed")), (1, 1), "a new kind");
+        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Table, kept, Changed")), (1, 1), "a new kind");
     });
 }
 
@@ -1152,9 +1152,9 @@ fn the_summary_counts_and_says_each_difference() {
         let fields = vec![visibility.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
         says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None });
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None, made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
-        let said = "The name changed from was to Unnamed. The kind changed from Schema to Entity. Visibility changed from Not set to Private.";
+        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
         says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
     });
 }
@@ -1283,7 +1283,24 @@ fn a_missing_name_is_said_in_words() {
         assert_eq!(named(h, "Ownership, None"), 1);
         let lists = CardLists { before: owner(Named::Unnamed), after: owner(Named::Said(String::new())), ..CardLists::default() };
         landed(h, id, key, listed(id, "a", lists));
-        assert_eq!(named(h, "Ownership, Attribute"), 2, "a nameless row goes by its kind");
+        assert_eq!(named(h, "Ownership, Column"), 2, "a nameless row goes by its kind");
+    });
+}
+
+/// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
+/// whose words differing is no renaming.
+#[test]
+fn an_er_element_reads_in_its_notations_words() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let line = |name: &str| Some(ElementCard { class: archforge_er::ENTITY, name: Some(name.into()), made: true });
+        let rows = |words: &str| vec![list(ListKind::Columns, vec![(Named::Made(words.into()), None)])];
+        let lists = CardLists { before: rows("a → b"), after: rows("c → b"), ..CardLists::default() };
+        landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
+        assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
+        assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
+        assert_eq!(painted_times(h, "COLUMNS"), 2);
+        assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
     });
 }
 

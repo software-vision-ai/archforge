@@ -1553,7 +1553,6 @@ str		Domain check	Restricción de comprobación de dominio
 str		Drawing	Dibujo
 str		Effect	Efecto
 str		Entry point	Punto de entrada
-str		Enumeration literal	Literal de enumeración
 str		Exactly one	Exactamente uno
 str		Execution location	Ubicación de ejecución
 str		Exit point	Punto de salida
@@ -1659,7 +1658,6 @@ str		Par	Paralelo
 str		Parallel	Paralelo
 str		Persistence	Persistencia
 str		Profile application	Aplicación de perfil
-str		Property	Propiedad
 str		Read	Leer
 str		Realization	Realización
 str		Redefinable template signature	Firma de plantilla redefinible
