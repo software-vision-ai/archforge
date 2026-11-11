@@ -1553,7 +1553,6 @@ str		Domain check	Domänen-Prüfbedingung
 str		Drawing	Zeichnen
 str		Effect	Effekt
 str		Entry point	Eintrittspunkt
-str		Enumeration literal	Aufzählungsliteral
 str		Exactly one	Genau eins
 str		Execution location	Ausführungsort
 str		Exit point	Austrittspunkt
@@ -1659,7 +1658,6 @@ str		Par	Parallel
 str		Parallel	Parallel
 str		Persistence	Persistenz
 str		Profile application	Profilanwendung
-str		Property	Eigenschaft
 str		Read	Lesen
 str		Realization	Realisierung
 str		Redefinable template signature	Redefinierbare Template-Signatur

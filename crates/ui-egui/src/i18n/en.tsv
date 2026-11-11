@@ -1552,7 +1552,6 @@ str		Domain check	Domain check
 str		Drawing	Drawing
 str		Effect	Effect
 str		Entry point	Entry point
-str		Enumeration literal	Enumeration literal
 str		Exactly one	Exactly one
 str		Execution location	Execution location
 str		Exit point	Exit point
@@ -1658,7 +1657,6 @@ str		Par	Par
 str		Parallel	Parallel
 str		Persistence	Persistence
 str		Profile application	Profile application
-str		Property	Property
 str		Read	Read
 str		Realization	Realization
 str		Redefinable template signature	Redefinable template signature

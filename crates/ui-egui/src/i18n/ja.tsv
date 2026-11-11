@@ -1553,7 +1553,6 @@ str		Domain check	ドメインチェック制約
 str		Drawing	描画
 str		Effect	効果
 str		Entry point	入口点
-str		Enumeration literal	列挙リテラル
 str		Exactly one	ちょうど 1
 str		Execution location	実行場所
 str		Exit point	出口点
@@ -1659,7 +1658,6 @@ str		Par	並列
 str		Parallel	並列
 str		Persistence	永続化
 str		Profile application	プロファイル適用
-str		Property	プロパティ
 str		Read	読み取り
 str		Realization	実現
 str		Redefinable template signature	再定義可能テンプレートシグネチャ

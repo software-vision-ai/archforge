@@ -119,11 +119,26 @@ pub fn literal_label(universe: &Universe, ty: DataId, index: u32) -> Option<Stri
     Some(tr(&words(literals.get(usize::try_from(index).ok()?)?)))
 }
 
-/// The kind word of `class` in this thread's language: its own for one of the [`KINDS`], otherwise
-/// Element. UML's Profile has a row of its own, as the plain word is a person's profile.
+/// The word Models and Properties use for `class` where it isn't its metamodel's name: a table and
+/// its columns, a subtype, an attribute, a literal. UML's Profile has a row of its own, as the plain
+/// word is a person's profile.
+fn notation_word(class: ClassId) -> Option<String> {
+    match class {
+        c if c == archforge_er::ENTITY => Some(tr("Table")),
+        c if c == archforge_er::ATTRIBUTE => Some(tr("Column")),
+        c if c == archforge_er::GENERALIZATION => Some(tr("Subtype")),
+        c if c == archforge_uml::PROPERTY => Some(tr("Attribute")),
+        c if c == archforge_uml::ENUMERATION_LITERAL => Some(tr("Literal")),
+        c if c == archforge_uml::PROFILE => Some(tr_ctx("uml", "Profile")),
+        _ => None,
+    }
+}
+
+/// The kind word of `class` in this thread's language: the notation's own where it has one, the
+/// metamodel's name for the rest of the [`KINDS`], otherwise Element.
 pub fn kind_label(universe: &Universe, class: ClassId) -> String {
-    if class == archforge_uml::PROFILE {
-        return tr_ctx("uml", "Profile");
+    if let Some(word) = notation_word(class) {
+        return word;
     }
     match universe.class(class).filter(|_| KINDS.contains(&class)) {
         Some(known) => tr(&words(&known.name)),
@@ -132,7 +147,8 @@ pub fn kind_label(universe: &Universe, class: ClassId) -> String {
 }
 
 /// Every key these labels look up, for the catalogue tests: each property a card shows and each
-/// literal of the model area, and the [`KINDS`] but Profile, which has a row of its own.
+/// literal of the model area, and the [`KINDS`] but those with a notation's word, whose rows the
+/// scan reads from [`notation_word`].
 #[cfg(test)]
 pub(crate) fn texts() -> Vec<String> {
     let Ok(universe) = archforge_notations::universe() else { return Vec::new() };
@@ -145,6 +161,6 @@ pub(crate) fn texts() -> Vec<String> {
             }
         }
     }
-    all.extend(KINDS.iter().filter(|c| **c != archforge_uml::PROFILE).filter_map(|c| universe.class(*c)).map(|c| words(&c.name)));
+    all.extend(KINDS.iter().filter(|c| notation_word(**c).is_none()).filter_map(|c| universe.class(*c)).map(|c| words(&c.name)));
     all
 }

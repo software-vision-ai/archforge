@@ -81,7 +81,7 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
 fn differences(universe: &Universe, (was, is): (&ElementCard, &ElementCard), fields: &[CardField]) -> Vec<String> {
     let name = |card: &ElementCard| short(&card.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed")));
     let mut said = Vec::new();
-    if was.name != is.name {
+    if is.renamed_from(was) {
         said.push(from_to(&tr("The name changed from {from} to {to}."), &name(was), &name(is)));
     }
     if was.class != is.class {

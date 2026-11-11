@@ -82,7 +82,7 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `UiState` | the stored appearance, language, Home's closed banner, the workspace's explorer and panel and their widths |
 | the title strip's controls | `strip.home`, `strip.open-project`, `strip.theme` on every screen; on the workspace `strip.home` closes the project |
 | `i18n::{tr, tr_ctx, trn, set_language}` | catalogue lookups at draw time |
-| `model_words::{words, property_label, literal_label, kind_label}` | the labels for what the metamodel names, looked up in the catalogues on the interface thread: every card property and literal of the model area, the kinds the notations create and `Element` for the rest |
+| `model_words::{words, property_label, literal_label, kind_label}` | the labels for what the metamodel names, looked up in the catalogues on the interface thread: every card property and literal of the model area, the kinds the notations create, in each notation's own word (a table, a column, a subtype), and `Element` for the rest |
 | `offscreen::render` | `pub fn render(width: f32, height: f32, scale: f32, theme: ThemeKind) -> Result<(u32, u32, Vec<u8>), String>` (feature `snapshot`) |
 | `offscreen::render_screen` | the same for a `Screen`: Home, the New project dialog over it, the workspace, its first schema being named, a table's Properties, the Skills tab, a first diagram just created, or a diagram of two tables |
 | `explorer::{State, ContextMenu, add, remove_selection, rows, fresh_name, Row, Tree}` | the Models explorer's state (a row's context menu among it, AR-132) and the actions the tests and the host drive |

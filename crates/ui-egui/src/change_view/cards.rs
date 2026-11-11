@@ -92,7 +92,7 @@ fn card(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
     paint.hline(body.x_range(), body.top() + BAND, Stroke::new(1.0, p.border));
     ux::text_mid(&paint, body.left() + 20.0, body.top() + BAND / 2.0, head, types::UI, p.text, Some((body.width() - 40.0).max(0.0)));
     let line = Rect::from_min_size(body.min + vec2(MARK, IDENTITY), vec2((body.width() - MARK - INSET).max(0.0), ROWS_AT - IDENTITY - 14.0));
-    let marked = sides.before.as_ref().zip(sides.after.as_ref()).is_some_and(|(a, b)| a.name != b.name || a.class != b.class);
+    let marked = sides.before.as_ref().zip(sides.after.as_ref()).is_some_and(|(a, b)| b.renamed_from(a) || a.class != b.class);
     if marked {
         mark(&paint, p, line, before);
     }
@@ -176,6 +176,7 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
 fn heading(kind: ListKind) -> String {
     match kind {
         ListKind::Attributes => tr("Attributes"),
+        ListKind::Columns => tr("Columns"),
         ListKind::Operations => tr("Operations"),
         ListKind::Literals => tr("Literals"),
         ListKind::Members => tr("Members"),
@@ -187,8 +188,8 @@ fn heading(kind: ListKind) -> String {
 /// isn't there is said to be missing, in words.
 fn row_words(universe: &Universe, row: &ListRow) -> String {
     match &row.name {
-        Named::Said(words) if !words.is_empty() => words.clone(),
-        Named::Said(_) | Named::Unnamed => kind_label(universe, row.class),
+        Named::Said(words) | Named::Made(words) if !words.is_empty() => words.clone(),
+        Named::Said(_) | Named::Made(_) | Named::Unnamed => kind_label(universe, row.class),
         Named::Nothing => tr("None"),
         Named::Unavailable => tr("Not available on this side"),
     }

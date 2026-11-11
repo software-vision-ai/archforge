@@ -1553,7 +1553,6 @@ str		Domain check	域检查约束
 str		Drawing	绘图
 str		Effect	效果
 str		Entry point	入口点
-str		Enumeration literal	枚举字面量
 str		Exactly one	恰好一个
 str		Execution location	执行位置
 str		Exit point	出口点
@@ -1659,7 +1658,6 @@ str		Par	并行
 str		Parallel	并行
 str		Persistence	持久化
 str		Profile application	配置文件应用
-str		Property	属性
 str		Read	读取
 str		Realization	实现
 str		Redefinable template signature	可重定义模板签名
