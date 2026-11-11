@@ -188,8 +188,9 @@ There are three ways to show a version in place of your current work:
 
 - In its details, choose **View this version**.
 - Click the version chip, in the bar at the top, left of search. It says *Current work*, with a dot
-  while you have unsaved changes. Its list starts with **Current work**, then the versions, newest
-  first, by date and description; the latest reads *Same as current work* when nothing is unsaved.
+  while you have unsaved changes. Its list starts with **Current work**, after the branch you are
+  on once the project has a second branch ([the workspace](03-workspace.md)), then the versions,
+  newest first, by date and description; the latest reads *Same as current work* when nothing is unsaved.
   Click a version to view it, or type to narrow the list, move with ↑ and ↓ and press Enter; Escape
   closes the list. Scrolling to its end lists older versions. From your current work,
   ⇧⌘H (Ctrl Shift H) opens the list too; while a version shows, it takes you

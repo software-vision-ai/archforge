@@ -292,3 +292,141 @@ fn the_keys_reach_the_list_through_the_current_row() {
         assert!(host.switches.lock().unwrap().iter().any(|s| s.branch == "n00"), "{theme:?}: ↓ and Enter switch to the next");
     });
 }
+
+/// The width of `text` where it is drawn starting inside `area`.
+fn drawn_in(h: &Harness<'static, Shell>, area: egui::Rect, text: &str) -> Option<f32> {
+    /// The first text under `s` reading `text` that starts inside `area`.
+    fn walk(s: &egui::Shape, area: egui::Rect, text: &str) -> Option<f32> {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == text && area.contains(t.pos) => Some(t.galley.size().x),
+            egui::Shape::Vec(v) => v.iter().find_map(|s| walk(s, area, text)),
+            _ => None,
+        }
+    }
+    h.output().shapes.iter().find_map(|c| walk(&c.shape, area, text))
+}
+
+/// Opens the chip's list with ⇧⌘H, or ⇧⌘B for the branches, and answers its read of the versions,
+/// more of them to come.
+fn chip_list(h: &mut Harness<'static, Shell>, host: &SavingHost, branches: bool) {
+    key(h, if branches { egui::Key::B } else { egui::Key::H }, egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT));
+    let page = crate::VersionsPage { more: true, ..two_versions() };
+    host.version_reads.lock().unwrap().drain(..).for_each(|read| drop(read.send(Ok(page.clone()))));
+    h.run_steps(3);
+}
+
+/// With one branch the chip, its list and the status bar never say the word; with two the chip has
+/// the branch's icon and name, its list a branch row first, and the status bar "On {branch}", all
+/// following a switch at once and only of the project shown.
+#[test]
+fn the_chip_and_the_status_bar_name_the_branch_once_there_are_two() {
+    let on_branch = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t.starts_with("On "));
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        assert!(h.query_by_label("Current work").is_some() && !on_branch(&h), "{theme:?}: one branch");
+        assert!(!crate::actions::available(h.state(), crate::actions::BRANCHES), "{theme:?}: no branch list");
+        chip_list(&mut h, &host, false);
+        assert!(h.query_by_label_contains("Current work, ").is_some_and(|n| n.rect() == rect_of(&h, "workspace.header.version.row.0")));
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        *host.branch_held.lock().unwrap() = Some(Vec::new());
+        h.state_mut().versions.stale = true;
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        host.branch_held.lock().unwrap().take().unwrap()[0].send(Ok((listed(true), false))).unwrap();
+        h.step();
+        let delay = h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay;
+        assert!(delay.is_zero() && h.query_by_label("Current work").is_some(), "{theme:?}: drawn before, it asks for a frame");
+        h.step();
+        let chip = rect_of(&h, "workspace.header.version");
+        assert!(h.query_by_label("main · Current work").is_some() && drawn_in(&h, chip, "main").is_some(), "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t.starts_with("On main · ")), "{theme:?}: {:?}", painted(&h));
+        *host.branch_now.lock().unwrap() = Some("TRY-cancellations".into());
+        h.run_steps(2);
+        assert!(h.query_by_label("Try cancellations · Current work").is_some() && painted_has(&h, "On Try cancellations · Saved"), "{theme:?}");
+        chip_list(&mut h, &host, false);
+        assert!(h.query_by_label("Try cancellations, Branches").is_some(), "{theme:?}: the branch row first");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.state_mut().view_version("aa").unwrap();
+        h.run_steps(3);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        let older = rect_of(&h, "workspace.header.version.older");
+        let before = egui::Rect::from_min_max(older.left_top() - egui::vec2(200.0, 8.0), older.left_bottom());
+        let label = h.query_by_label("Try cancellations · Viewing a version").is_some();
+        assert!(label && drawn_in(&h, before, "Try cancellations").is_some(), "{theme:?}: viewing, before the steps");
+        h.state_mut().versions.about.as_mut().unwrap().0 = "/tmp/Other.archforge".into();
+        assert_eq!(crate::version_chip::branch_name(h.state()), None, "{theme:?}: a list read of another project");
+    });
+}
+
+/// The branch row, or ⇧⌘B, lists the branches with when each was last saved; Enter on another
+/// switches to it as a panel row does and closes the list, on the one in use only closes, and a
+/// refused switch keeps the list and says why; typing narrows the branches.
+#[test]
+fn the_chip_s_list_switches_branch() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        chip_list(&mut h, &host, false);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        let other = |h: &Harness<'static, Shell>| format!("Try cancellations, {}", when(h, "2026-11-09T15:30:00Z"));
+        assert!(h.query_by_label("main, Current").is_some() && h.query_by_label(&other(&h)).is_some(), "{theme:?}: the branches");
+        assert!(painted_has(&h, "Filter branches…") && !has_id(&h, "workspace.header.version.row.2"), "{theme:?}: and no version");
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().is_empty() && has_id(&h, "workspace.header.version.row.1"), "{theme:?}: refused, it stays");
+        let editing = crate::version_chip::refused_words(h.state(), crate::hold::HoldRefused::Editing);
+        assert_eq!(h.state().canvas.notice, editing, "{theme:?}: said why");
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        let switched: Vec<_> = host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect();
+        assert!(switched == ["try-cancellations"] && !has_id(&h, "workspace.header.version.row.0"), "{theme:?}: {switched:?}");
+
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        chip_list(&mut h, &host, true);
+        let reads = host.version_reads.lock().unwrap().len();
+        assert!(h.query_by_label("main, Current").is_some() && reads == 0, "{theme:?}: ⇧⌘B, reading no more versions");
+        h.event(egui::Event::Text("try".into()));
+        h.run_steps(2);
+        assert!(h.query_by_label("main, Current").is_none() && h.query_by_label(&other(&h)).is_some(), "{theme:?}: narrowed");
+        (0..3).for_each(|_| key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(4);
+        assert!(host.switches.lock().unwrap().is_empty() && !has_id(&h, "workspace.header.version.row.0"), "{theme:?}: the one in use");
+    });
+}
+
+/// As the window narrows the branch's name truncates first, then the label goes, then the chip is
+/// one icon, then search hides; each in turn.
+#[test]
+fn the_branch_chip_narrows_in_the_design_s_order() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
+        h.state_mut().state.explorer_collapsed = true;
+        let mut seen = Vec::new();
+        h.run_steps(2);
+        let whole = drawn_in(&h, rect_of(&h, "workspace.header.version"), "Try cancellations").unwrap();
+        for width in (640..=1600).rev().step_by(8) {
+            h.set_size(egui::vec2(width as f32, 860.0));
+            h.run_steps(2);
+            let chip = rect_of(&h, "workspace.header.version");
+            let name = drawn_in(&h, chip, "Try cancellations");
+            let full = name.is_some_and(|w| w >= whole - 0.5);
+            let stage = match (name, drawn_in(&h, chip, "Current work").is_some()) {
+                _ if !has_id(&h, "workspace.header.search") => 0,
+                (None, _) => 1,
+                (Some(_), false) => 2,
+                (Some(_), true) if !full => 3,
+                (Some(_), true) => 4,
+            };
+            assert!(seen.last().is_none_or(|&last| last >= stage), "{theme:?}: at {width} {stage} after {seen:?}");
+            if seen.last() != Some(&stage) {
+                seen.push(stage);
+            }
+        }
+        assert_eq!(seen, [4, 3, 2, 1, 0], "{theme:?}");
+    });
+}

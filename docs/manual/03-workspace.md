@@ -19,6 +19,13 @@ An open project fills the window with its workspace.
   version and switch, or switch and leave them on this branch for when you come back. Branches
   can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
   so under the list.
+  Once a project has a second branch, the version chip in the bar at the top names the branch you
+  are on, before *Current work*, and the status bar says *On* and its name before whether your work
+  is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),
+  to list the branches there, each with when its latest version was saved, type to narrow them, and
+  choose one, or move to it with ↑ and ↓ and press Enter, to switch to it as above. In a narrower
+  window the chip shortens the branch's name first, then leaves out *Current work*, then shows only
+  its icon, with the whole label when you point at it.
   Clicking a version in the history opens its details in the centre, and **View this version**
   there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
   through History, viewing an earlier version and coming back to your current work.

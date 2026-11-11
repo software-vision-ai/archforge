@@ -21,6 +21,7 @@ pub const CLOSE: &str = "file.close";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
+pub const BRANCHES: &str = "versions.branches";
 pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
 
@@ -169,6 +170,15 @@ pub static ACTIONS: &[Action] = &[
         available: crate::version_chip::available,
         run: crate::version_chip::newer,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
+        search: None,
+    },
+    Action {
+        id: BRANCHES,
+        label: |_| tr("Switch branch"),
+        // While the list can open and there are branches to switch between.
+        available: |s| crate::version_chip::available(s) && crate::version_chip::branch_name(s).is_some(),
+        run: crate::version_chip::open_branches,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::B }),
         search: None,
     },
     Action {

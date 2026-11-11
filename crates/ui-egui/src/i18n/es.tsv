@@ -279,6 +279,7 @@ str		Saving…	Guardando…
 str		Opening…	Abriendo…
 str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Cambios sin guardar · {chord} guarda
+str		On {branch} · {status}	En {branch} · {status}
 str		Chat is using the model	Chat está usando el modelo
 str		Agent access off	Acceso de agentes desactivado
 # Panel de Chat
@@ -464,6 +465,7 @@ str		The project stayed on its branch because it changed or was busy.	El proyect
 str		Your latest changes could not be written, so the project stayed on its branch.	No se pudieron escribir tus últimos cambios, por lo que el proyecto se quedó en su rama.
 str		The project stayed on its branch: {why}	El proyecto se quedó en su rama: {why}
 str		Switch to {branch}?	¿Cambiar a {branch}?
+str		Switch branch	Cambiar de rama
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} tiene cambios sin guardar. Se quedan en {branch} y estarán ahí cuando vuelvas. No podrás deshacer pasos anteriores.
 str		Save version and switch	Guardar versión y cambiar
 str		Switch	Cambiar
@@ -518,6 +520,7 @@ str		One line, at most 200 characters. It stays in the history.	Una línea, 200 
 plural		{n} model element	{n} elemento del modelo|{n} elementos del modelo
 str		Filter changes…	Filtrar cambios…
 str		Filter versions…	Filtrar versiones…
+str		Filter branches…	Filtrar ramas…
 str		Model elements	Elementos del modelo
 str		Unnamed	Sin nombre
 str		Added	Añadido

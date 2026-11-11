@@ -49,7 +49,7 @@ const SKELETON_ROWS: usize = 6;
 #[derive(Default)]
 pub struct State {
     /// The project and session the panel is about.
-    about: Option<(PathBuf, u64)>,
+    pub(crate) about: Option<(PathBuf, u64)>,
     /// Whether a read has started for them.
     asked: bool,
     pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
@@ -171,9 +171,12 @@ pub(crate) fn refresh(shell: &mut Shell, ctx: &egui::Context) {
         None => {}
     }
     take_more(v);
-    // A row of an open menu may now hold another branch.
-    if take_branches(v) && matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
-        shell.panels.menu = None;
+    // A row of an open menu may now hold another branch, and the chip, drawn before, name one.
+    if take_branches(v) {
+        ctx.request_repaint();
+        if matches!(shell.panels.menu, Some(crate::panels::Menu::Branch(_))) {
+            shell.panels.menu = None;
+        }
     }
     if (!v.asked || v.stale) && v.reading.is_none() {
         read(shell);
@@ -584,12 +587,13 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     }
 }
 
-/// Asks to go to the branch stored as `name`; a refusal says why over the canvas.
-fn switch_to(shell: &mut Shell, name: String) {
-    if let Err(why) = shell.ask_switch_branch(name) {
-        let words = crate::version_chip::refused_words(shell, why);
-        shell.canvas.say_refused_step(words);
-    }
+/// Asks to go to the branch stored as `name`, as a branch row here and in the chip's list do; a
+/// refusal says why over the canvas. Gives whether it went ahead.
+pub(crate) fn switch_to(shell: &mut Shell, name: String) -> bool {
+    let Err(why) = shell.ask_switch_branch(name) else { return true };
+    let words = crate::version_chip::refused_words(shell, why);
+    shell.canvas.say_refused_step(words);
+    false
 }
 
 /// Working changes from `y`: its header and what can be said so far. Gives where the next

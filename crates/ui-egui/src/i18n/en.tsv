@@ -278,6 +278,7 @@ str		Saving…	Saving…
 str		Opening…	Opening…
 str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
+str		On {branch} · {status}	On {branch} · {status}
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
 # Chat panel
@@ -463,6 +464,7 @@ str		The project stayed on its branch because it changed or was busy.	The projec
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
 str		Switch to {branch}?	Switch to {branch}?
+str		Switch branch	Switch branch
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.
 str		Save version and switch	Save version and switch
 str		Switch	Switch
@@ -517,6 +519,7 @@ str		One line, at most 200 characters. It stays in the history.	One line, at mos
 plural		{n} model element	{n} model element|{n} model elements
 str		Filter changes…	Filter changes…
 str		Filter versions…	Filter versions…
+str		Filter branches…	Filter branches…
 str		Model elements	Model elements
 str		Unnamed	Unnamed
 str		Added	Added

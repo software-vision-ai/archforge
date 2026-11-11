@@ -279,6 +279,7 @@ str		Saving…	正在保存…
 str		Opening…	正在打开…
 str		Saved	已保存
 str		Unsaved changes · {chord} saves	有未保存的更改 · {chord} 保存
+str		On {branch} · {status}	在 {branch} 上 · {status}
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
 # 聊天面板
@@ -464,6 +465,7 @@ str		The project stayed on its branch because it changed or was busy.	由于项�
 str		Your latest changes could not be written, so the project stayed on its branch.	无法写入您最近的更改，因此项目仍停留在其分支上。
 str		The project stayed on its branch: {why}	项目仍停留在其分支上：{why}
 str		Switch to {branch}?	切换到 {branch}？
+str		Switch branch	切换分支
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} 有未保存的更改。它们会保留在 {branch} 上，您回来时仍在。您将无法撤销之前的步骤。
 str		Save version and switch	保存版本并切换
 str		Switch	切换
@@ -518,6 +520,7 @@ str		One line, at most 200 characters. It stays in the history.	一行，最多 
 plural		{n} model element	{n} 个模型元素
 str		Filter changes…	筛选更改…
 str		Filter versions…	筛选版本…
+str		Filter branches…	筛选分支…
 str		Model elements	模型元素
 str		Unnamed	未命名
 str		Added	已添加
