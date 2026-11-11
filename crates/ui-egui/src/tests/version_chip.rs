@@ -1924,6 +1924,203 @@ fn a_skip_that_never_arrives_is_not_said() {
     }
 }
 
+/// Viewing `v1`, the last of the two versions read with older pages to read; the History panel's
+/// read answered too.
+fn at_the_end_of_what_is_read(h: &mut Harness<'static, Shell>, host: &SavingHost) {
+    press(h, egui::Key::OpenBracket);
+    answer(h, host, Ok(page(0, 2, true)));
+    shown(h, host, "v1");
+    answer(h, host, Ok(page(0, 2, true)));
+}
+
+/// The `after` of the last read of versions asked for.
+fn last_asked(host: &SavingHost) -> Option<String> {
+    host.version_asks.lock().unwrap().last().unwrap().clone()
+}
+
+/// A step past what is read reads the next page and goes on, one step and one read however many
+/// presses; a step newer than the newest reads nothing, older pages or not; ‹ is live until the
+/// history has really ended.
+#[test]
+fn a_step_past_what_is_read_reads_on() {
+    use egui::Key::{CloseBracket, OpenBracket};
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "older pages exist");
+        press(&mut h, CloseBracket);
+        shown(&mut h, &host, "v0");
+        answer(&mut h, &host, Ok(page(0, 2, true)));
+        press(&mut h, CloseBracket);
+        assert!(host.version_reads.lock().unwrap().is_empty(), "nothing is newer than the newest");
+        press(&mut h, OpenBracket);
+        shown_kept(&mut h, &host, "v1");
+        answer(&mut h, &host, Ok(page(0, 2, true)));
+        press(&mut h, OpenBracket);
+        assert_eq!(last_asked(&host).as_deref(), Some("v1"), "the page after what is read");
+        press(&mut h, OpenBracket);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "one read, however many presses");
+        assert!(host.reads.lock().unwrap().is_empty(), "nothing to go to yet");
+        answer(&mut h, &host, Ok(page(2, 4, false)));
+        shown(&mut h, &host, "v2");
+        answer(&mut h, &host, Ok(page(0, 4, false)));
+        press(&mut h, OpenBracket);
+        shown(&mut h, &host, "v3");
+        answer(&mut h, &host, Ok(page(0, 4, false)));
+        assert!(h.get_by_label("Older version").accesskit_node().is_disabled(), "the history has ended");
+        press(&mut h, OpenBracket);
+        assert!(host.version_reads.lock().unwrap().is_empty() && host.reads.lock().unwrap().is_empty(), "an end does nothing");
+    });
+}
+
+/// From a version further down than what is read, as History can reach, a step either way reads
+/// until it finds where it stands.
+#[test]
+fn a_step_from_a_version_not_read_yet_reads_until_it_is_found() {
+    for (key, to) in [(egui::Key::CloseBracket, "v2"), (egui::Key::OpenBracket, "v4")] {
+        in_both(|mut h, host| {
+            h.state_mut().view_version("v3").unwrap();
+            let rows = rows_now(&h);
+            answer_read(&mut h, &host, Ok(rows));
+            h.run_steps(2);
+            answer(&mut h, &host, Ok(page(0, 2, true)));
+            press(&mut h, key);
+            assert_eq!(last_asked(&host).as_deref(), Some("v1"));
+            answer(&mut h, &host, Ok(page(2, 5, false)));
+            shown(&mut h, &host, to);
+        });
+    }
+}
+
+/// Before the first read has answered the end isn't known: ‹ is live, and a press is the step taken
+/// when the read that is already on its way answers.
+#[test]
+fn a_press_during_the_first_read_waits_for_it() {
+    in_both(|mut h, host| {
+        h.state_mut().view_version("v1").unwrap();
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        h.run_steps(2);
+        assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "not told as the end before it is known");
+        let asked = host.version_asks.lock().unwrap().len();
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(host.version_asks.lock().unwrap().len(), asked, "the read on its way serves it");
+        answer(&mut h, &host, Ok(page(0, 3, false)));
+        shown(&mut h, &host, "v2");
+    });
+}
+
+/// Reading on passes whole pages of what can't be shown and names the first it passed; an empty
+/// page ends it, whatever it says.
+#[test]
+fn a_step_reads_on_past_pages_that_cannot_be_shown() {
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        ["v2", "v3"].iter().for_each(|hash| mark(&mut h, hash));
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Ok(page(2, 4, true)));
+        assert_eq!(last_asked(&host).as_deref(), Some("v3"), "nothing to show yet, so on again");
+        assert!(host.reads.lock().unwrap().is_empty());
+        answer(&mut h, &host, Ok(page(4, 5, false)));
+        shown(&mut h, &host, "v4");
+        let clock = crate::chat_panel::clock(h.state());
+        let date = |n: usize| crate::version_chip::when(&page(n, n + 1, false).versions[0].date, clock);
+        toast_says(&h, &crate::i18n::fmt(&crate::i18n::tr("{from} can't be shown. Skipped to {to}."), &[("from", &date(2)), ("to", &date(4))]));
+    });
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Ok(crate::VersionsPage { versions: Vec::new(), more: true }));
+        assert!(host.version_reads.lock().unwrap().is_empty() && host.reads.lock().unwrap().is_empty());
+        assert!(h.get_by_label("Older version").accesskit_node().is_disabled(), "the history has ended");
+    });
+}
+
+/// A step whose read fails says so and stays; it isn't told as the end, the next press reads that
+/// page again and what was said ends as it starts. Words said by others are left alone.
+#[test]
+fn a_step_whose_read_fails_says_so_and_the_next_reads_again() {
+    use crate::version_chip::failure_words;
+    in_both(|mut h, host| {
+        at_the_end_of_what_is_read(&mut h, &host);
+        h.state_mut().canvas.say_refused_step(Some("Said by another".into()));
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Said by another"), "a read ends only its own words");
+        answer(&mut h, &host, Err("no".into()));
+        toast_says(&h, &failure_words(false));
+        assert_eq!(h.state().viewing(), Some("v1"));
+        assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "not told as the end");
+        press(&mut h, egui::Key::OpenBracket);
+        assert_eq!(h.state().canvas.notice, None, "reading again ends it");
+        assert_eq!(last_asked(&host).as_deref(), Some("v1"), "that page again");
+        answer(&mut h, &host, Ok(page(2, 3, false)));
+        shown(&mut h, &host, "v2");
+    });
+}
+
+/// With nothing read, the words are of the newest versions; a read that then finds none ends them,
+/// and so does a save, which makes what was read old.
+#[test]
+fn a_first_read_that_fails_says_so_and_its_words_end() {
+    use crate::version_chip::failure_words;
+    in_both(|mut h, host| {
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Err("no".into()));
+        toast_says(&h, &failure_words(true));
+        assert_eq!(h.state().viewing(), None);
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        assert_eq!(h.state().canvas.notice, None, "the read that followed found nothing to step to");
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Err("no".into()));
+        toast_says(&h, &failure_words(true));
+        h.state_mut().save();
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        assert_eq!(h.state().canvas.notice, None, "a finished save ends it");
+    });
+}
+
+/// What covers the canvas says the failure too, as the toast there would go unseen.
+#[test]
+fn a_failed_step_is_said_over_a_versions_details() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let entry = version_row("a", None, (None, false), "2026-11-08T15:30:00Z");
+        let (mut h, host) = versions_listed(theme, vec![entry.clone()]);
+        crate::version_details::open(h.state_mut(), entry);
+        h.run_steps(2);
+        press(&mut h, egui::Key::OpenBracket);
+        answer(&mut h, &host, Err("no".into()));
+        assert!(has_id(&h, "workspace.version-details.view"), "the details are still there");
+        assert_eq!(painted_times(&h, &crate::version_chip::failure_words(true)), 1, "{:?}", painted(&h));
+    }
+}
+
+/// A step that waited is over once the person has moved, by going back or by a step the other way:
+/// its read then moves nothing and says nothing, whichever way it ends.
+#[test]
+fn a_step_waiting_ends_when_the_person_moves() {
+    for reply in [Ok(page(2, 3, false)), Err("no".to_string())] {
+        in_both(|mut h, host| {
+            at_the_end_of_what_is_read(&mut h, &host);
+            press(&mut h, egui::Key::OpenBracket);
+            h.state_mut().back_to_current_work();
+            h.run_steps(2);
+            answer(&mut h, &host, reply.clone());
+            assert!(h.state().viewing().is_none() && !h.state().is_held(), "it stays on current work, entering nothing");
+            assert_eq!(h.state().canvas.notice, None);
+        });
+        in_both(|mut h, host| {
+            at_the_end_of_what_is_read(&mut h, &host);
+            press(&mut h, egui::Key::OpenBracket);
+            press(&mut h, egui::Key::CloseBracket);
+            answer(&mut h, &host, reply.clone());
+            assert_eq!(h.state().canvas.notice, None);
+            shown(&mut h, &host, "v0");
+            assert!(host.reads.lock().unwrap().is_empty(), "only the step taken since");
+        });
+    }
+}
+
 /// The failed-load banner and its Retry, by the ids `versions` gives them.
 const LOAD_FAILED: &str = "workspace.versions.load.failed";
 const LOAD_RETRY: &str = "workspace.versions.load.retry";

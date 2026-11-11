@@ -54,9 +54,13 @@ pub struct Steps {
     pub(crate) reading: Option<Receiver<Result<VersionsPage, String>>>,
     /// The last read failed; what was read before it stays.
     failed: bool,
-    /// The step to take when the read arrives: older when true.
-    waiting: Option<bool>,
+    /// The step to take when the read arrives.
+    waiting: Option<Waiting>,
 }
+
+/// A step waiting for a read: older when true, and the version it goes from, none for current work.
+/// Once the person has moved from there, it is no longer the step they asked for.
+type Waiting = (bool, Option<String>);
 
 /// A row of the list: the version it views, none for current work; its name; the words beside it.
 type Row = (Option<String>, String, String);
@@ -112,6 +116,7 @@ pub(crate) fn close(shell: &mut Shell) {
 pub(crate) fn saved(shell: &mut Shell) {
     close(shell);
     shell.version_list.steps = Steps::default();
+    end_failure_said(shell);
 }
 
 /// ⇧⌘H: back to current work while viewing, otherwise the list.
@@ -131,38 +136,61 @@ pub(crate) fn newer(shell: &mut Shell) {
     ask_step(shell, false);
 }
 
-/// Takes the step now if the versions are read, otherwise when they arrive; a press while they
-/// are on their way is ignored.
+/// Takes the step now if what it goes to is read, otherwise when that arrives, by the one read
+/// there is: the latest press while it is on its way is the step taken, and starts no other.
 fn ask_step(shell: &mut Shell, older: bool) {
     let steps = &shell.version_list.steps;
-    if !steps.history.is_empty() {
-        step(shell, older);
-    } else if steps.reading.is_none() {
-        read_steps(shell, Some(older));
+    let (first, reading) = (steps.history.is_empty(), steps.reading.is_some());
+    if !first && !beyond_read(shell, older) {
+        return step(shell, older);
+    }
+    let waiting = Some((older, shell.stepping_from().map(str::to_string)));
+    if reading {
+        shell.version_list.steps.waiting = waiting;
+    } else if first {
+        read_steps(shell, waiting);
+    } else {
+        read_on(shell, waiting);
     }
 }
 
 /// Asks the host for the newest versions, in place of all that is read.
-fn read_steps(shell: &mut Shell, waiting: Option<bool>) {
+fn read_steps(shell: &mut Shell, waiting: Option<Waiting>) {
     if let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|p| p.path.clone())) {
         let reading = Some(host.versions(&path, None, PAGE));
         shell.version_list.steps = Steps { project: Some(path), reading, waiting, ..Steps::default() };
+        end_failure_said(shell);
     }
 }
 
 /// Asks the host for the page after what is read.
-fn read_on(shell: &mut Shell) {
+fn read_on(shell: &mut Shell, waiting: Option<Waiting>) {
     let steps = &mut shell.version_list.steps;
     if let (Some(host), Some(path), Some(after)) =
         (shell.services.projects.clone(), steps.project.clone(), steps.history.last().map(|v| v.hash.clone()))
     {
-        steps.failed = false;
+        (steps.failed, steps.waiting) = (false, waiting);
         steps.reading = Some(host.versions(&path, Some(after), PAGE));
+        end_failure_said(shell);
     }
 }
 
-/// Takes the answer to the read, and the step that waited for it. A failed read keeps what was
-/// read and marks the list.
+/// What a failed read is told as: of the newest versions, when `first`, or of the next ones.
+pub(crate) fn failure_words(first: bool) -> String {
+    if first { tr("The versions couldn't be read.") } else { tr("The next versions couldn't be read.") }
+}
+
+/// Ends what a failed step said, if that still stands: what is read is about to change.
+fn end_failure_said(shell: &mut Shell) {
+    if shell.canvas.refused_step.as_ref().is_some_and(|said| [true, false].map(failure_words).contains(said)) {
+        shell.canvas.say_refused_step(None);
+    }
+}
+
+/// Takes the answer to the read, and goes on with the step that waited for it, as long as the
+/// person is still where they asked it from: reading on while what it goes to is further still,
+/// or saying so in the toast when the read failed. A failed read keeps what was read and marks
+/// the list.
 fn take_steps(shell: &mut Shell) {
     let steps = &mut shell.version_list.steps;
     match steps.reading.as_ref().map(Receiver::try_recv) {
@@ -178,9 +206,23 @@ fn take_steps(shell: &mut Shell) {
         }
     }
     steps.reading = None;
-    if let Some(older) = steps.waiting.take() {
+    let (failed, first) = (steps.failed, steps.history.is_empty());
+    let Some((older, from)) = steps.waiting.take().filter(|(_, from)| shell.stepping_from() == from.as_deref()) else { return };
+    if failed {
+        shell.canvas.say_refused_step(Some(failure_words(first)));
+    } else if beyond_read(shell, older) {
+        read_on(shell, Some((older, from)));
+    } else {
         step(shell, older);
     }
+}
+
+/// Whether what a step goes to lies in pages not read yet: older than all that is read, or either
+/// way from a version not read itself, such as one reached from further down History.
+fn beyond_read(shell: &Shell, older: bool) -> bool {
+    let steps = &shell.version_list.steps;
+    let from_unread = shell.stepping_from().is_some_and(|commit| !steps.history.iter().any(|v| v.hash == commit));
+    steps.more && (older || from_unread) && target(shell, older).is_none()
 }
 
 /// The version a step goes to, past any known not to show, and the first of those it passed: from
@@ -208,7 +250,7 @@ fn target(shell: &Shell, older: bool) -> Option<(&VersionEntry, Option<&VersionE
 }
 
 /// Goes one version older or newer, saying so when it passes one that can't be shown; at the end
-/// of what is read, nowhere.
+/// of the history, nowhere.
 fn step(shell: &mut Shell, older: bool) {
     let clock = crate::chat_panel::clock(shell);
     let Some((version, passed)) = target(shell, older) else { return };
@@ -405,8 +447,9 @@ fn viewing_chip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (label, 
     }
 }
 
-/// ‹ or ›: muted, unavailable to a screen reader and doing nothing at the end of the history. When
-/// nothing could be read it stays live, to read again.
+/// ‹ or ›: muted, unavailable to a screen reader and doing nothing at the end of the history. While
+/// that end is not known it stays live: before the first read has answered, with nothing read, and
+/// with older pages to read, which a failed read leaves to be read again.
 fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, older: bool) {
     let (key, icon, name, none) = if older {
         ("older", &icons::CHEVRON_LEFT, tr("Older version"), tr("No older version"))
@@ -414,8 +457,9 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
         ("newer", &icons::CHEVRON_RIGHT, tr("Newer version"), tr("No newer version"))
     };
     let at = Rect::from_center_size(pos2(x, mid), vec2(24.0, 24.0));
-    let unread = shell.version_list.steps.failed && shell.version_list.steps.history.is_empty();
-    let (live, id) = ((target(shell, older).is_some() || unread) && available(shell), format!("{ID}.{key}"));
+    let steps = &shell.version_list.steps;
+    let unread = steps.history.is_empty() && (steps.failed || steps.reading.is_some());
+    let (live, id) = ((target(shell, older).is_some() || unread || beyond_read(shell, older)) && available(shell), format!("{ID}.{key}"));
     widgets::record_visible(ui, &mut shell.registry, &id, "button", at);
     let resp = ui.interact(at, widgets::egui_id(&id), if live { egui::Sense::click() } else { egui::Sense::hover() });
     ui.ctx().accesskit_node_builder(widgets::egui_id(&id), |node| {
@@ -482,14 +526,14 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 /// Under the rows: what could not be read, the newest versions or the next ones, and Retry for it.
 fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let first = shell.version_list.steps.history.is_empty();
-    let words = if first { tr("The versions couldn't be read.") } else { tr("The next versions couldn't be read.") };
+    let words = failure_words(first);
     let label = tr("Retry");
     let width = (ux::galley(ui.painter(), &label, types::UI, p.text, None).size().x + 20.0).ceil();
     let area = Rect::from_min_max(r.min, pos2(r.right() - width - 6.0, r.bottom()));
     let _ = control(shell, ui, &format!("{ID}.failed"), "status", area, false).accessible_name(words.as_str());
     ux::text_mid(ui.painter(), r.left() + 10.0, r.center().y, &words, types::SMALL, p.danger, Some((area.width() - 16.0).max(0.0)));
     if button(shell, ui, p, &format!("{ID}.retry"), pos2(r.right() - width, r.top() + 1.0), &label, Look::Secondary, true, None).1.clicked() {
-        if first { read_steps(shell, None) } else { read_on(shell) }
+        if first { read_steps(shell, None) } else { read_on(shell, None) }
     }
 }
 
@@ -550,7 +594,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
         if failed {
             failure_row(shell, ui, p, Rect::from_min_size(pos2(r.left() + 6.0, bottom), vec2(WIDTH - 12.0, ROW)));
         } else if reading_on && steps.reading.is_none() && offset + (bottom - first) + ROW >= rows.len() as f32 * ROW {
-            read_on(shell);
+            read_on(shell, None);
         }
         picked
     });
