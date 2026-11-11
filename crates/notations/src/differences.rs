@@ -3,12 +3,14 @@
 //! side is restored into a store of its own and repaired as an opening repairs it, so a box an
 //! opening fits shows no false change. One selected element's two sides are read the same way, as
 //! typed cards with their fields aligned and its members and owner listed, for a
-//! view to word later. Nothing here writes: the stores are thrown away.
+//! view to word later; one diagram's two sides are kept as stores of their own, for a view to draw.
+//! Nothing here writes to the project.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
+use archforge_diagram::{EDGE, Grid, LABEL, NODE, POINT, STYLE, diagram, diagram_of, edge, node};
 use archforge_mof::compare::{CompareError, MAX_COMPARED, RowChange, compare};
 use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot};
 use archforge_mof::schema::{Junction, Table};
@@ -131,6 +133,26 @@ pub struct CardLists {
     pub member_changes: usize,
 }
 
+/// One side of a compared diagram: a store of its own, so names and places are what they were there.
+pub struct DiagramSide {
+    pub store: Store,
+    pub diagram: Obj,
+    pub grid: Grid,
+}
+
+/// One diagram's two sides, found by its id. A side is none when the diagram is not there.
+pub struct DiagramSides {
+    pub id: Uuid,
+    /// Its name and the names of what contains it, from the after side when it is there.
+    pub name: Option<String>,
+    pub path: Vec<String>,
+    pub before: Option<DiagramSide>,
+    pub after: Option<DiagramSide>,
+    /// What happened to each box and line of this diagram that differs, by its id. One that stayed
+    /// is Changed when it or what it draws differs: its element, or a member listed on it.
+    pub marks: BTreeMap<Uuid, ChangeKind>,
+}
+
 /// Why two states could not be classified. There is never a partial answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassifyError {
@@ -154,13 +176,9 @@ impl fmt::Display for ClassifyError {
 
 impl std::error::Error for ClassifyError {}
 
-/// Classifies and names what differs between `before` and `after`, sorted by id. `repair` is what
-/// an opening does to a store, applied to a private copy of each side.
-pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
-    let (tables, junctions) = storage();
-    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
-    let found = compare(&old_rows, &new_rows, &tables, &junctions, MAX_COMPARED).map_err(ClassifyError::Compare)?;
+/// What happened to each item that differs between two states' rows, by id and table.
+fn kinds_between(old: &Rows, new: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<BTreeMap<(Uuid, ClassId), ChangeKind>, ClassifyError> {
+    let found = compare(old, new, tables, junctions, MAX_COMPARED).map_err(ClassifyError::Compare)?;
     // By id and class: an item that moved to another table is removed there and added here.
     let mut kinds: BTreeMap<(Uuid, ClassId), ChangeKind> = BTreeMap::new();
     let mut came_or_went = BTreeSet::new();
@@ -186,6 +204,16 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
             }
         }
     }
+    Ok(kinds)
+}
+
+/// Classifies and names what differs between `before` and `after`, sorted by id. `repair` is what
+/// an opening does to a store, applied to a private copy of each side.
+pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
+    let (tables, junctions) = storage();
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+    let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
     let named = |((id, class), kind): ((Uuid, ClassId), ChangeKind)| {
         let (name, path) = name_and_path(if kind == ChangeKind::Removed { &old } else { &new }, id);
         let area = if class.metamodel() == archforge_diagram::INDEX { Area::Diagram } else { Area::Model };
@@ -223,6 +251,74 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let member_changes = marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added));
     let lists = Arc::new(CardLists { before: before_lists, after: after_lists, member_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
+}
+
+/// The two sides of the diagram that holds the item `id`, a box or a line of it or the diagram
+/// itself, each restored and repaired as [`classified`] does it. `Ok(None)` when neither side has one.
+pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<DiagramSides>, ClassifyError> {
+    let (tables, junctions) = storage();
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+    let holder = |store: &Store| store.by_uuid(id).and_then(|o| diagram_of(store, o)).and_then(|d| store.uuid(d).ok());
+    let Some(diagram) = holder(&new).or_else(|| holder(&old)) else { return Ok(None) };
+    let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
+    let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
+    let side = |store: Store| store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build(&store, d), diagram: d, store });
+    let (before, after) = (side(old), side(new));
+    let marks = marks_of(&kinds, [("before", before.as_ref()), ("after", after.as_ref())])?;
+    Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks }))
+}
+
+/// What each box and line of `sides` is marked with: its own change, or Changed when something it
+/// draws differs on either side, as a member gone is only on the side that still has it.
+fn marks_of(
+    kinds: &BTreeMap<(Uuid, ClassId), ChangeKind>,
+    sides: [(&'static str, Option<&DiagramSide>); 2],
+) -> Result<BTreeMap<Uuid, ChangeKind>, ClassifyError> {
+    let changed: BTreeSet<Uuid> = kinds.keys().map(|(id, _)| *id).collect();
+    let own = |id: Uuid| kinds.get(&(id, NODE)).or_else(|| kinds.get(&(id, EDGE))).copied().unwrap_or(ChangeKind::Changed);
+    let mut marks = BTreeMap::new();
+    for (name, side) in sides {
+        let Some(side) = side else { continue };
+        let found = changed_items(side, &changed).map_err(|e| ClassifyError::Unreadable { side: name, why: e.to_string() })?;
+        marks.extend(found.into_iter().map(|id| (id, own(id))));
+    }
+    Ok(marks)
+}
+
+/// The boxes and lines of `side` that draw something in `changed`.
+fn changed_items(side: &DiagramSide, changed: &BTreeSet<Uuid>) -> Result<Vec<Uuid>, Invalid> {
+    let (store, mut found) = (&side.store, Vec::new());
+    for (list, shows) in [(diagram::NODE, node::ELEMENT), (diagram::EDGE, edge::ELEMENT)] {
+        for item in store.list(side.diagram, list)?.iter().filter_map(Value::as_ref) {
+            let element = store.get(item, shows)?.as_ref().filter(|e| store.is_alive(*e));
+            if draws_a_change(store, item, changed, MAX_NESTING)? || element.map_or(Ok(false), |e| draws_a_change(store, e, changed, MAX_NESTING))? {
+                found.push(store.uuid(item)?);
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// Whether `obj` or a part drawn with it differs, within `depth` levels.
+fn draws_a_change(store: &Store, obj: Obj, changed: &BTreeSet<Uuid>, depth: usize) -> Result<bool, Invalid> {
+    if changed.contains(&store.uuid(obj)?) {
+        return Ok(true);
+    }
+    if depth > 0 {
+        for part in store.owned_elements(obj)? {
+            let class = store.class_of(part)?;
+            if ([POINT, LABEL, STYLE].contains(&class) || is_feature(class)) && draws_a_change(store, part, changed, depth - 1)? {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Whether `class` is listed on its owner's box.
+fn is_feature(class: ClassId) -> bool {
+    class == archforge_uml::PARAMETER || kind_of(class) != ListKind::Members
 }
 
 /// Whether `prop` belongs on a card: one stored data value, not the element's id or name. The

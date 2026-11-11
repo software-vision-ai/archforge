@@ -3,7 +3,8 @@
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
-    Area, CardField, CardList, ChangeKind, ClassifyError, Difference, ElementCard, ElementSides, ListKind, Named, classified, element_sides,
+    Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
+    classified, diagram_sides, element_sides,
 };
 use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
@@ -415,4 +416,181 @@ fn an_unknown_element_is_none_and_an_unreadable_side_is_named() {
     assert_eq!(element_sides(&good, &good, Uuid([7; 16]), |_| {}), Ok(None));
     assert!(matches!(element_sides(&Rows::default(), &good, id, |_| {}), Err(ClassifyError::Unreadable { side: "before", .. })));
     assert!(matches!(element_sides(&good, &Rows::default(), id, |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
+}
+
+/// A project with a diagram of its schema, the tables customer and invoice placed on it.
+struct Placed {
+    s: Session,
+    shop: String,
+    customer: String,
+    invoice: String,
+    diagram: String,
+    first: String,
+    second: String,
+}
+
+/// The project every diagram comparison starts from.
+fn placed() -> Placed {
+    let (mut s, shop, customer, _) = project();
+    let invoice = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "invoice" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Billing" }));
+    let first = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
+    let second = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": invoice, "x": 400, "y": 0 }));
+    Placed { s, shop, customer, invoice, diagram, first, second }
+}
+
+/// The two sides of the diagram holding `id`, with no repair.
+fn drawn(before: &Rows, after: &Rows, id: &str) -> DiagramSides {
+    diagram_sides(before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
+}
+
+/// What `seen` marks the item `id` with.
+fn mark(seen: &DiagramSides, id: &str) -> Option<ChangeKind> {
+    seen.marks.get(&Uuid::parse(id).unwrap()).copied()
+}
+
+/// A box, or the diagram itself, finds the diagram; each side holds its own state, and a model
+/// element or an unknown id holds no diagram.
+#[test]
+fn each_side_of_a_diagram_is_its_own_state() {
+    /// Compiles only for a type a reading thread can hand to the interface thread.
+    fn moves_between_threads<T: Send>() {}
+    moves_between_threads::<DiagramSides>();
+    let Placed { mut s, customer, diagram, first, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let after = state(&s);
+    let name_on = |side: &DiagramSide| archforge_core::name_of(&side.store, side.store.by_uuid(Uuid::parse(&customer).unwrap()).unwrap());
+    for id in [&first, &diagram] {
+        let seen = drawn(&before, &after, id);
+        assert_eq!((seen.id.to_string(), seen.name.as_deref()), (diagram.clone(), Some("Billing")));
+        assert_eq!(seen.path, ["Commerce"]);
+        assert_eq!((name_on(seen.before.as_ref().unwrap()), name_on(seen.after.as_ref().unwrap())), ("customer".into(), "client".into()));
+        assert_eq!(seen.after.as_ref().unwrap().grid.len().0, 2, "both boxes");
+    }
+    assert!(diagram_sides(&before, &after, Uuid::parse(&customer).unwrap(), |_| {}).unwrap().is_none(), "a model element");
+    assert!(diagram_sides(&before, &after, Uuid([7; 16]), |_| {}).unwrap().is_none(), "an unknown id");
+}
+
+/// A diagram only one side has leaves the other absent, named from the side that has it.
+#[test]
+fn a_diagram_on_one_side_has_an_absent_side() {
+    let Placed { mut s, diagram, .. } = placed();
+    let with = state(&s);
+    run(&mut s, "diagram.remove", json!({ "diagram": diagram }));
+    let without = state(&s);
+    let gone = drawn(&with, &without, &diagram);
+    assert!(gone.before.is_some() && gone.after.is_none());
+    assert_eq!(gone.name.as_deref(), Some("Billing"));
+    let came = drawn(&without, &with, &diagram);
+    assert!(came.before.is_none() && came.after.is_some());
+    assert_eq!(came.name.as_deref(), Some("Billing"));
+}
+
+/// A box is marked with its own change, or Changed for what it draws; one nothing touched has no mark.
+#[test]
+fn boxes_are_marked_by_their_own_change_and_by_what_they_show() {
+    let Placed { mut s, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [first], "dx": 40, "dy": 40 }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "moved, and left alone");
+
+    let Placed { mut s, shop, customer, diagram, .. } = placed();
+    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let elsewhere = run(&mut s, "diagram.place", json!({ "diagram": other, "element": customer, "x": 0, "y": 0 }));
+    let before = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [elsewhere], "dx": 40, "dy": 40 }));
+    assert_eq!(drawn(&before, &state(&s), &diagram).marks, Default::default(), "a box on another diagram");
+
+    let Placed { mut s, customer, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "what it shows renamed");
+
+    let Placed { mut s, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.unplace", json!({ "nodes": [first] }));
+    let after = state(&s);
+    let seen = drawn(&before, &after, &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Removed), None));
+    assert_eq!(mark(&drawn(&after, &before, &diagram), &first), Some(ChangeKind::Added));
+}
+
+/// A member is on one side only, and marks the box that lists it whichever side that is. A table
+/// beside it in the schema is drawn by no box, so it marks none.
+#[test]
+fn a_member_on_one_side_marks_the_box_that_lists_it() {
+    let Placed { mut s, customer, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let after = state(&s);
+    for (one, other) in [(&before, &after), (&after, &before)] {
+        let seen = drawn(one, other, &diagram);
+        assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None));
+    }
+    let Placed { mut s, shop, diagram, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "unplaced" }));
+    assert_eq!(drawn(&before, &state(&s), &diagram).marks, Default::default(), "a neighbour no box draws");
+}
+
+/// A parameter is written on its operation's line, so it marks the box; a generalization the class
+/// owns isn't written on the box, so with no line for it nothing is marked.
+#[test]
+fn only_what_a_box_lists_marks_it() {
+    let (mut s, shop, order, _) = uml_project();
+    let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "sum" }] }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": shop, "name": "Orders" }));
+    let card = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 0 }));
+    let before = state(&s);
+    run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": item }));
+    let related = state(&s);
+    let found = differences(&before, &related);
+    assert!(found.iter().any(|d| d.class == archforge_uml::GENERALIZATION), "the class owns something new: {found:?}");
+    assert_eq!(mark(&drawn(&before, &related, &diagram), &card), None);
+    run(&mut s, "uml.operation.set", json!({ "operation": pay, "name": "pay", "parameters": [{ "name": "amount" }] }));
+    assert_eq!(mark(&drawn(&related, &state(&s), &diagram), &card), Some(ChangeKind::Changed));
+}
+
+/// A line is marked like a box: its own arrival, and a bend in its route, which is a part of it.
+#[test]
+fn lines_are_marked_like_boxes() {
+    let Placed { mut s, customer, invoice, diagram, first, second, .. } = placed();
+    let relationship = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": invoice }));
+    let before = state(&s);
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": first, "target": second }));
+    let connected = state(&s);
+    assert_eq!(mark(&drawn(&before, &connected, &diagram), &line), Some(ChangeKind::Added));
+    run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
+    let seen = drawn(&connected, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &line), mark(&seen, &first)), (Some(ChangeKind::Changed), None), "the bend is the line's");
+    run(&mut s, "diagram.style", json!({ "ids": [line], "fill": "#112233" }));
+    let styled = state(&s);
+    run(&mut s, "diagram.style", json!({ "ids": [line], "fill": "#445566" }));
+    assert_eq!(mark(&drawn(&styled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "its look is a part of it");
+    let restyled = state(&s);
+    run(&mut s, "diagram.label", json!({ "edge": line, "kind": "name", "dx": 9 }));
+    assert_eq!(mark(&drawn(&restyled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "so is its label");
+}
+
+/// What an opening repairs marks nothing, on either side.
+#[test]
+fn a_repair_marks_nothing() {
+    let Placed { mut s, diagram, first, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.resize", json!({ "node": first, "width": 100, "height": 200 }));
+    let after = state(&s);
+    let fit = |st: &mut Store| {
+        let nodes: Vec<_> = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).collect();
+        for n in nodes {
+            st.set(n, archforge_diagram::node::HEIGHT, Value::Real(200.0)).unwrap();
+            st.set(n, archforge_diagram::node::WIDTH, Value::Real(100.0)).unwrap();
+        }
+    };
+    assert_eq!(mark(&drawn(&before, &after, &diagram), &first), Some(ChangeKind::Changed), "without the repair it differs");
+    let seen = diagram_sides(&before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
+    assert_eq!(seen.marks, Default::default());
 }
