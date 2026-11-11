@@ -548,7 +548,12 @@ str		Literals	字面量
 str		Members	成员
 str		Ownership	所属
 str		Not available on this side	此侧不可用
-str		Relationships aren't shown here yet.	此处尚不显示关系。
+str		Relationships aren't listed on these cards yet.	这些卡片尚未列出关系。
+plural		Related change	相关更改
+str		{name} was added in this comparison.	{name} 在此比较中已添加。
+str		{name} was changed in this comparison.	{name} 在此比较中已更改。
+str		{name} was removed in this comparison.	{name} 在此比较中已移除。
+str		Go to {name}	转到 {name}
 str		Only what these cards don't show changed	只有这些卡片未显示的内容发生了变化
 str		The cards show the same on both sides.	两侧卡片显示的内容相同。
 str		The owner changed	所属已更改

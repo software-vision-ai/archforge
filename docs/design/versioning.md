@@ -389,6 +389,11 @@ afterwards has answered, and if that read fails the list says the changes could 
 Before → After, shown in the header; Swap reverses it deliberately. One
 comparison engine feeds the lists, element cards and diagram cards, so counts agree.
 
+Under an element's cards, related changes link to the other model elements connected to it that the
+same comparison lists: what it or its members refer to on either side, what refers to them, and its
+owner. What it contains is on its cards instead. A link moves along the list held, so the pair stays
+and nothing is read.
+
 Differences are found by comparing rows by identity, not from Dolt's diff output:
 
 - Object tables have `id BINARY(16) PRIMARY KEY`, so rename and move stay one element.
