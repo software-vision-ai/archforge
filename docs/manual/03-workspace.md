@@ -9,8 +9,8 @@ An open project fills the window with its workspace.
   anyone given a copy of the project can read it).
 - **The left rail** switches the left column between **Diagrams**, at the top, **Models** and **Versions**,
   which lists what has changed since the last version and the project's history, newest first.
-  **Save version…** there shows what changed and saves it as a new version under a description
-  of one line, which stays in the history. It is off while there is nothing to save.
+  **Save version…** there saves what changed as a new version:
+  [Versions](09-versions.md#save-a-version) goes through it step by step.
   Clicking a version in the history opens its details in the centre: its description, when it
   was saved and, where that is recorded, by whom, what changed since the version before and a link
   to that version, which opens its details the same way.
@@ -151,7 +151,8 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
 one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
-act on that field's text instead of the model.
+act on that field's text instead of the model. Undo is not the same as going back to a saved version:
+[Versions](09-versions.md#autosave-a-saved-version-and-undo) says how they differ.
 
 ## Removing from a diagram versus deleting from the model
 
