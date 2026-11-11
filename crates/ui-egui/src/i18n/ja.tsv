@@ -537,7 +537,12 @@ str		Literals	リテラル
 str		Members	メンバー
 str		Ownership	所有関係
 str		Not available on this side	この側では利用できません
-str		Relationships aren't shown here yet.	関連はまだここには表示されません。
+str		Relationships aren't listed on these cards yet.	関連はまだこれらのカードには一覧表示されません。
+plural		Related change	関連する変更
+str		{name} was added in this comparison.	{name} はこの比較で追加されました。
+str		{name} was changed in this comparison.	{name} はこの比較で変更されました。
+str		{name} was removed in this comparison.	{name} はこの比較で削除されました。
+str		Go to {name}	{name} へ移動
 str		Only what these cards don't show changed	これらのカードに表示されないものだけが変更されました
 str		The cards show the same on both sides.	カードの内容は両側で同じです。
 str		The owner changed	所有者が変更されました

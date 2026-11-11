@@ -2,6 +2,7 @@
 //! where, and its two sides. Those are built off the interface thread from rows already held, so a click reads nothing.
 
 mod cards;
+mod related;
 mod summary;
 
 use std::sync::mpsc::{Receiver, TryRecvError, channel};

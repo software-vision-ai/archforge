@@ -38,7 +38,7 @@ pub(super) struct Words {
 /// What to say of `sides`. `listed` says the list of changes vouches that the element changed: a
 /// failed list doesn't, so the summary then speaks only of what the cards hold.
 pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> Words {
-    let not_shown = tr("Relationships aren't shown here yet.");
+    let not_shown = tr("Relationships aren't listed on these cards yet.");
     let (Some(was), Some(is)) = (&sides.before, &sides.after) else {
         let (head, body) = if sides.before.is_none() {
             (tr("This element was added"), tr("It is only on the After side, so there is nothing to compare."))

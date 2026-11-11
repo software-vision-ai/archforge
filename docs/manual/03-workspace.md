@@ -47,7 +47,10 @@ An open project fills the window with its workspace.
   and members that differ and says the first three values in words, or that the element was added
   or removed. Below the values the cards group the element's attributes, operations, literals,
   other members and owner under headings, marked the same way when one came, went or changed; a
-  long list scrolls with the cards. Relationships aren't listed yet, and the summary says so.
+  long list scrolls with the cards. Relationships aren't listed on the cards yet, and the summary
+  says so. Under the cards, **Related change** names the other model elements connected to this one
+  that also differ in this comparison: what it or its members refer to, what refers to them, and
+  its owner. **Go to** and the name opens that element against the same version.
   The project's name at the top closes it.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).

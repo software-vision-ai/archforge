@@ -313,6 +313,51 @@ fn members_are_grouped_and_marked_on_their_own_side() {
     assert_eq!(was.last().unwrap().1, [(said("shop"), None)], "the same owner is plain");
 }
 
+/// What `id` is connected to between the two states.
+fn related(before: &Rows, after: &Rows, id: &str) -> Vec<Uuid> {
+    sides(before, after, id).lists.related.clone()
+}
+
+/// The id written as `text`.
+fn uuid(text: &str) -> Uuid {
+    Uuid::parse(text).unwrap()
+}
+
+/// A class is connected to its owner and to what its members refer to, not to its members; the
+/// type is connected back to the member that uses it, and a link only one side has still counts.
+#[test]
+fn a_uml_element_is_related_through_its_members_references() {
+    let (mut s, shop, order, total) = uml_project();
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": shop, "name": "Status" }));
+    let lone = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Lone" }));
+    let money = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Money" }));
+    run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "amount", "type": money }] }));
+    let before = state(&s);
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "type": status }));
+    let after = state(&s);
+    let found = related(&before, &after, &order);
+    assert!(found.contains(&uuid(&shop)) && found.contains(&uuid(&status)), "{}", found.len());
+    assert!(found.contains(&uuid(&money)), "through a member's own parameter");
+    assert!(!found.contains(&uuid(&order)) && !found.contains(&uuid(&total)) && !found.contains(&uuid(&lone)), "not itself, its own or a stranger");
+    assert!(related(&before, &after, &status).contains(&uuid(&total)), "who uses it");
+    assert!(related(&after, &before, &order).contains(&uuid(&status)), "on the before side alone");
+    let once = related(&after, &after, &order);
+    assert_eq!(once.iter().collect::<std::collections::BTreeSet<_>>().len(), once.len(), "each once");
+}
+
+/// A table is connected to the relationship that joins it, whichever end it is.
+#[test]
+fn an_er_element_is_related_through_its_relationships() {
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let joined = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order }));
+    let now = state(&s);
+    for end in [&customer, &order] {
+        assert!(related(&now, &now, end).contains(&uuid(&joined)), "{end}");
+    }
+    assert!(related(&now, &now, &joined).contains(&uuid(&customer)) && related(&now, &now, &joined).contains(&uuid(&order)));
+}
+
 /// A move to another owner changes its one row on both sides, even one of the same name; an element
 /// with no owner says so, and a column writes its type. An element on one side has no marks.
 #[test]

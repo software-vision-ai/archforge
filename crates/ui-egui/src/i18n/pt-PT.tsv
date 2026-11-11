@@ -537,7 +537,12 @@ str		Literals	Literais
 str		Members	Membros
 str		Ownership	Propriedade
 str		Not available on this side	Não disponível neste lado
-str		Relationships aren't shown here yet.	As relações ainda não são apresentadas aqui.
+str		Relationships aren't listed on these cards yet.	As relações ainda não são listadas nestes cartões.
+plural		Related change	Alteração relacionada|Alterações relacionadas
+str		{name} was added in this comparison.	{name} foi adicionado nesta comparação.
+str		{name} was changed in this comparison.	{name} foi alterado nesta comparação.
+str		{name} was removed in this comparison.	{name} foi removido nesta comparação.
+str		Go to {name}	Ir para {name}
 str		Only what these cards don't show changed	Só mudou o que estes cartões não mostram
 str		The cards show the same on both sides.	Os cartões mostram o mesmo em ambos os lados.
 str		The owner changed	O proprietário mudou

@@ -722,7 +722,7 @@ const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 const SUMMARY: &str = "workspace.change-view.summary";
-const NOT_SHOWN: &str = "Relationships aren't shown here yet.";
+const NOT_SHOWN: &str = "Relationships aren't listed on these cards yet.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -907,6 +907,105 @@ fn two_rows_of_one_element_open_it_once() {
         open_change(h, "old");
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 2, "both rows are the element");
         assert!(painted_has(h, "Added"), "the sides say Added, the row Removed: {:?}", painted(h));
+    });
+}
+
+/// The automation id of the link to `id`.
+fn related_link(id: Uuid) -> String {
+    format!("workspace.change-view.related.{id}")
+}
+
+/// Lands the sides of the open shop as connected to `related`.
+fn land_related(h: &mut Harness<'static, Shell>, key: Compared, related: Vec<Uuid>) {
+    let id = h.state().versions.element.as_ref().unwrap().row.id;
+    let card = ElementCard { class: archforge_er::SCHEMA, name: Some("shop".into()) };
+    let lists = Arc::new(CardLists { related, ..Default::default() });
+    landed(h, id, key, Ok(Some(ElementSides { lists, ..sided(id, Some(card.clone()), Some(card), Vec::new()) })));
+    h.run_steps(1);
+}
+
+/// Shop open among changes that hold warehouse too; gives warehouse's row and what the list was compared at.
+fn shop_and_warehouse(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Difference, Compared) {
+    before_and_after(h, host);
+    add_schema(h, "warehouse");
+    list_still(h);
+    host.reads.lock().unwrap().clear();
+    open_change(h, "shop");
+    let row = h.state().versions.changes.iter().find(|d| d.name.as_deref() == Some("warehouse")).unwrap().clone();
+    (row, h.state().versions.compared.clone().unwrap())
+}
+
+/// What the header says the element is compared with.
+fn compared_with(h: &Harness<'static, Shell>) -> String {
+    h.query_by_label_contains("Compared with").unwrap().accesskit_node().label().unwrap_or_default().to_string()
+}
+
+/// A link says what happened and opens that element in the same comparison, reading nothing.
+#[test]
+fn a_related_link_opens_its_element_in_the_same_comparison() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        land_related(h, key.clone(), vec![row.id]);
+        let header = compared_with(h);
+        assert!(h.query_by_label("warehouse was added in this comparison.").is_some(), "{:?}", painted(h));
+        tap(h, &related_link(row.id));
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading") && has_id(h, COMPARED));
+        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id));
+        assert_eq!(h.state().versions.compared, Some(key), "the same comparison");
+        assert!(asked(host).is_empty(), "nothing read: {:?}", asked(host));
+        assert_eq!(compared_with(h), header, "the header names the same pair");
+    });
+}
+
+/// Only what the list holds as a model's change gets a link; an element in two tables is one
+/// change, named from the side it is still on whichever row comes first, and a failed list offers none.
+#[test]
+fn only_a_listed_model_change_is_linked() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        let other = Uuid([9; 16]);
+        land_related(h, key.clone(), vec![row.id, other]);
+        let gone = Difference { kind: ChangeKind::Removed, class: archforge_er::ENTITY, name: Some("old".into()), ..row.clone() };
+        let sheet = Difference { id: other, area: Area::Diagram, ..row.clone() };
+        let held = h.state().versions.changes.clone();
+        for rows in [[held.clone(), vec![gone.clone(), sheet.clone()]].concat(), [vec![gone.clone(), sheet.clone()], held.clone()].concat()] {
+            crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+            h.run_steps(2);
+            assert!(has_id(h, &related_link(row.id)) && !has_id(h, &related_link(other)), "a diagram's row does not open");
+            assert!(h.query_by_label("warehouse was changed in this comparison.").is_some(), "{:?}", painted(h));
+        }
+        crate::versions::settle_changes(h.state_mut(), key, Err("list broken".into()));
+        h.run_steps(2);
+        assert!(!has_id(h, "workspace.change-view.related") && !has_id(h, &related_link(row.id)), "{:?}", painted(h));
+    });
+}
+
+/// An element connected to nothing that differs has no card; a long list draws only what shows and scrolls to its end.
+#[test]
+fn related_rows_are_drawn_only_in_view() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        land_related(h, key.clone(), Vec::new());
+        assert!(!has_id(h, "workspace.change-view.related"));
+        let many: Vec<_> = (0..400u16)
+            .map(|n| Difference { id: Uuid([n as u8, (n >> 8) as u8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), ..row.clone() })
+            .collect();
+        let (first, last) = (related_link(many[1].id), related_link(many[399].id));
+        let related = many.iter().map(|d| d.id).collect();
+        let rows = [h.state().versions.changes.clone(), many].concat();
+        crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+        land_related(h, key, related);
+        assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of view");
+        h.event(egui::Event::PointerMoved(rect_of(h, SUMMARY).center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -40000.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(8);
+        assert!(has_id(h, &last) && !has_id(h, &first), "the wheel reached the last row");
     });
 }
 
@@ -1326,7 +1425,7 @@ fn the_summary_counts_members_and_says_the_owner() {
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
         says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
-        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n };
+        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
         says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
