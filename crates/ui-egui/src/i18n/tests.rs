@@ -198,7 +198,17 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     assert_eq!(property_label(&universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
     assert_eq!(literal_label(&universe, visibility, package), Some(german("Package")));
     assert_eq!(kind_label(&universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
-    assert_eq!(kind_label(&universe, archforge_er::ENTITY), german("Entity"));
+    assert_eq!(kind_label(&universe, archforge_er::ENTITY), german("Table"));
+    // Each notation's own word, where the metamodel's name isn't what the rest of the interface says.
+    for (class, word) in [
+        (archforge_er::ATTRIBUTE, "Column"),
+        (archforge_er::GENERALIZATION, "Subtype"),
+        (archforge_uml::PROPERTY, "Attribute"),
+        (archforge_uml::ENUMERATION_LITERAL, "Literal"),
+    ] {
+        assert_eq!(kind_label(&universe, class), german(word), "{word}");
+    }
+    assert_eq!(kind_label(&universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
     assert_eq!(kind_label(&universe, archforge_uml::ACTOR), german("Element"));
     assert_eq!(kind_label(&universe, archforge_diagram::NODE), german("Element"));

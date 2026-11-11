@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Mayús
 str		The project is busy	El proyecto está ocupado
 str		Open or go back to a project first	Primero abre un proyecto o vuelve a uno
+str		Show a diagram first	Primero muestra un diagrama
 str		Open…	Abrir…
 str		Save	Guardar
 # Generar
@@ -462,6 +463,15 @@ str		You are already on this branch.	Ya estás en esta rama.
 str		The project stayed on its branch because it changed or was busy.	El proyecto se quedó en su rama porque cambió o estaba ocupado.
 str		Your latest changes could not be written, so the project stayed on its branch.	No se pudieron escribir tus últimos cambios, por lo que el proyecto se quedó en su rama.
 str		The project stayed on its branch: {why}	El proyecto se quedó en su rama: {why}
+str		Switch to {branch}?	¿Cambiar a {branch}?
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} tiene cambios sin guardar. Se quedan en {branch} y estarán ahí cuando vuelvas. No podrás deshacer pasos anteriores.
+str		Save version and switch	Guardar versión y cambiar
+str		Switch	Cambiar
+str		Couldn't switch to {branch}	No se pudo cambiar a {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} Sigues en {branch} y tu trabajo no ha cambiado.
+str		{why} You are still on {branch}. Your work is saved.	{why} Sigues en {branch}. Tu trabajo está guardado.
+str		Switching is refused	Cambio rechazado
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} No se pudo conservar tu trabajo, así que no se hizo el cambio. Sigues en {branch}.
 str		The switch did not finish, so the project stayed on its branch.	El cambio no terminó, por lo que el proyecto se quedó en su rama.
 str		The version could not be restored: {why}	No se pudo restaurar la versión: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Esta versión es igual que tu trabajo actual. Tu trabajo sin guardar se conservó como una versión.
@@ -1558,7 +1568,6 @@ str		Domain check	Restricción de comprobación de dominio
 str		Drawing	Dibujo
 str		Effect	Efecto
 str		Entry point	Punto de entrada
-str		Enumeration literal	Literal de enumeración
 str		Exactly one	Exactamente uno
 str		Execution location	Ubicación de ejecución
 str		Exit point	Punto de salida
@@ -1664,7 +1673,6 @@ str		Par	Paralelo
 str		Parallel	Paralelo
 str		Persistence	Persistencia
 str		Profile application	Aplicación de perfil
-str		Property	Propiedad
 str		Read	Leer
 str		Realization	Realización
 str		Redefinable template signature	Firma de plantilla redefinible

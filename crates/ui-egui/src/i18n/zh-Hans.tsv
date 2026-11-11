@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	项目正忙
 str		Open or go back to a project first	请先打开或返回一个项目
+str		Show a diagram first	请先显示一个图
 str		Open…	打开…
 str		Save	存储
 # 生成
@@ -462,6 +463,15 @@ str		You are already on this branch.	您已在此分支上。
 str		The project stayed on its branch because it changed or was busy.	由于项目已更改或正忙，项目仍停留在其分支上。
 str		Your latest changes could not be written, so the project stayed on its branch.	无法写入您最近的更改，因此项目仍停留在其分支上。
 str		The project stayed on its branch: {why}	项目仍停留在其分支上：{why}
+str		Switch to {branch}?	切换到 {branch}？
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} 有未保存的更改。它们会保留在 {branch} 上，您回来时仍在。您将无法撤销之前的步骤。
+str		Save version and switch	保存版本并切换
+str		Switch	切换
+str		Couldn't switch to {branch}	无法切换到 {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} 您仍在 {branch} 上，您的工作没有变化。
+str		{why} You are still on {branch}. Your work is saved.	{why} 您仍在 {branch} 上。您的工作已保存。
+str		Switching is refused	切换被拒绝
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} 无法保留您的工作，因此未进行切换。您仍在 {branch} 上。
 str		The switch did not finish, so the project stayed on its branch.	切换未完成，因此项目仍停留在其分支上。
 str		The version could not be restored: {why}	无法恢复该版本：{why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	此版本与您当前的工作相同。未保存的工作已保留为一个版本。
@@ -1558,7 +1568,6 @@ str		Domain check	域检查约束
 str		Drawing	绘图
 str		Effect	效果
 str		Entry point	入口点
-str		Enumeration literal	枚举字面量
 str		Exactly one	恰好一个
 str		Execution location	执行位置
 str		Exit point	出口点
@@ -1664,7 +1673,6 @@ str		Par	并行
 str		Parallel	并行
 str		Persistence	持久化
 str		Profile application	配置文件应用
-str		Property	属性
 str		Read	读取
 str		Realization	实现
 str		Redefinable template signature	可重定义模板签名

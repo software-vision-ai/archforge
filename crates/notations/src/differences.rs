@@ -3,18 +3,20 @@
 //! side is restored into a store of its own and repaired as an opening repairs it, so a box an
 //! opening fits shows no false change. One selected element's two sides are read the same way, as
 //! typed cards with their fields aligned and its members and owner listed, for a
-//! view to word later. Nothing here writes: the stores are thrown away.
+//! view to word later; one diagram's two sides are kept as stores of their own, for a view to draw.
+//! Nothing here writes to the project.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
+use archforge_diagram::{Grid, LABEL, POINT, STYLE, diagram, diagram_of, edge, node, node_tree};
 use archforge_mof::compare::{CompareError, MAX_COMPARED, RowChange, compare};
 use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot};
 use archforge_mof::schema::{Junction, Table};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Property, Store, TypeRef, Uuid, Value};
 
-use crate::{storage, store};
+use crate::{labels, storage, store};
 
 mod related;
 
@@ -41,8 +43,8 @@ pub struct Difference {
     pub class: ClassId,
     pub area: Area,
     pub kind: ChangeKind,
-    /// The item's name, or for a box or line in a diagram that of the element it shows; none when
-    /// it has neither. A removed item's comes from the before side, any other's from the after side.
+    /// The item's name, or what it joins or states when it has none, or for a box or line in a
+    /// diagram that of the element it shows; none when it has nothing to go by. A removed item's comes from the before side, any other's from the after side.
     pub name: Option<String>,
     /// The names of what contains the item, outermost first, from the same side as its name.
     pub path: Vec<String>,
@@ -52,8 +54,19 @@ pub struct Difference {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ElementCard {
     pub class: ClassId,
-    /// Its name on this side, or for a box or line that of the element it shows; none when it has neither.
+    /// Its name on this side, what it joins or states when it has none, or for a box or line that
+    /// of the element it shows; none when it has nothing to go by.
     pub name: Option<String>,
+    /// Whether `name` is made from what it joins or states rather than being a name of its own.
+    pub made: bool,
+}
+
+impl ElementCard {
+    /// Whether the element was renamed between `other` and this card. Words made from what it joins
+    /// or states follow those, so they differ without any renaming.
+    pub fn renamed_from(&self, other: &ElementCard) -> bool {
+        !(self.made && other.made) && self.name != other.name
+    }
 }
 
 /// One property of a compared element, in the same place on both cards.
@@ -88,6 +101,8 @@ pub struct ElementSides {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ListKind {
     Attributes,
+    /// A table's columns, which are an ER notation's attributes.
+    Columns,
     Operations,
     Literals,
     Members,
@@ -95,9 +110,12 @@ pub enum ListKind {
 }
 
 /// What a row names, typed so a view words it in the language shown.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Named {
     Said(String),
+    /// Words made from what a nameless element joins or states, which follow those: a rename of
+    /// what it joins leaves its own row as it was.
+    Made(String),
     Unnamed,
     /// There is no owner to name.
     Nothing,
@@ -136,6 +154,26 @@ pub struct CardLists {
     pub member_changes: usize,
 }
 
+/// One side of a compared diagram: a store of its own, so names and places are what they were there.
+pub struct DiagramSide {
+    pub store: Store,
+    pub diagram: Obj,
+    pub grid: Grid,
+}
+
+/// One diagram's two sides, found by its id. A side is none when the diagram is not there.
+pub struct DiagramSides {
+    pub id: Uuid,
+    /// Its name and the names of what contains it, from the after side when it is there.
+    pub name: Option<String>,
+    pub path: Vec<String>,
+    pub before: Option<DiagramSide>,
+    pub after: Option<DiagramSide>,
+    /// What happened to each box and line of this diagram that differs, by its id: Added or Removed
+    /// when it is on one side only, Changed when it or what it draws differs: its element, or a member listed on it.
+    pub marks: BTreeMap<Uuid, ChangeKind>,
+}
+
 /// Why two states could not be classified. There is never a partial answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassifyError {
@@ -159,13 +197,9 @@ impl fmt::Display for ClassifyError {
 
 impl std::error::Error for ClassifyError {}
 
-/// Classifies and names what differs between `before` and `after`, sorted by id. `repair` is what
-/// an opening does to a store, applied to a private copy of each side.
-pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
-    let (tables, junctions) = storage();
-    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
-    let found = compare(&old_rows, &new_rows, &tables, &junctions, MAX_COMPARED).map_err(ClassifyError::Compare)?;
+/// What happened to each item that differs between two states' rows, by id and table.
+fn kinds_between(old: &Rows, new: &Rows, tables: &[Table], junctions: &[Junction]) -> Result<BTreeMap<(Uuid, ClassId), ChangeKind>, ClassifyError> {
+    let found = compare(old, new, tables, junctions, MAX_COMPARED).map_err(ClassifyError::Compare)?;
     // By id and class: an item that moved to another table is removed there and added here.
     let mut kinds: BTreeMap<(Uuid, ClassId), ChangeKind> = BTreeMap::new();
     let mut came_or_went = BTreeSet::new();
@@ -191,6 +225,16 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
             }
         }
     }
+    Ok(kinds)
+}
+
+/// Classifies and names what differs between `before` and `after`, sorted by id. `repair` is what
+/// an opening does to a store, applied to a private copy of each side.
+pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> Result<Vec<Difference>, ClassifyError> {
+    let (tables, junctions) = storage();
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+    let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
     let named = |((id, class), kind): ((Uuid, ClassId), ChangeKind)| {
         let (name, path) = name_and_path(if kind == ChangeKind::Removed { &old } else { &new }, id);
         let area = if class.metamodel() == archforge_diagram::INDEX { Area::Diagram } else { Area::Model };
@@ -204,8 +248,8 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
 /// element from rows the caller holds; `Ok(None)` when neither side has the element.
 pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<ElementSides>, ClassifyError> {
     let (tables, junctions) = storage();
-    let (old, _) = repaired("before", before, &tables, &junctions, &repair)?;
-    let (new, _) = repaired("after", after, &tables, &junctions, &repair)?;
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
     let (card_before, was) = read_side("before", &old, id)?.unzip();
     let (card_after, is) = read_side("after", &new, id)?.unzip();
     if card_before.is_none() && card_after.is_none() {
@@ -214,8 +258,13 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let on_both = card_before.is_some() && card_after.is_some();
     let ((was, mut before_lists), (is, mut after_lists)) = (was.unwrap_or_default(), is.unwrap_or_default());
     if on_both {
-        marked(&mut before_lists, &after_lists, ChangeKind::Removed);
-        marked(&mut after_lists, &before_lists, ChangeKind::Added);
+        let mut changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
+        // A part's row is its own, so a change there, such as a constraint's expression, is its holder's too, on whichever side holds it.
+        let holder = |store: &Store, id: Uuid| store.container(store.by_uuid(id)?).ok()?.and_then(|(up, _)| store.uuid(up).ok());
+        let held: Vec<Uuid> = changed.iter().flat_map(|id| [holder(&old, *id), holder(&new, *id)]).flatten().collect();
+        changed.extend(held);
+        marked(&mut before_lists, &after_lists, ChangeKind::Removed, &changed);
+        marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
     }
     let marks = |of: &[CardList], only: Option<ChangeKind>| {
         of.iter()
@@ -229,6 +278,78 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let related = related::connected_to(id, [("after", &new), ("before", &old)])?;
     let lists = Arc::new(CardLists { before: before_lists, after: after_lists, related, member_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
+}
+
+/// The two sides of the diagram that holds the item `id`, a box or a line of it or the diagram
+/// itself, each restored and repaired as [`classified`] does it. `Ok(None)` when neither side has one.
+pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut Store)) -> Result<Option<DiagramSides>, ClassifyError> {
+    let (tables, junctions) = storage();
+    let (old, old_rows) = repaired("before", before, &tables, &junctions, &repair)?;
+    let (new, new_rows) = repaired("after", after, &tables, &junctions, &repair)?;
+    let holder = |store: &Store| store.by_uuid(id).and_then(|o| diagram_of(store, o)).and_then(|d| store.uuid(d).ok());
+    let Some(diagram) = holder(&new).or_else(|| holder(&old)) else { return Ok(None) };
+    let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
+    let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
+    let side = |store: Store| store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build(&store, d), diagram: d, store });
+    let (before, after) = (side(old), side(new));
+    let marks = marks_of(&changed, [("before", before.as_ref()), ("after", after.as_ref())])?;
+    Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks }))
+}
+
+/// What each box and line of `sides` is marked with. One on a single side was added or removed
+/// there, whether or not its own row differs, as a box can move between diagrams. One on both is
+/// Changed when something it draws differs on either, as a member gone is only on the side that still has it.
+fn marks_of(changed: &BTreeSet<Uuid>, sides: [(&'static str, Option<&DiagramSide>); 2]) -> Result<BTreeMap<Uuid, ChangeKind>, ClassifyError> {
+    let items = |(name, side): (&'static str, Option<&DiagramSide>)| {
+        side.map_or(Ok(BTreeMap::new()), |s| items_of(s, changed)).map_err(|e| ClassifyError::Unreadable { side: name, why: e.to_string() })
+    };
+    let [was, is] = sides.map(items);
+    let (was, is) = (was?, is?);
+    let mut marks: BTreeMap<Uuid, ChangeKind> = is.keys().filter(|id| !was.contains_key(id)).map(|id| (*id, ChangeKind::Added)).collect();
+    for (id, differs) in &was {
+        match is.get(id) {
+            None => drop(marks.insert(*id, ChangeKind::Removed)),
+            Some(now) if *differs || *now => drop(marks.insert(*id, ChangeKind::Changed)),
+            Some(_) => {}
+        }
+    }
+    Ok(marks)
+}
+
+/// Every box of `side`, nested ones too, and every line, with whether it draws something in `changed`.
+fn items_of(side: &DiagramSide, changed: &BTreeSet<Uuid>) -> Result<BTreeMap<Uuid, bool>, Invalid> {
+    let store = &side.store;
+    let refs = |list| Ok::<_, Invalid>(store.list(side.diagram, list)?.iter().filter_map(Value::as_ref).collect::<Vec<Obj>>());
+    let boxes = refs(diagram::NODE)?.into_iter().flat_map(|top| node_tree(store, top)).map(|n| (n, node::ELEMENT));
+    let mut found = BTreeMap::new();
+    for (item, shows) in boxes.chain(refs(diagram::EDGE)?.into_iter().map(|e| (e, edge::ELEMENT))) {
+        let element = store.get(item, shows)?.as_ref().filter(|e| store.is_alive(*e));
+        let differs =
+            draws_a_change(store, item, changed, MAX_NESTING)? || element.map_or(Ok(false), |e| draws_a_change(store, e, changed, MAX_NESTING))?;
+        found.insert(store.uuid(item)?, differs);
+    }
+    Ok(found)
+}
+
+/// Whether `obj` or a part drawn with it differs, within `depth` levels.
+fn draws_a_change(store: &Store, obj: Obj, changed: &BTreeSet<Uuid>, depth: usize) -> Result<bool, Invalid> {
+    if changed.contains(&store.uuid(obj)?) {
+        return Ok(true);
+    }
+    if depth > 0 {
+        for part in store.owned_elements(obj)? {
+            let class = store.class_of(part)?;
+            if ([POINT, LABEL, STYLE].contains(&class) || is_feature(class)) && draws_a_change(store, part, changed, depth - 1)? {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+/// Whether `class` is listed on its owner's box.
+fn is_feature(class: ClassId) -> bool {
+    class == archforge_uml::PARAMETER || kind_of(class) != ListKind::Members
 }
 
 /// Whether `prop` belongs on a card: one stored data value, not the element's id or name. The
@@ -249,16 +370,23 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
     for prop in info.stored.iter().filter(|p| universe.prop(**p).is_some_and(on_a_card)) {
         values.push((*prop, store.get(obj, *prop).map_err(unreadable)?));
     }
-    Ok(Some((ElementCard { class, name: shown_name(store, obj) }, (values, lists_of(store, obj).map_err(unreadable)?))))
+    let (name, made) = resolved_name(store, obj).map_or((None, false), |(name, made)| (Some(name), made));
+    Ok(Some((ElementCard { class, name, made }, (values, lists_of(store, obj).map_err(unreadable)?))))
 }
 
 /// Marks each row of `side` against the rows of `other`: `gone` when `other` has no such row,
-/// Changed when it says something else. A row is one member by its id; a
+/// Changed when it says something else, or for words made from what it joins when it or a part of it
+/// is in `changed`. A row is one member by its id, an ER enum's literal by its text; a
 /// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
-fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind) {
-    let key = |kind: ListKind, row: &ListRow| (kind, if kind == ListKind::Ownership { None } else { Some(row.id) });
-    let differ = |kind: ListKind, a: &ListRow, b: &ListRow| {
-        if kind == ListKind::Ownership { a.id != b.id } else { (a.id, a.class, &a.name) != (b.id, b.class, &b.name) }
+fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: &BTreeSet<Uuid>) {
+    let key = |kind: ListKind, row: &ListRow| {
+        let text = (kind == ListKind::Literals && row.class == archforge_er::ENUM_TYPE).then(|| row.name.clone());
+        (kind, if kind == ListKind::Ownership { None } else { Some(row.id) }, text)
+    };
+    let differ = |kind: ListKind, a: &ListRow, b: &ListRow| match (&a.name, &b.name) {
+        _ if kind == ListKind::Ownership => a.id != b.id,
+        (Named::Made(_), Named::Made(_)) => changed.contains(&a.id),
+        _ => (a.id, a.class, &a.name) != (b.id, b.class, &b.name),
     };
     let held: HashMap<_, _> = other.iter().flat_map(|l| l.rows.iter().map(move |r| (key(l.kind, r), r))).collect();
     for list in side {
@@ -280,6 +408,10 @@ fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
         let class = store.class_of(member)?;
         lists.entry(kind_of(class)).or_default().push(ListRow { name: member_name(store, member, class), ..plain_row(store, member, class) });
     }
+    if store.class_of(obj)? == archforge_er::ENUM_TYPE {
+        let literal = |text: String| ListRow { name: Named::Said(text), ..plain_row(store, obj, archforge_er::ENUM_TYPE) };
+        lists.entry(ListKind::Literals).or_default().extend(archforge_er::rules::literals_of(store, obj).into_iter().map(literal));
+    }
     lists.entry(ListKind::Ownership).or_default().push(owner_row(store, obj));
     Ok(lists.into_iter().map(|(kind, rows)| CardList { kind, rows }).collect())
 }
@@ -289,9 +421,12 @@ fn plain_row(store: &Store, obj: Obj, class: ClassId) -> ListRow {
     ListRow { id: store.uuid(obj).unwrap_or(Uuid([0; 16])), class, name: named(store, obj), change: None }
 }
 
-/// `obj`'s name, or that it has none.
+/// `obj`'s name, the words made for it, or that it has none.
 fn named(store: &Store, obj: Obj) -> Named {
-    shown_name(store, obj).map_or(Named::Unnamed, Named::Said)
+    match labels::unnamed(store, obj).filter(|_| archforge_core::name_of(store, obj).is_empty()) {
+        Some(words) => Named::Made(words),
+        None => shown_name(store, obj).map_or(Named::Unnamed, Named::Said),
+    }
 }
 
 /// The row of the owner of `obj`; an element with no owner says so, and one whose owner cannot be read says that.
@@ -307,14 +442,15 @@ fn owner_row(store: &Store, obj: Obj) -> ListRow {
 /// The list a member of `class` belongs to.
 fn kind_of(class: ClassId) -> ListKind {
     match class {
-        c if c == archforge_uml::PROPERTY || c == archforge_er::ATTRIBUTE => ListKind::Attributes,
+        c if c == archforge_uml::PROPERTY => ListKind::Attributes,
+        c if c == archforge_er::ATTRIBUTE => ListKind::Columns,
         c if c == archforge_uml::OPERATION => ListKind::Operations,
         c if c == archforge_uml::ENUMERATION_LITERAL => ListKind::Literals,
         _ => ListKind::Members,
     }
 }
 
-/// What a member's row writes: a feature as its element box lists it, a column with its type, anything else its name.
+/// What a member's row writes: a feature as its element box lists it, a column with its type, anything else what [`named`] gives.
 fn member_name(store: &Store, m: Obj, class: ClassId) -> Named {
     match class {
         c if c == archforge_uml::PROPERTY || c == archforge_uml::OPERATION => Named::Said(archforge_uml::figures::member_text(store, m)),
@@ -360,14 +496,20 @@ fn repaired(
     Ok((restored, rows))
 }
 
-/// The name of `obj`, or of the element it shows; none when there is neither.
+/// The name of `obj` or the words made for it, or those of the element it shows; none when there are neither.
 fn shown_name(store: &Store, obj: Obj) -> Option<String> {
-    let own = archforge_core::name_of(store, obj);
-    if !own.is_empty() {
-        return Some(own);
-    }
-    let shown = [archforge_diagram::node::ELEMENT, archforge_diagram::edge::ELEMENT].iter().find_map(|p| store.get(obj, *p).ok()?.as_ref())?;
-    Some(archforge_core::name_of(store, shown)).filter(|name| !name.is_empty())
+    resolved_name(store, obj).map(|(name, _)| name)
+}
+
+/// What [`shown_name`] finds, with whether those are words made rather than a name of its own.
+fn resolved_name(store: &Store, obj: Obj) -> Option<(String, bool)> {
+    let called = |o: Obj| {
+        let own = Some(archforge_core::name_of(store, o)).filter(|name| !name.is_empty()).map(|name| (name, false));
+        own.or_else(|| labels::unnamed(store, o).map(|words| (words, true)))
+    };
+    called(obj).or_else(|| {
+        called([archforge_diagram::node::ELEMENT, archforge_diagram::edge::ELEMENT].iter().find_map(|p| store.get(obj, *p).ok()?.as_ref())?)
+    })
 }
 
 /// The name of the item `id` and the names of what contains it, outermost first.

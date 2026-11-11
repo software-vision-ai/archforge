@@ -3,7 +3,8 @@
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
-    Area, CardField, CardList, ChangeKind, ClassifyError, Difference, ElementCard, ElementSides, ListKind, Named, classified, element_sides,
+    Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
+    classified, diagram_sides, element_sides,
 };
 use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
@@ -167,7 +168,7 @@ fn field(seen: &ElementSides, prop: PropId) -> &CardField {
 
 /// A card to expect.
 fn card(class: ClassId, name: &str) -> Option<ElementCard> {
-    Some(ElementCard { class, name: Some(name.to_string()) })
+    Some(ElementCard { class, name: Some(name.to_string()), made: false })
 }
 
 /// The name of an enumeration value of `prop`, through the metamodel the view will word it from.
@@ -399,6 +400,148 @@ fn the_owner_is_one_row_and_a_side_alone_has_no_marks() {
     assert!(lists(&sides(&before, &after, &email).lists.after).iter().all(|l| l.1.iter().all(|r| r.1.is_none())), "only on the after side");
 }
 
+/// The rows of the list of `kind` on the after side.
+fn rows_of(seen: &ElementSides, kind: ListKind) -> Vec<(Named, Option<ChangeKind>)> {
+    lists(&seen.lists.after).into_iter().find(|l| l.0 == kind).map(|l| l.1).unwrap_or_default()
+}
+
+/// Words made for a nameless element, unmarked.
+fn made(text: &str) -> (Named, Option<ChangeKind>) {
+    (Named::Made(text.to_string()), None)
+}
+
+/// The name a side's card gives `id`, and whether it was made.
+fn told_card(rows: &Rows, id: &str) -> (Option<String>, bool) {
+    let card = sides(rows, rows, id).after.unwrap();
+    (card.name, card.made)
+}
+
+/// ER: an unnamed line goes by its tables, and a key, check or index as the export names it. A
+/// column is listed as a column, and renaming a table is no change to what merely mentions it.
+#[test]
+fn er_elements_without_a_name_go_by_what_they_join() {
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let owner = run(&mut s, "er.attribute.add", json!({ "entity": order, "name": "owner", "type": "BIGINT" }));
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let vip = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "vip" }));
+    let places = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    let subtype = run(&mut s, "er.generalization.add", json!({ "supertype": customer, "subtype": vip }));
+    run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [email] }));
+    run(&mut s, "er.check.add", json!({ "entity": customer, "expression": "id > 0" }));
+    let index = run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "expression": "lower(email)" }] }));
+    let by_column = run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "attribute": email }] }));
+    let money = run(&mut s, "er.domain.add", json!({ "schema": shop, "name": "money", "base_type": "NUMERIC", "checks": ["value >= 0"] }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": order, "references": customer, "columns": [owner] }));
+    let before = state(&s);
+    assert_eq!(told_card(&before, &places), (Some("customer → order".into()), true));
+    assert_eq!(told_card(&before, &subtype), (Some("vip → customer".into()), true));
+    let table = sides(&before, &before, &customer);
+    assert_eq!(rows_of(&table, ListKind::Columns).len(), 2, "{table:?}");
+    assert_eq!(
+        rows_of(&table, ListKind::Members),
+        [made("pk_customer"), made("uq_customer_email"), made("ck_customer_1"), made("ix_customer_expr"), made("ix_customer_email")]
+    );
+    assert_eq!(rows_of(&sides(&before, &before, &index), ListKind::Members), [made("lower(email)")]);
+    assert_eq!(rows_of(&sides(&before, &before, &by_column), ListKind::Members), [made("email")]);
+    assert_eq!(rows_of(&sides(&before, &before, &money), ListKind::Members), [made("value >= 0")]);
+    assert_eq!(rows_of(&sides(&before, &before, &order), ListKind::Members), [made("order → customer")]);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let after = state(&s);
+    let line = sides(&before, &after, &places);
+    assert_eq!(line.after.as_ref().unwrap().name.as_deref(), Some("client → order"), "the words follow the table");
+    assert!(!line.after.as_ref().unwrap().renamed_from(line.before.as_ref().unwrap()), "but nothing renamed the line");
+    let seen = sides(&before, &after, &order);
+    assert_eq!((rows_of(&seen, ListKind::Members), seen.lists.member_changes), (vec![made("order → client")], 0), "{seen:?}");
+    run(&mut s, "er.relationship.rename", json!({ "relationship": places, "name": "places" }));
+    let named = sides(&after, &state(&s), &places);
+    assert!(named.after.as_ref().unwrap().renamed_from(named.before.as_ref().unwrap()), "given a name of its own, it was named");
+}
+
+/// A member whose words are made is marked when its own row or a part of it changed, not only when they differ.
+#[test]
+fn a_made_row_is_marked_by_its_own_change() {
+    let (mut s, _, customer, id) = project();
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let key = run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [email] }));
+    run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "attribute": id }, { "attribute": email }] }));
+    let before = state(&s);
+    run(&mut s, "er.unique.set", json!({ "unique": key, "columns": [id], "name": "", "nulls_distinct": false }));
+    let after = state(&s);
+    let rows = rows_of(&sides(&before, &after, &customer), ListKind::Members);
+    assert!(rows.contains(&(Named::Made("uq_customer_id".into()), Some(ChangeKind::Changed))), "{rows:?}");
+    run(&mut s, "element.remove", json!({ "ids": [email] }));
+    let rows = rows_of(&sides(&after, &state(&s), &customer), ListKind::Members);
+    assert!(rows.contains(&(Named::Made("ix_customer_id".into()), Some(ChangeKind::Changed))), "a part gone is on the before side only: {rows:?}");
+}
+
+/// An ER enum's literals are its rows, told apart by their text.
+#[test]
+fn an_er_enums_literals_are_listed_and_marked_by_their_text() {
+    let (mut s, shop, ..) = project();
+    let states = run(&mut s, "er.enum.add", json!({ "schema": shop, "name": "state", "literals": ["open", "paid"] }));
+    let before = state(&s);
+    run(&mut s, "er.enum.set", json!({ "enum": states, "name": "state", "literals": ["open", "sent"] }));
+    let seen = sides(&before, &state(&s), &states);
+    let row = |text, change| (said(text), change);
+    assert_eq!(rows_of(&seen, ListKind::Literals), [row("open", None), row("sent", Some(ChangeKind::Added))]);
+    assert_eq!(lists(&seen.lists.before)[0], (ListKind::Literals, vec![row("open", None), row("paid", Some(ChangeKind::Removed))]));
+    assert_eq!(seen.lists.member_changes, 2);
+}
+
+/// A constraint is marked by its whole expression, even an edit its shortened words don't show.
+#[test]
+fn a_constraint_is_marked_by_more_than_its_words() {
+    let (mut s, _, order, _) = uml_project();
+    let long = "x".repeat(100);
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": format!("{long} a") }));
+    for edit in [format!("{long} b"), format!("{long}  b")] {
+        let before = state(&s);
+        run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": edit }));
+        let seen = sides(&before, &state(&s), &order);
+        assert_eq!((rows_of(&seen, ListKind::Members)[0].1, seen.lists.member_changes), (Some(ChangeKind::Changed), 1), "{seen:?}");
+    }
+}
+
+/// UML: an unnamed relationship goes by its ends and a constraint by its braces, whose edit marks
+/// its row though the text is held in a part of it; a class's rename leaves a row that mentions it.
+#[test]
+fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
+    let (mut s, shop, order, _) = uml_project();
+    let payment = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Payment" }));
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": shop, "name": "Payable" }));
+    let holds = run(&mut s, "uml.association.add", json!({ "from": order, "to": payment }));
+    let needs = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": payable }));
+    let is_a = run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": payment }));
+    let realizes = run(&mut s, "uml.realization.add", json!({ "class": order, "interface": payable }));
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "total > 0" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": shop }));
+    run(&mut s, "uml.profile.apply", json!({ "package": shop, "profile": audit }));
+    run(&mut s, "element.describe", json!({ "element": payment, "text": "Money\nreceived" }));
+    let count = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "default": "3" }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "returns": "Boolean" }));
+    run(&mut s, "element.describe", json!({ "element": payable, "text": "x".repeat(100) }));
+    let before = state(&s);
+    assert!(rows_of(&sides(&before, &before, &shop), ListKind::Members).contains(&made("Audit")));
+    assert_eq!(rows_of(&sides(&before, &before, &payment), ListKind::Members), [made("Money received")], "on one line");
+    assert_eq!(rows_of(&sides(&before, &before, &count), ListKind::Members), [made("3")]);
+    assert_eq!(rows_of(&sides(&before, &before, &payable), ListKind::Members), [made(&format!("{}…", "x".repeat(80)))], "cut");
+    assert_eq!(rows_of(&sides(&before, &before, &pay), ListKind::Members), [(Named::Unnamed, None)], "nothing to go by: left to its kind");
+    for (id, words) in [(&holds, "Order → Payment"), (&needs, "Order → Payable"), (&is_a, "Order → Payment"), (&realizes, "Order → Payable")]
+    {
+        assert_eq!(told_card(&before, id), (Some(words.into()), true), "{id}");
+    }
+    assert_eq!(told_card(&before, &rule), (Some("{total > 0}".into()), true));
+    run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": "total >= 0" }));
+    run(&mut s, "uml.class.rename", json!({ "class": payment, "name": "Charge" }));
+    run(&mut s, "element.describe", json!({ "element": realizes, "text": "A part only the after side has." }));
+    let seen = sides(&before, &state(&s), &order);
+    let rows = rows_of(&seen, ListKind::Members);
+    assert!(rows.contains(&(Named::Made("{total >= 0}".into()), Some(ChangeKind::Changed))), "{rows:?}");
+    assert!(rows.contains(&made("Order → Charge")), "{rows:?}");
+    assert_eq!(seen.lists.member_changes, 2, "the constraint and the described realization: {rows:?}");
+}
+
 /// A box a repair fits shows no false change on either side, and is named by what it shows.
 #[test]
 fn a_card_shows_each_side_as_an_opening_repairs_it() {
@@ -460,4 +603,215 @@ fn an_unknown_element_is_none_and_an_unreadable_side_is_named() {
     assert_eq!(element_sides(&good, &good, Uuid([7; 16]), |_| {}), Ok(None));
     assert!(matches!(element_sides(&Rows::default(), &good, id, |_| {}), Err(ClassifyError::Unreadable { side: "before", .. })));
     assert!(matches!(element_sides(&good, &Rows::default(), id, |_| {}), Err(ClassifyError::Unreadable { side: "after", .. })));
+}
+
+/// A project with a diagram of its schema, the tables customer and invoice placed on it.
+struct Placed {
+    s: Session,
+    shop: String,
+    customer: String,
+    invoice: String,
+    diagram: String,
+    first: String,
+    second: String,
+}
+
+/// The project every diagram comparison starts from.
+fn placed() -> Placed {
+    let (mut s, shop, customer, _) = project();
+    let invoice = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "invoice" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Billing" }));
+    let first = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": customer, "x": 0, "y": 0 }));
+    let second = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": invoice, "x": 400, "y": 0 }));
+    Placed { s, shop, customer, invoice, diagram, first, second }
+}
+
+/// The two sides of the diagram holding `id`, with no repair.
+fn drawn(before: &Rows, after: &Rows, id: &str) -> DiagramSides {
+    diagram_sides(before, after, Uuid::parse(id).unwrap(), |_| {}).unwrap().unwrap()
+}
+
+/// What `seen` marks the item `id` with.
+fn mark(seen: &DiagramSides, id: &str) -> Option<ChangeKind> {
+    seen.marks.get(&Uuid::parse(id).unwrap()).copied()
+}
+
+/// A box, or the diagram itself, finds the diagram; each side holds its own state, and a model
+/// element or an unknown id holds no diagram.
+#[test]
+fn each_side_of_a_diagram_is_its_own_state() {
+    /// Compiles only for a type a reading thread can hand to the interface thread.
+    fn moves_between_threads<T: Send>() {}
+    moves_between_threads::<DiagramSides>();
+    let Placed { mut s, customer, diagram, first, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let after = state(&s);
+    let name_on = |side: &DiagramSide| archforge_core::name_of(&side.store, side.store.by_uuid(Uuid::parse(&customer).unwrap()).unwrap());
+    for id in [&first, &diagram] {
+        let seen = drawn(&before, &after, id);
+        assert_eq!((seen.id.to_string(), seen.name.as_deref()), (diagram.clone(), Some("Billing")));
+        assert_eq!(seen.path, ["Commerce"]);
+        assert_eq!((name_on(seen.before.as_ref().unwrap()), name_on(seen.after.as_ref().unwrap())), ("customer".into(), "client".into()));
+        assert_eq!(seen.after.as_ref().unwrap().grid.len().0, 2, "both boxes");
+    }
+    assert!(diagram_sides(&before, &after, Uuid::parse(&customer).unwrap(), |_| {}).unwrap().is_none(), "a model element");
+    assert!(diagram_sides(&before, &after, Uuid([7; 16]), |_| {}).unwrap().is_none(), "an unknown id");
+}
+
+/// A diagram only one side has leaves the other absent, named from the side that has it.
+#[test]
+fn a_diagram_on_one_side_has_an_absent_side() {
+    let Placed { mut s, diagram, .. } = placed();
+    let with = state(&s);
+    run(&mut s, "diagram.remove", json!({ "diagram": diagram }));
+    let without = state(&s);
+    let gone = drawn(&with, &without, &diagram);
+    assert!(gone.before.is_some() && gone.after.is_none());
+    assert_eq!(gone.name.as_deref(), Some("Billing"));
+    let came = drawn(&without, &with, &diagram);
+    assert!(came.before.is_none() && came.after.is_some());
+    assert_eq!(came.name.as_deref(), Some("Billing"));
+}
+
+/// A box is marked with its own change, or Changed for what it draws; one nothing touched has no mark.
+#[test]
+fn boxes_are_marked_by_their_own_change_and_by_what_they_show() {
+    let Placed { mut s, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [first], "dx": 40, "dy": 40 }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "moved, and left alone");
+
+    let Placed { mut s, shop, customer, diagram, .. } = placed();
+    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let elsewhere = run(&mut s, "diagram.place", json!({ "diagram": other, "element": customer, "x": 0, "y": 0 }));
+    let before = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [elsewhere], "dx": 40, "dy": 40 }));
+    assert_eq!(drawn(&before, &state(&s), &diagram).marks, Default::default(), "a box on another diagram");
+
+    let Placed { mut s, customer, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None), "what it shows renamed");
+
+    let Placed { mut s, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.unplace", json!({ "nodes": [first] }));
+    let after = state(&s);
+    let seen = drawn(&before, &after, &diagram);
+    assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Removed), None));
+    assert_eq!(mark(&drawn(&after, &before, &diagram), &first), Some(ChangeKind::Added));
+}
+
+/// A member is on one side only, and marks the box that lists it whichever side that is. A table
+/// beside it in the schema is drawn by no box, so it marks none.
+#[test]
+fn a_member_on_one_side_marks_the_box_that_lists_it() {
+    let Placed { mut s, customer, diagram, first, second, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let after = state(&s);
+    for (one, other) in [(&before, &after), (&after, &before)] {
+        let seen = drawn(one, other, &diagram);
+        assert_eq!((mark(&seen, &first), mark(&seen, &second)), (Some(ChangeKind::Changed), None));
+    }
+    let Placed { mut s, shop, diagram, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "unplaced" }));
+    assert_eq!(drawn(&before, &state(&s), &diagram).marks, Default::default(), "a neighbour no box draws");
+}
+
+/// A box handed from one diagram to another changes no row of its own, yet it is gone from one and
+/// new on the other. One that stays on the diagram is marked for neither.
+#[test]
+fn a_box_moved_between_diagrams_is_removed_from_one_and_added_to_the_other() {
+    let Placed { mut s, shop, diagram, first, second, .. } = placed();
+    let other = run(&mut s, "diagram.add", json!({ "kind": "er", "element": shop, "name": "Other" }));
+    let before = state(&s);
+    let mut after = before.clone();
+    let (from, to, moved) = (Uuid::parse(&diagram).unwrap(), Uuid::parse(&other).unwrap(), Uuid::parse(&second).unwrap());
+    let row = after.junctions.iter_mut().flatten().find(|r| r.0 == from && matches!(r.2, Cell::Id(id) if id == moved)).unwrap();
+    (row.0, row.1) = (to, 0);
+    assert!(!differences(&before, &after).iter().any(|d| d.id == moved), "its own row is the same");
+    let left = drawn(&before, &after, &diagram);
+    assert_eq!((mark(&left, &second), mark(&left, &first)), (Some(ChangeKind::Removed), None));
+    assert_eq!(mark(&drawn(&before, &after, &other), &second), Some(ChangeKind::Added));
+}
+
+/// A box nested in another is marked like any other, and its change doesn't mark the box around it.
+#[test]
+fn a_nested_box_is_marked_on_its_own() {
+    let Placed { mut s, diagram, first, .. } = placed();
+    let nested = run(&mut s, "diagram.note", json!({ "diagram": diagram, "text": "check", "parent": first, "x": 10, "y": 10 }));
+    let before = state(&s);
+    run(&mut s, "diagram.resize", json!({ "node": nested, "width": 100, "height": 60 }));
+    let seen = drawn(&before, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &nested), mark(&seen, &first)), (Some(ChangeKind::Changed), None));
+}
+
+/// A parameter is written on its operation's line, so it marks the box; a generalization the class
+/// owns isn't written on the box, so with no line for it nothing is marked.
+#[test]
+fn only_what_a_box_lists_marks_it() {
+    let (mut s, shop, order, _) = uml_project();
+    let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "sum" }] }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": shop, "name": "Orders" }));
+    let card = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 0 }));
+    let before = state(&s);
+    run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": item }));
+    let related = state(&s);
+    let found = differences(&before, &related);
+    assert!(found.iter().any(|d| d.class == archforge_uml::GENERALIZATION), "the class owns something new: {found:?}");
+    assert_eq!(mark(&drawn(&before, &related, &diagram), &card), None);
+    run(&mut s, "uml.operation.set", json!({ "operation": pay, "name": "pay", "parameters": [{ "name": "amount" }] }));
+    assert_eq!(mark(&drawn(&related, &state(&s), &diagram), &card), Some(ChangeKind::Changed));
+}
+
+/// A line is marked like a box: its own arrival, and a bend in its route, which is a part of it.
+#[test]
+fn lines_are_marked_like_boxes() {
+    let Placed { mut s, customer, invoice, diagram, first, second, .. } = placed();
+    let relationship = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": invoice }));
+    let before = state(&s);
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": first, "target": second }));
+    let connected = state(&s);
+    assert_eq!(told_card(&connected, &line), (Some("customer → invoice".into()), true), "a line goes by what it shows");
+    assert_eq!(mark(&drawn(&before, &connected, &diagram), &line), Some(ChangeKind::Added));
+    run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
+    let seen = drawn(&connected, &state(&s), &diagram);
+    assert_eq!((mark(&seen, &line), mark(&seen, &first)), (Some(ChangeKind::Changed), None), "the bend is the line's");
+    run(&mut s, "diagram.style", json!({ "ids": [line], "fill": "#112233" }));
+    let styled = state(&s);
+    run(&mut s, "diagram.style", json!({ "ids": [line], "fill": "#445566" }));
+    assert_eq!(mark(&drawn(&styled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "its look is a part of it");
+    let restyled = state(&s);
+    run(&mut s, "diagram.label", json!({ "edge": line, "kind": "name", "dx": 9 }));
+    assert_eq!(mark(&drawn(&restyled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "so is its label");
+    let labelled = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": invoice, "name": "bill" }));
+    let shown = sides(&labelled, &state(&s), &line);
+    assert_eq!(shown.after.as_ref().unwrap().name.as_deref(), Some("customer → bill"));
+    assert!(!shown.after.as_ref().unwrap().renamed_from(shown.before.as_ref().unwrap()), "words it shows aren't its name");
+}
+
+/// What an opening repairs marks nothing, on either side.
+#[test]
+fn a_repair_marks_nothing() {
+    let Placed { mut s, diagram, first, .. } = placed();
+    let before = state(&s);
+    run(&mut s, "diagram.resize", json!({ "node": first, "width": 100, "height": 200 }));
+    let after = state(&s);
+    let fit = |st: &mut Store| {
+        let nodes: Vec<_> = st.alive().filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::NODE)).collect();
+        for n in nodes {
+            st.set(n, archforge_diagram::node::HEIGHT, Value::Real(200.0)).unwrap();
+            st.set(n, archforge_diagram::node::WIDTH, Value::Real(100.0)).unwrap();
+        }
+    };
+    assert_eq!(mark(&drawn(&before, &after, &diagram), &first), Some(ChangeKind::Changed), "without the repair it differs");
+    let seen = diagram_sides(&before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
+    assert_eq!(seen.marks, Default::default());
 }

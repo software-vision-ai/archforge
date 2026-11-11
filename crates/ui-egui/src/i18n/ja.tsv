@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
+str		Show a diagram first	先に図を表示してください
 str		Open…	開く…
 str		Save	保存
 # 生成
@@ -462,6 +463,15 @@ str		You are already on this branch.	すでにこのブランチにいます。
 str		The project stayed on its branch because it changed or was busy.	プロジェクトが変更されたか使用中だったため、現在のブランチのままです。
 str		Your latest changes could not be written, so the project stayed on its branch.	最新の変更を書き込めなかったため、プロジェクトは現在のブランチのままです。
 str		The project stayed on its branch: {why}	プロジェクトは現在のブランチのままです: {why}
+str		Switch to {branch}?	{branch} に切り替えますか？
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} には未保存の変更があります。変更は {branch} に残り、戻ったときにそのままあります。以前の操作は元に戻せなくなります。
+str		Save version and switch	バージョンを保存して切り替え
+str		Switch	切り替え
+str		Couldn't switch to {branch}	{branch} に切り替えられませんでした
+str		{why} You are still on {branch} and your work is unchanged.	{why} 現在も {branch} にいて、作業内容は変わっていません。
+str		{why} You are still on {branch}. Your work is saved.	{why} 現在も {branch} にいます。作業内容は保存されました。
+str		Switching is refused	切り替えは拒否されました
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} 作業内容を保持できなかったため、切り替えませんでした。現在も {branch} にいます。
 str		The switch did not finish, so the project stayed on its branch.	切り替えが完了しなかったため、プロジェクトは現在のブランチのままです。
 str		The version could not be restored: {why}	バージョンを復元できませんでした: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	このバージョンは現在の作業と同じです。未保存の作業はバージョンとして保持しました。
@@ -1558,7 +1568,6 @@ str		Domain check	ドメインチェック制約
 str		Drawing	描画
 str		Effect	効果
 str		Entry point	入口点
-str		Enumeration literal	列挙リテラル
 str		Exactly one	ちょうど 1
 str		Execution location	実行場所
 str		Exit point	出口点
@@ -1664,7 +1673,6 @@ str		Par	並列
 str		Parallel	並列
 str		Persistence	永続化
 str		Profile application	プロファイル適用
-str		Property	プロパティ
 str		Read	読み取り
 str		Realization	実現
 str		Redefinable template signature	再定義可能テンプレートシグネチャ

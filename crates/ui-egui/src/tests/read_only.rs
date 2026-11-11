@@ -38,6 +38,17 @@ fn corner_squares(h: &Harness<'static, Shell>) -> usize {
     rect_shapes(h).iter().filter(|(r, fill, stroke)| *stroke == accent && *fill != accent && r.size() == egui::vec2(6.0, 6.0)).count()
 }
 
+/// While a version shows the diagram, the Model menu lists its rows but none can be picked.
+#[test]
+fn the_model_menu_is_off_while_a_version_shows() {
+    in_both(viewing, |mut h, _rig, _host| {
+        let s = h.state_mut();
+        assert!(crate::model_menu::sections(s).concat().contains(&"model.class") && !crate::actions::available(s, "model.note"));
+        crate::actions::run(s, "model.note");
+        assert_eq!((s.canvas.tool, crate::model_menu::why_off(s).as_str()), (crate::canvas::Tool::Select, "Read only while viewing a version"));
+    });
+}
+
 /// A selected node's corners, which resize, are not drawn while a version shows; its ring is.
 #[test]
 fn a_selected_node_has_no_corners_while_a_version_shows() {

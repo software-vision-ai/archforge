@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Maj
 str		The project is busy	Le projet est occupé
 str		Open or go back to a project first	Ouvrez d'abord un projet ou revenez à un projet
+str		Show a diagram first	Affichez d'abord un diagramme
 str		Open…	Ouvrir…
 str		Save	Enregistrer
 # Générer
@@ -462,6 +463,15 @@ str		You are already on this branch.	Vous êtes déjà sur cette branche.
 str		The project stayed on its branch because it changed or was busy.	Le projet est resté sur sa branche car il a changé ou était occupé.
 str		Your latest changes could not be written, so the project stayed on its branch.	Vos dernières modifications n'ont pas pu être écrites ; le projet est donc resté sur sa branche.
 str		The project stayed on its branch: {why}	Le projet est resté sur sa branche : {why}
+str		Switch to {branch}?	Passer à {branch} ?
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} a des modifications non enregistrées. Elles restent sur {branch} et seront là à votre retour. Vous ne pourrez pas annuler les étapes précédentes.
+str		Save version and switch	Enregistrer la version et changer
+str		Switch	Changer
+str		Couldn't switch to {branch}	Impossible de passer à {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} Vous êtes toujours sur {branch} et votre travail n’a pas changé.
+str		{why} You are still on {branch}. Your work is saved.	{why} Vous êtes toujours sur {branch}. Votre travail est enregistré.
+str		Switching is refused	Changement refusé
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} Votre travail n’a pas pu être conservé, le changement n’a donc pas eu lieu. Vous êtes toujours sur {branch}.
 str		The switch did not finish, so the project stayed on its branch.	Le changement n'a pas abouti ; le projet est donc resté sur sa branche.
 str		The version could not be restored: {why}	La version n'a pas pu être restaurée : {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Cette version est identique à votre travail en cours. Votre travail non enregistré a été conservé comme version.
@@ -1558,7 +1568,6 @@ str		Domain check	Contrainte de contrôle de domaine
 str		Drawing	Dessin
 str		Effect	Effet
 str		Entry point	Point d’entrée
-str		Enumeration literal	Littéral d’énumération
 str		Exactly one	Exactement un
 str		Execution location	Emplacement d’exécution
 str		Exit point	Point de sortie
@@ -1664,7 +1673,6 @@ str		Par	Parallèle
 str		Parallel	Parallèle
 str		Persistence	Persistance
 str		Profile application	Application de profil
-str		Property	Propriété
 str		Read	Lire
 str		Realization	Réalisation
 str		Redefinable template signature	Signature de modèle redéfinissable

@@ -39,8 +39,8 @@ These are not in Archforge yet. Where the window shows a place for them, it says
 
 - C4 diagrams of a system's architecture.
 - Source control for projects, beyond the versions Save makes.
-- A menu bar with every command; for now it holds macOS's application, File and Edit menus and, on
-  Windows and Linux, **File**, **Edit** and **Help** in the title strip.
+- A menu bar with every command; for now it holds macOS's application, File, Edit and Model menus and,
+  on Windows and Linux, **File**, **Edit**, **Model** and **Help** in the title strip.
 - Signed packages: today's packages are not signed, so macOS and Windows ask before they first
   open Archforge (see [Getting started](02-getting-started.md)).
 

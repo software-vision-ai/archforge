@@ -42,6 +42,7 @@ mod kinds;
 mod leaving;
 pub mod markdown;
 mod menu_bar;
+pub mod model_menu;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;
@@ -62,6 +63,7 @@ pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
 pub mod support;
+mod switch_ask;
 pub mod theme;
 pub mod types;
 mod uml_bindings;
@@ -281,6 +283,11 @@ pub trait ProjectHost: Send + Sync {
     /// why it could not be asked for, in words for a person.
     fn begin_branch_switch(&self, _project: &std::path::Path, _branch: String) -> Result<BranchSwitch, String> {
         Err("this host keeps no branches".to_string())
+    }
+
+    /// How the branch stored as `stored` is shown to a person: as it was typed, where it can be told.
+    fn branch_shown(&self, stored: &str) -> String {
+        stored.to_string()
     }
 
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
@@ -1908,7 +1915,7 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Restore { .. }));
+            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. }));
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

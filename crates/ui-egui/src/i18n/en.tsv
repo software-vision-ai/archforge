@@ -7,6 +7,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
 str		Open or go back to a project first	Open or go back to a project first
+str		Show a diagram first	Show a diagram first
 str		Open…	Open…
 str		Save	Save
 # Generate
@@ -461,6 +462,15 @@ str		You are already on this branch.	You are already on this branch.
 str		The project stayed on its branch because it changed or was busy.	The project stayed on its branch because it changed or was busy.
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
+str		Switch to {branch}?	Switch to {branch}?
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.
+str		Save version and switch	Save version and switch
+str		Switch	Switch
+str		Couldn't switch to {branch}	Couldn't switch to {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} You are still on {branch} and your work is unchanged.
+str		{why} You are still on {branch}. Your work is saved.	{why} You are still on {branch}. Your work is saved.
+str		Switching is refused	Switching is refused
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} Your work could not be kept, so the switch was not made. You are still on {branch}.
 str		The switch did not finish, so the project stayed on its branch.	The switch did not finish, so the project stayed on its branch.
 str		The version could not be restored: {why}	The version could not be restored: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	This version is the same as your current work. Your unsaved work was kept as a version.
@@ -1557,7 +1567,6 @@ str		Domain check	Domain check
 str		Drawing	Drawing
 str		Effect	Effect
 str		Entry point	Entry point
-str		Enumeration literal	Enumeration literal
 str		Exactly one	Exactly one
 str		Execution location	Execution location
 str		Exit point	Exit point
@@ -1663,7 +1672,6 @@ str		Par	Par
 str		Parallel	Parallel
 str		Persistence	Persistence
 str		Profile application	Profile application
-str		Property	Property
 str		Read	Read
 str		Realization	Realization
 str		Redefinable template signature	Redefinable template signature

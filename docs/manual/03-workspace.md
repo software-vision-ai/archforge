@@ -9,8 +9,8 @@ An open project fills the window with its workspace.
   anyone given a copy of the project can read it).
 - **The left rail** switches the left column between **Diagrams**, at the top, **Models** and **Versions**,
   which lists what has changed since the last version and the project's history, newest first.
-  **Save version…** there shows what changed and saves it as a new version under a description
-  of one line, which stays in the history. It is off while there is nothing to save.
+  **Save version…** there saves what changed as a new version:
+  [Versions](09-versions.md#save-a-version) goes through it step by step.
   Clicking a version in the history opens its details in the centre: its description, when it
   was saved and, where that is recorded, by whom, what changed since the version before and a link
   to that version, which opens its details the same way.
@@ -42,10 +42,11 @@ An open project fills the window with its workspace.
   added, changed or removed, where it is, and the version it is compared with, or that there is
   no version to compare with yet. Two cards side by side, **Before** (the last version) and
   **After** (current work), give the element's kind, name and values. A name or value that differs
-  is marked with − on the Before card and + on the After card as well as a tint. A side the
-  element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
+  is marked with − on the Before card and + on the After card as well as a tint. An element with
+  no name goes by what it joins or says, such as *Customer → Order*, and those words following a
+  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
   and members that differ and says the first three values in words, or that the element was added
-  or removed. Below the values the cards group the element's attributes, operations, literals,
+  or removed. Below the values the cards group the element's attributes or columns, operations, literals,
   other members and owner under headings, marked the same way when one came, went or changed; a
   long list scrolls with the cards. Relationships aren't listed on the cards yet, and the summary
   says so. Under the cards, **Related change** names the other model elements connected to this one
@@ -59,14 +60,21 @@ An open project fills the window with its workspace.
   again.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
-On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit** and
-**Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
+**Model** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
 ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was.
+
+**Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
+as a click on the tool does: click the canvas to place the element, or drag between two elements to
+draw the relationship. **Note** and **Link note** are always listed; the rest follow the open
+diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram the kinds of the
+classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
+the diagram can't be changed, the rows are greyed out.
 
 ## New diagram
 
@@ -154,7 +162,8 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
 one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
-act on that field's text instead of the model.
+act on that field's text instead of the model. Undo is not the same as going back to a saved version:
+[Versions](09-versions.md#autosave-a-saved-version-and-undo) says how they differ.
 
 ## Removing from a diagram versus deleting from the model
 
