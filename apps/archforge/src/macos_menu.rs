@@ -32,6 +32,8 @@ pub struct NativeMenu {
     model: Submenu,
     /// The rows `model` holds, by section; none until the first frame fills it.
     model_rows: Vec<Vec<&'static str>>,
+    /// Whether the last rebuild of `model` failed, so a failure is logged once, not every frame.
+    failing: bool,
 }
 
 /// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
@@ -80,7 +82,7 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
     menu.init_for_nsapp();
-    Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new() })
+    Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new(), failing: false })
 }
 
 /// What the menu bar calls for each chosen item: queues it for the next frame and wakes the window,
@@ -111,7 +113,7 @@ impl NativeMenu {
         }
     }
 
-    /// Rebuilds the Model menu when the diagram's rows have changed, once for each change.
+    /// Rebuilds the Model menu when the diagram's rows have changed, again each frame while that fails.
     fn follow_diagram(&mut self, shell: &Shell) {
         let rows = model_menu::sections(shell);
         if rows == self.model_rows {
@@ -119,11 +121,19 @@ impl NativeMenu {
         }
         while self.model.remove_at(0).is_some() {}
         self.items.retain(|(id, _)| !id.starts_with("model."));
-        if let Err(e) = append_groups(shell, &self.model, &rows, &mut self.items) {
-            log::warn!("the Model menu could not be rebuilt: {e}");
-        }
-        self.model_rows = rows;
+        let built = append_groups(shell, &self.model, &rows, &mut self.items);
+        self.model_rows = settle(rows, built, &mut self.failing);
     }
+}
+
+/// The rows the Model menu holds after a rebuild of `rows`: all of them when it worked, none when it
+/// failed, so the next frame tries again. Only the first of failures in a row is logged.
+fn settle(rows: Vec<Vec<&'static str>>, built: Result<(), muda::Error>, failing: &mut bool) -> Vec<Vec<&'static str>> {
+    if !*failing && let Err(e) = &built {
+        log::warn!("the Model menu could not be rebuilt, trying again: {e}");
+    }
+    *failing = built.is_err();
+    if *failing { Vec::new() } else { rows }
 }
 
 // The queue and the wake, free of the operating system's menu bar: building a real `Menu` needs the
@@ -222,6 +232,15 @@ mod tests {
             let keys = actions::keys(id).and_then(accelerator);
             assert_eq!(keys, wanted.map(|w| Accelerator::from_str(w).unwrap()), "{id}");
         }
+    }
+
+    /// A Model menu that failed to rebuild is tried again on the next frame, as no real rows are
+    /// empty; once it works its rows are kept.
+    #[test]
+    fn a_failed_rebuild_of_model_is_tried_again() {
+        let (rows, mut failing) = (vec![vec!["model.note", "model.link"]], false);
+        assert_eq!((settle(rows.clone(), Err(muda::Error::NotAChildOfThisMenu), &mut failing), failing), (vec![], true));
+        assert_eq!((settle(rows.clone(), Ok(()), &mut failing), failing), (rows, false));
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read
