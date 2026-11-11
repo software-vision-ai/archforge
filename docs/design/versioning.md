@@ -399,8 +399,8 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
   changed, layout did not".
 
 A diagram's two sides are each drawn from their own state in one framing: the zoom and pan that fit
-every box and line on either side, from neither the project nor the canvas, so how someone last looked
-at it is never a difference.
+every box, line and line label on either side, wherever a label was put, from neither the project nor
+the canvas, so how someone last looked at it is never a difference.
 
 ---
 

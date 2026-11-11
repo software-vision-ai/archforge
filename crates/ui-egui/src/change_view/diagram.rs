@@ -3,13 +3,15 @@
 
 use std::collections::BTreeMap;
 
-use archforge_diagram::{diagram, grid::bounds_of, node_tree};
+use archforge_diagram::grid::{bounds_of, middle_of};
+use archforge_diagram::{LabelPlace, diagram, edge, label, node_tree};
+use archforge_mof::Value;
 use archforge_notations::differences::{DiagramSide, DiagramSides};
 use egui::{CornerRadius, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use super::cards::{self, BAND, EYEBROW, GUTTER};
 use crate::Shell;
-use crate::canvas::{Live, Scene, State, View, draw_scene, fit, refs};
+use crate::canvas::{Live, Scene, State, View, draw_scene, fit, real, refs};
 use crate::i18n::tr;
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
@@ -42,13 +44,24 @@ fn framing(sides: &DiagramSides, size: Vec2) -> (f32, Vec2) {
 }
 
 /// The rectangle around what `side` draws: every box, nested ones too, as nothing keeps them inside
-/// their parent, and every line, whose bends can reach past the boxes.
+/// their parent, every line, whose bends can reach past the boxes, and where each line's labels were
+/// put, however far from it. A label's own size is left to the margin.
 fn extent(side: &DiagramSide) -> Option<Rect> {
-    let tree = refs(&side.store, side.diagram, diagram::NODE).into_iter().flat_map(|top| node_tree(&side.store, top));
-    let boxes =
-        tree.map(|n| bounds_of(&side.store, n)).map(|b| Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32)));
-    let bends = side.grid.lines().flat_map(|(_, points)| points).map(|(x, y)| Rect::from_min_size(pos2(*x as f32, *y as f32), Vec2::ZERO));
-    boxes.chain(bends).filter(Rect::is_finite).reduce(Rect::union)
+    let (store, point) = (&side.store, |(x, y): (f64, f64)| Rect::from_min_size(pos2(x as f32, y as f32), Vec2::ZERO));
+    let tree = refs(store, side.diagram, diagram::NODE).into_iter().flat_map(|top| node_tree(store, top));
+    let boxes = tree.map(|n| bounds_of(store, n)).map(|b| Rect::from_min_size(pos2(b.x as f32, b.y as f32), vec2(b.width as f32, b.height as f32)));
+    let bends = side.grid.lines().flat_map(|(_, points)| points.iter().copied());
+    let labels = side.grid.lines().flat_map(|(e, points)| {
+        refs(store, e, edge::LABEL).into_iter().filter_map(move |l| {
+            let from = match store.get(l, label::AT) {
+                Ok(Value::Enum(i)) if LabelPlace::from_index(i) == Some(LabelPlace::Source) => points.first().copied(),
+                Ok(Value::Enum(i)) if LabelPlace::from_index(i) == Some(LabelPlace::Target) => points.last().copied(),
+                _ => Some(middle_of(points)),
+            };
+            from.map(|(x, y)| (x + real(store, l, label::DX), y + real(store, l, label::DY)))
+        })
+    });
+    boxes.chain(bends.chain(labels).map(point)).filter(Rect::is_finite).reduce(Rect::union)
 }
 
 /// One side's pane in `card` under its eyebrow; `before` says which. A side the diagram is not on is

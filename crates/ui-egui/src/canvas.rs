@@ -328,7 +328,8 @@ fn active_diagram(shell: &Shell) -> Option<Obj> {
     (store.is_alive(d) && store.class_of(d).ok() == Some(DIAGRAM)).then_some(d)
 }
 
-fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
+/// The number `o` holds in `prop`, or 0 when it holds none or one that isn't finite.
+pub(crate) fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
     match store.get(o, prop) {
         Ok(Value::Real(v)) if v.is_finite() => v,
         _ => 0.0,
