@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use archforge_mof::{Universe, Uuid};
 use archforge_notations::differences::{Area, ChangeKind, Difference};
-use egui::{Rect, Stroke, StrokeKind, pos2};
+use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::i18n::{fmt, tr, trn};
@@ -30,6 +30,9 @@ pub(super) type Link = (usize, ChangeKind);
 /// The rows of `changes` that `related` names, in that order. An element with rows in two tables is
 /// one change, named from a row of the side it is still on; only a model's rows open, so a diagram's stay out.
 pub(super) fn links(changes: &[Difference], related: &[Uuid]) -> Vec<Link> {
+    if related.is_empty() {
+        return Vec::new();
+    }
     let mut rows: HashMap<Uuid, Link> = HashMap::new();
     for (i, d) in changes.iter().enumerate().filter(|(_, d)| d.area == Area::Model) {
         let (at, kind) = rows.entry(d.id).or_insert((i, d.kind));
@@ -48,8 +51,9 @@ pub(super) fn height(count: usize) -> f32 {
     if count == 0 { 0.0 } else { ABOVE + FIRST_MID + count as f32 * ROW }
 }
 
-/// Draws the card of `links` in `area`, its room above included. Only rows in view are worded and
-/// drawn, so a long list costs a frame only what shows.
+/// Draws the card of `links` in `area`, its room above included. Only rows in view, a row past each
+/// end of it and the first are worded and drawn, so a long list costs a frame only what shows while
+/// Tab and Shift+Tab still find the next link, from wherever the cards are scrolled, and bring it into view.
 pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, area: Rect, links: &[Link]) {
     if links.is_empty() {
         return;
@@ -61,11 +65,12 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
     let heading = trn("Related change", "Related changes", links.len() as u64);
     let head = ux::text_mid(&paint, left, card.top() + HEAD_MID, &heading, types::SMALL, p.text_secondary, Some((right - left).max(0.0)));
     let _ = control(shell, clip, "workspace.change-view.related", "status", head, false).accessible_name(&heading);
-    let room = (right - left - BETWEEN).max(0.0);
+    let (room, view) = ((right - left - BETWEEN).max(0.0), clip.clip_rect());
     for (i, (at, kind)) in links.iter().enumerate() {
         let mid = card.top() + FIRST_MID + i as f32 * ROW;
         let line = Rect::from_min_max(pos2(left, mid - ROW / 2.0), pos2(right, mid + ROW / 2.0));
-        let Some(row) = shell.versions.changes.get(*at).filter(|_| line.intersects(clip.clip_rect())).cloned() else { continue };
+        let near = i == 0 || line.intersects(view.expand2(vec2(0.0, ROW)));
+        let Some(row) = shell.versions.changes.get(*at).filter(|_| near).cloned() else { continue };
         let name = row.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| kind_label(universe, row.class));
         let (said, go) = (sentence(*kind, &name), fmt(&tr("Go to {name}"), &[("name", &name)]));
         let g = ux::galley(&paint, &go, types::UI_STRONG, p.accent, Some(LINK.min(room / 2.0)));
@@ -75,11 +80,23 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
         let _ = control(shell, clip, &format!("{id}.said"), "status", shown, false).on_hover_text(&said).accessible_name(&said);
         let resp = control(shell, clip, &id, "link", link, true).on_hover_text(&go);
         let _ = resp.clone().accessible_name(&go);
+        if resp.has_focus() {
+            into_view(shell, clip.ctx(), line, view);
+        }
         focus_ring(&paint, p, link, 3.0, &resp);
         paint.galley(link.min, g, p.accent);
         if resp.clicked() {
             super::open(shell, row);
         }
+    }
+}
+
+/// Scrolls the cards by what `line` stands out of `view`, so the link the keys reached shows whole.
+fn into_view(shell: &mut Shell, ctx: &egui::Context, line: Rect, view: Rect) {
+    let by = (line.top() - view.top()).min(0.0) + (line.bottom() - view.bottom()).max(0.0);
+    if let Some(o) = shell.versions.element.as_mut().filter(|_| by != 0.0) {
+        o.scroll.offset += by;
+        ctx.request_repaint();
     }
 }
 

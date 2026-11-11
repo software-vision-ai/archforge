@@ -1009,6 +1009,46 @@ fn related_rows_are_drawn_only_in_view() {
     });
 }
 
+/// The keys reach a link out of view and bring it in: Tab from the way back finds the first after
+/// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, and Enter opens it.
+#[test]
+fn the_keys_reach_and_open_a_related_link_out_of_view() {
+    use egui::Key::{Enter, Tab};
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        let many: Vec<_> = [row.clone()].into_iter().chain((0..60u8).map(|n| Difference { id: Uuid([n + 1; 16]), ..row.clone() })).collect();
+        let links: Vec<_> = many.iter().map(|d| related_link(d.id)).collect();
+        let rows = [h.state().versions.changes.clone(), many.clone()].concat();
+        crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+        land_related(h, key, many.iter().map(|d| d.id).collect());
+        h.event(egui::Event::PointerMoved(rect_of(h, SUMMARY).center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -40000.0),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run_steps(8);
+        assert!(!has_id(h, &links[0]), "the first is out of view");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.change-view.close")));
+        h.run_steps(1);
+        for (i, link) in links.iter().enumerate() {
+            h.key_press(Tab);
+            h.run_steps(2);
+            assert!(focused_on(h, link) && has_id(h, link), "link {i} reached and shown");
+        }
+        for (i, link) in links.iter().enumerate().rev().skip(1) {
+            h.key_press_modifiers(egui::Modifiers::SHIFT, Tab);
+            h.run_steps(2);
+            assert!(focused_on(h, link) && has_id(h, link), "link {i} reached back and shown");
+        }
+        h.key_press(Enter);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id), "the one reached opens");
+    });
+}
+
 const COMPARE: &str = "workspace.version-details.compare";
 const COMPARE_CLOSE: &str = "workspace.version-compare.close";
 const SWAP: &str = "workspace.version-compare.swap";
