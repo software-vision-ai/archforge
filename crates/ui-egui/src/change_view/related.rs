@@ -80,7 +80,7 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
         let _ = control(shell, clip, &format!("{id}.said"), "status", shown, false).on_hover_text(&said).accessible_name(&said);
         let resp = control(shell, clip, &id, "link", link, true).on_hover_text(&go);
         let _ = resp.clone().accessible_name(&go);
-        if resp.has_focus() {
+        if resp.gained_focus() {
             into_view(shell, clip.ctx(), line, view);
         }
         focus_ring(&paint, p, link, 3.0, &resp);
@@ -91,7 +91,8 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
     }
 }
 
-/// Scrolls the cards by what `line` stands out of `view`, so the link the keys reached shows whole.
+/// Scrolls the cards by what `line` stands out of `view`, so the link the keys just reached shows
+/// whole; the wheel is free again after.
 fn into_view(shell: &mut Shell, ctx: &egui::Context, line: Rect, view: Rect) {
     let by = (line.top() - view.top()).min(0.0) + (line.bottom() - view.bottom()).max(0.0);
     if let Some(o) = shell.versions.element.as_mut().filter(|_| by != 0.0) {

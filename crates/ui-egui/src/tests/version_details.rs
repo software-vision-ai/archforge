@@ -924,6 +924,14 @@ fn land_related(h: &mut Harness<'static, Shell>, key: Compared, related: Vec<Uui
     h.run_steps(1);
 }
 
+/// Turns the wheel far down over the control `over`.
+fn wheel_down(h: &mut Harness<'static, Shell>, over: &str) {
+    h.event(egui::Event::PointerMoved(rect_of(h, over).center()));
+    let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, -40000.0), egui::Modifiers::NONE);
+    h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+    h.run_steps(8);
+}
+
 /// Shop open among changes that hold warehouse too; gives warehouse's row and what the list was compared at.
 fn shop_and_warehouse(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Difference, Compared) {
     before_and_after(h, host);
@@ -996,21 +1004,14 @@ fn related_rows_are_drawn_only_in_view() {
         crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
         land_related(h, key, related);
         assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of view");
-        h.event(egui::Event::PointerMoved(rect_of(h, SUMMARY).center()));
-        h.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, -40000.0),
-            modifiers: egui::Modifiers::NONE,
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-        });
-        h.run_steps(8);
+        wheel_down(h, SUMMARY);
         assert!(has_id(h, &last) && !has_id(h, &first), "the wheel reached the last row");
     });
 }
 
 /// The keys reach a link out of view and bring it in: Tab from the way back finds the first after
-/// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, and Enter opens it.
+/// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, the wheel may move away
+/// from it again, and Enter opens it.
 #[test]
 fn the_keys_reach_and_open_a_related_link_out_of_view() {
     use egui::Key::{Enter, Tab};
@@ -1021,28 +1022,22 @@ fn the_keys_reach_and_open_a_related_link_out_of_view() {
         let rows = [h.state().versions.changes.clone(), many.clone()].concat();
         crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
         land_related(h, key, many.iter().map(|d| d.id).collect());
-        h.event(egui::Event::PointerMoved(rect_of(h, SUMMARY).center()));
-        h.event(egui::Event::MouseWheel {
-            unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, -40000.0),
-            modifiers: egui::Modifiers::NONE,
-            phase: egui::TouchPhase::Move,
-            source: egui::MouseWheelSource::Wheel,
-        });
-        h.run_steps(8);
+        wheel_down(h, SUMMARY);
         assert!(!has_id(h, &links[0]), "the first is out of view");
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.change-view.close")));
         h.run_steps(1);
         for (i, link) in links.iter().enumerate() {
             h.key_press(Tab);
-            h.run_steps(2);
+            h.run_steps(3);
             assert!(focused_on(h, link) && has_id(h, link), "link {i} reached and shown");
         }
         for (i, link) in links.iter().enumerate().rev().skip(1) {
             h.key_press_modifiers(egui::Modifiers::SHIFT, Tab);
-            h.run_steps(2);
+            h.run_steps(3);
             assert!(focused_on(h, link) && has_id(h, link), "link {i} reached back and shown");
         }
+        wheel_down(h, &links[0]);
+        assert!(focused_on(h, &links[0]) && !has_id(h, &links[0]), "the wheel moves away from the link that keeps the keys");
         h.key_press(Enter);
         frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
         assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id), "the one reached opens");
