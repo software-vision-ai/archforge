@@ -183,6 +183,12 @@ Stepping: from Current work, ‹ goes to the latest version when there are unsav
 to the one
 before it, which is the first that differs. In the list that latest row reads "Same as current work".
 
+A step past the versions read so far reads the next page and goes on, by the one read the list and
+the steps share, so a press while it runs starts no other; ‹ says "No older version" only at the end
+of the history. A read that fails says so in the toast over the canvas, or above what covers the
+canvas, and the version in view stays. The next step reads again. A step waits only until the person
+moves, and coming back does not revive it.
+
 ---
 
 ## 3. Viewing an earlier version
@@ -607,6 +613,7 @@ Checks against what exists:
 | Version unavailable | Row | "This version can't be shown", with the reason behind a "Why?" in the meta text. Stays listed; stepping skips it and says so in the toast over the canvas, naming the first passed. What is known holds of a branch: showing another version keeps it, and a project change, a restore or a branch switch ends it |
 | Newer or foreign model shape | Row | "Made with a newer Archforge." |
 | Read failed | Banner in History | The previous state stays, Retry offered; never half a model. It ends when any version is asked for, on going back from a version, and with a restore or a change of branch or project |
+| Step's read of the versions failed | Toast over the canvas | "The next versions couldn't be read.", or "The versions couldn't be read." before any were. The version in view stays. A later read ends it, as does the next action |
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
 | Long history | List | Pages of 50, selection held by hash, Show more, filter All / With a description |
 | Metadata missing | Details | The row is left out; no invented author |
