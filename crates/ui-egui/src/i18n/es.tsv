@@ -470,7 +470,7 @@ str		Couldn't switch to {branch}	No se pudo cambiar a {branch}
 str		{why} You are still on {branch} and your work is unchanged.	{why} Sigues en {branch} y tu trabajo no ha cambiado.
 str		{why} You are still on {branch}. Your work is saved.	{why} Sigues en {branch}. Tu trabajo está guardado.
 str		Switching is refused	Cambio rechazado
-str		Your work could not be kept, so the switch was not made.	No se pudo conservar tu trabajo, así que no se hizo el cambio.
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} No se pudo conservar tu trabajo, así que no se hizo el cambio. Sigues en {branch}.
 str		The switch did not finish, so the project stayed on its branch.	El cambio no terminó, por lo que el proyecto se quedó en su rama.
 str		The version could not be restored: {why}	No se pudo restaurar la versión: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Esta versión es igual que tu trabajo actual. Tu trabajo sin guardar se conservó como una versión.

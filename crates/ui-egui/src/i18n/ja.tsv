@@ -470,7 +470,7 @@ str		Couldn't switch to {branch}	{branch} に切り替えられませんでし�
 str		{why} You are still on {branch} and your work is unchanged.	{why} 現在も {branch} にいて、作業内容は変わっていません。
 str		{why} You are still on {branch}. Your work is saved.	{why} 現在も {branch} にいます。作業内容は保存されました。
 str		Switching is refused	切り替えは拒否されました
-str		Your work could not be kept, so the switch was not made.	作業内容を保持できなかったため、切り替えませんでした。
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} 作業内容を保持できなかったため、切り替えませんでした。現在も {branch} にいます。
 str		The switch did not finish, so the project stayed on its branch.	切り替えが完了しなかったため、プロジェクトは現在のブランチのままです。
 str		The version could not be restored: {why}	バージョンを復元できませんでした: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	このバージョンは現在の作業と同じです。未保存の作業はバージョンとして保持しました。

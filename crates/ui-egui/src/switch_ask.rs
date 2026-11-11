@@ -67,27 +67,32 @@ fn go(shell: &mut Shell, confirm: Confirm, save_first: bool) -> Result<(), HoldR
 }
 
 /// Once a frame, after the replacement's step: a switch that began and has ended without arriving
-/// comes back saying so, unless another question is up. One that arrived is no longer kept.
+/// comes back saying how it stood when it ended, waiting while another question is up. One that
+/// arrived is no longer kept, nor is one whose project no longer shows.
 pub(crate) fn keep(shell: &mut Shell) {
     if shell.replacing.is_some() {
         return;
     }
-    let Some(s) = shell.versions.switching.take() else { return };
-    let Some(path) = shell.project.as_ref().map(|o| o.path.clone()).filter(|p| *p == s.path && shell.ask.is_none()) else { return };
-    let failure = if shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision()) {
-        (true, tr("Your work could not be kept, so the switch was not made."))
-    } else {
+    let Some(mut s) = shell.versions.switching.take() else { return };
+    let Some(path) = shell.project.as_ref().map(|o| o.path.clone()).filter(|p| *p == s.path) else { return };
+    if s.confirm.failure.is_none() {
+        let refused = shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision());
         let why = shell.save_error.clone().unwrap_or_else(|| tr("The switch did not finish, so the project stayed on its branch."));
         // A Save that answered marked the session saved; one that failed left it unsaved.
-        let template = if s.save_first && !shell.shown_unsaved() {
+        let template = if refused {
+            tr("{why} Your work could not be kept, so the switch was not made. You are still on {branch}.")
+        } else if s.save_first && !shell.shown_unsaved() {
             tr("{why} You are still on {branch}. Your work is saved.")
         } else {
             tr("{why} You are still on {branch} and your work is unchanged.")
         };
-        (false, fmt(&template, &[("why", &why), ("branch", &s.confirm.from)]))
-    };
-    let confirm = Confirm { failure: Some(failure), ..s.confirm };
-    shell.ask = Some(Ask::Switch { path, generation: shell.session_generation(), confirm });
+        s.confirm.failure = Some((refused, fmt(&template, &[("why", &why), ("branch", &s.confirm.from)])));
+    }
+    if shell.ask.is_some() {
+        shell.versions.switching = Some(s);
+        return;
+    }
+    shell.ask = Some(Ask::Switch { path, generation: shell.session_generation(), confirm: s.confirm });
 }
 
 /// Draws the question or the failure over the window and acts on the answer. Enter does nothing

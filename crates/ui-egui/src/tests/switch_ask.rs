@@ -102,11 +102,38 @@ fn a_failed_save_or_switch_says_what_became_of_the_work() {
         add_schema(&mut h, "again");
         asking(&mut h, &host);
         let revision = h.state().session.as_ref().unwrap().revision();
-        (h.state_mut().refused, h.state_mut().written) = (Some(revision), None);
+        (h.state_mut().refused, h.state_mut().written, h.state_mut().save_error) = (Some(revision), None, Some("No rows.".into()));
         click_id(&mut h, SWITCH);
         h.run_steps(4);
-        assert!(painted_has(&h, "Switching is refused") && painted_has(&h, "could not be kept"), "{:?}", painted(&h));
+        let said = ["Switching is refused", "No rows. Your work could not be kept", "You are still on main."];
+        assert!(said.iter().all(|w| painted_has(&h, w)), "{:?}", painted(&h));
         assert!(host.switches.lock().unwrap().is_empty() && !h.state().is_held());
+    });
+}
+
+/// A switch that fails behind another question says so, as it stood then, once that one closes;
+/// kept for a project no longer shown, it is dropped.
+#[test]
+fn a_failure_waits_for_the_question_up_when_it_ends() {
+    in_both(work_and_earlier, |mut h, host, _| {
+        let fail_behind_a_question = |h: &mut Harness<'static, Shell>| {
+            answered(h, &host, SWITCH);
+            h.state_mut().ask = Some(Ask::Unsaved { path: h.state().project.as_ref().unwrap().path.clone() });
+            host.switches.lock().unwrap().remove(0).check.send(Err("Gone.".to_string().into())).unwrap();
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })) && !h.state().is_held());
+        };
+        fail_behind_a_question(&mut h);
+        h.state_mut().save_error = Some("Later.".into());
+        click_id(&mut h, "close-ask.cancel");
+        h.run_steps(3);
+        assert!(painted_has(&h, "Gone. You are still on main and your work is unchanged."), "{:?}", painted(&h));
+        click_id(&mut h, CLOSE);
+        h.run_steps(2);
+        fail_behind_a_question(&mut h);
+        (h.state_mut().project.as_mut().unwrap().path, h.state_mut().ask) = ("elsewhere".into(), None);
+        crate::switch_ask::keep(h.state_mut());
+        assert!(h.state().ask.is_none() && h.state().versions.switching.is_none());
     });
 }
 
