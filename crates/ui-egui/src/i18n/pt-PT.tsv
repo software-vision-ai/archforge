@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	O projeto está ocupado
 str		Open or go back to a project first	Abra primeiro um projeto ou volte a um projeto
+str		Show a diagram first	Mostre primeiro um diagrama
 str		Open…	Abrir…
 str		Save	Guardar
 # Gerar

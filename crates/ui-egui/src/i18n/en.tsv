@@ -7,6 +7,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
 str		Open or go back to a project first	Open or go back to a project first
+str		Show a diagram first	Show a diagram first
 str		Open…	Open…
 str		Save	Save
 # Generate

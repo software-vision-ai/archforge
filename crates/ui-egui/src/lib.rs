@@ -42,6 +42,7 @@ mod kinds;
 mod leaving;
 pub mod markdown;
 mod menu_bar;
+pub mod model_menu;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;

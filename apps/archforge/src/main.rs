@@ -83,9 +83,10 @@ const PREFS_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
 const PREFS_RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl eframe::App for DesktopApp {
+    /// Once a frame: the native menu's chosen items, the shell's logic, then the housekeeping of the running app.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         #[cfg(target_os = "macos")]
-        if let Some(menu) = &self.menu {
+        if let Some(menu) = &mut self.menu {
             menu.frame(&mut self.shell);
         }
         self.shell.logic(ctx);

@@ -8,6 +8,7 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
+str		Show a diagram first	先に図を表示してください
 str		Open…	開く…
 str		Save	保存
 # 生成
