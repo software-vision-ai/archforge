@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
 str		Show a diagram first	先に図を表示してください
+str		Current work is showing	現在の作業を表示しています
+str		Back to current work first	先に現在の作業に戻ってください
+str		This project has one branch	このプロジェクトのブランチは 1 つです
 str		Open…	開く…
 str		Save	保存
 # 生成

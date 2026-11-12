@@ -166,13 +166,6 @@ fn show_branches(shell: &mut Shell) {
     (l.branches, l.highlight, l.filter, l.scroll) = (true, 0, String::new(), TreeScroll::default());
 }
 
-/// ⇧⌘H: back to current work while viewing, otherwise the list.
-pub(crate) fn toggle(shell: &mut Shell) {
-    if !shell.back_to_current_work() {
-        open(shell);
-    }
-}
-
 /// ⌘[: the next older version.
 pub(crate) fn older(shell: &mut Shell) {
     ask_step(shell, true);

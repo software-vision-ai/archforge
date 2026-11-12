@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	项目正忙
 str		Open or go back to a project first	请先打开或返回一个项目
 str		Show a diagram first	请先显示一个图
+str		Current work is showing	正在显示当前工作
+str		Back to current work first	请先返回当前工作
+str		This project has one branch	此项目只有一个分支
 str		Open…	打开…
 str		Save	存储
 # 生成
