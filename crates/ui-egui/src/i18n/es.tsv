@@ -605,9 +605,11 @@ str		Attributes	Atributos
 str		Operations	Operaciones
 str		Literals	Literales
 str		Members	Miembros
+str		Relationships	Relaciones
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Propiedad
 str		Not available on this side	No disponible en este lado
-str		Relationships aren't listed on these cards yet.	Las relaciones aún no se enumeran en estas tarjetas.
+str		Each difference is marked on the cards below.	Cada diferencia está marcada en las tarjetas de abajo.
 plural		Related change	Cambio relacionado|Cambios relacionados
 str		{name} was added in this comparison.	{name} se añadió en esta comparación.
 str		{name} was changed in this comparison.	{name} cambió en esta comparación.
@@ -618,7 +620,8 @@ str		The cards show the same on both sides.	Las tarjetas muestran lo mismo en am
 str		The owner changed	Ha cambiado el propietario
 str		The owner changed.	Ha cambiado el propietario.
 plural		{n} member changed	{n} miembro cambiado|{n} miembros cambiados
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} relación cambiada|{n} relaciones cambiadas
+str		{these} · {those}	{these} · {those}
 str		This element was added	Se ha añadido este elemento
 str		It is only on the After side, so there is nothing to compare.	Solo está en el lado Después, así que no hay nada que comparar.
 str		This element was removed	Se ha eliminado este elemento

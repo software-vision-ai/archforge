@@ -2,7 +2,7 @@
 //! the model or a diagram, added, changed or removed, with the names and path of the item. Each
 //! side is restored into a store of its own and repaired as an opening repairs it, so a box an
 //! opening fits shows no false change. One selected element's two sides are read the same way, as
-//! typed cards with their fields aligned and its members and owner listed, for a
+//! typed cards with their fields aligned and its members, relationships and owner listed, for a
 //! view to word later; one diagram's two sides are kept as stores of their own, for a view to draw.
 //! Nothing here writes to the project.
 
@@ -94,7 +94,7 @@ pub struct ElementSides {
     /// The stored, single-valued, data-typed properties of its class in the metamodel's order, id
     /// and name left out; when the classes differ, the after side's own ones follow.
     pub fields: Vec<CardField>,
-    /// Each side's members and owner, shared so that a copy of the sides stays cheap however long a list is.
+    /// Each side's members, relationships and owner, shared so that a copy of the sides stays cheap however long a list is.
     pub lists: Arc<CardLists>,
 }
 
@@ -107,6 +107,8 @@ pub enum ListKind {
     Operations,
     Literals,
     Members,
+    /// The lines that join it to another element, whoever owns them.
+    Relationships,
     Ownership,
 }
 
@@ -127,11 +129,15 @@ pub enum Named {
 /// One row of a list on one side.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListRow {
-    /// The member or owner the row stands for; the element itself when no owner can be named.
+    /// The member, relationship or owner the row stands for; the element itself when no owner can be named.
     pub id: Uuid,
     pub class: ClassId,
-    /// Its notation text, or its name.
+    /// Its notation text, or its name; a relationship's role, or its own name, which is empty when it has neither.
     pub name: Named,
+    /// What a relationship joins the element to: its id, none when this side can't show it, and its name; none for any other row.
+    pub to: Option<(Option<Uuid>, Named)>,
+    /// What a relationship's row writes after the rest, as its line does: the far end's multiplicity, ` [1..*]`; empty for any other.
+    pub note: String,
     /// How it differs from the other side's row, when the element is on both.
     pub change: Option<ChangeKind>,
 }
@@ -153,6 +159,8 @@ pub struct CardLists {
     pub related: Vec<Uuid>,
     /// How many members differ, counted once when read, so a summary doesn't walk the lists each frame.
     pub member_changes: usize,
+    /// How many relationships differ, counted as members are.
+    pub relationship_changes: usize,
 }
 
 /// One side of a compared diagram: a store of its own, so names and places are what they were there.
@@ -305,17 +313,18 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
         marked(&mut before_lists, &after_lists, ChangeKind::Removed, &changed);
         marked(&mut after_lists, &before_lists, ChangeKind::Added, &changed);
     }
-    let marks = |of: &[CardList], only: Option<ChangeKind>| {
-        of.iter()
-            .filter(|l| l.kind != ListKind::Ownership)
-            .flat_map(|l| &l.rows)
-            .filter(|r| r.change.is_some() && (only.is_none() || r.change == only))
-            .count()
-    };
     // A changed row is on both sides, so it counts once, on the before side.
-    let member_changes = marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added));
+    let count = |kinds: &[ListKind]| {
+        let marks = |of: &[CardList], only: Option<ChangeKind>| {
+            let rows = of.iter().filter(|l| kinds.contains(&l.kind)).flat_map(|l| &l.rows);
+            rows.filter(|r| r.change.is_some() && (only.is_none() || r.change == only)).count()
+        };
+        marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added))
+    };
+    use ListKind::{Attributes, Columns, Literals, Members, Operations};
+    let (member_changes, relationship_changes) = (count(&[Attributes, Columns, Operations, Literals, Members]), count(&[ListKind::Relationships]));
     let related = related::connected_to(id, [("after", &new), ("before", &old)])?;
-    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, related, member_changes });
+    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, related, member_changes, relationship_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
 }
 
@@ -465,7 +474,8 @@ fn read_side(side: &'static str, store: &Store, id: Uuid) -> Result<Option<(Elem
 
 /// Marks each row of `side` against the rows of `other`: `gone` when `other` has no such row,
 /// Changed when it says something else, or for words made from what it joins when it or a part of it
-/// is in `changed`. A row is one member by its id, an ER enum's literal by its text; a
+/// is in `changed`. A relationship is Changed by its own change as well, and by what it joins only
+/// when that is another element, never when that element was renamed. A row is one member or relationship by its id, an ER enum's literal by its text; a
 /// card's owner is one row whatever the owner's id, so a move reads as a changed owner and a renamed owner doesn't.
 fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: &BTreeSet<Uuid>) {
     let key = |kind: ListKind, row: &ListRow| {
@@ -474,6 +484,10 @@ fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: 
     };
     let differ = |kind: ListKind, a: &ListRow, b: &ListRow| match (&a.name, &b.name) {
         _ if kind == ListKind::Ownership => a.id != b.id,
+        _ if kind == ListKind::Relationships => {
+            let far = |r: &ListRow| r.to.as_ref().map(|(id, _)| *id);
+            changed.contains(&a.id) || (&a.name, &a.note, far(a)) != (&b.name, &b.note, far(b))
+        }
         (Named::Made(_), Named::Made(_)) => changed.contains(&a.id),
         _ => (a.id, a.class, &a.name) != (b.id, b.class, &b.name),
     };
@@ -489,13 +503,26 @@ fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: 
     }
 }
 
-/// The lists of `obj`: its own members and its owner, read once, off the interface thread, so a
-/// view only ever draws what is held. An association's end the element owns is a member like any other.
+/// The lists of `obj`: its own members, the relationships it is an end of, whoever owns them, and
+/// its owner, read once, off the interface thread, so a view only ever draws what is held. An
+/// association's end the element owns is listed as its association, and a relationship it owns
+/// between others stays a member.
 fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
     let mut lists: BTreeMap<ListKind, Vec<ListRow>> = BTreeMap::new();
-    for member in store.owned_elements(obj)? {
-        let class = store.class_of(member)?;
-        lists.entry(kind_of(class)).or_default().push(ListRow { name: member_name(store, member, class), ..plain_row(store, member, class) });
+    let mut joined = BTreeSet::new();
+    let owned = store.owned_elements(obj)?.into_iter().map(|m| (m, true));
+    for (item, own) in owned.chain(store.referrers(obj).into_iter().map(|(by, _)| (by, false))) {
+        let rel = relationship_of(store, item)?;
+        let class = store.class_of(rel)?;
+        match far_end(store, rel, class, obj) {
+            Some(far) if joined.insert(rel) => lists.entry(ListKind::Relationships).or_default().push(relationship_row(store, rel, class, far)),
+            Some(_) => {}
+            None if own => {
+                let class = store.class_of(item)?;
+                lists.entry(kind_of(class)).or_default().push(ListRow { name: member_name(store, item, class), ..plain_row(store, item, class) });
+            }
+            None => {}
+        }
     }
     if store.class_of(obj)? == archforge_er::ENUM_TYPE {
         let literal = |text: String| ListRow { name: Named::Said(text), ..plain_row(store, obj, archforge_er::ENUM_TYPE) };
@@ -507,7 +534,52 @@ fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
 
 /// A row for `obj` naming it, unmarked.
 fn plain_row(store: &Store, obj: Obj, class: ClassId) -> ListRow {
-    ListRow { id: store.uuid(obj).unwrap_or(Uuid([0; 16])), class, name: named(store, obj), change: None }
+    ListRow { id: store.uuid(obj).unwrap_or(Uuid([0; 16])), class, name: named(store, obj), to: None, note: String::new(), change: None }
+}
+
+/// The association of `item` when it is an association's end, or `item` itself.
+fn relationship_of(store: &Store, item: Obj) -> Result<Obj, Invalid> {
+    let end = store.class_of(item)? == archforge_uml::PROPERTY;
+    Ok(if end { reference(store, item, archforge_uml::property::ASSOCIATION).unwrap_or(item) } else { item })
+}
+
+/// The value of the single reference `prop` of `obj`, when it is set.
+fn reference(store: &Store, obj: Obj, prop: PropId) -> Option<Obj> {
+    store.get(obj, prop).ok()?.as_ref()
+}
+
+/// The far end of `rel`, of `class`, from `obj`, as each notation stores its two ends: the element
+/// there, none when it is unset, and for an association the end itself;
+/// none when `rel` is no relationship between two or `obj` is not one of its ends.
+fn far_end(store: &Store, rel: Obj, class: ClassId, obj: Obj) -> Option<(Option<Obj>, Option<Obj>)> {
+    use archforge_er::{generalization, relationship};
+    use archforge_uml as uml;
+    let at = |prop| reference(store, rel, prop);
+    let (ends, parts) = match class {
+        c if c == archforge_er::RELATIONSHIP => ([at(relationship::FROM), at(relationship::TO)], [None; 2]),
+        c if c == archforge_er::GENERALIZATION => ([at(generalization::SUBTYPE), at(generalization::SUPERTYPE)], [None; 2]),
+        c if uml::is_association(c) => {
+            let parts = uml::figures::member_ends(store, rel)?;
+            (parts.map(|end| reference(store, end, uml::typed_element::TYPE)), parts.map(Some))
+        }
+        c if uml::is_relationship(c) || c == uml::EXTENSION => {
+            (uml::figures::ends(store, rel).map_or([None; 2], |(a, b)| [Some(a), Some(b)]), [None; 2])
+        }
+        _ => return None,
+    };
+    let far = 1 - ends.iter().position(|end| *end == Some(obj))?;
+    Some((ends[far], parts[far]))
+}
+
+/// The row of the relationship `rel`, of `class`, whose far end is `(element, end)`: the end's role
+/// or the relationship's own name, what it joins to, or that this side can't show it, and the
+/// end's multiplicity.
+fn relationship_row(store: &Store, rel: Obj, class: ClassId, (element, end): (Option<Obj>, Option<Obj>)) -> ListRow {
+    let role = end.map(|e| archforge_uml::figures::end_role(store, e)).filter(|r| !r.is_empty());
+    let reach = end.map(|e| archforge_uml::figures::multiplicity(store, e)).filter(|m| !m.is_empty());
+    let to = element.map_or((None, Named::Unavailable), |o| (store.uuid(o).ok(), named(store, o)));
+    let name = Named::Said(role.unwrap_or_else(|| archforge_core::name_of(store, rel)));
+    ListRow { name, to: Some(to), note: reach.map_or_else(String::new, |m| format!(" [{m}]")), ..plain_row(store, rel, class) }
 }
 
 /// `obj`'s name, the words made for it, or that it has none.

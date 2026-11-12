@@ -604,9 +604,11 @@ str		Attributes	Attributes
 str		Operations	Operations
 str		Literals	Literals
 str		Members	Members
+str		Relationships	Relationships
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Ownership
 str		Not available on this side	Not available on this side
-str		Relationships aren't listed on these cards yet.	Relationships aren't listed on these cards yet.
+str		Each difference is marked on the cards below.	Each difference is marked on the cards below.
 plural		Related change	Related change|Related changes
 str		{name} was added in this comparison.	{name} was added in this comparison.
 str		{name} was changed in this comparison.	{name} was changed in this comparison.
@@ -617,7 +619,8 @@ str		The cards show the same on both sides.	The cards show the same on both side
 str		The owner changed	The owner changed
 str		The owner changed.	The owner changed.
 plural		{n} member changed	{n} member changed|{n} members changed
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} relationship changed|{n} relationships changed
+str		{these} · {those}	{these} · {those}
 str		This element was added	This element was added
 str		It is only on the After side, so there is nothing to compare.	It is only on the After side, so there is nothing to compare.
 str		This element was removed	This element was removed

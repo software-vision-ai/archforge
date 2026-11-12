@@ -538,8 +538,82 @@ fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
     let seen = sides(&before, &state(&s), &order);
     let rows = rows_of(&seen, ListKind::Members);
     assert!(rows.contains(&(Named::Made("{total >= 0}".into()), Some(ChangeKind::Changed))), "{rows:?}");
-    assert!(rows.contains(&made("Order → Charge")), "{rows:?}");
-    assert_eq!(seen.lists.member_changes, 2, "the constraint and the described realization: {rows:?}");
+    assert_eq!(seen.lists.member_changes, 1, "the constraint: {rows:?}");
+    assert_eq!(seen.lists.relationship_changes, 1, "the described realization, not the lines to the renamed class");
+}
+
+/// `rows` with `edit` made straight in a store of their own, for a state no command makes.
+fn edited(rows: &Rows, edit: impl FnOnce(&mut Store)) -> Rows {
+    let (tables, junctions) = storage();
+    let mut st = rows::restore_into_empty(archforge_notations::store(ids()).unwrap(), rows, &tables, &junctions).unwrap();
+    edit(&mut st);
+    rows::snapshot(&st, &tables, &junctions).unwrap()
+}
+
+/// Each relationship row as its words, what it joins to and its mark.
+fn joins(seen: &ElementSides) -> Vec<(Named, Option<(Option<Uuid>, Named)>, String, Option<ChangeKind>)> {
+    let list = seen.lists.after.iter().find(|l| l.kind == ListKind::Relationships);
+    list.map_or_else(Vec::new, |l| l.rows.iter().map(|r| (r.name.clone(), r.to.clone(), r.note.clone(), r.change)).collect())
+}
+
+/// A relationship is listed on the cards of both elements it joins, whoever owns it, by its far
+/// end's role and multiplicity, or with no role by nothing for its kind to stand in; an
+/// association's end a class owns is listed there and not as an attribute, and one the package
+/// owns between others stays its member. A rename of what it joins doesn't mark it; an end's edit does.
+#[test]
+fn relationships_are_listed_on_the_cards_of_what_they_join() {
+    use archforge_uml::{association, class, property};
+    let (mut s, shop, order, _) = uml_project();
+    let line = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "OrderLine" }));
+    let shape = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Shape" }));
+    let holds = run(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
+    run(&mut s, "uml.association.set-end", json!({ "association": holds, "end": 1, "role": "lines", "multiplicity": "1..*" }));
+    let is_a = run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": shape }));
+    let at = |st: &Store, id: &str| st.by_uuid(uuid(id)).unwrap();
+    // The end at OrderLine moves into Order's attributes, as a model read from elsewhere can hold it.
+    let before = edited(&state(&s), |st| {
+        let (a, o) = (at(st, &holds), at(st, &order));
+        let end = st.list(a, association::MEMBER_END).unwrap()[1].as_ref().unwrap();
+        // Off the association's owned ends takes it off its member ends too: it goes back as the second.
+        st.remove_value(a, association::OWNED_END, &Value::Ref(end)).unwrap();
+        st.push(o, class::OWNED_ATTRIBUTE, Value::Ref(end)).unwrap();
+        st.push(a, association::MEMBER_END, Value::Ref(end)).unwrap();
+        assert_eq!(st.get(end, property::ASSOCIATION).unwrap().as_ref(), Some(a), "still the association's end");
+    });
+    let to = |id: &str, name: &str| Some((Some(uuid(id)), said(name)));
+    let seen = sides(&before, &before, &order);
+    assert_eq!(joins(&seen), [(said(""), to(&shape, "Shape"), String::new(), None), (said("lines"), to(&line, "OrderLine"), " [1..*]".into(), None)]);
+    assert_eq!(rows_of(&seen, ListKind::Attributes), [(said("- total"), None)], "the end is no attribute");
+    assert_eq!(joins(&sides(&before, &before, &line)), [(said(""), to(&order, "Order"), String::new(), None)], "on the other end's card");
+    assert!(rows_of(&sides(&before, &before, &shop), ListKind::Members).contains(&made("Order → OrderLine")), "the package's own line");
+    let edit = |change: &dyn Fn(&mut Store)| sides(&before, &edited(&before, change), &order);
+    let rename =
+        |st: &mut Store, o, name: &str| st.set(o, st.universe().info(st.class_of(o).unwrap()).unwrap().name_prop.unwrap(), Value::str(name)).unwrap();
+    let renamed = edit(&|st| rename(st, at(st, &line), "Line"));
+    assert_eq!((joins(&renamed)[1].1.clone(), joins(&renamed)[1].3), (to(&line, "Line"), None), "renamed elsewhere: unmarked");
+    let far = |st: &Store| st.list(at(st, &holds), association::MEMBER_END).unwrap()[1].as_ref().unwrap();
+    let role = edit(&|st| rename(st, far(st), "items"));
+    assert_eq!((joins(&role)[1].3, role.lists.relationship_changes, role.lists.member_changes), (Some(ChangeKind::Changed), 1, 0));
+    let reach = edit(&|st| {
+        let upper = st.get(far(st), archforge_uml::multiplicity_element::UPPER_VALUE).unwrap().as_ref().unwrap();
+        st.set(upper, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(5))).unwrap();
+    });
+    assert_eq!((joins(&reach)[1].2.as_str(), joins(&reach)[1].3), (" [1..5]", Some(ChangeKind::Changed)), "its multiplicity");
+    let typeless = edit(&|st| st.set(far(st), archforge_uml::typed_element::TYPE, Value::Null).unwrap());
+    assert_eq!((joins(&typeless)[1].1.clone(), joins(&typeless)[1].3), (Some((None, Named::Unavailable)), Some(ChangeKind::Changed)), "no type");
+    let moved = edit(&|st| st.set(at(st, &is_a), archforge_uml::generalization::GENERAL, Value::Ref(at(st, &line))).unwrap());
+    assert_eq!((joins(&moved)[0].1.clone(), joins(&moved)[0].3), (to(&line, "OrderLine"), Some(ChangeKind::Changed)), "joined elsewhere");
+
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let places = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order }));
+    let now = state(&s);
+    let rel = archforge_er::RELATIONSHIP;
+    assert_eq!(joins(&sides(&now, &now, &order)), [(said(""), to(&customer, "customer"), String::new(), None)], "from either end");
+    let cut = edited(&now, |st| st.set(at(st, &places), archforge_er::relationship::TO, Value::Null).unwrap());
+    let seen = sides(&now, &cut, &customer);
+    assert_eq!(joins(&seen), [(said(""), Some((None, Named::Unavailable)), String::new(), Some(ChangeKind::Changed))]);
+    assert_eq!(seen.lists.after.iter().find(|l| l.kind == ListKind::Relationships).unwrap().rows[0].class, rel);
 }
 
 /// A box a repair fits shows no false change on either side, and is named by what it shows.
