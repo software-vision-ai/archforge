@@ -9,6 +9,9 @@ str		Shift	Maj
 str		The project is busy	Le projet est occupé
 str		Open or go back to a project first	Ouvrez d'abord un projet ou revenez à un projet
 str		Show a diagram first	Affichez d'abord un diagramme
+str		Current work is showing	Le travail en cours est affiché
+str		Back to current work first	Revenez d'abord au travail en cours
+str		This project has one branch	Ce projet a une seule branche
 str		Open…	Ouvrir…
 str		Save	Enregistrer
 # Générer
@@ -279,6 +282,8 @@ str		Saving…	Enregistrement…
 str		Opening…	Ouverture…
 str		Saved	Enregistré
 str		Unsaved changes · {chord} saves	Modifications non enregistrées · {chord} enregistre
+str		On {branch} · {status}	Sur {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Discussion utilise le modèle
 str		Agent access off	Accès des agents désactivé
 # Panneau Discussion
@@ -356,6 +361,9 @@ str		Open Settings	Ouvrir les Réglages
 str		Saved with {project}	Enregistrées avec {project}
 str		The conversations in this project cannot be read: {why}	Les conversations de ce projet ne peuvent pas être lues : {why}
 str		No conversations in this project yet.	Aucune conversation dans ce projet pour l’instant.
+str		No conversations on this branch yet.	Aucune conversation sur cette branche pour l’instant.
+str		Conversations stay on the branch where they started.	Les conversations restent sur la branche où elles ont commencé.
+str		Ask about the model below to start one.	Posez une question sur le modèle ci-dessous pour en commencer une.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Les conversations sont conservées dans le projet : elles voyagent avec lui et n’apparaissent jamais dans un autre projet.
 str		Delete conversation	Supprimer la conversation
@@ -457,6 +465,7 @@ str		You can reach them again from History.	Vous pourrez les retrouver dans l’
 str		Undo starts fresh after a Restore.	L’annulation repart de zéro après une restauration.
 str		Restore	Restaurer
 str		The restore did not finish	La restauration n’a pas abouti
+str		A restore in {project} did not finish. Go to {project} to see why first.	Une restauration dans {project} n’a pas abouti. Allez d’abord dans {project} pour en voir la raison.
 str		{why} Nothing was changed.	{why} Rien n’a été modifié.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauration n'a pas pu avoir lieu car le projet a changé ou était occupé ; rien n'a donc été restauré.
 str		You are already on this branch.	Vous êtes déjà sur cette branche.
@@ -464,6 +473,7 @@ str		The project stayed on its branch because it changed or was busy.	Le projet 
 str		Your latest changes could not be written, so the project stayed on its branch.	Vos dernières modifications n'ont pas pu être écrites ; le projet est donc resté sur sa branche.
 str		The project stayed on its branch: {why}	Le projet est resté sur sa branche : {why}
 str		Switch to {branch}?	Passer à {branch} ?
+str		Switch branch	Changer de branche
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} a des modifications non enregistrées. Elles restent sur {branch} et seront là à votre retour. Vous ne pourrez pas annuler les étapes précédentes.
 str		Save version and switch	Enregistrer la version et changer
 str		Switch	Changer
@@ -495,6 +505,14 @@ str		Models	Modèles
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	Cette branche
+str	branch	Current	Actuelle
+str		Branches can't be merged yet.	Les branches ne peuvent pas encore être fusionnées.
+str		Only the first {n} branches are listed.	Seules les {n} premières branches sont listées.
+str		The branches couldn't be read.	Les branches n'ont pas pu être lues.
+str		At most {n} characters.	{n} caractères au maximum.
+str		Enter a name.	Saisissez un nom.
+str		A name has to be one line.	Un nom doit tenir sur une ligne.
+str		A name can't start or end with a space.	Un nom ne peut ni commencer ni finir par une espace.
 str		Working changes	Modifications en cours
 str		History	Historique
 str		Retry	Réessayer
@@ -514,6 +532,7 @@ str		One line, at most 200 characters. It stays in the history.	Une ligne, 200 c
 plural		{n} model element	{n} élément du modèle|{n} éléments du modèle
 str		Filter changes…	Filtrer les modifications…
 str		Filter versions…	Filtrer les versions…
+str		Filter branches…	Filtrer les branches…
 str		Model elements	Éléments du modèle
 str		Unnamed	Sans nom
 str		Added	Ajouté
@@ -548,7 +567,12 @@ str		Literals	Littéraux
 str		Members	Membres
 str		Ownership	Appartenance
 str		Not available on this side	Indisponible de ce côté
-str		Relationships aren't shown here yet.	Les relations ne sont pas encore affichées ici.
+str		Relationships aren't listed on these cards yet.	Les relations ne sont pas encore listées sur ces cartes.
+plural		Related change	Modification associée|Modifications associées
+str		{name} was added in this comparison.	{name} a été ajouté dans cette comparaison.
+str		{name} was changed in this comparison.	{name} a été modifié dans cette comparaison.
+str		{name} was removed in this comparison.	{name} a été supprimé dans cette comparaison.
+str		Go to {name}	Aller à {name}
 str		Only what these cards don't show changed	Seul ce que ces cartes n’affichent pas a changé
 str		The cards show the same on both sides.	Les cartes affichent la même chose des deux côtés.
 str		The owner changed	Le propriétaire a changé

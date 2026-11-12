@@ -162,9 +162,18 @@ pub fn trn(one: &str, other: &str, n: u64) -> String {
     form.unwrap_or_else(|| english.to_string()).replace("{n}", &n.to_string())
 }
 
-/// Fills named placeholders, so a translation may reorder them.
+/// Fills named placeholders, so a translation may reorder them, in one pass over the template: a
+/// value is never read for placeholders itself, so a name holding `{status}` stays as it is.
 pub fn fmt(template: &str, args: &[(&str, &str)]) -> String {
-    args.iter().fold(template.to_string(), |acc, (k, v)| acc.replace(&["{", k, "}"].concat(), v))
+    let (mut out, mut rest) = (String::with_capacity(template.len()), template);
+    while let Some((before, after)) = rest.split_once('{') {
+        out.push_str(before);
+        let found = after.split_once('}').and_then(|(key, tail)| Some((args.iter().find(|(k, _)| *k == key)?.1, tail)));
+        let (value, tail) = found.unwrap_or(("{", after));
+        out.push_str(value);
+        rest = tail;
+    }
+    out + rest
 }
 
 #[cfg(test)]

@@ -399,12 +399,13 @@ fn restore_in_banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, back: Rect) 
     let shown = shell.viewing().map(str::to_string).zip(crate::version_chip::shown(shell).cloned());
     let Some((commit, saved)) = shown.filter(|(commit, _)| crate::restore_ask::offered(shell, commit)) else { return back.left() };
     let at = Rect::from_min_size(pos2(back.left() - 36.0, back.top()), Vec2::splat(28.0));
-    let (live, words) = (crate::version_chip::available(shell), tr("Restore this version…"));
-    let resp = control(shell, ui, "workspace.banner.restore", "button", at, live).on_hover_text(&words);
+    let (held, words) = (crate::restore_ask::held_back(shell), tr("Restore this version…"));
+    let live = crate::version_chip::available(shell) && held.is_none();
+    let resp = control(shell, ui, "workspace.banner.restore", "button", at, live).on_hover_text(held.as_deref().unwrap_or(&words));
     let _ = resp.clone().accessible_name(&words);
     ux::icon_in(ui.painter(), at, &icons::RESTORE, if live { p.text_secondary } else { p.text_muted });
     if resp.clicked() {
-        crate::restore_ask::ask(shell, (commit, saved.clone(), saved), None);
+        crate::restore_ask::ask(shell, (commit, saved.clone(), saved));
     }
     at.left()
 }
@@ -537,6 +538,11 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)]))
         }
         Some(_) => (p.green, tr("Saved")),
+    };
+    // Which line of work it is about, once the project has a second branch.
+    let text = match crate::version_chip::branch_name(shell).filter(|_| shell.session.is_some()) {
+        Some(branch) => crate::i18n::fmt(&tr("On {branch} · {status}"), &[("branch", &branch), ("status", &text)]),
+        None => text,
     };
     // Beside the status, not in its place: it stays true however the status changes.
     let detail = detail.or_else(|| shell.project.as_ref().and_then(|o| o.notice.as_ref()).map(crate::BranchNotice::words));

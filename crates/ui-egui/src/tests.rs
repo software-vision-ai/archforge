@@ -6,6 +6,7 @@ use egui_kittest::Harness;
 use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
+mod branches;
 mod edit_menu;
 mod model_menu;
 mod read_only;
@@ -13,6 +14,7 @@ mod switch_ask;
 /// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
 mod version_details;
+mod versions_menu;
 
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -369,8 +371,14 @@ struct SavingHost {
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// The version each read of the versions started after.
     version_asks: std::sync::Mutex<Vec<Option<String>>>,
-    /// The branch the project is on.
+    /// The branch the project is on, what a read of the branches answers (none for no branches),
+    /// whether it says more exist, and how many reads were asked for.
     branch_now: std::sync::Mutex<Option<String>>,
+    branch_list: std::sync::Mutex<Option<Result<Vec<crate::BranchEntry>, String>>>,
+    branch_cut: std::sync::Mutex<bool>,
+    /// While set, each read of the branches waits there for the test to answer it.
+    branch_held: std::sync::Mutex<Option<Vec<std::sync::mpsc::Sender<Result<(Vec<crate::BranchEntry>, bool), String>>>>>,
+    branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
     /// When each version restored was saved, as its job was told.
@@ -414,6 +422,19 @@ impl crate::ProjectHost for SavingHost {
     /// The branch the test says the project is on.
     fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
         self.branch_now.lock().unwrap().clone()
+    }
+
+    /// Answers at once with what the test has set.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<crate::BranchEntry>, bool), String>> {
+        *self.branch_reads.lock().unwrap() += 1;
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(held) = self.branch_held.lock().unwrap().as_mut() {
+            held.push(tx);
+            return rx;
+        }
+        let listed = self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new()));
+        let _ = tx.send(listed.map(|l| (l, *self.branch_cut.lock().unwrap())));
+        rx
     }
 
     /// A switch the test answers through what is kept in `switches`.
@@ -3698,7 +3719,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         h.state_mut().in_window_menu = true;
         h.run();
         let (file, help, mid) = (rect_of(&h, "strip.menu.file"), rect_of(&h, "strip.menu.help"), rect_of(&h, "strip.theme").center().y);
-        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.model", "strip.menu.help"], "{theme:?}");
+        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.model", "strip.menu.versions", "strip.menu.help"], "{theme:?}");
         assert!(
             file.left() >= rect_of(&h, "strip.open-project").right() && file.height() == 24.0 && help.left() > file.right() && file.center().y == mid,
             "{theme:?}"
@@ -3706,7 +3727,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         click_menu(&mut h, "strip.menu.file");
         let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
             .map(|id| format!("strip.menu.row.{id}"));
-        assert_eq!(menu_ids(&h)[4..], want, "{theme:?}");
+        assert_eq!(menu_ids(&h)[5..], want, "{theme:?}");
         let rows = want.each_ref().map(|id| rect_of(&h, id));
         assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
         assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
@@ -3752,7 +3773,7 @@ fn a_click_moves_the_menu_or_closes_it() {
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.file");
         click_menu(&mut h, "strip.menu.help");
-        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[4..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
+        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[5..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
         click_menu(&mut h, "strip.menu.help");
         assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
     }
@@ -3892,8 +3913,8 @@ fn left_and_right_move_between_the_groups_and_wrap() {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
         let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", None), ("model", None), ("help", Some(ABOUT)));
-        let (r, l) = (ArrowRight, ArrowLeft);
-        for (key, at) in [(r, edit), (r, model), (r, help), (r, file), (l, help), (l, model), (l, edit), (l, file)] {
+        let (versions, r, l) = (("versions", None), ArrowRight, ArrowLeft);
+        for (key, at) in [(r, edit), (r, model), (r, versions), (r, help), (r, file), (l, help), (l, versions), (l, model), (l, edit), (l, file)] {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some(at.0), at.1), "{theme:?}: {key:?}");
         }

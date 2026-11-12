@@ -201,6 +201,19 @@ pub struct BranchSwitch {
     pub job: replace::Job,
 }
 
+/// One branch of a project, as the Branches section lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchEntry {
+    /// The name as stored, which a switch asks for, and as shown.
+    pub name: String,
+    pub shown: String,
+    pub current: bool,
+    /// It holds changes to the model not saved as a version; conversations don't count.
+    pub unsaved: bool,
+    /// When its latest version was saved, as the project stores it; none before the first.
+    pub latest: Option<String>,
+}
+
 pub trait ProjectHost: Send + Sync {
     /// Starts creating the project `name` in `folder` and returns at once; the host works on its
     /// own thread and sends one answer. The project created is open afterwards.
@@ -285,9 +298,48 @@ pub trait ProjectHost: Send + Sync {
         Err("this host keeps no branches".to_string())
     }
 
+    /// Reads the branches of the project at `project`, by name, and whether more exist than were
+    /// listed, and returns at once, as [`ProjectHost::versions`] does. A host that keeps no
+    /// branches lists none.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok((Vec::new(), false)));
+        rx
+    }
+
     /// How the branch stored as `stored` is shown to a person: as it was typed, where it can be told.
     fn branch_shown(&self, stored: &str) -> String {
         stored.to_string()
+    }
+
+    /// The name stored for a branch named `typed`, or why `typed` can't name one, in words for a
+    /// person. A host that keeps no branches takes none.
+    fn branch_name(&self, _typed: &str) -> Result<String, String> {
+        Err("this host keeps no branches".to_string())
+    }
+
+    /// Starts making the branch stored as `name` from the current work of the open project at
+    /// `path`, without switching to it, and returns at once.
+    fn create_branch(&self, _path: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
+        rx
+    }
+
+    /// Starts renaming the branch stored as `from` of the open project at `path` to the name stored
+    /// as `to`, and returns at once.
+    fn rename_branch(&self, _path: &std::path::Path, _from: &str, _to: &str) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
+        rx
+    }
+
+    /// Reads what deleting the branch stored as `branch` of the open project at `path` would take
+    /// with it, and returns at once, as [`ProjectHost::versions`] does.
+    fn branch_counts(&self, _path: &std::path::Path, _branch: &str) -> std::sync::mpsc::Receiver<Result<BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err("this host keeps no branches".into()));
+        rx
     }
 
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
@@ -588,6 +640,47 @@ impl std::fmt::Display for BranchNotDeleted {
 }
 
 impl std::error::Error for BranchNotDeleted {}
+
+/// What deleting a branch would take with it, as its confirmation says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchCounts {
+    /// The versions no other branch has. Chat commits are not versions.
+    pub versions_only_here: u64,
+    /// The conversations on the branch, committed or not.
+    pub conversations: u64,
+    /// Whether it holds unsaved changes to the model, as the branch row's dot says.
+    pub unsaved: bool,
+}
+
+/// Why a branch was not made or renamed. Its `Display` text is English, for logs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchRefused {
+    /// A branch has that name, in any case.
+    Taken,
+    /// The last new branch is not cleaned up yet; the next opening removes it.
+    NotCleanedUp,
+    /// The project moved, closed or reopened after this was asked for: nothing was tried.
+    Moved,
+    /// Whether it happened could not be told; asking again settles it.
+    Unclear(String),
+    /// It was refused or failed; `why` is the host's own technical text.
+    Failed(String),
+}
+
+impl std::fmt::Display for BranchRefused {
+    /// The reason in English; a screen words each variant itself.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BranchRefused::Taken => f.write_str("a branch of that name exists"),
+            BranchRefused::NotCleanedUp => f.write_str("the last new branch is not cleaned up yet"),
+            BranchRefused::Moved => f.write_str("the project moved or closed after this was asked for"),
+            BranchRefused::Unclear(why) => write!(f, "whether it happened cannot be told: {why}"),
+            BranchRefused::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for BranchRefused {}
 
 /// Why a project could not be created, in the kinds the dialog explains; a detail is the host's
 /// own technical text, shown small and untranslated under the translated sentence.

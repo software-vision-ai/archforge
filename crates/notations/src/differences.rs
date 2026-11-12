@@ -18,6 +18,8 @@ use archforge_mof::{ClassId, Invalid, Obj, PropId, Property, Store, TypeRef, Uui
 
 use crate::{labels, storage, store};
 
+mod related;
+
 /// Where a difference lies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Area {
@@ -145,6 +147,9 @@ pub struct CardList {
 pub struct CardLists {
     pub before: Vec<CardList>,
     pub after: Vec<CardList>,
+    /// What the element is connected to on either side, each once, the after side's first. A view
+    /// keeps those the comparison lists: most of them will not differ.
+    pub related: Vec<Uuid>,
     /// How many members differ, counted once when read, so a summary doesn't walk the lists each frame.
     pub member_changes: usize,
 }
@@ -270,7 +275,8 @@ pub fn element_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     };
     // A changed row is on both sides, so it counts once, on the before side.
     let member_changes = marks(&before_lists, None) + marks(&after_lists, Some(ChangeKind::Added));
-    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, member_changes });
+    let related = related::connected_to(id, [("after", &new), ("before", &old)])?;
+    let lists = Arc::new(CardLists { before: before_lists, after: after_lists, related, member_changes });
     Ok(Some(ElementSides { id, before: card_before, after: card_after, fields: aligned(&was, &is, on_both), lists }))
 }
 
@@ -491,7 +497,7 @@ fn repaired(
 }
 
 /// The name of `obj` or the words made for it, or those of the element it shows; none when there are neither.
-fn shown_name(store: &Store, obj: Obj) -> Option<String> {
+pub fn shown_name(store: &Store, obj: Obj) -> Option<String> {
     resolved_name(store, obj).map(|(name, _)| name)
 }
 

@@ -3,6 +3,7 @@
 
 mod cards;
 mod diagram;
+mod related;
 mod summary;
 
 use std::sync::mpsc::{Receiver, TryRecvError, channel};

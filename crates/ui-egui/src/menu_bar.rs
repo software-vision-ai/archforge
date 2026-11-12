@@ -7,7 +7,10 @@ use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
-use crate::actions::{self, ABOUT, CLOSE, COPY, CUT, GENERATE, Keys, NEW, OPEN, PASTE, QUIT, REDO, SAVE, SELECT_ALL, SETTINGS, UNDO};
+use crate::actions::{
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEWER, OPEN, PASTE, QUIT, REDO, SAVE, SAVE_VERSION, SELECT_ALL,
+    SETTINGS, UNDO, VERSIONS,
+};
 use crate::home::{control, off_words};
 use crate::i18n::tr;
 use crate::ux::{self, Palette, types};
@@ -27,6 +30,7 @@ static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
     Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
+    Group { id: "versions", title: || tr("Versions"), sections: |_| actions::VERSIONS_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
 ];
 
@@ -278,10 +282,34 @@ fn why_off(shell: &Shell, id: &str) -> String {
         SAVE if shell.is_held() => tr("The project is busy"),
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
         _ if id.starts_with("model.") => crate::model_menu::why_off(shell),
+        _ if id.starts_with("versions.") => versions_off(shell, id),
         // Off only for want of a field or of selected text, held or viewing a version as well.
         CUT | COPY | PASTE => tr("Nothing to act on here"),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
         _ if id.starts_with("edit.") && (id == SELECT_ALL || !shell.looking_only()) => tr("Nothing to act on here"),
+        _ => off_words(shell),
+    }
+}
+
+/// Why the Versions menu's row `id` is off: no project, then the row's own reason, then a hold.
+fn versions_off(shell: &Shell, id: &str) -> String {
+    if shell.session.is_none() || shell.project.is_none() || shell.active.is_none() {
+        return tr("Open or go back to a project first");
+    }
+    if id == SAVE_VERSION
+        && let Some(why) = crate::save_version::off_because(shell)
+    {
+        return why;
+    }
+    let listed = shell.versions.page.as_ref().is_some_and(|p| !p.versions.is_empty());
+    match id {
+        BACK if shell.version_in_view().is_none() => tr("Current work is showing"),
+        _ if shell.is_held() => tr("The project is busy"),
+        VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
+        COMPARE if !listed => tr("No versions yet."),
+        COMPARE => tr("Loading"),
+        NEWER if shell.stepping_from().is_none() => tr("No newer version"),
+        BRANCHES => tr("This project has one branch"),
         _ => off_words(shell),
     }
 }
@@ -336,5 +364,26 @@ mod tests {
             ("The project is busy".to_string(), no),
             "Paste is off for want of a field, not for the hold"
         );
+    }
+
+    /// A Versions row off says first that there is no project, then its own reason, then the hold.
+    #[test]
+    fn a_versions_row_off_says_why() {
+        crate::i18n::set_language("en");
+        let (mut s, ..) = shell();
+        let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK, NEWER].map(|id| why_off(s, id));
+        assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing", "No newer version"]);
+        let entry = crate::VersionEntry { hash: "c1".into(), description: None, author: None, by_agent: false, date: String::new(), previous: None };
+        (s.versions.page, s.versions.stale) = (Some(crate::VersionsPage { versions: vec![entry], more: false }), true);
+        assert_eq!(why_off(&s, COMPARE), "Loading", "listed, but perhaps not the newest");
+        s.begin_hold().unwrap();
+        assert_eq!(why_off(&s, VERSIONS), "The project is busy");
+        assert_eq!(why_off(&s, BACK), "Current work is showing", "its own reason comes before the hold");
+        let (mut s, ..) = shell();
+        s.show_version(actions::tests::session(), "c1".to_string());
+        assert_eq!(why_off(&s, VERSIONS), "Back to current work first");
+        assert_eq!(why_off(&s, SAVE_VERSION), "Back to current work to save a version");
+        s.active = None;
+        assert_eq!(why_off(&s, BACK), "Open or go back to a project first");
     }
 }

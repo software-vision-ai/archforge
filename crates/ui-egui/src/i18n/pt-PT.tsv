@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	O projeto está ocupado
 str		Open or go back to a project first	Abra primeiro um projeto ou volte a um projeto
 str		Show a diagram first	Mostre primeiro um diagrama
+str		Current work is showing	O trabalho atual está a ser mostrado
+str		Back to current work first	Volte primeiro ao trabalho atual
+str		This project has one branch	Este projeto tem um ramo
 str		Open…	Abrir…
 str		Save	Guardar
 # Gerar
@@ -279,6 +282,8 @@ str		Saving…	A guardar…
 str		Opening…	A abrir…
 str		Saved	Guardado
 str		Unsaved changes · {chord} saves	Alterações por guardar · {chord} guarda
+str		On {branch} · {status}	No ramo {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	A Conversa está a usar o modelo
 str		Agent access off	Acesso de agentes desligado
 # Painel da Conversa
@@ -356,6 +361,9 @@ str		Open Settings	Abrir Definições
 str		Saved with {project}	Guardadas com {project}
 str		The conversations in this project cannot be read: {why}	Não é possível ler as conversas deste projeto: {why}
 str		No conversations in this project yet.	Ainda não há conversas neste projeto.
+str		No conversations on this branch yet.	Ainda não há conversas neste ramo.
+str		Conversations stay on the branch where they started.	As conversas ficam no ramo onde começaram.
+str		Ask about the model below to start one.	Pergunte abaixo sobre o modelo para começar uma.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	As conversas são guardadas no projeto, por isso viajam com ele e nunca aparecem noutro projeto.
 str		Delete conversation	Eliminar conversa
@@ -457,6 +465,7 @@ str		You can reach them again from History.	Pode voltar a encontrá-las no Hist�
 str		Undo starts fresh after a Restore.	Anular recomeça do início após um Restauro.
 str		Restore	Restaurar
 str		The restore did not finish	O restauro não terminou
+str		A restore in {project} did not finish. Go to {project} to see why first.	Um restauro em {project} não terminou. Vá primeiro a {project} para ver porquê.
 str		{why} Nothing was changed.	{why} Nada foi alterado.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	O restauro não pôde avançar porque o projeto mudou ou estava ocupado, por isso nada foi restaurado.
 str		You are already on this branch.	Já está neste ramo.
@@ -464,6 +473,7 @@ str		The project stayed on its branch because it changed or was busy.	O projeto 
 str		Your latest changes could not be written, so the project stayed on its branch.	Não foi possível escrever as suas últimas alterações, por isso o projeto ficou no seu ramo.
 str		The project stayed on its branch: {why}	O projeto ficou no seu ramo: {why}
 str		Switch to {branch}?	Mudar para {branch}?
+str		Switch branch	Mudar de ramo
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} tem alterações por guardar. Ficam em {branch} e estarão lá quando voltar. Não poderá anular passos anteriores.
 str		Save version and switch	Guardar versão e mudar
 str		Switch	Mudar
@@ -495,6 +505,14 @@ str		Models	Modelos
 str		Versions	Versões
 str		Branches	Ramos
 str		This branch	Este ramo
+str	branch	Current	Atual
+str		Branches can't be merged yet.	Ainda não é possível juntar ramos.
+str		Only the first {n} branches are listed.	Apenas os primeiros {n} ramos são apresentados.
+str		The branches couldn't be read.	Não foi possível ler os ramos.
+str		At most {n} characters.	No máximo {n} caracteres.
+str		Enter a name.	Introduza um nome.
+str		A name has to be one line.	Um nome tem de ocupar uma só linha.
+str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.
 str		Working changes	Alterações em curso
 str		History	Histórico
 str		Retry	Tentar novamente
@@ -514,6 +532,7 @@ str		One line, at most 200 characters. It stays in the history.	Uma linha, no m�
 plural		{n} model element	{n} elemento do modelo|{n} elementos do modelo
 str		Filter changes…	Filtrar alterações…
 str		Filter versions…	Filtrar versões…
+str		Filter branches…	Filtrar ramos…
 str		Model elements	Elementos do modelo
 str		Unnamed	Sem nome
 str		Added	Adicionado
@@ -548,7 +567,12 @@ str		Literals	Literais
 str		Members	Membros
 str		Ownership	Propriedade
 str		Not available on this side	Não disponível neste lado
-str		Relationships aren't shown here yet.	As relações ainda não são apresentadas aqui.
+str		Relationships aren't listed on these cards yet.	As relações ainda não são listadas nestes cartões.
+plural		Related change	Alteração relacionada|Alterações relacionadas
+str		{name} was added in this comparison.	{name} foi adicionado nesta comparação.
+str		{name} was changed in this comparison.	{name} foi alterado nesta comparação.
+str		{name} was removed in this comparison.	{name} foi removido nesta comparação.
+str		Go to {name}	Ir para {name}
 str		Only what these cards don't show changed	Só mudou o que estes cartões não mostram
 str		The cards show the same on both sides.	Os cartões mostram o mesmo em ambos os lados.
 str		The owner changed	O proprietário mudou

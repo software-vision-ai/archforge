@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	项目正忙
 str		Open or go back to a project first	请先打开或返回一个项目
 str		Show a diagram first	请先显示一个图
+str		Current work is showing	正在显示当前工作
+str		Back to current work first	请先返回当前工作
+str		This project has one branch	此项目只有一个分支
 str		Open…	打开…
 str		Save	存储
 # 生成
@@ -279,6 +282,8 @@ str		Saving…	正在保存…
 str		Opening…	正在打开…
 str		Saved	已保存
 str		Unsaved changes · {chord} saves	有未保存的更改 · {chord} 保存
+str		On {branch} · {status}	在 {branch} 上 · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
 # 聊天面板
@@ -356,6 +361,9 @@ str		Open Settings	打开设置
 str		Saved with {project}	随 {project} 保存
 str		The conversations in this project cannot be read: {why}	无法读取此项目中的对话：{why}
 str		No conversations in this project yet.	此项目中还没有对话。
+str		No conversations on this branch yet.	此分支上还没有对话。
+str		Conversations stay on the branch where they started.	对话会留在开始它的分支上。
+str		Ask about the model below to start one.	在下方询问模型即可开始一个对话。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	对话保存在项目中，因此会随项目一起移动，并且不会出现在其他项目中。
 str		Delete conversation	删除对话
@@ -457,6 +465,7 @@ str		You can reach them again from History.	之后可从历史记录中再次找
 str		Undo starts fresh after a Restore.	恢复后，撤销记录将重新开始。
 str		Restore	恢复
 str		The restore did not finish	恢复未完成
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} 中的恢复未完成。请先转到 {project} 查看原因。
 str		{why} Nothing was changed.	{why} 未进行任何更改。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	由于项目已更改或正忙，无法进行恢复，因此未恢复任何内容。
 str		You are already on this branch.	您已在此分支上。
@@ -464,6 +473,7 @@ str		The project stayed on its branch because it changed or was busy.	由于项�
 str		Your latest changes could not be written, so the project stayed on its branch.	无法写入您最近的更改，因此项目仍停留在其分支上。
 str		The project stayed on its branch: {why}	项目仍停留在其分支上：{why}
 str		Switch to {branch}?	切换到 {branch}？
+str		Switch branch	切换分支
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} 有未保存的更改。它们会保留在 {branch} 上，您回来时仍在。您将无法撤销之前的步骤。
 str		Save version and switch	保存版本并切换
 str		Switch	切换
@@ -495,6 +505,14 @@ str		Models	模型
 str		Versions	版本
 str		Branches	分支
 str		This branch	此分支
+str	branch	Current	当前
+str		Branches can't be merged yet.	分支暂不能合并。
+str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。
+str		The branches couldn't be read.	无法读取分支。
+str		At most {n} characters.	最多 {n} 个字符。
+str		Enter a name.	请输入名称。
+str		A name has to be one line.	名称必须只有一行。
+str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
 str		Retry	重试
@@ -514,6 +532,7 @@ str		One line, at most 200 characters. It stays in the history.	一行，最多 
 plural		{n} model element	{n} 个模型元素
 str		Filter changes…	筛选更改…
 str		Filter versions…	筛选版本…
+str		Filter branches…	筛选分支…
 str		Model elements	模型元素
 str		Unnamed	未命名
 str		Added	已添加
@@ -548,7 +567,12 @@ str		Literals	字面量
 str		Members	成员
 str		Ownership	所属
 str		Not available on this side	此侧不可用
-str		Relationships aren't shown here yet.	此处尚不显示关系。
+str		Relationships aren't listed on these cards yet.	这些卡片尚未列出关系。
+plural		Related change	相关更改
+str		{name} was added in this comparison.	{name} 在此比较中已添加。
+str		{name} was changed in this comparison.	{name} 在此比较中已更改。
+str		{name} was removed in this comparison.	{name} 在此比较中已移除。
+str		Go to {name}	转到 {name}
 str		Only what these cards don't show changed	只有这些卡片未显示的内容发生了变化
 str		The cards show the same on both sides.	两侧卡片显示的内容相同。
 str		The owner changed	所属已更改

@@ -389,6 +389,11 @@ afterwards has answered, and if that read fails the list says the changes could 
 Before → After, shown in the header; Swap reverses it deliberately. One
 comparison engine feeds the lists, element cards and diagram cards, so counts agree.
 
+Under an element's cards, related changes link to the other model elements connected to it that the
+same comparison lists: what it or its members refer to on either side, what refers to them, and its
+owner. What it contains is on its cards instead. A link moves along the list held, so the pair stays
+and nothing is read.
+
 Differences are found by comparing rows by identity, not from Dolt's diff output:
 
 - Object tables have `id BINARY(16) PRIMARY KEY`, so rename and move stay one element.
@@ -406,7 +411,12 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 
 A diagram's two sides are each drawn from their own state in one framing: the zoom and pan that fit
 every box, line and line label on either side, wherever a label was put, from neither the project nor
-the canvas, so how someone last looked at it is never a difference.
+the canvas, so how someone last looked at it is never a difference. A box or line on one side only is
+Added or Removed; one on both is Changed when it or what it draws differs: its element, a member listed
+on it, a parameter of one, or a part of it such as a bend, a label or its style. A marked box has an
+outline in the change's colour and the change in words above it, without frame V3.4's tint, as a box's
+own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
+Words that would run past a pane's right edge are moved left to stay inside it.
 
 ---
 
@@ -625,6 +635,7 @@ Checks against what exists:
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
 | Stored branch can't be opened on reopening | Status bar | Opens `main` and gives the reason |
+| Restore failed | Dialog over the window | The question again, saying why, with Retry unless the version is the same as current work. Its words are fixed when the restore ends. Behind another question it waits until that one closes and its project shows again with the session it ended on; it is dropped once another session shows for that project. While it waits, Restore in another open project is off with the reason, so no new failure takes its place |
 | Switch failed | Dialog over the window (frame V5.9's words) | The reason, then that the project stayed on its branch and what became of the work: unchanged, or saved by **Save version and switch** before the switch failed |
 | Delete refused | Dialog | The reason; the branch stays |
 

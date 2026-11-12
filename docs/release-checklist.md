@@ -70,7 +70,9 @@ press ⌘A and look at **Edit**. With the field active again, press ⌘A, ⌘C, 
 **Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and **Edit ▸ Paste** in turn. Select a few words
 in a skill's preview, look at **Edit** and press ⌘C; paste them into a name field. Open a class diagram
 and look through **Model**, choose **Model ▸ Interface** and click the canvas; open an ER diagram and
-look through **Model** again; go to Home and look once more.
+look through **Model** again; go to Home and look once more. Open a project with a version and a change
+since; look through **Versions**, choose **Versions ▸ Save version…** and cancel; choose **Older version**,
+then press ⇧⌘H.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
@@ -84,7 +86,10 @@ disabled, and Select all selects every box and line the diagram draws. On the fi
 the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
 Copy is enabled and Cut and Paste are not, and the words paste into the field. Model on a class
 diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
-and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled.
+and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
+(⇧⌘H), **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
+current work** (⇧⌘H). While an earlier version shows, History is disabled and Back to current work enabled,
+and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. ⇧⌘S opens Save version and never saves.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.
