@@ -84,7 +84,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   against current work; off while it may be behind a save),
   Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
   even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
-  row off. New branch… joins once creating a branch has its dialog. Every shortcut is matched
+  row off. New branch… is not a row yet; its dialog opens from the Branches header's +. Every shortcut is matched
   exactly, so ⇧⌘S never saves.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.

@@ -19,6 +19,16 @@ An open project fills the window with its workspace.
   version and switch, or switch and leave them on this branch for when you come back. Branches
   can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
   so under the list.
+  The **+** in the Branches header, there even while the section is folded, opens **New branch**:
+  a branch keeps its own versions, unsaved work and conversations, and the new one starts from
+  your current work, unsaved changes included, which the branch you are on keeps as well. Type a
+  name of at most 60 characters, on one line, not starting or ending with a space; a name another
+  branch has is refused under the field, and **Create** stays off until the name can
+  be used. **Create** (or Enter) makes the branch and switches to it; while Archforge makes it the
+  dialog stays up. If it can't be made, the reason shows under the field and you stay where you
+  were: change the name or try again. If Archforge can't tell whether it was made, look at the
+  Branches list before trying again. If the switch to the new branch can't start, the reason is
+  shown as for any switch, and the branch stays in the list for you to switch to later.
   Once a project has a second branch, the version chip in the bar at the top names the branch you
   are on, before *Current work*, and the status bar says *On* and its name before whether your work
   is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),

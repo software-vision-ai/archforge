@@ -9,6 +9,7 @@
 pub mod actions;
 pub mod ai_agents;
 pub mod appearance;
+mod branch_ask;
 pub mod canvas;
 mod change_view;
 pub mod chat;
@@ -1903,6 +1904,7 @@ impl Shell {
         // Deleted conversations: the project's answers, the toast's time, the folders let go.
         chat_delete::frame(self);
         save_version::frame(self);
+        branch_ask::frame(self, ctx);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
@@ -2010,7 +2012,12 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. }));
+            || matches!(
+                self.ask,
+                Some(
+                    close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. } | close_ask::Ask::Branch { .. }
+                )
+            );
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);
