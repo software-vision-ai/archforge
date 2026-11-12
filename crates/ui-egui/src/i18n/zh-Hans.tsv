@@ -1180,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
 str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»
 str		{first} and {second}	{first} 和 {second}
+str		{first}, {second} and {third}	{first}、{second} 和 {third}
 plural		Show the use	显示 {n} 处使用
 str		A stereotype is shown on its profile's diagram	构造型显示在其配置文件的图中
 str		Place stereotype	放置构造型

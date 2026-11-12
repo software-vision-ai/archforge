@@ -9020,6 +9020,58 @@ fn working_changes_filter_a_long_list() {
     });
 }
 
+/// A skill changed since the version is a group of its own, at the path Skills, and the Save dialog
+/// counts it as a skill after model elements and diagrams, in one, two or three parts.
+#[test]
+fn a_skill_is_listed_and_counted_on_its_own() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    use egui_kittest::kittest::Queryable;
+    let summary = |h: &Harness<'static, Shell>| painted(h).into_iter().find(|t| t.contains("changed since")).unwrap_or_default();
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        compared(&mut h);
+        let areas: Vec<_> = h.state().versions.changes.iter().map(|d| (d.class, d.area)).collect();
+        assert_eq!(areas, [(archforge_core::SKILL, Area::Skill)], "{theme:?}");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "SKILLS") && !texts.iter().any(|t| t == "MODEL ELEMENTS"), "{theme:?}: {texts:?}");
+        assert!(h.query_by_label("Naming, Skills, Added").is_some(), "{theme:?}: the row's path is Skills");
+        let row = h.state().versions.changes[0].clone();
+        click_id(&mut h, &format!("workspace.versions.change.{}.{}", row.id, row.class.0));
+        // Its card is read as an element's, and the centre says Skills too.
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !painted(&h).iter().any(|t| t == "Singular.") {
+            assert!(h.state().versions.element.is_some() && std::time::Instant::now() < until, "{theme:?}: the card: {:?}", painted(&h));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            h.run_steps(1);
+        }
+        let said = ["Naming, Skills, Added, selected", "Naming, Skills, Added"].map(|l| h.query_all_by_label(l).count());
+        assert_eq!(said, [1, 1], "{theme:?}: the row, selected, and the centre's title");
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 model element and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        let item = |n: u8, area| Difference {
+            id: archforge_mof::Uuid([n; 16]),
+            class: archforge_core::SKILL,
+            area,
+            kind: ChangeKind::Changed,
+            name: Some(format!("item{n}")),
+            path: vec![],
+        };
+        let found = [Area::Skill, Area::Model, Area::Diagram, Area::Model, Area::Model].into_iter().zip(1..).map(|(a, n)| item(n, a)).collect();
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok(found));
+        h.run_steps(2);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("3 model elements, 1 diagram and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+    });
+}
+
 /// Presses `key` and looks at every frame from the press on until `done`, at most 200; fails
 /// saying `what` when it never is, however late another thread answers meanwhile.
 fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
@@ -9034,7 +9086,7 @@ fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(
     panic!("{what}: not within 200 frames");
 }
 
-/// ↑ and ↓ on a focused change move between the rows of both groups, out of view too, each whole
+/// ↑ and ↓ on a focused change move between the rows of all three groups, out of view too, each whole
 /// in the list as it comes, the first bringing its group's heading back; Enter opens the one reached.
 #[test]
 fn the_keys_reach_every_working_change() {
@@ -9042,7 +9094,7 @@ fn the_keys_reach_every_working_change() {
     let item = |n: u8| Difference {
         id: archforge_mof::Uuid([n; 16]),
         class: archforge_core::SKILL,
-        area: if n < 10 { Area::Model } else { Area::Diagram },
+        area: [Area::Model, Area::Diagram, Area::Skill][usize::from(n / 7)],
         kind: ChangeKind::Changed,
         name: Some(format!("item{n}")),
         path: vec![],
@@ -9071,11 +9123,11 @@ fn the_keys_reach_every_working_change() {
         }
         let heading = text_boxes(&h).into_iter().find(|(t, _)| t == "MODEL ELEMENTS").map(|(_, b)| b.top());
         assert!(heading.is_some_and(|top| top >= field), "{theme:?}: the heading came back with the first row: {heading:?}");
-        (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        (0..16).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
         // The element's own read finds nothing of these made-up rows and closes it again, so each
         // frame from the press on is looked at, not the state some frames later.
-        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| o.row.id) == Some(item(12).id);
-        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the one reached"));
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| o.row.id) == Some(item(16).id);
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the skill reached"));
     });
 }
 

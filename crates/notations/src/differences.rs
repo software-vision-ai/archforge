@@ -21,12 +21,14 @@ use crate::{labels, storage, store};
 
 mod related;
 
-/// Where a difference lies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where a difference lies, in the order a list of changes shows them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Area {
     Model,
     /// A diagram, its layout or its style: what presents the model.
     Diagram,
+    /// A skill, its text or its triggers: guidance kept beside the model, listed on its own.
+    Skill,
 }
 
 /// What happened to an item between the two states.
@@ -284,7 +286,13 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
     let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
     let named = |((id, class), kind): ((Uuid, ClassId), ChangeKind)| {
         let (name, path) = name_and_path(if kind == ChangeKind::Removed { &old } else { &new }, id);
-        let area = if class.metamodel() == archforge_diagram::INDEX { Area::Diagram } else { Area::Model };
+        let area = if class.metamodel() == archforge_diagram::INDEX {
+            Area::Diagram
+        } else if class == archforge_core::SKILL {
+            Area::Skill
+        } else {
+            Area::Model
+        };
         Difference { id, class, area, kind, name, path }
     };
     Ok(kinds.into_iter().map(named).collect())

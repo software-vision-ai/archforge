@@ -20,7 +20,7 @@ use crate::settings::{Look, button, control};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, types};
 use crate::version_details::{BAND, MARGIN, breadcrumb};
-use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, when, working_key};
+use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, path_words, when, working_key};
 
 /// The two sides the centre shows: an element's cards, or a diagram's drawings.
 #[derive(Clone)]
@@ -121,7 +121,7 @@ fn start_read(shell: &mut Shell) {
     let read = move || {
         let repair = crate::editing::fit_tables;
         let sides = match area {
-            Area::Model => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
+            Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
             Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
         };
         drop(tx.send(sides.map_err(|e| e.to_string())));
@@ -162,7 +162,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
     let (name, path, kind) = heading(&row, found.as_ref().and_then(|f| f.as_ref().ok()));
     let name = name.filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
-    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &path.join(" / ")), kind);
+    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &path), kind);
     match found {
         Some(Err(why)) => {
             let words = failed_words(row.area);
@@ -195,9 +195,9 @@ fn failed_words(area: Area) -> String {
     if area == Area::Diagram { tr("This diagram couldn't be compared.") } else { tr("This element couldn't be compared.") }
 }
 
-/// The name, path and change the header says: of `sides` once known, of `row` until then. The change
+/// The name, path words and change the header says: of `sides` once known, of `row` until then. The change
 /// comes from the sides, as a change of table is one change, not the two rows the list has for it.
-fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, Vec<String>, Option<ChangeKind>) {
+fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, String, Option<ChangeKind>) {
     let kind = |before: bool, after: bool| match (before, after) {
         (false, _) => ChangeKind::Added,
         (true, true) => ChangeKind::Changed,
@@ -206,13 +206,13 @@ fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, Vec<Stri
     match sides {
         Some(Sides::Element(s)) => {
             let card = s.after.as_ref().or(s.before.as_ref());
-            (card.map_or(row.name.clone(), |c| c.name.clone()), row.path.clone(), Some(kind(s.before.is_some(), s.after.is_some())))
+            (card.map_or(row.name.clone(), |c| c.name.clone()), path_words(row), Some(kind(s.before.is_some(), s.after.is_some())))
         }
         Some(Sides::Diagram(d)) => {
             let d = d.lock().unwrap_or_else(PoisonError::into_inner);
-            (d.name.clone(), d.path.clone(), Some(kind(d.before.is_some(), d.after.is_some())))
+            (d.name.clone(), d.path.join(" / "), Some(kind(d.before.is_some(), d.after.is_some())))
         }
-        None => (row.name.clone(), row.path.clone(), None),
+        None => (row.name.clone(), path_words(row), None),
     }
 }
 

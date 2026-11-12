@@ -303,14 +303,15 @@ fn details_give_way_to_the_canvas() {
 }
 
 /// The cards say what changed from the version before to this one: the model's elements first,
-/// and the first version reads nothing. The later version lacks what was added, so only the
-/// details say Removed, and the id of the diagram sorts before the schema's.
+/// then diagrams, then skills, and the first version reads nothing. The later version lacks what was
+/// added, so only the details say Removed; the skill's id sorts first and the diagram's before the schema's.
 #[test]
 fn details_list_what_changed_since_the_version_before() {
     in_both(|h, host| {
         add_schema(h, "first");
         let without = rows_now(h);
         let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
         s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap();
@@ -324,9 +325,10 @@ fn details_list_what_changed_since_the_version_before() {
         answer(host, "c2", Ok(with));
         answer(host, "c3", Ok(without));
         settled(h);
-        assert!(painted_has(h, "3 changed items"), "the schema, the diagram and its root: {:?}", painted(h));
+        assert!(painted_has(h, "4 changed items"), "the schema, the diagram and its root, the skill: {:?}", painted(h));
         let gone: Vec<_> = h.query_all_by_label_contains(", Removed").map(|n| n.accesskit_node().label().unwrap_or_default().to_string()).collect();
-        assert!(gone.len() == 3 && gone[0].starts_with("shop,") && gone[1].starts_with("Shop schema,"), "drawn in this order: {gone:?}");
+        let at = |n: usize, start: &str| gone.get(n).is_some_and(|g| g.starts_with(start));
+        assert!(gone.len() == 4 && at(0, "shop,") && at(1, "Shop schema,") && at(3, "Naming, Skills, Removed"), "drawn in this order: {gone:?}");
         opened(h, "c1");
         assert!(painted_has(h, "First version: there is nothing earlier to compare it with."), "{:?}", painted(h));
         assert!(!has_id(h, "workspace.version-details.loading") && asked(host).is_empty(), "nothing read for it");

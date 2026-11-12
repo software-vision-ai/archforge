@@ -692,7 +692,7 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     next + h + 21.0
 }
 
-/// The changes from `y`, model first and then diagrams, with a filter when they are many, or why
+/// The changes from `y`, model first, then diagrams, then skills, with a filter when they are many, or why
 /// they could not be told. Gives where the next section starts.
 fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     if let Some(why) = shell.versions.compare_failed.clone() {
@@ -716,7 +716,7 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     let needle = if shell.versions.changes.len() > FILTER_FROM { shell.versions.filter.to_lowercase() } else { String::new() };
     let holds = |d: &&Difference| needle.is_empty() || d.name.as_deref().unwrap_or("").to_lowercase().contains(&needle);
     let group = |area: Area| shell.versions.changes.iter().filter(|d| d.area == area).filter(holds).cloned().collect::<Vec<_>>();
-    let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram))];
+    let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram)), (tr("Skills"), group(Area::Skill))];
     let content: f32 = groups.iter().filter(|(_, g)| !g.is_empty()).map(|(_, g)| GROUP + g.len() as f32 * CHANGE_PITCH).sum();
     let height = (content + 8.0).min(r.height() * MOST_OF_COLUMN).min((r.bottom() - top - UNDER_CHANGES).max(0.0));
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
@@ -788,6 +788,12 @@ pub(crate) fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Colo
     }
 }
 
+/// Where a change is, as its row and the centre say it: a skill is in Skills, as the explorer
+/// lists it, rather than under the model that holds it.
+pub(crate) fn path_words(d: &Difference) -> String {
+    if d.area == Area::Skill { tr("Skills") } else { d.path.join(" / ") }
+}
+
 /// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
 /// to it; `live` makes it open the element in the centre and marks the open one as selected.
 /// Nothing out of sight is drawn or registered.
@@ -797,7 +803,7 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     }
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
     let (what, ink, tint) = kind_look(d.kind, p);
-    let path = d.path.join(" / ");
+    let path = path_words(d);
     let selected = live && shell.versions.element.as_ref().is_some_and(|o| o.row.id == d.id);
     let words = format!("{name}, {path}, {what}");
     let resp = control(shell, ui, id, "row", area, live);
@@ -811,7 +817,11 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     }
     focus_ring(paint, p, area, 8.0, &resp);
     let room = (area.width() - 76.0).max(0.0);
-    let icon = if d.area == Area::Diagram { &icons::DIAGRAM } else { &icons::CUBE };
+    let icon = match d.area {
+        Area::Model => &icons::CUBE,
+        Area::Diagram => &icons::DIAGRAM,
+        Area::Skill => &icons::SKILL,
+    };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 20.0, area.center().y), Vec2::splat(16.0)), icon, p.text_secondary);
     let mid = area.center().y;
     ux::text(paint, pos2(area.left() + 38.0, mid - 17.0), &name, types::UI, if selected { p.accent } else { p.text }, Some(room));

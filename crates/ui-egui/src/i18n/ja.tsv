@@ -1180,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
 str		{first} and {second}	{first} と {second}
+str		{first}, {second} and {third}	{first}、{second}、{third}
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置
