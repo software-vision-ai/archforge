@@ -1979,7 +1979,7 @@ fn viewing(h: &mut Harness<'static, Shell>, host: &SavingHost, row: &str) {
 }
 
 /// The details ask before anything starts and say what the restore makes, unsaved work included;
-/// Cancel starts nothing, and the job is told the date the question quotes.
+/// Cancel starts nothing, and the job is told the dates the question quotes.
 #[test]
 fn the_details_ask_first_and_say_what_a_restore_makes() {
     in_both(|h, host| {
@@ -1991,10 +1991,10 @@ fn the_details_ask_first_and_say_what_a_restore_makes() {
         add_schema(h, "shop");
         list_still(h);
         asking(h, "c3");
-        assert!(painted_has(h, "\"Before restoring\""), "the last version is on offer with unsaved work: {:?}", painted(h));
+        assert!(painted_has(h, "\"Before restoring 9 Nov 13:00\""), "the last version is on offer with unsaved work: {:?}", painted(h));
         let _job = restoring(h, host, "c3");
         assert!(h.state().is_held() && h.state().ask.is_none());
-        assert_eq!(*host.restore_dates.lock().unwrap(), ["7 Nov 17:15"]);
+        assert_eq!(*host.restore_dates.lock().unwrap(), [("7 Nov 17:15".to_string(), "9 Nov 13:00".to_string())], "the dates quoted");
     });
 }
 

@@ -123,6 +123,8 @@ pub struct RestoreRequest {
     pub commit: String,
     /// When the version was saved, as the list says it, for the new version's message.
     pub saved_at: String,
+    /// When the restore was asked for, as the list says it, for the name unsaved work is kept under.
+    pub before_at: String,
     pub by: SavedBy,
     /// What an opening does to a model, applied to both sides of the comparison.
     pub repair: fn(&mut archforge_mof::Store),
@@ -899,8 +901,15 @@ impl ProjectHost for Projects {
     }
 
     /// Worded on the wait's own thread in the language shown when the job runs.
-    fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
-        self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
+    fn restore_job(
+        &self,
+        project: &Path,
+        commit: String,
+        (saved_at, before_at): (String, String),
+        by: SavedBy,
+        repair: fn(&mut archforge_mof::Store),
+    ) -> ReplacementJob {
+        self.restore_job_within(project, RestoreRequest { commit, saved_at, before_at, by, repair }, RESTORE_LIMIT)
     }
 
     /// The name typed, stored as the project stores it; a refusal worded as the dialog says it.
@@ -1980,6 +1989,11 @@ fn restored_message(saved_at: &str) -> String {
     format!("Restored the version of {saved_at}")
 }
 
+/// The message of the version unsaved work is kept as before a restore asked for at `before_at`.
+fn before_message(before_at: &str) -> String {
+    format!("Before restoring {before_at}")
+}
+
 /// How a restore's writing stopped, and what is left to do about it.
 enum Stop {
     /// The model did not change.
@@ -2001,7 +2015,7 @@ fn replace(
 ) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
-    let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
+    let kept_work = match save_step(inner, project, &before_message(&request.before_at), &author) {
         Ok(saved) => matches!(saved, archforge_project::Saved::Version { .. }),
         Err(f) => match f.version {
             Version(_) => true,
@@ -3583,6 +3597,9 @@ mod tests {
     /// The time the versions restored in these tests were saved at.
     const SAVED_AT: &str = "2026-11-08T14:02:11Z";
 
+    /// When the restores in these tests were asked for, as the list says it.
+    const BEFORE_AT: &str = "8 Nov 15:42";
+
     /// Restores `commit` and gives the answer.
     fn restore_of(host: &Projects, path: &Path, commit: &str) -> Result<Restored, RestoreError> {
         host.restore_version(path, restoring(commit)).recv_timeout(Duration::from_secs(60)).expect("the restore answers")
@@ -3590,7 +3607,8 @@ mod tests {
 
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
-        RestoreRequest { commit: commit.into(), saved_at: SAVED_AT.into(), by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
+        let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -3621,7 +3639,7 @@ mod tests {
         assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: true });
         let messages = sandbox.messages();
         assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
-        assert!(messages[1].starts_with("Before restoring 20"), "{messages:?}");
+        assert_eq!(messages[1], format!("Before restoring {BEFORE_AT}"), "named by the date the list shows");
         assert_eq!(work(host), model("a"));
         assert!(!unsaved(host));
         let before = version(host, 1);
@@ -4042,7 +4060,14 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), SAVED_AT.into(), nobody(), archforge_ui_egui::editing::fit_tables);
+        let fresh = ProjectHost::restore_job(
+            &**host,
+            &path,
+            old.clone(),
+            (SAVED_AT.into(), BEFORE_AT.into()),
+            nobody(),
+            archforge_ui_egui::editing::fit_tables,
+        );
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));

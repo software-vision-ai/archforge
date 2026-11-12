@@ -359,9 +359,9 @@ fn rows(shell: &Shell) -> Vec<Row> {
     }
     let history = if shell.version_list.branches { &[][..] } else { &shell.version_list.steps.history[..] };
     for (i, v) in history.iter().enumerate() {
-        let detail = match v.description.as_deref().filter(|d| !d.is_empty()) {
+        let detail = match crate::versions::told(v, clock) {
             _ if i == 0 && !unsaved => tr("Same as current work"),
-            Some(d) => d.to_string(),
+            Some(d) => d,
             None if v.by_agent => tr("Saved by an agent"),
             None => String::new(),
         };

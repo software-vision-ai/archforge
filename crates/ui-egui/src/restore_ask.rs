@@ -3,16 +3,18 @@
 //! did not finish, once no other question is up. The restore itself is [`Shell::restore_version`].
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
+use crate::chat_words::date_and_time;
 use crate::close_ask::{Ask, Due, due};
 use crate::hold::HoldRefused;
 use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, types};
 use crate::versions::{last_known, last_version};
-use crate::{Shell, version_chip, widgets};
+use crate::{Shell, chat_panel, version_chip, widgets};
 
 const WIDTH: f32 = 480.0;
 
@@ -33,6 +35,13 @@ pub(crate) struct Restoring {
     confirm: Confirm,
     /// The undo history of the session it ended on, the only one its failure is about.
     ended_on: Option<u64>,
+}
+
+/// The time now, as the list says it: a restore asked for now keeps unsaved work under a name
+/// dated so, `Before restoring 8 Nov 15:42`.
+pub(crate) fn asked_at(shell: &Shell) -> String {
+    let clock = chat_panel::clock(shell);
+    date_and_time(clock.now, clock)
 }
 
 /// Whether restoring `commit` is on offer: not a version that can't be read, nor the last version
@@ -154,7 +163,10 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
         let adds = fmt(&tr("A new version with that content is added on top of the history, called \"{name}\"."), &[("name", &name)]);
         blocks.push(small(&format!("{adds} {}", tr("Nothing is rewound or removed, and later versions stay in History.")), p.text_secondary));
         if shell.shown_unsaved() {
-            let saves = tr("Your unsaved changes are saved first, as a version called \"Before restoring\" and the time.");
+            // Named as the host names it (`before_message`), dated now; drawn again as the minute turns.
+            let name = format!("Before restoring {}", asked_at(shell));
+            ui.ctx().request_repaint_after(Duration::from_secs(60 - chat_panel::clock(shell).now % 60));
+            let saves = fmt(&tr("Your unsaved changes are saved first, as a version called \"{name}\"."), &[("name", &name)]);
             blocks.push(small(&format!("{saves} {}", tr("You can reach them again from History.")), p.text));
         }
         blocks.push(small(&tr("Undo starts fresh after a Restore."), p.text_secondary));

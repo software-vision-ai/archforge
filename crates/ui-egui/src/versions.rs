@@ -1008,10 +1008,19 @@ pub(crate) fn described(v: &VersionEntry) -> Option<&str> {
     v.description.as_deref().filter(|d| !d.trim().is_empty())
 }
 
+/// What a version was described as, as it is shown: the name an earlier Archforge gave a
+/// restore's kept work, `Before restoring` and a stored time, gets that time as the list says it.
+/// The stored text is never changed.
+pub(crate) fn told(v: &VersionEntry, clock: Clock) -> Option<String> {
+    let d = described(v)?;
+    let stored = d.strip_prefix("Before restoring ").filter(|at| seconds_of(at).is_some());
+    Some(stored.map_or_else(|| d.to_string(), |at| format!("Before restoring {}", when(at, clock))))
+}
+
 /// A version as a select or a link names it: its date, then what it was described as when it was.
 pub(crate) fn dated(v: &VersionEntry, clock: Clock) -> String {
     let date = when(&v.date, clock);
-    described(v).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", d)]))
+    told(v, clock).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &d)]))
 }
 
 /// A version's two lines: its description and when and by whom, or without a description its date
@@ -1019,8 +1028,8 @@ pub(crate) fn dated(v: &VersionEntry, clock: Clock) -> String {
 pub(crate) fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
     let date = when(&v.date, clock);
     let who = if v.by_agent { Some(tr("Saved by an agent")) } else { v.author.clone().filter(|a| !a.is_empty()) };
-    match described(v) {
-        Some(d) => (d.to_string(), who.map_or(date.clone(), |w| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &w)]))),
+    match told(v, clock) {
+        Some(d) => (d, who.map_or(date.clone(), |w| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &w)]))),
         None if v.by_agent => (date, tr("Saved by an agent")),
         None => (date, tr("No description")),
     }

@@ -103,7 +103,8 @@ impl Replacing {
 
 impl Shell {
     /// Restores the version `commit`, saved at `saved_at`, as a new version: the version in view
-    /// gives way to current work first, and the project is held before the version is read. Refused
+    /// gives way to current work first, and the project is held before the version is read. Unsaved
+    /// work is kept under a name dated now, as the question quotes it ([`crate::restore_ask::asked_at`]). Refused
     /// as [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn restore_version(&mut self, commit: &str, saved_at: &str) -> Result<(), HoldRefused> {
         let cleared = self.clear_to_leave(Some(Leaving::Restore { commit: commit.to_string(), saved_at: saved_at.to_string() }))?;
@@ -113,7 +114,8 @@ impl Shell {
         self.leave_version();
         self.begin_hold()?;
         let by = SavedBy::Person(self.state.user_name.clone());
-        let job = host.restore_job(&path, commit.to_string(), saved_at.to_string(), by, editing::fit_tables);
+        let dates = (saved_at.to_string(), crate::restore_ask::asked_at(self));
+        let job = host.restore_job(&path, commit.to_string(), dates, by, editing::fit_tables);
         self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None, cleared);
         Ok(())
     }

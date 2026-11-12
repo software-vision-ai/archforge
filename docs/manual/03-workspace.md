@@ -64,7 +64,8 @@ An open project fills the window with its workspace.
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
   and later versions stay in History. A question names the version and says all this first, and
-  that unsaved work is first kept as a version called *Before restoring* and the time. Undo starts
+  that unsaved work is first kept as a version called *Before restoring* and the date and time, as
+  History shows them, for example *Before restoring 8 Nov 15:42*. Undo starts
   fresh after a restore. If it doesn't finish, the same question says what happened and whether your
   work is as it was, with **Retry**. When another question is open at that moment, this one follows
   once that one is answered and the project shows again; until then Restore is off in your other
