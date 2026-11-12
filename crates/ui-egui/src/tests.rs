@@ -871,6 +871,36 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
     }
 }
 
+/// A draft left on the element selected before and refused when the selection moves on names
+/// that element at the panel's foot, so it is not read as about the one shown, until the selection
+/// moves again; a description's draft stays on its element. An association's ends too, which have
+/// no name. In light and dark (AR-417).
+#[test]
+fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        let select = |h: &mut Harness<'static, Shell>, id: String| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+        };
+        select(&mut h, class.to_string());
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: class, text: "a\u{7}b".into(), refused: false });
+        select(&mut h, table.to_string());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on Order: ") && notice.contains("control"), "{theme:?}: {notice}");
+        assert!(painted(&h).contains(&notice), "{theme:?}: at the panel's foot");
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.target == class && d.refused), "{theme:?}: the draft stays");
+        select(&mut h, class.to_string());
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
+        let (mut h, made) = modifiers_sample(theme);
+        select(&mut h, made["holds"].clone());
+        h.state_mut().panels.ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
+        select(&mut h, made["Order"].clone());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
+    }
+}
+
 /// Enter with a new name still renames, and a click elsewhere still writes what was typed. In
 /// light and dark (AR-417).
 #[test]

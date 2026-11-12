@@ -1258,8 +1258,21 @@ fn write_description(shell: &mut Shell, target: Uuid, text: String) {
         }
         Err(e) => {
             shell.panels.description = Some(DescriptionDraft { target, text, refused: true });
-            shell.panels.notice = Some(e);
+            shell.panels.notice = Some(refused_on(shell, target, e));
         }
+    }
+}
+
+/// A refusal `why` of what was typed on `target`, as the panel's notice: when `target` is not the
+/// element selected, as when its draft is written because the selection moved on, it names the
+/// element, so it is not read as about the one shown (AR-417).
+pub(crate) fn refused_on(shell: &Shell, target: Uuid, why: String) -> String {
+    let Some(s) = shell.session.as_ref() else { return why };
+    let store = s.doc();
+    let Some(o) = store.by_uuid(target).filter(|o| s.view().selection.first() != Some(o)) else { return why };
+    match archforge_core::name_of(store, o) {
+        name if name.is_empty() => fmt(&tr("Not kept on the element selected before: {why}"), &[("why", &why)]),
+        name => fmt(&tr("Not kept on {name}: {why}"), &[("name", &name), ("why", &why)]),
     }
 }
 
@@ -2338,8 +2351,9 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
-    // A refusal is about what was selected: it goes with another selection, before a description
-    // typed there is written and may be refused in turn.
+    // A refusal is about what was selected: it goes with another selection. The drafts left on the
+    // element selected before are written after, so a refusal of theirs shows, naming that element
+    // ([`refused_on`]), until the selection moves on again.
     if shell.panels.notice_for != s.id {
         shell.panels.notice_for = s.id;
         shell.panels.notice = None;

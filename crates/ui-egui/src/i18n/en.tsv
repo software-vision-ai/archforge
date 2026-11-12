@@ -900,6 +900,8 @@ str		Selection · this diagram	Selection · this diagram
 str		{kind} · this diagram	{kind} · this diagram
 plural		{n} item	{n} item|{n} items
 str		The model could not be opened	The model could not be opened
+str		Not kept on {name}: {why}	Not kept on {name}: {why}
+str		Not kept on the element selected before: {why}	Not kept on the element selected before: {why}
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel
 str		Not available yet	Not available yet

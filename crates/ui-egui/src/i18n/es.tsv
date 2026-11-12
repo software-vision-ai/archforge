@@ -901,6 +901,8 @@ str		Selection · this diagram	Selección · este diagrama
 str		{kind} · this diagram	{kind} · este diagrama
 plural		{n} item	{n} elemento|{n} elementos
 str		The model could not be opened	No se pudo abrir el modelo
+str		Not kept on {name}: {why}	No se guardó en {name}: {why}
+str		Not kept on the element selected before: {why}	No se guardó en el elemento seleccionado antes: {why}
 str		The host gives no ids for the model's elements	El host no proporciona ids para los elementos del modelo
 str		Collapse panel	Contraer el panel
 str		Not available yet	Aún no disponible

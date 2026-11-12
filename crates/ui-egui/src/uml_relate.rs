@@ -794,7 +794,7 @@ pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
         if params.as_object().is_some_and(|fields| fields.len() > 2)
             && let Err(e) = run(shell, "uml.association.set-end", params)
         {
-            shell.panels.notice = Some(e);
+            shell.panels.notice = Some(crate::panels::refused_on(shell, edit.association, e));
         }
     }
 }

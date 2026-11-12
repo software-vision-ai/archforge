@@ -901,6 +901,8 @@ str		Selection · this diagram	所选内容 · 此图表
 str		{kind} · this diagram	{kind} · 此图表
 plural		{n} item	{n} 个项目
 str		The model could not be opened	无法打开模型
+str		Not kept on {name}: {why}	未在 {name} 上保留：{why}
+str		Not kept on the element selected before: {why}	未在之前选中的元素上保留：{why}
 str		The host gives no ids for the model's elements	宿主未提供模型元素的 ID
 str		Collapse panel	折叠面板
 str		Not available yet	尚不可用
