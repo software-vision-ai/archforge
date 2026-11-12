@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 use archforge_ui_egui::{Folder, Services, Shell};
 use egui_kittest::Harness;
 
+use crate::test_host::Sandbox;
+
 type H = Harness<'static, Shell>;
 
 fn rect_of(h: &H, id: &str) -> egui::Rect {
@@ -130,17 +132,15 @@ fn edges(h: &H) -> usize {
 }
 
 /// The real shell over the real project host, in a folder of its own named after `journey`, on
-/// Home: the harness, the host and the folder to remove after.
-fn start(journey: &str) -> (H, std::sync::Arc<crate::projects::Projects>, std::path::PathBuf) {
+/// Home: the harness, and the host's guard, which stops the host and removes the folder when the
+/// test ends, failed or not.
+fn start(journey: &str) -> (H, Sandbox) {
     archforge_ui_egui::i18n::set_language("en");
-    let base = std::env::temp_dir().join(format!("af-acceptance-{journey}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&base).unwrap();
-    let host = std::sync::Arc::new(crate::projects::Projects::new(&base.join("settings"), "Archforge acceptance".into()));
-    let folder = base.join("Documents/Archforge");
+    let sandbox = Sandbox::named(&format!("acceptance-{journey}"), None);
+    let folder = sandbox.base.join("Documents/Archforge");
     std::fs::create_dir_all(&folder).unwrap();
     let services = Services {
-        projects: Some(host.clone()),
+        projects: Some(sandbox.host.clone()),
         ids: Some(std::sync::Arc::new(crate::services::fresh_id)),
         projects_folder: Some(Folder { path: folder.clone(), label: "Documents / Archforge".into() }),
         ..Services::default()
@@ -153,7 +153,7 @@ fn start(journey: &str) -> (H, std::sync::Arc<crate::projects::Projects>, std::p
         Shell::new(services),
     );
     h.run();
-    (h, host, base)
+    (h, sandbox)
 }
 
 /// A new project named `name`, made from Home's start card, open and its model ready.
@@ -186,7 +186,7 @@ fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
 /// A user models a class diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
-    let (mut h, host, base) = start("uml");
+    let (mut h, _sandbox) = start("uml");
 
     // 1. A new project from Home.
     new_project(&mut h, "Shop");
@@ -266,9 +266,6 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
     assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
     assert!(!h.state().session.as_ref().unwrap().is_dirty());
     assert_eq!(h.state().title(), "Shop — Archforge");
-
-    host.shutdown();
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 /// The objects of class `class` in the open model.
@@ -291,9 +288,10 @@ fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
     assert!(h.state().panels.column.is_none(), "{name}: Apply writes the column and closes the editor: {:?}", h.state().panels.notice);
 }
 
+/// A user models an ER diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
-    let (mut h, host, base) = start("er");
+    let (mut h, _sandbox) = start("er");
 
     // 1. A new project from Home.
     new_project(&mut h, "Library");
@@ -360,9 +358,6 @@ fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was()
     assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
     assert!(!h.state().session.as_ref().unwrap().is_dirty());
     assert_eq!(h.state().title(), "Library — Archforge");
-
-    host.shutdown();
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 /// A model the writer can't turn into rows is a write that failed, never lost silently: an agent's
@@ -371,7 +366,8 @@ fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was()
 #[test]
 fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
     use archforge_ui_egui::{ProjectHost, close_ask::Ask, control::answer};
-    let (mut h, host, base) = start("unbuildable");
+    let (mut h, sandbox) = start("unbuildable");
+    let host = &sandbox.host;
     new_project(&mut h, "Shop");
     let path = h.state().tabs[0].path.clone();
     let too_large = |st: &mut archforge_mof::Store| {
@@ -404,9 +400,6 @@ fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
     h.step();
     wait(&mut h, "the question after the save", |h| matches!(&h.state().ask, Some(Ask::CannotWrite { why, .. }) if why.contains("too large")));
     assert_eq!(h.state().tabs.len(), 1, "still open");
-
-    host.shutdown();
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 /// The place of a built-in type in the type menu of a project with no types of its own: None

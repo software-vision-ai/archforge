@@ -24,6 +24,8 @@ mod prefs;
 mod projects;
 mod services;
 #[cfg(test)]
+mod test_host;
+#[cfg(test)]
 mod winres;
 
 use std::cell::RefCell;
