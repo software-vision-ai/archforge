@@ -1160,7 +1160,7 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         assert!(
             !on("before", kept) && !on("after", kept) && !on("after", gone) && !on("before", fresh) && !on("before", nested) && !on("before", line)
         );
-        for said in ["renamed, Changed", "client, Changed", "gone, Removed", "fresh, Added"] {
+        for said in ["renamed, Changed, Go to client", "client, Changed, Go to client", "gone, Removed", "fresh, Added"] {
             assert_eq!(h.query_all_by_label(said).count(), 1, "{said}");
         }
         let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
@@ -1186,6 +1186,85 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         list_still(h);
         frames_until(h, |h| h.state().versions.element_reading.is_none() && mark(h, renamed) != was);
         assert!(rect_of(h, AFTER).contains_rect(mark(h, renamed)), "{:?} {:?}", mark(h, renamed), rect_of(h, AFTER));
+    });
+}
+
+/// The two sides move and zoom together by the keys of either, by plain keys only, and by the wheel
+/// over either; 0 fits them again, and so does opening the diagram again.
+#[test]
+fn a_diagrams_two_sides_move_together() {
+    diagram_compared(|h, [_, _, kept, ..]| {
+        let row = h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap();
+        let at = |h: &Harness<'static, Shell>, side: &str| rect_of(h, &format!("workspace.change-view.{side}.node.{kept}"));
+        let near = |a: egui::Rect, b: egui::Rect| (a.min - b.min).length() < 0.01 && (a.max - b.max).length() < 0.01;
+        let shown = |h: &Harness<'static, Shell>| {
+            let (before, after) = (at(h, "before"), at(h, "after").translate(egui::vec2(rect_of(h, BEFORE).left() - rect_of(h, AFTER).left(), 0.0)));
+            assert!(near(before, after), "one framing: {before:?} {after:?}");
+            before
+        };
+        let press = |h: &mut Harness<'static, Shell>, modifiers, key| {
+            h.key_press_modifiers(modifiers, key);
+            h.run_steps(2);
+            shown(h)
+        };
+        let fitted = shown(h);
+        tap(h, AFTER);
+        assert!(focused_on(h, AFTER), "a click gives the side the keys");
+        assert!(near(press(h, egui::Modifiers::COMMAND, egui::Key::ArrowRight), fitted), "a chord stays the window's");
+        let right = press(h, egui::Modifiers::NONE, egui::Key::ArrowRight);
+        assert!(near(right, fitted.translate(egui::vec2(-40.0, 0.0))), "{right:?}");
+        let down = press(h, egui::Modifiers::NONE, egui::Key::ArrowDown);
+        assert!(near(down, right.translate(egui::vec2(0.0, -40.0))), "{down:?}");
+        let bigger = press(h, egui::Modifiers::NONE, egui::Key::Plus);
+        assert!((bigger.width() - down.width() * 1.25).abs() < 0.01, "{bigger:?}");
+        let smaller = press(h, egui::Modifiers::NONE, egui::Key::Minus);
+        assert!(near(smaller, down), "{smaller:?}");
+        assert!(near(press(h, egui::Modifiers::NONE, egui::Key::Num0), fitted), "0 fits again");
+        h.event(egui::Event::PointerMoved(rect_of(h, BEFORE).center()));
+        let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, -30.0), egui::Modifiers::NONE);
+        h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+        h.run_steps(8);
+        let wheeled = shown(h);
+        assert!(wheeled.top() < fitted.top() - 1.0 && (wheeled.left() - fitted.left()).abs() < 0.01, "{wheeled:?}");
+        tap(h, &row);
+        assert!(near(shown(h), fitted), "opening it again fits it again");
+    });
+}
+
+/// A mark whose element differs too opens that element's change, by a click or by Enter once Tab
+/// has brought it into view; a mark whose element doesn't differ is no link.
+#[test]
+fn a_diagrams_marks_link_to_their_elements_changes() {
+    diagram_compared(|h, [_, _, _, gone, _, _, line, renamed]| {
+        let mark = |side: &str, id: &str| format!("workspace.change-view.{side}.mark.{id}");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| (o.row.area, o.row.name.clone()));
+        let (diagram, row) =
+            (opened(h), h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap());
+        tap(h, &mark("before", gone));
+        h.run_steps(2);
+        assert_eq!(opened(h), diagram, "gone's element is not listed");
+        tap(h, BEFORE);
+        for _ in 0..30 {
+            h.key_press(egui::Key::ArrowLeft);
+        }
+        h.run_steps(2);
+        let link = mark("before", renamed);
+        assert!(!has_id(h, &link), "moved out of sight with its box");
+        for _ in 0..12 {
+            if !focused_on(h, &link) {
+                h.key_press(egui::Key::Tab);
+                h.run_steps(2);
+            }
+        }
+        assert!(focused_on(h, &link) && rect_of(h, BEFORE).contains_rect(rect_of(h, &link)), "Tab reached it and brought it into view");
+        h.key_press(egui::Key::Enter);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+        assert_eq!(opened(h), Some((Area::Model, Some("client".into()))), "Enter opens the renamed element");
+        tap(h, &row);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        tap(h, &mark("after", line));
+        h.run_steps(2);
+        assert_eq!(opened(h), Some((Area::Model, Some("joins".into()))), "a click opens the added relationship");
     });
 }
 

@@ -36,6 +36,8 @@ pub(crate) struct OpenedElement {
     read_of: Option<Compared>,
     found: Option<Result<Sides, String>>,
     scroll: TreeScroll,
+    /// The zoom and pan a diagram's two sides are drawn with once the person has moved either; none while they fit.
+    nav: Option<(f32, egui::Vec2)>,
 }
 
 /// The one read of an element's two sides under way, and what it is about.
@@ -46,11 +48,13 @@ pub(crate) struct ElementReading {
 }
 
 /// Opens the change `row` in place of a version's details and ends what was said of earlier work.
+/// Opening the one shown again keeps what was read of it, and fits a diagram's two sides again.
 pub(crate) fn open(shell: &mut Shell, row: Difference) {
     (shell.versions.details, shell.versions.selected, shell.canvas.notice) = (None, None, None);
     let v = &mut shell.versions;
-    if v.element.as_ref().is_none_or(|o| o.row.id != row.id) {
-        v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default() });
+    match v.element.as_mut() {
+        Some(o) if o.row.id == row.id => o.nav = None,
+        _ => v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default(), nav: None }),
     }
 }
 
