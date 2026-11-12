@@ -1932,10 +1932,7 @@ fn stop_note(error: &RestoreError) -> String {
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
     let error = match answer {
         Ok(Restored::Version { .. }) => return Ok(()),
-        Ok(Restored::Same { kept_work: false }) => return Err(JobFailure::Failed(tr("This version is the same as your current work."))),
-        Ok(Restored::Same { kept_work: true }) => {
-            return Err(JobFailure::WorkSaved(tr("This version is the same as your current work. Your unsaved work was kept as a version.")));
-        }
+        Ok(Restored::Same { kept_work }) => return Err(JobFailure::Same { work_saved: kept_work }),
         Err(error) => error,
     };
     log::warn!("{}", stop_note(&error));
@@ -3979,8 +3976,8 @@ mod tests {
     fn a_restores_answer_becomes_the_jobs() {
         let not_restored = |kept_work, written_back| RestoreError::NotRestored { why: "x".into(), kept_work, written_back };
         assert!(matches!(job_answer(Ok(Restored::Version { kept_work: true })), Ok(())));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Failed(_))));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Same { work_saved: false })));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::Same { work_saved: true })));
         assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: true })), Err(JobFailure::Unclear)));
         assert!(matches!(job_answer(Err(not_restored(true, true))), Err(JobFailure::WorkSaved(_))));
         assert!(matches!(job_answer(Err(not_restored(false, true))), Err(JobFailure::Failed(_))));
@@ -4032,17 +4029,13 @@ mod tests {
         use archforge_ui_egui::i18n::set_language;
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let same = version(host, 0);
-        let english = |_: ()| job_answer(Ok(Restored::Same { kept_work: false }));
-        let word = |answer: Result<(), JobFailure>| match answer {
-            Err(JobFailure::Failed(text)) => text,
-            _ => panic!("a failure"),
-        };
+        let stale = job_of(host, &path, &version(host, 1));
+        switched(&host.inner, &path);
         set_language("en");
-        let in_english = word(english(()));
+        let in_english = not_going_ahead();
         set_language("de");
-        let in_german = word(english(()));
-        let told = word(ran(&(job_of(host, &path, &same).run)()));
+        let in_german = not_going_ahead();
+        let Err(JobFailure::Failed(told)) = ran(&(stale.run)()) else { panic!("a failure") };
         set_language("en");
         assert_ne!(in_german, in_english, "the sentence is translated");
         assert_eq!(told, in_german);

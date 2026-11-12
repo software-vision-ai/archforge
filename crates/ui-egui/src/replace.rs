@@ -34,6 +34,9 @@ pub enum JobFailure {
     Failed(String),
     /// It failed after saving the unsaved work as a version: the model is the work, now saved.
     WorkSaved(String),
+    /// A restore made no version, as the version is the same as current work; `work_saved` says
+    /// unsaved work was saved as a version first. Trying again can't change it.
+    Same { work_saved: bool },
     /// It gave no clear answer: what happened has to be read back.
     Unclear,
 }
@@ -214,7 +217,7 @@ impl Shell {
                 ChatSettling::Settled => Stage::Save,
                 ChatSettling::Refused => {
                     self.save_error = Some(tr("Chat did not finish in time, so nothing was changed."));
-                    crate::restore_ask::failed(self);
+                    crate::restore_ask::failed(self, true);
                     return None;
                 }
             },
@@ -316,6 +319,14 @@ impl Shell {
                     self.mark_work_saved();
                     return self.give_up(Some(why));
                 }
+                Ok(Err(JobFailure::Same { work_saved })) => {
+                    let mut why = tr("This version is the same as your current work.");
+                    if work_saved {
+                        self.mark_work_saved();
+                        why = tr("This version is the same as your current work. Your unsaved work was kept as a version.");
+                    }
+                    return self.end_failed(Some(why), false);
+                }
                 // A lost reply says nothing about what happened: it is read back, never guessed.
                 Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
                     Some(read) => {
@@ -364,12 +375,17 @@ impl Shell {
     /// stays, so nothing else tells the Versions panel to look: a job that failed may have kept
     /// the work as a version first.
     pub(crate) fn give_up(&mut self, why: Option<String>) -> Option<Replacing> {
+        self.end_failed(why, true)
+    }
+
+    /// [`Self::give_up`], saying whether trying again could change the outcome (`retry`).
+    fn end_failed(&mut self, why: Option<String>, retry: bool) -> Option<Replacing> {
         if why.is_some() {
             self.save_error = why;
         }
         self.versions.stale = true;
         self.fail_hold();
-        crate::restore_ask::failed(self);
+        crate::restore_ask::failed(self, retry);
         None
     }
 

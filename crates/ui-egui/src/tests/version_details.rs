@@ -2151,11 +2151,12 @@ fn the_details_actions_wrap_inside_a_narrow_centre() {
     });
 }
 
-/// A failure brings the question back saying what happened, with Retry unless trying again can't
-/// help; one before anything is written says that nothing changed.
+/// A failure brings the question back saying what happened, with Retry unless the host says the
+/// version is the same as current work, which trying again can't change, the work kept or not; one
+/// before anything is written says that nothing changed.
 #[test]
 fn a_failure_comes_back_and_says_what_happened() {
-    use crate::replace::JobFailure::{Failed, WorkSaved};
+    use crate::replace::JobFailure::{Failed, Same, WorkSaved};
     in_both(|h, host| {
         asking(h, "c2");
         let (ended, _reading) = restoring(h, host, "c2");
@@ -2168,9 +2169,23 @@ fn a_failure_comes_back_and_says_what_happened() {
                 && !h.state().is_held()
         );
         let (ended, _reading) = restoring(h, host, "c2");
-        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        ended.send(Err(Same { work_saved: false })).unwrap();
         h.run_steps(4);
         assert!(painted_has(h, "This version is the same") && !has_id(h, GO), "nothing to try again");
+        tap(h, CLOSE);
+        add_schema(h, "same");
+        list_still(h);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Same { work_saved: true })).unwrap();
+        h.run_steps(4);
+        assert!(painted_has(h, "Your unsaved work was kept") && !has_id(h, GO) && !h.state().shown_unsaved(), "{:?}", painted(h));
+        tap(h, CLOSE);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        h.run_steps(4);
+        assert!(has_id(h, GO), "only the typed reason ends retrying");
         tap(h, CLOSE);
         assert!(h.state().ask.is_none() && h.state().versions.details.is_some());
         tap(h, RESTORE);

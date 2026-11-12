@@ -65,10 +65,10 @@ An open project fills the window with its workspace.
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
   and later versions stay in History. A question names the version and says all this first, and
   that unsaved work is first kept as a version called *Before restoring* and the date and time, as
-  History shows them, for example *Before restoring 8 Nov 15:42*. Undo starts
-  fresh after a restore. If it doesn't finish, the same question says what happened and whether your
-  work is as it was, with **Retry**. When another question is open at that moment, this one follows
-  once that one is answered and the project shows again; until then Restore is off in your other
+  History shows them, for example *Before restoring 8 Nov 15:42*. Undo starts fresh after a
+  restore. If it doesn't finish, the same question says what happened and whether your work is as
+  it was, with **Retry**, unless the version turned out to be the same as your current work. When
+  another question is open at that moment, this one follows once that one is answered and the project shows again; until then Restore is off in your other
   open projects and says why. When Archforge can't tell whether it
   finished, the status bar says so instead. Restore isn't offered for the last version while nothing is
   unsaved, which is what you have now, or for a version that can't be read.
