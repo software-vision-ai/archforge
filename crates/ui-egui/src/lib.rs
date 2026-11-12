@@ -248,6 +248,19 @@ pub trait ProjectHost: Send + Sync {
     /// project). Rows for a project that is no longer open are dropped.
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
+    /// [`ProjectHost::write`] of the model as `model` froze it, its rows built off the interface
+    /// thread by the host's writer; a model that cannot be turned into rows is that write's failure,
+    /// which [`ProjectHost::writing`] tells. This default, for a host with no writer of its own,
+    /// builds them where it is called and only logs a model it cannot turn into rows, so every
+    /// host that writes overrides it.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        match model.rows(&tables, &junctions) {
+            Ok(rows) => self.write(project, rows),
+            Err(e) => log::error!("the model could not be turned into rows to save: {e}"),
+        }
+    }
+
     /// Save: writes what waits, then commits it in the project at `project`, and says what that
     /// did to the history, or, when it failed, whether a version exists. The commit carries `description`, or the automatic `Saved <time>`
     /// when there is none. A description that is empty, more than one line or too long, or that
@@ -576,7 +589,6 @@ pub(crate) struct Parked {
     session_error: Option<SessionError>,
     adopted: Option<std::path::PathBuf>,
     written: Option<u64>,
-    refused: Option<u64>,
     saving: Option<Saving>,
     save_error: Option<String>,
     explorer: explorer::State,
@@ -790,8 +802,6 @@ pub struct Shell {
     adopted: Option<std::path::PathBuf>,
     /// The model's revision last handed to the host to write.
     written: Option<u64>,
-    /// The model's revision that could not be turned into rows, so it is not tried every frame.
-    refused: Option<u64>,
     /// A save the host works on, and the state it writes.
     saving: Option<Saving>,
     /// The last save's ticket, and how the latest finished ones went (the revision written, or
@@ -898,7 +908,6 @@ impl Shell {
             session_error: None,
             adopted: None,
             written: None,
-            refused: None,
             saving: None,
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
@@ -987,7 +996,6 @@ impl Shell {
             self.session_error = p.session_error;
             self.adopted = p.adopted;
             self.written = p.written;
-            self.refused = p.refused;
             self.saving = p.saving;
             self.save_error = p.save_error;
             self.explorer = p.explorer;
@@ -1200,8 +1208,7 @@ impl Shell {
                 return;
             }
             self.write_changes();
-            let current = self.session.as_ref().map(|s| s.revision());
-            if current.is_some() && self.refused == current { Err(self.save_error.clone().unwrap_or_default()) } else { Ok(()) }
+            Ok(())
         } else {
             self.hand_over_parked(i)
         };
@@ -1268,9 +1275,7 @@ impl Shell {
         if parked.written == Some(revision) {
             return Ok(());
         }
-        let (tables, junctions) = archforge_notations::storage();
-        let rows = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
-        host.write(&path, rows);
+        host.write_model(&path, session.doc().freeze());
         parked.written = Some(revision);
         Ok(())
     }
@@ -1342,7 +1347,6 @@ impl Shell {
             session_error: self.session_error.take(),
             adopted: self.adopted.take(),
             written: self.written.take(),
-            refused: self.refused.take(),
             saving: self.saving.take(),
             save_error: self.save_error.take(),
             explorer: std::mem::take(&mut self.explorer),
@@ -1371,7 +1375,6 @@ impl Shell {
         self.session_error = None;
         self.adopted = None;
         self.written = None;
-        self.refused = None;
         // A save of another project answers for that one, never for this.
         if let Some((_, _, ticket)) = self.saving.take() {
             self.finished_save(ticket, SaveState::Unknown);
@@ -1508,41 +1511,23 @@ impl Shell {
         self.state.keep_view(&path, view);
     }
 
-    /// Hands the model to the host when it changed since the last hand-over; the host writes it a
-    /// moment later. Nothing is handed over in the middle of a drag.
+    /// Hands the model to the host when it changed since the last hand-over, frozen as it is now:
+    /// the host's writer builds its rows and writes them a moment later, and says through
+    /// [`ProjectHost::writing`] when they could not be. Nothing is handed over in the middle of a drag.
     fn write_changes(&mut self) {
         let (Some(session), Some(host), Some(project)) = (&self.session, &self.services.projects, &self.project) else { return };
         let revision = session.revision();
-        if self.written == Some(revision)
-            || self.refused == Some(revision)
-            || session.interacting()
-            || self.holding.writes_stopped()
-            || self.viewing.is_some()
-        {
+        if self.written == Some(revision) || session.interacting() || self.holding.writes_stopped() || self.viewing.is_some() {
             return;
         }
-        let (tables, junctions) = archforge_notations::storage();
-        match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
-            Ok(rows) => {
-                host.write(&project.path, rows);
-                self.written = Some(revision);
-                // A change handed over replaces the word on a refused closing.
-                if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
-                    tab.close_error = None;
-                }
-                // The model could not be turned into rows before; now it could.
-                if self.refused.take().is_some() {
-                    self.save_error = None;
-                }
-                // A failed opening is old news once the open project changes.
-                self.open_error = None;
-            }
-            Err(e) => {
-                log::error!("the model could not be turned into rows to save: {e}");
-                self.save_error = Some(e.to_string());
-                self.refused = Some(revision);
-            }
+        host.write_model(&project.path, session.doc().freeze());
+        self.written = Some(revision);
+        // A change handed over replaces the word on a refused closing.
+        if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
+            tab.close_error = None;
         }
+        // A failed opening is old news once the open project changes.
+        self.open_error = None;
     }
 
     /// Save: the host writes what waits and commits it, a skill's text and a description being
@@ -1569,11 +1554,15 @@ impl Shell {
     /// no save or write failed, which a save tries again. Save without a description then makes no
     /// version, not even an untouched new project's first one.
     fn nothing_to_save(&self) -> bool {
-        let write_failed = match (&self.services.projects, &self.project) {
+        !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() && self.save_error.is_none() && !self.write_failed()
+    }
+
+    /// Whether the host's last write of the open project failed, its rows not built or not written.
+    pub(crate) fn write_failed(&self) -> bool {
+        match (&self.services.projects, &self.project) {
             (Some(host), Some(project)) => host.writing(&project.path).error.is_some(),
             _ => false,
-        };
-        !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() && self.save_error.is_none() && !write_failed
+        }
     }
 
     /// Starts a save recorded as `by`: under the description in `review` when there is one, and
@@ -1588,11 +1577,7 @@ impl Shell {
         if refused {
             return;
         }
-        // A state that could not be written cannot be saved: its error stays on the status bar.
         let current = self.session.as_ref().map(|s| s.revision());
-        if current.is_some() && self.refused == current {
-            return;
-        }
         let Some(revision) = self.written else { return };
         // After the writes above, which made typed text a change: no version of nothing (AR-383).
         if review.is_none() && self.nothing_to_save() {
@@ -1827,13 +1812,19 @@ impl Shell {
         // Any ending may have made a version, one that failed or went unanswered too: History reads again.
         self.versions.stale = true;
         // A closing that waited for this save goes on, asks again when edits came in meanwhile,
-        // or stops with the save's error.
+        // or stops with the save's error: asking to close without writing when the host could
+        // not write the project's changes, a model it could not turn into rows among them.
         let waiting: Vec<std::path::PathBuf> = self.close_after_save.iter().filter(|(_, t)| *t == ticket).map(|(p, _)| p.clone()).collect();
         self.close_after_save.retain(|(_, t)| *t != ticket);
         for path in waiting {
+            let unwritten = self.services.projects.as_ref().is_some_and(|h| h.writing(&path).error.is_some());
             match (&outcome, self.tab_of(&path)) {
                 (SaveState::Saved(_), Some(i)) if self.tab_unsaved(i) => self.ask = Some(close_ask::Ask::Unsaved { path }),
                 (SaveState::Saved(_), Some(i)) => self.close_tab_now(i),
+                (SaveState::Failed(why), Some(_)) if unwritten => {
+                    self.quitting = None;
+                    self.ask = Some(close_ask::Ask::CannotWrite { path, why: why.clone() });
+                }
                 _ => self.quitting = None,
             }
         }

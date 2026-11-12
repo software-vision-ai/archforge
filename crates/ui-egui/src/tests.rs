@@ -539,6 +539,13 @@ impl crate::ProjectHost for SavingHost {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
     }
 
+    /// Builds the rows on a thread of its own, as the app's writer does, then records them.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
+        self.write(project, rows);
+    }
+
     /// Nothing waits; the write failed when the test says so.
     fn writing(&self, _project: &std::path::Path) -> crate::Writing {
         crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
@@ -1282,7 +1289,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let selection = s.view().selection.clone();
     let generation = h.state().session_generation();
     let shell = h.state_mut();
-    (shell.save_error, shell.refused) = (Some("kept".into()), Some(u64::MAX));
+    shell.save_error = Some("kept".into());
     (shell.explorer.filter, shell.diagrams.filter) = ("in tree".into(), "in list".into());
     shell.panels.menu_scroll = Some(("menu".into(), 9.0));
 
@@ -1308,7 +1315,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection);
     assert!(h.state().session.as_ref().unwrap().is_dirty());
     let shell = h.state();
-    assert_eq!((shell.save_error.as_deref(), shell.refused), (Some("kept"), Some(u64::MAX)));
+    assert_eq!(shell.save_error.as_deref(), Some("kept"));
     assert_eq!((shell.explorer.filter.as_str(), shell.diagrams.filter.as_str()), ("in tree", "in list"));
     assert_eq!(shell.panels.menu_scroll, Some(("menu".into(), 9.0)));
     let s = h.state_mut().session.as_mut().unwrap();
@@ -1553,20 +1560,39 @@ fn a_tab_named_during_the_read_is_the_one_acted_on() {
     }
 }
 
-/// Closing without asking answers for the work: its refused write stops it, not the version's.
+/// Closing without asking answers for the work: the host closes the work's project, and a write of
+/// it that failed keeps it open, said on its tab.
 #[test]
 fn closing_without_asking_stops_on_the_works_refused_write() {
     let (mut h, host, earlier) = work_and_earlier();
-    let shell = h.state_mut();
-    shell.refused = Some(shell.session.as_ref().unwrap().revision());
-    shell.save_error = Some("could not write".into());
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
     h.state_mut().close_tab_now(0);
     h.run_steps(2);
     assert_eq!(h.state().viewing(), None);
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
+    host.closings.lock().unwrap().remove(0).send(Err("could not write".into())).unwrap();
+    h.run_steps(2);
     assert_eq!(h.state().tabs[0].close_error.as_deref(), Some("could not write"));
-    assert!(host.closed.lock().unwrap().is_empty());
+}
+
+/// A tab closed while another shows hands its last edit over before the host closes it, the rows
+/// built off the interface thread.
+#[test]
+fn closing_a_parked_tab_hands_its_last_edit_over_off_the_frame() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    let parked = h.state_mut().tabs[0].parked.as_mut().and_then(|p| p.session.as_mut()).unwrap();
+    parked.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    let built = archforge_mof::rows::built_here();
+    h.state_mut().close_tab_now(0);
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+    let (tables, junctions) = archforge_notations::storage();
+    let session = h.state().tabs[0].parked.as_ref().and_then(|p| p.session.as_ref()).unwrap();
+    let edit = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).unwrap();
+    assert_eq!(host.written.lock().unwrap().last(), Some(&(std::path::PathBuf::from(COMMERCE), edit)), "the edit was handed over");
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
 }
 
 /// What a refusal while a version is in view starts with, whatever language the sentence is in.

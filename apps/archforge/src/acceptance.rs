@@ -365,6 +365,50 @@ fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was()
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// A model the writer can't turn into rows is a write that failed, never lost silently: an agent's
+/// save says why, and closing with Save asks before closing without writing. No command makes
+/// such a model, so the test sets one in place.
+#[test]
+fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
+    use archforge_ui_egui::{ProjectHost, close_ask::Ask, control::answer};
+    let (mut h, host, base) = start("unbuildable");
+    new_project(&mut h, "Shop");
+    let path = h.state().tabs[0].path.clone();
+    let too_large = |st: &mut archforge_mof::Store| {
+        let u = st.universe().clone();
+        let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
+        let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
+        let o = st.create(class).unwrap();
+        st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
+    };
+    let mut session = archforge_notations::session_from_rows_repaired(&rows(&h), Box::new(crate::services::fresh_id), too_large).unwrap();
+    session.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    h.state_mut().session = Some(session);
+    h.step();
+    wait(&mut h, "the write that fails", |_| host.writing(&path).error.is_some());
+    let ticket = answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap()["ticket"].clone();
+    h.step();
+    wait(&mut h, "the save", |h| !h.state().is_saving());
+    let failed = answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket })).unwrap_err();
+    assert!(failed.contains("too large to store"), "{failed}");
+    settle(&mut h, "the failed save's reads");
+
+    click_on(&mut h, "workspace.header.project.0.close");
+    assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })), "{:?}", h.state().ask);
+    // Pressed without a harness run: the save's answer and the reads after it would outlast one.
+    let at = rect_of(&h, "close-ask.save").center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    wait(&mut h, "the question after the save", |h| matches!(&h.state().ask, Some(Ask::CannotWrite { why, .. }) if why.contains("too large")));
+    assert_eq!(h.state().tabs.len(), 1, "still open");
+
+    host.shutdown();
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// The place of a built-in type in the type menu of a project with no types of its own: None
 /// first, then the built-in types in their order.
 fn archforge_ui_egui_type_index(_h: &H, label: &str) -> usize {

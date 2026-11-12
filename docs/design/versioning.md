@@ -57,11 +57,12 @@ Short file names: `lib.rs` is `crates/ui-egui/src/lib.rs` unless a path says oth
 
 ### Autosave
 
-- Each frame `Shell::write_changes` snapshots the session into rows and hands them to the host when
-  `session.revision()` moved and no drag runs (`crates/ui-egui/src/lib.rs:1028-1056`, called at `:1422`).
-- One writer thread keeps one set of rows per project and writes them after 300 ms of quiet
-  (`apps/archforge/src/projects.rs:35`, `:556-635`). A failed write keeps the rows and is tried again
-  with the next change or Save (`:5-6`, `:664-672`).
+- Each frame `Shell::write_changes` freezes the session's store (`Store::freeze`, a bulk copy that
+  builds no rows) and hands it to the host when `session.revision()` moved and no drag runs.
+- One writer thread keeps one model per project, builds its rows from the frozen copy, and writes them
+  after 300 ms of quiet (`apps/archforge/src/projects.rs`, `write_waiting`). A model that can't be
+  turned into rows fails like a write: it stays waiting with the reason, Save and closing say it, and it
+  is tried again with the next change or Save.
 - `Project::write_model` replaces every row of every model table in one transaction, with no commit
   (`crates/project/src/model.rs:247-312`). The same rows written again leave `dolt_status` empty
   (`crates/project/tests/model.rs`; measured).
