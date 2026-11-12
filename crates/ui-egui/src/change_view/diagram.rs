@@ -2,7 +2,7 @@
 //! the layout, said apart, then each side drawn from its own state in one shared framing, so a box
 //! that stayed is in the same place on both, with what differs marked.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use archforge_diagram::grid::{bounds_of, middle_of};
 use archforge_diagram::{LabelPlace, diagram, edge, label, node, node_tree};
@@ -286,7 +286,8 @@ fn pane(
     clip.set_clip_rect(body.intersect(ui.clip_rect()));
     let view = View { origin: body.min, pan: framing.1, zoom: framing.0 };
     scene(shell, &clip, p, (side, body, &view), on_it);
-    marks(shell, &clip, p, (side, &view), (on_it, sides), go);
+    let rows = related::index(&shell.versions.changes);
+    marks(shell, &clip, p, (side, &view), (on_it, sides), &rows, go);
 }
 
 /// Draws the side's diagram read-only: no selection, gesture or problem. It records under the side's
@@ -318,13 +319,14 @@ fn scene(shell: &mut Shell, clip: &egui::Ui, p: &Palette, (side, area, view): (&
 }
 
 /// Marks what differs on this side: an outline round a box, the line drawn over in the change's
-/// colour, and the change in words on each.
+/// colour, and the change in words on each, linked through `rows`, the comparison's changes by element.
 fn marks(
     shell: &mut Shell,
     clip: &egui::Ui,
     p: &Palette,
     (side, view): (&str, &View),
     (on_it, sides): (&DiagramSide, &DiagramSides),
+    rows: &HashMap<Uuid, related::Link>,
     go: &mut Option<Difference>,
 ) {
     let store = &on_it.store;
@@ -335,7 +337,7 @@ fn marks(
         let line: Vec<Pos2> = points.iter().map(|(x, y)| view.to_screen(*x, *y)).collect();
         clip.painter().add(Shape::line(line, Stroke::new(MARK, ink)));
         let (x, y) = middle_of(points);
-        label(shell, clip, p, (side, on_it, e, id), (kind, view), (Align2::CENTER_CENTER, view.to_screen(x, y)), go);
+        label(shell, clip, p, (side, on_it, e, id), (kind, view), (Align2::CENTER_CENTER, view.to_screen(x, y)), rows, go);
     }
     for n in refs(store, on_it.diagram, diagram::NODE).into_iter().flat_map(|top| node_tree(store, top)) {
         let Some((id, kind)) = kind_of(n) else { continue };
@@ -345,13 +347,13 @@ fn marks(
             continue;
         }
         clip.painter().rect_stroke(area, 6.0, Stroke::new(MARK, kind_look(kind, p).1), StrokeKind::Outside);
-        label(shell, clip, p, (side, on_it, n, id), (kind, view), (Align2::LEFT_BOTTOM, area.left_top() - vec2(0.0, MARK + 2.0)), go);
+        label(shell, clip, p, (side, on_it, n, id), (kind, view), (Align2::LEFT_BOTTOM, area.left_top() - vec2(0.0, MARK + 2.0)), rows, go);
     }
 }
 
 /// The change in words, placed by its `corner` at `at` in `view`, naming `o`, whose id is `id`, to
-/// whoever reads it out or hovers. When the comparison lists a change of the element `o` draws, the
-/// words link to it: a click or Enter puts it in `go`, and the keys reaching it out of sight move both sides to it.
+/// whoever reads it out or hovers. When `rows` holds a change of the element `o` draws, the words
+/// link to its row: a click or Enter puts it in `go`, and the keys reaching it out of sight move both sides to it.
 fn label(
     shell: &mut Shell,
     clip: &egui::Ui,
@@ -359,6 +361,7 @@ fn label(
     (side, on_it, o, id): (&str, &DiagramSide, Obj, Uuid),
     (kind, view): (ChangeKind, &View),
     (corner, at): (Align2, Pos2),
+    rows: &HashMap<Uuid, related::Link>,
     go: &mut Option<Difference>,
 ) {
     let (word, ink, tint) = kind_look(kind, p);
@@ -371,8 +374,7 @@ fn label(
     let said = format!("{}, {word}", shown_name(&on_it.store, o).unwrap_or_else(|| tr("Unnamed")));
     let store = &on_it.store;
     let element = [node::ELEMENT, edge::ELEMENT].into_iter().find_map(|prop| store.get(o, prop).ok()?.as_ref()).and_then(|e| store.uuid(e).ok());
-    let row =
-        element.and_then(|e| related::links(&shell.versions.changes, &[e]).first().and_then(|(at, _)| shell.versions.changes.get(*at).cloned()));
+    let row = element.and_then(|e| rows.get(&e)).and_then(|(at, _)| shell.versions.changes.get(*at).cloned());
     let to = row.as_ref().map(|r| fmt(&tr("Go to {name}"), &[("name", r.name.as_deref().filter(|n| !n.is_empty()).unwrap_or(&tr("Unnamed")))]));
     let said = to.as_ref().map_or(said.clone(), |to| listed(&tr("{first}, {then}"), [said.as_str(), to].into_iter()));
     let id = format!("workspace.change-view.{side}.mark.{id}");

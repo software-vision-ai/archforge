@@ -28,12 +28,19 @@ const BETWEEN: f32 = 12.0;
 /// One related change: where its row is in the list of changes, and what happened to it.
 pub(super) type Link = (usize, ChangeKind);
 
-/// The rows of `changes` that `related` names, in that order. An element with rows in two tables is
-/// one change, named from a row of the side it is still on; only a model's rows open, so a diagram's stay out.
+/// The rows of `changes` that `related` names, in that order, as [`index`] finds them.
 pub(super) fn links(changes: &[Difference], related: &[Uuid]) -> Vec<Link> {
     if related.is_empty() {
         return Vec::new();
     }
+    let rows = index(changes);
+    related.iter().filter_map(|id| rows.get(id).copied()).collect()
+}
+
+/// The row of `changes` each element opens from, by its id, built once for many lookups. An element
+/// with rows in two tables is one change, named from a row of the side it is still on; only a model's
+/// rows open, so a diagram's stay out.
+pub(super) fn index(changes: &[Difference]) -> HashMap<Uuid, Link> {
     let mut rows: HashMap<Uuid, Link> = HashMap::new();
     for (i, d) in changes.iter().enumerate().filter(|(_, d)| d.area == Area::Model) {
         let (at, kind) = rows.entry(d.id).or_insert((i, d.kind));
@@ -44,7 +51,7 @@ pub(super) fn links(changes: &[Difference], related: &[Uuid]) -> Vec<Link> {
             *kind = ChangeKind::Changed;
         }
     }
-    related.iter().filter_map(|id| rows.get(id).copied()).collect()
+    rows
 }
 
 /// How much room `count` links take under the cards: none without any.
