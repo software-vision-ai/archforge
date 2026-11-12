@@ -123,6 +123,8 @@ pub struct RestoreRequest {
     pub commit: String,
     /// When the version was saved, as the list says it, for the new version's message.
     pub saved_at: String,
+    /// When the restore was asked for, as the list says it, for the name unsaved work is kept under.
+    pub before_at: String,
     pub by: SavedBy,
     /// What an opening does to a model, applied to both sides of the comparison.
     pub repair: fn(&mut archforge_mof::Store),
@@ -899,8 +901,15 @@ impl ProjectHost for Projects {
     }
 
     /// Worded on the wait's own thread in the language shown when the job runs.
-    fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
-        self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
+    fn restore_job(
+        &self,
+        project: &Path,
+        commit: String,
+        (saved_at, before_at): (String, String),
+        by: SavedBy,
+        repair: fn(&mut archforge_mof::Store),
+    ) -> ReplacementJob {
+        self.restore_job_within(project, RestoreRequest { commit, saved_at, before_at, by, repair }, RESTORE_LIMIT)
     }
 
     /// The name typed, stored as the project stores it; a refusal worded as the dialog says it.
@@ -1923,10 +1932,7 @@ fn stop_note(error: &RestoreError) -> String {
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
     let error = match answer {
         Ok(Restored::Version { .. }) => return Ok(()),
-        Ok(Restored::Same { kept_work: false }) => return Err(JobFailure::Failed(tr("This version is the same as your current work."))),
-        Ok(Restored::Same { kept_work: true }) => {
-            return Err(JobFailure::WorkSaved(tr("This version is the same as your current work. Your unsaved work was kept as a version.")));
-        }
+        Ok(Restored::Same { kept_work }) => return Err(JobFailure::Same { work_saved: kept_work }),
         Err(error) => error,
     };
     log::warn!("{}", stop_note(&error));
@@ -1980,6 +1986,11 @@ fn restored_message(saved_at: &str) -> String {
     format!("Restored the version of {saved_at}")
 }
 
+/// The message of the version unsaved work is kept as before a restore asked for at `before_at`.
+fn before_message(before_at: &str) -> String {
+    format!("Before restoring {before_at}")
+}
+
 /// How a restore's writing stopped, and what is left to do about it.
 enum Stop {
     /// The model did not change.
@@ -2001,7 +2012,7 @@ fn replace(
 ) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
-    let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
+    let kept_work = match save_step(inner, project, &before_message(&request.before_at), &author) {
         Ok(saved) => matches!(saved, archforge_project::Saved::Version { .. }),
         Err(f) => match f.version {
             Version(_) => true,
@@ -3583,6 +3594,9 @@ mod tests {
     /// The time the versions restored in these tests were saved at.
     const SAVED_AT: &str = "2026-11-08T14:02:11Z";
 
+    /// When the restores in these tests were asked for, as the list says it.
+    const BEFORE_AT: &str = "8 Nov 15:42";
+
     /// Restores `commit` and gives the answer.
     fn restore_of(host: &Projects, path: &Path, commit: &str) -> Result<Restored, RestoreError> {
         host.restore_version(path, restoring(commit)).recv_timeout(Duration::from_secs(60)).expect("the restore answers")
@@ -3590,7 +3604,8 @@ mod tests {
 
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
-        RestoreRequest { commit: commit.into(), saved_at: SAVED_AT.into(), by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
+        let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -3621,7 +3636,7 @@ mod tests {
         assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: true });
         let messages = sandbox.messages();
         assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
-        assert!(messages[1].starts_with("Before restoring 20"), "{messages:?}");
+        assert_eq!(messages[1], format!("Before restoring {BEFORE_AT}"), "named by the date the list shows");
         assert_eq!(work(host), model("a"));
         assert!(!unsaved(host));
         let before = version(host, 1);
@@ -3961,8 +3976,8 @@ mod tests {
     fn a_restores_answer_becomes_the_jobs() {
         let not_restored = |kept_work, written_back| RestoreError::NotRestored { why: "x".into(), kept_work, written_back };
         assert!(matches!(job_answer(Ok(Restored::Version { kept_work: true })), Ok(())));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Failed(_))));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Same { work_saved: false })));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::Same { work_saved: true })));
         assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: true })), Err(JobFailure::Unclear)));
         assert!(matches!(job_answer(Err(not_restored(true, true))), Err(JobFailure::WorkSaved(_))));
         assert!(matches!(job_answer(Err(not_restored(false, true))), Err(JobFailure::Failed(_))));
@@ -4014,17 +4029,13 @@ mod tests {
         use archforge_ui_egui::i18n::set_language;
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let same = version(host, 0);
-        let english = |_: ()| job_answer(Ok(Restored::Same { kept_work: false }));
-        let word = |answer: Result<(), JobFailure>| match answer {
-            Err(JobFailure::Failed(text)) => text,
-            _ => panic!("a failure"),
-        };
+        let stale = job_of(host, &path, &version(host, 1));
+        switched(&host.inner, &path);
         set_language("en");
-        let in_english = word(english(()));
+        let in_english = not_going_ahead();
         set_language("de");
-        let in_german = word(english(()));
-        let told = word(ran(&(job_of(host, &path, &same).run)()));
+        let in_german = not_going_ahead();
+        let Err(JobFailure::Failed(told)) = ran(&(stale.run)()) else { panic!("a failure") };
         set_language("en");
         assert_ne!(in_german, in_english, "the sentence is translated");
         assert_eq!(told, in_german);
@@ -4042,7 +4053,14 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), SAVED_AT.into(), nobody(), archforge_ui_egui::editing::fit_tables);
+        let fresh = ProjectHost::restore_job(
+            &**host,
+            &path,
+            old.clone(),
+            (SAVED_AT.into(), BEFORE_AT.into()),
+            nobody(),
+            archforge_ui_egui::editing::fit_tables,
+        );
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));

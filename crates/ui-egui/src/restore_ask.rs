@@ -3,16 +3,18 @@
 //! did not finish, once no other question is up. The restore itself is [`Shell::restore_version`].
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
+use crate::chat_words::date_and_time;
 use crate::close_ask::{Ask, Due, due};
 use crate::hold::HoldRefused;
 use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button};
 use crate::ux::{self, Palette, types};
 use crate::versions::{last_known, last_version};
-use crate::{Shell, version_chip, widgets};
+use crate::{Shell, chat_panel, version_chip, widgets};
 
 const WIDTH: f32 = 480.0;
 
@@ -25,6 +27,8 @@ pub struct Confirm {
     /// How the question names it.
     named: String,
     failure: Option<String>,
+    /// Whether the failure is one trying again could change, and Retry is offered.
+    retry: bool,
 }
 
 /// A restore started here, kept until it ends and, ended without restoring, until that is said.
@@ -33,6 +37,13 @@ pub(crate) struct Restoring {
     confirm: Confirm,
     /// The undo history of the session it ended on, the only one its failure is about.
     ended_on: Option<u64>,
+}
+
+/// The time now, as the list says it: a restore asked for now keeps unsaved work under a name
+/// dated so, `Before restoring 8 Nov 15:42`.
+pub(crate) fn asked_at(shell: &Shell) -> String {
+    let clock = chat_panel::clock(shell);
+    date_and_time(clock.now, clock)
 }
 
 /// Whether restoring `commit` is on offer: not a version that can't be read, nor the last version
@@ -57,7 +68,7 @@ pub(crate) fn held_back(shell: &Shell) -> Option<String> {
 /// project and session shown now.
 pub(crate) fn ask(shell: &mut Shell, (commit, saved, named): (String, String, String)) {
     if let Some(path) = shell.project.as_ref().map(|o| o.path.clone()) {
-        let confirm = Confirm { commit, saved, named, failure: None };
+        let confirm = Confirm { commit, saved, named, failure: None, retry: true };
         shell.ask = Some(Ask::Restore { path, generation: shell.session_generation(), confirm });
     }
 }
@@ -104,13 +115,14 @@ pub(crate) fn keep(shell: &mut Shell) {
     }
 }
 
-/// A restore started here ended without restoring: why, in the words `save_error` holds now, and
-/// the session it ended on are kept for [`keep`] to tell. A failure already kept stays as it was.
-pub(crate) fn failed(shell: &mut Shell) {
+/// A restore started here ended without restoring: why, in the words `save_error` holds now,
+/// whether trying again could change it (`retry`), and the session it ended on are kept for
+/// [`keep`] to tell. A failure already kept stays as it was.
+pub(crate) fn failed(shell: &mut Shell, retry: bool) {
     let why = shell.save_error.clone().unwrap_or_else(|| tr("The change did not finish, so the project is as it was."));
     let ended_on = shell.session.as_ref().map(|s| s.history());
     if let Some(r) = shell.versions.restoring.as_mut().filter(|r| r.confirm.failure.is_none()) {
-        (r.confirm.failure, r.ended_on) = (Some(why), ended_on);
+        (r.confirm.failure, r.confirm.retry, r.ended_on) = (Some(why), retry, ended_on);
     }
 }
 
@@ -154,7 +166,10 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
         let adds = fmt(&tr("A new version with that content is added on top of the history, called \"{name}\"."), &[("name", &name)]);
         blocks.push(small(&format!("{adds} {}", tr("Nothing is rewound or removed, and later versions stay in History.")), p.text_secondary));
         if shell.shown_unsaved() {
-            let saves = tr("Your unsaved changes are saved first, as a version called \"Before restoring\" and the time.");
+            // Named as the host names it (`before_message`), dated now; drawn again as the minute turns.
+            let name = format!("Before restoring {}", asked_at(shell));
+            ui.ctx().request_repaint_after(Duration::from_secs(60 - chat_panel::clock(shell).now % 60));
+            let saves = fmt(&tr("Your unsaved changes are saved first, as a version called \"{name}\"."), &[("name", &name)]);
             blocks.push(small(&format!("{saves} {}", tr("You can reach them again from History.")), p.text));
         }
         blocks.push(small(&tr("Undo starts fresh after a Restore."), p.text_secondary));
@@ -180,9 +195,7 @@ fn card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, c: &Confirm
         paint.galley(pos2(left + inset, y), g, ink);
         y += h + 6.0;
     }
-    // Trying again can't change that the version is the same.
-    let same = c.failure.as_ref().is_some_and(|why| why.starts_with(&tr("This version is the same as your current work.")));
-    let words = (!same).then(|| if c.failure.is_some() { tr("Retry") } else { tr("Restore") });
+    let words = (c.failure.is_none() || c.retry).then(|| if c.failure.is_some() { tr("Retry") } else { tr("Restore") });
     let width_of = |text: &str| (ux::galley(&paint, text, types::UI, p.text, None).size().x + 20.0).ceil();
     let top = frame.bottom() - 48.0;
     let mut x = frame.right() - 20.0;

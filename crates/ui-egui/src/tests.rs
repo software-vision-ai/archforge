@@ -389,8 +389,8 @@ struct SavingHost {
     branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
-    /// When each version restored was saved, as its job was told.
-    restore_dates: std::sync::Mutex<Vec<String>>,
+    /// When each version restored was saved and when its restore was asked for, as its job was told.
+    restore_dates: std::sync::Mutex<Vec<(String, String)>>,
     /// Each branch switch asked for, and what the next one is refused with.
     switches: std::sync::Mutex<Vec<SwitchEnds>>,
     switch_refused: std::sync::Mutex<Option<String>>,
@@ -416,13 +416,13 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         _commit: String,
-        saved_at: String,
+        (saved_at, before_at): (String, String),
         _by: crate::SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> crate::replace::Job {
         let (answer, answers) = std::sync::mpsc::channel();
         let (reading, readings) = std::sync::mpsc::channel();
-        self.restore_dates.lock().unwrap().push(saved_at);
+        self.restore_dates.lock().unwrap().push((saved_at, before_at));
         self.restores.lock().unwrap().push((answer, reading));
         crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
     }
@@ -8690,6 +8690,31 @@ fn a_versions_row_says_what_it_holds_and_when() {
         assert!(german.starts_with("6.") && painted(&h).contains(&german), "{german}: {:?}", painted(&h));
         h.state_mut().state.language = "en".to_string();
         h.run_steps(2);
+    });
+}
+
+/// A restore's kept work named by an earlier Archforge, `Before restoring` and a stored time, shows
+/// that time as the list says it; the stored name is left as it is, and other names show as stored,
+/// a time not in the stored form or a day its month lacks among them.
+#[test]
+fn an_earlier_restores_kept_work_shows_its_time_as_the_list_says_it() {
+    let earlier = "Before restoring 2026-11-07T16:15:00Z";
+    let named = |hash, d| version_row(hash, Some(d), (None, false), "2026-11-07T16:15:00Z");
+    in_both_appearances(|theme| {
+        let kept = [
+            "Before restoring 9 Nov 12:59",
+            "Before restoring 2026-11-07",
+            "Before restoring 2026/11/07 16:15:00X",
+            "Before restoring 2026-02-31T10:00:00Z",
+        ];
+        let listed = [named("a", earlier)].into_iter().chain(kept.iter().zip(["b", "c", "d", "e"]).map(|(d, hash)| named(hash, d))).collect();
+        let (h, _host) = versions_listed(theme, listed);
+        let texts = painted(&h);
+        for t in ["Before restoring 7 Nov 17:15"].iter().chain(&kept) {
+            assert!(texts.iter().any(|x| x == t), "{theme:?}: {t}: {texts:?}");
+        }
+        assert!(!texts.iter().any(|t| t == earlier), "{theme:?}: {texts:?}");
+        assert_eq!(h.state().versions.page.as_ref().unwrap().versions[0].description.as_deref(), Some(earlier), "{theme:?}: as stored");
     });
 }
 
