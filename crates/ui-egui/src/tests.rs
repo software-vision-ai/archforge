@@ -8947,6 +8947,37 @@ fn a_refused_skill_text_is_unsaved_shown_or_parked() {
     }
 }
 
+/// The window title marks typed text the work doesn't have yet as its tab does, though the model
+/// has nothing unsaved: a description being typed, a skill's text before its typing pauses, and one
+/// the store refused.
+#[test]
+fn the_title_marks_text_typed_and_not_yet_kept() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let (clean, marked) = ("Commerce platform — Archforge", "• Commerce platform — Archforge");
+        assert_eq!(h.state().title(), clean, "{theme:?}: nothing unsaved");
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: skill, text: "Typing".into(), refused: false });
+        assert_eq!(h.state().title(), marked, "{theme:?}: a description being typed");
+        h.state_mut().panels.description = None;
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert_eq!(h.state().title(), marked, "{theme:?}: a skill's text before the pause");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let refused = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.refused.is_some());
+        assert!(refused && !h.state().session.as_ref().unwrap().is_dirty(), "{theme:?}: refused, the model untouched");
+        assert_eq!(h.state().title(), marked, "{theme:?}: a refused skill text");
+    });
+}
+
 /// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
 #[test]
 fn working_changes_filter_a_long_list() {

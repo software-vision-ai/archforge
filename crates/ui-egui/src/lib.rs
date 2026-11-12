@@ -1998,9 +1998,10 @@ impl Shell {
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            // Unsaved changes mark the title with a dot before the name.
+            // Unsaved changes mark the title with a dot before the name, as they mark its tab: text
+            // typed and not yet kept among them.
             Some(p) => {
-                let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
+                let name = if self.shown_unsaved() { format!("• {}", p.name) } else { p.name.clone() };
                 crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])
             }
             None => "Archforge".to_string(),
