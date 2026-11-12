@@ -81,6 +81,7 @@ fn a_model_of_opposite_pairs_comes_back_from_its_rows_identical() {
     st.move_item(pricing, u::classifier::USE_CASE, 1, 0).unwrap();
     assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
     let saved = rows::snapshot(&st, &tables, &junctions).unwrap();
+    assert_eq!(st.freeze().rows(&tables, &junctions).unwrap(), saved, "a frozen copy gives the same rows");
     let mut back = store(1 << 40);
     rows::restore(&mut back, &saved, &tables, &junctions).unwrap();
     let again = rows::snapshot(&back, &tables, &junctions).unwrap();
