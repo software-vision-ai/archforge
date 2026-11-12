@@ -110,8 +110,21 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
     }
 }
 
-/// Asks the host to make the branch stored as `name` from current work.
+/// Asks the host to make the branch stored as `name` from current work. As a switch and a save do,
+/// the skill text and description being typed are kept and handed over first; one that can't be
+/// kept stops it, its reason under the field.
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
+    if shell.viewing.is_none() {
+        crate::skill_tab::sync(shell, 0.0, true, None);
+        if crate::panels::commit_description(shell) || !crate::skill_tab::unkept(&shell.canvas).is_empty() {
+            let why = crate::version_chip::refused_words(shell, crate::hold::HoldRefused::Description);
+            if let Some(Ask::Branch { naming, .. }) = shell.ask.as_mut() {
+                naming.refused = why;
+            }
+            return;
+        }
+        shell.write_changes();
+    }
     let Some(Ask::Branch { path, generation, naming }) = shell.ask.as_mut() else { return };
     let answer = host.create_branch(path, &name);
     shell.versions.making = Some(Making { about: (path.clone(), *generation), name, answer });

@@ -636,3 +636,27 @@ fn new_branch_keeps_the_keys_and_its_answer_to_itself() {
         assert!(!has_id(&h, NEW), "{theme:?}: not while the project is held");
     });
 }
+
+/// Create keeps the skill text still being typed first, as a switch does, so the branch holds it;
+/// text the store refuses stops it, the reason under the field.
+#[test]
+fn new_branch_keeps_the_skill_text_being_typed_first() {
+    in_both_appearances(|theme| {
+        for (typed, kept) in [("Plain.".to_string(), true), ("x".repeat(16_001), false)] {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+            let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+            crate::skill_tab::open(h.state_mut(), skill);
+            // Typed just now, so only a forced keep takes it.
+            let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+            (doc.text, doc.changed_at) = (typed.clone(), f64::MAX);
+            click_id(&mut h, NEW);
+            h.event(egui::Event::Text("Fresh".into()));
+            h.run_steps(2);
+            let asked = create(&mut h, &host);
+            let saved = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.saved == typed);
+            assert_eq!((asked, saved), (usize::from(kept), kept), "{theme:?}");
+            assert_eq!(painted_has(&h, &crate::skill_tab::unkept_reason()), !kept, "{theme:?}");
+        }
+    });
+}
