@@ -556,6 +556,7 @@ str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行
 str		No changes since the last version.	前のバージョンから変更はありません。
+str		What you're typing isn't kept yet	入力中のテキストはまだ保持されていません
 str		No versions yet.	バージョンはまだありません。
 str		Shared with main up to here	ここまで main と共通
 str		No versions yet. Save version records your first one.	バージョンはまだありません。「バージョンを保存」で最初のバージョンを記録します。

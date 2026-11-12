@@ -556,6 +556,7 @@ str		Working changes	Modifications en cours
 str		History	Historique
 str		Retry	Réessayer
 str		No changes since the last version.	Aucune modification depuis la dernière version.
+str		What you're typing isn't kept yet	Ce que vous saisissez n’est pas encore conservé
 str		No versions yet.	Aucune version pour l'instant.
 str		Shared with main up to here	Commun avec main jusqu'ici
 str		No versions yet. Save version records your first one.	Aucune version pour l'instant. Enregistrer la version crée la première.

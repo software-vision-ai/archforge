@@ -556,6 +556,7 @@ str		Working changes	Cambios en curso
 str		History	Historial
 str		Retry	Reintentar
 str		No changes since the last version.	Sin cambios desde la última versión.
+str		What you're typing isn't kept yet	Lo que está escribiendo aún no se ha guardado
 str		No versions yet.	Todavía no hay versiones.
 str		Shared with main up to here	Compartido con main hasta aquí
 str		No versions yet. Save version records your first one.	Todavía no hay versiones. Guardar versión registra la primera.

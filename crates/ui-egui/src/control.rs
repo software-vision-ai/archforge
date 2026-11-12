@@ -302,7 +302,7 @@ fn inspect(shell: &Shell) -> Value {
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "branch": shell.project.as_ref().and_then(|p| shell.services.projects.as_ref()?.current_branch(&p.path)),
         "revision": session.revision(),
-        "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),
+        "unsaved": session.is_dirty() || shell.typing_unkept(),
         "saving": shell.is_saving(),
         "save_error": shell.save_error,
         "undo": session.undo_label(),

@@ -549,11 +549,9 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
             let why = shell.close_error().unwrap_or_default().to_string();
             (p.danger, crate::i18n::fmt(&tr("The project could not be closed: {why}"), &[("why", &why)]))
         }
-        // A description typed in Properties and not yet written, or refused, is unsaved work too:
-        // never Saved while it waits.
-        Some(s) if s.is_dirty() || crate::panels::description_pending(&shell.panels) => {
-            (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)]))
-        }
+        // A description or a skill's text typed and not yet written, or a refused description, is
+        // unsaved work too: never Saved while it waits.
+        Some(s) if s.is_dirty() || shell.typing_unkept() => (p.amber, crate::i18n::fmt(&tr("Unsaved changes · {chord} saves"), &[("chord", chord)])),
         Some(_) => (p.green, tr("Saved")),
     };
     // Which line of work it is about, once the project has a second branch.

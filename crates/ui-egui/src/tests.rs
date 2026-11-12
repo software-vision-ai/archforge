@@ -8877,6 +8877,44 @@ fn working_changes_list_what_a_save_would_write() {
     });
 }
 
+/// A skill's text typed but not yet kept is a change, as a description is: Working changes never
+/// says there are none, Save version… says why it is off, and the status bar and the chip call the
+/// work unsaved; once the typing pauses the text is kept and listed.
+#[test]
+fn skill_text_waiting_to_be_kept_is_no_no_changes() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        versions_answer(
+            &mut h,
+            &host,
+            Ok(crate::VersionsPage { versions: vec![version_row("c1", None, (None, false), "2026-11-08T15:30:00Z")], more: false }),
+        );
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        crate::skill_tab::open(h.state_mut(), skill);
+        compared(&mut h);
+        let unsaved = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t.starts_with("Unsaved changes"));
+        let off = |h: &Harness<'static, Shell>| crate::save_version::off_because(h.state());
+        let none = Some("No changes since the last version.".to_string());
+        assert!(no_changes_said(&h) && off(&h) == none && !unsaved(&h) && !h.state().shown_unsaved(), "{theme:?}: {:?}", painted(&h));
+        // Typed just now: kept only once the typing pauses.
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert!(crate::skill_tab::waiting(h.state()) && h.state().versions.working == 0, "{theme:?}: still waiting");
+        assert!(!no_changes_said(&h), "{theme:?}: {:?}", painted(&h));
+        assert!(off(&h).is_some() && off(&h) != none && off(&h).as_deref() != Some("Loading"), "{theme:?}: {:?}", off(&h));
+        assert!(unsaved(&h) && h.state().shown_unsaved(), "{theme:?}: the status bar and the chip");
+        h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap().changed_at = 0.0;
+        compared(&mut h);
+        assert!(!crate::skill_tab::waiting(h.state()) && h.state().versions.working == 1 && off(&h).is_none(), "{theme:?}: kept and listed");
+    });
+}
+
 /// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
 #[test]
 fn working_changes_filter_a_long_list() {

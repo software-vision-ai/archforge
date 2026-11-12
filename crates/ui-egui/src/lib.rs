@@ -1015,13 +1015,13 @@ impl Shell {
     }
 
     /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
-    /// written, or refused, among them (AR-186).
+    /// written, or refused, and a skill's text not yet kept among them (AR-186, AR-381).
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
             if let Some(viewing) = &self.viewing {
                 return viewing.unsaved();
             }
-            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || self.typing_unkept();
         }
         self.tabs
             .get(i)
@@ -1745,6 +1745,13 @@ impl Shell {
     /// Whether the project shown holds unsaved work.
     pub(crate) fn shown_unsaved(&self) -> bool {
         self.active.is_some_and(|i| self.tab_unsaved(i))
+    }
+
+    /// Whether text typed in current work waits to be written to it: a description in Properties,
+    /// being typed or refused, or a skill's text before its typing pauses. It is unsaved work like
+    /// a change to the model, so nothing calls the work saved or unchanged meanwhile (AR-381).
+    pub(crate) fn typing_unkept(&self) -> bool {
+        panels::description_pending(&self.panels) || skill_tab::waiting(self)
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.

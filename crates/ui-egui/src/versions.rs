@@ -393,11 +393,12 @@ pub(crate) fn settled(shell: &Shell) -> bool {
 }
 
 /// What Working changes says, when what is known allows it. "No changes" is what Save would find:
-/// no difference in the model and diagrams, and none in what only a save writes (`settings` and
-/// `model_tables`, which leave the session marked unsaved with nothing to list).
+/// no difference in the model and diagrams, none in what only a save writes (`settings` and
+/// `model_tables`, which leave the session marked unsaved with nothing to list), and no text typed
+/// that waits to be written (`Shell::typing_unkept`).
 fn working_words(shell: &Shell) -> Option<String> {
     let page = shell.versions.page.as_ref()?;
-    let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !crate::panels::description_pending(&shell.panels);
+    let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !shell.typing_unkept();
     if page.versions.is_empty() {
         Some(tr("No versions yet. Save version records your first one."))
     } else if !settled(shell) {
