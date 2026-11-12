@@ -2111,6 +2111,46 @@ fn start_a_branch_is_not_offered_on_an_unreadable_version() {
     });
 }
 
+/// In every language the bundled faces draw, at the narrowest centre beside the explorer and at the
+/// least window width, the details' four actions wrap rather than pass the centre column's right
+/// edge, and what the details show under them starts below their last line. Japanese and Chinese
+/// draw with an installed family, which a test can't count on, and their labels are shorter.
+#[test]
+fn the_details_actions_wrap_inside_a_narrow_centre() {
+    let actions = [VIEW, "workspace.version-details.compare", RESTORE, BRANCH];
+    in_both(|h, host| {
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        opened(h, "c2");
+        for language in crate::i18n::LANGUAGES.iter().filter(|l| !["ja", "zh-Hans"].contains(&l.code)) {
+            h.state_mut().state.language = language.code.into();
+            // 796 leaves the centre its least width beside the explorer; 640 hides the explorer.
+            for (width, explorer) in [(796.0, true), (640.0, false)] {
+                h.set_size(egui::vec2(width, 860.0));
+                h.run_steps(2);
+                assert_eq!(has_id(h, "workspace.versions.row.c2"), explorer, "{width}");
+                let left = rect_of(h, "workspace.version-details.close").left() - crate::version_details::MARGIN;
+                // The right rail's buttons sit 4 points inside it, and it starts where the centre ends.
+                let right = rect_of(h, "workspace.panels.agent").left() - 4.0;
+                for id in actions {
+                    let at = rect_of(h, id);
+                    assert!(at.left() >= left && at.right() <= right, "{}: {width}: {id} {at:?} outside {left}..{right}", language.code);
+                }
+                let lowest = actions.iter().map(|id| rect_of(h, id).bottom()).fold(0.0, f32::max);
+                let below = h
+                    .state()
+                    .widgets()
+                    .iter()
+                    .filter(|w| w.id.starts_with("workspace.version-details.") && !actions.contains(&w.id.as_str()) && !w.id.ends_with(".close"))
+                    .map(|w| w.rect[1])
+                    .fold(f32::MAX, f32::min);
+                assert!(below < f32::MAX && below > lowest, "{}: {width}: {below} under {lowest}", language.code);
+            }
+        }
+        h.state_mut().state.language = "en".into();
+    });
+}
+
 /// A failure brings the question back saying what happened, with Retry unless trying again can't
 /// help; one before anything is written says that nothing changed.
 #[test]
