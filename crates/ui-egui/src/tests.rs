@@ -8919,6 +8919,20 @@ fn working_changes_filter_a_long_list() {
     });
 }
 
+/// Presses `key` and looks at every frame from the press on until `done`, at most 200; fails
+/// saying `what` when it never is, however late another thread answers meanwhile.
+fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
+    h.key_down_modifiers(egui::Modifiers::NONE, key);
+    h.key_up_modifiers(egui::Modifiers::NONE, key);
+    for _ in 0..200 {
+        h.run_steps(1);
+        if done(h) {
+            return;
+        }
+    }
+    panic!("{what}: not within 200 frames");
+}
+
 /// ↑ and ↓ on a focused change move between the rows of both groups, out of view too, each whole
 /// in the list as it comes, the first bringing its group's heading back; Enter opens the one reached.
 #[test]
@@ -8957,9 +8971,10 @@ fn the_keys_reach_every_working_change() {
         let heading = text_boxes(&h).into_iter().find(|(t, _)| t == "MODEL ELEMENTS").map(|(_, b)| b.top());
         assert!(heading.is_some_and(|top| top >= field), "{theme:?}: the heading came back with the first row: {heading:?}");
         (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
-        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        h.run_steps(2);
-        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(item(12).id), "{theme:?}: Enter opened the one reached");
+        // The element's own read finds nothing of these made-up rows and closes it again, so each
+        // frame from the press on is looked at, not the state some frames later.
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| o.row.id) == Some(item(12).id);
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the one reached"));
     });
 }
 
@@ -9326,9 +9341,8 @@ fn the_keys_reach_every_history_row() {
         h.run_steps(1);
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         assert!(whole(&h, 6), "{theme:?}: and with it gone they move again");
-        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
-        h.run_steps(2);
-        assert_eq!(h.state().versions.selected.as_deref(), Some("v6"), "{theme:?}: Enter opened the one reached");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.selected.as_deref() == Some("v6");
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the one reached"));
     });
 }
 
