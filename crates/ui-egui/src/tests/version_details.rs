@@ -782,6 +782,59 @@ fn the_frame_builds_no_rows_for_working_changes_or_their_sides() {
     });
 }
 
+/// Puts beside current work an unlimited natural too large for its column, so its rows cannot be
+/// built, and hands the session over already.
+fn unbuildable(h: &mut Harness<'static, Shell>) {
+    let mut n = 0u64;
+    let ids = Box::new(move || {
+        n += 1;
+        let mut r = [7u8; 10];
+        r[2..].copy_from_slice(&n.to_be_bytes());
+        Uuid::v7(1_761_670_950_000, r)
+    });
+    let s = archforge_notations::session_from_rows_repaired(&rows_now(h), ids, |st| {
+        let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
+        st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+    })
+    .unwrap();
+    h.state_mut().written = Some(s.revision());
+    h.state_mut().session = Some(s);
+}
+
+/// Opens Compare on `c3` and answers its reads with `before`, all frames building no rows: the
+/// frame only copies current work, whose rows are built with the comparison.
+fn compared_off_the_frame(h: &mut Harness<'static, Shell>, host: &SavingHost, before: &Arc<Rows>) {
+    let built = archforge_mof::rows::built_here();
+    compared(h, "c3");
+    answer(host, "c2", Ok(before.clone()));
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |_| asked(host) == ["c3"]);
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |h| found(h).is_some());
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+}
+
+/// Compare builds no rows on the frame either, and rows that cannot be built land as the
+/// comparison's failure, with why, about the revision it took.
+#[test]
+fn the_frame_builds_no_rows_for_compare() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        h.state_mut().written = h.state().session.as_ref().map(|s| s.revision());
+        compared_off_the_frame(h, host, &before);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+    });
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        let why = found(h).unwrap().unwrap_err();
+        assert!(why.contains("too large to store"), "{why}");
+        let revision = h.state().session.as_ref().map(|s| s.revision());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), revision);
+    });
+}
+
 /// A row opens its element in place of the details, reading nothing; the project's name closes it.
 #[test]
 fn a_working_change_opens_in_the_centre_without_a_read() {
@@ -1520,6 +1573,30 @@ fn a_version_is_compared_with_current_work_and_read_once() {
         add_schema(h, "more");
         found_many(h, 2);
         assert!(asked(host).is_empty() && h.state().session_generation() == generation, "{:?}", asked(host));
+    });
+}
+
+/// Differences found in id order are grouped by area, model elements first, each area keeping that
+/// order: a diagram made between two schemas lists after both, its unnamed part after it.
+#[test]
+fn what_is_found_is_grouped_by_area() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let mut made = |id: &str, params: serde_json::Value| {
+            let s = h.state_mut().session.as_mut().unwrap();
+            Uuid::parse(s.execute(id, &params).unwrap().value["id"].as_str().unwrap()).unwrap()
+        };
+        let alpha = made("er.schema.add", serde_json::json!({ "name": "alpha" }));
+        let diagram = made("diagram.add", serde_json::json!({ "kind": "er", "element": alpha.to_string(), "name": "Billing" }));
+        let omega = made("er.schema.add", serde_json::json!({ "name": "omega" }));
+        assert!(alpha < diagram && diagram < omega, "the diagram's id lies between the schemas'");
+        answer(host, "c3", Ok(before));
+        found_many(h, 5);
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let listed: Vec<_> = items.iter().map(|d| (d.area, d.name.clone().unwrap_or_default())).collect();
+        let names = ["shop", "alpha", "omega"].map(|n| (Area::Model, n.to_string()));
+        let diagrams = [(Area::Diagram, "Billing".to_string()), (Area::Diagram, String::new())];
+        assert_eq!(listed, [names.as_slice(), &diagrams].concat());
     });
 }
 

@@ -1,13 +1,15 @@
 //! What the Compare page finds (section 6 of `docs/design/versioning.md`): a version read at its
-//! revision against a snapshot of current work, off the interface thread. Comparing reads rows only,
-//! so the session is never replaced. While a version shows, current work is the session set aside.
+//! revision against current work, off the interface thread. The frame only copies current work's
+//! objects; their rows are built with the comparison. Comparing reads rows only, so the session is
+//! never replaced. While a version shows, current work is the session set aside.
 //! Nothing draws what it finds yet.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use archforge_mof::rows::{Rows, snapshot};
+use archforge_mof::Frozen;
+use archforge_mof::rows::Rows;
 use archforge_notations::differences::classified;
 
 use super::Side;
@@ -122,14 +124,12 @@ fn next(shell: &mut Shell, sides: Sides) {
         return;
     }
     let Some(before) = held.map(|h| h.rows.clone()) else { return read_before(shell, key.sides.0) };
-    let (tables, junctions) = archforge_notations::storage();
-    let started = snapshot(session.doc(), &tables, &junctions)
-        .map_err(|e| e.to_string())
-        .and_then(|live| compare(before, live, key.sides.1).map_err(|e| e.to_string()));
+    // The frame only copies the objects; their rows are built with the comparison.
+    let started = compare(before, session.doc().freeze(), key.sides.1);
     let r = &mut shell.versions.compare_results;
     match started {
         Ok(answer) => r.comparing = Some((key, answer)),
-        Err(why) => r.found = Some((key, Err(why))),
+        Err(why) => r.found = Some((key, Err(why.to_string()))),
     }
     r.held = r.held.take().filter(|h| h.keep);
 }
@@ -146,15 +146,21 @@ fn read_before(shell: &mut Shell, version: String) {
     shell.versions.compare_results.reading = Some((version, answer));
 }
 
-/// Compares `version` and `live` on a thread of its own, `live` first when `swapped`. The model's
-/// root is no change of its own.
-fn compare(version: Arc<Rows>, live: Rows, swapped: bool) -> std::io::Result<Receiver<Found>> {
+/// Builds the rows of `live` and compares them with `version` on a thread of its own, `live` first
+/// when `swapped`; rows that cannot be built fail the comparison with their reason. The model's root
+/// is no change of its own.
+fn compare(version: Arc<Rows>, live: Frozen, swapped: bool) -> std::io::Result<Receiver<Found>> {
     let (tx, rx) = channel();
+    let (tables, junctions) = archforge_notations::storage();
     let work = move || {
-        let (before, after) = if swapped { (&live, &*version) } else { (&*version, &live) };
-        let found = classified(before, after, crate::editing::fit_tables).map_err(|e| e.to_string());
+        let found = live.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|live| {
+            let (before, after) = if swapped { (&live, &*version) } else { (&*version, &live) };
+            classified(before, after, crate::editing::fit_tables).map_err(|e| e.to_string())
+        });
+        // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
+            items.sort_by_key(|d| d.area);
             Arc::new(items)
         }));
     };
