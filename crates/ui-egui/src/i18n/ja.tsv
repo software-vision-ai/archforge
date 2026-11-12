@@ -514,6 +514,11 @@ str		New branch	新しいブランチ
 str		A branch keeps its own versions, unsaved work and conversations.	ブランチは独自のバージョン、未保存の作業、会話を持ちます。
 str		It starts from current work on {branch}.	{branch} の現在の作業から始まります。
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	{branch} の現在の作業から始まります。未保存の変更も引き継がれ、{branch} にもそのまま残ります。
+str		Start a branch here	ここからブランチを開始
+str		Start a branch here…	ここからブランチを開始…
+str		It starts from the version of {version}.	{version} のバージョンから始まります。
+str		Viewing ends on the new branch.	表示は新しいブランチで終わります。
+str		Your unsaved changes stay on {branch}.	未保存の変更は {branch} に残ります。
 str		That name is already in use.	その名前はすでに使われています。
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	前回の新しいブランチがまだ片付いていません。プロジェクトを開き直すと削除されます。
 str		The project changed before the branch was made, so none was made.	ブランチを作る前にプロジェクトが変わったため、作成されませんでした。

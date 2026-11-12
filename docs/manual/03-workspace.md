@@ -29,6 +29,10 @@ An open project fills the window with its workspace.
   were: change the name or try again. If Archforge can't tell whether it was made, look at the
   Branches list before trying again. If the switch to the new branch can't start, the reason is
   shown as for any switch, and the branch stays in the list for you to switch to later.
+  **Start a branch here…**, in a version's details and as the branch button beside **Back to
+  current work** in the banner of a version you are viewing, opens the same dialog for a branch that
+  starts from that version instead. Your unsaved changes stay on the branch you are on, and viewing
+  ends on the new branch once it is made. It isn't offered for a version that can't be read.
   **Rename…** in a branch's **More** menu renames it, the branch you are on too; `main` keeps its
   name. The name is checked as for a new branch, and **Rename** stays off while it is unchanged. The
   branch keeps its conversations, versions and unsaved work, and you stay on it. If it can't be

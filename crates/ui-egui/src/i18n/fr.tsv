@@ -514,6 +514,11 @@ str		New branch	Nouvelle branche
 str		A branch keeps its own versions, unsaved work and conversations.	Une branche a ses propres versions, son travail non enregistré et ses conversations.
 str		It starts from current work on {branch}.	Elle part du travail actuel sur {branch}.
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Elle part du travail actuel sur {branch}. Vos modifications non enregistrées la suivent, et {branch} les garde aussi.
+str		Start a branch here	Commencer une branche ici
+str		Start a branch here…	Commencer une branche ici…
+str		It starts from the version of {version}.	Elle part de la version du {version}.
+str		Viewing ends on the new branch.	L’affichage se termine sur la nouvelle branche.
+str		Your unsaved changes stay on {branch}.	Vos modifications non enregistrées restent sur {branch}.
 str		That name is already in use.	Ce nom est déjà utilisé.
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	La dernière nouvelle branche n'est pas encore nettoyée. Rouvrir le projet la supprime.
 str		The project changed before the branch was made, so none was made.	Le projet a changé avant la création de la branche, donc aucune n'a été créée.

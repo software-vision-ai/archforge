@@ -514,6 +514,11 @@ str		New branch	新建分支
 str		A branch keeps its own versions, unsaved work and conversations.	分支拥有自己的版本、未保存的工作和对话。
 str		It starts from current work on {branch}.	它从 {branch} 上的当前工作开始。
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	它从 {branch} 上的当前工作开始。您未保存的更改会一并带过去，{branch} 也会保留它们。
+str		Start a branch here	从此处开始分支
+str		Start a branch here…	从此处开始分支…
+str		It starts from the version of {version}.	它从 {version} 的版本开始。
+str		Viewing ends on the new branch.	查看将在新分支上结束。
+str		Your unsaved changes stay on {branch}.	您未保存的更改会留在 {branch} 上。
 str		That name is already in use.	该名称已被使用。
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	上一个新分支尚未清理。重新打开项目即可将其移除。
 str		The project changed before the branch was made, so none was made.	在创建分支之前项目已更改，因此未创建分支。

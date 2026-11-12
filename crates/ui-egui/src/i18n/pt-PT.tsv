@@ -514,6 +514,11 @@ str		New branch	Novo ramo
 str		A branch keeps its own versions, unsaved work and conversations.	Um ramo tem as suas próprias versões, trabalho por guardar e conversas.
 str		It starts from current work on {branch}.	Começa no trabalho atual em {branch}.
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Começa no trabalho atual em {branch}. As suas alterações por guardar vêm consigo, e {branch} também as mantém.
+str		Start a branch here	Iniciar um ramo aqui
+str		Start a branch here…	Iniciar um ramo aqui…
+str		It starts from the version of {version}.	Começa na versão de {version}.
+str		Viewing ends on the new branch.	A visualização termina no novo ramo.
+str		Your unsaved changes stay on {branch}.	As suas alterações por guardar ficam em {branch}.
 str		That name is already in use.	Esse nome já está a ser usado.
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	O último ramo novo ainda não foi limpo. Abrir o projeto novamente remove-o.
 str		The project changed before the branch was made, so none was made.	O projeto mudou antes de o ramo ser criado, por isso nenhum foi criado.

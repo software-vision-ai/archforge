@@ -365,8 +365,10 @@ struct SavingHost {
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each branch delete's answer, sent by the test.
     branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
-    /// Each branch made from current work, by its stored name, and where the test answers it.
+    /// Each branch made, by its stored name, and where the test answers it.
     branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// The version each branch made starts at, in the same order; none for current work.
+    branch_starts: std::sync::Mutex<Vec<Option<String>>>,
     /// Each branch rename, from and to as stored, and where the test answers it.
     branch_renames: std::sync::Mutex<Vec<(String, String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
     /// Each count of what goes with a branch, by its stored name, and where the test answers it.
@@ -498,8 +500,9 @@ impl crate::ProjectHost for SavingHost {
     }
 
     /// Keeps the answer for the test to send.
-    fn create_branch(&self, _path: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+    fn create_branch(&self, _path: &std::path::Path, name: &str, start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
         let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_starts.lock().unwrap().push(start.map(str::to_string));
         self.branch_makes.lock().unwrap().push((name.to_string(), tx));
         rx
     }

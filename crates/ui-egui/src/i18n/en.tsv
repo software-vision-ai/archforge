@@ -513,6 +513,11 @@ str		New branch	New branch
 str		A branch keeps its own versions, unsaved work and conversations.	A branch keeps its own versions, unsaved work and conversations.
 str		It starts from current work on {branch}.	It starts from current work on {branch}.
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.
+str		Start a branch here	Start a branch here
+str		Start a branch here…	Start a branch here…
+str		It starts from the version of {version}.	It starts from the version of {version}.
+str		Viewing ends on the new branch.	Viewing ends on the new branch.
+str		Your unsaved changes stay on {branch}.	Your unsaved changes stay on {branch}.
 str		That name is already in use.	That name is already in use.
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	The last new branch is not cleaned up yet. Opening the project again removes it.
 str		The project changed before the branch was made, so none was made.	The project changed before the branch was made, so none was made.

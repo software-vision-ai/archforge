@@ -319,9 +319,9 @@ pub trait ProjectHost: Send + Sync {
         Err("this host keeps no branches".to_string())
     }
 
-    /// Starts making the branch stored as `name` from the current work of the open project at
-    /// `path`, without switching to it, and returns at once.
-    fn create_branch(&self, _path: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+    /// Starts making the branch stored as `name` of the open project at `path`, from its version
+    /// `start` or with none from its current work, without switching to it, and returns at once.
+    fn create_branch(&self, _path: &std::path::Path, _name: &str, _start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
         rx
