@@ -1565,6 +1565,17 @@ impl Shell {
         self.start_save(Some((description, Some(reviewed))), SavedBy::Person(self.state.user_name.clone()));
     }
 
+    /// Whether the status bar says Saved: no change and no text typed that the work hasn't got, and
+    /// no save or write failed, which a save tries again. Save without a description then makes no
+    /// version, not even an untouched new project's first one.
+    fn nothing_to_save(&self) -> bool {
+        let write_failed = match (&self.services.projects, &self.project) {
+            (Some(host), Some(project)) => host.writing(&project.path).error.is_some(),
+            _ => false,
+        };
+        !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() && self.save_error.is_none() && !write_failed
+    }
+
     /// Starts a save recorded as `by`: under the description in `review` when there is one, and
     /// only if the model still stands at the revision `review` names when it names one.
     fn start_save(&mut self, review: Option<(String, Option<u64>)>, by: SavedBy) {
@@ -1583,6 +1594,10 @@ impl Shell {
             return;
         }
         let Some(revision) = self.written else { return };
+        // After the writes above, which made typed text a change: no version of nothing (AR-383).
+        if review.is_none() && self.nothing_to_save() {
+            return;
+        }
         // After the writes above: text still being typed counts as a move, since it was not reviewed.
         let moved = review.as_ref().and_then(|(_, reviewed)| *reviewed).is_some_and(|reviewed| current != Some(reviewed) || revision != reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {

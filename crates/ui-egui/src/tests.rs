@@ -351,6 +351,8 @@ struct SavingHost {
     version_limits: std::sync::Mutex<Vec<usize>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
+    /// Why the last write failed, as the test sets it; none by default.
+    write_error: std::sync::Mutex<Option<String>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
@@ -535,6 +537,11 @@ impl crate::ProjectHost for SavingHost {
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    /// Nothing waits; the write failed when the test says so.
+    fn writing(&self, _project: &std::path::Path) -> crate::Writing {
+        crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
     }
 
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
@@ -891,6 +898,7 @@ fn while_held_edits_undo_and_save_are_refused() {
     h.state_mut().end_hold();
     assert!(h.state().can_save());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.state_mut().save();
     assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
 }
@@ -8555,6 +8563,39 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
     });
 }
 
+/// ⌘S and File ▸ Save on an untouched new project make no version: the host is never asked, and
+/// History still says there are none; a save with a description, or after a failed save or write,
+/// still asks it (AR-413).
+#[test]
+fn saving_an_untouched_new_project_makes_no_version() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        assert!(!dirty(&h) && !h.state().shown_unsaved(), "{theme:?}: the status bar says Saved");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        h.state_mut().save();
+        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "{theme:?}: no version was asked for");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "{theme:?}: History has nothing new to read");
+        assert!(painted(&h).iter().any(|t| t == "No versions yet. Save version records your first one."), "{theme:?}: {:?}", painted(&h));
+        // A save under a description, an agent's, is still the host's to decide.
+        h.state_mut().save_as(crate::SavedBy::Agent(None), Some("Start".into()));
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: a described save goes to the host");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        // A failed save or write is not Saved: Save tries again, as before.
+        h.state_mut().save_error = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed save");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        *host.write_error.lock().unwrap() = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed write");
+    });
+}
+
 /// History lists what was read and keeps it through a failed read; a save, another session or
 /// another project read again; "No changes" is never said of unsaved work.
 #[test]
@@ -8942,11 +8983,12 @@ fn skill_text_waiting_to_be_kept_is_no_no_changes() {
 }
 
 /// A skill's text the store refused is unsaved work, in the tab shown and in a parked one, though
-/// the model has nothing unsaved: quitting asks about it instead of closing the window.
+/// the model has nothing unsaved: Save still asks the host, and quitting asks about it instead of
+/// closing the window.
 #[test]
 fn a_refused_skill_text_is_unsaved_shown_or_parked() {
     for parked in [false, true] {
-        let (mut h, _host) = saving_harness(Some(commerce()), None);
+        let (mut h, host) = saving_harness(Some(commerce()), None);
         let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
         let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
         crate::skill_tab::open(h.state_mut(), skill);
@@ -8965,6 +9007,13 @@ fn a_refused_skill_text_is_unsaved_shown_or_parked() {
             assert!(h.state().active != Some(first) && h.state().tabs[first].parked.is_some(), "parked");
         }
         assert!(h.state().tab_unsaved(first), "{parked}: the refused text is unsaved");
+        if !parked {
+            // Something to save, as the status bar says, so Save still goes to the host (AR-413).
+            h.state_mut().save();
+            assert_eq!(host.saves.lock().unwrap().len(), 1, "Save asks the host");
+            host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+            h.run_steps(2);
+        }
         h.state_mut().request_quit();
         h.run_steps(3);
         assert!(!h.state().quit_confirmed(), "{parked}: the window stays");

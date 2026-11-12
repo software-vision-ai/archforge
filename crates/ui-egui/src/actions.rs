@@ -379,6 +379,14 @@ pub(crate) mod tests {
         (shell, host, picks)
     }
 
+    /// `shell` with unsaved work, which Save makes a version of: with none it asks for nothing.
+    fn unsaved(shell: &mut Shell) -> &mut Shell {
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
+        shell
+    }
+
     /// A question about the open project, which keeps everything behind it off.
     fn question() -> crate::close_ask::Ask {
         crate::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }
@@ -406,7 +414,7 @@ pub(crate) mod tests {
         type Setup = fn(&mut Shell);
         let states: [(&str, Setup, &[&str]); 18] = [
             ("a project", |_| {}, &[]),
-            ("saving", |s| s.save(), &[SAVE]),
+            ("saving", |s| unsaved(s).save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
             ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE]),
             ("About open", crate::support::open, &BEHIND_A_DIALOG),
@@ -485,6 +493,9 @@ pub(crate) mod tests {
         );
         for id in ALL {
             let (mut shell, saves, picks) = shell();
+            if id == SAVE {
+                unsaved(&mut shell);
+            }
             run(&mut shell, id);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
@@ -550,10 +561,13 @@ pub(crate) mod tests {
         ];
         for (id, modifiers, key) in pressed {
             let (mut shell, saves, picks) = shell();
+            unsaved(&mut shell);
             press(&mut shell, modifiers, key);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         let (mut shell, saves, picks) = shell();
+        // Unsaved, so a key that reached Save would show.
+        unsaved(&mut shell);
         shell.ask = Some(question());
         press(&mut shell, shift_cmd, Key::G);
         press(&mut shell, Modifiers::COMMAND, Key::O);
