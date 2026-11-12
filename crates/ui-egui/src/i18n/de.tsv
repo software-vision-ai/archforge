@@ -460,7 +460,7 @@ str		Restore this version?	Diese Version wiederherstellen?
 str		The version of {what}	Die Version vom {what}
 str		A new version with that content is added on top of the history, called "{name}".	Eine neue Version mit diesem Inhalt wird oben in der Historie hinzugefügt und heißt „{name}“.
 str		Nothing is rewound or removed, and later versions stay in History.	Nichts wird zurückgespult oder entfernt, und spätere Versionen bleiben in der Historie.
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Ihre nicht gespeicherten Änderungen werden zuerst als Version „Before restoring“ mit der Uhrzeit gespeichert.
+str		Your unsaved changes are saved first, as a version called "{name}".	Ihre nicht gespeicherten Änderungen werden zuerst als Version „{name}“ gespeichert.
 str		You can reach them again from History.	Sie finden sie danach in der Historie wieder.
 str		Undo starts fresh after a Restore.	Nach einer Wiederherstellung beginnt Rückgängig neu.
 str		Restore	Wiederherstellen

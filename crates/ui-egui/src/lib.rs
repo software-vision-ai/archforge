@@ -269,14 +269,16 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
-    /// The job that restores the version `commit` of the project at `project`, saved at `saved_at`
-    /// as the list says it, as a new version recorded as `by`, for [`Shell::begin_replacement`];
-    /// `repair` is what an opening does to a model. Its callbacks only hand the work over.
+    /// The job that restores the version `commit` of the project at `project` as a new version
+    /// recorded as `by`, for [`Shell::begin_replacement`]. `dates` are when the version was saved,
+    /// which names the new version, and when the restore was asked for, which names the version
+    /// unsaved work is kept as first, both as the list says them. `repair` is what an opening does
+    /// to a model. Its callbacks only hand the work over.
     fn restore_job(
         &self,
         _project: &std::path::Path,
         _commit: String,
-        _saved_at: String,
+        _dates: (String, String),
         _by: SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> replace::Job {
