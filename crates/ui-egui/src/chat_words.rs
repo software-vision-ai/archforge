@@ -101,12 +101,31 @@ pub fn date_and_time(then: u64, clock: Clock) -> String {
     fmt(&tr("{date} {time}"), &[("date", &date_on(day(then), day(clock.now))), ("time", &clock_time(then, clock.offset))])
 }
 
-/// The seconds since 1970 of a time as [`rfc3339`] writes it, none for anything else.
+/// The seconds since 1970 of a time as [`rfc3339`] writes it, none for anything else: each
+/// separator in its place, digits elsewhere, and a day the month has.
 pub fn seconds_of(date: &str) -> Option<u64> {
+    let canonical = date.len() == 20
+        && date.bytes().enumerate().all(|(i, b)| match i {
+            4 | 7 => b == b'-',
+            10 => b == b'T',
+            13 | 16 => b == b':',
+            19 => b == b'Z',
+            _ => b.is_ascii_digit(),
+        });
+    if !canonical {
+        return None;
+    }
     let digits = |from: usize, to: usize| date.get(from..to)?.parse::<i64>().ok();
     let (y, m, d) = (digits(0, 4)?, digits(5, 7)?, digits(8, 10)?);
     let (hour, minute, second) = (digits(11, 13)?, digits(14, 16)?, digits(17, 19)?);
-    if date.len() != 20 || !(1..=12).contains(&m) || !(1..=31).contains(&d) || hour > 23 || minute > 59 || second > 60 {
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let last_day = match m {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if !(1..=12).contains(&m) || !(1..=last_day).contains(&d) || hour > 23 || minute > 59 || second > 60 {
         return None;
     }
     let y = if m <= 2 { y - 1 } else { y };
@@ -344,11 +363,25 @@ mod tests {
         let clock = Clock { now, offset: Some(3_600) };
         assert_eq!(rfc3339(now), "2026-11-07T14:02:00Z");
         assert_eq!(seconds_of("2026-11-07T14:02:00Z"), Some(now), "read back as it was written");
-        for not_a_time in
-            ["2026-13-07T14:02:00Z", "2026-00-07T14:02:00Z", "2026-11-32T14:02:00Z", "2026-11-07T24:02:00Z", "2026-11-07 14:02", "yesterday"]
-        {
+        for not_a_time in [
+            "2026-13-07T14:02:00Z",
+            "2026-00-07T14:02:00Z",
+            "2026-11-32T14:02:00Z",
+            "2026-11-07T24:02:00Z",
+            "2026-11-07 14:02",
+            "yesterday",
+            "2026/11/07 14:02:00Z",
+            "2026-11-07T14:02:00X",
+            "+026-11-07T14:02:00Z",
+            "2026-02-31T10:00:00Z",
+            "2026-04-31T10:00:00Z",
+            "2027-02-29T10:00:00Z",
+            "2100-02-29T10:00:00Z",
+        ] {
             assert_eq!(seconds_of(not_a_time), None, "{not_a_time}");
         }
+        assert_eq!(seconds_of("2028-02-29T10:00:00Z"), Some(1_835_431_200), "a leap year has 29 February");
+        assert_eq!(seconds_of("2000-02-29T00:00:00Z"), Some(951_782_400), "and so does a fourth century");
         assert_eq!(civil(0), (1970, 1, 1));
         assert_eq!(when(now, clock), "Today 15:02", "the local offset moves the clock");
         assert_eq!(when(now - 86_400, clock), "Yesterday");

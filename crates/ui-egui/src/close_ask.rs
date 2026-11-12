@@ -27,8 +27,14 @@ pub enum Ask {
     /// A Chat turn runs while the work of `path`, as session `generation` holds it, is being left
     /// for `then`.
     StopChat { path: std::path::PathBuf, generation: u64, then: crate::leaving::Leaving },
-    /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed.
+    /// Switching away from the unsaved work of `path`, as session `generation` holds it, or how
+    /// that switch ended.
+    Switch { path: std::path::PathBuf, generation: u64, confirm: crate::switch_ask::Confirm },
+    /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed,
+    /// or how that restore ended.
     Restore { path: std::path::PathBuf, generation: u64, confirm: crate::restore_ask::Confirm },
+    /// A branch of `path` is being named, over the work session `generation` holds.
+    Branch { path: std::path::PathBuf, generation: u64, naming: crate::branch_ask::Naming },
 }
 
 impl Ask {
@@ -40,8 +46,33 @@ impl Ask {
             | Ask::ConfirmLoss { path }
             | Ask::HoldFailed { path, .. }
             | Ask::StopChat { path, .. }
-            | Ask::Restore { path, .. } => path,
+            | Ask::Switch { path, .. }
+            | Ask::Restore { path, .. }
+            | Ask::Branch { path, .. } => path,
         }
+    }
+}
+
+/// When a failure kept until it can be told (`crate::switch_ask`, `crate::restore_ask`) is told.
+pub(crate) enum Due {
+    Now,
+    Later,
+    Never,
+}
+
+/// When the failure of an operation on the project at `path`, which ended on the session whose
+/// undo history is `ended_on`, is told: now when that project shows with that session and no other
+/// question is up, later while another project shows or a question is, and never once another
+/// session shows for that project.
+pub(crate) fn due(shell: &Shell, path: &std::path::Path, ended_on: Option<u64>) -> Due {
+    if shell.project.as_ref().is_none_or(|o| o.path != path) {
+        Due::Later
+    } else if shell.session.as_ref().map(|s| s.history()) != ended_on {
+        Due::Never
+    } else if shell.ask.is_some() {
+        Due::Later
+    } else {
+        Due::Now
     }
 }
 
@@ -66,14 +97,17 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         return;
     };
     // Chat's question is about the session it was asked over; another showing now takes it along.
-    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Restore { generation, .. } if generation != shell.session_generation()) {
+    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Switch { generation, .. } | Ask::Restore { generation, .. } | Ask::Branch { generation, .. } if generation != shell.session_generation())
+    {
         shell.ask = None;
         return;
     }
     let name = shell.tabs[i].name.clone();
     let quitting = shell.quitting();
     let (title, lines, buttons): (String, Vec<String>, Vec<(&str, String, Answer, bool)>) = match &ask {
+        Ask::Switch { confirm, .. } => return crate::switch_ask::show(shell, ui, confirm.clone()),
         Ask::Restore { confirm, .. } => return crate::restore_ask::show(shell, ui, confirm.clone()),
+        Ask::Branch { naming, .. } => return crate::branch_ask::show(shell, ui, naming.clone()),
         Ask::Unsaved { .. } => (
             fmt(&tr("Save the changes to {name}?"), &[("name", &name)]),
             vec![tr("If you don't save, the changes since the last save are lost.")],

@@ -216,7 +216,9 @@ fn canary() -> Secret {
     Secret::new(CANARY.to_owned()).unwrap()
 }
 
-/// Events until (and with) the first that `stop` accepts, within five seconds.
+/// Events until (and with) the first that `stop` accepts, within five seconds; a failure names the
+/// calling line, so it says which awaited event did not come.
+#[track_caller]
 fn events_until(session: &mut ClaudeSession, stop: impl Fn(&SessionEvent) -> bool) -> Vec<SessionEvent> {
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut events = Vec::new();
@@ -625,16 +627,18 @@ fn stop_sends_the_interrupt_control_request() {
     std::fs::remove_dir_all(&base).unwrap();
 }
 
-/// A refused stop request falls back to SIGINT to the runtime, which ends the turn.
+/// A refused stop request falls back to SIGINT to the runtime, which ends the turn. The fake waits
+/// for the signal in short sleeps, not in `read`: the system shell defers a trap whose signal comes
+/// just before `read` blocks until the next input line, which a stopped turn never sends (AR-406).
 #[test]
 fn a_refused_stop_request_falls_back_to_sigint() {
     let base = scratch("sigint");
     let result = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming"}"#;
     let body = format!(
-        "stopped() {{ printf '%s\\n' {result}; }}\ntrap stopped INT\ninput\n\
+        "got=\nstopped() {{ printf '%s\\n' {result}; got=1; }}\ntrap stopped INT\ninput\n\
          printf '%s\\n' '{{\"type\":\"system\",\"subtype\":\"api_retry\",\"attempt\":1,\"max_retries\":10,\"error_status\":null,\"error\":\"unknown\"}}'\n\
          input\nprintf '%s\\n' '{{\"type\":\"control_response\",\"response\":{{\"subtype\":\"error\",\"request_id\":\"archforge-stop-1\",\"error\":\"no\"}}}}'\n\
-         while IFS= read -r line; do :; done",
+         while [ -z \"$got\" ]; do /bin/sleep 0.02; done\nwhile IFS= read -r line; do :; done",
         result = quoted(result)
     );
     let (runtime, folder) = fake_claude(&base, &body);

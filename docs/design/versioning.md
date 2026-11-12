@@ -183,6 +183,12 @@ Stepping: from Current work, ‹ goes to the latest version when there are unsav
 to the one
 before it, which is the first that differs. In the list that latest row reads "Same as current work".
 
+A step past the versions read so far reads the next page and goes on, by the one read the list and
+the steps share, so a press while it runs starts no other; ‹ says "No older version" only at the end
+of the history. A read that fails says so in the toast over the canvas, or above what covers the
+canvas, and the version in view stays. The next step reads again. A step waits only until the person
+moves, and coming back does not revive it.
+
 ---
 
 ## 3. Viewing an earlier version
@@ -383,6 +389,11 @@ afterwards has answered, and if that read fails the list says the changes could 
 Before → After, shown in the header; Swap reverses it deliberately. One
 comparison engine feeds the lists, element cards and diagram cards, so counts agree.
 
+Under an element's cards, related changes link to the other model elements connected to it that the
+same comparison lists: what it or its members refer to on either side, what refers to them, and its
+owner. What it contains is on its cards instead. A link moves along the list held, so the pair stays
+and nothing is read.
+
 Differences are found by comparing rows by identity, not from Dolt's diff output:
 
 - Object tables have `id BINARY(16) PRIMARY KEY`, so rename and move stay one element.
@@ -397,6 +408,37 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 - `diagram_*` tables and style are presentation; the rest is model. A node's `element` column links
   the two, which gives "model
   changed, layout did not".
+
+A diagram's two sides are each drawn from their own state in one framing: the zoom and pan that fit
+every box, line and line label on either side, wherever a label was put, from neither the project nor
+the canvas, so how someone last looked at it is never a difference. A box or line on one side only is
+Added or Removed; one on both is Changed when it or what it draws differs: its element, a member listed
+on it, a parameter of one, or a part of it such as a bend, a label or its style. A marked box has an
+outline in the change's colour and the change in words above it, without frame V3.4's tint, as a box's
+own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
+Words that would run past a pane's right edge are moved left to stay inside it, while what they mark starts inside it.
+
+That framing is where both sides start, and the two move together: a drag or the wheel over either
+side pans both, a pinch or the wheel with the command key zooms both about the pointer, and a side
+with the keys pans both by the arrow keys, zooms both by + and − and fits both again by 0. Opening
+the diagram again from the list fits it again too. Where the person has moved them stays only while
+the diagram is open, never in the project or the canvas. A mark on a box or line whose element the
+same comparison lists is a link to that element's change: a click, or Enter once Tab reaches it,
+opens the element along the list held, as the related changes under an element's cards do, and Tab
+reaching a mark out of sight moves both sides to it. A side the diagram is not on (an added diagram's
+Before, a removed one's After) is a pane that says so and does not move.
+
+Above the two sides, frame V3.4's **Model** and **Layout** cards say the same differences apart.
+Model counts the elements a box or line draws, on either side, that were added, changed or removed,
+themselves or a member listed with them, and names them. Layout counts the boxes placed, moved,
+changed or taken off and the lines drawn, changed or taken off: a box is moved when its place
+differs, and changed when only another part of its own does, such as its size, a bend, a label or
+its style. A card with nothing says so and that the other alone changed: "The layout didn't change.
+Only the model changed." When no box or line differs but the diagram's own row or the order of its
+boxes or lines does, Layout says the diagram's own details changed; when an empty diagram was added or
+removed, Layout says that. The frame names each element's kind
+("1 class changed") and each box's change ("Order moved"); the cards count elements and boxes and
+list names, as a count for every kind would not translate.
 
 ---
 
@@ -413,7 +455,9 @@ included.
 
 Step 7 is one writer job:
 
-1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`.
+1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`:
+   the time the restore was asked for as History says it (`8 Nov 15:42`), the date the question quotes.
+   Earlier versions named with a stored time keep their name; History shows that time as it shows dates.
 2. The version's model rows, in today's table shape, are written to the working set.
 3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
    nothing differed, and is reported as above.
@@ -595,6 +639,8 @@ Checks against what exists:
 | Before the first version | Working changes | No baseline: everything is Added, except the root Model element |
 | First version | Details, Compare | "First version: there is nothing earlier to compare it with." Before shows the absent state |
 | No changes | Working changes | "No changes since the last version." Save version… disabled, with the reason in its tooltip |
+| Nothing unsaved: the status bar says Saved (an untouched new project, or nothing changed since the last version) | ⌘S, File ▸ Save, an agent's save without a description | No version is made and the host is not asked. Text still being typed, or a failed save or write, is not Saved, so ⌘S keeps the text or tries again. A save with a description is still the host's to decide (AR-383, AR-413) |
+| Text typed and not yet kept (a skill's text before its typing pauses or refused, a description being typed or refused) | Working changes, status bar, chip, the close and quit questions, shown or parked | Unsaved work, never "No changes": Working changes lists what was kept, the status bar says Unsaved changes, and with nothing listed Save version… is off with "What you're typing isn't kept yet" |
 | Unsaved only in `settings` or `model_tables` (an upgrade, a table first used) | Working changes, status bar | Working changes lists nothing; the status bar keeps Unsaved changes, and ⌘S saves them. Save version… stays disabled |
 | A branch with no version | Compare | That branch is not offered as a side of a comparison |
 | Identical pair | Compare | "These two versions are the same." |
@@ -603,6 +649,7 @@ Checks against what exists:
 | Version unavailable | Row | "This version can't be shown", with the reason behind a "Why?" in the meta text. Stays listed; stepping skips it and says so in the toast over the canvas, naming the first passed. What is known holds of a branch: showing another version keeps it, and a project change, a restore or a branch switch ends it |
 | Newer or foreign model shape | Row | "Made with a newer Archforge." |
 | Read failed | Banner in History | The previous state stays, Retry offered; never half a model. It ends when any version is asked for, on going back from a version, and with a restore or a change of branch or project |
+| Step's read of the versions failed | Toast over the canvas | "The next versions couldn't be read.", or "The versions couldn't be read." before any were. The version in view stays. A later read ends it, as does the next action |
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
 | Long history | List | Pages of 50, selection held by hash, Show more, filter All / With a description |
 | Metadata missing | Details | The row is left out; no invented author |
@@ -614,7 +661,8 @@ Checks against what exists:
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
 | Stored branch can't be opened on reopening | Status bar | Opens `main` and gives the reason |
-| Switch failed | Branch list | The reason; current branch and work unchanged |
+| Restore failed | Dialog over the window | The question again, saying why, with Retry unless the version is the same as current work. Its words are fixed when the restore ends. Behind another question it waits until that one closes and its project shows again with the session it ended on; it is dropped once another session shows for that project. While it waits, Restore in another open project is off with the reason, so no new failure takes its place |
+| Switch failed | Dialog over the window (frame V5.9's words) | The reason, then that the project stayed on its branch and what became of the work: unchanged, or saved by **Save version and switch** before the switch failed |
 | Delete refused | Dialog | The reason; the branch stays |
 
 ---

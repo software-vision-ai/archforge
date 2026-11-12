@@ -6,11 +6,15 @@ use egui_kittest::Harness;
 use crate::theme::ThemeKind;
 use crate::{Services, Shell, UiState};
 
+mod branches;
 mod edit_menu;
+mod model_menu;
 mod read_only;
+mod switch_ask;
 /// A click of the primary button at `at`, pointer moved there first.
 mod version_chip;
 mod version_details;
+mod versions_menu;
 
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -347,6 +351,8 @@ struct SavingHost {
     version_limits: std::sync::Mutex<Vec<usize>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
+    /// Why the last write failed, as the test sets it; none by default.
+    write_error: std::sync::Mutex<Option<String>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
@@ -361,18 +367,32 @@ struct SavingHost {
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each branch delete's answer, sent by the test.
     branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
+    /// Each branch made, by its stored name, and where the test answers it.
+    branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// The version each branch made starts at, in the same order; none for current work.
+    branch_starts: std::sync::Mutex<Vec<Option<String>>>,
+    /// Each branch rename, from and to as stored, and where the test answers it.
+    branch_renames: std::sync::Mutex<Vec<(String, String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// Each count of what goes with a branch, by its stored name, and where the test answers it.
+    branch_counts: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<crate::BranchCounts, String>>)>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Each read of the versions waiting for the answer the test sends.
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// The version each read of the versions started after.
     version_asks: std::sync::Mutex<Vec<Option<String>>>,
-    /// The branch the project is on.
+    /// The branch the project is on, what a read of the branches answers (none for no branches),
+    /// whether it says more exist, and how many reads were asked for.
     branch_now: std::sync::Mutex<Option<String>>,
+    branch_list: std::sync::Mutex<Option<Result<Vec<crate::BranchEntry>, String>>>,
+    branch_cut: std::sync::Mutex<bool>,
+    /// While set, each read of the branches waits there for the test to answer it.
+    branch_held: std::sync::Mutex<Option<Vec<std::sync::mpsc::Sender<Result<(Vec<crate::BranchEntry>, bool), String>>>>>,
+    branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
-    /// When each version restored was saved, as its job was told.
-    restore_dates: std::sync::Mutex<Vec<String>>,
+    /// When each version restored was saved and when its restore was asked for, as its job was told.
+    restore_dates: std::sync::Mutex<Vec<(String, String)>>,
     /// Each branch switch asked for, and what the next one is refused with.
     switches: std::sync::Mutex<Vec<SwitchEnds>>,
     switch_refused: std::sync::Mutex<Option<String>>,
@@ -398,13 +418,13 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         _commit: String,
-        saved_at: String,
+        (saved_at, before_at): (String, String),
         _by: crate::SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> crate::replace::Job {
         let (answer, answers) = std::sync::mpsc::channel();
         let (reading, readings) = std::sync::mpsc::channel();
-        self.restore_dates.lock().unwrap().push(saved_at);
+        self.restore_dates.lock().unwrap().push((saved_at, before_at));
         self.restores.lock().unwrap().push((answer, reading));
         crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
     }
@@ -412,6 +432,19 @@ impl crate::ProjectHost for SavingHost {
     /// The branch the test says the project is on.
     fn current_branch(&self, _project: &std::path::Path) -> Option<String> {
         self.branch_now.lock().unwrap().clone()
+    }
+
+    /// Answers at once with what the test has set.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<crate::BranchEntry>, bool), String>> {
+        *self.branch_reads.lock().unwrap() += 1;
+        let (tx, rx) = std::sync::mpsc::channel();
+        if let Some(held) = self.branch_held.lock().unwrap().as_mut() {
+            held.push(tx);
+            return rx;
+        }
+        let listed = self.branch_list.lock().unwrap().clone().unwrap_or(Ok(Vec::new()));
+        let _ = tx.send(listed.map(|l| (l, *self.branch_cut.lock().unwrap())));
+        rx
     }
 
     /// A switch the test answers through what is kept in `switches`.
@@ -463,6 +496,33 @@ impl crate::ProjectHost for SavingHost {
         rx
     }
 
+    /// Stored in lower case with hyphens, which no listed name shares by accident; empty is refused.
+    fn branch_name(&self, typed: &str) -> Result<String, String> {
+        Some(typed.trim().to_lowercase().replace(' ', "-")).filter(|s| !s.is_empty()).ok_or_else(|| crate::i18n::tr("Enter a name."))
+    }
+
+    /// Keeps the answer for the test to send.
+    fn create_branch(&self, _path: &std::path::Path, name: &str, start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_starts.lock().unwrap().push(start.map(str::to_string));
+        self.branch_makes.lock().unwrap().push((name.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn branch_counts(&self, _path: &std::path::Path, branch: &str) -> std::sync::mpsc::Receiver<Result<crate::BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_counts.lock().unwrap().push((branch.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn rename_branch(&self, _path: &std::path::Path, from: &str, to: &str) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_renames.lock().unwrap().push((from.to_string(), to.to_string(), tx));
+        rx
+    }
+
     fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.opens.lock().unwrap().push((path.to_path_buf(), tx));
@@ -477,6 +537,11 @@ impl crate::ProjectHost for SavingHost {
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    /// Nothing waits; the write failed when the test says so.
+    fn writing(&self, _project: &std::path::Path) -> crate::Writing {
+        crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
     }
 
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
@@ -833,6 +898,7 @@ fn while_held_edits_undo_and_save_are_refused() {
     h.state_mut().end_hold();
     assert!(h.state().can_save());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.state_mut().save();
     assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
 }
@@ -3696,7 +3762,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         h.state_mut().in_window_menu = true;
         h.run();
         let (file, help, mid) = (rect_of(&h, "strip.menu.file"), rect_of(&h, "strip.menu.help"), rect_of(&h, "strip.theme").center().y);
-        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.help"], "{theme:?}");
+        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.model", "strip.menu.versions", "strip.menu.help"], "{theme:?}");
         assert!(
             file.left() >= rect_of(&h, "strip.open-project").right() && file.height() == 24.0 && help.left() > file.right() && file.center().y == mid,
             "{theme:?}"
@@ -3704,7 +3770,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         click_menu(&mut h, "strip.menu.file");
         let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
             .map(|id| format!("strip.menu.row.{id}"));
-        assert_eq!(menu_ids(&h)[3..], want, "{theme:?}");
+        assert_eq!(menu_ids(&h)[5..], want, "{theme:?}");
         let rows = want.each_ref().map(|id| rect_of(&h, id));
         assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
         assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
@@ -3750,7 +3816,7 @@ fn a_click_moves_the_menu_or_closes_it() {
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.file");
         click_menu(&mut h, "strip.menu.help");
-        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[3..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
+        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[5..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
         click_menu(&mut h, "strip.menu.help");
         assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
     }
@@ -3889,8 +3955,9 @@ fn left_and_right_move_between_the_groups_and_wrap() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
-        let (file, edit, help) = (("file", Some(SETTINGS)), ("edit", None), ("help", Some(ABOUT)));
-        for (key, at) in [(ArrowRight, edit), (ArrowRight, help), (ArrowRight, file), (ArrowLeft, help), (ArrowLeft, edit), (ArrowLeft, file)] {
+        let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", None), ("model", None), ("help", Some(ABOUT)));
+        let (versions, r, l) = (("versions", None), ArrowRight, ArrowLeft);
+        for (key, at) in [(r, edit), (r, model), (r, versions), (r, help), (r, file), (l, help), (l, versions), (l, model), (l, edit), (l, file)] {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some(at.0), at.1), "{theme:?}: {key:?}");
         }
@@ -8455,8 +8522,15 @@ fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: R
 /// Two versions, the older without a description.
 fn two_versions() -> crate::VersionsPage {
     let date = "2026-11-08T15:30:00Z".to_string();
-    let aa =
-        crate::VersionEntry { hash: "aa".into(), description: Some("Add order status".into()), author: None, by_agent: false, date, previous: None };
+    let aa = crate::VersionEntry {
+        hash: "aa".into(),
+        description: Some("Add order status".into()),
+        author: None,
+        by_agent: false,
+        date,
+        previous: None,
+        shared: false,
+    };
     let bb = crate::VersionEntry { hash: "bb".into(), description: None, ..aa.clone() };
     crate::VersionsPage { versions: vec![aa, bb], more: false }
 }
@@ -8486,6 +8560,39 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
         assert!(texts.iter().any(|t| t == "No versions yet."), "{texts:?}");
         assert!(texts.iter().any(|t| t == "No versions yet. Save version records your first one."), "{texts:?}");
         assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}");
+    });
+}
+
+/// ⌘S and File ▸ Save on an untouched new project make no version: the host is never asked, and
+/// History still says there are none; a save with a description, or after a failed save or write,
+/// still asks it (AR-413).
+#[test]
+fn saving_an_untouched_new_project_makes_no_version() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        assert!(!dirty(&h) && !h.state().shown_unsaved(), "{theme:?}: the status bar says Saved");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        h.state_mut().save();
+        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "{theme:?}: no version was asked for");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "{theme:?}: History has nothing new to read");
+        assert!(painted(&h).iter().any(|t| t == "No versions yet. Save version records your first one."), "{theme:?}: {:?}", painted(&h));
+        // A save under a description, an agent's, is still the host's to decide.
+        h.state_mut().save_as(crate::SavedBy::Agent(None), Some("Start".into()));
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: a described save goes to the host");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        // A failed save or write is not Saved: Save tries again, as before.
+        h.state_mut().save_error = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed save");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        *host.write_error.lock().unwrap() = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed write");
     });
 }
 
@@ -8574,7 +8681,7 @@ fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Har
 /// A version with the things a row says.
 fn version_row(hash: &str, description: Option<&str>, by: (Option<&str>, bool), date: &str) -> crate::VersionEntry {
     let (description, author) = (description.map(str::to_string), by.0.map(str::to_string));
-    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None }
+    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None, shared: false }
 }
 
 /// A row's two lines, its date local and never as stored: with and without a description, by a
@@ -8624,6 +8731,59 @@ fn a_versions_row_says_what_it_holds_and_when() {
         assert!(german.starts_with("6.") && painted(&h).contains(&german), "{german}: {:?}", painted(&h));
         h.state_mut().state.language = "en".to_string();
         h.run_steps(2);
+    });
+}
+
+/// A restore's kept work named by an earlier Archforge, `Before restoring` and a stored time, shows
+/// that time as the list says it; the stored name is left as it is, and other names show as stored,
+/// a time not in the stored form or a day its month lacks among them.
+#[test]
+fn an_earlier_restores_kept_work_shows_its_time_as_the_list_says_it() {
+    let earlier = "Before restoring 2026-11-07T16:15:00Z";
+    let named = |hash, d| version_row(hash, Some(d), (None, false), "2026-11-07T16:15:00Z");
+    in_both_appearances(|theme| {
+        let kept = [
+            "Before restoring 9 Nov 12:59",
+            "Before restoring 2026-11-07",
+            "Before restoring 2026/11/07 16:15:00X",
+            "Before restoring 2026-02-31T10:00:00Z",
+        ];
+        let listed = [named("a", earlier)].into_iter().chain(kept.iter().zip(["b", "c", "d", "e"]).map(|(d, hash)| named(hash, d))).collect();
+        let (h, _host) = versions_listed(theme, listed);
+        let texts = painted(&h);
+        for t in ["Before restoring 7 Nov 17:15"].iter().chain(&kept) {
+            assert!(texts.iter().any(|x| x == t), "{theme:?}: {t}: {texts:?}");
+        }
+        assert!(!texts.iter().any(|t| t == earlier), "{theme:?}: {texts:?}");
+        assert_eq!(h.state().versions.page.as_ref().unwrap().versions[0].description.as_deref(), Some(earlier), "{theme:?}: as stored");
+    });
+}
+
+/// Over the first version `main` has too, and only there, History draws a divider a screen reader
+/// reads; none while no page read holds one, and one at the top when the branch has no version of
+/// its own yet.
+#[test]
+fn history_marks_where_a_branch_shares_its_versions_with_main() {
+    use egui_kittest::kittest::Queryable;
+    let words = "Shared with main up to here";
+    let row = |hash: &str, shared| crate::VersionEntry { shared, ..version_row(hash, Some(hash), (None, false), "2026-11-08T15:30:00Z") };
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_listed(theme, vec![row("a", false), row("b", false)]);
+        assert!(!has_id(&h, "workspace.versions.shared") && !painted(&h).iter().any(|t| t == words), "{theme:?}: not on this page");
+        h.state_mut().versions.page.as_mut().unwrap().more = true;
+        h.run_steps(2);
+        let at = rect_of(&h, "workspace.versions.more").center();
+        click(&mut h, at);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![row("c", true), row("d", true)], more: false }));
+        let [b, c, d, divider] = ["row.b", "row.c", "row.d", "shared"].map(|id| rect_of(&h, &format!("workspace.versions.{id}")));
+        assert!(b.bottom() < divider.top() && divider.bottom() < c.top(), "{theme:?}: {b:?} {divider:?} {c:?}");
+        assert_eq!((c.top() - b.top(), d.top() - c.top()), (68.0, 50.0), "{theme:?}: only the rows under it move");
+        assert_eq!(painted(&h).iter().filter(|t| *t == words).count(), 1, "{theme:?}");
+        assert_eq!(h.query_all_by_label(words).count(), 1, "{theme:?}: read out whole");
+
+        let (h, _host) = versions_listed(theme, vec![row("e", true)]);
+        let (divider, e) = (rect_of(&h, "workspace.versions.shared"), rect_of(&h, "workspace.versions.row.e"));
+        assert!(divider.bottom() < e.top(), "{theme:?}: over the newest");
     });
 }
 
@@ -8783,6 +8943,115 @@ fn working_changes_list_what_a_save_would_write() {
     });
 }
 
+/// A skill's text typed but not yet kept is a change, as a description is: Working changes never
+/// says there are none, Save version… says why it is off, and the status bar and the chip call the
+/// work unsaved; once the typing pauses the text is kept and listed.
+#[test]
+fn skill_text_waiting_to_be_kept_is_no_no_changes() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        versions_answer(
+            &mut h,
+            &host,
+            Ok(crate::VersionsPage { versions: vec![version_row("c1", None, (None, false), "2026-11-08T15:30:00Z")], more: false }),
+        );
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        crate::skill_tab::open(h.state_mut(), skill);
+        compared(&mut h);
+        let unsaved = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t.starts_with("Unsaved changes"));
+        let off = |h: &Harness<'static, Shell>| crate::save_version::off_because(h.state());
+        let none = Some("No changes since the last version.".to_string());
+        assert!(no_changes_said(&h) && off(&h) == none && !unsaved(&h) && !h.state().shown_unsaved(), "{theme:?}: {:?}", painted(&h));
+        // Typed just now: kept only once the typing pauses.
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert!(crate::skill_tab::waiting(h.state()) && h.state().versions.working == 0, "{theme:?}: still waiting");
+        assert!(!no_changes_said(&h), "{theme:?}: {:?}", painted(&h));
+        assert!(off(&h).is_some() && off(&h) != none && off(&h).as_deref() != Some("Loading"), "{theme:?}: {:?}", off(&h));
+        assert!(unsaved(&h), "{theme:?}: the status bar: {:?}", painted(&h));
+        assert!(h.state().shown_unsaved(), "{theme:?}: the chip and the close question");
+        h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap().changed_at = 0.0;
+        compared(&mut h);
+        assert!(!crate::skill_tab::waiting(h.state()) && h.state().versions.working == 1 && off(&h).is_none(), "{theme:?}: kept and listed");
+    });
+}
+
+/// A skill's text the store refused is unsaved work, in the tab shown and in a parked one, though
+/// the model has nothing unsaved: Save still asks the host, and quitting asks about it instead of
+/// closing the window.
+#[test]
+fn a_refused_skill_text_is_unsaved_shown_or_parked() {
+    for parked in [false, true] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let first = h.state().active.unwrap();
+        assert!(!h.state().tab_unsaved(first), "{parked}: nothing unsaved yet");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let doc = h.state().canvas.skills.iter().find(|d| d.skill == skill).unwrap();
+        assert!(doc.refused.is_some() && !h.state().session.as_ref().unwrap().is_dirty(), "{parked}: refused, the model untouched");
+        if parked {
+            h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+            h.run_steps(3);
+            assert!(h.state().active != Some(first) && h.state().tabs[first].parked.is_some(), "parked");
+        }
+        assert!(h.state().tab_unsaved(first), "{parked}: the refused text is unsaved");
+        if !parked {
+            // Something to save, as the status bar says, so Save still goes to the host (AR-413).
+            h.state_mut().save();
+            assert_eq!(host.saves.lock().unwrap().len(), 1, "Save asks the host");
+            host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+            h.run_steps(2);
+        }
+        h.state_mut().request_quit();
+        h.run_steps(3);
+        assert!(!h.state().quit_confirmed(), "{parked}: the window stays");
+        assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{parked}: quitting asks about it");
+    }
+}
+
+/// The window title marks typed text the work doesn't have yet as its tab does, though the model
+/// has nothing unsaved: a description being typed, a skill's text before its typing pauses, and one
+/// the store refused.
+#[test]
+fn the_title_marks_text_typed_and_not_yet_kept() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let (clean, marked) = ("Commerce platform — Archforge", "• Commerce platform — Archforge");
+        assert_eq!(h.state().title(), clean, "{theme:?}: nothing unsaved");
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: skill, text: "Typing".into(), refused: false });
+        assert_eq!(h.state().title(), marked, "{theme:?}: a description being typed");
+        h.state_mut().panels.description = None;
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert_eq!(h.state().title(), marked, "{theme:?}: a skill's text before the pause");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let refused = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.refused.is_some());
+        assert!(refused && !h.state().session.as_ref().unwrap().is_dirty(), "{theme:?}: refused, the model untouched");
+        assert_eq!(h.state().title(), marked, "{theme:?}: a refused skill text");
+    });
+}
+
 /// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
 #[test]
 fn working_changes_filter_a_long_list() {
@@ -8822,6 +9091,121 @@ fn working_changes_filter_a_long_list() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(h.state().versions.filter.is_empty(), "{theme:?}");
+    });
+}
+
+/// A skill changed since the version is a group of its own, at the path Skills, and the Save dialog
+/// counts it as a skill after model elements and diagrams, in one, two or three parts.
+#[test]
+fn a_skill_is_listed_and_counted_on_its_own() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    use egui_kittest::kittest::Queryable;
+    let summary = |h: &Harness<'static, Shell>| painted(h).into_iter().find(|t| t.contains("changed since")).unwrap_or_default();
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        compared(&mut h);
+        let areas: Vec<_> = h.state().versions.changes.iter().map(|d| (d.class, d.area)).collect();
+        assert_eq!(areas, [(archforge_core::SKILL, Area::Skill)], "{theme:?}");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "SKILLS") && !texts.iter().any(|t| t == "MODEL ELEMENTS"), "{theme:?}: {texts:?}");
+        assert!(h.query_by_label("Naming, Skills, Added").is_some(), "{theme:?}: the row's path is Skills");
+        let row = h.state().versions.changes[0].clone();
+        click_id(&mut h, &format!("workspace.versions.change.{}.{}", row.id, row.class.0));
+        // Its card is read as an element's, and the centre says Skills too.
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !painted(&h).iter().any(|t| t == "Singular.") {
+            assert!(h.state().versions.element.is_some() && std::time::Instant::now() < until, "{theme:?}: the card: {:?}", painted(&h));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            h.run_steps(1);
+        }
+        let said = ["Naming, Skills, Added, selected", "Naming, Skills, Added"].map(|l| h.query_all_by_label(l).count());
+        assert_eq!(said, [1, 1], "{theme:?}: the row, selected, and the centre's title");
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 model element and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        let item = |n: u8, area| Difference {
+            id: archforge_mof::Uuid([n; 16]),
+            class: archforge_core::SKILL,
+            area,
+            kind: ChangeKind::Changed,
+            name: Some(format!("item{n}")),
+            path: vec![],
+        };
+        let found = [Area::Skill, Area::Model, Area::Diagram, Area::Model, Area::Model].into_iter().zip(1..).map(|(a, n)| item(n, a)).collect();
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok(found));
+        h.run_steps(2);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("3 model elements, 1 diagram and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+    });
+}
+
+/// Presses `key` and looks at every frame from the press on until `done`, at most 200; fails
+/// saying `what` when it never is, however late another thread answers meanwhile. The frame the key
+/// goes down in is looked at on its own: what the press starts there (an opened element's read) can
+/// answer by the next frame, the key's release, so a look after both is late on a loaded machine.
+fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
+    h.key_down(key);
+    h.step();
+    let pressed = done(h);
+    h.key_up(key);
+    for _ in 0..200 {
+        h.run_steps(1);
+        if pressed || done(h) {
+            return;
+        }
+    }
+    panic!("{what}: not within 200 frames");
+}
+
+/// ↑ and ↓ on a focused change move between the rows of all three groups, out of view too, each whole
+/// in the list as it comes, the first bringing its group's heading back; Enter opens the one reached.
+#[test]
+fn the_keys_reach_every_working_change() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    let item = |n: u8| Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: [Area::Model, Area::Diagram, Area::Skill][usize::from(n / 7)],
+        kind: ChangeKind::Changed,
+        name: Some(format!("item{n}")),
+        path: vec![],
+    };
+    let id = |n: u8| format!("workspace.versions.change.{}.{}", item(n).id, item(n).class.0);
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok((0..20).map(item).collect()));
+        h.run_steps(2);
+        assert!(!has_id(&h, &id(19)), "{theme:?}: the last change starts out of view");
+        let (field, history) = (rect_of(&h, "workspace.versions.filter").bottom(), rect_of(&h, "workspace.versions.history").top());
+        let whole = |h: &Harness<'static, Shell>, n: u8| {
+            let row = rect_of(h, &id(n));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&id(n)))) && row.top() >= field && row.bottom() <= history - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&id(0))));
+        h.run_steps(1);
+        for n in 1..20 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↓ reached change {n}");
+        }
+        for n in (0..19).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↑ reached change {n}");
+        }
+        let heading = text_boxes(&h).into_iter().find(|(t, _)| t == "MODEL ELEMENTS").map(|(_, b)| b.top());
+        assert!(heading.is_some_and(|top| top >= field), "{theme:?}: the heading came back with the first row: {heading:?}");
+        (0..16).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        // The element's own read finds nothing of these made-up rows and closes it again, so each
+        // frame from the press on is looked at, not the state some frames later.
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| o.row.id) == Some(item(16).id);
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the skill reached"));
     });
 }
 
@@ -9140,6 +9524,56 @@ fn a_next_page_belongs_to_the_list_it_was_asked_for() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(next.send(Ok(long_page(60, 61, false))).is_err(), "{theme:?}: with no host to read again too");
+    });
+}
+
+/// ↑ and ↓ on a focused version move between the rows, out of view too and past the divider over
+/// what is shared, each whole in the list as it comes; Enter opens the one reached. Behind a dialog
+/// the keys stay the dialog's.
+#[test]
+fn the_keys_reach_every_history_row() {
+    let row = |i: usize| format!("workspace.versions.row.v{i}");
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let mut page = long_page(0, 50, true);
+        page.versions.iter_mut().skip(20).for_each(|v| v.shared = true);
+        versions_answer(&mut h, &host, Ok(page));
+        assert!(!has_id(&h, &row(30)), "{theme:?}: out of view");
+        let (top, bottom) = (rect_of(&h, "workspace.versions.all").bottom(), rect_of(&h, "workspace.explorer.resize").bottom());
+        let whole = |h: &Harness<'static, Shell>, i: usize| {
+            let at = rect_of(h, &row(i));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(i)))) && at.top() >= top && at.bottom() <= bottom - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(0))));
+        h.run_steps(1);
+        for i in 1..=30 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↓ reached v{i}");
+        }
+        assert!(rect_of(&h, "workspace.versions.shared").bottom() <= rect_of(&h, &row(20)).top(), "{theme:?}: a divider over v20");
+        // Behind About, ↓ on the last row in view would scroll the list; egui lets go of a focus under
+        // a modal layer, and the shell holds the keys back too.
+        let before = rect_of(&h, &row(30));
+        crate::support::open(h.state_mut());
+        h.run_steps(1);
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(30)))), "{theme:?}: the row has the focus behind About");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(has_id(&h, &row(30)) && rect_of(&h, &row(30)) == before, "{theme:?}: behind About the keys are the dialog's");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert!(h.state().about.is_none() && rect_of(&h, &row(30)) == before, "{theme:?}: About closed");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(30))));
+        h.run_steps(1);
+        for i in (5..30).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↑ reached v{i}");
+        }
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(5))));
+        h.run_steps(1);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(whole(&h, 6), "{theme:?}: and with it gone they move again");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.selected.as_deref() == Some("v6");
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the one reached"));
     });
 }
 

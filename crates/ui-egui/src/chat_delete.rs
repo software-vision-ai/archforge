@@ -25,7 +25,8 @@
 //!   (a copy of the project) stays.
 //! - **A branch deleted** lets go of the folders of the conversations that were only on it, the
 //!   same way, once the project says the branch is gone: [`delete_branch`]. Any other answer keeps
-//!   them, as does no answer by the time Archforge quits.
+//!   them, as does no answer by the time Archforge quits. Every answer is told to the dialog that
+//!   asked (`crate::branch_ask`).
 
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -304,12 +305,16 @@ fn history_shown(shell: &Shell, project: &Path) -> bool {
     shell.project.as_ref().is_some_and(|p| p.path == project) && shell.chat_panel.view == View::History
 }
 
-/// Reads the history of `project` again when it is shown with its history open.
+/// Reads the history of `project` again when it is shown with its history open. Shown with a
+/// conversation instead, the list last read no longer holds and is dropped, so what an empty
+/// conversation says of the branch is read again ([`crate::chat_panel::showing`]).
 fn reread(shell: &mut Shell, project: &Path) {
     if history_shown(shell, project)
         && let Some(store) = shell.services.chats.clone()
     {
         shell.chat_panel.listing = Some(store.list(project));
+    } else if shell.project.as_ref().is_some_and(|p| p.path == project) {
+        shell.chat_panel.history = None;
     }
 }
 
@@ -344,19 +349,26 @@ fn forget(shell: &mut Shell, key: &str, after: Awaited) {
 }
 
 /// Asks the project to delete the branch `branch` of `project`; the folders of the conversations
-/// only on it go once the answer says it is gone, whichever project is shown by then. The screen
-/// that asks for this comes with AR-292.
-pub fn delete_branch(shell: &mut Shell, project: &Path, branch: &str) {
-    let Some(host) = shell.services.projects.clone() else { return };
-    shell.chats.branch_deletes.push(host.delete_branch(project, branch));
+/// only on it go once the answer says it is gone, whichever project is shown by then. Gives where
+/// the answer is told, which closes without one when the project stops answering or no host keeps
+/// projects.
+pub fn delete_branch(shell: &mut Shell, project: &Path, branch: &str) -> Receiver<Result<(), crate::BranchRefused>> {
+    let (tell, told) = std::sync::mpsc::channel();
+    if let Some(host) = shell.services.projects.clone() {
+        shell.chats.branch_deletes.push((host.delete_branch(project, branch), tell));
+    }
+    told
 }
 
-/// Takes the answers that have come to branch deletes. Only a branch seen gone names
-/// conversations; every other answer, or a project that stopped answering, lets go of nothing.
+/// Takes the answers that have come to branch deletes and tells each to whoever asked. Only a
+/// branch seen gone names conversations; every other answer, or a project that stopped answering,
+/// lets go of nothing.
 fn branch_answers(shell: &mut Shell) {
     let mut answers = Vec::new();
-    shell.chats.branch_deletes.retain(|rx| match rx.try_recv() {
+    shell.chats.branch_deletes.retain(|(rx, tell)| match rx.try_recv() {
         Ok(answer) => {
+            // The one who asked may be gone.
+            let _ = tell.send(answer.clone().map(drop).map_err(crate::BranchRefused::from));
             answers.push(answer);
             false
         }

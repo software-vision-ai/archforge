@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# Lets the tests change a session's request timeout between steps; never shipped.
+testing = []
+
 [dependencies]
 archforge-control.workspace = true
 archforge-secrets.workspace = true
@@ -18,6 +22,9 @@ zeroize.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
+
+[dev-dependencies]
+archforge-agents = { path = ".", features = ["testing"] }
 
 [lints]
 workspace = true

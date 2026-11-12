@@ -9,6 +9,7 @@
 pub mod actions;
 pub mod ai_agents;
 pub mod appearance;
+mod branch_ask;
 pub mod canvas;
 mod change_view;
 pub mod chat;
@@ -42,6 +43,7 @@ mod kinds;
 mod leaving;
 pub mod markdown;
 mod menu_bar;
+pub mod model_menu;
 pub mod model_words;
 pub mod new_project;
 mod notation_ui;
@@ -62,6 +64,7 @@ pub mod skill_tab;
 pub mod state;
 pub mod subtypes;
 pub mod support;
+mod switch_ask;
 pub mod theme;
 pub mod types;
 mod uml_bindings;
@@ -199,6 +202,19 @@ pub struct BranchSwitch {
     pub job: replace::Job,
 }
 
+/// One branch of a project, as the Branches section lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchEntry {
+    /// The name as stored, which a switch asks for, and as shown.
+    pub name: String,
+    pub shown: String,
+    pub current: bool,
+    /// It holds changes to the model not saved as a version; conversations don't count.
+    pub unsaved: bool,
+    /// When its latest version was saved, as the project stores it; none before the first.
+    pub latest: Option<String>,
+}
+
 pub trait ProjectHost: Send + Sync {
     /// Starts creating the project `name` in `folder` and returns at once; the host works on its
     /// own thread and sends one answer. The project created is open afterwards.
@@ -253,14 +269,16 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
-    /// The job that restores the version `commit` of the project at `project`, saved at `saved_at`
-    /// as the list says it, as a new version recorded as `by`, for [`Shell::begin_replacement`];
-    /// `repair` is what an opening does to a model. Its callbacks only hand the work over.
+    /// The job that restores the version `commit` of the project at `project` as a new version
+    /// recorded as `by`, for [`Shell::begin_replacement`]. `dates` are when the version was saved,
+    /// which names the new version, and when the restore was asked for, which names the version
+    /// unsaved work is kept as first, both as the list says them. `repair` is what an opening does
+    /// to a model. Its callbacks only hand the work over.
     fn restore_job(
         &self,
         _project: &std::path::Path,
         _commit: String,
-        _saved_at: String,
+        _dates: (String, String),
         _by: SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> replace::Job {
@@ -281,6 +299,50 @@ pub trait ProjectHost: Send + Sync {
     /// why it could not be asked for, in words for a person.
     fn begin_branch_switch(&self, _project: &std::path::Path, _branch: String) -> Result<BranchSwitch, String> {
         Err("this host keeps no branches".to_string())
+    }
+
+    /// Reads the branches of the project at `project`, by name, and whether more exist than were
+    /// listed, and returns at once, as [`ProjectHost::versions`] does. A host that keeps no
+    /// branches lists none.
+    fn branches(&self, _project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Ok((Vec::new(), false)));
+        rx
+    }
+
+    /// How the branch stored as `stored` is shown to a person: as it was typed, where it can be told.
+    fn branch_shown(&self, stored: &str) -> String {
+        stored.to_string()
+    }
+
+    /// The name stored for a branch named `typed`, or why `typed` can't name one, in words for a
+    /// person. A host that keeps no branches takes none.
+    fn branch_name(&self, _typed: &str) -> Result<String, String> {
+        Err("this host keeps no branches".to_string())
+    }
+
+    /// Starts making the branch stored as `name` of the open project at `path`, from its version
+    /// `start` or with none from its current work, without switching to it, and returns at once.
+    fn create_branch(&self, _path: &std::path::Path, _name: &str, _start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
+        rx
+    }
+
+    /// Starts renaming the branch stored as `from` of the open project at `path` to the name stored
+    /// as `to`, and returns at once.
+    fn rename_branch(&self, _path: &std::path::Path, _from: &str, _to: &str) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
+        rx
+    }
+
+    /// Reads what deleting the branch stored as `branch` of the open project at `path` would take
+    /// with it, and returns at once, as [`ProjectHost::versions`] does.
+    fn branch_counts(&self, _path: &std::path::Path, _branch: &str) -> std::sync::mpsc::Receiver<Result<BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err("this host keeps no branches".into()));
+        rx
     }
 
     /// Reads the model the version `commit` of the project at `project` holds, and returns at once.
@@ -369,6 +431,8 @@ pub struct VersionEntry {
     pub date: String,
     /// The nearest earlier version; none for the first.
     pub previous: Option<String>,
+    /// Whether `main` has it too; never on `main` itself. History marks where these start.
+    pub shared: bool,
 }
 
 /// A page of a project's versions, newest first.
@@ -582,6 +646,58 @@ impl std::fmt::Display for BranchNotDeleted {
 
 impl std::error::Error for BranchNotDeleted {}
 
+impl From<BranchNotDeleted> for BranchRefused {
+    /// A delete's answer as the branch dialog takes it, each reason as itself.
+    fn from(not: BranchNotDeleted) -> Self {
+        match not {
+            BranchNotDeleted::Unclear(why) => BranchRefused::Unclear(why),
+            BranchNotDeleted::Moved => BranchRefused::Moved,
+            BranchNotDeleted::Failed(why) => BranchRefused::Failed(why),
+        }
+    }
+}
+
+/// What deleting a branch would take with it, as its confirmation says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BranchCounts {
+    /// The versions no other branch has. Chat commits are not versions.
+    pub versions_only_here: u64,
+    /// The conversations on the branch, committed or not.
+    pub conversations: u64,
+    /// Whether it holds unsaved changes to the model, as the branch row's dot says.
+    pub unsaved: bool,
+}
+
+/// Why a branch was not made or renamed. Its `Display` text is English, for logs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchRefused {
+    /// A branch has that name, in any case.
+    Taken,
+    /// The last new branch is not cleaned up yet; the next opening removes it.
+    NotCleanedUp,
+    /// The project moved, closed or reopened after this was asked for: nothing was tried.
+    Moved,
+    /// Whether it happened could not be told; asking again settles it.
+    Unclear(String),
+    /// It was refused or failed; `why` is the host's own technical text.
+    Failed(String),
+}
+
+impl std::fmt::Display for BranchRefused {
+    /// The reason in English; a screen words each variant itself.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BranchRefused::Taken => f.write_str("a branch of that name exists"),
+            BranchRefused::NotCleanedUp => f.write_str("the last new branch is not cleaned up yet"),
+            BranchRefused::Moved => f.write_str("the project moved or closed after this was asked for"),
+            BranchRefused::Unclear(why) => write!(f, "whether it happened cannot be told: {why}"),
+            BranchRefused::Failed(why) => f.write_str(why),
+        }
+    }
+}
+
+impl std::error::Error for BranchRefused {}
+
 /// Why a project could not be created, in the kinds the dialog explains; a detail is the host's
 /// own technical text, shown small and untranslated under the translated sentence.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -739,6 +855,14 @@ pub struct Shell {
     /// Whether the person turned agent access on for this start. The queue above says nothing about
     /// it: the app attaches that on every start, for Chat's access too.
     pub(crate) own_agent_access: bool,
+}
+
+/// Whether `panels` and `canvas` hold text typed that the work doesn't have yet: a description
+/// draft, being typed or refused, or a skill's text not yet kept, waiting for its typing to pause
+/// or refused by the store. It is unsaved work like a change to the model, so nothing calls the
+/// work saved or unchanged, and a close or a quit asks, while it waits (AR-381).
+pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> bool {
+    panels::description_pending(panels) || !skill_tab::unkept(canvas).is_empty()
 }
 
 impl Shell {
@@ -900,19 +1024,19 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
-    /// written, or refused, among them (AR-186).
+    /// Whether tab `i`'s project holds changes not yet saved, text typed that it doesn't have yet
+    /// among them (`crate::typing_unkept`; AR-186, AR-381), whether it is shown or parked.
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
             if let Some(viewing) = &self.viewing {
                 return viewing.unsaved();
             }
-            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || self.typing_unkept();
         }
         self.tabs
             .get(i)
             .and_then(|t| t.parked.as_ref())
-            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || typing_unkept(&p.panels, &p.canvas))
     }
 
     /// The tab of the project at `path`.
@@ -1441,6 +1565,17 @@ impl Shell {
         self.start_save(Some((description, Some(reviewed))), SavedBy::Person(self.state.user_name.clone()));
     }
 
+    /// Whether the status bar says Saved: no change and no text typed that the work hasn't got, and
+    /// no save or write failed, which a save tries again. Save without a description then makes no
+    /// version, not even an untouched new project's first one.
+    fn nothing_to_save(&self) -> bool {
+        let write_failed = match (&self.services.projects, &self.project) {
+            (Some(host), Some(project)) => host.writing(&project.path).error.is_some(),
+            _ => false,
+        };
+        !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() && self.save_error.is_none() && !write_failed
+    }
+
     /// Starts a save recorded as `by`: under the description in `review` when there is one, and
     /// only if the model still stands at the revision `review` names when it names one.
     fn start_save(&mut self, review: Option<(String, Option<u64>)>, by: SavedBy) {
@@ -1459,6 +1594,10 @@ impl Shell {
             return;
         }
         let Some(revision) = self.written else { return };
+        // After the writes above, which made typed text a change: no version of nothing (AR-383).
+        if review.is_none() && self.nothing_to_save() {
+            return;
+        }
         // After the writes above: text still being typed counts as a move, since it was not reviewed.
         let moved = review.as_ref().and_then(|(_, reviewed)| *reviewed).is_some_and(|reviewed| current != Some(reviewed) || revision != reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
@@ -1633,6 +1772,11 @@ impl Shell {
         self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
+    /// Whether current work holds text typed that it doesn't have yet (`crate::typing_unkept`).
+    pub(crate) fn typing_unkept(&self) -> bool {
+        typing_unkept(&self.panels, &self.canvas)
+    }
+
     /// Whether File → Generate… can open: a project is open and the dialog is not.
     pub fn can_generate(&self) -> bool {
         self.session.is_some() && self.generate.is_none() && self.about.is_none() && self.versions.dialog.is_none()
@@ -1801,6 +1945,7 @@ impl Shell {
         // Deleted conversations: the project's answers, the toast's time, the folders let go.
         chat_delete::frame(self);
         save_version::frame(self);
+        branch_ask::frame(self, ctx);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
@@ -1870,9 +2015,10 @@ impl Shell {
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            // Unsaved changes mark the title with a dot before the name.
+            // Unsaved changes mark the title with a dot before the name, as they mark its tab: text
+            // typed and not yet kept among them.
             Some(p) => {
-                let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
+                let name = if self.shown_unsaved() { format!("• {}", p.name) } else { p.name.clone() };
                 crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])
             }
             None => "Archforge".to_string(),
@@ -1908,7 +2054,12 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Restore { .. }));
+            || matches!(
+                self.ask,
+                Some(
+                    close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. } | close_ask::Ask::Branch { .. }
+                )
+            );
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

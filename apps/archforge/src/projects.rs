@@ -32,14 +32,14 @@ use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
 use archforge_notations::differences::{ClassifyError, Difference};
 use archforge_project::{
-    Author, BranchCounts, BranchCreated, BranchCreationError, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem, Hooks, ModelSchema, Project,
-    RenameBranchError, SafeBranch, VersionReader, check_description,
+    Author, BRANCH_NAME_CHARS, BranchCreated, BranchCreationError, BranchNameProblem, DESCRIPTION_CHARS, DeleteBranchError, DescriptionProblem,
+    Hooks, MAX_BRANCHES, ModelSchema, Project, RenameBranchError, SafeBranch, VersionReader, check_description,
 };
 use archforge_ui_egui::i18n::{fmt, tr};
 use archforge_ui_egui::replace::{Job as ReplacementJob, JobAnswer, JobFailure};
 use archforge_ui_egui::{
-    BranchNotDeleted, BranchNotice, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, VersionAfter, VersionEntry,
-    VersionRead, VersionReadError, VersionsPage, Writing,
+    BranchCounts, BranchEntry, BranchNotDeleted, BranchNotice, BranchRefused, BranchSwitch, CreateError, Opened, ProjectHost, SaveError, Saved,
+    SavedBy, VersionAfter, VersionEntry, VersionRead, VersionReadError, VersionsPage, Writing,
 };
 
 /// How long the writer waits after a change for the next one before it writes.
@@ -123,6 +123,8 @@ pub struct RestoreRequest {
     pub commit: String,
     /// When the version was saved, as the list says it, for the new version's message.
     pub saved_at: String,
+    /// When the restore was asked for, as the list says it, for the name unsaved work is kept under.
+    pub before_at: String,
     pub by: SavedBy,
     /// What an opening does to a model, applied to both sides of the comparison.
     pub repair: fn(&mut archforge_mof::Store),
@@ -567,29 +569,29 @@ impl Projects {
     }
 
     /// Starts making the branch `name` at the version `start` on the writer, and returns at once;
-    /// see [`create_branch`]. The screen that asks for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// see [`create_branch`].
     pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, Some(start))
     }
 
-    /// Starts making the branch `name` from current work on the writer, and returns at once. The
-    /// screen that asks for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Starts making the branch `name` from current work on the writer, and returns at once.
     pub fn create_branch_from_work(&self, project: &Path, name: SafeBranch) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, None)
     }
 
     /// Reads, off the writer, what deleting `branch` would take with it, for its confirmation. An
-    /// answer from before a switch is dropped, as any read of the versions is. The screen that asks
-    /// for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// answer from before a switch is dropped, as any read of the versions is.
     pub fn branch_counts(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<BranchCounts, String>> {
-        self.on_a_reader(project, move |reader| reader.branch_counts(&branch).map_err(|e| e.to_string()))
+        let counts = |c: archforge_project::BranchCounts| BranchCounts {
+            versions_only_here: c.versions_only_here,
+            conversations: c.conversations,
+            unsaved: c.unsaved,
+        };
+        self.on_a_reader(project, move |reader| reader.branch_counts(&branch).map(counts).map_err(|e| e.to_string()))
     }
 
     /// Starts deleting `branch` on the writer, and returns at once; see [`Project::delete_branch`].
-    /// The answer is the conversations whose folders can go. The screen comes with AR-292.
+    /// The answer is the conversations whose folders can go. Delete… on a branch row asks for it.
     pub fn delete_branch(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<Vec<Uuid>, DeleteJobError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
@@ -600,8 +602,7 @@ impl Projects {
     }
 
     /// Starts renaming the branch `from` to `to` on the writer, and returns at once; see
-    /// [`Project::rename_branch`]. The screen that asks for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// [`Project::rename_branch`].
     pub fn rename_branch(&self, project: &Path, from: SafeBranch, to: SafeBranch) -> Receiver<Result<(), RenameJobError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
@@ -894,31 +895,79 @@ impl ProjectHost for Projects {
         Ok(BranchSwitch { read, unsaved, job: moving.into_job() })
     }
 
+    /// As it was typed where Archforge made it.
+    fn branch_shown(&self, stored: &str) -> String {
+        SafeBranch::found(stored).map_or_else(|_| stored.to_string(), |b| b.shown())
+    }
+
     /// Worded on the wait's own thread in the language shown when the job runs.
-    fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
-        self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
+    fn restore_job(
+        &self,
+        project: &Path,
+        commit: String,
+        (saved_at, before_at): (String, String),
+        by: SavedBy,
+        repair: fn(&mut archforge_mof::Store),
+    ) -> ReplacementJob {
+        self.restore_job_within(project, RestoreRequest { commit, saved_at, before_at, by, repair }, RESTORE_LIMIT)
+    }
+
+    /// The name typed, stored as the project stores it; a refusal worded as the dialog says it.
+    fn branch_name(&self, typed: &str) -> Result<String, String> {
+        SafeBranch::typed(typed).map(|b| b.stored().to_string()).map_err(|problem| match problem {
+            BranchNameProblem::Empty => tr("Enter a name."),
+            BranchNameProblem::TooLong { .. } => fmt(&tr("At most {n} characters."), &[("n", &BRANCH_NAME_CHARS.to_string())]),
+            BranchNameProblem::NotOneLine => tr("A name has to be one line."),
+            BranchNameProblem::EdgeSpace => tr("A name can't start or end with a space."),
+        })
+    }
+
+    /// The writer's creation at the version `start`, or with none from current work, its answer put
+    /// as the window takes it. A branch made whose record stays is made.
+    fn create_branch(&self, path: &Path, name: &str, start: Option<&str>) -> Receiver<Result<(), BranchRefused>> {
+        let made = |name| match start {
+            Some(start) => Projects::create_branch(self, path, name, start.to_string()),
+            None => self.create_branch_from_work(path, name),
+        };
+        match SafeBranch::found(name) {
+            Ok(name) => branch_answer(made(name), branch_made, not_made),
+            Err(e) => refused_at_once(e.to_string()),
+        }
+    }
+
+    /// The writer's rename, its answer put as the window takes it.
+    fn rename_branch(&self, path: &Path, from: &str, to: &str) -> Receiver<Result<(), BranchRefused>> {
+        match (SafeBranch::found(from), SafeBranch::found(to)) {
+            (Ok(from), Ok(to)) => branch_answer(Projects::rename_branch(self, path, from, to), |()| {}, not_renamed),
+            (Err(e), _) | (_, Err(e)) => refused_at_once(e.to_string()),
+        }
+    }
+
+    /// Read off the writer, as [`Projects::branch_counts`] is.
+    fn branch_counts(&self, path: &Path, branch: &str) -> Receiver<Result<BranchCounts, String>> {
+        match SafeBranch::found(branch) {
+            Ok(branch) => Projects::branch_counts(self, path, branch),
+            Err(e) => {
+                let (tx, rx) = channel();
+                let _ = tx.send(Err(e.to_string()));
+                rx
+            }
+        }
     }
 
     /// The writer's delete, its answer put as the window takes it, on a thread of its own as only
     /// the writer can answer it.
     fn delete_branch(&self, path: &Path, name: &str) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
-        let (tx, rx) = channel();
-        let job = match SafeBranch::found(name) {
-            Ok(branch) => Projects::delete_branch(self, path, branch),
+        match SafeBranch::found(name) {
+            Ok(branch) => deleted_answer(Projects::delete_branch(self, path, branch), |wait| {
+                std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait).map(drop)
+            }),
             Err(e) => {
+                let (tx, rx) = channel();
                 let _ = tx.send(Err(BranchNotDeleted::Failed(e.to_string())));
-                return rx;
+                rx
             }
-        };
-        let reply = tx.clone();
-        let wait = move || {
-            let answer = job.recv().unwrap_or_else(|e| Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
-            let _ = reply.send(answer.map_err(not_deleted));
-        };
-        if let Err(e) = std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait) {
-            let _ = tx.send(Err(BranchNotDeleted::Failed(format!("no thread could wait for the answer: {e}"))));
         }
-        rx
     }
 
     /// Opens the project on `main`, with no branch stored for it.
@@ -979,6 +1028,12 @@ impl ProjectHost for Projects {
     /// A page of the project's versions, read on a thread of its own ([`Projects::on_a_reader`]).
     fn versions(&self, project: &Path, after: Option<String>, limit: usize) -> Receiver<Result<VersionsPage, String>> {
         self.on_a_reader(project, move |reader| reader.versions(after.as_deref(), limit).map(page_of).map_err(|e| e.to_string()))
+    }
+
+    /// The project's first [`MAX_BRANCHES`] branches, read on a thread of its own
+    /// ([`Projects::on_a_reader`]); see [`branch_entries`].
+    fn branches(&self, project: &Path) -> Receiver<Result<(Vec<BranchEntry>, bool), String>> {
+        self.on_a_reader(project, |reader| branch_entries(reader, MAX_BRANCHES))
     }
 
     /// The model a version of the project holds, read on a thread of its own ([`Projects::on_a_reader`]).
@@ -1877,10 +1932,7 @@ fn stop_note(error: &RestoreError) -> String {
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
     let error = match answer {
         Ok(Restored::Version { .. }) => return Ok(()),
-        Ok(Restored::Same { kept_work: false }) => return Err(JobFailure::Failed(tr("This version is the same as your current work."))),
-        Ok(Restored::Same { kept_work: true }) => {
-            return Err(JobFailure::WorkSaved(tr("This version is the same as your current work. Your unsaved work was kept as a version.")));
-        }
+        Ok(Restored::Same { kept_work }) => return Err(JobFailure::Same { work_saved: kept_work }),
         Err(error) => error,
     };
     log::warn!("{}", stop_note(&error));
@@ -1934,6 +1986,11 @@ fn restored_message(saved_at: &str) -> String {
     format!("Restored the version of {saved_at}")
 }
 
+/// The message of the version unsaved work is kept as before a restore asked for at `before_at`.
+fn before_message(before_at: &str) -> String {
+    format!("Before restoring {before_at}")
+}
+
 /// How a restore's writing stopped, and what is left to do about it.
 enum Stop {
     /// The model did not change.
@@ -1955,7 +2012,7 @@ fn replace(
 ) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
-    let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
+    let kept_work = match save_step(inner, project, &before_message(&request.before_at), &author) {
         Ok(saved) => matches!(saved, archforge_project::Saved::Version { .. }),
         Err(f) => match f.version {
             Version(_) => true,
@@ -2186,6 +2243,85 @@ fn not_deleted(error: DeleteJobError) -> BranchNotDeleted {
     }
 }
 
+/// Waits for the writer's answer `job` to a delete on what `spawn` starts, as only the writer can
+/// answer it, and gives it as the window takes it. A wait that can't start leaves the delete on the
+/// writer, where it may still run, and a writer that stops without answering may have deleted the
+/// branch already: in either case whether the branch went can't be told.
+fn deleted_answer(
+    job: Receiver<Result<Vec<Uuid>, DeleteJobError>>,
+    spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
+) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
+    let (tx, rx) = channel();
+    let reply = tx.clone();
+    let wait = move || {
+        let answer = match job.recv() {
+            Ok(answer) => answer.map_err(not_deleted),
+            Err(e) => Err(BranchNotDeleted::Unclear(format!("the writer stopped without answering: {e}"))),
+        };
+        let _ = reply.send(answer);
+    };
+    if let Err(e) = spawn(Box::new(wait)) {
+        let _ = tx.send(Err(BranchNotDeleted::Unclear(format!("no thread could wait for the answer: {e}"))));
+    }
+    rx
+}
+
+/// Waits on a thread of its own for the writer's answer `job`, as only the writer can answer it,
+/// and gives it as the window takes it: `kept` takes what a success holds, `refused` a refusal. A
+/// writer that stopped without answering may have done the job, so that can't be told.
+fn branch_answer<T: Send + 'static, E: Send + 'static>(
+    job: Receiver<Result<T, E>>,
+    kept: fn(T),
+    refused: fn(E) -> BranchRefused,
+) -> Receiver<Result<(), BranchRefused>> {
+    let (tx, rx) = channel();
+    let reply = tx.clone();
+    let wait = move || {
+        let answer = job.recv().map_err(|e| BranchRefused::Unclear(format!("the writer stopped: {e}")));
+        let _ = reply.send(answer.and_then(|a| a.map(kept).map_err(refused)));
+    };
+    if let Err(e) = std::thread::Builder::new().name("archforge-branch-answer".into()).spawn(wait) {
+        // The job is on the writer already, so it may still run.
+        let _ = tx.send(Err(BranchRefused::Unclear(format!("no thread could wait for the answer: {e}"))));
+    }
+    rx
+}
+
+/// An answer, already given, that nothing was tried, for `why`.
+fn refused_at_once(why: String) -> Receiver<Result<(), BranchRefused>> {
+    let (tx, rx) = channel();
+    let _ = tx.send(Err(BranchRefused::Failed(why)));
+    rx
+}
+
+/// A branch made, as the window takes it; one whose record stays is said in the log.
+fn branch_made(created: BranchCreated) {
+    if let BranchCreated::RecordStays { why } = created {
+        log::warn!("a new branch was made, but its creation record stays until the next opening: {why}");
+    }
+}
+
+/// The writer's reason for making no branch, as the window takes it.
+fn not_made(error: CreateBranchError) -> BranchRefused {
+    match error {
+        CreateBranchError::Creation(BranchCreationError::NameTaken) => BranchRefused::Taken,
+        CreateBranchError::Creation(BranchCreationError::RecordRemains) => BranchRefused::NotCleanedUp,
+        CreateBranchError::BranchChanged | CreateBranchError::Reopened | CreateBranchError::NotOpen => BranchRefused::Moved,
+        other => BranchRefused::Failed(other.to_string()),
+    }
+}
+
+/// The writer's reason for renaming no branch, as the window takes it.
+fn not_renamed(error: RenameJobError) -> BranchRefused {
+    match error {
+        RenameJobError::Rename(RenameBranchError::NameTaken) => BranchRefused::Taken,
+        RenameJobError::Rename(RenameBranchError::RecordRemains) => BranchRefused::NotCleanedUp,
+        RenameJobError::Rename(RenameBranchError::CannotTell(why)) => BranchRefused::Unclear(why),
+        RenameJobError::BranchChanged | RenameJobError::Reopened | RenameJobError::NotOpen => BranchRefused::Moved,
+        other => BranchRefused::Failed(other.to_string()),
+    }
+}
+
 /// Commits what of the conversations waits.
 fn keep_conversations(inner: &Inner, project: &Project) -> Result<bool, archforge_project::Error> {
     #[cfg(test)]
@@ -2298,6 +2434,22 @@ fn version_read_error(e: archforge_project::Error) -> VersionReadError {
     }
 }
 
+/// The branches `reader` lists, at most `max`, each with when its latest version was saved, and
+/// whether more exist. A name that can't be used has no versions to read.
+fn branch_entries(reader: &VersionReader, max: usize) -> Result<(Vec<BranchEntry>, bool), String> {
+    let found = reader.branches(max).map_err(|e| e.to_string())?;
+    let entry = |b: archforge_project::ListedBranch| {
+        let latest = match &b.usable {
+            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
+            Err(_) => None,
+        };
+        // Changes that can't be looked at may be the model's.
+        let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
+        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
+    };
+    Ok((found.listed.into_iter().map(entry).collect::<Result<_, String>>()?, found.cut))
+}
+
 /// A page of versions in the shell's terms.
 fn page_of(page: archforge_project::Versions) -> VersionsPage {
     let versions = page.versions.into_iter().map(|v| VersionEntry {
@@ -2307,6 +2459,7 @@ fn page_of(page: archforge_project::Versions) -> VersionsPage {
         by_agent: v.by_agent,
         date: v.date,
         previous: v.previous,
+        shared: v.shared,
     });
     VersionsPage { versions: versions.collect(), more: page.more }
 }
@@ -3324,6 +3477,34 @@ mod tests {
         assert_eq!(read.recv_timeout(Duration::from_secs(60)).unwrap(), Err("the branch changed while it was on its way".to_string()));
     }
 
+    /// Conversations are numbered per branch: a new branch lists none and starts at Chat 1, and the
+    /// branch left keeps its own list and numbering.
+    #[test]
+    fn conversations_are_listed_and_numbered_per_branch() {
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat_store::{Answer, ChatStore, Write};
+        let sandbox = Sandbox::new(Some(Box::new(archforge_secrets::MemoryStore::new())));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let chats = crate::chats::Chats::new(host.clone(), sandbox.agents.clone().unwrap());
+        let made = |n: u8| {
+            let chat = archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+            let create =
+                Write::Create { chat, title: "T".into(), provider: Provider::Claude, model: "m".into(), skip: Vec::new(), now: 1_762_437_731 };
+            match chats.write(&path, create).recv_timeout(Duration::from_secs(60)).unwrap() {
+                Ok(Answer::Created { origin }) => origin,
+                other => panic!("not created: {other:?}"),
+            }
+        };
+        let listed = || chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap().len();
+        assert_eq!((made(1), made(2)), ("Chat 1".to_string(), "Chat 2".to_string()));
+        assert_eq!(host.create_branch_from_work(&path, branch("fresh")).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(BranchCreated::Listed));
+        assert!(matches!(switch_to(host, &path, "fresh"), Ok(Switched::Moved(_))));
+        assert_eq!(listed(), 0, "a new branch starts with none");
+        assert_eq!(made(3), "Chat 1", "and starts its numbering again");
+        assert!(matches!(switch_to(host, &path, "main"), Ok(Switched::Moved(_))));
+        assert_eq!((listed(), made(4)), (2, "Chat 3".to_string()), "main keeps its own");
+    }
+
     /// An answer read across a switch is dropped; the same read with no switch answers.
     #[test]
     fn a_read_across_a_switch_gives_no_answer() {
@@ -3413,6 +3594,9 @@ mod tests {
     /// The time the versions restored in these tests were saved at.
     const SAVED_AT: &str = "2026-11-08T14:02:11Z";
 
+    /// When the restores in these tests were asked for, as the list says it.
+    const BEFORE_AT: &str = "8 Nov 15:42";
+
     /// Restores `commit` and gives the answer.
     fn restore_of(host: &Projects, path: &Path, commit: &str) -> Result<Restored, RestoreError> {
         host.restore_version(path, restoring(commit)).recv_timeout(Duration::from_secs(60)).expect("the restore answers")
@@ -3420,7 +3604,8 @@ mod tests {
 
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
-        RestoreRequest { commit: commit.into(), saved_at: SAVED_AT.into(), by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
+        let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -3451,7 +3636,7 @@ mod tests {
         assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: true });
         let messages = sandbox.messages();
         assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
-        assert!(messages[1].starts_with("Before restoring 20"), "{messages:?}");
+        assert_eq!(messages[1], format!("Before restoring {BEFORE_AT}"), "named by the date the list shows");
         assert_eq!(work(host), model("a"));
         assert!(!unsaved(host));
         let before = version(host, 1);
@@ -3791,8 +3976,8 @@ mod tests {
     fn a_restores_answer_becomes_the_jobs() {
         let not_restored = |kept_work, written_back| RestoreError::NotRestored { why: "x".into(), kept_work, written_back };
         assert!(matches!(job_answer(Ok(Restored::Version { kept_work: true })), Ok(())));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Failed(_))));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Same { work_saved: false })));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::Same { work_saved: true })));
         assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: true })), Err(JobFailure::Unclear)));
         assert!(matches!(job_answer(Err(not_restored(true, true))), Err(JobFailure::WorkSaved(_))));
         assert!(matches!(job_answer(Err(not_restored(false, true))), Err(JobFailure::Failed(_))));
@@ -3844,17 +4029,13 @@ mod tests {
         use archforge_ui_egui::i18n::set_language;
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let same = version(host, 0);
-        let english = |_: ()| job_answer(Ok(Restored::Same { kept_work: false }));
-        let word = |answer: Result<(), JobFailure>| match answer {
-            Err(JobFailure::Failed(text)) => text,
-            _ => panic!("a failure"),
-        };
+        let stale = job_of(host, &path, &version(host, 1));
+        switched(&host.inner, &path);
         set_language("en");
-        let in_english = word(english(()));
+        let in_english = not_going_ahead();
         set_language("de");
-        let in_german = word(english(()));
-        let told = word(ran(&(job_of(host, &path, &same).run)()));
+        let in_german = not_going_ahead();
+        let Err(JobFailure::Failed(told)) = ran(&(stale.run)()) else { panic!("a failure") };
         set_language("en");
         assert_ne!(in_german, in_english, "the sentence is translated");
         assert_eq!(told, in_german);
@@ -3872,7 +4053,14 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), SAVED_AT.into(), nobody(), archforge_ui_egui::editing::fit_tables);
+        let fresh = ProjectHost::restore_job(
+            &**host,
+            &path,
+            old.clone(),
+            (SAVED_AT.into(), BEFORE_AT.into()),
+            nobody(),
+            archforge_ui_egui::editing::fit_tables,
+        );
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));
@@ -4806,6 +4994,70 @@ mod tests {
         assert!(!path.join(".creating-branch").exists());
     }
 
+    /// The window's side: a typed name is stored as the project stores it or refused in the
+    /// dialog's words, translated; a creation from current work and a rename answer as the window
+    /// takes them, as does one at a version, which leaves current work behind; a name taken in
+    /// another case, a record that remains, a project not open and a name outside the safe set each
+    /// by its own kind; the counts are the branch's.
+    #[test]
+    fn the_window_names_makes_renames_and_counts_branches() {
+        let (sandbox, path) = branched();
+        let host: &dyn ProjectHost = sandbox.host.as_ref();
+        assert_eq!(host.branch_name("fresh").as_deref(), Ok("fresh"));
+        let typed = host.branch_name("Try it").unwrap();
+        assert_eq!((typed.as_str() != "Try it", host.branch_shown(&typed).as_str()), (true, "Try it"));
+        archforge_ui_egui::i18n::set_language("de");
+        let too_long = "x".repeat(61);
+        let at_most = fmt(&tr("At most {n} characters."), &[("n", "60")]);
+        assert!(at_most.contains("60") && at_most != "At most 60 characters." && host.branch_name(&too_long) == Err(at_most));
+        let refusals = [("  ", "Enter a name."), ("a\nb", "A name has to be one line."), (" a", "A name can't start or end with a space.")];
+        for (text, words) in refusals {
+            assert!(tr(words) != words && host.branch_name(text) == Err(tr(words)), "{text:?}");
+        }
+        archforge_ui_egui::i18n::set_language("en");
+        let answer = |asked: Receiver<_>| asked.recv_timeout(Duration::from_secs(60)).expect("it answers");
+        let counts = BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false };
+        let read = |name: &str| host.branch_counts(&path, name).recv_timeout(Duration::from_secs(60)).expect("it answers");
+        assert_eq!((read("main"), read("odd+name").is_err()), (Ok(counts), true));
+        assert_eq!(answer(host.create_branch(&path, &typed, None)), Ok(()));
+        assert!(has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
+        // At a version, the branch starts there and leaves the unsaved work behind.
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let (start, saved) = {
+            let open = lock(&sandbox.host.inner.open);
+            (open[0].head_of("main").unwrap(), open[0].read_model(&schema).unwrap())
+        };
+        host.write(&path, model("work"));
+        assert_eq!(sandbox.host.flush_for_test(&path), Ok(()));
+        assert_eq!(answer(host.create_branch(&path, "at-version", Some(&start))), Ok(()));
+        let at = lock(&sandbox.host.inner.open)[0].check_branch(&branch("at-version"), &schema).unwrap();
+        assert!(at == saved && at != model("work"), "it holds the version, and current work stayed behind");
+        assert_eq!(answer(host.create_branch(&path, "ELSEWHERE", None)), Err(BranchRefused::Taken));
+        assert_eq!(answer(host.create_branch(&sandbox.base.join("nowhere"), "lost", None)), Err(BranchRefused::Moved));
+        let unsafe_name = BranchRefused::Failed(SafeBranch::found("odd+name").unwrap_err().to_string());
+        assert_eq!(answer(host.create_branch(&path, "odd+name", None)), Err(unsafe_name.clone()));
+        assert_eq!(answer(host.rename_branch(&path, &typed, "renamed")), Ok(()));
+        assert!(has_branch(&lock(&sandbox.host.inner.open)[0], "renamed") && !has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
+        assert_eq!(answer(host.rename_branch(&path, "renamed", "MAIN")), Err(BranchRefused::Taken));
+        assert_eq!(answer(host.rename_branch(&sandbox.base.join("nowhere"), "renamed", "x")), Err(BranchRefused::Moved));
+        assert_eq!(answer(host.rename_branch(&path, "renamed", "odd+name")), Err(unsafe_name));
+        let main = BranchRefused::Failed(RenameJobError::Rename(RenameBranchError::Main).to_string());
+        assert_eq!(answer(host.rename_branch(&path, "main", "other")), Err(main));
+        stopped_creation(&path, "held", "main", &start);
+        assert_eq!(answer(host.create_branch(&path, "another", None)), Err(BranchRefused::NotCleanedUp));
+        assert_eq!(answer(host.rename_branch(&path, "renamed", "held")), Err(BranchRefused::NotCleanedUp));
+        // A branch whose record stays is made; a writer that stopped without answering, or a rename
+        // whose reply was lost, may have done it.
+        let (kept, recorded) = channel::<Result<BranchCreated, CreateBranchError>>();
+        kept.send(Ok(BranchCreated::RecordStays { why: "a test".into() })).unwrap();
+        assert_eq!(answer(branch_answer(recorded, branch_made, not_made)), Ok(()));
+        let (lost, stopped) = channel::<Result<(), RenameJobError>>();
+        drop(lost);
+        assert!(matches!(answer(branch_answer(stopped, |()| {}, not_renamed)), Err(BranchRefused::Unclear(_))));
+        let unclear = RenameJobError::Rename(RenameBranchError::CannotTell("lost".into()));
+        assert_eq!(not_renamed(unclear), BranchRefused::Unclear("lost".into()));
+    }
+
     /// A rename moves the branch with what it holds, and a branch in use stays current under its
     /// new name, with what was waiting and no change of generation.
     #[test]
@@ -5011,6 +5263,31 @@ mod tests {
         assert_eq!(saved(&sandbox.host, &path), Ok(true));
         let counts = sandbox.host.branch_counts(&path, branch("main")).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
         assert_eq!(counts, BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false });
+    }
+
+    /// Each branch comes with when its own latest version was saved, a later chat commit being no
+    /// version, and the one in use is marked; a name outside the safe set has no versions read, and
+    /// a list cut short says so.
+    #[test]
+    fn each_branch_is_listed_with_its_latest_version() {
+        let (sandbox, path) = branched();
+        let host = &sandbox.host;
+        let on_it = |name: &str, statement: &str| lock(&host.inner.open)[0].run_on_branch(name, statement).unwrap();
+        let commit = |author: &str, date: &str| {
+            on_it("elsewhere", &format!("CALL DOLT_COMMIT('--allow-empty', '-m', 'x', '--author', '{author}', '--date', '{date}')"));
+        };
+        commit("A Person <a@person>", "2030-01-02T03:04:05");
+        commit(archforge_project::CHAT_AUTHOR, "2031-01-01T00:00:00");
+        on_it("main", "CALL DOLT_BRANCH('odd+name')");
+        let (listed, cut) = host.branches(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+        let reader = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
+        let (two, two_cut) = branch_entries(&reader, 2).unwrap();
+        assert!(!cut && two.len() == 2 && two_cut, "only a list cut short says so");
+        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].date.clone();
+        let seen: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.current, b.latest.as_deref())).collect();
+        let main = ("main", true, Some(main_latest.as_str()));
+        assert!(seen.contains(&("elsewhere", false, Some("2030-01-02T03:04:05Z"))) && seen.contains(&main), "{seen:?}");
+        assert!(seen.contains(&("odd+name", false, None)), "{seen:?}");
     }
 
     /// A chat seeded on `name`, a branch of its own, with the project back on `main`.
@@ -5279,6 +5556,27 @@ mod tests {
             assert_eq!(answer(host.delete_branch(&path, branch("scripted"))), Ok(Vec::new()));
             assert_eq!(answer(host.delete_branch(&path, branch("main"))), Err(DeleteJobError::Delete(DeleteBranchError::Main)));
         }
+    }
+
+    /// A delete whose wait can't start may still run on the writer, so it is unclear, even when
+    /// the writer has answered already; so is one whose writer stops without answering. A wait
+    /// that starts gives the writer's answer as it is.
+    #[test]
+    fn a_delete_nobody_sees_answered_is_unclear() {
+        let spawn = |wait: Box<dyn FnOnce() + Send>| std::thread::Builder::new().spawn(wait).map(drop);
+        let answered = |reply: Option<Result<Vec<Uuid>, DeleteJobError>>, waits: bool| {
+            let (tx, job) = channel();
+            if let Some(reply) = reply {
+                let _ = tx.send(reply);
+            }
+            drop(tx);
+            let asked = if waits { deleted_answer(job, spawn) } else { deleted_answer(job, |_| Err(std::io::Error::other("no threads left"))) };
+            asked.recv_timeout(Duration::from_secs(60)).expect("it answers")
+        };
+        assert!(matches!(answered(Some(Ok(Vec::new())), false), Err(BranchNotDeleted::Unclear(_))), "no wait");
+        assert!(matches!(answered(None, true), Err(BranchNotDeleted::Unclear(_))), "the writer stopped");
+        assert_eq!(answered(Some(Ok(Vec::new())), true), Ok(Vec::new()), "answered");
+        assert_eq!(answered(Some(Err(DeleteJobError::NotOpen)), true), Err(BranchNotDeleted::Moved), "refused");
     }
 
     /// The window is told of conversations only for a branch seen gone: not for a job's refusal,

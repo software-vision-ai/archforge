@@ -1303,7 +1303,7 @@ fn emit_slabs(b: &Built) -> String {
         .filter(|(_, c)| !c.is_abstract)
         .map(|(i, c)| (ClassId::new(m.index, i as u16), plural(&snake(&c.name)), format!("{}Obj", pascal(&c.name))))
         .collect();
-    let _ = writeln!(s, "/// One typed slab per concrete metaclass.\n#[derive(Debug, Default)]\npub struct {name} {{");
+    let _ = writeln!(s, "/// One typed slab per concrete metaclass.\n#[derive(Debug, Default, Clone)]\npub struct {name} {{");
     for (_, f, t) in &concrete {
         let _ = writeln!(s, "    pub {f}: Vec<{t}>,");
     }
@@ -1339,7 +1339,10 @@ fn emit_slabs(b: &Built) -> String {
     for (_, f, t) in &concrete {
         let _ = writeln!(s, "            .saturating_add(self.{f}.capacity().saturating_mul(size_of::<{t}>()))");
     }
-    let _ = writeln!(s, "    }}\n}}");
+    let _ = writeln!(
+        s,
+        "    }}\n    /// Every slab copied, the objects' text shared.\n    fn duplicate(&self) -> Box<dyn Slabs> {{\n        Box::new(self.clone())\n    }}\n}}"
+    );
     s
 }
 

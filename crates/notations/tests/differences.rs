@@ -3,8 +3,8 @@
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
-    Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
-    classified, diagram_sides, element_sides,
+    Apart, Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
+    Placing, classified, diagram_sides, element_sides,
 };
 use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
@@ -99,6 +99,21 @@ fn the_area_comes_from_the_table_and_never_from_a_name() {
     assert_eq!(about(&found, &node).area, Area::Diagram);
 }
 
+/// A skill is an area of its own, added or changed in its triggers' list alone, never the model's.
+#[test]
+fn a_skill_is_an_area_of_its_own() {
+    let (mut s, ..) = project();
+    let before = state(&s);
+    let skill = run(&mut s, "skill.add", json!({ "name": "Naming", "body": "Singular.", "triggers": ["naming"] }));
+    let added = differences(&before, &state(&s));
+    assert_eq!((about(&added, &skill).kind, about(&added, &skill).area), (ChangeKind::Added, Area::Skill));
+    let before = state(&s);
+    let set = json!({ "skill": skill, "name": "Naming", "description": "", "body": "Singular.", "triggers": ["naming", "export"], "dialect": "", "applies_to": "", "type_pattern": "" });
+    run(&mut s, "skill.set", set);
+    let found = differences(&before, &state(&s));
+    assert_eq!(found.iter().map(|d| (d.class, d.kind, d.area)).collect::<Vec<_>>(), [(archforge_core::SKILL, ChangeKind::Changed, Area::Skill)]);
+}
+
 /// A child that came is listed once, not also as a change to its owner; a real order change is the owner's.
 #[test]
 fn an_owner_is_changed_only_by_what_its_list_really_did() {
@@ -168,7 +183,7 @@ fn field(seen: &ElementSides, prop: PropId) -> &CardField {
 
 /// A card to expect.
 fn card(class: ClassId, name: &str) -> Option<ElementCard> {
-    Some(ElementCard { class, name: Some(name.to_string()) })
+    Some(ElementCard { class, name: Some(name.to_string()), made: false })
 }
 
 /// The name of an enumeration value of `prop`, through the metamodel the view will word it from.
@@ -314,6 +329,51 @@ fn members_are_grouped_and_marked_on_their_own_side() {
     assert_eq!(was.last().unwrap().1, [(said("shop"), None)], "the same owner is plain");
 }
 
+/// What `id` is connected to between the two states.
+fn related(before: &Rows, after: &Rows, id: &str) -> Vec<Uuid> {
+    sides(before, after, id).lists.related.clone()
+}
+
+/// The id written as `text`.
+fn uuid(text: &str) -> Uuid {
+    Uuid::parse(text).unwrap()
+}
+
+/// A class is connected to its owner and to what its members refer to, not to its members; the
+/// type is connected back to the member that uses it, and a link only one side has still counts.
+#[test]
+fn a_uml_element_is_related_through_its_members_references() {
+    let (mut s, shop, order, total) = uml_project();
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": shop, "name": "Status" }));
+    let lone = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Lone" }));
+    let money = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Money" }));
+    run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "parameters": [{ "name": "amount", "type": money }] }));
+    let before = state(&s);
+    run(&mut s, "uml.attribute.set", json!({ "attribute": total, "type": status }));
+    let after = state(&s);
+    let found = related(&before, &after, &order);
+    assert!(found.contains(&uuid(&shop)) && found.contains(&uuid(&status)), "{}", found.len());
+    assert!(found.contains(&uuid(&money)), "through a member's own parameter");
+    assert!(!found.contains(&uuid(&order)) && !found.contains(&uuid(&total)) && !found.contains(&uuid(&lone)), "not itself, its own or a stranger");
+    assert!(related(&before, &after, &status).contains(&uuid(&total)), "who uses it");
+    assert!(related(&after, &before, &order).contains(&uuid(&status)), "on the before side alone");
+    let once = related(&after, &after, &order);
+    assert_eq!(once.iter().collect::<std::collections::BTreeSet<_>>().len(), once.len(), "each once");
+}
+
+/// A table is connected to the relationship that joins it, whichever end it is.
+#[test]
+fn an_er_element_is_related_through_its_relationships() {
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let joined = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order }));
+    let now = state(&s);
+    for end in [&customer, &order] {
+        assert!(related(&now, &now, end).contains(&uuid(&joined)), "{end}");
+    }
+    assert!(related(&now, &now, &joined).contains(&uuid(&customer)) && related(&now, &now, &joined).contains(&uuid(&order)));
+}
+
 /// A move to another owner changes its one row on both sides, even one of the same name; an element
 /// with no owner says so, and a column writes its type. An element on one side has no marks.
 #[test]
@@ -353,6 +413,239 @@ fn the_owner_is_one_row_and_a_side_alone_has_no_marks() {
     let columns = lists(&sides(&before, &after, &customer).lists.after);
     assert_eq!(columns[0].1, [(said("id : BIGINT"), None), (said("email : TEXT"), Some(ChangeKind::Added))], "{columns:?}");
     assert!(lists(&sides(&before, &after, &email).lists.after).iter().all(|l| l.1.iter().all(|r| r.1.is_none())), "only on the after side");
+}
+
+/// The rows of the list of `kind` on the after side.
+fn rows_of(seen: &ElementSides, kind: ListKind) -> Vec<(Named, Option<ChangeKind>)> {
+    lists(&seen.lists.after).into_iter().find(|l| l.0 == kind).map(|l| l.1).unwrap_or_default()
+}
+
+/// Words made for a nameless element, unmarked.
+fn made(text: &str) -> (Named, Option<ChangeKind>) {
+    (Named::Made(text.to_string()), None)
+}
+
+/// The name a side's card gives `id`, and whether it was made.
+fn told_card(rows: &Rows, id: &str) -> (Option<String>, bool) {
+    let card = sides(rows, rows, id).after.unwrap();
+    (card.name, card.made)
+}
+
+/// ER: an unnamed line goes by its tables, and a key, check or index as the export names it. A
+/// column is listed as a column, and renaming a table is no change to what merely mentions it.
+#[test]
+fn er_elements_without_a_name_go_by_what_they_join() {
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let owner = run(&mut s, "er.attribute.add", json!({ "entity": order, "name": "owner", "type": "BIGINT" }));
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let vip = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "vip" }));
+    let places = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order, "from_end": "exactly-one", "to_end": "zero-or-more" }));
+    let subtype = run(&mut s, "er.generalization.add", json!({ "supertype": customer, "subtype": vip }));
+    run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [email] }));
+    run(&mut s, "er.check.add", json!({ "entity": customer, "expression": "id > 0" }));
+    let index = run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "expression": "lower(email)" }] }));
+    let by_column = run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "attribute": email }] }));
+    let money = run(&mut s, "er.domain.add", json!({ "schema": shop, "name": "money", "base_type": "NUMERIC", "checks": ["value >= 0"] }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": order, "references": customer, "columns": [owner] }));
+    let before = state(&s);
+    assert_eq!(told_card(&before, &places), (Some("customer → order".into()), true));
+    assert_eq!(told_card(&before, &subtype), (Some("vip → customer".into()), true));
+    let table = sides(&before, &before, &customer);
+    assert_eq!(rows_of(&table, ListKind::Columns).len(), 2, "{table:?}");
+    assert_eq!(
+        rows_of(&table, ListKind::Members),
+        [made("pk_customer"), made("uq_customer_email"), made("ck_customer_1"), made("ix_customer_expr"), made("ix_customer_email")]
+    );
+    assert_eq!(rows_of(&sides(&before, &before, &index), ListKind::Members), [made("lower(email)")]);
+    assert_eq!(rows_of(&sides(&before, &before, &by_column), ListKind::Members), [made("email")]);
+    assert_eq!(rows_of(&sides(&before, &before, &money), ListKind::Members), [made("value >= 0")]);
+    assert_eq!(rows_of(&sides(&before, &before, &order), ListKind::Members), [made("order → customer")]);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    let after = state(&s);
+    let line = sides(&before, &after, &places);
+    assert_eq!(line.after.as_ref().unwrap().name.as_deref(), Some("client → order"), "the words follow the table");
+    assert!(!line.after.as_ref().unwrap().renamed_from(line.before.as_ref().unwrap()), "but nothing renamed the line");
+    let seen = sides(&before, &after, &order);
+    assert_eq!((rows_of(&seen, ListKind::Members), seen.lists.member_changes), (vec![made("order → client")], 0), "{seen:?}");
+    run(&mut s, "er.relationship.rename", json!({ "relationship": places, "name": "places" }));
+    let named = sides(&after, &state(&s), &places);
+    assert!(named.after.as_ref().unwrap().renamed_from(named.before.as_ref().unwrap()), "given a name of its own, it was named");
+}
+
+/// A member whose words are made is marked when its own row or a part of it changed, not only when they differ.
+#[test]
+fn a_made_row_is_marked_by_its_own_change() {
+    let (mut s, _, customer, id) = project();
+    let email = run(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "email", "type": "TEXT" }));
+    let key = run(&mut s, "er.unique.add", json!({ "entity": customer, "columns": [email] }));
+    run(&mut s, "er.index.add", json!({ "entity": customer, "columns": [{ "attribute": id }, { "attribute": email }] }));
+    let before = state(&s);
+    run(&mut s, "er.unique.set", json!({ "unique": key, "columns": [id], "name": "", "nulls_distinct": false }));
+    let after = state(&s);
+    let rows = rows_of(&sides(&before, &after, &customer), ListKind::Members);
+    assert!(rows.contains(&(Named::Made("uq_customer_id".into()), Some(ChangeKind::Changed))), "{rows:?}");
+    run(&mut s, "element.remove", json!({ "ids": [email] }));
+    let rows = rows_of(&sides(&after, &state(&s), &customer), ListKind::Members);
+    assert!(rows.contains(&(Named::Made("ix_customer_id".into()), Some(ChangeKind::Changed))), "a part gone is on the before side only: {rows:?}");
+}
+
+/// An ER enum's literals are its rows, told apart by their text.
+#[test]
+fn an_er_enums_literals_are_listed_and_marked_by_their_text() {
+    let (mut s, shop, ..) = project();
+    let states = run(&mut s, "er.enum.add", json!({ "schema": shop, "name": "state", "literals": ["open", "paid"] }));
+    let before = state(&s);
+    run(&mut s, "er.enum.set", json!({ "enum": states, "name": "state", "literals": ["open", "sent"] }));
+    let seen = sides(&before, &state(&s), &states);
+    let row = |text, change| (said(text), change);
+    assert_eq!(rows_of(&seen, ListKind::Literals), [row("open", None), row("sent", Some(ChangeKind::Added))]);
+    assert_eq!(lists(&seen.lists.before)[0], (ListKind::Literals, vec![row("open", None), row("paid", Some(ChangeKind::Removed))]));
+    assert_eq!(seen.lists.member_changes, 2);
+}
+
+/// A constraint is marked by its whole expression, even an edit its shortened words don't show.
+#[test]
+fn a_constraint_is_marked_by_more_than_its_words() {
+    let (mut s, _, order, _) = uml_project();
+    let long = "x".repeat(100);
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": format!("{long} a") }));
+    for edit in [format!("{long} b"), format!("{long}  b")] {
+        let before = state(&s);
+        run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": edit }));
+        let seen = sides(&before, &state(&s), &order);
+        assert_eq!((rows_of(&seen, ListKind::Members)[0].1, seen.lists.member_changes), (Some(ChangeKind::Changed), 1), "{seen:?}");
+    }
+}
+
+/// UML: an unnamed relationship goes by its ends and a constraint by its braces, whose edit marks
+/// its row though the text is held in a part of it; a class's rename leaves a row that mentions it.
+#[test]
+fn uml_elements_without_a_name_go_by_what_they_join_or_state() {
+    let (mut s, shop, order, _) = uml_project();
+    let payment = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Payment" }));
+    let payable = run(&mut s, "uml.interface.add", json!({ "package": shop, "name": "Payable" }));
+    let holds = run(&mut s, "uml.association.add", json!({ "from": order, "to": payment }));
+    let needs = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": payable }));
+    let is_a = run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": payment }));
+    let realizes = run(&mut s, "uml.realization.add", json!({ "class": order, "interface": payable }));
+    let rule = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "total > 0" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": shop }));
+    run(&mut s, "uml.profile.apply", json!({ "package": shop, "profile": audit }));
+    run(&mut s, "element.describe", json!({ "element": payment, "text": "Money\nreceived" }));
+    let count = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "count", "default": "3" }));
+    let pay = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "pay", "returns": "Boolean" }));
+    run(&mut s, "element.describe", json!({ "element": payable, "text": "x".repeat(100) }));
+    let before = state(&s);
+    assert!(rows_of(&sides(&before, &before, &shop), ListKind::Members).contains(&made("Audit")));
+    assert_eq!(rows_of(&sides(&before, &before, &payment), ListKind::Members), [made("Money received")], "on one line");
+    assert_eq!(rows_of(&sides(&before, &before, &count), ListKind::Members), [made("3")]);
+    assert_eq!(rows_of(&sides(&before, &before, &payable), ListKind::Members), [made(&format!("{}…", "x".repeat(80)))], "cut");
+    assert_eq!(rows_of(&sides(&before, &before, &pay), ListKind::Members), [(Named::Unnamed, None)], "nothing to go by: left to its kind");
+    for (id, words) in [(&holds, "Order → Payment"), (&needs, "Order → Payable"), (&is_a, "Order → Payment"), (&realizes, "Order → Payable")]
+    {
+        assert_eq!(told_card(&before, id), (Some(words.into()), true), "{id}");
+    }
+    assert_eq!(told_card(&before, &rule), (Some("{total > 0}".into()), true));
+    run(&mut s, "uml.constraint.set", json!({ "constraint": rule, "expression": "total >= 0" }));
+    run(&mut s, "uml.class.rename", json!({ "class": payment, "name": "Charge" }));
+    run(&mut s, "element.describe", json!({ "element": realizes, "text": "A part only the after side has." }));
+    let seen = sides(&before, &state(&s), &order);
+    let rows = rows_of(&seen, ListKind::Members);
+    assert!(rows.contains(&(Named::Made("{total >= 0}".into()), Some(ChangeKind::Changed))), "{rows:?}");
+    assert_eq!(seen.lists.member_changes, 1, "the constraint: {rows:?}");
+    assert_eq!(seen.lists.relationship_changes, 1, "the described realization, not the lines to the renamed class");
+}
+
+/// `rows` with `edit` made straight in a store of their own, for a state no command makes.
+fn edited(rows: &Rows, edit: impl FnOnce(&mut Store)) -> Rows {
+    let (tables, junctions) = storage();
+    let mut st = rows::restore_into_empty(archforge_notations::store(ids()).unwrap(), rows, &tables, &junctions).unwrap();
+    edit(&mut st);
+    rows::snapshot(&st, &tables, &junctions).unwrap()
+}
+
+/// Each relationship row as its words, what it joins to and its mark.
+fn joins(seen: &ElementSides) -> Vec<(Named, Option<(Option<Uuid>, Named)>, String, Option<ChangeKind>)> {
+    let list = seen.lists.after.iter().find(|l| l.kind == ListKind::Relationships);
+    list.map_or_else(Vec::new, |l| l.rows.iter().map(|r| (r.name.clone(), r.to.clone(), r.note.clone(), r.change)).collect())
+}
+
+/// A relationship is listed on the cards of both elements it joins, whoever owns it, by its far
+/// end's role and multiplicity, or with no role by nothing for its kind to stand in; an
+/// association's end a class owns is listed there and not as an attribute, and one the package
+/// owns between others stays its member. A rename of what it joins doesn't mark it; an end's edit does.
+#[test]
+fn relationships_are_listed_on_the_cards_of_what_they_join() {
+    use archforge_uml::{association, class, property};
+    let (mut s, shop, order, _) = uml_project();
+    let line = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "OrderLine" }));
+    let shape = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Shape" }));
+    let holds = run(&mut s, "uml.association.add", json!({ "from": order, "to": line }));
+    run(&mut s, "uml.association.set-end", json!({ "association": holds, "end": 1, "role": "lines", "multiplicity": "1..*" }));
+    let is_a = run(&mut s, "uml.generalization.add", json!({ "specific": order, "general": shape }));
+    let at = |st: &Store, id: &str| st.by_uuid(uuid(id)).unwrap();
+    // The end at OrderLine moves into Order's attributes, as a model read from elsewhere can hold it.
+    let before = edited(&state(&s), |st| {
+        let (a, o) = (at(st, &holds), at(st, &order));
+        let end = st.list(a, association::MEMBER_END).unwrap()[1].as_ref().unwrap();
+        // Off the association's owned ends takes it off its member ends too: it goes back as the second.
+        st.remove_value(a, association::OWNED_END, &Value::Ref(end)).unwrap();
+        st.push(o, class::OWNED_ATTRIBUTE, Value::Ref(end)).unwrap();
+        st.push(a, association::MEMBER_END, Value::Ref(end)).unwrap();
+        assert_eq!(st.get(end, property::ASSOCIATION).unwrap().as_ref(), Some(a), "still the association's end");
+    });
+    let to = |id: &str, name: &str| Some((Some(uuid(id)), said(name)));
+    let seen = sides(&before, &before, &order);
+    assert_eq!(joins(&seen), [(said(""), to(&shape, "Shape"), String::new(), None), (said("lines"), to(&line, "OrderLine"), " [1..*]".into(), None)]);
+    assert_eq!(rows_of(&seen, ListKind::Attributes), [(said("- total"), None)], "the end is no attribute");
+    assert_eq!(joins(&sides(&before, &before, &line)), [(said(""), to(&order, "Order"), String::new(), None)], "on the other end's card");
+    assert!(rows_of(&sides(&before, &before, &shop), ListKind::Members).contains(&made("Order → OrderLine")), "the package's own line");
+    let edit = |change: &dyn Fn(&mut Store)| sides(&before, &edited(&before, change), &order);
+    let rename =
+        |st: &mut Store, o, name: &str| st.set(o, st.universe().info(st.class_of(o).unwrap()).unwrap().name_prop.unwrap(), Value::str(name)).unwrap();
+    let renamed = edit(&|st| rename(st, at(st, &line), "Line"));
+    assert_eq!((joins(&renamed)[1].1.clone(), joins(&renamed)[1].3), (to(&line, "Line"), None), "renamed elsewhere: unmarked");
+    let far = |st: &Store| st.list(at(st, &holds), association::MEMBER_END).unwrap()[1].as_ref().unwrap();
+    let role = edit(&|st| rename(st, far(st), "items"));
+    assert_eq!((joins(&role)[1].3, role.lists.relationship_changes, role.lists.member_changes), (Some(ChangeKind::Changed), 1, 0));
+    let reach = edit(&|st| {
+        let upper = st.get(far(st), archforge_uml::multiplicity_element::UPPER_VALUE).unwrap().as_ref().unwrap();
+        st.set(upper, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(5))).unwrap();
+    });
+    assert_eq!((joins(&reach)[1].2.as_str(), joins(&reach)[1].3), (" [1..5]", Some(ChangeKind::Changed)), "its multiplicity");
+    let typeless = edit(&|st| st.set(far(st), archforge_uml::typed_element::TYPE, Value::Null).unwrap());
+    assert_eq!((joins(&typeless)[1].1.clone(), joins(&typeless)[1].3), (Some((None, Named::Unavailable)), Some(ChangeKind::Changed)), "no type");
+    let moved = edit(&|st| st.set(at(st, &is_a), archforge_uml::generalization::GENERAL, Value::Ref(at(st, &line))).unwrap());
+    assert_eq!((joins(&moved)[0].1.clone(), joins(&moved)[0].3), (to(&line, "OrderLine"), Some(ChangeKind::Changed)), "joined elsewhere");
+
+    let (mut s, shop, customer, _) = project();
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let places = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order }));
+    let now = state(&s);
+    let rel = archforge_er::RELATIONSHIP;
+    assert_eq!(joins(&sides(&now, &now, &order)), [(said(""), to(&customer, "customer"), String::new(), None)], "from either end");
+    let cut = edited(&now, |st| st.set(at(st, &places), archforge_er::relationship::TO, Value::Null).unwrap());
+    let seen = sides(&now, &cut, &customer);
+    assert_eq!(joins(&seen), [(said(""), Some((None, Named::Unavailable)), String::new(), Some(ChangeKind::Changed))]);
+    assert_eq!(seen.lists.after.iter().find(|l| l.kind == ListKind::Relationships).unwrap().rows[0].class, rel);
+}
+
+/// A template binding is listed on the bound element's card and on the template's, which it reaches
+/// through the template's signature, not the template itself.
+#[test]
+fn a_binding_is_listed_on_the_bound_element_and_the_template() {
+    let (mut s, shop, order, _) = uml_project();
+    let pair = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Pair" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": pair, "name": "T" }));
+    let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
+    let before = state(&s);
+    run(&mut s, "uml.template-binding.add", json!({ "bound": order, "template": pair, "arguments": { "T": item } }));
+    let after = state(&s);
+    let to = |id: &str, name: &str| Some((Some(uuid(id)), said(name)));
+    let binds = (said(""), to(&pair, "Pair"), String::new(), Some(ChangeKind::Added));
+    assert_eq!(joins(&sides(&before, &after, &order)), [binds], "on the bound element's card");
+    assert_eq!(joins(&sides(&before, &after, &pair)), [(said(""), to(&order, "Order"), String::new(), Some(ChangeKind::Added))], "on the template's");
 }
 
 /// A box a repair fits shows no false change on either side, and is named by what it shows.
@@ -481,10 +774,11 @@ fn a_diagram_on_one_side_has_an_absent_side() {
     let without = state(&s);
     let gone = drawn(&with, &without, &diagram);
     assert!(gone.before.is_some() && gone.after.is_none());
-    assert_eq!(gone.name.as_deref(), Some("Billing"));
+    assert_eq!((gone.name.as_deref(), gone.apart.diagram), (Some("Billing"), Some(ChangeKind::Removed)));
     let came = drawn(&without, &with, &diagram);
     assert!(came.before.is_none() && came.after.is_some());
-    assert_eq!(came.name.as_deref(), Some("Billing"));
+    assert_eq!((came.name.as_deref(), came.apart.diagram), (Some("Billing"), Some(ChangeKind::Added)));
+    assert_eq!(drawn(&with, &with, &diagram).apart.diagram, None, "on both sides");
 }
 
 /// A box is marked with its own change, or Changed for what it draws; one nothing touched has no mark.
@@ -591,6 +885,7 @@ fn lines_are_marked_like_boxes() {
     let before = state(&s);
     let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": first, "target": second }));
     let connected = state(&s);
+    assert_eq!(told_card(&connected, &line), (Some("customer → invoice".into()), true), "a line goes by what it shows");
     assert_eq!(mark(&drawn(&before, &connected, &diagram), &line), Some(ChangeKind::Added));
     run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
     let seen = drawn(&connected, &state(&s), &diagram);
@@ -602,6 +897,11 @@ fn lines_are_marked_like_boxes() {
     let restyled = state(&s);
     run(&mut s, "diagram.label", json!({ "edge": line, "kind": "name", "dx": 9 }));
     assert_eq!(mark(&drawn(&restyled, &state(&s), &diagram), &line), Some(ChangeKind::Changed), "so is its label");
+    let labelled = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": invoice, "name": "bill" }));
+    let shown = sides(&labelled, &state(&s), &line);
+    assert_eq!(shown.after.as_ref().unwrap().name.as_deref(), Some("customer → bill"));
+    assert!(!shown.after.as_ref().unwrap().renamed_from(shown.before.as_ref().unwrap()), "words it shows aren't its name");
 }
 
 /// What an opening repairs marks nothing, on either side.
@@ -621,4 +921,43 @@ fn a_repair_marks_nothing() {
     assert_eq!(mark(&drawn(&before, &after, &diagram), &first), Some(ChangeKind::Changed), "without the repair it differs");
     let seen = diagram_sides(&before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
     assert_eq!(seen.marks, Default::default());
+}
+
+/// What `apart` holds, by name, to compare at once: the model's elements, then the layout's boxes and lines.
+fn apart(seen: &Apart) -> (Vec<(&str, ChangeKind)>, Vec<(&str, Placing, bool)>, bool) {
+    let model = seen.model.iter().map(|m| (m.name.as_deref().unwrap_or_default(), m.kind)).collect();
+    let layout = seen.layout.iter().map(|l| (l.name.as_deref().unwrap_or_default(), l.kind, l.line)).collect();
+    (model, layout, seen.itself)
+}
+
+/// A diagram's differences kept apart: a rename is the model's alone, a move the layout's alone,
+/// and a new element placed is both; a line rerouted and the diagram renamed are the layout's.
+#[test]
+fn model_and_layout_changes_are_kept_apart() {
+    let Placed { mut s, shop, customer, invoice, diagram, first, second } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    assert_eq!(apart(&drawn(&before, &state(&s), &diagram).apart), (vec![("client", ChangeKind::Changed)], vec![], false), "the model only");
+
+    let renamed = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [second], "dx": 40, "dy": 0 }));
+    assert_eq!(apart(&drawn(&renamed, &state(&s), &diagram).apart), (vec![], vec![("invoice", Placing::Moved, false)], false), "the layout only");
+
+    let moved = state(&s);
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let ordered = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 400 }));
+    run(&mut s, "diagram.unplace", json!({ "nodes": [first] }));
+    let seen = drawn(&moved, &state(&s), &diagram);
+    let both = (vec![("order", ChangeKind::Added)], vec![("client", Placing::TakenOff, false), ("order", Placing::Placed, false)], false);
+    assert_eq!(apart(&seen.apart), both, "a box taken off leaves its element as it was");
+    assert_eq!(apart(&drawn(&state(&s), &moved, &diagram).apart).0, [("order", ChangeKind::Removed)], "swapped");
+
+    let relationship = run(&mut s, "er.relationship.add", json!({ "from": order, "to": invoice }));
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": ordered, "target": second }));
+    let connected = state(&s);
+    run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
+    run(&mut s, "diagram.rename", json!({ "diagram": diagram, "name": "Invoices" }));
+    let seen = drawn(&connected, &state(&s), &diagram);
+    let (model, layout, itself) = apart(&seen.apart);
+    assert_eq!((model, layout.len(), layout[0].1, layout[0].2, itself), (vec![], 1, Placing::Changed, true, true), "rerouted and renamed");
 }

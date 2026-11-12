@@ -1,12 +1,15 @@
 //! What the Compare page finds under its band (frame V3.2 of page 09 of the design and section 6 of
-//! `docs/design/versioning.md`): a version read at its revision against a snapshot of current work,
-//! off the interface thread. Comparing reads rows only, so the session is never replaced.
+//! `docs/design/versioning.md`): a version read at its revision against current work, off the
+//! interface thread. The frame only copies current work's objects; their rows are built with the
+//! comparison. Comparing reads rows only, so the session is never replaced. While a version shows,
+//! current work is the session set aside.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use archforge_mof::rows::{Rows, snapshot};
+use archforge_mof::Frozen;
+use archforge_mof::rows::Rows;
 use archforge_notations::differences::{Area, Difference, classified};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
@@ -49,14 +52,21 @@ pub(crate) struct Held {
     pub(crate) keep: bool,
 }
 
-/// The page's one read and one comparison, and what the last comparison found.
+/// Which step gave what is found: differences always come from a comparison, a failure from either.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Origin {
+    Read,
+    Comparison,
+}
+
+/// The page's one read and one comparison, and what the last of them found, with which one it was.
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
     pub(crate) held: Option<Held>,
     pub(crate) reading: Option<(String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Key, Receiver<Found>)>,
-    pub(crate) found: Option<(Key, Found)>,
+    pub(crate) found: Option<(Key, Found, Origin)>,
     /// How far the list has scrolled; a list of other sides starts at its top.
     pub(crate) scroll: TreeScroll,
 }
@@ -117,7 +127,7 @@ fn take_answers(shell: &mut Shell) {
     {
         match answer {
             Ok(rows) => r.held = Some(Held { version, keep: bytes_of(&rows) <= MOST_KEPT_BYTES, rows }),
-            Err(why) => r.found = revision.map(|revision| (Key { sides, revision }, Err(why.to_string()))),
+            Err(why) => r.found = revision.map(|revision| (Key { sides, revision }, Err(why.to_string()), Origin::Read)),
         }
     }
     if let Some(answer) = r.comparing.as_ref().and_then(|(_, rx)| answered(rx))
@@ -125,34 +135,35 @@ fn take_answers(shell: &mut Shell) {
         && now.as_ref() == Some(&key.sides)
         && (answer.is_ok() || revision == Some(key.revision))
     {
-        if r.found.as_ref().is_none_or(|(shown, _)| shown.sides != key.sides) {
+        if r.found.as_ref().is_none_or(|(shown, ..)| shown.sides != key.sides) {
             r.scroll = TreeScroll::default();
         }
-        r.found = Some((key, answer));
+        r.found = Some((key, answer, Origin::Comparison));
     }
 }
 
 /// Compares the newest rows when what is shown is not of them. One comparison runs at a time, so
-/// revisions that move while it runs fold into the next. A version that could not be read waits
-/// for Retry, or each edit would read it again; nothing is compared while an edit is under way.
+/// revisions that move while it runs fold into the next; nothing is compared while an edit is under
+/// way. What is shown for these sides is known at its own revision, whatever it is. At a later one,
+/// differences and a failed comparison give way: the rows held are compared again, or, if they went
+/// as too large, read again first. A failed read stays known until Retry clears it, or each edit
+/// would ask the host for the version again.
 fn next(shell: &mut Shell, sides: Sides) {
     let Some(session) = shell.current_work().filter(|s| !s.interacting()) else { return };
     let key = Key { sides, revision: session.revision() };
     let r = &shell.versions.compare_results;
     let held = r.held.as_ref().filter(|h| h.version == key.sides.0);
-    let known = r.found.as_ref().is_some_and(|(shown, found)| *shown == key || (shown.sides == key.sides && found.is_err() && held.is_none()));
+    let known = r.found.as_ref().is_some_and(|(shown, _, origin)| *shown == key || (shown.sides == key.sides && *origin == Origin::Read));
     if known || r.comparing.is_some() {
         return;
     }
     let Some(before) = held.map(|h| h.rows.clone()) else { return read_before(shell, key.sides.0) };
-    let (tables, junctions) = archforge_notations::storage();
-    let started = snapshot(session.doc(), &tables, &junctions)
-        .map_err(|e| e.to_string())
-        .and_then(|live| compare(before, live, key.sides.1).map_err(|e| e.to_string()));
+    // The frame only copies the objects; their rows are built with the comparison.
+    let started = compare(before, session.doc().freeze(), key.sides.1);
     let r = &mut shell.versions.compare_results;
     match started {
         Ok(answer) => r.comparing = Some((key, answer)),
-        Err(why) => r.found = Some((key, Err(why))),
+        Err(why) => r.found = Some((key, Err(why.to_string()), Origin::Comparison)),
     }
     r.held = r.held.take().filter(|h| h.keep);
 }
@@ -169,15 +180,21 @@ fn read_before(shell: &mut Shell, version: String) {
     shell.versions.compare_results.reading = Some((version, answer));
 }
 
-/// Compares `version` and `live` on a thread of its own, `live` first when `swapped`. The model's
-/// root is no change of its own.
-fn compare(version: Arc<Rows>, live: Rows, swapped: bool) -> std::io::Result<Receiver<Found>> {
+/// Builds the rows of `live` and compares them with `version` on a thread of its own, `live` first
+/// when `swapped`; rows that cannot be built fail the comparison with their reason. The model's root
+/// is no change of its own.
+fn compare(version: Arc<Rows>, live: Frozen, swapped: bool) -> std::io::Result<Receiver<Found>> {
     let (tx, rx) = channel();
+    let (tables, junctions) = archforge_notations::storage();
     let work = move || {
-        let (before, after) = if swapped { (&live, &*version) } else { (&*version, &live) };
-        let found = classified(before, after, crate::editing::fit_tables).map_err(|e| e.to_string());
+        let found = live.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|live| {
+            let (before, after) = if swapped { (&live, &*version) } else { (&*version, &live) };
+            classified(before, after, crate::editing::fit_tables).map_err(|e| e.to_string())
+        });
+        // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
+            items.sort_by_key(|d| d.area);
             Arc::new(items)
         }));
     };
@@ -197,7 +214,7 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         };
         return say(shell, ui, p, r, &head, &body);
     };
-    let found = shell.versions.compare_results.found.as_ref().filter(|(key, _)| key.sides == now).map(|(_, found)| found.clone());
+    let found = shell.versions.compare_results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, _)| found.clone());
     match found {
         None => loading(shell, ui, p, r),
         Some(Err(why)) => failed(shell, ui, p, r, &why),

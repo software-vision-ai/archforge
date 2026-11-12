@@ -328,7 +328,8 @@ fn active_diagram(shell: &Shell) -> Option<Obj> {
     (store.is_alive(d) && store.class_of(d).ok() == Some(DIAGRAM)).then_some(d)
 }
 
-fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
+/// The number `o` holds in `prop`, or 0 when it holds none or one that isn't finite.
+pub(crate) fn real(store: &Store, o: Obj, prop: archforge_mof::PropId) -> f64 {
     match store.get(o, prop) {
         Ok(Value::Real(v)) if v.is_finite() => v,
         _ => 0.0,
@@ -339,7 +340,8 @@ fn string(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
     store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
-fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
+/// The live objects the list `prop` of `o` refers to.
+pub(crate) fn refs(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Vec<Obj> {
     store.list(o, prop).unwrap_or_default().iter().filter_map(Value::as_ref).filter(|r| store.is_alive(*r)).collect()
 }
 
@@ -439,12 +441,13 @@ pub(crate) fn zoom_by(state: &mut State, factor: f32, at: Vec2) {
     crate::package_nav::intend(&mut state.nav, factor);
 }
 
-/// Fits the whole diagram into the canvas, or shows an empty one at 100 % from its top left.
-fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>) {
+/// Fits the whole diagram into the canvas, zoomed out no further than `least`, or shows an empty
+/// one at 100 % from its top left.
+pub(crate) fn fit(state: &mut State, size: Vec2, bounds: Option<Rect>, least: f32) {
     match bounds {
         Some(b) if b.width() > 0.0 && b.height() > 0.0 => {
             let room = (size - Vec2::splat(2.0 * FIT_MARGIN)).max(Vec2::splat(1.0));
-            let z = (room.x / b.width()).min(room.y / b.height()).min(1.0).clamp(ZOOM_RANGE.0, ZOOM_RANGE.1);
+            let z = (room.x / b.width()).min(room.y / b.height()).min(1.0).max(least);
             state.zoom = z;
             state.pan = (size - b.size() * z) / 2.0 - b.min.to_vec2() * z;
         }
@@ -635,7 +638,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas", "canvas", r);
     let bounds = shell.session.as_ref().map(|s| diagram_bounds(s.doc(), d)).unwrap_or_default();
     if shell.canvas.fit_pending {
-        fit(&mut shell.canvas, r.size(), bounds);
+        fit(&mut shell.canvas, r.size(), bounds, ZOOM_RANGE.0);
         shell.canvas.fit_pending = false;
     }
     // A node the search found comes to the centre, readable.
@@ -2754,7 +2757,7 @@ fn minimap(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, bounds: Optio
     // The footer: Whole diagram, then − 100 % +.
     let fit_text = ux::text(&paint, m.min + vec2(12.0, 134.0), &tr("Whole diagram"), types::SMALL, p.text_secondary, Some(90.0));
     if control(shell, ui, "workspace.minimap.fit", "button", fit_text.expand(4.0), true).clicked() {
-        fit(&mut shell.canvas, r.size(), bounds);
+        fit(&mut shell.canvas, r.size(), bounds, ZOOM_RANGE.0);
     }
     let plus = Rect::from_center_size(pos2(m.right() - 20.0, m.top() + 142.0), Vec2::splat(20.0));
     let minus = Rect::from_center_size(pos2(m.right() - 76.0, m.top() + 142.0), Vec2::splat(20.0));

@@ -23,7 +23,7 @@ over the project's *Naming* skill for that schema's tables.
 
 The toolbar formats the text (bold, italic, heading, lists, code, link, quote), and the pencil and
 eye switch between writing and a preview. The text is kept a moment after you stop typing, and
-each keep is one undo step.
+each keep is one undo step. Until then it already counts as an unsaved change.
 
 **Skills** in the right panel lists the skills that apply to the selection, with where each comes
 from; choose one to open it, or hover over one of the element's own skills to remove it. Its **+**

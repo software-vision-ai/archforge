@@ -198,7 +198,17 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
     assert_eq!(property_label(&universe, archforge_er::foreign_key::ON_DELETE), Some(german("On delete")));
     assert_eq!(literal_label(&universe, visibility, package), Some(german("Package")));
     assert_eq!(kind_label(&universe, archforge_uml::INTERFACE_REALIZATION), german("Interface realization"));
-    assert_eq!(kind_label(&universe, archforge_er::ENTITY), german("Entity"));
+    assert_eq!(kind_label(&universe, archforge_er::ENTITY), german("Table"));
+    // Each notation's own word, where the metamodel's name isn't what the rest of the interface says.
+    for (class, word) in [
+        (archforge_er::ATTRIBUTE, "Column"),
+        (archforge_er::GENERALIZATION, "Subtype"),
+        (archforge_uml::PROPERTY, "Attribute"),
+        (archforge_uml::ENUMERATION_LITERAL, "Literal"),
+    ] {
+        assert_eq!(kind_label(&universe, class), german(word), "{word}");
+    }
+    assert_eq!(kind_label(&universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
     assert_eq!(kind_label(&universe, archforge_uml::ACTOR), german("Element"));
     assert_eq!(kind_label(&universe, archforge_diagram::NODE), german("Element"));
@@ -772,9 +782,12 @@ fn every_catalogue_in_the_folder_is_registered() {
     assert_eq!((names.len(), codes.len()), (LANGUAGES.len(), LANGUAGES.len()), "each language has a code and a name of its own");
 }
 
+/// A translation may put the placeholders in another order, and each is filled once.
 #[test]
 fn placeholders_can_be_reordered() {
     assert_eq!(fmt("{b} before {a}", &[("a", "1"), ("b", "2")]), "2 before 1");
+    // A value is not read for placeholders, and what names no argument stays.
+    assert_eq!(fmt("On {branch} · {status} {x} {", &[("branch", "fix {status}"), ("status", "Saved")]), "On fix {status} · Saved {x} {");
 }
 
 #[test]
