@@ -24,7 +24,8 @@ fn answer_versions(host: &SavingHost) {
         by_agent,
         ..Default::default()
     };
-    let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, None, false)];
+    // The oldest is an earlier Archforge's name for a restore's kept work.
+    let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, Some("Before restoring 2026-11-08T14:01:00Z"), false)];
     host.version_reads
         .lock()
         .unwrap()
@@ -64,7 +65,8 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
         assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 50, "the design's page");
         host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
-        assert!(["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)));
+        let said = ["No unsaved changes", "Same as current work", "Saved by an agent", "Before restoring 8 Nov 14:01"];
+        assert!(said.iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "T14:01"), "{:?}", painted(&h));
         assert!(!painted_has(&h, "Add status"));
         add_schema(&mut h, "shop");
         assert!(painted_has(&h, "Unsaved changes") && painted_has(&h, "Add status") && h.query_by_label("Current work · unsaved changes").is_some());

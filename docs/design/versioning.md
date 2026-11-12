@@ -455,7 +455,9 @@ included.
 
 Step 7 is one writer job:
 
-1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`.
+1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`:
+   the time the restore was asked for as History says it (`8 Nov 15:42`), the date the question quotes.
+   Earlier versions named with a stored time keep their name; History shows that time as it shows dates.
 2. The version's model rows, in today's table shape, are written to the working set.
 3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
    nothing differed, and is reported as above.
