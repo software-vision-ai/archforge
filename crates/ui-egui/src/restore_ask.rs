@@ -83,7 +83,7 @@ fn go(shell: &mut Shell, confirm: Confirm) {
     match shell.restore_version(&confirm.commit, &confirm.saved) {
         Ok(()) | Err(HoldRefused::ChatRunning) => {
             if let Some(path) = shell.project.as_ref().map(|o| o.path.clone()) {
-                shell.versions.restoring = Some(Restoring { path, confirm: Confirm { failure: None, retry: true, ..confirm }, ended_on: None });
+                shell.versions.restoring = Some(Restoring { path, confirm: Confirm { failure: None, ..confirm }, ended_on: None });
             }
         }
         Err(why) => {
