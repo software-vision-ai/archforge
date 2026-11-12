@@ -741,13 +741,14 @@ fn a_branch_row_menu_renames_any_branch_but_main() {
 }
 
 /// A refused rename says why in its own words and the dialog stays. A lost answer may have renamed
-/// it, and asking for the same rename again settles that, though the list now shows the new name.
+/// it, and only asking for the same rename again settles that, though the list now shows the new
+/// name: another name is refused, naming the one to ask for.
 #[test]
 fn a_refused_rename_says_why_and_a_lost_one_can_be_asked_again() {
     let cases = [
         (Some(crate::BranchRefused::Moved), "The project changed before the branch was renamed, so its name stayed."),
         (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't rename the branch: disk full"),
-        (None, "Archforge could not tell whether the branch was renamed. Rename it to the same name again to find out."),
+        (None, "Archforge could not tell whether the branch was renamed to later. Rename it to later again to find out."),
     ];
     in_both_appearances(|theme| {
         for (answer, words) in cases.clone() {
@@ -764,6 +765,11 @@ fn a_refused_rename_says_why_and_a_lost_one_can_be_asked_again() {
             *host.branch_list.lock().unwrap() = Some(Ok(with(["later".to_string()])));
             h.run_steps(4);
             assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
+            if lost {
+                retype(&mut h, "Other");
+                assert!(painted_has(&h, words) && renamed(&mut h, &host).is_empty(), "{theme:?}: only the unsettled name");
+                retype(&mut h, "Later");
+            }
             let again = renamed(&mut h, &host).len();
             assert_eq!(again, usize::from(lost), "{theme:?}: {words}: the listed name counts as taken but after a lost answer");
         }

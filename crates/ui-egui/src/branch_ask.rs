@@ -31,9 +31,10 @@ pub struct Naming {
     focused: bool,
     /// The branch being renamed, as stored; none while a new branch is named.
     renaming: Option<String>,
-    /// A rename to this stored name whose outcome couldn't be told: asking for it again settles it,
-    /// so a branch listed under it doesn't count as taking the name.
-    unsettled: Option<String>,
+    /// A rename to this name, stored and as shown, whose outcome couldn't be told: only asking for
+    /// it again settles it, so it is the one name offered, and a branch listed under it doesn't
+    /// count as taking it.
+    unsettled: Option<(String, String)>,
 }
 
 /// A creation or rename asked for: the project and session it was asked over, the name as stored,
@@ -70,27 +71,40 @@ fn ask(shell: &mut Shell, naming: Naming) {
 }
 
 /// The name to store for `text`, or why it can't be one: the host's own refusal, or a branch
-/// listed with that name in any case, as the project compares names. A name in `mine` (the branch
-/// renamed, a rename to settle) is never counted as taken.
-fn checked(host: &dyn ProjectHost, listed: &[BranchEntry], mine: &[Option<String>], text: &str) -> Result<String, String> {
+/// listed with that name in any case, as the project compares names, or a rename to settle first.
+/// Neither the branch `renaming` nor the name of a rename to settle is counted as taken.
+fn checked(
+    host: &dyn ProjectHost,
+    listed: &[BranchEntry],
+    (renaming, unsettled): (Option<&String>, Option<&(String, String)>),
+    text: &str,
+) -> Result<String, String> {
     let name = host.branch_name(text)?;
-    if !mine.contains(&Some(name.clone())) && listed.iter().any(|b| b.name.eq_ignore_ascii_case(&name)) {
-        return Err(words(&BranchRefused::Taken, false));
+    if let Some((_, shown)) = unsettled.filter(|(to, _)| *to != name) {
+        return Err(pending(shown));
+    }
+    let mine = renaming == Some(&name) || unsettled.is_some();
+    if !mine && listed.iter().any(|b| b.name.eq_ignore_ascii_case(&name)) {
+        return Err(words(&BranchRefused::Taken, None));
     }
     Ok(name)
 }
 
-/// What a person is told of a refusal, of a rename when `renaming`.
-fn words(refused: &BranchRefused, renaming: bool) -> String {
-    match (refused, renaming) {
+/// What a person is told of a rename to `shown` whose outcome couldn't be told.
+fn pending(shown: &str) -> String {
+    fmt(&tr("Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out."), &[("name", shown)])
+}
+
+/// What a person is told of a refusal; of a rename when `renaming` names the name, as shown, whose
+/// outcome is unsettled or would be.
+fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
+    match (refused, renaming.is_some()) {
         (BranchRefused::Taken, _) => tr("That name is already in use."),
         (BranchRefused::NotCleanedUp, _) => tr("The last new branch is not cleaned up yet. Opening the project again removes it."),
         (BranchRefused::Moved, false) => tr("The project changed before the branch was made, so none was made."),
         (BranchRefused::Moved, true) => tr("The project changed before the branch was renamed, so its name stayed."),
         (BranchRefused::Unclear(_), false) => tr("Archforge could not tell whether the branch was made. Look at Branches before trying again."),
-        (BranchRefused::Unclear(_), true) => {
-            tr("Archforge could not tell whether the branch was renamed. Rename it to the same name again to find out.")
-        }
+        (BranchRefused::Unclear(_), true) => pending(renaming.unwrap_or_default()),
         (BranchRefused::Failed(why), false) => fmt(&tr("Couldn't make the branch: {why}"), &[("why", why)]),
         (BranchRefused::Failed(why), true) => fmt(&tr("Couldn't rename the branch: {why}"), &[("why", why)]),
     }
@@ -130,11 +144,14 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
         Err(refused) => {
             if let Some(Ask::Branch { naming, .. }) = shell.ask.as_mut() {
                 // The field takes the keyboard back, so the name can be changed at once.
-                (naming.refused, naming.waiting, naming.focused) = (Some(words(&refused, renaming.is_some())), false, false);
-                // The host settles an unclear rename only when the same one is asked for again.
+                // The host settles an unclear rename only when the same one is asked for again, so
+                // the first one stays the rename to ask for.
                 if matches!(refused, BranchRefused::Unclear(_)) && renaming.is_some() {
-                    naming.unsettled.get_or_insert(name);
+                    let shown = shell.services.projects.as_ref().map_or_else(|| name.clone(), |h| h.branch_shown(&name));
+                    naming.unsettled.get_or_insert((name, shown));
                 }
+                let to = renaming.as_ref().map(|_| naming.unsettled.as_ref().map_or("", |u| u.1.as_str()));
+                (naming.refused, naming.waiting, naming.focused) = (Some(words(&refused, to)), false, false);
             }
         }
     }
@@ -187,8 +204,8 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
         ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
         ui.painter().rect_filled(window, 0.0, p.scrim);
         ui.interact(window, widgets::egui_id("branch-ask.veil"), Sense::click_and_drag());
-        let mine = [naming.renaming.clone(), naming.unsettled.clone()];
-        let name = |text: &str| checked(host.as_ref(), &listed, &mine, text);
+        let (renaming, unsettled) = (naming.renaming.clone(), naming.unsettled.clone());
+        let name = |text: &str| checked(host.as_ref(), &listed, (renaming.as_ref(), unsettled.as_ref()), text);
         (asked, close) = card(shell, ui, &p, (window, &from), &mut naming, name);
         close |= !naming.waiting && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
     });
