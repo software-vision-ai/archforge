@@ -1,7 +1,7 @@
 //! The short summary above the Before and After cards (frames V1.1 and V3.3 of page 09): how many
-//! values and members differ and which values, in whole sentences, worded while drawing from the two
-//! sides held. What the cards don't hold yet is said plainly, so a card with no marks never reads as
-//! "nothing changed".
+//! values, members and relationships differ and which values, in whole sentences, worded while
+//! drawing from the two sides held. Cards with no marks on a listed change say that only what they
+//! don't show changed, so they never read as "nothing changed".
 
 use std::sync::Arc;
 
@@ -38,24 +38,20 @@ pub(super) struct Words {
 /// What to say of `sides`. `listed` says the list of changes vouches that the element changed: a
 /// failed list doesn't, so the summary then speaks only of what the cards hold.
 pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> Words {
-    let not_shown = tr("Relationships aren't listed on these cards yet.");
     let (Some(was), Some(is)) = (&sides.before, &sides.after) else {
         let (head, body) = if sides.before.is_none() {
             (tr("This element was added"), tr("It is only on the After side, so there is nothing to compare."))
         } else {
             (tr("This element was removed"), tr("It is only on the Before side, so there is nothing to compare."))
         };
-        return Words { head, body: joined(&[body, not_shown]) };
+        return Words { head, body };
     };
     let mut said = differences(universe, (was, is), &sides.fields);
     let owner = sides.lists.after.iter().any(|l| l.kind == ListKind::Ownership && l.rows.iter().any(|r| r.change.is_some()));
-    let members = sides.lists.member_changes;
-    if said.is_empty() && !owner && members == 0 {
-        return if listed {
-            Words { head: tr("Only what these cards don't show changed"), body: joined(&[tr("The cards show the same on both sides."), not_shown]) }
-        } else {
-            Words { head: tr("The cards show no difference"), body: not_shown }
-        };
+    let (members, relationships) = (sides.lists.member_changes, sides.lists.relationship_changes);
+    if said.is_empty() && !owner && members == 0 && relationships == 0 {
+        let head = if listed { tr("Only what these cards don't show changed") } else { tr("The cards show no difference") };
+        return Words { head, body: tr("The cards show the same on both sides.") };
     }
     let count = said.len();
     said.truncate(MOST_SAID);
@@ -65,15 +61,14 @@ pub(super) fn words(universe: &Universe, sides: &ElementSides, listed: bool) -> 
     if owner {
         said.push(tr("The owner changed."));
     }
-    said.push(not_shown);
-    let member_head = trn("{n} member changed", "{n} members changed", members as u64);
-    let value_head = trn("{n} value changed", "{n} values changed", count as u64);
-    let head = match (count, members) {
-        (0, 0) => tr("The owner changed"),
-        (_, 0) => value_head,
-        (0, _) => member_head,
-        _ => fmt(&tr("{values} · {members}"), &[("values", &value_head), ("members", &member_head)]),
-    };
+    said.push(tr("Each difference is marked on the cards below."));
+    let heads = [
+        (count > 0).then(|| trn("{n} value changed", "{n} values changed", count as u64)),
+        (members > 0).then(|| trn("{n} member changed", "{n} members changed", members as u64)),
+        (relationships > 0).then(|| trn("{n} relationship changed", "{n} relationships changed", relationships as u64)),
+    ];
+    let both = |these: String, those: String| fmt(&tr("{these} · {those}"), &[("these", &these), ("those", &those)]);
+    let head = heads.into_iter().flatten().reduce(both).unwrap_or_else(|| tr("The owner changed"));
     Words { head, body: joined(&said) }
 }
 

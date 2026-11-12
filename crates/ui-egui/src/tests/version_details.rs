@@ -722,7 +722,7 @@ const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 const SUMMARY: &str = "workspace.change-view.summary";
-const NOT_SHOWN: &str = "Relationships aren't listed on these cards yet.";
+const MARKED: &str = "Each difference is marked on the cards below.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -1571,14 +1571,13 @@ fn says(h: &Harness<'static, Shell>, head: &str, body: &str) {
 fn the_summary_says_added_or_removed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        says(h, "This element was added", &format!("It is only on the After side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
         landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
-        says(h, "This element was removed", &format!("It is only on the Before side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
     });
 }
 
-/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all;
-/// members are said not to be shown, so the count isn't read as all there is.
+/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all.
 #[test]
 fn the_summary_counts_and_says_each_difference() {
     in_both(|h, host| {
@@ -1587,11 +1586,11 @@ fn the_summary_counts_and_says_each_difference() {
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
         let fields = vec![visibility.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
         let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None, made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
         let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
-        says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
+        says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1605,7 +1604,7 @@ fn the_summary_counts_what_it_does_not_write_out() {
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
             landed(h, id, key.clone(), Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-            says(h, &format!("{n} values changed"), &format!("{three}{more} {NOT_SHOWN}"));
+            says(h, &format!("{n} values changed"), &format!("{three}{more} {MARKED}"));
         }
     });
 }
@@ -1618,7 +1617,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         let said = "Visibility is only on the Before side. Visibility is only on the After side.";
-        says(h, "2 values changed", &format!("{said} {NOT_SHOWN}"));
+        says(h, "2 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1630,10 +1629,10 @@ fn unmarked_cards_never_read_as_nothing_changed() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "Only what these cards don't show changed", &format!("The cards show the same on both sides. {NOT_SHOWN}"));
+        says(h, "Only what these cards don't show changed", "The cards show the same on both sides.");
         h.state_mut().versions.compare_failed = Some("the list failed".into());
         h.run_steps(1);
-        says(h, "The cards show no difference", NOT_SHOWN);
+        says(h, "The cards show no difference", "The cards show the same on both sides.");
     });
 }
 
@@ -1645,7 +1644,7 @@ fn the_summary_cuts_a_long_value() {
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {NOT_SHOWN}", "x".repeat(40)));
+        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {MARKED}", "x".repeat(40)));
         assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
     });
 }
@@ -1671,7 +1670,7 @@ fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>
 
 /// A list of `kind` holding rows that say each `(words, change)`.
 fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
-    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, change };
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, to: None, note: String::new(), change };
     CardList { kind, rows: rows.into_iter().map(row).collect() }
 }
 
@@ -1723,6 +1722,34 @@ fn a_missing_name_is_said_in_words() {
     });
 }
 
+/// A relationship reads as what it joins to, after its role, or after its kind when it has none, with
+/// its far end's multiplicity, and says when this side has nothing at its far end.
+#[test]
+fn a_relationship_reads_as_what_it_joins_to() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let row = |class, name: &str, to: Named, change| {
+            let note = if name.is_empty() { String::new() } else { " [1..*]".to_owned() };
+            ListRow { id: Uuid([9; 16]), class, name: Named::Said(name.into()), to: Some((None, to)), note, change }
+        };
+        let side = |far: Named| {
+            let rows = vec![
+                row(archforge_uml::ASSOCIATION, "lines", Named::Said("OrderLine".into()), None),
+                row(archforge_uml::GENERALIZATION, "", Named::Said("Shape".into()), None),
+                row(archforge_er::RELATIONSHIP, "", far, Some(ChangeKind::Changed)),
+            ];
+            vec![CardList { kind: ListKind::Relationships, rows }]
+        };
+        let lists = CardLists { before: side(Named::Unavailable), after: side(Named::Said("order".into())), ..CardLists::default() };
+        landed(h, id, key, listed(id, "a", lists));
+        assert_eq!(named(h, "Relationships, lines \u{2192} OrderLine [1..*]"), 2, "{:?}", painted(h));
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} Shape"), 2, "no role: its kind");
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} Not available on this side, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} order, Changed"), 1);
+        assert_eq!(painted_times(h, "RELATIONSHIPS"), 2);
+    });
+}
+
 /// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
 /// whose words differing is no renaming.
 #[test]
@@ -1765,7 +1792,7 @@ fn a_long_list_draws_only_rows_in_view() {
     });
 }
 
-/// Members that differ are counted beside the values, the same count however many rows hold it;
+/// Members and relationships that differ are counted beside the values, the same count however many rows hold it;
 /// a changed owner is said in words, past the sentences a summary cuts, and is no value in the count.
 #[test]
 fn the_summary_counts_members_and_says_the_owner() {
@@ -1773,21 +1800,31 @@ fn the_summary_counts_members_and_says_the_owner() {
         let (id, key) = element_open(h, host);
         let some = |n| CardLists { member_changes: n, ..CardLists::default() };
         landed(h, id, key.clone(), listed(id, "a", some(2)));
-        says(h, "2 members changed", NOT_SHOWN);
+        says(h, "2 members changed", MARKED);
+        let joined = |members, relationships| CardLists { member_changes: members, relationship_changes: relationships, ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "a", joined(0, 1)));
+        says(h, "1 relationship changed", MARKED);
+        let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(joined(1, 2)), ..sided(id, schema("a"), schema("a"), fields) })));
+        says(
+            h,
+            "1 value changed \u{b7} 1 member changed \u{b7} 2 relationships changed",
+            &format!("Visibility changed from Not set to Private. {MARKED}"),
+        );
         let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
-        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
         let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
-        says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
+        says(h, "The owner changed", &format!("The owner changed. {MARKED}"));
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
         landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {NOT_SHOWN}"));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {MARKED}"));
         landed(h, id, key, with_owner(vec![changed; 4]));
         let one = "Visibility changed from Not set to Private.";
-        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {NOT_SHOWN}"));
+        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {MARKED}"));
     });
 }
 

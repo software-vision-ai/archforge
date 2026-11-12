@@ -605,9 +605,11 @@ str		Attributes	属性
 str		Operations	操作
 str		Literals	字面量
 str		Members	成员
+str		Relationships	关系
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	所属
 str		Not available on this side	此侧不可用
-str		Relationships aren't listed on these cards yet.	这些卡片尚未列出关系。
+str		Each difference is marked on the cards below.	每处差异都在下方卡片中标出。
 plural		Related change	相关更改
 str		{name} was added in this comparison.	{name} 在此比较中已添加。
 str		{name} was changed in this comparison.	{name} 在此比较中已更改。
@@ -618,7 +620,8 @@ str		The cards show the same on both sides.	两侧卡片显示的内容相同。
 str		The owner changed	所属已更改
 str		The owner changed.	所属已更改。
 plural		{n} member changed	{n} 个成员已更改
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} 个关系已更改
+str		{these} · {those}	{these} · {those}
 str		This element was added	此元素已添加
 str		It is only on the After side, so there is nothing to compare.	它仅存在于“之后”一侧，因此无可比较。
 str		This element was removed	此元素已移除

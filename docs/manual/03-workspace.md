@@ -79,12 +79,15 @@ An open project fills the window with its workspace.
   **After** (current work), give the element's kind, name and values. A name or value that differs
   is marked with − on the Before card and + on the After card as well as a tint. An element with
   no name goes by what it joins or says, such as *Customer → Order*, and those words following a
-  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
-  and members that differ and says the first three values in words, or that the element was added
+  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values,
+  members and relationships that differ and says the first three values in words, or that the element was added
   or removed. Below the values the cards group the element's attributes or columns, operations, literals,
-  other members and owner under headings, marked the same way when one came, went or changed; a
-  long list scrolls with the cards. Relationships aren't listed on the cards yet, and the summary
-  says so. Under the cards, **Related change** names the other model elements connected to this one
+  other members, relationships and owner under headings, marked the same way when one came, went or changed; a
+  long list scrolls with the cards. A relationship between two elements is listed on both their cards,
+  whoever owns it, by its role at the far end or its own name, else its kind, and what it joins to,
+  or *Not available on this side* when nothing is set there, such as `lines → OrderLine [1..*]` or `Generalization → Shape`; an association's end that a class
+  owns is listed there rather than among its attributes. Renaming what it joins to isn't marked as a
+  change to it. Under the cards, **Related change** names the other model elements connected to this one
   that also differ in this comparison: what it or its members refer to, what refers to them, and
   its owner. **Go to** and the name opens that element against the same version.
   The project's name at the top closes it.

@@ -605,9 +605,11 @@ str		Attributes	属性
 str		Operations	操作
 str		Literals	リテラル
 str		Members	メンバー
+str		Relationships	関連
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	所有関係
 str		Not available on this side	この側では利用できません
-str		Relationships aren't listed on these cards yet.	関連はまだこれらのカードには一覧表示されません。
+str		Each difference is marked on the cards below.	各違いは下のカードに示されています。
 plural		Related change	関連する変更
 str		{name} was added in this comparison.	{name} はこの比較で追加されました。
 str		{name} was changed in this comparison.	{name} はこの比較で変更されました。
@@ -618,7 +620,8 @@ str		The cards show the same on both sides.	カードの内容は両側で同じ
 str		The owner changed	所有者が変更されました
 str		The owner changed.	所有者が変更されました。
 plural		{n} member changed	{n} 件のメンバーが変更されました
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} 件の関連が変更されました
+str		{these} · {those}	{these} · {those}
 str		This element was added	この要素は追加されました
 str		It is only on the After side, so there is nothing to compare.	変更後の側にのみ存在するため、比較するものはありません。
 str		This element was removed	この要素は削除されました
