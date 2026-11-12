@@ -189,9 +189,15 @@ every diagram. Each row has an edit button (a pencil) at its right end; it opens
 which changes nothing until you apply it with the check at its foot (or Enter). The cross (or
 Escape) cancels, and the red bin removes the row.
 
-Type a description in the **Description** field and press Enter, or leave the field, to keep it;
-empty the field to remove it. Each change is one undo step. In a UML model the description is
-kept as a comment the element owns: it goes with the element when you remove it, and an agent
+Type a new name in the **Name** field, or a description in the **Description** field, and press
+Enter, or leave the field, to keep it; press Escape to give up what you typed and get back what
+was there, with nothing changed. Empty the **Description** field to remove the description. A
+name can't be empty: an emptied name is refused before anything changes, and the old name stays
+(a relationship or a diagram may be left unnamed). Each change is one undo step. When a change is
+refused, the reason shows at the foot of Properties until you select something else. A description
+or an end's role you leave by selecting something else is kept then; if that is refused, the reason
+names the element you typed it on, and a description stays in that element's field. In a UML model the
+description is kept as a comment the element owns: it goes with the element when you remove it, and an agent
 reading the element reads it too.
 
 **Appearance** styles the selection on the open diagram only: fill, border and text colours, the

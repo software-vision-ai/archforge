@@ -551,6 +551,7 @@ str		The branch stays: {why}	La branche reste : {why}
 str		At most {n} characters.	{n} caractères au maximum.
 str		Enter a name.	Saisissez un nom.
 str		A name has to be one line.	Un nom doit tenir sur une ligne.
+str		A name can't be empty.	Un nom ne peut pas être vide.
 str		A name can't start or end with a space.	Un nom ne peut ni commencer ni finir par une espace.
 str		Working changes	Modifications en cours
 str		History	Historique
@@ -900,6 +901,8 @@ str		Selection · this diagram	Sélection · ce diagramme
 str		{kind} · this diagram	{kind} · ce diagramme
 plural		{n} item	{n} élément|{n} éléments
 str		The model could not be opened	Le modèle n’a pas pu être ouvert
+str		Not kept on {name}: {why}	Non conservé sur {name} : {why}
+str		Not kept on the element selected before: {why}	Non conservé sur l’élément sélectionné auparavant : {why}
 str		The host gives no ids for the model's elements	L’hôte ne fournit pas d’identifiants pour les éléments du modèle
 str		Collapse panel	Replier le panneau
 str		Not available yet	Pas encore disponible

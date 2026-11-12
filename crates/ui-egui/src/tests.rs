@@ -809,6 +809,116 @@ fn closing_with_a_description_being_typed_keeps_it_or_asks() {
     }
 }
 
+/// The name of the element `id`, as the model has it.
+fn name_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_core::name_of(st, st.by_uuid(id).unwrap())
+}
+
+/// Selects `id` and replaces what its Properties field `field` holds with `text`, without Enter.
+fn retype_on(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, field: &str, text: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    retype(h, field, text);
+}
+
+/// Escape in a Properties field gives the edit up: an emptied name and a typed description come
+/// back as the model has them, nothing is sent and no step is added. In light and dark (AR-417).
+#[test]
+fn escape_gives_up_a_properties_edit_and_sends_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        let before = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        retype_on(&mut h, class, "workspace.properties.name", "");
+        assert!(h.state().panels.name.as_ref().is_some_and(|n| n.text.is_empty()), "{theme:?}: emptied, not yet written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        retype_on(&mut h, class, "workspace.properties.description", "Draft.");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+        assert_eq!(description_on(&h, class), "", "{theme:?}");
+        assert!(h.state().panels.name.is_none() && h.state().panels.description.is_none(), "{theme:?}: the drafts are gone");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: nothing was refused");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), before, "{theme:?}: no step");
+    }
+}
+
+/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words; another
+/// refusal is the engine's reason without its command's id; the notice goes with another
+/// selection. In light and dark (AR-417).
+#[test]
+fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        for empty in ["", "   "] {
+            retype_on(&mut h, class, "workspace.properties.name", empty);
+            // A session that refuses every change in its own words shows whether anything reached it.
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+            assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
+            assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
+            assert!(h.state().panels.name.is_none() && !dirty(&h), "{theme:?}: the old name stays, nothing sent");
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [table.to_string()] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
+        s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
+        retype_on(&mut h, table, "workspace.properties.name", "order");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with(char::is_uppercase) && notice.contains("order") && !notice.contains("rename"), "{theme:?}: {notice}");
+    }
+}
+
+/// A draft left on the element selected before and refused when the selection moves on names
+/// that element at the panel's foot, so it is not read as about the one shown, until the selection
+/// moves again; a description's draft stays on its element. An association's ends too, which have
+/// no name. In light and dark (AR-417).
+#[test]
+fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        let select = |h: &mut Harness<'static, Shell>, id: String| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+        };
+        select(&mut h, class.to_string());
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: class, text: "a\u{7}b".into(), refused: false });
+        select(&mut h, table.to_string());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on Order: ") && notice.contains("control"), "{theme:?}: {notice}");
+        assert!(painted(&h).contains(&notice), "{theme:?}: at the panel's foot");
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.target == class && d.refused), "{theme:?}: the draft stays");
+        select(&mut h, class.to_string());
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
+        let (mut h, made) = modifiers_sample(theme);
+        select(&mut h, made["holds"].clone());
+        h.state_mut().panels.ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
+        select(&mut h, made["Order"].clone());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
+    }
+}
+
+/// Enter with a new name still renames, and a click elsewhere still writes what was typed. In
+/// light and dark (AR-417).
+#[test]
+fn enter_and_a_click_elsewhere_still_rename_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        retype_on(&mut h, class, "workspace.properties.name", "Purchase");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Purchase", "{theme:?}");
+        retype_on(&mut h, class, "workspace.properties.name", "Sale");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        assert_eq!(name_on(&h, class), "Sale", "{theme:?}: written when left");
+    }
+}
+
 #[test]
 fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
     use crate::control::answer;
@@ -20205,6 +20315,76 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(line(&h), (Some("/goods".into()), Some("* = few {ordered, subsets lines}".into())));
+    }
+}
+
+/// An association with both ends' Modifiers open, Read only changed on each end in `changed`.
+fn both_modifiers_open(theme: ThemeKind, changed: &[usize]) -> Harness<'static, Shell> {
+    let (mut h, made) = modifiers_sample(theme);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["holds"]] })).unwrap();
+    h.run();
+    for i in [0, 1] {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.modifiers")).center();
+        click(&mut h, at);
+    }
+    for i in changed {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.read-only")).center();
+        click(&mut h, at);
+    }
+    h
+}
+
+/// Escape in one end's Role gives up that role alone, and the other end's Modifiers keep their
+/// change. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[0]);
+        let (ends, before) = (|h: &Harness<'static, Shell>| h.state().panels.ends.clone().unwrap(), revision(&h));
+        retype(&mut h, "workspace.properties.end.1.role", "goods");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(ends(&h).role[1], "items", "{theme:?}: the role is given up");
+        assert!(ends(&h).modifiers[0].read_only && ends(&h).modifiers_open[0], "{theme:?}: end 0's Modifiers keep their change");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+    }
+}
+
+/// Escape in one end's Default field, which the toolkit lets go of as the frame begins, goes to
+/// that end's Modifiers, not to the other end's changed last. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_default_goes_to_its_own_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[1]);
+        let changed = |h: &Harness<'static, Shell>| h.state().panels.ends.as_ref().unwrap().modifiers.clone().map(|m| m.read_only);
+        let at = rect_of(&h, "workspace.properties.end.0.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, true], "{theme:?}: end 1's change stays");
+        let at = rect_of(&h, "workspace.properties.end.1.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, false], "{theme:?}: its own Default gives it up");
+    }
+}
+
+/// With no field holding the keyboard, Escape goes to the Modifiers changed last (end 1); once
+/// they are given up, cancelled or applied, the next goes on to end 0's. In light and dark (AR-417).
+#[test]
+fn escape_with_no_field_goes_on_to_the_other_end_once_the_last_is_resolved() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let pending = |h: &Harness<'static, Shell>| h.state().panels.ends.clone().map(|e| [0, 1].map(|i| e.modifiers[i] != e.written_modifiers[i]));
+        for way in ["escape", "cancel", "apply"] {
+            let mut h = both_modifiers_open(theme, &[0, 1]);
+            h.state_mut().panels.scroll = 10_000.0;
+            h.run();
+            match rect_of(&h, &format!("workspace.properties.end.1.{way}").replace(".escape", ".cancel")).center() {
+                _ if way == "escape" => key(&mut h, egui::Key::Escape, egui::Modifiers::NONE),
+                at => click(&mut h, at),
+            }
+            assert_eq!(pending(&h), Some([true, false]), "{theme:?} {way}: end 1 resolved, end 0 kept");
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            assert_eq!(pending(&h), Some([false, false]), "{theme:?} {way}: Escape reached end 0");
+        }
     }
 }
 

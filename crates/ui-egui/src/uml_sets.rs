@@ -20,7 +20,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, menu, run, section, text_field};
+use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, edit_field, menu, run, section};
 use crate::ux::{self, Palette, icons, types};
 
 /// The automation ids the design gives.
@@ -569,14 +569,15 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     let candidate_names: Vec<String> = candidates.iter().map(|g| sets::generalization_name(store, *g)).collect();
     let member_rows: Vec<(Obj, Uuid, String)> =
         members.iter().filter_map(|g| Some((*g, store.uuid(*g).ok()?, sets::generalization_name(store, *g)))).collect();
-    // Name, written on Enter or leaving the field; the name field takes the keyboard when the set
-    // was just made.
+    // Name, written on Enter or leaving the field, given up on Escape, never sent empty; the name
+    // field takes the keyboard when the set was just made.
     let focus = shell.panels.set_name_focus.take() == Some(id);
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let committed = text_field(
+    let set = "uml.generalization-set.set";
+    let out = edit_field(
         shell,
         ui,
         p,
@@ -589,10 +590,12 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         focus,
         true,
     );
-    if committed {
+    if out == FieldOut::Cancel {
         shell.panels.name = None;
-        if text.trim() != subject.name {
-            match run(shell, "uml.generalization-set.set", json!({ "set": id.to_string(), "name": text.trim() })) {
+    } else if out == FieldOut::Commit {
+        shell.panels.name = None;
+        if text.trim() != subject.name && !crate::panels::refuse_empty_name(shell, set, &text) {
+            match run(shell, set, json!({ "set": id.to_string(), "name": text.trim() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
             }

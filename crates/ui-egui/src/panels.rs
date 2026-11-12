@@ -2,7 +2,8 @@
 //! Properties shows the selection as the ER design does — a schema's name; a table's name and
 //! kind, its columns with the in-place column editor, its keys — and Skills shows the skills on
 //! the selection and the ones it inherits, each opening in its tab. Every change goes through the
-//! engine's commands, so undo covers it; a refusal stays with the field in the engine's words.
+//! engine's commands, so undo covers it; a refusal shows at the panel's foot as the engine's
+//! reason, without the command's id, until the selection moves on.
 //! Agent and Appearance say what is true until their slices.
 //!
 //! The geometry is the design's: a section is 16 px in from the panel's edges with a full-width
@@ -51,8 +52,10 @@ pub struct State {
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
     pub picker: Option<crate::appearance::Picker>,
-    /// The last refusal of a change, shown at the panel's foot until the next change.
+    /// The last refusal of a change, shown at the panel's foot until the next change or another
+    /// selection, and the selection it was given under.
     pub notice: Option<String>,
+    pub notice_for: Option<Uuid>,
     /// The classifier No subclasses (final) was refused on, while something specializes it: the
     /// refusal shows under the check box, naming those classifiers (AR-137).
     pub final_refused: Option<Uuid>,
@@ -391,9 +394,27 @@ impl Subject {
     }
 }
 
+/// Runs a command on the open project's session; a refusal comes back as the panel says it
+/// ([`refusal`]).
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    session.execute(id, &params).map(|o| o.value).map_err(|e| refusal(&e))
+}
+
+/// An engine's refusal as the panel says it: the reason alone, without the command's id or the
+/// parameter it is about, as a sentence; a reason the catalogues know is translated.
+pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
+    let reason = match e {
+        archforge_engine::EngineError::Failed { error, .. } => error.message.clone(),
+        archforge_engine::EngineError::Disabled { reason, .. } => (*reason).to_string(),
+        other => other.to_string(),
+    };
+    if reason == "the name is empty" {
+        return tr("A name can't be empty.");
+    }
+    let mut chars = reason.chars();
+    let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
 }
 
 fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
@@ -467,8 +488,18 @@ pub(crate) fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
     Some(y + 50.0)
 }
 
-/// A label over a filled text field that commits on Enter or when it loses the keyboard; gives
-/// the text as typed and whether it was committed this frame.
+/// What a text field that writes when it is left asked for this frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldOut {
+    Idle,
+    /// The text as typed is to be written: Enter, or the field left another way.
+    Commit,
+    /// Escape: the edit is given up and the value as last written comes back; nothing is written.
+    Cancel,
+}
+
+/// A label over a filled text field that commits on Enter, and when it loses the keyboard if
+/// `commit_on_blur`; gives whether it was committed this frame ([`edit_field`] says more).
 pub(crate) fn text_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -482,6 +513,49 @@ pub(crate) fn text_field(
     take_focus: bool,
     commit_on_blur: bool,
 ) -> bool {
+    edit_field(shell, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur) == FieldOut::Commit
+}
+
+/// Records which widget held the keyboard as each frame begins, before the toolkit takes it away
+/// on Escape from a field that does not keep Escape (AR-417).
+struct KeysAtStart;
+
+impl egui::Plugin for KeysAtStart {
+    /// The recorder's name, for the toolkit's profiling.
+    fn debug_name(&self) -> &'static str {
+        "archforge.keys-at-start"
+    }
+
+    /// Runs before the frame's input reaches the toolkit's focus: the keyboard is still where it was.
+    fn input_hook(&mut self, ctx: &egui::Context, _input: &mut egui::RawInput) {
+        let held = ctx.memory(|m| m.focused());
+        ctx.data_mut(|d| d.insert_temp(widgets::egui_id("archforge.keys-at-start"), held));
+    }
+}
+
+/// The widget that held the keyboard as this frame began, so Escape goes to what the person was
+/// in even when the toolkit has already let go of it; none when nothing held it. The recorder is
+/// registered on first use (later calls are ignored) and answers from the next frame on.
+pub(crate) fn keys_at_start(ui: &egui::Ui) -> Option<egui::Id> {
+    ui.ctx().add_plugin(KeysAtStart);
+    ui.data(|d| d.get_temp::<Option<egui::Id>>(widgets::egui_id("archforge.keys-at-start"))).flatten()
+}
+
+/// [`text_field`], saying what it asked for. One that commits on blur is written in place, as in
+/// Models: Enter or leaving it commits, Escape gives the edit up (AR-417); others leave Escape be.
+pub(crate) fn edit_field(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    text: &mut String,
+    limit: usize,
+    take_focus: bool,
+    commit_on_blur: bool,
+) -> FieldOut {
     let paint = ui.painter().clone();
     ux::text(&paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
@@ -489,6 +563,15 @@ pub(crate) fn text_field(
     widgets::record_visible(ui, &mut shell.registry, id, "field", field);
     let inner = field_inner(ui, field);
     let eid = widgets::egui_id(id);
+    // Escape stays with a field that commits on blur and cancels there (checklist 118).
+    let cancel = commit_on_blur && ui.memory(|m| m.has_focus(eid)) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    // The toolkit still reports the field as left on the frame after, which is no commit.
+    let just_cancelled = ui.data_mut(|d| d.remove_temp::<bool>(eid.with("cancelled"))).unwrap_or(false);
+    if cancel {
+        ui.memory_mut(|m| m.surrender_focus(eid));
+        ui.data_mut(|d| d.insert_temp(eid.with("cancelled"), true));
+    }
+    let filter = egui::EventFilter { escape: commit_on_blur, horizontal_arrows: true, vertical_arrows: true, tab: false };
     let edit = egui::TextEdit::singleline(text)
         .id(eid)
         .frame(egui::Frame::NONE)
@@ -496,6 +579,7 @@ pub(crate) fn text_field(
         .font(types::SMALL.font())
         .text_color(p.text)
         .char_limit(limit)
+        .event_filter(filter)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
     let _ = (*out.response).clone().accessible_name(label);
@@ -507,7 +591,13 @@ pub(crate) fn text_field(
     }
     // A one-line field gives up the keyboard on Enter in the same frame.
     let enter = (out.response.has_focus() || out.response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
-    enter || (commit_on_blur && out.response.lost_focus())
+    if cancel {
+        FieldOut::Cancel
+    } else if enter || (commit_on_blur && out.response.lost_focus() && !just_cancelled) {
+        FieldOut::Commit
+    } else {
+        FieldOut::Idle
+    }
 }
 
 /// Where a field's one line of text goes: 8 points in from the sides, its row centred on the
@@ -1128,17 +1218,33 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     }
 }
 
-/// The name field of a schema or table, committed through its rename command.
+/// The rename commands whose name may be emptied, which leaves the element unnamed.
+const MAY_BE_UNNAMED: [&str; 3] = ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"];
+
+/// Refuses a name of nothing but spaces for an element that needs one, before anything is sent:
+/// the panel says so in plain words, and the name as written stays. Gives whether it refused.
+pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
+    let refused = name.trim().is_empty() && !MAY_BE_UNNAMED.contains(&cmd);
+    if refused {
+        shell.panels.notice = Some(tr("A name can't be empty."));
+    }
+    refused
+}
+
+/// The name field of an element, committed through its rename command on Enter or when it is
+/// left; Escape brings the name back, and an empty name is refused before it is sent.
 pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
     let Some(id) = subject.id else { return };
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let committed = text_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
-    if committed {
+    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
+    if out == FieldOut::Cancel {
         shell.panels.name = None;
-        if text.trim() != subject.name {
+    } else if out == FieldOut::Commit {
+        shell.panels.name = None;
+        if text.trim() != subject.name && !refuse_empty_name(shell, cmd, &text) {
             match run(shell, cmd, json!({ key: id.to_string(), "name": text.trim() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
@@ -1172,8 +1278,21 @@ fn write_description(shell: &mut Shell, target: Uuid, text: String) {
         }
         Err(e) => {
             shell.panels.description = Some(DescriptionDraft { target, text, refused: true });
-            shell.panels.notice = Some(e);
+            shell.panels.notice = Some(refused_on(shell, target, e));
         }
+    }
+}
+
+/// A refusal `why` of what was typed on `target`, as the panel's notice: when `target` is not the
+/// element selected, as when its draft is written because the selection moved on, it names the
+/// element, so it is not read as about the one shown (AR-417).
+pub(crate) fn refused_on(shell: &Shell, target: Uuid, why: String) -> String {
+    let Some(s) = shell.session.as_ref() else { return why };
+    let store = s.doc();
+    let Some(o) = store.by_uuid(target).filter(|o| s.view().selection.first() != Some(o)) else { return why };
+    match archforge_core::name_of(store, o) {
+        name if name.is_empty() => fmt(&tr("Not kept on the element selected before: {why}"), &[("why", &why)]),
+        name => fmt(&tr("Not kept on {name}: {why}"), &[("name", &name), ("why", &why)]),
     }
 }
 
@@ -1211,7 +1330,8 @@ pub(crate) fn description_pending(panels: &State) -> bool {
 }
 
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
-/// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]). It
+/// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]); Escape
+/// gives the typing up, a refused draft too, and the description as written comes back. It
 /// shows what the element's notation keeps: an ER element's description, a UML element's
 /// description Comment (AR-186).
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
@@ -1221,7 +1341,7 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
         Some(d) if d.target == id => d.text.clone(),
         _ => current.clone(),
     };
-    let committed = text_field(
+    let out = edit_field(
         shell,
         ui,
         p,
@@ -1234,7 +1354,9 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
         false,
         true,
     );
-    if committed {
+    if out == FieldOut::Cancel {
+        shell.panels.description = None;
+    } else if out == FieldOut::Commit {
         write_description(shell, id, text);
     } else if text != current {
         // The refused mark stays while the text does; a change makes it a draft to write again.
@@ -2249,6 +2371,13 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
+    // A refusal is about what was selected: it goes with another selection. The drafts left on the
+    // element selected before are written after, so a refusal of theirs shows, naming that element
+    // ([`refused_on`]), until the selection moves on again.
+    if shell.panels.notice_for != s.id {
+        shell.panels.notice_for = s.id;
+        shell.panels.notice = None;
+    }
     // A description typed on the element selected before goes to it first.
     flush_description(shell, s.id);
     crate::uml_relate::finish_ends(shell, s.id);

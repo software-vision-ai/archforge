@@ -29,7 +29,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::panels::{Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// What the Relationship tool draws.
@@ -760,9 +760,18 @@ pub struct EndsEdit {
     pub modifier_refused: [Option<(&'static str, String)>; 2],
     /// Whether each end's Modifiers are open: closed, a line sums them up.
     pub modifiers_open: [bool; 2],
+    /// The end whose Modifiers were changed last, for [`EndsEdit::escape_target`] (AR-417).
+    pub modifiers_last: Option<usize>,
 }
 
 impl EndsEdit {
+    /// The end whose open Modifiers Escape gives up when no field holds the keyboard: the one changed
+    /// last while it holds a change, else one that does, so a resolved draft hands it on (AR-417).
+    pub(crate) fn escape_target(&self) -> Option<usize> {
+        let pending = |i: usize| self.modifiers_open[i] && self.modifiers[i] != self.written_modifiers[i];
+        self.modifiers_last.filter(|i| pending(*i)).or_else(|| (0..2).find(|i| pending(*i)))
+    }
+
     /// Whether an end holds a role, multiplicity or modifiers typed and not yet written: only what
     /// differs from the model, as Properties fills this in for an association nothing has touched.
     pub(crate) fn unwritten(&self) -> bool {
@@ -792,7 +801,7 @@ pub(crate) fn finish_ends(shell: &mut Shell, subject: Option<Uuid>) {
         if params.as_object().is_some_and(|fields| fields.len() > 2)
             && let Err(e) = run(shell, "uml.association.set-end", params)
         {
-            shell.panels.notice = Some(e);
+            shell.panels.notice = Some(crate::panels::refused_on(shell, edit.association, e));
         }
     }
 }
@@ -860,6 +869,7 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
         modifiers,
         modifier_refused: [None, None],
         modifiers_open: [false, false],
+        modifiers_last: None,
     })
 }
 
@@ -1043,7 +1053,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         let half = ((width - 8.0) / 2.0).max(0.0);
         let key = format!("workspace.properties.end.{i}");
         let at = pos2(r.left() + PAD, y);
-        let role = text_field(
+        let role_out = crate::panels::edit_field(
             shell,
             ui,
             p,
@@ -1056,6 +1066,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             false,
             true,
         );
+        // Escape gives the role up: the role as written comes back, and nothing is sent.
+        if role_out == FieldOut::Cancel {
+            edit.role[i] = edit.written_role[i].clone();
+        }
+        let role = role_out == FieldOut::Commit;
         let typed = edit.multiplicity[i].clone();
         let refusal = edit.refused[i].clone();
         // Where the other end is qualified, this end's multiplicity counts per qualifier value (AR-127).
@@ -1293,6 +1308,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let left = r.left() + PAD;
     let right = left + half + 8.0;
     let key = format!("workspace.properties.end.{i}");
+    let before = edit.modifiers[i].clone();
     let refused = edit.modifier_refused[i].clone();
     let under = |paint: &egui::Painter, y: f32, fields: &[&str]| -> f32 {
         match &refused {
@@ -1423,8 +1439,18 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     }
     drop(offered);
     crate::uml_panel::keep_targets(shell, targets);
+    if edit.modifiers[i] != before {
+        edit.modifiers_last = Some(i);
+    }
     let edited = edit.modifiers[i] != edit.written_modifiers[i];
-    let escape = edited && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
+    // Escape goes to these Modifiers when one of their controls held the keyboard as the frame
+    // began (the toolkit has let go of the Default field by now), or with none holding it.
+    let own = ["default", "static", "derived", "read-only", "ordered", "unique", "subsets", "redefines", "cancel", "apply"];
+    let theirs = match crate::panels::keys_at_start(ui) {
+        Some(f) => own.iter().any(|c| f == crate::widgets::egui_id(&format!("{key}.{c}"))),
+        None => edit.escape_target() == Some(i),
+    };
+    let escape = edited && theirs && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
     let asked = if cancel || escape {
         Asked::Cancel
     } else if apply || enter {
