@@ -2636,6 +2636,7 @@ fn kind(e: archforge_project::Error) -> CreateError {
 #[cfg(unix)]
 mod tests {
     use super::*;
+    use crate::test_host::Sandbox;
 
     fn wait(rx: &Receiver<Result<Opened, CreateError>>) -> Result<Opened, CreateError> {
         rx.recv_timeout(Duration::from_secs(60)).expect("the host answers")
@@ -2693,12 +2694,42 @@ mod tests {
         host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
     }
 
+    /// The run folder of the database server `pid`: the folder of the configuration it runs with.
+    fn run_folder(pid: u32) -> PathBuf {
+        let out = std::process::Command::new("/bin/ps").args(["-o", "command=", "-p", &pid.to_string()]).output().unwrap();
+        let command = String::from_utf8(out.stdout).unwrap();
+        let (_, config) = command.trim().split_once(" --config ").unwrap_or_else(|| panic!("a server's command: {command:?}"));
+        Path::new(config).parent().unwrap().to_path_buf()
+    }
+
+    /// A test that fails with a project open and written to, through the test host's guard, leaves
+    /// no database server running, and neither its own folder nor the server's run folder behind (AR-421).
+    #[test]
+    fn a_test_that_panics_with_a_project_open_leaves_no_server_and_no_folder() {
+        let seen = Mutex::new(None);
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let sandbox = Sandbox::named("guard", None);
+            let path = sandbox.project();
+            // A write starts the writer thread, which holds the host: dropping the host alone
+            // no longer stops its servers.
+            sandbox.host.write(&path, model("shop"));
+            assert_eq!(saved(&sandbox.host, &path), Ok(true));
+            let pid = lock(&sandbox.host.inner.open)[0].server().pid();
+            *lock(&seen) = Some((pid, sandbox.base.clone(), run_folder(pid)));
+            panic!("a test fails with its project open");
+        }));
+        assert!(failed.is_err(), "the test failed");
+        let (pid, base, run) = seen.into_inner().unwrap().expect("the project opened");
+        assert!(gone(pid), "the server {pid} still runs");
+        assert!(!base.exists(), "{} is left", base.display());
+        assert!(!run.exists(), "{} is left", run.display());
+    }
+
+    /// The host keeps several projects open; closing one stops only its server, and exit stops the rest.
     #[test]
     fn the_host_keeps_several_projects_open_closes_one_on_request_and_all_on_exit() {
-        let base = std::env::temp_dir().join(format!("af-host-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("host", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let opened = wait(&host.create(&folder, "Commerce platform")).unwrap();
         assert_eq!(opened.path, folder.canonicalize().unwrap().join("Commerce platform.archforge"));
@@ -2725,12 +2756,12 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save puts a project back to its last save (or to how it was created) and closes it;
+    /// closing without writing keeps what was written.
     #[test]
     fn dont_save_puts_a_project_back_to_its_last_save_and_closes_it() {
-        let base = std::env::temp_dir().join(format!("af-discard-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("discard", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let path = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         let shop = model("shop");
@@ -2776,13 +2807,13 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save through the host puts the model back to its save but keeps the conversations
+    /// written on the writer.
     #[test]
     fn dont_save_through_the_host_keeps_the_conversations_written_on_the_writer() {
         use archforge_project::{NewChat, NewQuestion, NewTurn, Provider, TurnEnd, TurnOutcome};
-        let base = std::env::temp_dir().join(format!("af-chats-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("chats", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
         let shop = model("shop");
         host.write(&path, shop.clone());
@@ -2838,10 +2869,8 @@ mod tests {
         use archforge_ui_egui::chat_panel::Chip;
         use archforge_ui_egui::chat_store::{Anchor, AnchorRole, Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
         const CANARY: &str = "sk-ant-api03-canary-chat-store-0000-4F2a";
-        let base = std::env::temp_dir().join(format!("af-chat-store-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-store", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let keys = MemoryStore::new();
         keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(CANARY.to_string()).unwrap()).unwrap();
         let agents = std::sync::Arc::new(crate::agents::Agents::with(&base.join("settings"), Box::new(keys), archforge_agents::HostEnv::default()));
@@ -2958,10 +2987,8 @@ mod tests {
     fn the_hosts_chat_store_deletes_after_the_writes_before_it_and_brings_a_conversation_back_from_its_commit() {
         use archforge_ui_egui::ai_agents::Provider;
         use archforge_ui_egui::chat_store::{Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
-        let base = std::env::temp_dir().join(format!("af-chat-delete-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-delete", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let agents = std::sync::Arc::new(crate::agents::Agents::with(
             &base.join("settings"),
             Box::new(archforge_secrets::MemoryStore::new()),
@@ -3114,30 +3141,8 @@ mod tests {
         made(host.save(project, Some(text.to_string()), nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
     }
 
-    /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
-    /// against `keys` when given. Dropped, even by a failing test, it stops what it started and
-    /// the folder goes.
-    struct Sandbox {
-        base: PathBuf,
-        host: Arc<Projects>,
-        agents: Option<Arc<crate::agents::Agents>>,
-    }
-
+    /// What these tests ask of the shared test host.
     impl Sandbox {
-        /// The host, with its folder created and `keys` wired in.
-        fn new(keys: Option<Box<dyn archforge_secrets::SecretStore>>) -> Sandbox {
-            let base = (0..1000)
-                .map(|n| std::env::temp_dir().join(format!("af-d{}-{n}", std::process::id())))
-                .find(|p| std::fs::create_dir(p).is_ok())
-                .expect("a folder of the test's own");
-            let host = Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
-            let agents = keys.map(|k| Arc::new(crate::agents::Agents::with(&base.join("settings"), k, archforge_agents::HostEnv::default())));
-            if let Some(a) = &agents {
-                host.check_descriptions_with(a.clone());
-            }
-            Sandbox { base, host, agents }
-        }
-
         /// A project made in the sandbox.
         fn project(&self) -> PathBuf {
             wait(&self.host.create(&self.base.join("p"), "Shop")).unwrap().path
@@ -3146,23 +3151,6 @@ mod tests {
         /// The project's commit messages, newest first.
         fn messages(&self) -> Vec<String> {
             lock(&self.host.inner.open)[0].newest_commit_messages(50).unwrap()
-        }
-    }
-
-    impl Drop for Sandbox {
-        /// Stops the servers and threads, then removes the folder, retrying while a stopping server
-        /// still writes. It never panics, so it is safe while a failed test unwinds.
-        fn drop(&mut self) {
-            self.host.shutdown();
-            if let Some(a) = &self.agents {
-                a.shutdown();
-            }
-            for _ in 0..50 {
-                if std::fs::remove_dir_all(&self.base).is_ok() || !self.base.exists() {
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
         }
     }
 
@@ -6179,13 +6167,13 @@ mod tests {
         assert!(host.inner.keys.get().is_some(), "a description would be refused in the application");
     }
 
+    /// A project whose class skill has the name of a project skill saves, and its model opens again
+    /// with both skills.
     #[test]
     fn a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again() {
         // The project saved, but its model would not open again.
-        let base = std::env::temp_dir().join(format!("af-skills-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("skills", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "MVPFlowReview")).unwrap().path;
         let mut n = 0u64;
         let ids = move || {
@@ -6259,12 +6247,12 @@ mod tests {
         assert_eq!(host.writing(&path), Writing::default(), "and clears the failure");
     }
 
+    /// The host writes, saves and reopens models per project, keeps a project whose rows cannot be
+    /// written open, and drops rows for a closed project.
     #[test]
     fn the_host_writes_saves_and_reopens_models_and_drops_rows_for_a_closed_project() {
-        let base = std::env::temp_dir().join(format!("af-save-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("save", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let first = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         // Rows written and saved come back on opening, with nothing unsaved.
