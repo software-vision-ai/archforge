@@ -68,7 +68,8 @@ Do this when you want to look over your changes and say what they are.
 
 1. In the left rail, choose **Versions**. A number on its icon says how many things have changed.
    **Working changes** lists them, model elements first and then diagrams. Click a model element or a
-   diagram to see how it differs from your last version.
+   diagram, or press Enter on it, to see how it differs from your last version; ↑ and ↓ move
+   between them.
 2. Choose **Save version…**, at the right of the **Working changes** heading. The **Save version**
    dialog opens and says how many model elements and diagrams changed since your last version.
 3. In **Description**, type what this version is, such as *Added email*. A description is one line
@@ -171,7 +172,8 @@ shares with `main`, the versions from before the two parted. A divider, *Shared 
 here*, sits above the first shared version once the list has reached it. It says only what the two
 have in common, not which branch this one was made from. On `main` there is no divider.
 
-Click a version to open its details in the centre:
+Click a version, or press Enter on it, to open its details in the centre; ↑ and ↓ move between
+versions:
 
 - its description, when it was saved and, where that is recorded, by whom;
 - **View this version**, which [shows it in the window](#view-an-earlier-version);

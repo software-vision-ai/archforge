@@ -147,6 +147,38 @@ fn a_row_switches_to_its_branch() {
     });
 }
 
+/// While a row's menu is open the arrows are the menu's, with the row focused too, by the pointer
+/// and by the keys: ↓ and Enter pick its Switch, and the focus stays on the row.
+#[test]
+fn a_row_s_open_menu_keeps_the_arrows() {
+    let (row, more) = ("workspace.versions.branch.row.b00", "workspace.versions.branch.more.b00");
+    in_both_appearances(|theme| {
+        let switched = |h: &mut Harness<'static, Shell>, host: &SavingHost| {
+            h.run_steps(4);
+            host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>()
+        };
+        let focus = |h: &mut Harness<'static, Shell>, id: &str| {
+            h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(id)));
+            h.run_steps(1);
+        };
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        click_id(&mut h, more);
+        focus(&mut h, row);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(row))), "{theme:?}: the row kept the focus");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(switched(&mut h, &host), ["b00"], "{theme:?}: by the pointer, the menu's Switch");
+
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        focus(&mut h, more);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(h.state().panels.menu.is_some(), "{theme:?}: Enter opened the menu");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(switched(&mut h, &host), ["b00"], "{theme:?}: by the keys, the menu's Switch");
+    });
+}
+
 /// A branch whose name holds a dot has controls of its own, not another branch's.
 #[test]
 fn every_branch_control_has_an_id_of_its_own() {

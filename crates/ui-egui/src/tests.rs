@@ -8919,6 +8919,50 @@ fn working_changes_filter_a_long_list() {
     });
 }
 
+/// ↑ and ↓ on a focused change move between the rows of both groups, out of view too, each whole
+/// in the list as it comes, the first bringing its group's heading back; Enter opens the one reached.
+#[test]
+fn the_keys_reach_every_working_change() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    let item = |n: u8| Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: if n < 10 { Area::Model } else { Area::Diagram },
+        kind: ChangeKind::Changed,
+        name: Some(format!("item{n}")),
+        path: vec![],
+    };
+    let id = |n: u8| format!("workspace.versions.change.{}.{}", item(n).id, item(n).class.0);
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok((0..20).map(item).collect()));
+        h.run_steps(2);
+        assert!(!has_id(&h, &id(19)), "{theme:?}: the last change starts out of view");
+        let (field, history) = (rect_of(&h, "workspace.versions.filter").bottom(), rect_of(&h, "workspace.versions.history").top());
+        let whole = |h: &Harness<'static, Shell>, n: u8| {
+            let row = rect_of(h, &id(n));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&id(n)))) && row.top() >= field && row.bottom() <= history - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&id(0))));
+        h.run_steps(1);
+        for n in 1..20 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↓ reached change {n}");
+        }
+        for n in (0..19).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↑ reached change {n}");
+        }
+        let heading = text_boxes(&h).into_iter().find(|(t, _)| t == "MODEL ELEMENTS").map(|(_, b)| b.top());
+        assert!(heading.is_some_and(|top| top >= field), "{theme:?}: the heading came back with the first row: {heading:?}");
+        (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(item(12).id), "{theme:?}: Enter opened the one reached");
+    });
+}
+
 /// An answer for rows that have moved on shows for what it read, a version in view is not compared,
 /// a change of session lets go of what was found, and rows that cannot be read say so, not "no changes".
 #[test]
@@ -9234,6 +9278,57 @@ fn a_next_page_belongs_to_the_list_it_was_asked_for() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(next.send(Ok(long_page(60, 61, false))).is_err(), "{theme:?}: with no host to read again too");
+    });
+}
+
+/// ↑ and ↓ on a focused version move between the rows, out of view too and past the divider over
+/// what is shared, each whole in the list as it comes; Enter opens the one reached. Behind a dialog
+/// the keys stay the dialog's.
+#[test]
+fn the_keys_reach_every_history_row() {
+    let row = |i: usize| format!("workspace.versions.row.v{i}");
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let mut page = long_page(0, 50, true);
+        page.versions.iter_mut().skip(20).for_each(|v| v.shared = true);
+        versions_answer(&mut h, &host, Ok(page));
+        assert!(!has_id(&h, &row(30)), "{theme:?}: out of view");
+        let (top, bottom) = (rect_of(&h, "workspace.versions.all").bottom(), rect_of(&h, "workspace.explorer.resize").bottom());
+        let whole = |h: &Harness<'static, Shell>, i: usize| {
+            let at = rect_of(h, &row(i));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(i)))) && at.top() >= top && at.bottom() <= bottom - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(0))));
+        h.run_steps(1);
+        for i in 1..=30 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↓ reached v{i}");
+        }
+        assert!(rect_of(&h, "workspace.versions.shared").bottom() <= rect_of(&h, &row(20)).top(), "{theme:?}: a divider over v20");
+        // Behind About, ↓ on the last row in view would scroll the list; egui lets go of a focus under
+        // a modal layer, and the shell holds the keys back too.
+        let before = rect_of(&h, &row(30));
+        crate::support::open(h.state_mut());
+        h.run_steps(1);
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(30)))), "{theme:?}: the row has the focus behind About");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(has_id(&h, &row(30)) && rect_of(&h, &row(30)) == before, "{theme:?}: behind About the keys are the dialog's");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert!(h.state().about.is_none() && rect_of(&h, &row(30)) == before, "{theme:?}: About closed");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(30))));
+        h.run_steps(1);
+        for i in (5..30).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↑ reached v{i}");
+        }
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(5))));
+        h.run_steps(1);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(whole(&h, 6), "{theme:?}: and with it gone they move again");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert_eq!(h.state().versions.selected.as_deref(), Some("v6"), "{theme:?}: Enter opened the one reached");
     });
 }
 
