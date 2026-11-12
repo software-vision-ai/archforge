@@ -72,7 +72,8 @@ pub(crate) fn all(records: &Path) -> Result<Vec<(PathBuf, Record)>, Error> {
     Ok(out)
 }
 
-fn read_file(file: &Path) -> Result<Option<Record>, Error> {
+/// The record in `file`; a damaged or oversized one is set aside and counts as none.
+pub(crate) fn read_file(file: &Path) -> Result<Option<Record>, Error> {
     let f = match std::fs::File::open(file) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),

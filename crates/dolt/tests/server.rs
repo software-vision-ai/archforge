@@ -257,6 +257,55 @@ fn a_server_left_by_a_crashed_archforge_is_stopped_at_the_next_start() {
 }
 
 #[test]
+fn a_server_a_killed_archforge_left_running_is_stopped_at_start_up_without_opening_its_project() {
+    let env = Env::new("orphan");
+    let (mut owner, orphan) = helper(&env);
+    let _guard = KillOnDrop(orphan);
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    assert!(alive(orphan), "the server outlives its owner");
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 1);
+    assert!(wait_gone(orphan), "start-up stopped it");
+    assert_eq!(env.leftovers(), (0, 0), "its record and run folder went with it");
+    assert!(!env.data().join(".dolt/sql-server.info").exists(), "it stopped politely, removing its lock");
+}
+
+#[test]
+fn start_up_leaves_a_server_whose_archforge_still_runs_alone() {
+    let env = Env::new("owned");
+    let server = env.start().unwrap();
+    let _guard = KillOnDrop(server.pid());
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 0);
+    assert_eq!(one(&mut server.connect().unwrap()), 1);
+    assert_eq!(env.leftovers(), (1, 1), "its record and run folder stay");
+    server.stop().unwrap();
+}
+
+#[test]
+fn start_up_never_signals_a_process_that_took_a_recorded_servers_id() {
+    let env = Env::new("reused");
+    let mut sleeper = Command::new("/bin/sleep").arg("60").spawn().unwrap();
+    let _guard = KillOnDrop(sleeper.id());
+    // The record's Archforge is gone: its process id is this test's, but its start time is not.
+    let record = serde_json::json!({
+        "data_dir": env.data(),
+        "server_pid": sleeper.id(),
+        "run_root": env.run_root,
+        "run_dir": env.run_root.join("af-zzzzzzzz"),
+        "command": [env.dolt.path(), "sql-server", "--config", env.run_root.join("af-zzzzzzzz/server.yaml")],
+        "owner_pid": std::process::id(),
+        "owner_started": "Thu Jan  1 00:00:00 1970",
+    });
+    std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700).create(env.base.join("records")).unwrap();
+    std::fs::write(env.base.join("records/0000000000000000.json"), record.to_string()).unwrap();
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 0);
+    assert!(alive(sleeper.id()), "the other program got no signal");
+    assert_eq!(env.leftovers().0, 0, "the stale record was forgotten");
+    sleeper.kill().unwrap();
+    sleeper.wait().unwrap();
+}
+
+#[test]
 fn a_dead_server_its_stale_socket_record_and_lock_do_not_stop_a_start() {
     let env = Env::new("stale");
     let (mut owner, server_pid) = helper(&env);

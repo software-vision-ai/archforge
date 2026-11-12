@@ -553,6 +553,27 @@ impl Projects {
         let _ = self.inner.keys.set(agents);
     }
 
+    /// Stops, on a thread of its own, the database servers a crashed or killed Archforge left
+    /// running for any project, and logs what it stopped: for the start-up. It holds the job lock,
+    /// so no opening or creation meets a record while it is swept. `None` when the thread could not
+    /// start; the next opening of each project still recovers its own server.
+    pub fn stop_orphans(&self) -> Option<std::thread::JoinHandle<()>> {
+        let inner = self.inner.clone();
+        let sweep = move || {
+            let _job = lock(&inner.job);
+            match archforge_dolt::stop_orphans(&ServerOptions::new(inner.settings.join("servers"))) {
+                Ok(0) => {}
+                Ok(n) => log::info!("stopped {n} database server(s) a closed Archforge left running"),
+                Err(e) => log::warn!("the database servers a closed Archforge left running were not looked for: {e}"),
+            }
+        };
+        std::thread::Builder::new()
+            .name("archforge-orphans".into())
+            .spawn(sweep)
+            .map_err(|e| log::warn!("the database servers a closed Archforge left running were not looked for: {e}"))
+            .ok()
+    }
+
     /// Runs `job` on the writer against the open project at `path`, after every job sent before
     /// it, and answers with what it gives; a project no longer open is an error.
     pub fn on_writer<T: Send + 'static>(
@@ -2691,6 +2712,78 @@ mod tests {
     /// Closes `path` and waits for the answer.
     fn close(host: &Projects, path: &Path) -> Result<(), String> {
         host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
+    }
+
+    /// The marker that makes this test binary act as an Archforge that is killed with a project
+    /// open, and the folder it works in.
+    const ORPHAN_OWNER: &str = "ARCHFORGE_TEST_ORPHAN_OWNER";
+
+    /// Run only by the test below, as a process of its own: opens a project, saves a model, writes
+    /// another without saving, says so with its server's id, and waits to be killed.
+    #[test]
+    #[ignore = "run by the orphan test as a separate process"]
+    fn orphan_owner() {
+        let Some(base) = std::env::var_os(ORPHAN_OWNER).map(PathBuf::from) else { return };
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let path = wait(&host.create(&base.join("p"), "Shop")).unwrap().path;
+        host.write(&path, model("shop"));
+        assert_eq!(saved(&host, &path), Ok(true));
+        host.write(&path, model("crm"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        println!("READY {}", lock(&host.inner.open)[0].server().pid());
+        std::thread::sleep(Duration::from_secs(120));
+    }
+
+    /// Kills a server a failing test left behind, so no run leaves an orphan.
+    struct KillOnDrop(u32);
+
+    impl Drop for KillOnDrop {
+        /// Kills the server unless it is gone.
+        fn drop(&mut self) {
+            if !gone(self.0) {
+                let _ = std::process::Command::new("/bin/kill").args(["-KILL", &self.0.to_string()]).status();
+            }
+        }
+    }
+
+    #[test]
+    fn a_server_a_killed_archforge_left_running_is_stopped_at_the_next_start_and_its_project_opens_whole() {
+        use std::io::BufRead;
+        let sandbox = Sandbox::new(None);
+        let mut owner = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "projects::tests::orphan_owner", "--ignored", "--nocapture", "--test-threads=1"])
+            .env(ORPHAN_OWNER, &sandbox.base)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let stdout = owner.stdout.take().unwrap();
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Some((_, pid)) = line.split_once("READY ") {
+                    let _ = tx.send(pid.trim().parse::<u32>().unwrap_or(0));
+                }
+            }
+        });
+        let ready = rx.recv_timeout(Duration::from_secs(120));
+        // SIGKILL: no exit path of the owner runs.
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        let orphan = ready.expect("the owner opened its project");
+        let _guard = KillOnDrop(orphan);
+        assert!(!gone(orphan), "the server outlives the killed Archforge");
+        sandbox.host.stop_orphans().unwrap().join().unwrap();
+        // Stopped means a zombie at least, which its new parent reaps a moment later.
+        let started = Instant::now();
+        while !gone(orphan) && started.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(gone(orphan), "the next start stopped it");
+        let path = sandbox.base.canonicalize().unwrap().join("p/Shop.archforge");
+        let back = wait(&sandbox.host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&model("crm")), "what was written stays");
+        assert!(back.unsaved, "and stays unsaved over the saved version");
     }
 
     #[test]

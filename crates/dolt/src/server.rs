@@ -169,7 +169,7 @@ fn prepare(data_dir: &Path, opts: &ServerOptions) -> Result<Prepared, Error> {
     let data_text = paths::text("project folder", &data_dir)?.to_string();
     private_records(&opts.records)?;
     let (run_root, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
-    sweep(&opts.records, &data_text, uid);
+    sweep(&opts.records, Some(&data_text), uid, None);
     recover(&data_dir, &data_text, opts, uid)?;
     Ok(Prepared { data_dir, data_text, run_root, uid })
 }
@@ -200,31 +200,66 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
     Ok(if id.is_dolt_server() { Proc::OtherDoltServer } else { Proc::Other })
 }
 
-/// Removes the records of other projects whose server is gone, with their run folders.
-fn sweep(records: &Path, data_text: &str, uid: Option<u32>) {
+// Why a sweep at start-up, and no tie from the server to its Archforge (AR-422): Linux's parent-death
+// signal follows the thread that started the server, and servers start on worker threads that end
+// once a project is open; macOS has no such signal, only a watcher process; Windows' job objects
+// kill without a polite stop. Each needs unsafe calls or a helper process of its own, so it is left
+// for a ticket of its own, and this sweep stays the backstop on every platform either way.
+/// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
+/// forgets the records of servers that are gone: for a start-up, so a project never opened again
+/// does not keep its server running. A server whose Archforge still runs, this one or another, is
+/// left alone, and a process is signalled only while its command line, checked before each signal,
+/// is exactly the recorded one, whose configuration lies in a run folder with a random name made
+/// for that start: a process id another program took gets no signal. Returns how many servers
+/// were stopped.
+pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
+    private_records(&opts.records)?;
+    let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
+    Ok(sweep(&opts.records, None, uid, Some(opts.stop_budget)))
+}
+
+/// Goes through the records of every project but `except`: forgets those whose server is gone and,
+/// given a stop budget, stops the servers whose Archforge is gone, as recovery does, then forgets
+/// them. Returns how many it stopped.
+fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Duration>) -> usize {
     let all = match record::all(records) {
         Ok(a) => a,
         Err(e) => {
             log::warn!("the server records could not be swept: {e}");
-            return;
+            return 0;
         }
     };
-    for (file, r) in all.into_iter().filter(|(_, r)| r.data_dir != data_text) {
-        match classify(r.server_pid, Some(&r)) {
-            Ok(Proc::Gone | Proc::Other | Proc::OtherDoltServer) => forget(&file, &r, uid),
-            Ok(_) => {}
-            Err(e) => log::warn!("the server record {} stays: {e}", file.display()),
+    let mut stopped = 0;
+    for (file, r) in all.into_iter().filter(|(_, r)| except != Some(r.data_dir.as_str())) {
+        match (classify(r.server_pid, Some(&r)), stop) {
+            (Ok(Proc::Gone | Proc::Other | Proc::OtherDoltServer), _) => forget(&file, &r, uid),
+            (Ok(Proc::OursOwnerDead), Some(budget)) => {
+                log::info!("stopping the database server {} that a closed Archforge left running for {}", r.server_pid, r.data_dir);
+                match stop_foreign(r.server_pid, &r.command, budget) {
+                    Ok(()) => {
+                        forget(&file, &r, uid);
+                        stopped += 1;
+                    }
+                    Err(e) => log::warn!("the database server {} left running for {} stays: {e}", r.server_pid, r.data_dir),
+                }
+            }
+            (Ok(_), _) => {}
+            (Err(e), _) => log::warn!("the server record {} stays: {e}", file.display()),
         }
     }
+    stopped
 }
 
-/// Removes a record and the run folder it names, under the run root it records.
+/// Removes a record and the run folder it names, under the run root it records; the record only
+/// while it is still the one read, since another start may have written its own since.
 fn forget(file: &Path, r: &Record, uid: Option<u32>) {
     let root = Path::new(&r.run_root);
     if root.is_absolute() {
         run_dir::remove(root, Path::new(&r.run_dir), uid);
     }
-    record::remove(file);
+    if record::read_file(file).ok().flatten().as_ref() == Some(r) {
+        record::remove(file);
+    }
 }
 
 /// Recovery for this project: gathers the facts, decides, acts.

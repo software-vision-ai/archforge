@@ -2,7 +2,8 @@
 
 **Purpose.** The project database's server: runs `dolt sql-server` for one project folder beside the
 application, reachable only by this user with a password made for each start, connects to it, stops
-it, and recovers a server a crashed Archforge left behind.
+it, and recovers a server a crashed Archforge left behind: at the next opening of its project, and
+for every project at the application's start-up.
 
 **Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
 the portable-target check leaves it out. No toolkit.
@@ -23,6 +24,7 @@ removed. The password never shows in a log, an error or a debug print.
 | `ServerOptions::new` | `pub fn new(records: impl Into<PathBuf>) -> ServerOptions` (records folder; run root, budgets) |
 | `Server::start` | `pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error>` |
 | `Server::connect` | `pub fn connect(&self) -> Result<mysql::Conn, Error>` (socket on unix, loopback on Windows) |
+| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone; returns how many it stopped) |
 | `Server::stop` | `pub fn stop(self) -> Result<(), Error>` (dropping a server stops it too) |
 | `Server::{port, socket, password, data_dir, pid}` | the running server's facts |
 | `Error` | one enum; every variant names the value it is about |
