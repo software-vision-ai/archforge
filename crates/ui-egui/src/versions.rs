@@ -64,7 +64,7 @@ pub struct State {
     pub(crate) branches_cut: bool,
     branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
-    branches_asked: bool,
+    pub(crate) branches_asked: bool,
     /// Whether Branches was opened or folded by hand; until then it is open with two or more.
     branches_open: Option<bool>,
     /// Why the last read failed; what was shown stays.
@@ -73,6 +73,8 @@ pub struct State {
     pub(crate) stale: bool,
     /// A branch switch started from the question, until it arrives or says why not.
     pub(crate) switching: Option<crate::switch_ask::Switching>,
+    /// A branch asked for in New branch…, until the host answers.
+    pub(crate) making: Option<crate::branch_ask::Making>,
     /// A read begun for that has yet to succeed, so the first row may not be the last version.
     last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
@@ -458,6 +460,15 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let count = (!listed.is_empty()).then(|| listed.len().to_string());
     if header(shell, ui, p, r, y, ("branches", &tr("Branches"), Some(open), count)) {
         shell.versions.branches_open = Some(!open);
+    }
+    if crate::branch_ask::offered(shell) {
+        let plus = Rect::from_center_size(pos2(r.right() - 48.0, y + HEADER / 2.0), Vec2::splat(24.0));
+        let resp = control(shell, ui, "workspace.versions.branches.new", "button", plus, true).on_hover_text(tr("New branch…"));
+        focus_ring(ui.painter(), p, plus, 6.0, &resp);
+        ux::icon_in(ui.painter(), Rect::from_center_size(plus.center(), Vec2::splat(14.0)), &icons::PLUS, p.text_secondary);
+        if resp.accessible_name(tr("New branch…")).clicked() {
+            crate::branch_ask::open(shell);
+        }
     }
     let y = y + HEADER;
     if !open {

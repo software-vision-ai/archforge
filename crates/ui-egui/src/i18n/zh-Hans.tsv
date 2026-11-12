@@ -509,6 +509,16 @@ str	branch	Current	当前
 str		Branches can't be merged yet.	分支暂不能合并。
 str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。
 str		The branches couldn't be read.	无法读取分支。
+str		New branch…	新建分支…
+str		New branch	新建分支
+str		A branch keeps its own versions, unsaved work and conversations.	分支拥有自己的版本、未保存的工作和对话。
+str		It starts from current work on {branch}.	它从 {branch} 上的当前工作开始。
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	它从 {branch} 上的当前工作开始。您未保存的更改会一并带过去，{branch} 也会保留它们。
+str		That name is already in use.	该名称已被使用。
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	上一个新分支尚未清理。重新打开项目即可将其移除。
+str		The project changed before the branch was made, so none was made.	在创建分支之前项目已更改，因此未创建分支。
+str		Couldn't make the branch: {why}	无法创建分支：{why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge 无法确定分支是否已创建。请先查看分支，再重试。
 str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。

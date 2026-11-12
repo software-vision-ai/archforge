@@ -365,6 +365,8 @@ struct SavingHost {
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each branch delete's answer, sent by the test.
     branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
+    /// Each branch made from current work, by its stored name, and where the test answers it.
+    branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Each read of the versions waiting for the answer the test sends.
@@ -483,6 +485,18 @@ impl crate::ProjectHost for SavingHost {
     ) -> std::sync::mpsc::Receiver<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.branch_deletes.lock().unwrap().push(tx);
+        rx
+    }
+
+    /// Stored in lower case with hyphens, which no listed name shares by accident; empty is refused.
+    fn branch_name(&self, typed: &str) -> Result<String, String> {
+        Some(typed.trim().to_lowercase().replace(' ', "-")).filter(|s| !s.is_empty()).ok_or_else(|| crate::i18n::tr("Enter a name."))
+    }
+
+    /// Keeps the answer for the test to send.
+    fn create_branch(&self, _path: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_makes.lock().unwrap().push((name.to_string(), tx));
         rx
     }
 

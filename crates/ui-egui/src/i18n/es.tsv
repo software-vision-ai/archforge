@@ -509,6 +509,16 @@ str	branch	Current	Actual
 str		Branches can't be merged yet.	Las ramas aún no se pueden fusionar.
 str		Only the first {n} branches are listed.	Solo se muestran las primeras {n} ramas.
 str		The branches couldn't be read.	No se pudieron leer las ramas.
+str		New branch…	Nueva rama…
+str		New branch	Nueva rama
+str		A branch keeps its own versions, unsaved work and conversations.	Una rama tiene sus propias versiones, su trabajo sin guardar y sus conversaciones.
+str		It starts from current work on {branch}.	Parte del trabajo actual en {branch}.
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Parte del trabajo actual en {branch}. Tus cambios sin guardar vienen con ella, y {branch} también los conserva.
+str		That name is already in use.	Ese nombre ya está en uso.
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	La última rama nueva aún no se ha limpiado. Al abrir el proyecto de nuevo se elimina.
+str		The project changed before the branch was made, so none was made.	El proyecto cambió antes de crear la rama, así que no se creó ninguna.
+str		Couldn't make the branch: {why}	No se pudo crear la rama: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge no pudo saber si se creó la rama. Mira en Ramas antes de volver a intentarlo.
 str		At most {n} characters.	Como máximo {n} caracteres.
 str		Enter a name.	Escribe un nombre.
 str		A name has to be one line.	Un nombre debe ocupar una sola línea.

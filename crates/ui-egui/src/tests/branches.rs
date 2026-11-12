@@ -3,6 +3,7 @@
 use egui_kittest::kittest::Queryable;
 
 use super::*;
+use crate::close_ask::Ask;
 
 const MAIN: &str = "workspace.versions.branch.row.main";
 const OTHER: &str = "workspace.versions.branch.row.try-cancellations";
@@ -503,5 +504,135 @@ fn chat_shows_only_the_conversations_of_the_branch_shown() {
         click_id(&mut h, "workspace.chat.toast.undo");
         h.run_steps(3);
         assert!(!painted_has(&h, NONE) && painted_has(&h, "Ask about Commerce platform"), "{theme:?}: back: {:?}", painted(&h));
+    });
+}
+
+const NEW: &str = "workspace.versions.branches.new";
+const NAME: &str = "branch-ask.name";
+
+/// New branch… from the Branches header over `listed(true)`, with `typed` in its name field.
+fn naming(theme: ThemeKind, typed: &str) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = branches_read(theme, Ok(listed(true)));
+    click_id(&mut h, NEW);
+    h.run_steps(2);
+    h.event(egui::Event::Text(typed.into()));
+    h.run_steps(2);
+    (h, host)
+}
+
+/// How many branches the host was asked to make once Create is clicked: one more only when it is on.
+fn create(h: &mut Harness<'static, Shell>, host: &SavingHost) -> usize {
+    click_id(h, "branch-ask.create");
+    h.run_steps(2);
+    host.branch_makes.lock().unwrap().len()
+}
+
+/// The header's + is offered while only `main` folds the section. The dialog says where the branch
+/// starts, and that unsaved work comes along; a name taken in another case or emptied says why
+/// under the field with Create off. Create asks the host for the name as stored; while it works
+/// nothing closes the dialog; made, the dialog closes, the branches are read again and the switch
+/// to the new branch starts.
+#[test]
+fn new_branch_names_makes_and_switches_to_the_branch() {
+    in_both_appearances(|theme| {
+        let (h, _host) = branches_read(theme, Ok(listed(false)));
+        assert!(has_id(&h, NEW) && !has_id(&h, MAIN), "{theme:?}: offered while folded");
+        let (mut h, host) = naming(theme, "TRY Cancellations");
+        let starts = ["New branch", "A branch keeps its own versions, unsaved work and conversations.", "It starts from current work on main."];
+        assert!(starts.iter().all(|t| painted_has(&h, t)) && !painted_has(&h, "come along"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "That name is already in use.") && create(&mut h, &host) == 0, "{theme:?}: taken in another case");
+        let at = rect_of(&h, NAME).center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert!(painted_has(&h, "Enter a name.") && create(&mut h, &host) == 0, "{theme:?}: emptied");
+        type_into(&mut h, NAME, "Fresh idea");
+        assert!(painted_has(&h, "At most 60 characters.") && create(&mut h, &host) == 1, "{theme:?}");
+        assert_eq!(host.branch_makes.lock().unwrap().iter().map(|m| m.0.clone()).collect::<Vec<_>>(), ["fresh-idea"], "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        click_id(&mut h, "branch-ask.cancel");
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && create(&mut h, &host) == 1, "{theme:?}: up while the host works");
+        assert!(!has_id(&h, NEW), "{theme:?}: one at a time");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh-idea"], "{theme:?}");
+
+        let (mut h, _host) = naming(theme, "");
+        add_schema(&mut h, "crm");
+        let unsaved = "It starts from current work on main. Your unsaved changes come along, and main keeps them too.";
+        assert!(painted_has(&h, unsaved) && painted_has(&h, "At most 60 characters."), "{theme:?}: nothing said of a name not typed yet");
+    });
+}
+
+/// Enter makes the branch too. Each refusal is said under the field in its own words and the
+/// dialog stays, Create on again; changing the name ends it. A lost answer may have made the
+/// branch. Nothing switches.
+#[test]
+fn a_refused_branch_says_why_and_the_dialog_stays() {
+    let cases = [
+        (Some(crate::BranchRefused::Taken), "That name is already in use."),
+        (Some(crate::BranchRefused::NotCleanedUp), "The last new branch is not cleaned up yet. Opening the project again removes it."),
+        (Some(crate::BranchRefused::Moved), "The project changed before the branch was made, so none was made."),
+        (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't make the branch: disk full"),
+        (None, "Archforge could not tell whether the branch was made. Look at Branches before trying again."),
+    ];
+    in_both_appearances(|theme| {
+        for (i, (answer, words)) in cases.clone().into_iter().enumerate() {
+            let (mut h, host) = naming(theme, "Fresh");
+            // Enter keeps the field's keyboard; a click on Create takes it, and a refusal gives it back.
+            if i == 0 {
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE)
+            } else {
+                _ = create(&mut h, &host)
+            }
+            let (_, reply) = host.branch_makes.lock().unwrap().remove(0);
+            match answer {
+                Some(refused) => reply.send(Err(refused)).unwrap(),
+                None => drop(reply),
+            }
+            h.run_steps(3);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
+            assert!(host.switches.lock().unwrap().is_empty(), "{theme:?}: {words}");
+            h.event(egui::Event::Text("er".into()));
+            h.run_steps(2);
+            assert!(!painted_has(&h, words), "{theme:?}: {words}: a new name ends it");
+            assert_eq!(create(&mut h, &host), 1, "{theme:?}: {words}: Create is on again");
+        }
+    });
+}
+
+/// With the keyboard off the field nothing behind the dialog takes a key; a branch made after the
+/// dialog went with its session switches to nothing; a held project offers no new branch.
+#[test]
+fn new_branch_keeps_the_keys_and_its_answer_to_itself() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[0].id)).center();
+        click(&mut h, at);
+        h.state_mut().explorer.focused = true;
+        crate::branch_ask::open(h.state_mut());
+        h.run_steps(2);
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.ctx.memory_mut(|m| m.focused().into_iter().for_each(|id| m.surrender_focus(id)));
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        let kept = h.state().session.as_ref().unwrap().revision() == revision;
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && kept, "{theme:?}: Delete didn't reach the selected row");
+        let (mut h, host) = naming(theme, "Fresh");
+        create(&mut h, &host);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && h.state().versions.making.is_none() && host.switches.lock().unwrap().is_empty(), "{theme:?}");
+        h.state_mut().begin_hold().unwrap();
+        h.run_steps(1);
+        assert!(!has_id(&h, NEW), "{theme:?}: not while the project is held");
     });
 }
