@@ -280,6 +280,7 @@ dependencies = [
 name = "archforge-agents"
 version = "0.13.0"
 dependencies = [
+ "archforge-agents",
  "archforge-control",
  "archforge-secrets",
  "craft-atomic",
