@@ -325,10 +325,12 @@ impl VersionReader {
             return Ok(None);
         }
         // Asked only when the row exists, so a project without `main` reads as sharing nothing.
-        let base: Option<mysql::Row> = c
-            .query_first("SELECT LEFT(CAST(DOLT_MERGE_BASE('main', 'HEAD') AS CHAR), 64) FROM dolt_branches WHERE name = 'main'")
-            .map_err(sql("cannot find what the branch shares with main"))?;
-        // No common commit, which Dolt answers with NULL, shares nothing either.
+        // No common commit shares nothing either: Dolt 2.7 answers NULL, 2.6 refuses the question.
+        let base: Option<mysql::Row> =
+            match c.query_first("SELECT LEFT(CAST(DOLT_MERGE_BASE('main', 'HEAD') AS CHAR), 64) FROM dolt_branches WHERE name = 'main'") {
+                Err(e) if no_common_ancestor(&e) => return Ok(None),
+                answer => answer.map_err(sql("cannot find what the branch shares with main"))?,
+            };
         match base {
             None => Ok(None),
             Some(row) if matches!(row.as_ref(0), Some(mysql::Value::NULL)) => Ok(None),
@@ -351,6 +353,12 @@ impl VersionReader {
     }
 }
 
+/// Whether `e` is Dolt 2.6's refusal to name a merge base of two lines with no common commit,
+/// which later versions answer with NULL. Any other error stays an error.
+fn no_common_ancestor(e: &mysql::Error) -> bool {
+    matches!(e, mysql::Error::MySqlError(e) if e.code == 1105 && e.message == "no common ancestor")
+}
+
 /// Whether `message` is exactly the automatic `Saved <RFC 3339>`, so "Saved the day" stays a
 /// description.
 fn is_automatic(message: &str) -> bool {
@@ -363,6 +371,17 @@ fn is_automatic(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only Dolt 2.6's exact no-common-ancestor refusal reads as sharing nothing.
+    #[test]
+    fn only_the_exact_no_common_ancestor_refusal_shares_nothing() {
+        let refusal = |code: u16, message: &str| mysql::Error::MySqlError(mysql::MySqlError { state: "HY000".into(), code, message: message.into() });
+        assert!(no_common_ancestor(&refusal(1105, "no common ancestor")));
+        for other in [refusal(1105, "branch not found: main"), refusal(1105, "no common ancestor here"), refusal(1146, "no common ancestor")] {
+            assert!(!no_common_ancestor(&other), "{other}");
+        }
+        assert!(!no_common_ancestor(&mysql::Error::IoError(std::io::Error::other("no common ancestor"))));
+    }
 
     /// Only the exact shape counts, and the time the application writes has it.
     #[test]
