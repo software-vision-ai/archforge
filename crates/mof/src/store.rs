@@ -51,10 +51,14 @@ pub trait Reflect: Send {
 pub trait Slabs: Send + 'static {
     /// A new object of `class` with its defaults; its slot. None for a class this slab set has not.
     fn create(&mut self, class: ClassId) -> Option<u32>;
+    /// The object in `slot` of `class`'s slab; None when there is none.
     fn object(&self, class: ClassId, slot: u32) -> Option<&dyn Reflect>;
+    /// The object in `slot` of `class`'s slab, to change; None when there is none.
     fn object_mut(&mut self, class: ClassId, slot: u32) -> Option<&mut dyn Reflect>;
     /// An estimate of the bytes held.
     fn bytes(&self) -> usize;
+    /// A copy of every object as it is now, which later changes to these slabs do not reach.
+    fn duplicate(&self) -> Box<dyn Slabs>;
 }
 
 /// The slabs of several metamodels as one, dispatching on the class's metamodel index, so one store
@@ -97,8 +101,13 @@ impl Slabs for CompositeSlabs {
     fn object_mut(&mut self, class: ClassId, slot: u32) -> Option<&mut dyn Reflect> {
         self.part_mut(class)?.object_mut(class, slot)
     }
+    /// The bytes every metamodel's slabs hold, added up.
     fn bytes(&self) -> usize {
         self.parts.iter().map(|(_, s)| s.bytes()).fold(0usize, usize::saturating_add)
+    }
+    /// Every metamodel's slabs copied, each under its own index.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(CompositeSlabs { parts: self.parts.iter().map(|(i, s)| (*i, s.duplicate())).collect() })
     }
 }
 
@@ -293,7 +302,7 @@ pub enum Problem {
 }
 
 /// Every object's class, slot, container and uuid, as a struct of arrays.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Registry {
     class: Vec<ClassId>,
     slot: Vec<u32>,
@@ -319,12 +328,33 @@ pub struct Store {
 }
 
 impl fmt::Debug for Store {
+    /// How many handles were given out and how many objects are live.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Store({} objects, {} live)", self.reg.class.len(), self.live)
     }
 }
 
 type R<T> = Result<T, Invalid>;
+
+/// A store's objects frozen at one moment, for building their rows on another thread: the
+/// interface thread copies the registry and the slabs in bulk ([`Store::freeze`]), and the rows
+/// are built from the copy elsewhere, so edits made after the copy never reach them. It holds no
+/// indexes and takes no changes, so the rows are all it gives.
+pub struct Frozen(Store);
+
+impl fmt::Debug for Frozen {
+    /// The copy's object counts, as the store's own.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Frozen({:?})", self.0)
+    }
+}
+
+impl Frozen {
+    /// The rows of the objects as they were frozen, as [`crate::rows::snapshot`] gives them.
+    pub fn rows(&self, tables: &[crate::schema::Table], junctions: &[crate::schema::Junction]) -> R<crate::rows::Rows> {
+        crate::rows::snapshot(&self.0, tables, junctions)
+    }
+}
 
 impl Store {
     /// A store over `universe` with the generated slabs and the host's id source.
@@ -341,6 +371,25 @@ impl Store {
             live: 0,
             corrupt: None,
         }
+    }
+
+    /// Every object as it is now, copied for building rows off this thread. The copy walks no
+    /// property and builds no row: it copies the registry's arrays and each slab's objects, whose
+    /// text is shared, not copied.
+    pub fn freeze(&self) -> Frozen {
+        Frozen(Store {
+            universe: self.universe.clone(),
+            slabs: self.slabs.duplicate(),
+            reg: self.reg.clone(),
+            by_uuid: HashMap::new(),
+            refs: BTreeSet::new(),
+            names: BTreeMap::new(),
+            recording: None,
+            // A frozen store makes no object, so it never asks for an id.
+            ids: Box::new(|| Uuid([0; 16])),
+            live: self.live,
+            corrupt: self.corrupt.clone(),
+        })
     }
 
     pub fn universe(&self) -> &Arc<Universe> {

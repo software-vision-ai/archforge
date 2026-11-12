@@ -6,7 +6,7 @@ use super::classes::*;
 use super::meta::*;
 
 /// One typed slab per concrete metaclass.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ErSlabs {
     pub schemas: Vec<SchemaObj>,
     pub entities: Vec<EntityObj>,
@@ -122,5 +122,9 @@ impl Slabs for ErSlabs {
             .saturating_add(self.generalizations.capacity().saturating_mul(size_of::<GeneralizationObj>()))
             .saturating_add(self.sequences.capacity().saturating_mul(size_of::<SequenceObj>()))
             .saturating_add(self.views.capacity().saturating_mul(size_of::<ViewObj>()))
+    }
+    /// Every slab copied, the objects' text shared.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(self.clone())
     }
 }

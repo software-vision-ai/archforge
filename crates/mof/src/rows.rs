@@ -141,9 +141,23 @@ fn value_of(store: &Store, prop: &Property, cell: &Cell, ids: &HashMap<Uuid, Obj
     }
 }
 
+#[cfg(feature = "testing")]
+thread_local! {
+    static BUILT_HERE: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many times [`snapshot`] has run on the calling thread, for tests that check which thread
+/// builds rows.
+#[cfg(feature = "testing")]
+pub fn built_here() -> u64 {
+    BUILT_HERE.with(std::cell::Cell::get)
+}
+
 /// The store's rows for `tables` and `junctions`. An object whose class has no table is refused,
 /// so nothing is ever left out of a save without a word.
 pub fn snapshot(store: &Store, tables: &[Table], junctions: &[Junction]) -> Result<Rows, Invalid> {
+    #[cfg(feature = "testing")]
+    BUILT_HERE.with(|n| n.set(n.get().saturating_add(1)));
     let mut by_class: HashMap<ClassId, Vec<Obj>> = HashMap::new();
     for o in store.alive() {
         by_class.entry(store.class_of(o)?).or_default().push(o);
