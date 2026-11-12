@@ -8908,7 +8908,8 @@ fn skill_text_waiting_to_be_kept_is_no_no_changes() {
         assert!(crate::skill_tab::waiting(h.state()) && h.state().versions.working == 0, "{theme:?}: still waiting");
         assert!(!no_changes_said(&h), "{theme:?}: {:?}", painted(&h));
         assert!(off(&h).is_some() && off(&h) != none && off(&h).as_deref() != Some("Loading"), "{theme:?}: {:?}", off(&h));
-        assert!(unsaved(&h) && h.state().shown_unsaved(), "{theme:?}: the status bar and the chip");
+        assert!(unsaved(&h), "{theme:?}: the status bar: {:?}", painted(&h));
+        assert!(h.state().shown_unsaved(), "{theme:?}: the chip and the close question");
         h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap().changed_at = 0.0;
         compared(&mut h);
         assert!(!crate::skill_tab::waiting(h.state()) && h.state().versions.working == 1 && off(&h).is_none(), "{theme:?}: kept and listed");

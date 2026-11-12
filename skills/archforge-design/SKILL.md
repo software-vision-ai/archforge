@@ -290,7 +290,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   to three, then back to text. Cmd B, Cmd I and Cmd K work while writing.
 - The text is kept a moment after typing pauses, when the tab closes, on Save and on quitting,
   each time one undo step. A text the model refuses keeps its tab, and its project, open, saying
-  why.
+  why. Text waiting to be kept is unsaved work, as a description being typed is
+  (`Shell::typing_unkept`): nothing says "Saved" or "No changes" meanwhile.
 - A link in Preview opens only after a confirmation that names its site and shows the whole
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
