@@ -637,7 +637,7 @@ Checks against what exists:
 | Before the first version | Working changes | No baseline: everything is Added, except the root Model element |
 | First version | Details, Compare | "First version: there is nothing earlier to compare it with." Before shows the absent state |
 | No changes | Working changes | "No changes since the last version." Save version… disabled, with the reason in its tooltip |
-| Nothing unsaved (an untouched new project, or nothing changed since the last version) | ⌘S, File ▸ Save | No version is made and the host is not asked; the status bar stays on Saved. Text still being typed counts as unsaved, so ⌘S keeps and saves it (AR-383, AR-413) |
+| Nothing unsaved (an untouched new project, or nothing changed since the last version) | ⌘S, File ▸ Save, an agent's save without a description | No version is made and the host is not asked; the status bar stays on Saved. Text still being typed counts as unsaved, so ⌘S keeps and saves it. A save with a description is still the host's to decide (AR-383, AR-413) |
 | Text typed and not yet kept (a skill's text before its typing pauses or refused, a description being typed or refused) | Working changes, status bar, chip, the close and quit questions, shown or parked | Unsaved work, never "No changes": Working changes lists what was kept, the status bar says Unsaved changes, and with nothing listed Save version… is off with "What you're typing isn't kept yet" |
 | Unsaved only in `settings` or `model_tables` (an upgrade, a table first used) | Working changes, status bar | Working changes lists nothing; the status bar keeps Unsaved changes, and ⌘S saves them. Save version… stays disabled |
 | A branch with no version | Compare | That branch is not offered as a side of a comparison |
