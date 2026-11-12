@@ -499,18 +499,39 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
     }
 }
 
-/// A name typed in place is committed before a row of another menu runs, so File ▸ Close and the
-/// rest see it in the model, as they would with no menu.
+/// A saved project with Customer's name being typed as "Item" in Models, the in-window menu shown.
+fn renaming_a_saved_project(theme: ThemeKind) -> Harness<'static, Shell> {
+    let (mut h, _) = drawn(theme);
+    (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
+    h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+    h.run();
+    assert!(!h.state().tab_unsaved(h.state().active.unwrap()), "{theme:?}: nothing unsaved yet");
+    key(&mut h, Key::F2, Modifiers::NONE);
+    key(&mut h, Key::A, Modifiers::COMMAND);
+    h.event(Event::Text("Item".into()));
+    h.run();
+    h
+}
+
+/// File ▸ Close, chosen this frame, finds the name in the model, and once it runs asks about the
+/// unsaved change and keeps the project open.
+fn close_asks(mut h: Harness<'static, Shell>, theme: ThemeKind) {
+    h.step();
+    let st = h.state().session.as_ref().unwrap().doc();
+    assert_eq!(h.state().menu_bar.chosen, Some(actions::CLOSE), "{theme:?}: Close waits for the next frame");
+    assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: the name is in the model before it runs");
+    let tabs = h.state().tabs.len();
+    h.run();
+    assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{theme:?}: Close asks about the unsaved name");
+    assert_eq!((h.state().tabs.len(), h.state().session.is_some()), (tabs, true), "{theme:?}: the project is still open");
+}
+
+/// A name typed in place is committed before a row of another menu runs, so File ▸ Close on a
+/// saved project asks about it, as it would with no menu.
 #[test]
 fn another_menus_row_finds_the_name_typed_in_place_committed() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = drawn(theme);
-        (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
-        h.run();
-        key(&mut h, Key::F2, Modifiers::NONE);
-        key(&mut h, Key::A, Modifiers::COMMAND);
-        h.event(Event::Text("Item".into()));
-        h.run();
+        let mut h = renaming_a_saved_project(theme);
         let at = rect_of(&h, "strip.menu.file").center();
         click(&mut h, at);
         let at = rect_of(&h, "strip.menu.row.file.close").center();
@@ -519,25 +540,16 @@ fn another_menus_row_finds_the_name_typed_in_place_committed() {
         (0..2).for_each(|n| {
             h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
         });
-        h.step();
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(h.state().menu_bar.chosen, Some(actions::CLOSE), "{theme:?}: Close waits for the next frame");
-        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: the name is in the model before it runs");
+        close_asks(h, theme);
     }
 }
 
 /// From the keys as well: F10 and the arrows reach Edit with the name still open, and File ▸ Close
-/// chosen with Enter finds it in the model before it runs.
+/// chosen with Enter finds it in the model and asks about it.
 #[test]
 fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, _) = drawn(theme);
-        (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
-        h.run();
-        key(&mut h, Key::F2, Modifiers::NONE);
-        key(&mut h, Key::A, Modifiers::COMMAND);
-        h.event(Event::Text("Item".into()));
-        h.run();
+        let mut h = renaming_a_saved_project(theme);
         key(&mut h, Key::F10, Modifiers::NONE);
         key(&mut h, Key::ArrowRight, Modifiers::NONE);
         assert_eq!((h.state().menu_bar.open, h.state().explorer.rename.as_ref().map(|r| r.text.as_str())), (Some("edit"), Some("Item")), "{theme:?}");
@@ -546,10 +558,7 @@ fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
             key(&mut h, Key::ArrowDown, Modifiers::NONE);
         }
         h.event(Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE });
-        h.step();
-        let st = h.state().session.as_ref().unwrap().doc();
-        assert_eq!(h.state().menu_bar.chosen, Some(actions::CLOSE), "{theme:?}: Close waits for the next frame");
-        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: the name is in the model before it runs");
+        close_asks(h, theme);
     }
 }
 
