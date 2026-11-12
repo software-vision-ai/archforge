@@ -652,6 +652,17 @@ impl CodexSession {
         self.conn.process()
     }
 
+    /// Sets the request timeout for every deadline counted from now on (requests sent later, the
+    /// late answers and stops they lead to); a request already sent keeps its deadline. For tests,
+    /// which bound only the step under test, so a loaded machine cannot time out the others. A
+    /// timeout out of range is refused.
+    #[cfg(feature = "testing")]
+    pub fn set_request_timeout(&mut self, timeout: Duration) -> Result<(), AgentError> {
+        timeout_check(timeout)?;
+        self.request_timeout = timeout;
+        Ok(())
+    }
+
     /// Sends request `call` with `params` and remembers it with its deadline.
     fn request(&mut self, call: Call, params: Option<Value>) -> Result<u64, AgentError> {
         let id = self.conn.request(call.method(), params)?;
