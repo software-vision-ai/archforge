@@ -1,7 +1,7 @@
 //! What the Compare page finds (section 6 of `docs/design/versioning.md`): a version read at its
 //! revision against a snapshot of current work, off the interface thread. Comparing reads rows only,
-//! so the session is never replaced. Nothing draws what it finds yet; the part that draws it also
-//! takes the session set aside for current work while a version shows.
+//! so the session is never replaced. While a version shows, current work is the session set aside.
+//! Nothing draws what it finds yet.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -89,7 +89,7 @@ fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T,
 /// they were, or a steady stream of edits would hide every answer; a failure for them says nothing
 /// of the newest rows, which the next comparison takes.
 fn take_answers(shell: &mut Shell) {
-    let (now, revision) = (sides(shell), shell.session.as_ref().map(|s| s.revision()));
+    let (now, revision) = (sides(shell), shell.current_work().map(|s| s.revision()));
     let r = &mut shell.versions.compare_results;
     if let Some(answer) = r.reading.as_ref().and_then(|(_, rx)| answered(rx))
         && let Some((version, _)) = r.reading.take()
@@ -113,7 +113,7 @@ fn take_answers(shell: &mut Shell) {
 /// revisions that move while it runs fold into the next. A version that could not be read waits
 /// for Retry, or each edit would read it again; nothing is compared while an edit is under way.
 fn next(shell: &mut Shell, sides: Sides) {
-    let Some(session) = shell.session.as_ref().filter(|s| !s.interacting()) else { return };
+    let Some(session) = shell.current_work().filter(|s| !s.interacting()) else { return };
     let key = Key { sides, revision: session.revision() };
     let r = &shell.versions.compare_results;
     let held = r.held.as_ref().filter(|h| h.version == key.sides.0);

@@ -1643,6 +1643,43 @@ fn the_page_and_the_details_take_turns_at_reading() {
     });
 }
 
+/// While a version is in view, Compare pairs its version with the work set aside, not with the
+/// version shown: in what it finds and in the revision a failure is about.
+#[test]
+fn compare_takes_current_work_while_a_version_shows() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        let work = h.state().session.as_ref().unwrap().revision();
+        opened(h, "c2");
+        tap(h, VIEW);
+        h.run_steps(3);
+        while asked(host).iter().any(|c| c == "c2") {
+            answer(host, "c2", Ok(before.clone()));
+        }
+        h.run_steps(4);
+        assert_eq!(h.state().viewing(), Some("c2"));
+        for read in host.version_reads.lock().unwrap().drain(..) {
+            let _ = read.send(Ok(crate::VersionsPage { versions: history(), more: false }));
+        }
+        host.reads.lock().unwrap().clear();
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_ne!(h.state().session.as_ref().unwrap().revision(), work, "the version shown is another session");
+        compared(h, "c3");
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(before.clone()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| found(h).is_some());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), Some(work), "a failure about current work");
+        h.state_mut().versions.compare_results.found = None;
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])), "the schema only current work holds");
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), Some(work));
+    });
+}
+
 /// Nothing is compared during an edit.
 #[test]
 fn an_edit_under_way_holds_the_comparison() {
