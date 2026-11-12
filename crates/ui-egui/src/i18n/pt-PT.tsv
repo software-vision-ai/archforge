@@ -583,6 +583,25 @@ plural		{n} more value changed.	Mais {n} valor mudou.|Mais {n} valores mudaram.
 str		Yes	Sim
 str		Not set	Não definido
 str		Nothing here yet	Ainda não há nada
+str		Layout	Disposição
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} elemento adicionado|{n} elementos adicionados
+plural		{n} element changed	{n} elemento alterado|{n} elementos alterados
+plural		{n} element removed	{n} elemento removido|{n} elementos removidos
+plural		{n} box placed	{n} caixa colocada|{n} caixas colocadas
+plural		{n} box moved	{n} caixa movida|{n} caixas movidas
+plural		{n} box changed	{n} caixa alterada|{n} caixas alteradas
+plural		{n} box taken off	{n} caixa retirada|{n} caixas retiradas
+plural		{n} line drawn	{n} linha traçada|{n} linhas traçadas
+plural		{n} line changed	{n} linha alterada|{n} linhas alteradas
+plural		{n} line taken off	{n} linha retirada|{n} linhas retiradas
+str		The model didn't change	O modelo não mudou
+str		Only the layout changed.	Só a disposição mudou.
+str		The layout didn't change	A disposição não mudou
+str		Only the model changed.	Só o modelo mudou.
+str		The diagram's own details changed	Os dados próprios do diagrama mudaram
+str		Such as its name, or the order its boxes are drawn in.	Por exemplo, o nome ou a ordem em que as caixas são desenhadas.
 str		Version of {when}	Versão de {when}
 str		Last version	Última versão
 str		No description	Sem descrição

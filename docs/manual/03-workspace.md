@@ -61,8 +61,12 @@ An open project fills the window with its workspace.
   its owner. **Go to** and the name opens that element against the same version.
   The project's name at the top closes it.
   Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
-  way: **Before** and **After** side by side, each drawn as it was on its side and both at one
-  zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
+  way. Two cards above it keep the model and the layout apart: **Model** counts the elements its
+  boxes and lines draw that were added, changed or removed and names them, and **Layout** counts
+  the boxes placed, moved, changed or taken off and the lines drawn, changed or taken off. When only
+  one of them changed, the other card says so, such as *The layout didn't change* and *Only the
+  model changed.* Under the cards are **Before** and **After** side by side, each drawn as it was
+  on its side and both at one zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
   line that differs is drawn over in colour, and each says *Added*, *Changed* or *Removed*. A side
   the diagram isn't on says so.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the

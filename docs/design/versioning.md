@@ -418,6 +418,17 @@ outline in the change's colour and the change in words above it, without frame V
 own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
 Words that would run past a pane's right edge are moved left to stay inside it.
 
+Above the two sides, frame V3.4's **Model** and **Layout** cards say the same differences apart.
+Model counts the elements a box or line draws, on either side, that were added, changed or removed,
+themselves or a member listed with them, and names them. Layout counts the boxes placed, moved,
+changed or taken off and the lines drawn, changed or taken off: a box is moved when its place
+differs, and changed when only another part of its own does, such as its size, a bend, a label or
+its style. A card with nothing says so and that the other alone changed: "The layout didn't change.
+Only the model changed." When no box or line differs but the diagram's own row or the order of its
+boxes or lines does, Layout says the diagram's own details changed. The frame names each element's kind
+("1 class changed") and each box's change ("Order moved"); the cards count elements and boxes and
+list names, as a count for every kind would not translate.
+
 ---
 
 ## 7. Restore

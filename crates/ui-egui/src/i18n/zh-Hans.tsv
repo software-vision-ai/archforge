@@ -583,6 +583,25 @@ plural		{n} more value changed.	另有 {n} 个值已更改。
 str		Yes	是
 str		Not set	未设置
 str		Nothing here yet	尚无内容
+str		Layout	布局
+str		{first}, {then}	{first}，{then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	已添加 {n} 个元素
+plural		{n} element changed	已更改 {n} 个元素
+plural		{n} element removed	已删除 {n} 个元素
+plural		{n} box placed	已放置 {n} 个框
+plural		{n} box moved	已移动 {n} 个框
+plural		{n} box changed	已更改 {n} 个框
+plural		{n} box taken off	已移除 {n} 个框
+plural		{n} line drawn	已绘制 {n} 条线
+plural		{n} line changed	已更改 {n} 条线
+plural		{n} line taken off	已移除 {n} 条线
+str		The model didn't change	模型未更改
+str		Only the layout changed.	只有布局发生了变化。
+str		The layout didn't change	布局未更改
+str		Only the model changed.	只有模型发生了变化。
+str		The diagram's own details changed	图本身的信息已更改
+str		Such as its name, or the order its boxes are drawn in.	例如其名称，或其框的绘制顺序。
 str		Version of {when}	{when} 的版本
 str		Last version	最新版本
 str		No description	无描述

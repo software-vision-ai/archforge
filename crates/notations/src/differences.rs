@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt;
 use std::sync::Arc;
 
+use archforge_diagram::grid::bounds_of;
 use archforge_diagram::{Grid, LABEL, POINT, STYLE, diagram, diagram_of, edge, node, node_tree};
 use archforge_mof::compare::{CompareError, MAX_COMPARED, RowChange, compare};
 use archforge_mof::rows::{Cell, MAX_NESTING, Rows, restore_into_empty, snapshot};
@@ -172,6 +173,41 @@ pub struct DiagramSides {
     /// What happened to each box and line of this diagram that differs, by its id: Added or Removed
     /// when it is on one side only, Changed when it or what it draws differs: its element, or a member listed on it.
     pub marks: BTreeMap<Uuid, ChangeKind>,
+    /// The same differences kept apart: in the model the diagram draws, and in its layout.
+    pub apart: Apart,
+}
+
+/// What differs on a compared diagram, kept apart (frame V3.4 of page 09): the model elements its
+/// boxes and lines draw, and its own boxes, lines and details, so a view can say that the model
+/// changed and the layout did not.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Apart {
+    /// Each element a box or line draws on either side that differs, itself or a member listed with it, sorted by name.
+    pub model: Vec<Placed<ChangeKind>>,
+    /// Each box and line whose own part differs, or that is on one side only, sorted by name.
+    pub layout: Vec<Placed<Placing>>,
+    /// Whether the diagram's own row or lists differ on both sides, such as its name or the order it draws its boxes in.
+    pub itself: bool,
+}
+
+/// One item of [`Apart`]: its id, what happened to it, and its name from the side that has it, the after side first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Placed<K> {
+    pub id: Uuid,
+    pub kind: K,
+    pub name: Option<String>,
+    /// Whether it is a line rather than a box; always false for a model element.
+    pub line: bool,
+}
+
+/// What happened to a box or line in a diagram's layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Placing {
+    Placed,
+    /// A box whose place differs; a line's route is a change of its own.
+    Moved,
+    Changed,
+    TakenOff,
 }
 
 /// Why two states could not be classified. There is never a partial answer.
@@ -290,43 +326,88 @@ pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let Some(diagram) = holder(&new).or_else(|| holder(&old)) else { return Ok(None) };
     let changed: BTreeSet<Uuid> = kinds_between(&old_rows, &new_rows, &tables, &junctions)?.into_keys().map(|(id, _)| id).collect();
     let (name, path) = name_and_path(if new.by_uuid(diagram).is_some() { &new } else { &old }, diagram);
+    let (marks, mut apart) = marks_of(&changed, [("before", &old), ("after", &new)], diagram)?;
     let side = |store: Store| store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build(&store, d), diagram: d, store });
     let (before, after) = (side(old), side(new));
-    let marks = marks_of(&changed, [("before", before.as_ref()), ("after", after.as_ref())])?;
-    Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks }))
+    apart.itself = before.is_some() && after.is_some() && changed.contains(&diagram);
+    Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks, apart }))
 }
 
-/// What each box and line of `sides` is marked with. One on a single side was added or removed
-/// there, whether or not its own row differs, as a box can move between diagrams. One on both is
-/// Changed when something it draws differs on either, as a member gone is only on the side that still has it.
-fn marks_of(changed: &BTreeSet<Uuid>, sides: [(&'static str, Option<&DiagramSide>); 2]) -> Result<BTreeMap<Uuid, ChangeKind>, ClassifyError> {
-    let items = |(name, side): (&'static str, Option<&DiagramSide>)| {
-        side.map_or(Ok(BTreeMap::new()), |s| items_of(s, changed)).map_err(|e| ClassifyError::Unreadable { side: name, why: e.to_string() })
+/// One box or line of a side, as [`marks_of`] weighs it.
+struct Item {
+    line: bool,
+    /// Whether a part of its own differs: its row, a bend, a label or its style.
+    own: bool,
+    /// A box's place; none for a line.
+    at: Option<(f64, f64)>,
+    /// The element it draws, with whether that or a member listed with it differs, and its name.
+    element: Option<(Uuid, bool, Option<String>)>,
+    name: Option<String>,
+}
+
+/// What each box and line of the diagram `diagram` is marked with on the two `stores`, and the same
+/// kept apart. One on a single side was added or removed there, whether or not its own row
+/// differs, as a box can move between diagrams. One on both is Changed when something it draws
+/// differs on either, as a member gone is only on the side that still has it: in the layout when
+/// that is a part of its own, in the model when it is of its element.
+fn marks_of(
+    changed: &BTreeSet<Uuid>,
+    stores: [(&'static str, &Store); 2],
+    diagram: Uuid,
+) -> Result<(BTreeMap<Uuid, ChangeKind>, Apart), ClassifyError> {
+    let items = |(side, store): (&'static str, &Store)| {
+        let found = store.by_uuid(diagram).map_or(Ok(BTreeMap::new()), |d| items_of(store, d, changed));
+        found.map_err(|e| ClassifyError::Unreadable { side, why: e.to_string() })
     };
-    let [was, is] = sides.map(items);
+    let [was, is] = stores.map(items);
     let (was, is) = (was?, is?);
-    let mut marks: BTreeMap<Uuid, ChangeKind> = is.keys().filter(|id| !was.contains_key(id)).map(|id| (*id, ChangeKind::Added)).collect();
-    for (id, differs) in &was {
-        match is.get(id) {
-            None => drop(marks.insert(*id, ChangeKind::Removed)),
-            Some(now) if *differs || *now => drop(marks.insert(*id, ChangeKind::Changed)),
-            Some(_) => {}
+    let (mut marks, mut layout, mut model) = (BTreeMap::new(), Vec::new(), BTreeMap::new());
+    for (id, item) in is.iter().chain(&was) {
+        if marks.contains_key(id) {
+            continue;
+        }
+        let (then, now) = (was.get(id), is.get(id));
+        let (placing, kind) = match (then, now) {
+            (None, _) => (Some(Placing::Placed), ChangeKind::Added),
+            (_, None) => (Some(Placing::TakenOff), ChangeKind::Removed),
+            (Some(a), Some(b)) if a.at != b.at => (Some(Placing::Moved), ChangeKind::Changed),
+            (Some(a), Some(b)) => ((a.own || b.own).then_some(Placing::Changed), ChangeKind::Changed),
+        };
+        let shown: Vec<_> = [now, then].into_iter().flatten().filter_map(|i| i.element.as_ref()).filter(|e| e.1).collect();
+        if placing.is_none() && shown.is_empty() {
+            continue;
+        }
+        marks.insert(*id, kind);
+        layout.extend(placing.map(|kind| Placed { id: *id, kind, name: item.name.clone(), line: item.line }));
+        for (e, _, name) in shown {
+            let kind = match stores.map(|(_, s)| s.by_uuid(*e).is_some()) {
+                [false, _] => ChangeKind::Added,
+                [_, false] => ChangeKind::Removed,
+                _ => ChangeKind::Changed,
+            };
+            model.entry(*e).or_insert_with(|| Placed { id: *e, kind, name: name.clone(), line: false });
         }
     }
-    Ok(marks)
+    let mut model: Vec<_> = model.into_values().collect();
+    model.sort_by(|a, b| a.name.cmp(&b.name));
+    layout.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok((marks, Apart { model, layout, itself: false }))
 }
 
-/// Every box of `side`, nested ones too, and every line, with whether it draws something in `changed`.
-fn items_of(side: &DiagramSide, changed: &BTreeSet<Uuid>) -> Result<BTreeMap<Uuid, bool>, Invalid> {
-    let store = &side.store;
-    let refs = |list| Ok::<_, Invalid>(store.list(side.diagram, list)?.iter().filter_map(Value::as_ref).collect::<Vec<Obj>>());
-    let boxes = refs(diagram::NODE)?.into_iter().flat_map(|top| node_tree(store, top)).map(|n| (n, node::ELEMENT));
+/// Every box of the diagram `diagram`, nested ones too, and every line, as [`Item`]s by id.
+fn items_of(store: &Store, diagram: Obj, changed: &BTreeSet<Uuid>) -> Result<BTreeMap<Uuid, Item>, Invalid> {
+    let refs = |list| Ok::<_, Invalid>(store.list(diagram, list)?.iter().filter_map(Value::as_ref).collect::<Vec<Obj>>());
+    let boxes = refs(diagram::NODE)?.into_iter().flat_map(|top| node_tree(store, top)).map(|n| (n, false));
     let mut found = BTreeMap::new();
-    for (item, shows) in boxes.chain(refs(diagram::EDGE)?.into_iter().map(|e| (e, edge::ELEMENT))) {
-        let element = store.get(item, shows)?.as_ref().filter(|e| store.is_alive(*e));
-        let differs =
-            draws_a_change(store, item, changed, MAX_NESTING)? || element.map_or(Ok(false), |e| draws_a_change(store, e, changed, MAX_NESTING))?;
-        found.insert(store.uuid(item)?, differs);
+    for (item, line) in boxes.chain(refs(diagram::EDGE)?.into_iter().map(|e| (e, true))) {
+        let shows = store.get(item, if line { edge::ELEMENT } else { node::ELEMENT })?;
+        let element = match shows.as_ref().filter(|e| store.is_alive(*e)) {
+            Some(e) => Some((store.uuid(e)?, draws_a_change(store, e, changed, MAX_NESTING)?, shown_name(store, e))),
+            None => None,
+        };
+        let at = (!line).then(|| bounds_of(store, item)).map(|b| (b.x, b.y));
+        let own = draws_a_change(store, item, changed, MAX_NESTING)?;
+        found.insert(store.uuid(item)?, Item { line, own, at, element, name: shown_name(store, item) });
     }
     Ok(found)
 }
