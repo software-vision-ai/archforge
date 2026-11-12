@@ -519,6 +519,12 @@ str		The last new branch is not cleaned up yet. Opening the project again remove
 str		The project changed before the branch was made, so none was made.	ブランチを作る前にプロジェクトが変わったため、作成されませんでした。
 str		Couldn't make the branch: {why}	ブランチを作成できませんでした: {why}
 str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	ブランチが作成されたかどうか Archforge では判断できませんでした。もう一度試す前にブランチを確認してください。
+str		Rename…	名前を変更…
+str		Rename branch	ブランチの名前を変更
+str		The conversations and versions on this branch are not affected.	このブランチの会話とバージョンには影響しません。
+str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
+str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
 str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。

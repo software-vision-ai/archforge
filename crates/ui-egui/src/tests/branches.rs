@@ -109,8 +109,8 @@ fn a_row_says_what_its_branch_holds() {
     });
 }
 
-/// A click, Enter or the menu's Switch on another branch asks to switch to it; the branch in use
-/// has no menu, and a click on it does nothing; ↑ and ↓ move between rows, out of view too.
+/// A click, Enter or the menu's Switch on another branch asks to switch to it; `main` in use has
+/// no menu, and a click on it does nothing; ↑ and ↓ move between rows, out of view too.
 #[test]
 fn a_row_switches_to_its_branch() {
     in_both_appearances(|theme| {
@@ -657,6 +657,149 @@ fn new_branch_keeps_the_skill_text_being_typed_first() {
             let saved = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.saved == typed);
             assert_eq!((asked, saved), (usize::from(kept), kept), "{theme:?}");
             assert_eq!(painted_has(&h, &crate::skill_tab::unkept_reason()), !kept, "{theme:?}");
+        }
+    });
+}
+
+const RENAME: &str = "branch-ask.rename";
+
+/// Rename… from `branch`'s menu, its `at`th entry, with the field's name replaced by `typed`.
+fn renaming(h: &mut Harness<'static, Shell>, (branch, at): (&str, usize), typed: &str) {
+    click_id(h, &format!("workspace.versions.branch.more.{branch}"));
+    h.run_steps(1);
+    click_id(h, &format!("workspace.versions.branch.menu.{branch}.{at}"));
+    h.run_steps(2);
+    retype(h, typed);
+}
+
+/// The dialog's name field holding `typed` in place of what it held.
+fn retype(h: &mut Harness<'static, Shell>, typed: &str) {
+    let at = rect_of(h, NAME).center();
+    click(h, at);
+    key(h, egui::Key::A, egui::Modifiers::COMMAND);
+    h.event(egui::Event::Text(typed.into()));
+    h.run_steps(2);
+}
+
+/// The renames the host was asked for once Rename is clicked, from and to as stored.
+fn renamed(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, String)> {
+    click_id(h, RENAME);
+    h.run_steps(2);
+    host.branch_renames.lock().unwrap().iter().map(|r| (r.0.clone(), r.1.clone())).collect()
+}
+
+/// Another branch's menu has Switch and Rename…, the branch in use only Rename…, and `main` no
+/// Rename…. The dialog holds the name; unchanged, Rename is off; a name taken says so; Rename asks
+/// the host for the names as stored, and done, the dialog closes and the branches are read again.
+#[test]
+fn a_branch_row_menu_renames_any_branch_but_main() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        assert!(!has_id(&h, "workspace.versions.branch.more.main"), "{theme:?}: main in use has no menu");
+        renaming(&mut h, ("try-cancellations", 1), "Try cancellations");
+        let words = ["Rename branch", "The conversations and versions on this branch are not affected."];
+        assert!(words.iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "starts from"), "{theme:?}: {:?}", painted(&h));
+        assert!(renamed(&mut h, &host).is_empty() && painted_has(&h, "At most 60 characters."), "{theme:?}: unchanged");
+        retype(&mut h, "x");
+        retype(&mut h, "Try cancellations");
+        assert!(!painted_has(&h, "already in use") && renamed(&mut h, &host).is_empty(), "{theme:?}: typed again, its own name");
+        retype(&mut h, "Main");
+        assert!(painted_has(&h, "That name is already in use.") && renamed(&mut h, &host).is_empty(), "{theme:?}: taken");
+        retype(&mut h, "Later idea");
+        assert_eq!(renamed(&mut h, &host), [("try-cancellations".into(), "later-idea".into())], "{theme:?}");
+        assert!(host.branch_makes.lock().unwrap().is_empty(), "{theme:?}: nothing made");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_renames.lock().unwrap().remove(0).2.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        assert!(host.switches.lock().unwrap().is_empty(), "{theme:?}: a rename switches to nothing");
+
+        *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
+        h.run_steps(2);
+        click_id(&mut h, "workspace.versions.branch.more.main");
+        h.run_steps(1);
+        let main = ["workspace.versions.branch.menu.main.0", "workspace.versions.branch.menu.main.1"];
+        assert!(has_id(&h, main[0]) && !has_id(&h, main[1]), "{theme:?}: main only switches");
+        click_id(&mut h, "workspace.versions.branch.more.main");
+        let path = h.state().project.as_ref().unwrap().path.clone();
+        h.state_mut().state.keep_branch(&path, Some("try-cancellations".into()));
+        assert_eq!(h.state().state.branch_of(&path), Some("try-cancellations"), "{theme:?}: kept before");
+        renaming(&mut h, ("try-cancellations", 0), "Later idea");
+        assert_eq!(renamed(&mut h, &host), [("try-cancellations".into(), "later-idea".into())], "{theme:?}: the branch in use");
+        host.branch_renames.lock().unwrap().remove(0).2.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state().state.branch_of(&path), Some("later-idea"), "{theme:?}: it reopens under the new name");
+        click_id(&mut h, "workspace.versions.branch.more.try-cancellations");
+        h.run_steps(1);
+        assert!(has_id(&h, "workspace.versions.branch.menu.try-cancellations.0"), "{theme:?}: open");
+        h.state_mut().begin_hold().unwrap();
+        h.run_steps(2);
+        h.state_mut().end_hold();
+        h.run_steps(2);
+        assert!(h.state().panels.menu.is_none(), "{theme:?}: a menu left empty by a hold doesn't come back after it");
+    });
+}
+
+/// A refused rename says why in its own words and the dialog stays. A lost answer may have renamed
+/// it, and only asking for the same rename again settles that, though the list now shows the new
+/// name: another name is refused, naming the one to ask for.
+#[test]
+fn a_refused_rename_says_why_and_a_lost_one_can_be_asked_again() {
+    let cases = [
+        (Some(crate::BranchRefused::Moved), "The project changed before the branch was renamed, so its name stayed."),
+        (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't rename the branch: disk full"),
+        (None, "Archforge could not tell whether the branch was renamed to later. Rename it to later again to find out."),
+    ];
+    in_both_appearances(|theme| {
+        for (answer, words) in cases.clone() {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            renaming(&mut h, ("try-cancellations", 1), "Later");
+            assert_eq!(renamed(&mut h, &host).len(), 1, "{theme:?}");
+            let (.., reply) = host.branch_renames.lock().unwrap().pop().unwrap();
+            assert!(renamed(&mut h, &host).is_empty(), "{theme:?}: one at a time");
+            let lost = answer.is_none();
+            match answer {
+                Some(refused) => reply.send(Err(refused)).unwrap(),
+                None => drop(reply),
+            }
+            *host.branch_list.lock().unwrap() = Some(Ok(with(["later".to_string()])));
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
+            if lost {
+                retype(&mut h, "Other");
+                assert!(painted_has(&h, words) && renamed(&mut h, &host).is_empty(), "{theme:?}: only the unsettled name");
+                retype(&mut h, "Later");
+            }
+            let again = renamed(&mut h, &host).len();
+            assert_eq!(again, usize::from(lost), "{theme:?}: {words}: the listed name counts as taken but after a lost answer");
+        }
+    });
+}
+
+/// A rename of the branch in use keeps the skill text still being typed first, as a switch does,
+/// and text the store refuses stops it, the reason under the field; another branch's rename leaves
+/// the text where it is.
+#[test]
+fn renaming_the_branch_in_use_keeps_the_text_being_typed_first() {
+    in_both_appearances(|theme| {
+        let huge = "x".repeat(16_001);
+        for (on, typed, asked, saved) in
+            [("main", &*huge, 1, false), ("try-cancellations", "Plain.", 1, true), ("try-cancellations", &*huge, 0, false)]
+        {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            *host.branch_now.lock().unwrap() = Some(on.into());
+            let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+            let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+            crate::skill_tab::open(h.state_mut(), skill);
+            // Typed just now, so only a forced keep takes it.
+            let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+            (doc.text, doc.changed_at) = (typed.to_string(), f64::MAX);
+            h.run_steps(2);
+            renaming(&mut h, ("try-cancellations", usize::from(on == "main")), "Later");
+            assert_eq!(renamed(&mut h, &host).len(), asked, "{theme:?}: on {on}");
+            assert_eq!(h.state().canvas.skills.iter().any(|d| d.skill == skill && d.saved == typed), saved, "{theme:?}: on {on}");
+            let refused = painted_has(&h, &crate::skill_tab::unkept_reason());
+            assert_eq!(refused, asked == 0, "{theme:?}: on {on}: only the branch in use waits for the text");
         }
     });
 }

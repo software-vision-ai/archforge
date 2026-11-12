@@ -1,6 +1,6 @@
-//! Naming a new branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2 and V5.9):
-//! New branch… from current work, the name field with its refusal under it, and the switch to the
-//! branch once the host has made it.
+//! Naming a branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2, V5.7 and V5.9):
+//! New branch… from current work and the switch to it once the host has made it, or Rename… from a
+//! branch row's menu, each with the name field and its refusal under it.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -29,18 +29,25 @@ pub struct Naming {
     waiting: bool,
     /// The field has been given the keyboard; Enter gives it up, so it is given back.
     focused: bool,
+    /// The branch being renamed, as stored; none while a new branch is named.
+    renaming: Option<String>,
+    /// A rename to this name, stored and as shown, whose outcome couldn't be told: only asking for
+    /// it again settles it, so it is the one name offered, and a branch listed under it doesn't
+    /// count as taking it.
+    unsettled: Option<(String, String)>,
 }
 
-/// A creation asked for: the project and session it was asked over, the name as stored, and the
-/// host's answer on its way.
+/// A creation or rename asked for: the project and session it was asked over, the name as stored,
+/// the branch renamed (none for a creation), and the host's answer on its way.
 pub(crate) struct Making {
     about: (PathBuf, u64),
     name: String,
+    renaming: Option<String>,
     answer: Receiver<Result<(), BranchRefused>>,
 }
 
-/// Whether New branch… is offered: the host keeps branches for the project shown, it is not held
-/// by another operation, and no creation is on its way.
+/// Whether New branch… and Rename… are offered: the host keeps branches for the project shown, it
+/// is not held by another operation, and no creation or rename is on its way.
 pub(crate) fn offered(shell: &Shell) -> bool {
     let host = shell.services.projects.as_ref().zip(shell.project.as_ref());
     shell.versions.making.is_none() && !shell.is_held() && host.is_some_and(|(h, o)| h.current_branch(&o.path).is_some())
@@ -48,34 +55,63 @@ pub(crate) fn offered(shell: &Shell) -> bool {
 
 /// Opens New branch… over the work shown, with the field empty.
 pub(crate) fn open(shell: &mut Shell) {
+    ask(shell, Naming::default());
+}
+
+/// Opens Rename… for the branch `b` over the work shown, the field holding its name.
+pub(crate) fn open_rename(shell: &mut Shell, b: &BranchEntry) {
+    ask(shell, Naming { text: b.shown.clone(), renaming: Some(b.name.clone()), ..Naming::default() });
+}
+
+/// Puts the dialog holding `naming` over the work shown, where it is offered.
+fn ask(shell: &mut Shell, naming: Naming) {
     if let Some(path) = shell.project.as_ref().filter(|_| offered(shell)).map(|o| o.path.clone()) {
-        shell.ask = Some(Ask::Branch { path, generation: shell.session_generation(), naming: Naming::default() });
+        shell.ask = Some(Ask::Branch { path, generation: shell.session_generation(), naming });
     }
 }
 
 /// The name to store for `text`, or why it can't be one: the host's own refusal, or a branch
-/// listed with that name in any case, as the project compares names.
-fn checked(host: &dyn ProjectHost, listed: &[BranchEntry], text: &str) -> Result<String, String> {
+/// listed with that name in any case, as the project compares names, or a rename to settle first.
+/// Neither the branch `renaming` nor the name of a rename to settle is counted as taken.
+fn checked(
+    host: &dyn ProjectHost,
+    listed: &[BranchEntry],
+    (renaming, unsettled): (Option<&String>, Option<&(String, String)>),
+    text: &str,
+) -> Result<String, String> {
     let name = host.branch_name(text)?;
-    if listed.iter().any(|b| b.name.eq_ignore_ascii_case(&name)) {
-        return Err(words(&BranchRefused::Taken));
+    if let Some((_, shown)) = unsettled.filter(|(to, _)| *to != name) {
+        return Err(pending(shown));
+    }
+    let mine = renaming == Some(&name) || unsettled.is_some();
+    if !mine && listed.iter().any(|b| b.name.eq_ignore_ascii_case(&name)) {
+        return Err(words(&BranchRefused::Taken, None));
     }
     Ok(name)
 }
 
-/// What a person is told of a refusal.
-fn words(refused: &BranchRefused) -> String {
-    match refused {
-        BranchRefused::Taken => tr("That name is already in use."),
-        BranchRefused::NotCleanedUp => tr("The last new branch is not cleaned up yet. Opening the project again removes it."),
-        BranchRefused::Moved => tr("The project changed before the branch was made, so none was made."),
-        BranchRefused::Unclear(_) => tr("Archforge could not tell whether the branch was made. Look at Branches before trying again."),
-        BranchRefused::Failed(why) => fmt(&tr("Couldn't make the branch: {why}"), &[("why", why)]),
+/// What a person is told of a rename to `shown` whose outcome couldn't be told.
+fn pending(shown: &str) -> String {
+    fmt(&tr("Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out."), &[("name", shown)])
+}
+
+/// What a person is told of a refusal; of a rename when `renaming` names the name, as shown, whose
+/// outcome is unsettled or would be.
+fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
+    match (refused, renaming.is_some()) {
+        (BranchRefused::Taken, _) => tr("That name is already in use."),
+        (BranchRefused::NotCleanedUp, _) => tr("The last new branch is not cleaned up yet. Opening the project again removes it."),
+        (BranchRefused::Moved, false) => tr("The project changed before the branch was made, so none was made."),
+        (BranchRefused::Moved, true) => tr("The project changed before the branch was renamed, so its name stayed."),
+        (BranchRefused::Unclear(_), false) => tr("Archforge could not tell whether the branch was made. Look at Branches before trying again."),
+        (BranchRefused::Unclear(_), true) => pending(renaming.unwrap_or_default()),
+        (BranchRefused::Failed(why), false) => fmt(&tr("Couldn't make the branch: {why}"), &[("why", why)]),
+        (BranchRefused::Failed(why), true) => fmt(&tr("Couldn't rename the branch: {why}"), &[("why", why)]),
     }
 }
 
-/// Once a frame: takes the host's answer to a creation, and reads the branches again. Made, the
-/// dialog closes and the project goes to the new branch; refused, the dialog says why under the
+/// Once a frame: takes the host's answer to a creation or a rename, and reads the branches again.
+/// Done, the dialog closes and a new branch is gone to; refused, the dialog says why under the
 /// field. Either only while the dialog is up over the session it was asked over.
 pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
     let Some(making) = shell.versions.making.as_ref() else { return };
@@ -85,7 +121,7 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
         // The host may have made it before it stopped.
         Err(TryRecvError::Disconnected) => Err(BranchRefused::Unclear("the host stopped without an answer".into())),
     };
-    let Some(Making { about, name, .. }) = shell.versions.making.take() else { return };
+    let Some(Making { about, name, renaming, .. }) = shell.versions.making.take() else { return };
     ctx.request_repaint();
     shell.versions.branches_asked = false;
     let shown = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
@@ -96,6 +132,10 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
     match answer {
         Ok(()) => {
             shell.ask = None;
+            // A rename of the branch in use is where the project reopens.
+            if let Some(from) = renaming {
+                return shell.branch_renamed(&about.0, &from, &name);
+            }
             if let Err(why) = crate::switch_ask::to_new_branch(shell, name) {
                 let words = crate::version_chip::refused_words(shell, why);
                 shell.canvas.say_refused_step(words);
@@ -104,17 +144,28 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
         Err(refused) => {
             if let Some(Ask::Branch { naming, .. }) = shell.ask.as_mut() {
                 // The field takes the keyboard back, so the name can be changed at once.
-                (naming.refused, naming.waiting, naming.focused) = (Some(words(&refused)), false, false);
+                // The host settles an unclear rename only when the same one is asked for again, so
+                // the first one stays the rename to ask for.
+                if matches!(refused, BranchRefused::Unclear(_)) && renaming.is_some() {
+                    let shown = shell.services.projects.as_ref().map_or_else(|| name.clone(), |h| h.branch_shown(&name));
+                    naming.unsettled.get_or_insert((name, shown));
+                }
+                let to = renaming.as_ref().map(|_| naming.unsettled.as_ref().map_or("", |u| u.1.as_str()));
+                (naming.refused, naming.waiting, naming.focused) = (Some(words(&refused, to)), false, false);
             }
         }
     }
 }
 
-/// Asks the host to make the branch stored as `name` from current work. As a switch and a save do,
-/// the skill text and description being typed are kept and handed over first; one that can't be
-/// kept stops it, its reason under the field.
+/// Asks the host to make the branch stored as `name` from current work, or to rename the branch
+/// the dialog renames to it. Before a creation or a rename of the branch in use, as before a switch
+/// and a save, the skill text and description being typed are kept and handed over first; one that
+/// can't be kept stops it, its reason under the field.
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
-    if shell.viewing.is_none() {
+    let Some(Ask::Branch { path, naming, .. }) = shell.ask.as_ref() else { return };
+    let renaming = naming.renaming.clone();
+    let in_use = renaming.as_ref().is_none_or(|from| host.current_branch(path).is_some_and(|now| from.eq_ignore_ascii_case(&now)));
+    if shell.viewing.is_none() && in_use {
         crate::skill_tab::sync(shell, 0.0, true, None);
         if crate::panels::commit_description(shell) || !crate::skill_tab::unkept(&shell.canvas).is_empty() {
             let why = crate::version_chip::refused_words(shell, crate::hold::HoldRefused::Description);
@@ -126,13 +177,16 @@ fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
         shell.write_changes();
     }
     let Some(Ask::Branch { path, generation, naming }) = shell.ask.as_mut() else { return };
-    let answer = host.create_branch(path, &name);
-    shell.versions.making = Some(Making { about: (path.clone(), *generation), name, answer });
+    let answer = match &renaming {
+        Some(from) => host.rename_branch(path, from, &name),
+        None => host.create_branch(path, &name),
+    };
+    shell.versions.making = Some(Making { about: (path.clone(), *generation), name, renaming, answer });
     (naming.waiting, naming.refused) = (true, None);
 }
 
-/// Draws the dialog over the window and acts on it. While a creation is on its way nothing closes
-/// it and nothing more is asked.
+/// Draws the dialog over the window and acts on it. While a creation or rename is on its way
+/// nothing closes it and nothing more is asked.
 pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
     let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|o| o.path.clone())) else {
         shell.ask = None;
@@ -150,7 +204,8 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
         ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
         ui.painter().rect_filled(window, 0.0, p.scrim);
         ui.interact(window, widgets::egui_id("branch-ask.veil"), Sense::click_and_drag());
-        let name = |text: &str| checked(host.as_ref(), &listed, text);
+        let (renaming, unsettled) = (naming.renaming.clone(), naming.unsettled.clone());
+        let name = |text: &str| checked(host.as_ref(), &listed, (renaming.as_ref(), unsettled.as_ref()), text);
         (asked, close) = card(shell, ui, &p, (window, &from), &mut naming, name);
         close |= !naming.waiting && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
     });
@@ -167,8 +222,9 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
     }
 }
 
-/// The dialog's card: what a branch is, where it starts, the name field and what is wrong with the
-/// name. Gives the name to make, when Create or Enter asks for it, and whether Cancel was clicked.
+/// The dialog's card: what a branch is and where it starts, or for a rename what it leaves alone,
+/// the name field and what is wrong with the name. Gives the name to make or rename to, when the
+/// main button or Enter asks for it, and whether Cancel was clicked.
 fn card(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -185,24 +241,31 @@ fn card(
     } else {
         tr("It starts from current work on {branch}.")
     };
-    let what = tr("A branch keeps its own versions, unsaved work and conversations.");
-    let lead = ux::galley_rows(&paint, &what, types::SMALL, p.text_secondary, Some(inner), 3);
-    let starts = ux::galley_rows(&paint, &fmt(&start, &[("branch", from)]), types::SMALL, p.text, Some(inner), 4);
+    let (title, what, act, act_id) = match n.renaming {
+        Some(_) => (tr("Rename branch"), tr("The conversations and versions on this branch are not affected."), tr("Rename"), "branch-ask.rename"),
+        None => (tr("New branch"), tr("A branch keeps its own versions, unsaved work and conversations."), tr("Create"), "branch-ask.create"),
+    };
+    let mut lines = vec![(ux::galley_rows(&paint, &what, types::SMALL, p.text_secondary, Some(inner), 3), p.text_secondary, 14.0)];
+    // A rename starts nowhere: only a new branch says where.
+    if n.renaming.is_none() {
+        lines[0].2 = 8.0;
+        lines.push((ux::galley_rows(&paint, &fmt(&start, &[("branch", from)]), types::SMALL, p.text, Some(inner), 4), p.text, 14.0));
+    }
     let checked = name(&n.text);
     // The host's refusal of the name typed, else what is wrong with it once it has been typed in.
     let problem = n.refused.clone().or_else(|| checked.clone().err().filter(|_| n.edited));
     let (said, ink) = problem.map_or_else(|| (fmt(&tr("At most {n} characters."), &[("n", "60")]), p.text_muted), |why| (why, p.danger));
     let hint = ux::galley_rows(&paint, &said, types::CAPTION, ink, Some(inner), 3);
-    let height = 46.0 + lead.size().y + 8.0 + starts.size().y + 14.0 + 49.0 + hint.size().y + 16.0 + 28.0 + 20.0;
+    let height = 46.0 + lines.iter().map(|(g, _, gap)| g.size().y + gap).sum::<f32>() + 49.0 + hint.size().y + 16.0 + 28.0 + 20.0;
     let frame = Rect::from_center_size(window.center(), vec2(width, height));
     ux::shadow(&paint, frame, 10.0, p.shadow);
     paint.rect_filled(frame, 10.0, p.surface);
     paint.rect_stroke(frame, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
     widgets::record_visible(ui, &mut shell.registry, "branch-ask", "dialog", frame);
     let left = frame.left() + 20.0;
-    ux::text(&paint, pos2(left, frame.top() + 20.0), &tr("New branch"), types::DIALOG_TITLE, p.text, Some(inner));
+    ux::text(&paint, pos2(left, frame.top() + 20.0), &title, types::DIALOG_TITLE, p.text, Some(inner));
     let mut y = frame.top() + 46.0;
-    for (g, ink, gap) in [(lead, p.text_secondary, 8.0), (starts, p.text, 14.0)] {
+    for (g, ink, gap) in lines {
         let h = g.size().y;
         paint.galley(pos2(left, y), g, ink);
         y += h + gap;
@@ -214,12 +277,13 @@ fn card(
     let at = Rect::from_min_size(pos2(left, y), hint.size());
     let _ = control(shell, ui, "branch-ask.hint", "status", at, false).accessible_name(said);
     paint.galley(at.min, hint, ink);
-    // Of the text as typed this frame, so Create never makes a name the field no longer shows.
-    let live = (!n.waiting).then(|| name(&n.text).ok()).flatten();
+    // Of the text as typed this frame, so Create never makes a name the field no longer shows; a
+    // rename to the name the branch has is no rename.
+    let live = (!n.waiting).then(|| name(&n.text).ok()).flatten().filter(|to| n.renaming.as_ref() != Some(to));
     let top = frame.bottom() - 48.0;
     let width_of = |text: &str| (ux::galley(&paint, text, types::UI, p.text, None).size().x + 20.0).ceil();
-    let at = pos2(frame.right() - 20.0 - width_of(&tr("Create")), top);
-    let (_, create) = button(shell, ui, p, "branch-ask.create", at, &tr("Create"), Look::Primary, live.is_some(), None);
+    let at = pos2(frame.right() - 20.0 - width_of(&act), top);
+    let (_, create) = button(shell, ui, p, act_id, at, &act, Look::Primary, live.is_some(), None);
     let at = pos2(at.x - 8.0 - width_of(&tr("Cancel")), top);
     let (_, cancel) = button(shell, ui, p, "branch-ask.cancel", at, &tr("Cancel"), Look::Secondary, !n.waiting, None);
     (live.filter(|_| create.clicked() || enter), cancel.clicked())
