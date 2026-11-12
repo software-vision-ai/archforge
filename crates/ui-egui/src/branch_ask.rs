@@ -1,7 +1,8 @@
-//! Naming a branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2, V5.7 to V5.9):
-//! New branch… from current work and the switch to it once the host has made it, or Rename… from a
-//! branch row's menu, each with the name field and its refusal under it; and Delete… from that
-//! menu, saying what goes with the branch, and why it stays when it does.
+//! Naming a branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2, V5.3, V5.7 to
+//! V5.9): New branch… from current work, or Start a branch here… from a version, and the switch to
+//! it once the host has made it, or Rename… from a branch row's menu, each with the name field and
+//! its refusal under it; and Delete… from that menu, saying what goes with the branch, and why it
+//! stays when it does.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -38,6 +39,8 @@ pub struct Naming {
     unsettled: Option<(String, String)>,
     /// The branch to delete, in place of naming one.
     deleting: Option<Doomed>,
+    /// The version a new branch starts at, and how it is named; none for current work.
+    start: Option<(String, String)>,
 }
 
 /// A branch asked to be deleted: its name as stored and as shown, and what goes with it once read,
@@ -74,6 +77,17 @@ pub(crate) fn offered(shell: &Shell) -> bool {
 /// Opens New branch… over the work shown, with the field empty.
 pub(crate) fn open(shell: &mut Shell) {
     ask(shell, Naming::default());
+}
+
+/// Opens Start a branch here… at the version `commit`, called `named`, with the field empty.
+pub(crate) fn open_at(shell: &mut Shell, commit: String, named: String) {
+    ask(shell, Naming { start: Some((commit, named)), ..Naming::default() });
+}
+
+/// Whether Start a branch here… is offered for the version `commit`: as New branch… is, and only
+/// for a version that can be read.
+pub(crate) fn offered_at(shell: &Shell, commit: &str) -> bool {
+    offered(shell) && !shell.versions.unavailable.contains_key(commit)
 }
 
 /// Opens Rename… for the branch `b` over the work shown, the field holding its name.
@@ -211,13 +225,13 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
     }
 }
 
-/// Asks the host to make the branch stored as `name` from current work, to rename the branch the
-/// dialog renames to it, or to delete the branch `name`. Before a creation or a rename of the
+/// Asks the host to make the branch stored as `name` from current work or the version the dialog
+/// starts at, to rename the branch the dialog renames to it, or to delete the branch `name`. Before a creation or a rename of the
 /// branch in use, as before a switch and a save, the skill text and description being typed are
 /// kept and handed over first; one that can't be kept stops it, its reason under the field.
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
     let Some(Ask::Branch { path, naming, .. }) = shell.ask.as_ref() else { return };
-    let (renaming, deleting) = (naming.renaming.clone(), naming.deleting.is_some());
+    let (renaming, deleting, start) = (naming.renaming.clone(), naming.deleting.is_some(), naming.start.clone());
     let in_use = renaming.as_ref().is_none_or(|from| host.current_branch(path).is_some_and(|now| from.eq_ignore_ascii_case(&now)));
     // A delete leaves current work alone: the branch in use is never deleted.
     if deleting {
@@ -239,7 +253,7 @@ fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
     let Some(Ask::Branch { path, .. }) = shell.ask.as_ref() else { return };
     let answer = match &renaming {
         Some(from) => host.rename_branch(path, from, &name),
-        None => host.create_branch(path, &name),
+        None => host.create_branch(path, &name, start.as_ref().map(|s| s.0.as_str())),
     };
     made(shell, name, renaming, answer);
 }
@@ -307,20 +321,26 @@ fn card(
     let paint = ui.painter().clone();
     let width = 480.0_f32.min(window.width() - 32.0).max(240.0);
     let inner = width - 40.0;
-    let start = if shell.shown_unsaved() {
-        tr("It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.")
-    } else {
-        tr("It starts from current work on {branch}.")
+    let start = match &n.start {
+        Some((_, named)) => fmt(&starts_at(shell), &[("version", named), ("branch", from)]),
+        None if shell.shown_unsaved() => {
+            fmt(&tr("It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too."), &[("branch", from)])
+        }
+        None => fmt(&tr("It starts from current work on {branch}."), &[("branch", from)]),
     };
-    let (title, what, act, act_id) = match n.renaming {
-        Some(_) => (tr("Rename branch"), tr("The conversations and versions on this branch are not affected."), tr("Rename"), "branch-ask.rename"),
-        None => (tr("New branch"), tr("A branch keeps its own versions, unsaved work and conversations."), tr("Create"), "branch-ask.create"),
+    let what = tr("A branch keeps its own versions, unsaved work and conversations.");
+    let (title, what, act, act_id) = match (&n.renaming, &n.start) {
+        (Some(_), _) => {
+            (tr("Rename branch"), tr("The conversations and versions on this branch are not affected."), tr("Rename"), "branch-ask.rename")
+        }
+        (None, Some(_)) => (tr("Start a branch here"), what, tr("Create"), "branch-ask.create"),
+        (None, None) => (tr("New branch"), what, tr("Create"), "branch-ask.create"),
     };
     let mut lines = vec![(ux::galley_rows(&paint, &what, types::SMALL, p.text_secondary, Some(inner), 3), p.text_secondary, 14.0)];
     // A rename starts nowhere: only a new branch says where.
     if n.renaming.is_none() {
         lines[0].2 = 8.0;
-        lines.push((ux::galley_rows(&paint, &fmt(&start, &[("branch", from)]), types::SMALL, p.text, Some(inner), 4), p.text, 14.0));
+        lines.push((ux::galley_rows(&paint, &start, types::SMALL, p.text, Some(inner), 4), p.text, 14.0));
     }
     let checked = name(&n.text);
     // The host's refusal of the name typed, else what is wrong with it once it has been typed in.
@@ -358,6 +378,19 @@ fn card(
     let at = pos2(at.x - 8.0 - width_of(&tr("Cancel")), top);
     let (_, cancel) = button(shell, ui, p, "branch-ask.cancel", at, &tr("Cancel"), Look::Secondary, !n.waiting, None);
     (live.filter(|_| create.clicked() || enter), cancel.clicked())
+}
+
+/// Where a branch from a version starts, as a template over `{version}` and `{branch}`: viewing
+/// ends on it, and unsaved work shown stays on the branch in use.
+fn starts_at(shell: &Shell) -> String {
+    let at = tr("It starts from the version of {version}.");
+    if shell.viewing.is_some() {
+        format!("{at} {}", tr("Viewing ends on the new branch."))
+    } else if shell.shown_unsaved() {
+        format!("{at} {}", tr("Your unsaved changes stay on {branch}."))
+    } else {
+        at
+    }
 }
 
 /// What goes with the branch `d`, as the delete's card says it.

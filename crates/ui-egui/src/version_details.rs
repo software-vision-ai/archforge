@@ -262,13 +262,23 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         compare::open(shell);
         return true;
     }
+    let mut end = compared.right();
     if crate::restore_ask::offered(shell, &entry.hash) {
         let (id, label) = ("workspace.version-details.restore", tr("Restore this version…"));
-        let at = pos2(compared.right() + 8.0, y);
-        let off = off.or_else(|| crate::restore_ask::held_back(shell));
-        if button(shell, ui, p, id, at, &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
+        let at = pos2(end + 8.0, y);
+        let held = off.clone().or_else(|| crate::restore_ask::held_back(shell));
+        let (restore, pressed) = button(shell, ui, p, id, at, &label, Look::Secondary, held.is_none(), held.as_deref());
+        if pressed.clicked() {
             let saved = crate::version_chip::when(&entry.date, clock);
             crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)));
+            return true;
+        }
+        end = restore.right();
+    }
+    if crate::branch_ask::offered_at(shell, &entry.hash) {
+        let (id, label) = ("workspace.version-details.branch", tr("Start a branch here…"));
+        if button(shell, ui, p, id, pos2(end + 8.0, y), &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
+            crate::branch_ask::open_at(shell, entry.hash.clone(), dated(&entry, clock));
             return true;
         }
     }

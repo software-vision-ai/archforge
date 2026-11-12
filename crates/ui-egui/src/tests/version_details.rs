@@ -2031,6 +2031,86 @@ fn restore_is_not_offered_for_current_work_or_an_unreadable_version() {
     });
 }
 
+const BRANCH: &str = "workspace.version-details.branch";
+const BRANCH_ON_BANNER: &str = "workspace.banner.branch";
+
+/// Opens Start a branch here… with `start` on a project on `main`, and names the branch Fresh.
+fn branching(h: &mut Harness<'static, Shell>, host: &SavingHost, start: &str) {
+    *host.branch_now.lock().unwrap() = Some("main".into());
+    h.run_steps(1);
+    tap(h, start);
+    h.run_steps(2);
+    h.event(egui::Event::Text("Fresh".into()));
+    h.run_steps(2);
+}
+
+/// Create on the dialog up; gives the branches the host was asked to make and where each starts.
+fn made_at(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, Option<String>)> {
+    tap(h, "branch-ask.create");
+    h.run_steps(2);
+    let names = host.branch_makes.lock().unwrap().iter().map(|m| m.0.clone()).collect::<Vec<_>>();
+    names.into_iter().zip(host.branch_starts.lock().unwrap().iter().cloned()).collect()
+}
+
+/// The details start a branch at their version, named with its date and description; unsaved work
+/// shown is said to stay. Made, the dialog closes and the switch to the new branch starts.
+#[test]
+fn the_details_start_a_branch_at_their_version_and_switch_to_it() {
+    in_both(|h, host| {
+        add_schema(h, "shop");
+        list_still(h);
+        opened(h, "c2");
+        branching(h, host, BRANCH);
+        let said = ["Start a branch here", "It starts from the version of 7 Nov 09:20 · First classes. Your unsaved changes stay on main."];
+        assert!(said.iter().all(|w| painted_has(h, w)) && !painted_has(h, "Viewing ends"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// The banner starts a branch at the version in view, saying viewing ends there; made, the switch
+/// leaves the version for the new branch.
+#[test]
+fn the_banner_starts_a_branch_and_viewing_ends_on_it() {
+    in_both(|h, host| {
+        viewing(h, host, "c2");
+        branching(h, host, BRANCH_ON_BANNER);
+        let said = "It starts from the version of 7 Nov 09:20. Viewing ends on the new branch.";
+        assert!(painted_has(h, said) && !painted_has(h, "stay on"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        assert_eq!(h.state().viewing(), Some("c2"), "still viewing while the host works");
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().viewing().is_none() && h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// A branch starts at any version that can be read, the last one too, in the details or the banner,
+/// and at none that can't; nor with no branches kept.
+#[test]
+fn start_a_branch_is_not_offered_on_an_unreadable_version() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        assert!(!has_id(h, BRANCH), "no branches kept");
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        assert!(has_id(h, BRANCH), "the last version");
+        h.state_mut().versions.unavailable.insert("c2".into(), Some("gone".into()));
+        opened(h, "c2");
+        assert!(has_id(h, VIEW) && !has_id(h, BRANCH), "unreadable");
+        h.state_mut().versions.unavailable.clear();
+        viewing(h, host, "c2");
+        assert!(has_id(h, BRANCH_ON_BANNER), "in view");
+        h.state_mut().versions.unavailable.insert("c2".into(), None);
+        h.run_steps(1);
+        assert!(!has_id(h, BRANCH_ON_BANNER), "unreadable in view");
+    });
+}
+
 /// A failure brings the question back saying what happened, with Retry unless trying again can't
 /// help; one before anything is written says that nothing changed.
 #[test]

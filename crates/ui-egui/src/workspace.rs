@@ -383,7 +383,8 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
     let back = tr("Back to current work");
     let g = ux::galley(paint, &back, types::UI, p.on_accent, None);
     let button = Rect::from_min_size(pos2(band.right() - 12.0 - g.size().x - 20.0, band.top() + 8.0), vec2(g.size().x + 20.0, 28.0));
-    let text_end = restore_in_banner(shell, ui, p, button);
+    let beside = branch_in_banner(shell, ui, p, button);
+    let text_end = restore_in_banner(shell, ui, p, beside);
     ux::text_mid(paint, band.left() + 36.0, band.center().y, &words, types::UI, p.accent, room(text_end - band.left() - 48.0));
     paint.rect_filled(button, 6.0, p.accent_fill);
     paint.galley(button.center() - g.size() / 2.0, g, p.on_accent);
@@ -393,8 +394,24 @@ fn banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> Rect {
     Rect::from_min_max(pos2(r.left(), band.bottom()), r.max)
 }
 
-/// Left of `back` while the version shown can be restored: the icon that asks. Gives where the words
-/// must end; without it they may reach `back`.
+/// Left of `back` while a branch can start at the version shown: the icon that opens Start a branch
+/// here…. Gives what the next icon to the left goes beside: this icon, or `back` without it.
+fn branch_in_banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, back: Rect) -> Rect {
+    let shown = shell.viewing().map(str::to_string).zip(crate::version_chip::shown(shell).cloned());
+    let Some((commit, saved)) = shown.filter(|(commit, _)| crate::branch_ask::offered_at(shell, commit)) else { return back };
+    let at = Rect::from_min_size(pos2(back.left() - 36.0, back.top()), Vec2::splat(28.0));
+    let (live, words) = (crate::version_chip::available(shell), tr("Start a branch here…"));
+    let resp = control(shell, ui, "workspace.banner.branch", "button", at, live).on_hover_text(&words);
+    let _ = resp.clone().accessible_name(&words);
+    ux::icon_in(ui.painter(), at, &icons::BRANCH, if live { p.text_secondary } else { p.text_muted });
+    if resp.clicked() {
+        crate::branch_ask::open_at(shell, commit, saved);
+    }
+    at
+}
+
+/// Left of `back` (the way back, or the branch icon beside it) while the version shown can be
+/// restored: the icon that asks. Gives where the words must end; without it they may reach `back`.
 fn restore_in_banner(shell: &mut Shell, ui: &egui::Ui, p: &Palette, back: Rect) -> f32 {
     let shown = shell.viewing().map(str::to_string).zip(crate::version_chip::shown(shell).cloned());
     let Some((commit, saved)) = shown.filter(|(commit, _)| crate::restore_ask::offered(shell, commit)) else { return back.left() };

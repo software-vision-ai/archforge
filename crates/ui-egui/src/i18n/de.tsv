@@ -514,6 +514,11 @@ str		New branch	Neuer Zweig
 str		A branch keeps its own versions, unsaved work and conversations.	Ein Zweig hat eigene Versionen, eigene ungespeicherte Arbeit und eigene Unterhaltungen.
 str		It starts from current work on {branch}.	Er beginnt mit der aktuellen Arbeit auf {branch}.
 str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Er beginnt mit der aktuellen Arbeit auf {branch}. Ihre ungespeicherten Änderungen kommen mit, und {branch} behält sie ebenfalls.
+str		Start a branch here	Hier einen Zweig beginnen
+str		Start a branch here…	Hier einen Zweig beginnen…
+str		It starts from the version of {version}.	Er beginnt mit der Version vom {version}.
+str		Viewing ends on the new branch.	Die Ansicht endet auf dem neuen Zweig.
+str		Your unsaved changes stay on {branch}.	Ihre nicht gespeicherten Änderungen bleiben auf {branch}.
 str		That name is already in use.	Dieser Name wird bereits verwendet.
 str		The last new branch is not cleaned up yet. Opening the project again removes it.	Der letzte neue Zweig ist noch nicht bereinigt. Erneutes Öffnen des Projekts entfernt ihn.
 str		The project changed before the branch was made, so none was made.	Das Projekt hat sich geändert, bevor der Zweig erstellt wurde, daher wurde keiner erstellt.

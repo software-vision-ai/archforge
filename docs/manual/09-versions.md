@@ -272,7 +272,8 @@ Stepping from one version to another leaves no current work on screen, so Chat i
 If a version can't be shown when you leave your current work for it, your current work stays as it
 was and the status bar gives the reason.
 
-**Compare…** and **Restore this version…** in a version's details, and the restore button beside
-**Back to current work** in the banner, are described in [The workspace](03-workspace.md).
+**Compare…**, **Restore this version…** and **Start a branch here…** in a version's details, and the
+restore and branch buttons beside **Back to current work** in the banner, are described in
+[The workspace](03-workspace.md).
 
 Back to the [contents](README.md).

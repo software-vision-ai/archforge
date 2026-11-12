@@ -567,8 +567,7 @@ impl Projects {
     }
 
     /// Starts making the branch `name` at the version `start` on the writer, and returns at once;
-    /// see [`create_branch`]. The screen that asks for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// see [`create_branch`].
     pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, Some(start))
     }
@@ -914,11 +913,15 @@ impl ProjectHost for Projects {
         })
     }
 
-    /// The writer's creation from current work, its answer put as the window takes it. A branch
-    /// made whose record stays is made.
-    fn create_branch(&self, path: &Path, name: &str) -> Receiver<Result<(), BranchRefused>> {
+    /// The writer's creation at the version `start`, or with none from current work, its answer put
+    /// as the window takes it. A branch made whose record stays is made.
+    fn create_branch(&self, path: &Path, name: &str, start: Option<&str>) -> Receiver<Result<(), BranchRefused>> {
+        let made = |name| match start {
+            Some(start) => Projects::create_branch(self, path, name, start.to_string()),
+            None => self.create_branch_from_work(path, name),
+        };
         match SafeBranch::found(name) {
-            Ok(name) => branch_answer(self.create_branch_from_work(path, name), branch_made, not_made),
+            Ok(name) => branch_answer(made(name), branch_made, not_made),
             Err(e) => refused_at_once(e.to_string()),
         }
     }
@@ -4975,8 +4978,9 @@ mod tests {
 
     /// The window's side: a typed name is stored as the project stores it or refused in the
     /// dialog's words, translated; a creation from current work and a rename answer as the window
-    /// takes them, a name taken in another case, a record that remains, a project not open and a
-    /// name outside the safe set each by its own kind; the counts are the branch's.
+    /// takes them, as does one at a version, which leaves current work behind; a name taken in
+    /// another case, a record that remains, a project not open and a name outside the safe set each
+    /// by its own kind; the counts are the branch's.
     #[test]
     fn the_window_names_makes_renames_and_counts_branches() {
         let (sandbox, path) = branched();
@@ -4997,12 +5001,23 @@ mod tests {
         let counts = BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false };
         let read = |name: &str| host.branch_counts(&path, name).recv_timeout(Duration::from_secs(60)).expect("it answers");
         assert_eq!((read("main"), read("odd+name").is_err()), (Ok(counts), true));
-        assert_eq!(answer(host.create_branch(&path, &typed)), Ok(()));
+        assert_eq!(answer(host.create_branch(&path, &typed, None)), Ok(()));
         assert!(has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
-        assert_eq!(answer(host.create_branch(&path, "ELSEWHERE")), Err(BranchRefused::Taken));
-        assert_eq!(answer(host.create_branch(&sandbox.base.join("nowhere"), "lost")), Err(BranchRefused::Moved));
+        // At a version, the branch starts there and leaves the unsaved work behind.
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let (start, saved) = {
+            let open = lock(&sandbox.host.inner.open);
+            (open[0].head_of("main").unwrap(), open[0].read_model(&schema).unwrap())
+        };
+        host.write(&path, model("work"));
+        assert_eq!(sandbox.host.flush_for_test(&path), Ok(()));
+        assert_eq!(answer(host.create_branch(&path, "at-version", Some(&start))), Ok(()));
+        let at = lock(&sandbox.host.inner.open)[0].check_branch(&branch("at-version"), &schema).unwrap();
+        assert!(at == saved && at != model("work"), "it holds the version, and current work stayed behind");
+        assert_eq!(answer(host.create_branch(&path, "ELSEWHERE", None)), Err(BranchRefused::Taken));
+        assert_eq!(answer(host.create_branch(&sandbox.base.join("nowhere"), "lost", None)), Err(BranchRefused::Moved));
         let unsafe_name = BranchRefused::Failed(SafeBranch::found("odd+name").unwrap_err().to_string());
-        assert_eq!(answer(host.create_branch(&path, "odd+name")), Err(unsafe_name.clone()));
+        assert_eq!(answer(host.create_branch(&path, "odd+name", None)), Err(unsafe_name.clone()));
         assert_eq!(answer(host.rename_branch(&path, &typed, "renamed")), Ok(()));
         assert!(has_branch(&lock(&sandbox.host.inner.open)[0], "renamed") && !has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
         assert_eq!(answer(host.rename_branch(&path, "renamed", "MAIN")), Err(BranchRefused::Taken));
@@ -5010,9 +5025,8 @@ mod tests {
         assert_eq!(answer(host.rename_branch(&path, "renamed", "odd+name")), Err(unsafe_name));
         let main = BranchRefused::Failed(RenameJobError::Rename(RenameBranchError::Main).to_string());
         assert_eq!(answer(host.rename_branch(&path, "main", "other")), Err(main));
-        let start = lock(&sandbox.host.inner.open)[0].head_of("main").unwrap();
         stopped_creation(&path, "held", "main", &start);
-        assert_eq!(answer(host.create_branch(&path, "another")), Err(BranchRefused::NotCleanedUp));
+        assert_eq!(answer(host.create_branch(&path, "another", None)), Err(BranchRefused::NotCleanedUp));
         assert_eq!(answer(host.rename_branch(&path, "renamed", "held")), Err(BranchRefused::NotCleanedUp));
         // A branch whose record stays is made; a writer that stopped without answering, or a rename
         // whose reply was lost, may have done it.

@@ -529,7 +529,7 @@ impl Project {
     /// removed. If anything fails up to that commit the branch is deleted and then the record
     /// removed; after it the branch is finished and stays, whatever becomes of the record.
     ///
-    /// The screen that asks for this comes with AR-292.
+    /// Start a branch here… asks for this at the version shown.
     pub fn create_branch(&self, name: &SafeBranch, start: &str, schema: &ModelSchema) -> Result<BranchCreated, BranchCreationError> {
         self.create_branch_watched(name, start, None, schema, &mut |_| Ok(()))
     }
