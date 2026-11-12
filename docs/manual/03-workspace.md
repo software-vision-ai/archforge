@@ -60,7 +60,7 @@ An open project fills the window with its workspace.
   work as After; the button between them swaps the two, and each select lists your current work
   and this branch's versions, reading further ones as you reach the end. Under them the page says
   how many differences there are between the version and your current work, and lists them in
-  groups, keeping up as the work changes. While no button and not the Explorer has the keyboard
+  groups (model elements, diagrams, then skills), keeping up as the work changes. While no button and not the Explorer has the keyboard
   (Esc lets it go), the arrow keys scroll the list by a difference, Page Up and Page Down by a page,
   and Home and End to either end. Your current work stays your own work while another
   version is shown, not the version in view. If the two are the same the page says so, and if

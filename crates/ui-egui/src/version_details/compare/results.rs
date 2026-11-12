@@ -265,21 +265,23 @@ fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, why: &str) {
     }
 }
 
-/// How many differences there are, by area, and the cards in their groups, scrolling under that.
+/// How many differences there are, by area, and the cards in their groups (model elements, diagrams,
+/// then skills), scrolling under that.
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Difference]) {
     let (left, width) = column(r);
     let count = |area| items.iter().filter(|d| d.area == area).count();
-    let (model, diagrams) = (count(Area::Model), count(Area::Diagram));
+    let (model, diagrams, skills) = (count(Area::Model), count(Area::Diagram), count(Area::Skill));
     let head = trn("{n} difference", "{n} differences", items.len() as u64);
     let shown = ux::text(ui.painter(), r.min + vec2(MARGIN, 0.0), &head, types::SECTION, p.text, Some(width));
     let _ = control(shell, ui, "workspace.version-compare.count", "status", shown, false).accessible_name(&head);
     let parts = [
         (model > 0).then(|| trn("{n} model element", "{n} model elements", model as u64)),
         (diagrams > 0).then(|| trn("{n} diagram", "{n} diagrams", diagrams as u64)),
+        (skills > 0).then(|| trn("{n} skill", "{n} skills", skills as u64)),
     ];
     let breakdown = parts.into_iter().flatten().collect::<Vec<_>>().join(" · ");
     ux::text(ui.painter(), pos2(left, r.top() + 32.0), &breakdown, types::SMALL, p.text_secondary, Some(width));
-    let groups = [(tr("Model elements"), Area::Model, model), (tr("Diagrams"), Area::Diagram, diagrams)];
+    let groups = [(tr("Model elements"), Area::Model, model), (tr("Diagrams"), Area::Diagram, diagrams), (tr("Skills"), Area::Skill, skills)];
     let content: f32 = groups.iter().filter(|g| g.2 > 0).map(|g| GROUP + g.2 as f32 * PITCH).sum();
     let top = r.top() + LIST_TOP;
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));

@@ -1913,6 +1913,51 @@ fn a_failed_comparison_on_the_page_is_said_and_retried() {
     });
 }
 
+/// Current work whose rows cannot be built is a failure on the page too: said, why on hover, no
+/// count, and Retry compares again.
+#[test]
+fn rows_that_cannot_be_built_are_said_on_the_page() {
+    const FAILED: &str = "workspace.version-compare.failed";
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        frames_until(h, |h| has_id(h, FAILED));
+        assert!(painted_has(h, "The changes couldn't be compared.") && !painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, FAILED).center()));
+        h.run_steps(4);
+        assert!(painted(h).iter().any(|t| t.contains("too large to store")), "{:?}", painted(h));
+        // An edit under way holds the comparison Retry asks for, so the bars show until it ends.
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        tap(h, "workspace.version-compare.retry");
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, FAILED));
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        frames_until(h, |h| has_id(h, FAILED));
+    });
+}
+
+/// Skills are a group of their own, after model elements, and counted as skills.
+#[test]
+fn skills_are_listed_on_their_own() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        frames_until(h, |h| h.state().versions.changes.iter().any(|d| d.area == Area::Skill));
+        let the_panels = painted_times(h, "SKILLS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+        h.run_steps(1);
+        assert!(painted_has(h, "2 differences") && painted_has(h, "1 model element · 1 skill"), "{:?}", painted(h));
+        assert_eq!(painted_times(h, "SKILLS"), the_panels + 1, "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label("Naming, Skills, Added").count(), 2, "the list's row and the page's card");
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let top = |d: &Difference| rect_of(h, &format!("workspace.version-compare.change.{}.{}", d.id, d.class.0)).top();
+        assert_eq!(items.iter().map(|d| d.area).collect::<Vec<_>>(), [Area::Model, Area::Skill]);
+        assert!(top(&items[0]) < top(&items[1]), "the skill's card under the model element's");
+    });
+}
+
 /// Nothing to list is said in words, and two saved versions are not compared yet.
 #[test]
 fn an_empty_result_and_two_versions_are_said() {
