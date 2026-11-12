@@ -447,6 +447,58 @@ fn rows_chosen_by_the_pointer_act_on_the_fields_selection() {
     }
 }
 
+/// The name typed in place, in Models and on the canvas, stays open through the in-window Edit menu:
+/// Copy, Cut and Paste act on its selection, the menu closed by its title leaves it open with its
+/// text selected, and a press elsewhere then commits it, as it does with no menu.
+#[test]
+fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
+    for (theme, on_canvas) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let (mut h, _) = drawn(theme);
+        (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, !on_canvas);
+        h.run();
+        if on_canvas {
+            // The header's right end, clear of the note inside the box.
+            let node = node_of(&h, archforge_mof::Uuid::parse(&selection(&h)[0]).unwrap());
+            let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).right_top() + egui::vec2(-20.0, 12.0);
+            (0..2).for_each(|_| click(&mut h, at));
+        } else {
+            key(&mut h, Key::F2, Modifiers::NONE);
+        }
+        let name = |h: &Harness<'static, Shell>| {
+            h.state().canvas.rename.as_ref().map(|r| r.text.clone()).or(h.state().explorer.rename.as_ref().map(|r| r.text.clone()))
+        };
+        // Selects the name's text, opens Edit, clicks `at`; whether the frames after copied "Customer".
+        let menu = |h: &mut Harness<'static, Shell>, at: &str| {
+            key(h, Key::A, Modifiers::COMMAND);
+            for id in ["strip.menu.edit", at] {
+                h.run();
+                let at = rect_of(h, id).center();
+                h.event(Event::PointerMoved(at));
+                h.run();
+                (0..2).for_each(|n| {
+                    h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
+                });
+            }
+            (0..4).any(|_| (h.step(), copied(h, "Customer")).1)
+        };
+        assert!(menu(&mut h, "strip.menu.row.edit.copy") && name(&h).as_deref() == Some("Customer"), "{on_canvas}: Copy copied the name");
+        assert!(menu(&mut h, "strip.menu.row.edit.cut") && name(&h).as_deref() == Some(""), "{on_canvas}: Cut took it");
+        menu(&mut h, "strip.menu.row.edit.paste");
+        h.event(Event::Paste("Order".into()));
+        h.run();
+        menu(&mut h, "strip.menu.edit");
+        h.event(Event::Text("Item".into()));
+        h.run();
+        assert_eq!(name(&h).as_deref(), Some("Item"), "{on_canvas}: pasted, and the menu closed by its title left the name selected");
+        menu(&mut h, "workspace.properties.kind");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(name(&h).is_none() && st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{on_canvas}: the press elsewhere committed it");
+        h.state_mut().menu_bar.held = Some(crate::widgets::egui_id("gone"));
+        h.step();
+        assert_eq!(h.state().menu_bar.held, None, "{on_canvas}: a name gone while held is let go once");
+    }
+}
+
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
 #[test]

@@ -1962,7 +1962,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     let nothing_focused = ui.memory(|m| m.focused().is_none());
     if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
         shell.canvas.rename = None;
-    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+    } else if (has_focus && enter) || (!fresh && crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), has_focus)) {
         commit_rename(shell);
     }
 }

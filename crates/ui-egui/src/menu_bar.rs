@@ -53,6 +53,10 @@ pub(crate) struct Bar {
     pub(crate) back: Option<egui::Id>,
     /// The text `back` had selected, when it is a field: a field that loses the focus drops it.
     pub(crate) selected: Option<egui::text::CCursorRange>,
+    /// Where the bar was drawn last.
+    rect: Option<Rect>,
+    /// The inline editor the bar keeps open after taking its keyboard, until the menu closes.
+    pub(crate) held: Option<egui::Id>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
@@ -60,21 +64,49 @@ pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
     if let Some(id) = shell.menu_bar.chosen.take() {
         // A pointer's click on the row took the keyboard, and its selection, from the field the
         // menu was opened on.
-        if id.starts_with("edit.")
-            && let Some(back) = shell.menu_bar.back
-        {
-            if let (Some(range), Some(mut field)) = (shell.menu_bar.selected, TextEditState::load(ctx, back)) {
-                field.cursor.set_char_range(Some(range));
-                field.store(ctx, back);
-            }
-            ctx.memory_mut(|m| m.request_focus(back));
+        if id.starts_with("edit.") && shell.menu_bar.back.is_some() {
+            give_back(shell, ctx);
             crate::edit_menu::note(shell, ctx);
         }
         actions::run(shell, id);
     }
+    // A menu closed by its own title, with no row chosen, leaves the name typed in place as it was;
+    // once, so a name that went meanwhile takes no keyboard later.
+    if shell.menu_bar.open.is_none() && !on_bar(shell, ctx) && shell.menu_bar.held.take().is_some() {
+        give_back(shell, ctx);
+    }
     if shell.menu_bar.open.is_some() && !(shell.in_window_menu && actions::free(shell)) {
         shell.menu_bar.open = None;
     }
+}
+
+/// Gives the field the menu was opened on the keyboard back, with the text it had selected.
+fn give_back(shell: &Shell, ctx: &egui::Context) {
+    let Some(back) = shell.menu_bar.back else { return };
+    if let (Some(range), Some(mut field)) = (shell.menu_bar.selected, TextEditState::load(ctx, back)) {
+        field.cursor.set_char_range(Some(range));
+        field.store(ctx, back);
+    }
+    ctx.memory_mut(|m| m.request_focus(back));
+}
+
+/// Whether the pointer is down on the bar, or let go on it this frame.
+fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
+    ctx.input(|i| {
+        (i.pointer.any_down() || i.pointer.any_released())
+            && shell.menu_bar.rect.zip(i.pointer.interact_pos()).is_some_and(|(bar, at)| bar.contains(at))
+    })
+}
+
+/// Whether the inline editor `id`, which commits when it loses the keyboard, commits now: on `lost`,
+/// unless the bar took the keyboard from it, and then once the menu closes with no row to give it back.
+pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
+    if shell.menu_bar.back == Some(id) && (shell.menu_bar.open.is_some() || shell.menu_bar.chosen.is_some() || on_bar(shell, ctx)) {
+        shell.menu_bar.held = Some(id);
+        return false;
+    }
+    let held = shell.menu_bar.held.take_if(|h| *h == id).is_some();
+    lost || (held && !focused)
 }
 
 /// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.
@@ -126,9 +158,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     };
     if press(ctx, Escape, false) || press(ctx, F10, false) {
         shell.menu_bar.open = None;
-        if let Some(id) = shell.menu_bar.back {
-            ctx.memory_mut(|m| m.request_focus(id));
-        }
+        give_back(shell, ctx);
     } else if across > 0 {
         let group = &GROUPS[(at + across) % GROUPS.len()];
         shell.menu_bar.open = Some(group.id);
@@ -185,6 +215,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         bar = bar.union(button);
         x = button.right() + GROUP_GAP;
     }
+    shell.menu_bar.rect = Some(bar);
     let Some((group, button)) = shown else { return };
     let (menu, picked) = popup(shell, ui, p, group, pos2(button.left(), strip.bottom()));
     let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|at| menu.contains(at) || bar.contains(at)));

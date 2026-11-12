@@ -862,7 +862,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let escape = has_keys && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if escape {
         shell.explorer.rename = None;
-    } else if enter || out.response.lost_focus() {
+    } else if enter || crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), out.response.has_focus()) {
         commit_rename(shell);
     }
 }
