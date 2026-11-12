@@ -1459,8 +1459,12 @@ fn answers(shell: &mut Shell) {
     match step {
         Some(Step::Creating(rx, pending)) => match rx.try_recv() {
             Ok(Ok(Answer::Created { origin })) => {
-                // The branch holds a conversation now: a list that said none no longer holds.
-                if matches!(&shell.chat_panel.history, Some(Ok(rows)) if rows.is_empty()) {
+                // The branch holds a conversation now: a list that said none no longer holds, nor
+                // does one still on its way, read before this one was made (its answer would land
+                // later this frame). Both go, and the list is read again when next needed
+                // ([`showing`], [`toggle_history`]).
+                let stale = shell.chat_panel.listing.take().is_some();
+                if stale || matches!(&shell.chat_panel.history, Some(Ok(rows)) if rows.is_empty()) {
                     shell.chat_panel.history = None;
                 }
                 let project = shell.project.as_ref().map(|p| p.path.clone()).unwrap_or_default();

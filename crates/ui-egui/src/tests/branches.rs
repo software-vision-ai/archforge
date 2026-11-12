@@ -466,8 +466,24 @@ fn chat_shows_only_the_conversations_of_the_branch_shown() {
         let hint = "Ask about the model below to start one.";
         assert!(has_id(&h, "workspace.chat.branch-note") && painted_has(&h, NONE) && painted_has(&h, hint), "{theme:?}: {:?}", painted(&h));
         assert!(h.query_by_label(&format!("{NOTE} {NONE} {hint}")).is_some(), "{theme:?}: a status node reads it whole");
-        ask_in_chat(&mut h, "First");
+        // The first question. In Light the list read before says none; in Dark none is read yet
+        // and a list read before the conversation was made answers in the frame its creation is
+        // answered. Either list, saying none, is not kept.
+        let at = rect_of(&h, "workspace.chat.composer").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("First".into()));
+        h.run();
+        rig.store.hold.store(true, std::sync::atomic::Ordering::SeqCst);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        if theme == ThemeKind::Dark {
+            let path = h.state().project.as_ref().unwrap().path.clone();
+            h.state_mut().chat_panel.history = None;
+            h.state_mut().chat_panel.listing = Some(crate::chat_store::ChatStore::list(&*rig.store, &path));
+        }
+        rig.store.release();
+        h.run_steps(2);
         assert_eq!(rig.store.chats.lock().unwrap()[0].row.origin, "Chat 1", "{theme:?}: numbered on its branch");
+        assert!(!painted_has(&h, NONE), "{theme:?}: the branch has one: {:?}", painted(&h));
         chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
         click_id(&mut h, "workspace.chat.new");
         h.run_steps(3);
