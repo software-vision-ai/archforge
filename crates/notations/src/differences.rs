@@ -503,7 +503,8 @@ fn marked(side: &mut [CardList], other: &[CardList], gone: ChangeKind, changed: 
     }
 }
 
-/// The lists of `obj`: its own members, the relationships it is an end of, whoever owns them, and
+/// The lists of `obj`: its own members, the relationships it is an end of, whoever owns them and
+/// whether they refer to it or to its template signature, and
 /// its owner, read once, off the interface thread, so a view only ever draws what is held. An
 /// association's end the element owns is listed as its association, and a relationship it owns
 /// between others stays a member.
@@ -511,7 +512,10 @@ fn lists_of(store: &Store, obj: Obj) -> Result<Vec<CardList>, Invalid> {
     let mut lists: BTreeMap<ListKind, Vec<ListRow>> = BTreeMap::new();
     let mut joined = BTreeSet::new();
     let owned = store.owned_elements(obj)?.into_iter().map(|m| (m, true));
-    for (item, own) in owned.chain(store.referrers(obj).into_iter().map(|(by, _)| (by, false))) {
+    // A template binding refers to the template's signature, not to the template.
+    let signature = reference(store, obj, archforge_uml::classifier::OWNED_TEMPLATE_SIGNATURE);
+    let referrers = [Some(obj), signature].into_iter().flatten().flat_map(|o| store.referrers(o)).map(|(by, _)| (by, false));
+    for (item, own) in owned.chain(referrers) {
         let rel = relationship_of(store, item)?;
         let class = store.class_of(rel)?;
         match far_end(store, rel, class, obj) {

@@ -616,6 +616,23 @@ fn relationships_are_listed_on_the_cards_of_what_they_join() {
     assert_eq!(seen.lists.after.iter().find(|l| l.kind == ListKind::Relationships).unwrap().rows[0].class, rel);
 }
 
+/// A template binding is listed on the bound element's card and on the template's, which it reaches
+/// through the template's signature, not the template itself.
+#[test]
+fn a_binding_is_listed_on_the_bound_element_and_the_template() {
+    let (mut s, shop, order, _) = uml_project();
+    let pair = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Pair" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": pair, "name": "T" }));
+    let item = run(&mut s, "uml.class.add", json!({ "package": shop, "name": "Item" }));
+    let before = state(&s);
+    run(&mut s, "uml.template-binding.add", json!({ "bound": order, "template": pair, "arguments": { "T": item } }));
+    let after = state(&s);
+    let to = |id: &str, name: &str| Some((Some(uuid(id)), said(name)));
+    let binds = (said(""), to(&pair, "Pair"), String::new(), Some(ChangeKind::Added));
+    assert_eq!(joins(&sides(&before, &after, &order)), [binds], "on the bound element's card");
+    assert_eq!(joins(&sides(&before, &after, &pair)), [(said(""), to(&order, "Order"), String::new(), Some(ChangeKind::Added))], "on the template's");
+}
+
 /// A box a repair fits shows no false change on either side, and is named by what it shows.
 #[test]
 fn a_card_shows_each_side_as_an_opening_repairs_it() {
