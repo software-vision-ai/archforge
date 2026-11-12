@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use archforge_notations::differences::{Area, Difference, classified};
+use archforge_notations::differences::{Difference, classified};
 use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::explorer::{TreeScroll, scroll_tree};
@@ -106,10 +106,10 @@ fn compare(before: Receiver<VersionRead>, after: Receiver<VersionRead>) -> Recei
             .and_then(|old| Ok((old, new?)))
             .map_err(|e| e.to_string())
             .and_then(|(old, new)| classified(&old, &new, crate::editing::fit_tables).map_err(|e| e.to_string()));
-        // The model's root is no change of its own; model elements come before diagrams.
+        // The model's root is no change of its own; model elements come first, then diagrams, then skills.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
-            items.sort_by_key(|d| d.area == Area::Diagram);
+            items.sort_by_key(|d| d.area);
             Arc::new(items)
         }));
     };

@@ -428,7 +428,7 @@ plural		{n} table	{n} tabela|{n} tabelas
 plural		{n} column	{n} coluna|{n} colunas
 plural		{n} schema	{n} esquema|{n} esquemas
 plural		{n} diagram	{n} diagrama|{n} diagramas
-plural		{n} skill	{n} skill|{n} skills
+plural		{n} skill	{n} competência|{n} competências
 str		Not saved	Não guardado
 str		Changes could not be written to the project	Não foi possível escrever as alterações no projeto
 str		No version was made: {why}	Não foi criada nenhuma versão: {why}
@@ -1180,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» em {metaclass} está em uso: {uses}. Retire-os primeiro.
 str		«{stereotype}» on {elements}	«{stereotype}» em {elements}
 str		{first} and {second}	{first} e {second}
+str		{first}, {second} and {third}	{first}, {second} e {third}
 plural		Show the use	Mostrar o uso|Mostrar os {n} usos
 str		A stereotype is shown on its profile's diagram	Um estereótipo aparece no diagrama do seu perfil
 str		Place stereotype	Colocar estereótipo

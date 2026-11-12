@@ -67,11 +67,12 @@ Undo remembers up to 500 steps, and only while the project stays open. A
 Do this when you want to look over your changes and say what they are.
 
 1. In the left rail, choose **Versions**. A number on its icon says how many things have changed.
-   **Working changes** lists them, model elements first and then diagrams. Click a model element or a
-   diagram, or press Enter on it, to see how it differs from your last version; ↑ and ↓ move
-   between them.
+   **Working changes** lists them in groups: model elements, then diagrams, then skills, which sit
+   under **Skills** of their own. Click a change, or press Enter on it, to see how it differs from
+   your last version; ↑ and ↓ move between them, across the groups.
 2. Choose **Save version…**, at the right of the **Working changes** heading. The **Save version**
-   dialog opens and says how many model elements and diagrams changed since your last version.
+   dialog opens and says how many model elements, diagrams and skills changed since your last
+   version, such as *3 model elements, 1 diagram and 1 skill changed since 8 Nov 14:02.*
 3. In **Description**, type what this version is, such as *Added email*. A description is one line
    of at most 200 characters, and it stays in the history, where anyone given a copy of the project
    can read it. Don't put anything secret in it.
@@ -178,8 +179,8 @@ versions:
 
 - its description, when it was saved and, where that is recorded, by whom;
 - **View this version**, which [shows it in the window](#view-an-earlier-version);
-- under **Changed items**, what changed since the version before it, model elements first and then
-  diagrams. The first version says *First version: there is nothing earlier to compare it with.*;
+- under **Changed items**, what changed since the version before it, model elements first, then
+  diagrams, then skills. The first version says *First version: there is nothing earlier to compare it with.*;
 - under **Previous version**, the version before it, which opens its details the same way.
 
 Versions are compared one at a time, so when you click through History quickly, the changes of the

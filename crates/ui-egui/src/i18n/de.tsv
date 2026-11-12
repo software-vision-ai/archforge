@@ -1180,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
 str		{first} and {second}	{first} und {second}
+str		{first}, {second} and {third}	{first}, {second} und {third}
 plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
 str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
 str		Place stereotype	Stereotyp platzieren

@@ -99,6 +99,21 @@ fn the_area_comes_from_the_table_and_never_from_a_name() {
     assert_eq!(about(&found, &node).area, Area::Diagram);
 }
 
+/// A skill is an area of its own, added or changed in its triggers' list alone, never the model's.
+#[test]
+fn a_skill_is_an_area_of_its_own() {
+    let (mut s, ..) = project();
+    let before = state(&s);
+    let skill = run(&mut s, "skill.add", json!({ "name": "Naming", "body": "Singular.", "triggers": ["naming"] }));
+    let added = differences(&before, &state(&s));
+    assert_eq!((about(&added, &skill).kind, about(&added, &skill).area), (ChangeKind::Added, Area::Skill));
+    let before = state(&s);
+    let set = json!({ "skill": skill, "name": "Naming", "description": "", "body": "Singular.", "triggers": ["naming", "export"], "dialect": "", "applies_to": "", "type_pattern": "" });
+    run(&mut s, "skill.set", set);
+    let found = differences(&before, &state(&s));
+    assert_eq!(found.iter().map(|d| (d.class, d.kind, d.area)).collect::<Vec<_>>(), [(archforge_core::SKILL, ChangeKind::Changed, Area::Skill)]);
+}
+
 /// A child that came is listed once, not also as a change to its owner; a real order change is the owner's.
 #[test]
 fn an_owner_is_changed_only_by_what_its_list_really_did() {
