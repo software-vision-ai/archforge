@@ -1640,6 +1640,44 @@ fn a_comparison_runs_alone_and_lands_only_on_its_sides() {
     });
 }
 
+/// A page waiting behind a comparison the details have left still wakes the window.
+#[test]
+fn a_page_waiting_its_turn_wakes_the_window() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        compared(h, "c1");
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && asked(host) == ["c2", "c3"], "{:?}", asked(host));
+    });
+}
+
+/// Once the list names the version before, the details rest with their read of it still under
+/// way; the page waiting its turn behind that read wakes the window, and once it is answered asks
+/// for its own on the frames it wakes, with no pointer moving.
+#[test]
+fn a_page_behind_a_read_the_details_no_longer_need_goes_on_by_itself() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let (before, after) = before_and_after(h, host);
+        host.version_reads.lock().unwrap().clear();
+        opened(h, "c3");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        let read = the_read(h, host);
+        tap(h, COMPARE);
+        h.state_mut().versions.page = Some(crate::VersionsPage { versions: history(), more: false });
+        h.run_steps(4);
+        assert!(h.state().versions.details_reading.is_some() && asked(host).is_empty(), "{:?}", asked(host));
+        assert!(h.ctx.has_requested_repaint(), "waiting its turn");
+        read.send(page_of(history().remove(1))).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while asked(host).is_empty() {
+            assert!(h.ctx.has_requested_repaint() && std::time::Instant::now() < until, "the page stalls");
+            h.run_steps(1);
+        }
+        assert_eq!(asked(host), ["c3"]);
+    });
+}
+
 /// A failed read is a failure, not no differences; an edit does not read again but the other
 /// direction does, and a read that stops without an answer is a failure too.
 #[test]

@@ -64,7 +64,7 @@ fn sides(shell: &Shell) -> Option<Sides> {
 
 /// Once a frame, after the details have had their turn: lets go of what belonged to another project
 /// or session and of the rows of a page gone, takes the answers, starts what is due, and wakes the
-/// window while anything is awaited.
+/// window while anything is awaited, its turn at a read included.
 pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     let about = about(shell);
     if shell.versions.compare_results.about != about {
@@ -76,11 +76,12 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
         let r = &mut shell.versions.compare_results;
         (r.held, r.found) = (None, None);
     }
+    let waits = now.is_some() && (shell.versions.details_comparing.is_some() || shell.versions.details_reading.is_some());
     if let Some(now) = now {
         next(shell, now);
     }
     let r = &shell.versions.compare_results;
-    if r.reading.is_some() || r.comparing.is_some() {
+    if waits || r.reading.is_some() || r.comparing.is_some() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 }
