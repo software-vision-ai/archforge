@@ -414,8 +414,7 @@ pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     }
     let mut chars = reason.chars();
     let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
-    let end = if reason.ends_with(['.', '!', '?']) { "" } else { "." };
-    format!("{first}{}{end}", chars.as_str())
+    format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
 }
 
 fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
@@ -500,9 +499,7 @@ pub(crate) enum FieldOut {
 }
 
 /// A label over a filled text field that commits on Enter, and when it loses the keyboard if
-/// `commit_on_blur`; gives the text as typed and whether it was committed this frame. Escape in a
-/// field that commits on blur commits nothing: [`edit_field`] tells the caller to bring the value
-/// back.
+/// `commit_on_blur`; gives whether it was committed this frame ([`edit_field`] says more).
 pub(crate) fn text_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -519,9 +516,33 @@ pub(crate) fn text_field(
     edit_field(shell, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur) == FieldOut::Commit
 }
 
-/// [`text_field`], saying what it asked for. One that commits on blur is written in place, as the
-/// inline rename in Models is: Enter or leaving it commits, and Escape gives the edit up (AR-417).
-/// One that does not leaves Escape to its editor.
+/// Records which widget held the keyboard as each frame begins, before the toolkit takes it away
+/// on Escape from a field that does not keep Escape (AR-417).
+struct KeysAtStart;
+
+impl egui::Plugin for KeysAtStart {
+    /// The recorder's name, for the toolkit's profiling.
+    fn debug_name(&self) -> &'static str {
+        "archforge.keys-at-start"
+    }
+
+    /// Runs before the frame's input reaches the toolkit's focus: the keyboard is still where it was.
+    fn input_hook(&mut self, ctx: &egui::Context, _input: &mut egui::RawInput) {
+        let held = ctx.memory(|m| m.focused());
+        ctx.data_mut(|d| d.insert_temp(widgets::egui_id("archforge.keys-at-start"), held));
+    }
+}
+
+/// The widget that held the keyboard as this frame began, so Escape goes to what the person was
+/// in even when the toolkit has already let go of it; none when nothing held it. The recorder is
+/// registered on first use (later calls are ignored) and answers from the next frame on.
+pub(crate) fn keys_at_start(ui: &egui::Ui) -> Option<egui::Id> {
+    ui.ctx().add_plugin(KeysAtStart);
+    ui.data(|d| d.get_temp::<Option<egui::Id>>(widgets::egui_id("archforge.keys-at-start"))).flatten()
+}
+
+/// [`text_field`], saying what it asked for. One that commits on blur is written in place, as in
+/// Models: Enter or leaving it commits, Escape gives the edit up (AR-417); others leave Escape be.
 pub(crate) fn edit_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -542,8 +563,7 @@ pub(crate) fn edit_field(
     widgets::record_visible(ui, &mut shell.registry, id, "field", field);
     let inner = field_inner(ui, field);
     let eid = widgets::egui_id(id);
-    // Escape stays with a field that commits on blur, so it cancels there rather than letting the
-    // toolkit take the keyboard away, which would read as leaving the field.
+    // Escape stays with a field that commits on blur and cancels there (checklist 118).
     let cancel = commit_on_blur && ui.memory(|m| m.has_focus(eid)) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
     // The toolkit still reports the field as left on the frame after, which is no commit.
     let just_cancelled = ui.data_mut(|d| d.remove_temp::<bool>(eid.with("cancelled"))).unwrap_or(false);

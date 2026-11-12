@@ -29,9 +29,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{
-    Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, edit_field, editable_select, menu, run, section, select_field, text_field,
-};
+use crate::panels::{Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// What the Relationship tool draws.
@@ -762,12 +760,18 @@ pub struct EndsEdit {
     pub modifier_refused: [Option<(&'static str, String)>; 2],
     /// Whether each end's Modifiers are open: closed, a line sums them up.
     pub modifiers_open: [bool; 2],
-    /// The end whose Modifiers were changed last: Escape with no field holding the keyboard goes to
-    /// its Modifiers alone (AR-417).
+    /// The end whose Modifiers were changed last, for [`EndsEdit::escape_target`] (AR-417).
     pub modifiers_last: Option<usize>,
 }
 
 impl EndsEdit {
+    /// The end whose open Modifiers Escape gives up when no field holds the keyboard: the one changed
+    /// last while it holds a change, else one that does, so a resolved draft hands it on (AR-417).
+    pub(crate) fn escape_target(&self) -> Option<usize> {
+        let pending = |i: usize| self.modifiers_open[i] && self.modifiers[i] != self.written_modifiers[i];
+        self.modifiers_last.filter(|i| pending(*i)).or_else(|| (0..2).find(|i| pending(*i)))
+    }
+
     /// Whether an end holds a role, multiplicity or modifiers typed and not yet written: only what
     /// differs from the model, as Properties fills this in for an association nothing has touched.
     pub(crate) fn unwritten(&self) -> bool {
@@ -1049,7 +1053,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         let half = ((width - 8.0) / 2.0).max(0.0);
         let key = format!("workspace.properties.end.{i}");
         let at = pos2(r.left() + PAD, y);
-        let role_out = edit_field(
+        let role_out = crate::panels::edit_field(
             shell,
             ui,
             p,
@@ -1439,13 +1443,12 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         edit.modifiers_last = Some(i);
     }
     let edited = edit.modifiers[i] != edit.written_modifiers[i];
-    // Escape goes to the field holding the keyboard: these Modifiers' own controls, or, with none
-    // holding it, the Modifiers changed last. Another field's Escape (the other end's role) is not theirs.
-    let focused = ui.memory(|m| m.focused());
+    // Escape goes to these Modifiers when one of their controls held the keyboard as the frame
+    // began (the toolkit has let go of the Default field by now), or with none holding it.
     let own = ["default", "static", "derived", "read-only", "ordered", "unique", "subsets", "redefines", "cancel", "apply"];
-    let theirs = match focused {
+    let theirs = match crate::panels::keys_at_start(ui) {
         Some(f) => own.iter().any(|c| f == crate::widgets::egui_id(&format!("{key}.{c}"))),
-        None => edit.modifiers_last == Some(i),
+        None => edit.escape_target() == Some(i),
     };
     let escape = edited && theirs && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
     let asked = if cancel || escape {

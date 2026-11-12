@@ -243,8 +243,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
   reason as a sentence, without the command's id, and goes when the selection changes; a draft left
   on the element selected before and refused then names that element ("Not kept on {name}: …").
-  Escape goes only to the field or editor holding the keyboard; with none holding it, an
-  association end's Modifiers changed last are given up.
+  Escape goes only to the field or editor that held the keyboard as the frame began
+  (`panels::keys_at_start`, as the toolkit lets go of some fields on Escape first); with none
+  holding it, an association end's Modifiers changed last that still hold a change are given up.
 - Sections are divided by full-width lines, each headed by a regular title with its count
   ("Columns · 3") and an icon action such as +. Fields are filled and borderless with small muted
   labels above them. The panel carries no help or footer texts.
