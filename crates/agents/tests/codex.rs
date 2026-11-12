@@ -1576,8 +1576,9 @@ fn timed_out_threads_are_released() {
 
     let body = format!("{}\nreq\nreq\ndrain", held_thread_prelude());
     let world = World::new("late-forgotten", &body);
-    let asked = Instant::now();
     let mut session = held_turn_start(&world, long, short / 10);
+    // `turn/start` is sent after this, so its forgetting is ten request timeouts later at least.
+    let asked = Instant::now();
     let events = events_until(&mut session, 5, turn_end);
     assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "turn/start", .. })), "{events:?}");
     world.pump(&mut session, 5);

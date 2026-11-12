@@ -653,9 +653,10 @@ impl CodexSession {
     }
 
     /// Sets the request timeout for every deadline counted from now on (requests sent later, the
-    /// late answers and stops they lead to); a request already sent keeps its deadline. For tests,
-    /// which bound only the step under test, so a loaded machine cannot time out the others. A
-    /// timeout out of range is refused.
+    /// late answers and stops they lead to), and for a stop already waiting for an unnamed turn,
+    /// whose due time is counted from the timeout at each poll; a request already sent keeps its
+    /// deadline. For tests, which bound only the step under test, so a loaded machine cannot time
+    /// out the others. A timeout out of range is refused.
     #[cfg(feature = "testing")]
     pub fn set_request_timeout(&mut self, timeout: Duration) -> Result<(), AgentError> {
         timeout_check(timeout)?;
