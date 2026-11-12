@@ -9050,10 +9050,10 @@ fn working_changes_filter_a_long_list() {
 /// goes down in is looked at on its own: what the press starts there (an opened element's read) can
 /// answer by the next frame, the key's release, so a look after both is late on a loaded machine.
 fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
-    h.key_down_modifiers(egui::Modifiers::NONE, key);
+    h.key_down(key);
     h.step();
     let pressed = done(h);
-    h.key_up_modifiers(egui::Modifiers::NONE, key);
+    h.key_up(key);
     for _ in 0..200 {
         h.run_steps(1);
         if pressed || done(h) {
