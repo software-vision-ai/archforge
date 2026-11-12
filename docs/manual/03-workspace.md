@@ -82,8 +82,8 @@ click elsewhere; while one is open, keys go to neither the window behind it nor 
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
 ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name you
-are typing in place stays open while the **Edit** menu is open, for its rows to act on; another menu,
-or a click elsewhere, finishes it, as it would with no menu.
+are typing in place stays open for the **Edit** menu's rows to act on; it is finished before another
+menu's row runs, and by a click elsewhere, as it would be with no menu.
 
 **Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
 as a click on the tool does: click the canvas to place the element, or drag between two elements to

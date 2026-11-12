@@ -175,6 +175,12 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     {
         shell.menu_bar.chosen = Some(id);
         shell.menu_bar.open = None;
+        // Another menu's row finds a field committed, a name typed in place too, as after a click.
+        if !id.starts_with("edit.")
+            && let Some(back) = shell.menu_bar.back
+        {
+            ctx.memory_mut(|m| m.surrender_focus(back));
+        }
     }
 }
 

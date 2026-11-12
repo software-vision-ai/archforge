@@ -526,6 +526,33 @@ fn another_menus_row_finds_the_name_typed_in_place_committed() {
     }
 }
 
+/// From the keys as well: F10 and the arrows reach Edit with the name still open, and File ▸ Close
+/// chosen with Enter finds it in the model before it runs.
+#[test]
+fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = drawn(theme);
+        (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
+        h.run();
+        key(&mut h, Key::F2, Modifiers::NONE);
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        h.event(Event::Text("Item".into()));
+        h.run();
+        key(&mut h, Key::F10, Modifiers::NONE);
+        key(&mut h, Key::ArrowRight, Modifiers::NONE);
+        assert_eq!((h.state().menu_bar.open, h.state().explorer.rename.as_ref().map(|r| r.text.as_str())), (Some("edit"), Some("Item")), "{theme:?}");
+        key(&mut h, Key::ArrowLeft, Modifiers::NONE);
+        while h.state().menu_bar.row != Some(actions::CLOSE) {
+            key(&mut h, Key::ArrowDown, Modifiers::NONE);
+        }
+        h.event(Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE });
+        h.step();
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(h.state().menu_bar.chosen, Some(actions::CLOSE), "{theme:?}: Close waits for the next frame");
+        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: the name is in the model before it runs");
+    }
+}
+
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
 #[test]
