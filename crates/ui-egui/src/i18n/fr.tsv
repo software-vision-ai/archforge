@@ -525,6 +525,22 @@ str		The conversations and versions on this branch are not affected.	Les convers
 str		The project changed before the branch was renamed, so its name stayed.	Le projet a changé avant que la branche soit renommée, elle a donc gardé son nom.
 str		Couldn't rename the branch: {why}	Impossible de renommer la branche : {why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge n'a pas pu savoir si la branche a été renommée en {name}. Renommez-la à nouveau en {name} pour le savoir.
+str		Delete…	Supprimer…
+str		Delete {branch}?	Supprimer {branch} ?
+str		Goes with the branch:	Part avec la branche :
+str		Counting what goes with it…	Décompte de ce qui part avec elle…
+str		What goes with it couldn't be read: {why}	Impossible de lire ce qui part avec elle : {why}
+plural		{n} version only on this branch	{n} version uniquement sur cette branche|{n} versions uniquement sur cette branche
+plural		{n} conversation	{n} conversation|{n} conversations
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · modifications non enregistrées
+str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Elle quitte la liste du projet. Son contenu peut rester dans le stockage du dossier du projet, comme une conversation supprimée reste dans l'historique enregistré du projet.
+str		There is no Undo for deleting a branch.	La suppression d'une branche ne peut pas être annulée.
+str		Delete branch	Supprimer la branche
+str		Couldn't delete {branch}	Impossible de supprimer {branch}
+str		The project changed before the branch was deleted, so it stays.	Le projet a changé avant la suppression de la branche, elle reste donc.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge n'a pas pu savoir si la branche a été supprimée. Supprimez-la à nouveau pour le savoir.
+str		The branch stays: {why}	La branche reste : {why}
 str		At most {n} characters.	{n} caractères au maximum.
 str		Enter a name.	Saisissez un nom.
 str		A name has to be one line.	Un nom doit tenir sur une ligne.

@@ -1,6 +1,7 @@
-//! Naming a branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2, V5.7 and V5.9):
+//! Naming a branch (`docs/design/versioning.md`, sections 8 and 10, frames V5.2, V5.7 to V5.9):
 //! New branch… from current work and the switch to it once the host has made it, or Rename… from a
-//! branch row's menu, each with the name field and its refusal under it.
+//! branch row's menu, each with the name field and its refusal under it; and Delete… from that
+//! menu, saying what goes with the branch, and why it stays when it does.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -8,10 +9,10 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::close_ask::Ask;
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, trn};
 use crate::settings::{Look, button, control};
-use crate::ux::{self, Palette, types};
-use crate::{BranchEntry, BranchRefused, ProjectHost, Shell, widgets};
+use crate::ux::{self, Palette, icons, types};
+use crate::{BranchCounts, BranchEntry, BranchRefused, ProjectHost, Shell, widgets};
 
 /// The most characters the field takes: more than a name may hold, so a long paste shows as too
 /// long rather than cut.
@@ -35,7 +36,22 @@ pub struct Naming {
     /// it again settles it, so it is the one name offered, and a branch listed under it doesn't
     /// count as taking it.
     unsettled: Option<(String, String)>,
+    /// The branch to delete, in place of naming one.
+    deleting: Option<Doomed>,
 }
+
+/// A branch asked to be deleted: its name as stored and as shown, and what goes with it once read,
+/// or why that couldn't be.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Doomed {
+    name: String,
+    shown: String,
+    counts: Option<Result<BranchCounts, String>>,
+}
+
+/// The read of what goes with a branch asked to be deleted: the project, session and branch it
+/// was asked over, and the host's answer on its way.
+pub(crate) type Counting = ((PathBuf, u64, String), Receiver<Result<BranchCounts, String>>);
 
 /// A creation or rename asked for: the project and session it was asked over, the name as stored,
 /// the branch renamed (none for a creation), and the host's answer on its way.
@@ -43,6 +59,8 @@ pub(crate) struct Making {
     about: (PathBuf, u64),
     name: String,
     renaming: Option<String>,
+    /// It deletes the branch `name`.
+    deleting: bool,
     answer: Receiver<Result<(), BranchRefused>>,
 }
 
@@ -63,11 +81,25 @@ pub(crate) fn open_rename(shell: &mut Shell, b: &BranchEntry) {
     ask(shell, Naming { text: b.shown.clone(), renaming: Some(b.name.clone()), ..Naming::default() });
 }
 
-/// Puts the dialog holding `naming` over the work shown, where it is offered.
-fn ask(shell: &mut Shell, naming: Naming) {
-    if let Some(path) = shell.project.as_ref().filter(|_| offered(shell)).map(|o| o.path.clone()) {
-        shell.ask = Some(Ask::Branch { path, generation: shell.session_generation(), naming });
-    }
+/// Opens Delete… for the branch `b`, and reads what goes with it.
+pub(crate) fn open_delete(shell: &mut Shell, b: &BranchEntry) {
+    let doomed = Doomed { name: b.name.clone(), shown: b.shown.clone(), counts: None };
+    let (Some((path, generation)), Some(host)) =
+        (ask(shell, Naming { deleting: Some(doomed), ..Naming::default() }), shell.services.projects.clone())
+    else {
+        return;
+    };
+    let read = host.branch_counts(&path, &b.name);
+    shell.versions.counting = Some(((path, generation, b.name.clone()), read));
+}
+
+/// Puts the dialog holding `naming` over the work shown, where it is offered; gives the project
+/// and session it is over.
+fn ask(shell: &mut Shell, naming: Naming) -> Option<(PathBuf, u64)> {
+    let path = shell.project.as_ref().filter(|_| offered(shell)).map(|o| o.path.clone())?;
+    let generation = shell.session_generation();
+    shell.ask = Some(Ask::Branch { path: path.clone(), generation, naming });
+    Some((path, generation))
 }
 
 /// The name to store for `text`, or why it can't be one: the host's own refusal, or a branch
@@ -110,10 +142,40 @@ fn words(refused: &BranchRefused, renaming: Option<&str>) -> String {
     }
 }
 
-/// Once a frame: takes the host's answer to a creation or a rename, and reads the branches again.
-/// Done, the dialog closes and a new branch is gone to; refused, the dialog says why under the
-/// field. Either only while the dialog is up over the session it was asked over.
+/// What a person is told of a delete refused, or whose outcome couldn't be told.
+fn undeleted(refused: &BranchRefused) -> String {
+    match refused {
+        BranchRefused::Moved => tr("The project changed before the branch was deleted, so it stays."),
+        BranchRefused::Unclear(_) => tr("Archforge could not tell whether the branch was deleted. Delete it again to find out."),
+        other => fmt(&tr("The branch stays: {why}"), &[("why", &other.to_string())]),
+    }
+}
+
+/// Takes the host's count of what goes with a branch asked to be deleted, for the dialog still up
+/// over that branch and the session it was asked over.
+fn counted(shell: &mut Shell, ctx: &egui::Context) {
+    let Some((_, read)) = shell.versions.counting.as_ref() else { return };
+    let counts = match read.try_recv() {
+        Ok(counts) => counts,
+        Err(TryRecvError::Empty) => return ctx.request_repaint_after(std::time::Duration::from_millis(100)),
+        Err(TryRecvError::Disconnected) => Err("the host stopped without an answer".into()),
+    };
+    let Some(((path, generation, name), _)) = shell.versions.counting.take() else { return };
+    ctx.request_repaint();
+    if let Some(Ask::Branch { path: p, generation: g, naming }) = shell.ask.as_mut()
+        && (&*p, *g) == (&path, generation)
+        && let Some(doomed) = naming.deleting.as_mut().filter(|d| d.name == name)
+    {
+        doomed.counts = Some(counts);
+    }
+}
+
+/// Once a frame: takes the host's count for a delete, and its answer to a creation, a rename or a
+/// delete, and reads the branches again. Done, the dialog closes and a new branch is gone to;
+/// refused, the dialog says why. Either only while the dialog is up over the session it was asked
+/// over.
 pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
+    counted(shell, ctx);
     let Some(making) = shell.versions.making.as_ref() else { return };
     let answer = match making.answer.try_recv() {
         Ok(answer) => answer,
@@ -121,7 +183,7 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
         // The host may have made it before it stopped.
         Err(TryRecvError::Disconnected) => Err(BranchRefused::Unclear("the host stopped without an answer".into())),
     };
-    let Some(Making { about, name, renaming, .. }) = shell.versions.making.take() else { return };
+    let Some(Making { about, name, renaming, deleting, .. }) = shell.versions.making.take() else { return };
     ctx.request_repaint();
     shell.versions.branches_asked = false;
     let shown = shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()));
@@ -130,6 +192,7 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
         return;
     }
     match answer {
+        Ok(()) if deleting => shell.ask = None,
         Ok(()) => {
             shell.ask = None;
             // A rename of the branch in use is where the project reopens.
@@ -151,20 +214,27 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
                     naming.unsettled.get_or_insert((name, shown));
                 }
                 let to = renaming.as_ref().map(|_| naming.unsettled.as_ref().map_or("", |u| u.1.as_str()));
-                (naming.refused, naming.waiting, naming.focused) = (Some(words(&refused, to)), false, false);
+                let said = if deleting { undeleted(&refused) } else { words(&refused, to) };
+                (naming.refused, naming.waiting, naming.focused) = (Some(said), false, false);
             }
         }
     }
 }
 
-/// Asks the host to make the branch stored as `name` from current work, or to rename the branch
-/// the dialog renames to it. Before a creation or a rename of the branch in use, as before a switch
+/// Asks the host to make the branch stored as `name` from current work, to rename the branch the
+/// dialog renames to it, or to delete the branch `name` the dialog deletes. Before a creation or a rename of the branch in use, as before a switch
 /// and a save, the skill text and description being typed are kept and handed over first; one that
 /// can't be kept stops it, its reason under the field.
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
     let Some(Ask::Branch { path, naming, .. }) = shell.ask.as_ref() else { return };
-    let renaming = naming.renaming.clone();
+    let (renaming, deleting) = (naming.renaming.clone(), naming.deleting.is_some());
     let in_use = renaming.as_ref().is_none_or(|from| host.current_branch(path).is_some_and(|now| from.eq_ignore_ascii_case(&now)));
+    // A delete leaves current work alone: the branch in use is never deleted.
+    if deleting {
+        let path = path.clone();
+        let answer = crate::chat_delete::delete_branch(shell, &path, &name);
+        return made(shell, name, None, answer);
+    }
     if shell.viewing.is_none() && in_use {
         crate::skill_tab::sync(shell, 0.0, true, None);
         if crate::panels::commit_description(shell) || !crate::skill_tab::unkept(&shell.canvas).is_empty() {
@@ -176,17 +246,25 @@ fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
         }
         shell.write_changes();
     }
-    let Some(Ask::Branch { path, generation, naming }) = shell.ask.as_mut() else { return };
+    let Some(Ask::Branch { path, .. }) = shell.ask.as_ref() else { return };
     let answer = match &renaming {
         Some(from) => host.rename_branch(path, from, &name),
         None => host.create_branch(path, &name),
     };
-    shell.versions.making = Some(Making { about: (path.clone(), *generation), name, renaming, answer });
+    made(shell, name, renaming, answer);
+}
+
+/// Keeps the host's `answer` to what the dialog asked for the branch `name`: made, renamed from
+/// `renaming`, or deleted. The dialog waits for it.
+fn made(shell: &mut Shell, name: String, renaming: Option<String>, answer: Receiver<Result<(), BranchRefused>>) {
+    let Some(Ask::Branch { path, generation, naming }) = shell.ask.as_mut() else { return };
+    let deleting = naming.deleting.is_some();
+    shell.versions.making = Some(Making { about: (path.clone(), *generation), name, renaming, deleting, answer });
     (naming.waiting, naming.refused) = (true, None);
 }
 
-/// Draws the dialog over the window and acts on it. While a creation or rename is on its way
-/// nothing closes it and nothing more is asked.
+/// Draws the dialog over the window and acts on it. While a creation, rename or delete is on its
+/// way nothing closes it and nothing more is asked.
 pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
     let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|o| o.path.clone())) else {
         shell.ask = None;
@@ -206,7 +284,10 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
         ui.interact(window, widgets::egui_id("branch-ask.veil"), Sense::click_and_drag());
         let (renaming, unsettled) = (naming.renaming.clone(), naming.unsettled.clone());
         let name = |text: &str| checked(host.as_ref(), &listed, (renaming.as_ref(), unsettled.as_ref()), text);
-        (asked, close) = card(shell, ui, &p, (window, &from), &mut naming, name);
+        (asked, close) = match naming.deleting.clone() {
+            Some(doomed) => doomed_card(shell, ui, &p, window, &naming, &doomed),
+            None => card(shell, ui, &p, (window, &from), &mut naming, name),
+        };
         close |= !naming.waiting && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
     });
     if naming.text != before {
@@ -287,4 +368,77 @@ fn card(
     let at = pos2(at.x - 8.0 - width_of(&tr("Cancel")), top);
     let (_, cancel) = button(shell, ui, p, "branch-ask.cancel", at, &tr("Cancel"), Look::Secondary, !n.waiting, None);
     (live.filter(|_| create.clicked() || enter), cancel.clicked())
+}
+
+/// What goes with the branch `d`, as the delete's card says it.
+fn goes_with(d: &Doomed) -> String {
+    match &d.counts {
+        None => tr("Counting what goes with it…"),
+        Some(Err(why)) => fmt(&tr("What goes with it couldn't be read: {why}"), &[("why", why)]),
+        Some(Ok(c)) => {
+            let versions = trn("{n} version only on this branch", "{n} versions only on this branch", c.versions_only_here);
+            let chats = trn("{n} conversation", "{n} conversations", c.conversations);
+            let line = if c.unsaved { tr("{versions} · {conversations} · unsaved changes") } else { tr("{versions} · {conversations}") };
+            fmt(&line, &[("versions", &versions), ("conversations", &chats)])
+        }
+    }
+}
+
+/// The delete's card (frame V5.8): what goes with the branch once read, that it leaves the list
+/// and may remain in the project folder, and that there is no Undo; refused, why it stays, in that
+/// place (V5.9). Gives the branch to delete when Delete branch is clicked, once what goes with it
+/// is read or can't be, and whether Cancel was.
+fn doomed_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, n: &Naming, d: &Doomed) -> (Option<String>, bool) {
+    let paint = ui.painter().clone();
+    let width = 480.0_f32.min(window.width() - 32.0).max(240.0);
+    let inner = width - 40.0;
+    let named = [("branch", d.shown.as_str())];
+    let (title, ink) = match n.refused {
+        Some(_) => (fmt(&tr("Couldn't delete {branch}"), &named), p.danger),
+        None => (fmt(&tr("Delete {branch}?"), &named), p.text),
+    };
+    let counts = goes_with(d);
+    let stays = tr(
+        "It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.",
+    );
+    let small = |words: &str, ink, wrap: f32| ux::galley_rows(&paint, words, types::SMALL, ink, Some(wrap), 6);
+    let lines = [
+        (small(&tr("Goes with the branch:"), p.text_secondary, inner), p.text_secondary, 10.0),
+        (small(&counts, p.text, inner), p.text, 12.0),
+        (small(&stays, p.text_secondary, inner), p.text_secondary, 12.0),
+    ];
+    let notice = n.refused.clone().unwrap_or_else(|| tr("There is no Undo for deleting a branch."));
+    let warn = small(&notice, p.danger, inner - 44.0);
+    let tint = warn.size().y + 20.0;
+    let height = 46.0 + lines.iter().map(|(g, _, gap)| g.size().y + gap).sum::<f32>() + tint + 16.0 + 28.0 + 20.0;
+    let frame = Rect::from_center_size(window.center(), vec2(width, height));
+    ux::shadow(&paint, frame, 10.0, p.shadow);
+    paint.rect_filled(frame, 10.0, p.surface);
+    paint.rect_stroke(frame, 10.0, Stroke::new(1.0, p.dialog_edge), StrokeKind::Inside);
+    widgets::record_visible(ui, &mut shell.registry, "branch-ask", "dialog", frame);
+    let left = frame.left() + 20.0;
+    ux::text(&paint, pos2(left, frame.top() + 20.0), &title, types::DIALOG_TITLE, ink, Some(inner));
+    let mut y = frame.top() + 46.0;
+    for (i, (g, ink, gap)) in lines.into_iter().enumerate() {
+        let at = Rect::from_min_size(pos2(left, y), g.size());
+        if i == 1 {
+            let _ = control(shell, ui, "branch-ask.counts", "status", at, false).accessible_name(counts.as_str());
+        }
+        paint.galley(at.min, g, ink);
+        y = at.bottom() + gap;
+    }
+    let block = Rect::from_min_size(pos2(left, y), vec2(inner, tint));
+    paint.rect_filled(block, 8.0, p.danger_tint);
+    ux::icon_in(&paint, Rect::from_center_size(pos2(left + 20.0, y + 18.0), vec2(14.0, 14.0)), &icons::WARNING, p.danger);
+    let _ = control(shell, ui, "branch-ask.notice", "status", block, false).accessible_name(notice.as_str());
+    paint.galley(pos2(left + 34.0, y + 10.0), warn, p.danger);
+    let top = frame.bottom() - 48.0;
+    let width_of = |text: &str| (ux::galley(&paint, text, types::UI, p.text, None).size().x + 20.0).ceil();
+    let act = tr("Delete branch");
+    let at = pos2(frame.right() - 20.0 - width_of(&act), top);
+    let live = !n.waiting && d.counts.is_some();
+    let (_, delete) = button(shell, ui, p, "branch-ask.delete", at, &act, Look::DangerFill, live, None);
+    let at = pos2(at.x - 8.0 - width_of(&tr("Cancel")), top);
+    let (_, cancel) = button(shell, ui, p, "branch-ask.cancel", at, &tr("Cancel"), Look::Secondary, !n.waiting, None);
+    ((live && delete.clicked()).then(|| d.name.clone()), cancel.clicked())
 }

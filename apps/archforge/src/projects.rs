@@ -946,23 +946,16 @@ impl ProjectHost for Projects {
     /// The writer's delete, its answer put as the window takes it, on a thread of its own as only
     /// the writer can answer it.
     fn delete_branch(&self, path: &Path, name: &str) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
-        let (tx, rx) = channel();
-        let job = match SafeBranch::found(name) {
-            Ok(branch) => Projects::delete_branch(self, path, branch),
+        match SafeBranch::found(name) {
+            Ok(branch) => deleted_answer(Projects::delete_branch(self, path, branch), |wait| {
+                std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait).map(drop)
+            }),
             Err(e) => {
+                let (tx, rx) = channel();
                 let _ = tx.send(Err(BranchNotDeleted::Failed(e.to_string())));
-                return rx;
+                rx
             }
-        };
-        let reply = tx.clone();
-        let wait = move || {
-            let answer = job.recv().unwrap_or_else(|e| Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
-            let _ = reply.send(answer.map_err(not_deleted));
-        };
-        if let Err(e) = std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait) {
-            let _ = tx.send(Err(BranchNotDeleted::Failed(format!("no thread could wait for the answer: {e}"))));
         }
-        rx
     }
 
     /// Opens the project on `main`, with no branch stored for it.
@@ -2234,6 +2227,25 @@ fn not_deleted(error: DeleteJobError) -> BranchNotDeleted {
         DeleteJobError::Delete(DeleteBranchError::CannotTell(why)) => BranchNotDeleted::Unclear(why),
         other => BranchNotDeleted::Failed(other.to_string()),
     }
+}
+
+/// Waits for the writer's answer `job` to a delete on what `spawn` starts, as only the writer can
+/// answer it, and gives it as the window takes it. A wait that can't start leaves the delete on the
+/// writer, where it may still run, so whether the branch went can't be told.
+fn deleted_answer(
+    job: Receiver<Result<Vec<Uuid>, DeleteJobError>>,
+    spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
+) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
+    let (tx, rx) = channel();
+    let reply = tx.clone();
+    let wait = move || {
+        let answer = job.recv().unwrap_or_else(|e| Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
+        let _ = reply.send(answer.map_err(not_deleted));
+    };
+    if let Err(e) = spawn(Box::new(wait)) {
+        let _ = tx.send(Err(BranchNotDeleted::Unclear(format!("no thread could wait for the answer: {e}"))));
+    }
+    rx
 }
 
 /// Waits on a thread of its own for the writer's answer `job`, as only the writer can answer it,
@@ -5508,6 +5520,21 @@ mod tests {
             assert_eq!(answer(host.delete_branch(&path, branch("scripted"))), Ok(Vec::new()));
             assert_eq!(answer(host.delete_branch(&path, branch("main"))), Err(DeleteJobError::Delete(DeleteBranchError::Main)));
         }
+    }
+
+    /// A delete whose wait can't start may still run on the writer, so it is unclear; one that
+    /// starts gives the writer's answer.
+    #[test]
+    fn a_delete_nobody_can_wait_for_is_unclear() {
+        let id = Uuid::v7(1_762_400_000_000, [3; 10]);
+        let (tx, job) = channel();
+        let _ = tx.send(Ok(vec![id]));
+        let unwaited = deleted_answer(job, |_| Err(std::io::Error::other("no threads left")));
+        assert!(matches!(unwaited.recv_timeout(Duration::from_secs(60)), Ok(Err(BranchNotDeleted::Unclear(_)))));
+        let (tx, job) = channel();
+        let _ = tx.send(Ok(vec![id]));
+        let waited = deleted_answer(job, |wait| std::thread::Builder::new().spawn(wait).map(drop));
+        assert_eq!(waited.recv_timeout(Duration::from_secs(60)), Ok(Ok(vec![id])));
     }
 
     /// The window is told of conversations only for a branch seen gone: not for a job's refusal,

@@ -803,3 +803,123 @@ fn renaming_the_branch_in_use_keeps_the_text_being_typed_first() {
         }
     });
 }
+
+const DELETE: &str = "branch-ask.delete";
+
+/// Delete… from `branch`'s menu, its `at`th entry; gives the count the host was asked for.
+fn deleting(
+    h: &mut Harness<'static, Shell>,
+    host: &SavingHost,
+    (branch, at): (&str, usize),
+) -> std::sync::mpsc::Sender<Result<crate::BranchCounts, String>> {
+    click_id(h, &format!("workspace.versions.branch.more.{branch}"));
+    h.run_steps(1);
+    click_id(h, &format!("workspace.versions.branch.menu.{branch}.{at}"));
+    h.run_steps(2);
+    let (asked, counts) = host.branch_counts.lock().unwrap().pop().unwrap();
+    assert_eq!(asked, branch);
+    counts
+}
+
+/// How many deletes the host was asked for once Delete branch is clicked.
+fn deleted(h: &mut Harness<'static, Shell>, host: &SavingHost) -> usize {
+    click_id(h, DELETE);
+    h.run_steps(2);
+    host.branch_deletes.lock().unwrap().len()
+}
+
+/// Delete… is on another branch's menu, never on `main` or the branch in use. The dialog names the
+/// branch, what goes with it once counted, that it may remain in the project folder and that there
+/// is no Undo; Delete branch waits for the count. While the host works nothing closes it; deleted,
+/// it closes and the branches are read again.
+#[test]
+fn a_branch_row_menu_deletes_another_branch_after_saying_what_goes() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        let counts = deleting(&mut h, &host, ("try-cancellations", 2));
+        let says = ["Delete Try cancellations?", "Goes with the branch:", "Counting what goes with it…", "may remain in the project folder's"];
+        assert!(says.iter().all(|t| painted_has(&h, t)), "{theme:?}: {:?}", painted(&h));
+        let no_undo = "There is no Undo for deleting a branch.";
+        assert!(painted_has(&h, no_undo) && h.query_by_label(no_undo).is_some(), "{theme:?}: a status node reads it");
+        assert_eq!(deleted(&mut h, &host), 0, "{theme:?}: not before the count");
+        counts.send(Ok(crate::BranchCounts { versions_only_here: 2, conversations: 1, unsaved: true })).unwrap();
+        h.run_steps(2);
+        let line = "2 versions only on this branch · 1 conversation · unsaved changes";
+        assert!(painted_has(&h, line) && h.query_by_label(line).is_some(), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(deleted(&mut h, &host), 1, "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        click_id(&mut h, "branch-ask.cancel");
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && deleted(&mut h, &host) == 1, "{theme:?}: up while the host works");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_deletes.lock().unwrap().remove(0).send(Ok(Vec::new())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        assert!(host.switches.lock().unwrap().is_empty() && host.branch_renames.lock().unwrap().is_empty(), "{theme:?}");
+        *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
+        h.run_steps(2);
+        click_id(&mut h, MORE);
+        h.run_steps(1);
+        assert!(has_id(&h, MENU) && !has_id(&h, "workspace.versions.branch.menu.try-cancellations.1"), "{theme:?}: in use, only Rename…");
+    });
+}
+
+/// A refused delete says why the branch stays in the dialog, which stays with Delete branch on;
+/// a lost answer may have deleted it, and asking again finds out. A count that can't be read says
+/// so and lets the delete go ahead.
+#[test]
+fn a_refused_delete_says_why_the_branch_stays() {
+    let unclear = "Archforge could not tell whether the branch was deleted. Delete it again to find out.";
+    let cases = [
+        (Some(crate::BranchNotDeleted::Moved), "The project changed before the branch was deleted, so it stays."),
+        (Some(crate::BranchNotDeleted::Failed("disk full".into())), "The branch stays: disk full"),
+        (Some(crate::BranchNotDeleted::Unclear("lost".into())), unclear),
+        (None, unclear),
+    ];
+    in_both_appearances(|theme| {
+        for (answer, words) in cases.clone() {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            deleting(&mut h, &host, ("try-cancellations", 2)).send(Err("unreadable".into())).unwrap();
+            h.run_steps(2);
+            assert!(painted_has(&h, "What goes with it couldn't be read: unreadable"), "{theme:?}");
+            assert_eq!(deleted(&mut h, &host), 1, "{theme:?}: {words}");
+            let reply = host.branch_deletes.lock().unwrap().remove(0);
+            match answer {
+                Some(not) => reply.send(Err(not)).unwrap(),
+                None => drop(reply),
+            }
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })), "{theme:?}: {words}");
+            assert!(painted_has(&h, "Couldn't delete Try cancellations") && h.query_by_label(words).is_some(), "{theme:?}: {words}");
+            assert_eq!(deleted(&mut h, &host), 1, "{theme:?}: {words}: Delete branch is on again");
+        }
+    });
+}
+
+/// With the delete dialog up and the keyboard off it, Delete doesn't reach the explorer's selected
+/// row; with no dialog the same key removes it.
+#[test]
+fn delete_branch_keeps_the_keys_to_itself() {
+    in_both_appearances(|theme| {
+        for up in [true, false] {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
+            crate::explorer::add(h.state_mut(), "schema");
+            h.run();
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+            let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[0].id)).center();
+            click(&mut h, at);
+            h.state_mut().explorer.focused = true;
+            if up {
+                crate::branch_ask::open_delete(h.state_mut(), &listed(true)[1]);
+                h.run_steps(2);
+                assert!(has_id(&h, DELETE), "{theme:?}: up");
+            }
+            let revision = h.state().session.as_ref().unwrap().revision();
+            h.ctx.memory_mut(|m| m.focused().into_iter().for_each(|id| m.surrender_focus(id)));
+            key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+            let changed = h.state().session.as_ref().unwrap().revision() != revision;
+            assert_eq!(changed, !up, "{theme:?}: with the dialog up: {up}");
+        }
+    });
+}

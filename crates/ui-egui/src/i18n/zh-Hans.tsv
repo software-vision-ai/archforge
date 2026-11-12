@@ -525,6 +525,22 @@ str		The conversations and versions on this branch are not affected.	此分支�
 str		The project changed before the branch was renamed, so its name stayed.	在重命名分支之前项目已更改，因此其名称保持不变。
 str		Couldn't rename the branch: {why}	无法重命名分支：{why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge 无法确定分支是否已重命名为 {name}。请再次重命名为 {name} 以确认。
+str		Delete…	删除…
+str		Delete {branch}?	删除 {branch}？
+str		Goes with the branch:	随分支一起删除：
+str		Counting what goes with it…	正在统计随之删除的内容…
+str		What goes with it couldn't be read: {why}	无法读取随之删除的内容：{why}
+plural		{n} version only on this branch	仅在此分支上的 {n} 个版本
+plural		{n} conversation	{n} 个对话
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 未保存的更改
+str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	它会从项目列表中消失。其内容可能仍留在项目文件夹的存储中，就像已删除的对话仍留在项目的已保存历史中一样。
+str		There is no Undo for deleting a branch.	删除分支无法撤销。
+str		Delete branch	删除分支
+str		Couldn't delete {branch}	无法删除 {branch}
+str		The project changed before the branch was deleted, so it stays.	分支删除前项目已更改，因此分支保留。
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge 无法判断分支是否已删除。再次删除即可确认。
+str		The branch stays: {why}	分支保留：{why}
 str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。

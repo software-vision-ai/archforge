@@ -293,8 +293,8 @@ pub struct State {
     /// The deleted conversations' folders asked of the host to remove, with its answers.
     pub(crate) forgetting: Vec<(String, Receiver<Result<bool, String>>)>,
     /// The branch deletes asked of a project and not answered yet, of every open project: what
-    /// they answer lets go of folders (AR-329).
-    pub(crate) branch_deletes: Vec<Receiver<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>,
+    /// they answer lets go of folders (AR-329), and is told to whoever asked (AR-393).
+    pub(crate) branch_deletes: Vec<(Receiver<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>, Sender<Result<(), crate::BranchRefused>>)>,
 }
 
 impl State {

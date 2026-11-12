@@ -525,6 +525,22 @@ str		The conversations and versions on this branch are not affected.	Die Unterha
 str		The project changed before the branch was renamed, so its name stayed.	Das Projekt hat sich geändert, bevor der Zweig umbenannt wurde, daher blieb sein Name.
 str		Couldn't rename the branch: {why}	Der Zweig konnte nicht umbenannt werden: {why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge konnte nicht feststellen, ob der Zweig in {name} umbenannt wurde. Benennen Sie ihn noch einmal in {name} um, um es herauszufinden.
+str		Delete…	Löschen…
+str		Delete {branch}?	{branch} löschen?
+str		Goes with the branch:	Mit dem Zweig geht:
+str		Counting what goes with it…	Es wird gezählt, was mitgeht…
+str		What goes with it couldn't be read: {why}	Was mitgeht, konnte nicht gelesen werden: {why}
+plural		{n} version only on this branch	{n} Version nur auf diesem Zweig|{n} Versionen nur auf diesem Zweig
+plural		{n} conversation	{n} Unterhaltung|{n} Unterhaltungen
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · ungespeicherte Änderungen
+str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Er verschwindet aus der Liste des Projekts. Sein Inhalt kann im Speicher des Projektordners bleiben, wie eine gelöschte Unterhaltung im gespeicherten Verlauf des Projekts.
+str		There is no Undo for deleting a branch.	Das Löschen eines Zweigs lässt sich nicht rückgängig machen.
+str		Delete branch	Zweig löschen
+str		Couldn't delete {branch}	{branch} konnte nicht gelöscht werden
+str		The project changed before the branch was deleted, so it stays.	Das Projekt hat sich geändert, bevor der Zweig gelöscht wurde, daher bleibt er.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge konnte nicht feststellen, ob der Zweig gelöscht wurde. Löschen Sie ihn erneut, um es herauszufinden.
+str		The branch stays: {why}	Der Zweig bleibt: {why}
 str		At most {n} characters.	Höchstens {n} Zeichen.
 str		Enter a name.	Geben Sie einen Namen ein.
 str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
