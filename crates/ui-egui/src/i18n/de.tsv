@@ -503,6 +503,10 @@ str	branch	Current	Aktuell
 str		Branches can't be merged yet.	Zweige können noch nicht zusammengeführt werden.
 str		Only the first {n} branches are listed.	Nur die ersten {n} Zweige sind aufgeführt.
 str		The branches couldn't be read.	Die Zweige konnten nicht gelesen werden.
+str		At most {n} characters.	Höchstens {n} Zeichen.
+str		Enter a name.	Geben Sie einen Namen ein.
+str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
+str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
 str		Retry	Erneut versuchen

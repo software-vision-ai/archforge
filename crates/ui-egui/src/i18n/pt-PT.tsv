@@ -503,6 +503,10 @@ str	branch	Current	Atual
 str		Branches can't be merged yet.	Ainda não é possível juntar ramos.
 str		Only the first {n} branches are listed.	Apenas os primeiros {n} ramos são apresentados.
 str		The branches couldn't be read.	Não foi possível ler os ramos.
+str		At most {n} characters.	No máximo {n} caracteres.
+str		Enter a name.	Introduza um nome.
+str		A name has to be one line.	Um nome tem de ocupar uma só linha.
+str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.
 str		Working changes	Alterações em curso
 str		History	Histórico
 str		Retry	Tentar novamente

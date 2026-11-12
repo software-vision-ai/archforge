@@ -502,6 +502,10 @@ str	branch	Current	Current
 str		Branches can't be merged yet.	Branches can't be merged yet.
 str		Only the first {n} branches are listed.	Only the first {n} branches are listed.
 str		The branches couldn't be read.	The branches couldn't be read.
+str		At most {n} characters.	At most {n} characters.
+str		Enter a name.	Enter a name.
+str		A name has to be one line.	A name has to be one line.
+str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry
