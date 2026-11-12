@@ -99,9 +99,12 @@ fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
 }
 
 /// Whether the inline editor `id`, which commits when it loses the keyboard, commits now: on `lost`,
-/// unless the bar took the keyboard from it, and then once the menu closes with no row to give it back.
+/// unless the bar took the keyboard from it for the Edit menu, and then once that menu closes with no
+/// Edit row to give it back. Any other menu or row finds it committed, as with no menu.
 pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
-    if shell.menu_bar.back == Some(id) && (shell.menu_bar.open.is_some() || shell.menu_bar.chosen.is_some() || on_bar(shell, ctx)) {
+    let bar = &shell.menu_bar;
+    let edit = bar.open == Some("edit") || bar.chosen.is_some_and(|r| r.starts_with("edit.")) || (bar.open.is_none() && on_bar(shell, ctx));
+    if bar.back == Some(id) && edit {
         shell.menu_bar.held = Some(id);
         return false;
     }

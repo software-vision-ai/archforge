@@ -499,6 +499,33 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
     }
 }
 
+/// A name typed in place is committed before a row of another menu runs, so File ▸ Close and the
+/// rest see it in the model, as they would with no menu.
+#[test]
+fn another_menus_row_finds_the_name_typed_in_place_committed() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = drawn(theme);
+        (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
+        h.run();
+        key(&mut h, Key::F2, Modifiers::NONE);
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        h.event(Event::Text("Item".into()));
+        h.run();
+        let at = rect_of(&h, "strip.menu.file").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "strip.menu.row.file.close").center();
+        h.event(Event::PointerMoved(at));
+        h.run();
+        (0..2).for_each(|n| {
+            h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
+        });
+        h.step();
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(h.state().menu_bar.chosen, Some(actions::CLOSE), "{theme:?}: Close waits for the next frame");
+        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: the name is in the model before it runs");
+    }
+}
+
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
 #[test]
