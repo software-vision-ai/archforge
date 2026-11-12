@@ -416,7 +416,17 @@ Added or Removed; one on both is Changed when it or what it draws differs: its e
 on it, a parameter of one, or a part of it such as a bend, a label or its style. A marked box has an
 outline in the change's colour and the change in words above it, without frame V3.4's tint, as a box's
 own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
-Words that would run past a pane's right edge are moved left to stay inside it.
+Words that would run past a pane's right edge are moved left to stay inside it, while what they mark starts inside it.
+
+That framing is where both sides start, and the two move together: a drag or the wheel over either
+side pans both, a pinch or the wheel with the command key zooms both about the pointer, and a side
+with the keys pans both by the arrow keys, zooms both by + and − and fits both again by 0. Opening
+the diagram again from the list fits it again too. Where the person has moved them stays only while
+the diagram is open, never in the project or the canvas. A mark on a box or line whose element the
+same comparison lists is a link to that element's change: a click, or Enter once Tab reaches it,
+opens the element along the list held, as the related changes under an element's cards do, and Tab
+reaching a mark out of sight moves both sides to it. A side the diagram is not on (an added diagram's
+Before, a removed one's After) is a pane that says so and does not move.
 
 Above the two sides, frame V3.4's **Model** and **Layout** cards say the same differences apart.
 Model counts the elements a box or line draws, on either side, that were added, changed or removed,

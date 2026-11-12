@@ -616,6 +616,7 @@ str		The diagram's own details changed	図そのものの情報が変更され�
 str		Such as its name, or the order its boxes are drawn in.	名前や、ボックスを描く順序などです。
 str		This diagram was added	この図が追加されました
 str		It has no boxes or lines yet.	まだボックスも線もありません。
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	ドラッグ、スクロール、または矢印キーで両側を移動します。+ と − で拡大・縮小し、0 で再び全体を収めます。
 str		This diagram was removed	この図が削除されました
 str		It had no boxes or lines.	ボックスも線もありませんでした。
 str		Version of {when}	{when} のバージョン

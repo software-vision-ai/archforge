@@ -616,6 +616,7 @@ str		The diagram's own details changed	Os dados próprios do diagrama mudaram
 str		Such as its name, or the order its boxes are drawn in.	Por exemplo, o nome ou a ordem em que as caixas são desenhadas.
 str		This diagram was added	Este diagrama foi adicionado
 str		It has no boxes or lines yet.	Ainda não tem caixas nem linhas.
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	Arraste, deslize ou use as setas para mover os dois lados; + e − ampliam-nos ou reduzem-nos, e 0 volta a ajustá-los.
 str		This diagram was removed	Este diagrama foi removido
 str		It had no boxes or lines.	Não tinha caixas nem linhas.
 str		Version of {when}	Versão de {when}
