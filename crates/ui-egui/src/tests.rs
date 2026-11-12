@@ -847,7 +847,10 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
         let (mut h, _host, class, table) = described_project(theme);
         for empty in ["", "   "] {
             retype_on(&mut h, class, "workspace.properties.name", empty);
+            // A session that refuses every change in its own words shows whether anything reached it.
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
             key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
             assert_eq!(name_on(&h, class), "Order", "{theme:?}");
             assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
             assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
