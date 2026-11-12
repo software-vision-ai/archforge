@@ -534,7 +534,8 @@ plural		{n} version only on this branch	{n} Version nur auf diesem Zweig|{n} Ver
 plural		{n} conversation	{n} Unterhaltung|{n} Unterhaltungen
 str		{versions} · {conversations}	{versions} · {conversations}
 str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · ungespeicherte Änderungen
-str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Er verschwindet aus der Liste des Projekts. Sein Inhalt kann im Speicher des Projektordners bleiben, wie eine gelöschte Unterhaltung im gespeicherten Verlauf des Projekts.
+str		It leaves the project's list.	Er verschwindet aus der Liste des Projekts.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Sein Inhalt kann im Speicher des Projektordners bleiben, wie eine gelöschte Unterhaltung im gespeicherten Verlauf des Projekts.
 str		There is no Undo for deleting a branch.	Das Löschen eines Zweigs lässt sich nicht rückgängig machen.
 str		Delete branch	Zweig löschen
 str		Couldn't delete {branch}	{branch} konnte nicht gelöscht werden

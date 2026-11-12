@@ -212,9 +212,9 @@ pub(crate) fn frame(shell: &mut Shell, ctx: &egui::Context) {
 }
 
 /// Asks the host to make the branch stored as `name` from current work, to rename the branch the
-/// dialog renames to it, or to delete the branch `name` the dialog deletes. Before a creation or a rename of the branch in use, as before a switch
-/// and a save, the skill text and description being typed are kept and handed over first; one that
-/// can't be kept stops it, its reason under the field.
+/// dialog renames to it, or to delete the branch `name`. Before a creation or a rename of the
+/// branch in use, as before a switch and a save, the skill text and description being typed are
+/// kept and handed over first; one that can't be kept stops it, its reason under the field.
 fn create(shell: &mut Shell, host: &dyn ProjectHost, name: String) {
     let Some(Ask::Branch { path, naming, .. }) = shell.ask.as_ref() else { return };
     let (renaming, deleting) = (naming.renaming.clone(), naming.deleting.is_some());
@@ -388,9 +388,8 @@ fn doomed_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, window: Rect, n: &
         None => (fmt(&tr("Delete {branch}?"), &named), p.text),
     };
     let counts = goes_with(d);
-    let stays = tr(
-        "It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.",
-    );
+    let remains = tr("Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.");
+    let stays = format!("{} {remains}", tr("It leaves the project's list."));
     let small = |words: &str, ink, wrap: f32| ux::galley_rows(&paint, words, types::SMALL, ink, Some(wrap), 6);
     let lines = [
         (small(&tr("Goes with the branch:"), p.text_secondary, inner), p.text_secondary, 10.0),

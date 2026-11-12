@@ -534,7 +534,8 @@ plural		{n} version only on this branch	このブランチだけのバージョ�
 plural		{n} conversation	会話 {n} 件
 str		{versions} · {conversations}	{versions} · {conversations}
 str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 保存されていない変更
-str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	プロジェクトの一覧から消えます。削除された会話がプロジェクトの保存済み履歴に残るように、その内容はプロジェクトフォルダーのストレージに残ることがあります。
+str		It leaves the project's list.	プロジェクトの一覧から消えます。
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	削除された会話がプロジェクトの保存済み履歴に残るように、その内容はプロジェクトフォルダーのストレージに残ることがあります。
 str		There is no Undo for deleting a branch.	ブランチの削除は元に戻せません。
 str		Delete branch	ブランチを削除
 str		Couldn't delete {branch}	{branch} を削除できませんでした

@@ -688,8 +688,8 @@ fn renamed(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, S
     host.branch_renames.lock().unwrap().iter().map(|r| (r.0.clone(), r.1.clone())).collect()
 }
 
-/// Another branch's menu has Switch and Rename…, the branch in use only Rename…, and `main` no
-/// Rename…. The dialog holds the name; unchanged, Rename is off; a name taken says so; Rename asks
+/// Another branch's menu has Switch, Rename… and Delete…, the branch in use only Rename…, and
+/// `main` no Rename…. The dialog holds the name; unchanged, Rename is off; a name taken says so; Rename asks
 /// the host for the names as stored, and done, the dialog closes and the branches are read again.
 #[test]
 fn a_branch_row_menu_renames_any_branch_but_main() {

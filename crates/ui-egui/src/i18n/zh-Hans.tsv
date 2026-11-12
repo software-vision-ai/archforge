@@ -534,7 +534,8 @@ plural		{n} version only on this branch	仅在此分支上的 {n} 个版本
 plural		{n} conversation	{n} 个对话
 str		{versions} · {conversations}	{versions} · {conversations}
 str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 未保存的更改
-str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	它会从项目列表中消失。其内容可能仍留在项目文件夹的存储中，就像已删除的对话仍留在项目的已保存历史中一样。
+str		It leaves the project's list.	它会从项目列表中消失。
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	其内容可能仍留在项目文件夹的存储中，就像已删除的对话仍留在项目的已保存历史中一样。
 str		There is no Undo for deleting a branch.	删除分支无法撤销。
 str		Delete branch	删除分支
 str		Couldn't delete {branch}	无法删除 {branch}

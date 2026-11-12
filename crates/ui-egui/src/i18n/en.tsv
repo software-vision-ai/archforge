@@ -533,7 +533,8 @@ plural		{n} version only on this branch	{n} version only on this branch|{n} vers
 plural		{n} conversation	{n} conversation|{n} conversations
 str		{versions} · {conversations}	{versions} · {conversations}
 str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · unsaved changes
-str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.
+str		It leaves the project's list.	It leaves the project's list.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.
 str		There is no Undo for deleting a branch.	There is no Undo for deleting a branch.
 str		Delete branch	Delete branch
 str		Couldn't delete {branch}	Couldn't delete {branch}

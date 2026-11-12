@@ -534,7 +534,8 @@ plural		{n} version only on this branch	{n} version uniquement sur cette branche
 plural		{n} conversation	{n} conversation|{n} conversations
 str		{versions} · {conversations}	{versions} · {conversations}
 str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · modifications non enregistrées
-str		It leaves the project's list. Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Elle quitte la liste du projet. Son contenu peut rester dans le stockage du dossier du projet, comme une conversation supprimée reste dans l'historique enregistré du projet.
+str		It leaves the project's list.	Elle quitte la liste du projet.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Son contenu peut rester dans le stockage du dossier du projet, comme une conversation supprimée reste dans l'historique enregistré du projet.
 str		There is no Undo for deleting a branch.	La suppression d'une branche ne peut pas être annulée.
 str		Delete branch	Supprimer la branche
 str		Couldn't delete {branch}	Impossible de supprimer {branch}
