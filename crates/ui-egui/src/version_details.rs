@@ -238,9 +238,10 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     if crate::restore_ask::offered(shell, &entry.hash) {
         let (id, label) = ("workspace.version-details.restore", tr("Restore this version…"));
         let at = pos2(compared.right() + 8.0, y);
+        let off = off.or_else(|| crate::restore_ask::held_back(shell));
         if button(shell, ui, p, id, at, &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
             let saved = crate::version_chip::when(&entry.date, clock);
-            crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)), None);
+            crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)));
             return true;
         }
     }
