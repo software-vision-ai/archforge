@@ -358,6 +358,9 @@ str		Open Settings	設定を開く
 str		Saved with {project}	{project} と一緒に保存
 str		The conversations in this project cannot be read: {why}	このプロジェクトの会話を読み込めません: {why}
 str		No conversations in this project yet.	このプロジェクトにはまだ会話がありません。
+str		No conversations on this branch yet.	このブランチにはまだ会話がありません。
+str		Conversations stay on the branch where they started.	会話は開始したブランチに残ります。
+str		Ask about the model below to start one.	下でモデルについて質問すると会話を始められます。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	会話はプロジェクト内に保存されるため、プロジェクトと一緒に移動し、別のプロジェクトには表示されません。
 str		Delete conversation	会話を削除

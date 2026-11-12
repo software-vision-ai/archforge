@@ -539,6 +539,26 @@ fn badge_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, badge: Rect, panel:
     }
 }
 
+/// Frame V5.5: that conversations stay on the branch where they started and, when `empty`, that
+/// this branch has none yet and how to start one, at `at`; a status node reads it whole. Gives the
+/// height drawn.
+fn branch_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, width: f32, empty: bool) -> f32 {
+    let paint = ui.painter().clone();
+    let note = tr("Conversations stay on the branch where they started.");
+    let mut h = crate::settings::wrapped(&paint, at, width, &note, types::SMALL, p.text_secondary, 3);
+    let mut words = note;
+    if empty {
+        h += 24.0;
+        let (none, hint) = (tr("No conversations on this branch yet."), tr("Ask about the model below to start one."));
+        h += crate::settings::wrapped(&paint, pos2(at.x, at.y + h), width, &none, types::UI, p.text, 3) + 6.0;
+        h += crate::settings::wrapped(&paint, pos2(at.x, at.y + h), width, &hint, types::SMALL, p.text_secondary, 3);
+        words = [words, none, hint].join(" ");
+    }
+    let r = Rect::from_min_size(at, vec2(width, h));
+    let _ = control(shell, ui, "workspace.chat.branch-note", "status", r, false).accessible_name(words);
+    h
+}
+
 /// The conversation's timeline in `area`, scrolled; it follows the end while the person has not
 /// scrolled up.
 fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel: &mut Panel, acts: &mut Vec<Act>) {
@@ -554,8 +574,11 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     // Laid out in content coordinates from the top, then moved by the scroll.
     let top = area.top() - panel.scroll;
     let mut y = top;
+    let branch_empty = crate::chat_panel::branch_empty(shell, panel);
     let Some(chat) = panel.chat.as_mut() else { return };
-    if chat.turns.is_empty() {
+    if chat.turns.is_empty() && branch_empty {
+        y += branch_note(shell, &clip, p, pos2(left, y), width, true);
+    } else if chat.turns.is_empty() {
         let title = fmt(&tr("Ask about {project}"), &[("project", &project)]);
         y += ux::text(&paint, pos2(left, y), &title, types::UI_STRONG, p.text, Some(width)).height() + 12.0;
         let intro = tr("Chat reads the model to answer and shows each read below. It changes nothing until you allow changes for this conversation.");
@@ -989,6 +1012,10 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
     let eyebrow = fmt(&tr("Saved with {project}"), &[("project", &project)]).to_uppercase();
     ux::text(&paint, pos2(left + 10.0, y), &eyebrow, types::EYEBROW, p.text_muted, Some(width - 20.0));
     y += 24.0;
+    let branched = crate::chat_panel::branched(shell);
+    if branched {
+        y += branch_note(shell, ui, p, pos2(left + 10.0, y), width - 20.0, false) + 12.0;
+    }
     let clock = crate::chat_panel::clock(shell);
     let open = panel.chat.as_ref().map(|c| c.id);
     let (mut scroll_by, mut scroll_room, mut return_early) = (0.0_f32, None, false);
@@ -999,15 +1026,11 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
             y += crate::settings::wrapped(&paint, pos2(left + 10.0, y), width - 20.0, &words, types::SMALL, p.danger, 6) + 8.0;
         }
         Some(Ok(rows)) if rows.is_empty() => {
-            y += crate::settings::wrapped(
-                &paint,
-                pos2(left + 10.0, y),
-                width - 20.0,
-                &tr("No conversations in this project yet."),
-                types::SMALL,
-                p.text_secondary,
-                3,
-            ) + 8.0;
+            let none = if branched { tr("No conversations on this branch yet.") } else { tr("No conversations in this project yet.") };
+            let h = crate::settings::wrapped(&paint, pos2(left + 10.0, y), width - 20.0, &none, types::SMALL, p.text_secondary, 3);
+            let r = Rect::from_min_size(pos2(left + 10.0, y), vec2(width - 20.0, h));
+            let _ = control(shell, ui, "workspace.chat.history.empty", "status", r, false).accessible_name(none);
+            y += h + 8.0;
         }
         Some(Ok(rows)) => {
             // The rows scroll under the eyebrow; the footnote follows the last.

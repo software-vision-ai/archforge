@@ -358,6 +358,9 @@ str		Open Settings	Ouvrir les Réglages
 str		Saved with {project}	Enregistrées avec {project}
 str		The conversations in this project cannot be read: {why}	Les conversations de ce projet ne peuvent pas être lues : {why}
 str		No conversations in this project yet.	Aucune conversation dans ce projet pour l’instant.
+str		No conversations on this branch yet.	Aucune conversation sur cette branche pour l’instant.
+str		Conversations stay on the branch where they started.	Les conversations restent sur la branche où elles ont commencé.
+str		Ask about the model below to start one.	Posez une question sur le modèle ci-dessous pour en commencer une.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Les conversations sont conservées dans le projet : elles voyagent avec lui et n’apparaissent jamais dans un autre projet.
 str		Delete conversation	Supprimer la conversation

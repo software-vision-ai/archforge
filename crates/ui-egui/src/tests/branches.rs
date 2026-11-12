@@ -436,3 +436,56 @@ fn the_branch_chip_narrows_in_the_design_s_order() {
         assert_eq!(seen, [4, 3, 2, 1, 0], "{theme:?}");
     });
 }
+
+/// Chat on a project of two branches (frame V5.5): the history says conversations stay on their
+/// branch; a switch keeps the history open and reads it from the branch arrived on, the old rows
+/// gone, and an empty conversation there says the branch has none until one is made.
+#[test]
+fn chat_shows_only_the_conversations_of_the_branch_shown() {
+    const NOTE: &str = "Conversations stay on the branch where they started.";
+    const NONE: &str = "No conversations on this branch yet.";
+    in_both_appearances(|theme| {
+        let (mut h, rig, _) = chat_history(theme);
+        assert!(painted_has(&h, "Review the checkout package") && !painted_has(&h, NOTE), "{theme:?}: one branch never says it");
+        let host = std::sync::Arc::new(SavingHost::default());
+        *host.branch_now.lock().unwrap() = Some("main".to_string());
+        *host.branch_list.lock().unwrap() = Some(Ok(listed(true)));
+        h.state_mut().services.projects = Some(host.clone());
+        versions_answer(&mut h, &host, Ok(two_versions()));
+        assert!(painted_has(&h, NOTE) && painted_has(&h, "Review the checkout package"), "{theme:?}: {:?}", painted(&h));
+        let rows = rows_now(&h);
+        let ends = switch_asked(&mut h, &host);
+        switch_checked(&mut h, &ends, rows);
+        rig.store.chats.lock().unwrap().clear();
+        switch_moved(&mut h, &ends);
+        assert_eq!(h.state().chat_panel.view, crate::chat_panel::View::History, "{theme:?}: the history stays open");
+        assert!(has_id(&h, "workspace.chat.history.empty") && h.query_by_label(NONE).is_some(), "{theme:?}: {:?}", painted(&h));
+        assert!(!painted_has(&h, "Review the checkout package"), "{theme:?}: the branch left's rows are gone");
+        click_id(&mut h, "workspace.chat.history");
+        h.run_steps(2);
+        let hint = "Ask about the model below to start one.";
+        assert!(has_id(&h, "workspace.chat.branch-note") && painted_has(&h, NONE) && painted_has(&h, hint), "{theme:?}: {:?}", painted(&h));
+        assert!(h.query_by_label(&format!("{NOTE} {NONE} {hint}")).is_some(), "{theme:?}: a status node reads it whole");
+        ask_in_chat(&mut h, "First");
+        assert_eq!(rig.store.chats.lock().unwrap()[0].row.origin, "Chat 1", "{theme:?}: numbered on its branch");
+        chat_event(&mut h, &rig, crate::chat::ChatEvent::TurnEnded(crate::chat::TurnEnd::Completed));
+        click_id(&mut h, "workspace.chat.new");
+        h.run_steps(3);
+        assert!(!painted_has(&h, NONE) && painted_has(&h, "Ask about Commerce platform"), "{theme:?}: the branch has one now: {:?}", painted(&h));
+        // Its one conversation deleted, the branch has none; brought back from the conversation
+        // view, it has one again.
+        click_id(&mut h, "workspace.chat.history");
+        h.run_steps(2);
+        let row = rect_of(&h, "workspace.chat.history.0").center();
+        point_at(&mut h, row);
+        click_id(&mut h, "workspace.chat.history.0.delete");
+        click_id(&mut h, "workspace.chat.delete.confirm");
+        h.run_steps(2);
+        click_id(&mut h, "workspace.chat.history");
+        h.run_steps(2);
+        assert!(painted_has(&h, NONE) && has_id(&h, "workspace.chat.toast.undo"), "{theme:?}: {:?}", painted(&h));
+        click_id(&mut h, "workspace.chat.toast.undo");
+        h.run_steps(3);
+        assert!(!painted_has(&h, NONE) && painted_has(&h, "Ask about Commerce platform"), "{theme:?}: back: {:?}", painted(&h));
+    });
+}

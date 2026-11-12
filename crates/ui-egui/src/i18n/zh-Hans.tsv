@@ -358,6 +358,9 @@ str		Open Settings	打开设置
 str		Saved with {project}	随 {project} 保存
 str		The conversations in this project cannot be read: {why}	无法读取此项目中的对话：{why}
 str		No conversations in this project yet.	此项目中还没有对话。
+str		No conversations on this branch yet.	此分支上还没有对话。
+str		Conversations stay on the branch where they started.	对话会留在开始它的分支上。
+str		Ask about the model below to start one.	在下方询问模型即可开始一个对话。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	对话保存在项目中，因此会随项目一起移动，并且不会出现在其他项目中。
 str		Delete conversation	删除对话

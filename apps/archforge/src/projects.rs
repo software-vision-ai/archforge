@@ -3351,6 +3351,34 @@ mod tests {
         assert_eq!(read.recv_timeout(Duration::from_secs(60)).unwrap(), Err("the branch changed while it was on its way".to_string()));
     }
 
+    /// Conversations are numbered per branch: a new branch lists none and starts at Chat 1, and the
+    /// branch left keeps its own list and numbering.
+    #[test]
+    fn conversations_are_listed_and_numbered_per_branch() {
+        use archforge_ui_egui::ai_agents::Provider;
+        use archforge_ui_egui::chat_store::{Answer, ChatStore, Write};
+        let sandbox = Sandbox::new(Some(Box::new(archforge_secrets::MemoryStore::new())));
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let chats = crate::chats::Chats::new(host.clone(), sandbox.agents.clone().unwrap());
+        let made = |n: u8| {
+            let chat = archforge_mof::Uuid::v7(1_762_400_000_000, [n; 10]);
+            let create =
+                Write::Create { chat, title: "T".into(), provider: Provider::Claude, model: "m".into(), skip: Vec::new(), now: 1_762_437_731 };
+            match chats.write(&path, create).recv_timeout(Duration::from_secs(60)).unwrap() {
+                Ok(Answer::Created { origin }) => origin,
+                other => panic!("not created: {other:?}"),
+            }
+        };
+        let listed = || chats.list(&path).recv_timeout(Duration::from_secs(60)).unwrap().unwrap().len();
+        assert_eq!((made(1), made(2)), ("Chat 1".to_string(), "Chat 2".to_string()));
+        assert_eq!(host.create_branch_from_work(&path, branch("fresh")).recv_timeout(Duration::from_secs(60)).unwrap(), Ok(BranchCreated::Listed));
+        assert!(matches!(switch_to(host, &path, "fresh"), Ok(Switched::Moved(_))));
+        assert_eq!(listed(), 0, "a new branch starts with none");
+        assert_eq!(made(3), "Chat 1", "and starts its numbering again");
+        assert!(matches!(switch_to(host, &path, "main"), Ok(Switched::Moved(_))));
+        assert_eq!((listed(), made(4)), (2, "Chat 3".to_string()), "main keeps its own");
+    }
+
     /// An answer read across a switch is dropped; the same read with no switch answers.
     #[test]
     fn a_read_across_a_switch_gives_no_answer() {
