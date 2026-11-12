@@ -1,5 +1,5 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File, Edit and Model, in the design's order. Each item is enabled while its action can
+//! system's Hide), File, Edit, Model and Versions, in the design's order. Each item is enabled while its action can
 //! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
 //! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -11,7 +11,7 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
+use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO, VERSIONS_MENU};
 use archforge_ui_egui::i18n::tr;
 use archforge_ui_egui::model_menu;
 
@@ -39,7 +39,7 @@ pub struct NativeMenu {
 /// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
 fn accelerator(keys: &Keys) -> Option<Accelerator> {
     let shift = if keys.modifiers.shift { "Shift+" } else { "" };
-    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.name())).ok()
+    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.symbol_or_name())).ok()
 }
 
 /// The table's item for action `id`, off until the first frame asks; recorded in `items`.
@@ -76,7 +76,9 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
     let model = Submenu::new(tr("Model"), true);
-    menu.append_items(&[&app, &file, &edit, &model]).map_err(err)?;
+    let versions = Submenu::new(tr("Versions"), true);
+    append_groups(shell, &versions, &VERSIONS_MENU, &mut items).map_err(err)?;
+    menu.append_items(&[&app, &file, &edit, &model, &versions]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
@@ -149,7 +151,10 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
+    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+
+    const ITEMS: [&str; 17] =
+        [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, SAVE_VERSION, VERSIONS, COMPARE, BRANCHES, OLDER, NEWER, BACK];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -209,7 +214,7 @@ mod tests {
     #[test]
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..]].concat().concat();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VERSIONS_MENU[..]].concat().concat();
         let mut sorted_items = ITEMS.to_vec();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
@@ -223,6 +228,13 @@ mod tests {
             (GENERATE, Some("CmdOrCtrl+Shift+G")),
             (UNDO, Some("CmdOrCtrl+Z")),
             (REDO, Some("CmdOrCtrl+Shift+Z")),
+            (SAVE_VERSION, Some("CmdOrCtrl+Shift+S")),
+            (VERSIONS, Some("CmdOrCtrl+Shift+H")),
+            (BRANCHES, Some("CmdOrCtrl+Shift+B")),
+            (OLDER, Some("CmdOrCtrl+BracketLeft")),
+            (NEWER, Some("CmdOrCtrl+BracketRight")),
+            (BACK, Some("CmdOrCtrl+Shift+H")),
+            (COMPARE, None),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),

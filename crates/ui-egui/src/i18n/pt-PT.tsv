@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	O projeto está ocupado
 str		Open or go back to a project first	Abra primeiro um projeto ou volte a um projeto
 str		Show a diagram first	Mostre primeiro um diagrama
+str		Current work is showing	O trabalho atual está a ser mostrado
+str		Back to current work first	Volte primeiro ao trabalho atual
+str		This project has one branch	Este projeto tem um ramo
 str		Open…	Abrir…
 str		Save	Guardar
 # Gerar

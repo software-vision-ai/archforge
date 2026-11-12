@@ -130,6 +130,31 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
     shell.versions.details = Some(Details { about, entry, comparison, compare: None, scroll: TreeScroll::default() });
 }
 
+/// The version Compare… in the Versions menu sets against current work: the one whose details show,
+/// otherwise the newest listed; none while the Compare page is already open.
+pub(crate) fn to_compare(shell: &Shell) -> Option<VersionEntry> {
+    let v = &shell.versions;
+    if v.details.as_ref().is_some_and(|d| d.compare.is_some()) {
+        return None;
+    }
+    v.details.as_ref().map(|d| d.entry.clone()).or_else(|| v.page.as_ref()?.versions.first().cloned())
+}
+
+/// Whether Compare… can act: a version to compare, a host to read it, nothing held and nothing over the window.
+pub(crate) fn can_compare(shell: &Shell) -> bool {
+    crate::actions::free(shell) && !shell.is_held() && shell.services.projects.is_some() && to_compare(shell).is_some()
+}
+
+/// Compare…: the Compare page of that version against current work, in the Versions explorer.
+pub(crate) fn compare_from_menu(shell: &mut Shell) {
+    let Some(entry) = to_compare(shell).filter(|_| can_compare(shell)) else { return };
+    shell.state.show_explorer(Explorer::SourceControl);
+    if shell.versions.details.is_none() {
+        open(shell, entry);
+    }
+    compare::open(shell);
+}
+
 /// Once a frame: what belongs to another project or session is let go, the answers that have come
 /// are taken, the version before comes from the list when it holds it, the details shown get their
 /// next read when none runs, and an answer still awaited wakes the window. An answer lands only on

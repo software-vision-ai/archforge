@@ -71,7 +71,7 @@ An open project fills the window with its workspace.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
-**Model** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+**Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
@@ -85,6 +85,13 @@ draw the relationship. **Note** and **Link note** are always listed; the rest fo
 diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram the kinds of the
 classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
 the diagram can't be changed, the rows are greyed out.
+
+**Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
+of versions, **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
+**Back to current work**. Compare… sets the version whose details show, or else the newest, against
+your current work. Save version… needs changes to save. While you look at an earlier version,
+History gives way to Back to current work, which takes the same keys; Switch branch needs a second
+branch. While the project is busy, saving or switching branch, every row waits.
 
 ## New diagram
 
