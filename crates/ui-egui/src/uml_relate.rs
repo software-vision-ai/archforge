@@ -762,6 +762,9 @@ pub struct EndsEdit {
     pub modifier_refused: [Option<(&'static str, String)>; 2],
     /// Whether each end's Modifiers are open: closed, a line sums them up.
     pub modifiers_open: [bool; 2],
+    /// The end whose Modifiers were changed last: Escape with no field holding the keyboard goes to
+    /// its Modifiers alone (AR-417).
+    pub modifiers_last: Option<usize>,
 }
 
 impl EndsEdit {
@@ -862,6 +865,7 @@ fn ends_edit(store: &Store, a: Obj, id: Uuid) -> Option<EndsEdit> {
         modifiers,
         modifier_refused: [None, None],
         modifiers_open: [false, false],
+        modifiers_last: None,
     })
 }
 
@@ -1300,6 +1304,7 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     let left = r.left() + PAD;
     let right = left + half + 8.0;
     let key = format!("workspace.properties.end.{i}");
+    let before = edit.modifiers[i].clone();
     let refused = edit.modifier_refused[i].clone();
     let under = |paint: &egui::Painter, y: f32, fields: &[&str]| -> f32 {
         match &refused {
@@ -1430,8 +1435,19 @@ fn end_modifiers(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
     }
     drop(offered);
     crate::uml_panel::keep_targets(shell, targets);
+    if edit.modifiers[i] != before {
+        edit.modifiers_last = Some(i);
+    }
     let edited = edit.modifiers[i] != edit.written_modifiers[i];
-    let escape = edited && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
+    // Escape goes to the field holding the keyboard: these Modifiers' own controls, or, with none
+    // holding it, the Modifiers changed last. Another field's Escape (the other end's role) is not theirs.
+    let focused = ui.memory(|m| m.focused());
+    let own = ["default", "static", "derived", "read-only", "ordered", "unique", "subsets", "redefines", "cancel", "apply"];
+    let theirs = match focused {
+        Some(f) => own.iter().any(|c| f == crate::widgets::egui_id(&format!("{key}.{c}"))),
+        None => edit.modifiers_last == Some(i),
+    };
+    let escape = edited && theirs && shell.panels.menu.is_none() && ui.input(|inp| inp.key_pressed(egui::Key::Escape));
     let asked = if cancel || escape {
         Asked::Cancel
     } else if apply || enter {

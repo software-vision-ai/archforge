@@ -20305,6 +20305,33 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
     }
 }
 
+/// Escape goes to the field holding the keyboard: in one end's Role it gives up that role alone,
+/// and the other end's Modifiers keep their change; with no field holding it, the Modifiers changed
+/// last are given up. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, made) = modifiers_sample(theme);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["holds"]] })).unwrap();
+        h.run();
+        let at = rect_of(&h, "workspace.properties.end.0.modifiers").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.properties.end.0.read-only").center();
+        click(&mut h, at);
+        let ends = |h: &Harness<'static, Shell>| h.state().panels.ends.clone().unwrap();
+        assert!(ends(&h).modifiers[0].read_only, "{theme:?}: changed, not applied");
+        let before = revision(&h);
+        retype(&mut h, "workspace.properties.end.1.role", "goods");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(ends(&h).role[1], "items", "{theme:?}: the role is given up");
+        assert!(ends(&h).modifiers[0].read_only && ends(&h).modifiers_open[0], "{theme:?}: end 0's Modifiers keep their change");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(!ends(&h).modifiers[0].read_only, "{theme:?}: with no field holding the keyboard, the Modifiers changed last");
+        assert_eq!(revision(&h), before, "{theme:?}");
+    }
+}
+
 /// An end moved to another class drops, in the same step, what it no longer subsets, and the
 /// canvas says so in the user's words; a role edit afterwards writes. In light and dark.
 #[test]

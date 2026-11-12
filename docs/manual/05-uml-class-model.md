@@ -1111,7 +1111,8 @@ The card writes modifiers the UML way:
 
 An association's end has the same modifiers, under **Modifiers** in its section of
 **Properties**. Closed, the line beside **Modifiers** sums them up. Open it to edit them, then use
-its own check and cross. The role, multiplicity, navigability and aggregation above it are written
+its own check and cross. Escape gives up the Modifiers you changed last, unless another field,
+such as the other end's role, holds the keyboard: then it gives up that field alone. The role, multiplicity, navigability and aggregation above it are written
 as before, and keep the modifiers. An end's **Subsets** and **Redefines** offer the properties of
 the class at the other end of the association, and of the classes that class specializes. Beside
 the line, the end reads in the same order: `/` before a derived end's role, then its

@@ -713,6 +713,7 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
             written_modifiers: [modifiers(), modifiers()],
             modifier_refused: [None, None],
             modifiers_open: [false, false],
+            modifiers_last: None,
         }
     }
     type Change = fn(&mut EndsEdit);
