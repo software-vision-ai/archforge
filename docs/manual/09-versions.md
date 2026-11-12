@@ -97,8 +97,8 @@ then counts the new changes, so read it again before you save.
 
 ## Save at once
 
-Press ⌘S (Ctrl S), or choose **File ▸ Save**, to make a version straight away, with no review and no
-description. **Save** in the question Archforge asks when you close a project does the same.
+Press ⌘S (Ctrl S), or choose **File ▸ Save**, to make a version of your changes straight away, with no
+review and no description. **Save** in the question Archforge asks when you close a project does the same.
 **History** lists such a version by its date and time, with *No description*.
 
 Use it for a quick safety point, and **Save version…** for a point you will want to find again. A
@@ -114,14 +114,14 @@ there is nothing earlier to compare it with, and the dialog says what changed wi
 In the example, adding *Customer* turns **Save version…** on, and *Added Customer* is your first
 version.
 
-⌘S doesn't wait for a first change: on a new project you haven't touched, it saves the empty project
-as your first version, with *No description*.
+⌘S waits for a first change too: on a new project you haven't touched, it makes no version, and
+**History** still says there are none.
 
 ## When there is nothing to save
 
 With no changes since your last version, **Working changes** says *No changes since the last
-version.* and **Save version…** is off. ⌘S makes no second version, and the status bar stays on
-*Saved*.
+version.* and **Save version…** is off. ⌘S and **File ▸ Save** make no second version, and the status bar stays on *Saved*. Text you are still typing in a skill or a
+description counts as a change: ⌘S keeps it and saves it.
 
 Now and then the status bar says *Unsaved changes* while **Working changes** lists nothing, for
 example after a newer Archforge has brought an older project up to date. There is nothing to review,

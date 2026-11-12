@@ -891,6 +891,7 @@ fn while_held_edits_undo_and_save_are_refused() {
     h.state_mut().end_hold();
     assert!(h.state().can_save());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.state_mut().save();
     assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
 }
@@ -8552,6 +8553,24 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
         assert!(texts.iter().any(|t| t == "No versions yet."), "{texts:?}");
         assert!(texts.iter().any(|t| t == "No versions yet. Save version records your first one."), "{texts:?}");
         assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}");
+    });
+}
+
+/// ⌘S and File ▸ Save on an untouched new project make no version: the host is never asked, and
+/// History still says there are none (AR-413).
+#[test]
+fn saving_an_untouched_new_project_makes_no_version() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        assert!(!dirty(&h) && !h.state().shown_unsaved(), "{theme:?}: the status bar says Saved");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        h.state_mut().save();
+        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "{theme:?}: no version was asked for");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "{theme:?}: History has nothing new to read");
+        assert!(painted(&h).iter().any(|t| t == "No versions yet. Save version records your first one."), "{theme:?}: {:?}", painted(&h));
     });
 }
 

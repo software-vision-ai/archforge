@@ -107,6 +107,8 @@ fn the_keys_move_view_and_close() {
         assert!(h.query_by_label("Viewing a version").is_some(), "no other version's date");
         h.state_mut().back_to_current_work();
         opened_list(&mut h, &host);
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("no".into()))).unwrap();
         h.run_steps(3);
@@ -245,6 +247,8 @@ fn a_step_waiting_for_its_read() {
         h.run_steps(3);
         shown(&mut h, &host, "h2");
         h.state_mut().back_to_current_work();
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);
@@ -2073,6 +2077,8 @@ fn a_first_read_that_fails_says_so_and_its_words_end() {
         press(&mut h, egui::Key::OpenBracket);
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &failure_words(true));
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);

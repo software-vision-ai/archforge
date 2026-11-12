@@ -301,10 +301,13 @@ mod tests {
         assert_eq!(host.0.load(Ordering::SeqCst), 0, "only Open was chosen");
     }
 
-    /// Save asks the host once, and opens no picker.
+    /// Save asks the host once for unsaved work, and opens no picker.
     #[test]
     fn save_asks_the_host_to_save() {
         let (mut shell, host, picks) = shell_with_project();
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
         choose(SAVE, &mut shell);
         assert_eq!(host.0.load(Ordering::SeqCst), 1);
         assert_eq!(picks.load(Ordering::SeqCst), 0, "only Save was chosen");

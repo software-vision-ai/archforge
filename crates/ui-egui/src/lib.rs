@@ -1581,6 +1581,11 @@ impl Shell {
             return;
         }
         let Some(revision) = self.written else { return };
+        // After the writes above, which made typed text a change: with nothing unsaved, as the status
+        // bar says, no version is made, not even an untouched new project's first (AR-383).
+        if review.is_none() && !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() {
+            return;
+        }
         // After the writes above: text still being typed counts as a move, since it was not reviewed.
         let moved = review.as_ref().and_then(|(_, reviewed)| *reviewed).is_some_and(|reviewed| current != Some(reviewed) || revision != reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
