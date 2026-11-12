@@ -55,6 +55,13 @@ const MOST_READS: usize = 4;
 /// The most projects open at once, one per tab: each runs a database server.
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
+/// A model handed to the writer: its rows, or a copy frozen on the interface thread whose rows the
+/// writer builds, so that thread never does.
+enum Handed {
+    Rows(Rows),
+    Model(Box<archforge_mof::Frozen>),
+}
+
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
 /// project named, recorded as who asked, under the description given or an automatic one, or only
 /// write when no project is named) with its answer; or a flush of one project (write what waits, answer whether that
@@ -63,9 +70,9 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// The generation a job carries is its project's when the job was asked for, before any key check;
 /// a job of another generation is refused rather than applied to a branch it was not made for.
 enum Job {
-    /// The rows, their generation, and the words to record if that generation has passed, put in
+    /// The model, its generation, and the words to record if that generation has passed, put in
     /// the language shown while still on the interface thread.
-    Write(PathBuf, Rows, u64, String),
+    Write(PathBuf, Handed, u64, String),
     Save(Option<(PathBuf, SavedBy, u64)>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
@@ -824,6 +831,21 @@ impl Projects {
         })
     }
 
+    /// Hands the writer `project`'s newest model, counted for any described save still being checked.
+    fn hand(&self, project: &Path, model: Handed) {
+        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
+        // Counted and sent under one lock, so the count always agrees with the writer's queue.
+        let mut handed = lock(&self.inner.handed);
+        *handed.entry(project.to_path_buf()).or_default() += 1;
+        let stale = tr("A change arrived after the branch changed, so it was not written.");
+        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), model, generation_of(&self.inner, project), stale));
+        drop(handed);
+        if let Err(e) = sent {
+            log::error!("the model could not be handed to the writer: {e}");
+            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
+        }
+    }
+
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
     /// short lock on the readers is taken here, so the read waits for no write and no write waits
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
@@ -994,17 +1016,12 @@ impl ProjectHost for Projects {
 
     /// Hands the writer `project`'s newest rows, counted for any described save still being checked.
     fn write(&self, project: &Path, rows: Rows) {
-        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
-        // Counted and sent under one lock, so the count always agrees with the writer's queue.
-        let mut handed = lock(&self.inner.handed);
-        *handed.entry(project.to_path_buf()).or_default() += 1;
-        let stale = tr("A change arrived after the branch changed, so it was not written.");
-        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows, generation_of(&self.inner, project), stale));
-        drop(handed);
-        if let Err(e) = sent {
-            log::error!("the model could not be handed to the writer: {e}");
-            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
-        }
+        self.hand(project, Handed::Rows(rows));
+    }
+
+    /// Hands the writer `project`'s model as frozen, for it to build the rows, counted as `write`'s are.
+    fn write_model(&self, project: &Path, model: archforge_mof::Frozen) {
+        self.hand(project, Handed::Model(Box::new(model)));
     }
 
     /// Save, under `description` when one is given. A description of the wrong shape is refused
@@ -1431,7 +1448,7 @@ fn writer(inner: &Arc<Inner>) -> Sender<Job> {
 /// commits. Rows that failed to be written are tried again with the next change or Save, not on a
 /// timer. What waits is one set of rows per open project at most.
 fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
-    let mut waiting: BTreeMap<PathBuf, Rows> = BTreeMap::new();
+    let mut waiting: BTreeMap<PathBuf, Handed> = BTreeMap::new();
     // How many sets of rows each project's queue has delivered, to hold against `Described::handed`.
     let mut seen: BTreeMap<PathBuf, u64> = BTreeMap::new();
     // Whether the last write left rows behind, which then wait for the next change or Save. It
@@ -1456,7 +1473,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             }
         };
         match job {
-            Some(Job::Write(project, rows, generation, stale)) => {
+            Some(Job::Write(project, handed, generation, stale)) => {
                 *seen.entry(project.clone()).or_default() += 1;
                 if generation != generation_of(inner, &project) {
                     log::warn!("changes for {} made before its branch changed are dropped", project.display());
@@ -1466,7 +1483,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     (state.pending, state.error) = (pending, Some(stale));
                     continue;
                 }
-                waiting.insert(project, rows);
+                waiting.insert(project, handed);
                 failed = false;
             }
             None => {
@@ -1582,7 +1599,7 @@ fn unwritten(inner: &Inner, project: &Path) -> String {
 
 /// Writes the waiting rows to their projects; those that fail stay waiting, and each project's
 /// state says how its own writing stands. Rows for a project that is no longer open are dropped.
-fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
+fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Handed>) {
     let targets: Vec<PathBuf> = waiting.keys().cloned().collect();
     for target in targets {
         let open = lock(&inner.open);
@@ -1593,7 +1610,21 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             lock(&inner.writing).remove(&target);
             continue;
         };
-        let Some(rows) = waiting.get(&target) else { continue };
+        let Some(handed) = waiting.get_mut(&target) else { continue };
+        // A model handed over frozen is built here, off the interface thread, once: a write that
+        // fails after keeps its rows. One that can't be built waits as a write that failed does.
+        if let Handed::Model(model) = handed {
+            let (tables, junctions) = archforge_notations::storage();
+            match model.rows(&tables, &junctions) {
+                Ok(rows) => *handed = Handed::Rows(rows),
+                Err(e) => {
+                    drop(open);
+                    failed_write(inner, &target, format!("the model could not be turned into rows: {e}"));
+                    continue;
+                }
+            }
+        }
+        let Handed::Rows(rows) = &*handed else { continue };
         #[cfg(test)]
         let refused = take_fault(inner, |f| matches!(f, Fault::WriteBack)).is_some();
         #[cfg(not(test))]
@@ -1604,23 +1635,26 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()))
         };
         drop(open);
-        let mut states = lock(&inner.writing);
         match result {
             Ok(()) => {
                 waiting.remove(&target);
-                states.remove(&target);
+                lock(&inner.writing).remove(&target);
             }
-            Err(e) => {
-                let state = states.entry(target.clone()).or_default();
-                // The same failure again is said once.
-                if state.error.as_deref() != Some(e.as_str()) {
-                    log::error!("the model of {} could not be written: {e}", target.display());
-                }
-                state.pending = true;
-                state.error = Some(e);
-            }
+            Err(e) => failed_write(inner, &target, e),
         }
     }
+}
+
+/// Records that `target`'s rows still wait, and why the write failed; the same failure again is
+/// logged once.
+fn failed_write(inner: &Inner, target: &Path, e: String) {
+    let mut states = lock(&inner.writing);
+    let state = states.entry(target.to_path_buf()).or_default();
+    if state.error.as_deref() != Some(e.as_str()) {
+        log::error!("the model of {} could not be written: {e}", target.display());
+    }
+    state.pending = true;
+    state.error = Some(e);
 }
 
 /// Moves `path` to `target`, on the writer, after everything [`checked_target`] does. Only then do
@@ -1632,7 +1666,7 @@ fn switch(
     path: &Path,
     target: SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Switched, SwitchError> {
     let moved = checked_target(inner, path, &target.clone(), asked, waiting, failed, |project, rows| {
@@ -1650,7 +1684,7 @@ fn check_switch(
     path: &Path,
     target: &SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<CheckedBranch, SwitchError> {
     checked_target(inner, path, target, asked, waiting, failed, |project, rows| {
@@ -1669,7 +1703,7 @@ fn checked_target<T>(
     path: &Path,
     target: &SafeBranch,
     (generation, instance): (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
     then: impl FnOnce(&Project, Rows) -> Result<T, SwitchError>,
 ) -> Result<T, SwitchError> {
@@ -1736,7 +1770,7 @@ fn restore(
     request: RestoreRequest,
     (generation, instance): (u64, u64),
     watch: &Arc<JobWatch>,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Restored, RestoreError> {
     if instance != instance_of(inner, path) {
@@ -1779,7 +1813,7 @@ fn restore(
         Ok(done) => Ok(done),
         Err(Stop::Unchanged(error)) => Err(error),
         Err(Stop::WriteBack { why, kept_work }) => {
-            waiting.insert(path.to_path_buf(), current);
+            waiting.insert(path.to_path_buf(), Handed::Rows(current));
             write_waiting(inner, waiting);
             *failed = !waiting.is_empty();
             Err(RestoreError::NotRestored { why, kept_work, written_back: !waiting.contains_key(path) })
@@ -2157,7 +2191,7 @@ fn create_branch(
     start: Option<&str>,
     generation: u64,
     instance: u64,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<BranchCreated, CreateBranchError> {
     if instance != instance_of(inner, path) {
@@ -6190,6 +6224,39 @@ mod tests {
         close(&host, &path).unwrap();
         host.shutdown();
         remove_settled(&base);
+    }
+
+    /// A model that no table can hold: an unlimited natural past what a cell stores.
+    fn unbuildable() -> archforge_mof::Frozen {
+        let mut st = archforge_notations::store(counted_ids()).unwrap();
+        let u = st.universe().clone();
+        let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
+        let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
+        let o = st.create(class).unwrap();
+        st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
+        st.freeze()
+    }
+
+    /// A model handed over frozen is built into rows by the writer and written as rows are; one
+    /// that cannot be turned into rows fails that write, which says why, and nothing is saved.
+    #[test]
+    fn the_writer_builds_and_writes_a_frozen_model() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(true));
+        let (tables, junctions) = archforge_notations::storage();
+        assert_eq!(work(host), archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), "the rows of the model handed over");
+        host.write_model(&path, unbuildable());
+        let answer = saved(host, &path);
+        let why = host.writing(&path).error.unwrap_or_default();
+        assert!(matches!(&answer, Err(SaveError::Failed(e)) if *e == why), "a model that could not be written is not saved: {answer:?}");
+        assert!(why.contains("too large to store") && host.writing(&path).pending, "it waits, and the status bar says why: {why}");
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(false), "the same model again leaves nothing to commit");
+        assert_eq!(host.writing(&path), Writing::default(), "and clears the failure");
     }
 
     #[test]
