@@ -1294,6 +1294,47 @@ fn a_new_pair_lists_from_the_top() {
     });
 }
 
+/// With no control and not the explorer holding the keys, they scroll the list: the arrows by a
+/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them.
+#[test]
+fn the_keys_scroll_the_list() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.run_steps(1);
+        let offset = |h: &Harness<'static, Shell>| h.state().versions.compare_results.scroll.offset;
+        let first = ids(h).into_iter().find(|i| i.starts_with("workspace.version-compare.change.")).unwrap();
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 56.0, "a card down");
+        key(h, ArrowUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "and back");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert!(offset(h) > 56.0, "more than a card: {}", offset(h));
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a page up");
+        key(h, End, egui::Modifiers::NONE);
+        let end = offset(h);
+        h.run_steps(1);
+        assert!(end > 0.0 && end < 15.0 * 56.0 && !has_id(h, &first), "the last cards show: {end}");
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), end, "nothing further");
+        key(h, Home, egui::Modifiers::NONE);
+        h.run_steps(1);
+        assert!(offset(h) == 0.0 && has_id(h, &first));
+        h.state_mut().explorer.focused = true;
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(SWAP)));
+        h.run();
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a control has the keys");
+    });
+}
+
 /// A failure is said with Retry, and no count; Retry reads again.
 #[test]
 fn a_failed_comparison_on_the_page_is_said_and_retried() {

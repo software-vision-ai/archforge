@@ -266,6 +266,8 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Dif
     let content: f32 = groups.iter().filter(|g| g.2 > 0).map(|g| GROUP + g.2 as f32 * PITCH).sum();
     let top = r.top() + LIST_TOP;
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
+    // What shows of the list, as scroll_tree measures it.
+    scroll_keys(shell, ui, (tree.bottom() - top - 8.0).max(1.0));
     let offset = scroll_tree(ui, p, tree, top, content as usize, 1.0, 0.0, true, None, &mut shell.versions.compare_results.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -286,5 +288,28 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Dif
             y += PITCH;
         }
         y += GROUP - HEADING;
+    }
+}
+
+/// The keys scroll the cards while no control and not the explorer has them, as the explorer's
+/// keys work only while it has them: the arrows by a card, Page Up and Page Down by the `page` that
+/// shows, Home and End to either end. scroll_tree keeps the offset within the list.
+fn scroll_keys(shell: &mut Shell, ui: &egui::Ui, page: f32) {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    if shell.explorer.focused || ui.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    let press = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    let scroll = &mut shell.versions.compare_results.scroll;
+    for (key, by) in [(ArrowDown, PITCH), (ArrowUp, -PITCH), (PageDown, page), (PageUp, -page)] {
+        if press(key) {
+            scroll.offset += by;
+        }
+    }
+    if press(Home) {
+        scroll.offset = 0.0;
+    }
+    if press(End) {
+        scroll.offset = f32::MAX;
     }
 }
