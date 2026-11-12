@@ -538,9 +538,17 @@ fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
     next
 }
 
+/// An entry of a branch row's menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    Switch,
+    Rename,
+}
+
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
 /// unsaved changes to the model, and when its latest version was saved. A click or Enter on
-/// another branch switches to it, as its menu's Switch does.
+/// another branch switches to it, as its menu's Switch does; the menu renames any branch but
+/// `main`, the one in use too.
 fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, usize), b: &BranchEntry) {
     // The branch in use shows its session's state as it changes; another's waits for a switch.
     let unsaved = if b.current { shell.shown_unsaved() } else { b.unsaved };
@@ -558,6 +566,9 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     };
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
     let menu = crate::panels::Menu::Branch(i);
+    // Delete… joins these with AR-393.
+    let renames = !b.name.eq_ignore_ascii_case("main") && crate::branch_ask::offered(shell);
+    let entries = [(Entry::Switch, !b.current), (Entry::Rename, renames)].into_iter().filter_map(|(e, on)| on.then_some(e)).collect::<Vec<_>>();
     let paint = ui.painter();
     if b.current {
         paint.rect_filled(area, 8.0, p.accent_tint);
@@ -566,7 +577,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     let mid = area.center().y;
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 16.0, mid), Vec2::splat(14.0)), &icons::BRANCH, p.text_secondary);
     // From the right: the menu, the date and the dot, then the name with what room is left.
-    let mut right = area.right() - if b.current { 10.0 } else { 36.0 };
+    let mut right = area.right() - if entries.is_empty() { 10.0 } else { 36.0 };
     if let Some(date) = &date {
         let g = ux::galley(paint, date, types::CAPTION, p.text_muted, None);
         right -= g.size().x;
@@ -585,7 +596,11 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     } else if resp.clicked() {
         switch_to(shell, b.name.clone());
     }
-    if b.current {
+    if entries.is_empty() {
+        // A menu open when its last entry went is closed, so it doesn't come back by itself.
+        if shell.panels.menu == Some(menu) {
+            shell.panels.menu = None;
+        }
         return;
     }
     let more = Rect::from_center_size(pos2(area.right() - 18.0, mid), Vec2::splat(28.0));
@@ -598,10 +613,13 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     if more_resp.clicked() {
         shell.panels.menu = if open { None } else { Some(menu) };
     }
-    // Rename and Delete join Switch with AR-292.
     let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
-    if shell.panels.menu == Some(menu) && crate::panels::menu(shell, ui, p, anchor, &id("menu"), &[tr("Switch")]) == Some(0) {
-        switch_to(shell, b.name.clone());
+    let items = entries.iter().map(|e| if *e == Entry::Switch { tr("Switch") } else { tr("Rename…") }).collect::<Vec<_>>();
+    let chosen = if shell.panels.menu == Some(menu) { crate::panels::menu(shell, ui, p, anchor, &id("menu"), &items) } else { None };
+    match chosen.and_then(|at| entries.get(at)) {
+        Some(Entry::Switch) => _ = switch_to(shell, b.name.clone()),
+        Some(Entry::Rename) => crate::branch_ask::open_rename(shell, b),
+        None => {}
     }
 }
 

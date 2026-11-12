@@ -519,6 +519,12 @@ str		The last new branch is not cleaned up yet. Opening the project again remove
 str		The project changed before the branch was made, so none was made.	在创建分支之前项目已更改，因此未创建分支。
 str		Couldn't make the branch: {why}	无法创建分支：{why}
 str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge 无法确定分支是否已创建。请先查看分支，再重试。
+str		Rename…	重命名…
+str		Rename branch	重命名分支
+str		The conversations and versions on this branch are not affected.	此分支上的对话和版本不受影响。
+str		The project changed before the branch was renamed, so its name stayed.	在重命名分支之前项目已更改，因此其名称保持不变。
+str		Couldn't rename the branch: {why}	无法重命名分支：{why}
+str		Archforge could not tell whether the branch was renamed. Rename it to the same name again to find out.	Archforge 无法确定分支是否已重命名。请再次重命名为相同的名称以确认。
 str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。

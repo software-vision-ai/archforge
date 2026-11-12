@@ -29,6 +29,11 @@ An open project fills the window with its workspace.
   were: change the name or try again. If Archforge can't tell whether it was made, look at the
   Branches list before trying again. If the switch to the new branch can't start, the reason is
   shown as for any switch, and the branch stays in the list for you to switch to later.
+  **Rename…** in a branch's **More** menu renames it, the branch you are on too; `main` keeps its
+  name. The name is checked as for a new branch, and **Rename** stays off while it is unchanged. The
+  branch keeps its conversations, versions and unsaved work, and you stay on it. If it can't be
+  renamed, the reason shows under the field and the name stays. If Archforge can't tell whether it
+  was renamed, rename it to the same name again: that finds out.
   Once a project has a second branch, the version chip in the bar at the top names the branch you
   are on, before *Current work*, and the status bar says *On* and its name before whether your work
   is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),

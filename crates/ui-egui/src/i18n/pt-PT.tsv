@@ -519,6 +519,12 @@ str		The last new branch is not cleaned up yet. Opening the project again remove
 str		The project changed before the branch was made, so none was made.	O projeto mudou antes de o ramo ser criado, por isso nenhum foi criado.
 str		Couldn't make the branch: {why}	Não foi possível criar o ramo: {why}
 str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	O Archforge não conseguiu saber se o ramo foi criado. Veja em Ramos antes de tentar novamente.
+str		Rename…	Mudar o nome…
+str		Rename branch	Mudar o nome do ramo
+str		The conversations and versions on this branch are not affected.	As conversas e as versões deste ramo não são afetadas.
+str		The project changed before the branch was renamed, so its name stayed.	O projeto mudou antes de o nome do ramo ser mudado, por isso o nome manteve-se.
+str		Couldn't rename the branch: {why}	Não foi possível mudar o nome do ramo: {why}
+str		Archforge could not tell whether the branch was renamed. Rename it to the same name again to find out.	O Archforge não conseguiu saber se o nome do ramo foi mudado. Mude-o novamente para o mesmo nome para saber.
 str		At most {n} characters.	No máximo {n} caracteres.
 str		Enter a name.	Introduza um nome.
 str		A name has to be one line.	Um nome tem de ocupar uma só linha.
