@@ -42,11 +42,14 @@ pub(crate) enum Origin {
 }
 
 /// The page's one read and one comparison, and what the last of them found, with which one it was.
+/// The read, of a version of a project, is never let go before it answers: a host read cannot be
+/// called back and counts against the host's limit until it ends, so Compare never has more than
+/// this one under way, whatever was opened and closed meanwhile.
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
     pub(crate) held: Option<Held>,
-    pub(crate) reading: Option<(String, Receiver<VersionRead>)>,
+    pub(crate) reading: Option<(PathBuf, String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Key, Receiver<Found>)>,
     pub(crate) found: Option<(Key, Found, Origin)>,
 }
@@ -62,24 +65,33 @@ fn sides(shell: &Shell) -> Option<Sides> {
     }
 }
 
-/// Once a frame, after the details have had their turn: lets go of what belonged to another project
-/// or session and of the rows of a page gone, takes the answers, starts what is due, and wakes the
-/// window while anything is awaited, its turn at a read included.
-pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+/// Lets go of all but the read once the project or session shown is another, or none is, and takes
+/// the answers that have come. Also once a frame before drawing, as Home and a project closed draw
+/// no rail to call [`keep`]: an answer nobody wants is dropped there too, its rows with it.
+pub(crate) fn let_go(shell: &mut Shell) {
     let about = about(shell);
-    if shell.versions.compare_results.about != about {
-        shell.versions.compare_results = Results { about, ..Results::default() };
+    let r = &mut shell.versions.compare_results;
+    if r.about != about {
+        *r = Results { about, reading: r.reading.take(), ..Results::default() };
     }
     take_answers(shell);
-    let now = sides(shell);
-    if now.is_none() {
+}
+
+/// Once a frame, after the details have had their turn: lets go of what belonged to another project
+/// or session, takes the answers, starts what is due, and wakes the window while anything is
+/// awaited, its turn at a read included. A page gone, or on a pair it does not compare, wants
+/// nothing and wakes nothing: its rows go, and its read and comparison, which cannot be called
+/// back, run on unwatched, their answers dropped as they come unless a page is back on their sides.
+/// The details do not wait for that read.
+pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    let_go(shell);
+    let Some(now) = sides(shell) else {
         let r = &mut shell.versions.compare_results;
         (r.held, r.found) = (None, None);
-    }
-    let waits = now.is_some() && (shell.versions.details_comparing.is_some() || shell.versions.details_reading.is_some());
-    if let Some(now) = now {
-        next(shell, now);
-    }
+        return;
+    };
+    let waits = shell.versions.details_comparing.is_some() || shell.versions.details_reading.is_some();
+    next(shell, now);
     let r = &shell.versions.compare_results;
     if waits || r.reading.is_some() || r.comparing.is_some() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -95,15 +107,17 @@ fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T,
     }
 }
 
-/// Lands what has come, only on the sides it is about. Rows that have only moved on still show what
-/// they were, or a steady stream of edits would hide every answer; a failure for them says nothing
-/// of the newest rows, which the next comparison takes.
+/// Lands what has come, only on the sides it is about, a read only in the project it is of; what
+/// nobody wants is dropped. Rows that have only moved on still show what they were, or a steady
+/// stream of edits would hide every answer; a failure for them says nothing of the newest rows,
+/// which the next comparison takes.
 fn take_answers(shell: &mut Shell) {
     let (now, revision) = (sides(shell), shell.current_work().map(|s| s.revision()));
     let r = &mut shell.versions.compare_results;
-    if let Some(answer) = r.reading.as_ref().and_then(|(_, rx)| answered(rx))
-        && let Some((version, _)) = r.reading.take()
-        && let Some(sides) = now.clone().filter(|s| s.0 == version)
+    let shown = r.about.as_ref().map(|(path, _)| path.clone());
+    if let Some(answer) = r.reading.as_ref().and_then(|(.., rx)| answered(rx))
+        && let Some((project, version, _)) = r.reading.take()
+        && let Some(sides) = now.clone().filter(|s| s.0 == version && shown == Some(project))
     {
         match answer {
             Ok(rows) => r.held = Some(Held { version, keep: bytes_of(&rows) <= MOST_KEPT_BYTES, rows }),
@@ -146,7 +160,9 @@ fn next(shell: &mut Shell, sides: Sides) {
 }
 
 /// Asks for the rows of `version`, taking turns with the details' reads: the host refuses reads past
-/// its limit, and that would read as a failed comparison.
+/// its limit, and that would read as a failed comparison. A read still under way, whichever version
+/// or project it is of, is waited for: one of this version lands as it answers, and the details'
+/// two and this one leave the host room for the list's read or a view.
 fn read_before(shell: &mut Shell, version: String) {
     let v = &shell.versions;
     if v.compare_results.reading.is_some() || v.details_comparing.is_some() || v.details_reading.is_some() {
@@ -154,7 +170,7 @@ fn read_before(shell: &mut Shell, version: String) {
     }
     let (Some(host), Some((path, _))) = (shell.services.projects.clone(), v.compare_results.about.clone()) else { return };
     let answer = host.read_version(&path, version.clone());
-    shell.versions.compare_results.reading = Some((version, answer));
+    shell.versions.compare_results.reading = Some((path, version, answer));
 }
 
 /// Builds the rows of `live` and compares them with `version` on a thread of its own, `live` first
