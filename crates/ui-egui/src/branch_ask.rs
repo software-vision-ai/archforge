@@ -49,9 +49,9 @@ pub(crate) struct Doomed {
     counts: Option<Result<BranchCounts, String>>,
 }
 
-/// The read of what goes with a branch asked to be deleted: the project, session and branch it
-/// was asked over, and the host's answer on its way.
-pub(crate) type Counting = ((PathBuf, u64, String), Receiver<Result<BranchCounts, String>>);
+/// The host's count of what goes with the branch the dialog deletes, on its way. Opening Delete…
+/// again replaces it, and a dialog gone takes no answer.
+pub(crate) type Counting = Receiver<Result<BranchCounts, String>>;
 
 /// A creation or rename asked for: the project and session it was asked over, the name as stored,
 /// the branch renamed (none for a creation), and the host's answer on its way.
@@ -84,22 +84,16 @@ pub(crate) fn open_rename(shell: &mut Shell, b: &BranchEntry) {
 /// Opens Delete… for the branch `b`, and reads what goes with it.
 pub(crate) fn open_delete(shell: &mut Shell, b: &BranchEntry) {
     let doomed = Doomed { name: b.name.clone(), shown: b.shown.clone(), counts: None };
-    let (Some((path, generation)), Some(host)) =
-        (ask(shell, Naming { deleting: Some(doomed), ..Naming::default() }), shell.services.projects.clone())
-    else {
-        return;
-    };
-    let read = host.branch_counts(&path, &b.name);
-    shell.versions.counting = Some(((path, generation, b.name.clone()), read));
+    if let (Some(path), Some(host)) = (ask(shell, Naming { deleting: Some(doomed), ..Naming::default() }), shell.services.projects.clone()) {
+        shell.versions.counting = Some(host.branch_counts(&path, &b.name));
+    }
 }
 
-/// Puts the dialog holding `naming` over the work shown, where it is offered; gives the project
-/// and session it is over.
-fn ask(shell: &mut Shell, naming: Naming) -> Option<(PathBuf, u64)> {
+/// Puts the dialog holding `naming` over the work shown, where it is offered; gives the project.
+fn ask(shell: &mut Shell, naming: Naming) -> Option<PathBuf> {
     let path = shell.project.as_ref().filter(|_| offered(shell)).map(|o| o.path.clone())?;
-    let generation = shell.session_generation();
-    shell.ask = Some(Ask::Branch { path: path.clone(), generation, naming });
-    Some((path, generation))
+    shell.ask = Some(Ask::Branch { path: path.clone(), generation: shell.session_generation(), naming });
+    Some(path)
 }
 
 /// The name to store for `text`, or why it can't be one: the host's own refusal, or a branch
@@ -151,21 +145,17 @@ fn undeleted(refused: &BranchRefused) -> String {
     }
 }
 
-/// Takes the host's count of what goes with a branch asked to be deleted, for the dialog still up
-/// over that branch and the session it was asked over.
+/// Takes the host's count of what goes with a branch asked to be deleted, for its dialog still up.
 fn counted(shell: &mut Shell, ctx: &egui::Context) {
-    let Some((_, read)) = shell.versions.counting.as_ref() else { return };
+    let Some(read) = shell.versions.counting.as_ref() else { return };
     let counts = match read.try_recv() {
         Ok(counts) => counts,
         Err(TryRecvError::Empty) => return ctx.request_repaint_after(std::time::Duration::from_millis(100)),
         Err(TryRecvError::Disconnected) => Err("the host stopped without an answer".into()),
     };
-    let Some(((path, generation, name), _)) = shell.versions.counting.take() else { return };
+    shell.versions.counting = None;
     ctx.request_repaint();
-    if let Some(Ask::Branch { path: p, generation: g, naming }) = shell.ask.as_mut()
-        && (&*p, *g) == (&path, generation)
-        && let Some(doomed) = naming.deleting.as_mut().filter(|d| d.name == name)
-    {
+    if let Some(Ask::Branch { naming: Naming { deleting: Some(doomed), .. }, .. }) = shell.ask.as_mut() {
         doomed.counts = Some(counts);
     }
 }

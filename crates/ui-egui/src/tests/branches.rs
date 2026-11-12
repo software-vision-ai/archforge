@@ -854,7 +854,8 @@ fn a_branch_row_menu_deletes_another_branch_after_saying_what_goes() {
         host.branch_deletes.lock().unwrap().remove(0).send(Ok(Vec::new())).unwrap();
         h.run_steps(4);
         assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
-        assert!(host.switches.lock().unwrap().is_empty() && host.branch_renames.lock().unwrap().is_empty(), "{theme:?}");
+        let others = [host.branch_makes.lock().unwrap().len(), host.branch_renames.lock().unwrap().len(), host.switches.lock().unwrap().len()];
+        assert_eq!(others, [0; 3], "{theme:?}: nothing made, renamed or switched to");
         *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
         h.run_steps(2);
         click_id(&mut h, MORE);
