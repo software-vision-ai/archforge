@@ -8916,6 +8916,37 @@ fn skill_text_waiting_to_be_kept_is_no_no_changes() {
     });
 }
 
+/// A skill's text the store refused is unsaved work, in the tab shown and in a parked one, though
+/// the model has nothing unsaved: quitting asks about it instead of closing the window.
+#[test]
+fn a_refused_skill_text_is_unsaved_shown_or_parked() {
+    for parked in [false, true] {
+        let (mut h, _host) = saving_harness(Some(commerce()), None);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let first = h.state().active.unwrap();
+        assert!(!h.state().tab_unsaved(first), "{parked}: nothing unsaved yet");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let doc = h.state().canvas.skills.iter().find(|d| d.skill == skill).unwrap();
+        assert!(doc.refused.is_some() && !h.state().session.as_ref().unwrap().is_dirty(), "{parked}: refused, the model untouched");
+        if parked {
+            h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+            h.run_steps(3);
+            assert!(h.state().active != Some(first) && h.state().tabs[first].parked.is_some(), "parked");
+        }
+        assert!(h.state().tab_unsaved(first), "{parked}: the refused text is unsaved");
+        h.state_mut().request_quit();
+        h.run_steps(3);
+        assert!(!h.state().quit_confirmed(), "{parked}: the window stays");
+        assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{parked}: quitting asks about it");
+    }
+}
+
 /// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
 #[test]
 fn working_changes_filter_a_long_list() {

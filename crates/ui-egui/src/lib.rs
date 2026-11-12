@@ -855,6 +855,14 @@ pub struct Shell {
     pub(crate) own_agent_access: bool,
 }
 
+/// Whether `panels` and `canvas` hold text typed that the work doesn't have yet: a description
+/// draft, being typed or refused, or a skill's text not yet kept, waiting for its typing to pause
+/// or refused by the store. It is unsaved work like a change to the model, so nothing calls the
+/// work saved or unchanged, and a close or a quit asks, while it waits (AR-381).
+pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> bool {
+    panels::description_pending(panels) || !skill_tab::unkept(canvas).is_empty()
+}
+
 impl Shell {
     pub fn new(services: Services) -> Self {
         Self {
@@ -1014,8 +1022,8 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
-    /// written, or refused, and a skill's text not yet kept among them (AR-186, AR-381).
+    /// Whether tab `i`'s project holds changes not yet saved, text typed that it doesn't have yet
+    /// among them (`crate::typing_unkept`; AR-186, AR-381), whether it is shown or parked.
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
             if let Some(viewing) = &self.viewing {
@@ -1026,7 +1034,7 @@ impl Shell {
         self.tabs
             .get(i)
             .and_then(|t| t.parked.as_ref())
-            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || typing_unkept(&p.panels, &p.canvas))
     }
 
     /// The tab of the project at `path`.
@@ -1747,11 +1755,9 @@ impl Shell {
         self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
-    /// Whether text typed in current work waits to be written to it: a description in Properties,
-    /// being typed or refused, or a skill's text before its typing pauses. It is unsaved work like
-    /// a change to the model, so nothing calls the work saved or unchanged meanwhile (AR-381).
+    /// Whether current work holds text typed that it doesn't have yet (`crate::typing_unkept`).
     pub(crate) fn typing_unkept(&self) -> bool {
-        panels::description_pending(&self.panels) || skill_tab::waiting(self)
+        typing_unkept(&self.panels, &self.canvas)
     }
 
     /// Whether File → Generate… can open: a project is open and the dialog is not.
