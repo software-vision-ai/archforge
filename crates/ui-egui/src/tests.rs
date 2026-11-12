@@ -351,6 +351,8 @@ struct SavingHost {
     version_limits: std::sync::Mutex<Vec<usize>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
+    /// Why the last write failed, as the test sets it; none by default.
+    write_error: std::sync::Mutex<Option<String>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
@@ -535,6 +537,11 @@ impl crate::ProjectHost for SavingHost {
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    /// Nothing waits; the write failed when the test says so.
+    fn writing(&self, _project: &std::path::Path) -> crate::Writing {
+        crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
     }
 
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
@@ -8557,7 +8564,8 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
 }
 
 /// ⌘S and File ▸ Save on an untouched new project make no version: the host is never asked, and
-/// History still says there are none; a save with a description still asks it (AR-413).
+/// History still says there are none; a save with a description, or after a failed save or write,
+/// still asks it (AR-413).
 #[test]
 fn saving_an_untouched_new_project_makes_no_version() {
     in_both_appearances(|theme| {
@@ -8574,6 +8582,17 @@ fn saving_an_untouched_new_project_makes_no_version() {
         // A save under a description, an agent's, is still the host's to decide.
         h.state_mut().save_as(crate::SavedBy::Agent(None), Some("Start".into()));
         assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: a described save goes to the host");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        // A failed save or write is not Saved: Save tries again, as before.
+        h.state_mut().save_error = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed save");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        *host.write_error.lock().unwrap() = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed write");
     });
 }
 
