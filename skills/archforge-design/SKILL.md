@@ -194,7 +194,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - Selecting is by click, Shift-click and marquee; Edit ▸ Select all (⌘A) with the canvas holding the
   keyboard takes every box and line the open diagram draws, as a click on each would, nested boxes
   included, while viewing a version as well, never while the project is held; Delete on a selection
-  that holds boxes takes the boxes off, never a selected line's or set's element. A selected box
+  that holds boxes takes the boxes off in current work (a viewed version is read only, so there it
+  does nothing), never a selected line's or set's element. A selected box
   shows handles and buttons beside it: connect, and the notation's add (for ER, add column).
   Dragging moves the whole selection as one undo step; arrow keys nudge. Two or more selected boxes
   show an arrange bar under them.

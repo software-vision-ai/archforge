@@ -65,14 +65,15 @@ project.
 **File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
 **Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again. Close
 About, type into a name field and, with the field still active, press ⌘Z and then ⇧⌘Z, and choose
-**Edit ▸ Undo**. Click the canvas so the field lets go, make a change, press ⌘Z and then ⇧⌘Z, then
-press ⌘A and look at **Edit**. With the field active again, press ⌘A, ⌘C, ⌘X and ⌘V, then choose
-**Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and **Edit ▸ Paste** in turn. Select a few words
-in a skill's preview, look at **Edit** and press ⌘C; paste them into a name field. Open a class diagram
-and look through **Model**, choose **Model ▸ Interface** and click the canvas; open an ER diagram and
-look through **Model** again; go to Home and look once more. Open a project with a version and a change
-since; look through **Versions**, choose **Versions ▸ Save version…** and cancel; choose **Older version**,
-then press ⇧⌘H.
+**Edit ▸ Undo**. Open a class diagram (make one with **+** in **Diagrams** if the project has none),
+place two classes on it and draw a line from one to the other. Click the canvas so the field lets go,
+make a change, press ⌘Z and then ⇧⌘Z, then press ⌘A and look at **Edit**. With the field active again,
+press ⌘A, ⌘C, ⌘X and ⌘V, then choose **Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and
+**Edit ▸ Paste** in turn. Select a few words in a skill's preview, look at **Edit** and press ⌘C; paste
+them into a name field. With the class diagram showing, look through **Model**, choose
+**Model ▸ Interface** and click the canvas; open an ER diagram and look through **Model** again; go to
+Home and look once more. Open a project with a version and a change since; look through **Versions**,
+choose **Versions ▸ Save version…** and cancel; choose **Older version**, then press ⇧⌘H.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled

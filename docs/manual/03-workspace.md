@@ -163,7 +163,8 @@ border width, and for lines their colour, width and routing (straight, right-ang
 - Click a box or a line to select it; Shift-click adds to the selection; drag on empty canvas to
   select everything in a rectangle. **Edit ▸ Select all** (⌘A, or Ctrl A) after a click on the
   canvas selects every box and line the diagram draws, also while you look at a saved version.
-  Delete then takes the boxes off the diagram and deletes nothing from the model.
+  In current work, Delete then takes the boxes off the diagram and deletes nothing from the model.
+  A saved version is read only, so there Delete does nothing.
 - Drag selected boxes to move them; the arrow keys nudge them.
 - Double-click a box's name to rename it in place.
 - The tools float at the bottom of the diagram: **Select**, **Pan**, the diagram's own tools,
