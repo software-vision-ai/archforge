@@ -55,20 +55,43 @@ fn type_text(h: &mut H, text: &str) {
     h.run();
 }
 
+/// The longest run of frames the window may ask for at once, each right after the last, before
+/// the test calls it a window that never stops drawing. One answer from the host asks for one or
+/// two such frames.
+const AT_ONCE: usize = 30;
+
+/// The delay the window asked for before its next frame; `Duration::MAX` when it asked for none.
+fn asked(h: &H) -> Duration {
+    h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay)
+}
+
 /// Waits until `done` holds, the host answering on its own threads, drawing only the frames the
 /// window asks for, as the real window does: the next one once the delay it asked for has passed,
 /// never one it did not ask for. A window that asks for no frame while `done` does not hold yet
-/// would wait for the pointer to move, so the test fails there, naming the step. Past a minute it
-/// fails too.
-fn wait(h: &mut H, what: &str, done: impl Fn(&Shell) -> bool) {
+/// would wait for the pointer to move, so the test fails there, naming the step. It draws one frame
+/// at a time, not a harness `run`, whose few steps a chain of the host's answers can outlast on a
+/// loaded machine; a window that asks for more than `AT_ONCE` frames in a row at once never stops
+/// drawing and fails the test. Past a minute it fails too.
+fn wait(h: &mut H, what: &str, done: impl Fn(&H) -> bool) {
     let started = Instant::now();
-    while !done(h.state()) {
+    let mut at_once = 0;
+    while !done(h) {
         assert!(started.elapsed() < Duration::from_secs(60), "{what} did not happen in time");
-        let delay = h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
+        let delay = asked(h);
         assert!(delay != Duration::MAX, "{what}: the window asked for no frame and would wait for the pointer to move");
+        at_once = if delay.is_zero() { at_once + 1 } else { 0 };
+        assert!(at_once <= AT_ONCE, "{what}: the window asks for a frame at once on every frame and never stops drawing");
         std::thread::sleep(delay);
-        h.run();
+        h.step();
     }
+}
+
+/// Draws the frames the window asks for until it asks for none, so the reads it starts on its own
+/// after an opening or a save (the versions, then the branches) have answered before the next
+/// click. An answer that lands among a click's frames asks for frames of its own, and on a loaded
+/// machine took a click past the harness's step limit.
+fn settle(h: &mut H, what: &str) {
+    wait(h, what, |h| asked(h) == Duration::MAX);
 }
 
 /// The open model's rows, as saving writes them: every element and every diagram's layout.
@@ -139,22 +162,24 @@ fn new_project(h: &mut H, name: &str) {
     h.state_mut().new_project.as_mut().expect("the dialog opens").name = name.into();
     h.run();
     click_on(h, "new-project.create");
-    wait(h, "the project opening", |s| s.session.is_some());
+    wait(h, "the project opening", |h| h.state().session.is_some());
+    settle(h, "the opened project's reads");
 }
 
 /// Save, close (nothing asks, since nothing is unsaved), and open the project again from Home's
 /// recent list; gives the rows saved, to compare with what comes back.
 fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
     key(h, egui::Key::S, egui::Modifiers::COMMAND);
-    wait(h, "the save", |s| s.session.as_ref().is_some_and(|x| !x.is_dirty()) && !s.is_saving());
+    wait(h, "the save", |h| h.state().session.as_ref().is_some_and(|x| !x.is_dirty()) && !h.state().is_saving());
+    settle(h, "the saved project's reads");
     let saved = rows(h);
     click_on(h, "workspace.header.project.0.close");
     assert!(h.state().ask.is_none(), "a saved project closes without asking");
-    wait(h, "the closing", |s| s.tabs.is_empty());
+    wait(h, "the closing", |h| h.state().tabs.is_empty());
     click_on(h, "home.recent.0");
-    wait(h, "the opening's answer", |s| !s.is_opening());
+    wait(h, "the opening's answer", |h| !h.state().is_opening());
     assert!(h.state().session_error.is_none(), "{:?}", h.state().session_error);
-    wait(h, "the opening again", |s| s.session.is_some());
+    wait(h, "the opening again", |h| h.state().session.is_some());
     saved
 }
 
