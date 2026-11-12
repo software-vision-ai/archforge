@@ -9147,13 +9147,17 @@ fn a_skill_is_listed_and_counted_on_its_own() {
 }
 
 /// Presses `key` and looks at every frame from the press on until `done`, at most 200; fails
-/// saying `what` when it never is, however late another thread answers meanwhile.
+/// saying `what` when it never is, however late another thread answers meanwhile. The frame the key
+/// goes down in is looked at on its own: what the press starts there (an opened element's read) can
+/// answer by the next frame, the key's release, so a look after both is late on a loaded machine.
 fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
-    h.key_down_modifiers(egui::Modifiers::NONE, key);
-    h.key_up_modifiers(egui::Modifiers::NONE, key);
+    h.key_down(key);
+    h.step();
+    let pressed = done(h);
+    h.key_up(key);
     for _ in 0..200 {
         h.run_steps(1);
-        if done(h) {
+        if pressed || done(h) {
             return;
         }
     }
