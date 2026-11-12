@@ -45,7 +45,8 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
     shell.is_held() || (!settled(shell) && shell.versions.compare_failed.is_none())
 }
 
-/// Why Save version… is off, when it is: it needs current work with settled changes to save.
+/// Why Save version… is off, when it is: it needs current work with settled changes to save. With
+/// none listed, text typed that waits to be written is why, never "no changes" (AR-381).
 pub(crate) fn off_because(shell: &Shell) -> Option<String> {
     if shell.viewing.is_some() {
         Some(tr("Back to current work to save a version"))
@@ -55,6 +56,8 @@ pub(crate) fn off_because(shell: &Shell) -> Option<String> {
         Some(tr("Loading"))
     } else if shell.versions.compare_failed.is_some() {
         Some(tr("The changes couldn't be compared."))
+    } else if shell.versions.working == 0 && shell.typing_unkept() {
+        Some(tr("What you're typing isn't kept yet"))
     } else if shell.versions.working == 0 {
         Some(tr("No changes since the last version."))
     } else {

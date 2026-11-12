@@ -30,7 +30,7 @@ pub(crate) struct Viewing {
 impl Viewing {
     /// Whether the real work holds changes not yet saved.
     pub(crate) fn unsaved(&self) -> bool {
-        self.session.is_dirty() || panels::description_pending(&self.panels)
+        self.session.is_dirty() || crate::typing_unkept(&self.panels, &self.canvas)
     }
 }
 

@@ -855,6 +855,14 @@ pub struct Shell {
     pub(crate) own_agent_access: bool,
 }
 
+/// Whether `panels` and `canvas` hold text typed that the work doesn't have yet: a description
+/// draft, being typed or refused, or a skill's text not yet kept, waiting for its typing to pause
+/// or refused by the store. It is unsaved work like a change to the model, so nothing calls the
+/// work saved or unchanged, and a close or a quit asks, while it waits (AR-381).
+pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> bool {
+    panels::description_pending(panels) || !skill_tab::unkept(canvas).is_empty()
+}
+
 impl Shell {
     pub fn new(services: Services) -> Self {
         Self {
@@ -1014,19 +1022,19 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
-    /// written, or refused, among them (AR-186).
+    /// Whether tab `i`'s project holds changes not yet saved, text typed that it doesn't have yet
+    /// among them (`crate::typing_unkept`; AR-186, AR-381), whether it is shown or parked.
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
             if let Some(viewing) = &self.viewing {
                 return viewing.unsaved();
             }
-            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || self.typing_unkept();
         }
         self.tabs
             .get(i)
             .and_then(|t| t.parked.as_ref())
-            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || typing_unkept(&p.panels, &p.canvas))
     }
 
     /// The tab of the project at `path`.
@@ -1747,6 +1755,11 @@ impl Shell {
         self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
+    /// Whether current work holds text typed that it doesn't have yet (`crate::typing_unkept`).
+    pub(crate) fn typing_unkept(&self) -> bool {
+        typing_unkept(&self.panels, &self.canvas)
+    }
+
     /// Whether File → Generate… can open: a project is open and the dialog is not.
     pub fn can_generate(&self) -> bool {
         self.session.is_some() && self.generate.is_none() && self.about.is_none() && self.versions.dialog.is_none()
@@ -1985,9 +1998,10 @@ impl Shell {
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            // Unsaved changes mark the title with a dot before the name.
+            // Unsaved changes mark the title with a dot before the name, as they mark its tab: text
+            // typed and not yet kept among them.
             Some(p) => {
-                let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
+                let name = if self.shown_unsaved() { format!("• {}", p.name) } else { p.name.clone() };
                 crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])
             }
             None => "Archforge".to_string(),

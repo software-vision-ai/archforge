@@ -132,6 +132,7 @@ Point at **Save version…** while it is off to see why:
 | It says | Why | What to do |
 |---|---|---|
 | *No changes since the last version.* | There is nothing to review | Nothing, or make a change first |
+| *What you're typing isn't kept yet* | Text you are typing in a skill or a description isn't part of your work yet | In a skill, pause for a moment; in a description, press Enter or click elsewhere |
 | *Loading* | Archforge is still working out what changed | Wait a moment |
 | *Saving…* | A save is running | Wait for it to finish |
 | *The changes couldn't be compared.* | Archforge couldn't work out what changed | ⌘S still saves, without a review |
