@@ -1404,9 +1404,11 @@ fn a_refused_stop_ends_the_session_naming_resume() {
         delta_of_a()
     );
     let world = World::new("refused-stop", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    // Only the stop and the time it leaves the turn are bounded by `timeout`.
+    session.set_request_timeout(timeout).unwrap();
     let stopped_at = Instant::now();
     session.stop().unwrap();
     let early = events_for(&mut session, timeout / 2);
@@ -1425,7 +1427,7 @@ fn a_refused_stop_ends_the_session_naming_resume() {
 /// A refused stop followed by Codex ending the turn closes it normally, as stopped.
 #[test]
 fn a_refused_stop_then_a_completed_turn_closes_normally() {
-    let timeout = Duration::from_millis(300);
+    let timeout = Duration::from_secs(1);
     let body = format!(
         "{}\nreq\nok \"$id\" '{{\"turn\":{{\"id\":\"A\",\"items\":[],\"status\":\"inProgress\"}}}}'\n{}req\nerr \"$id\" -32600 'cannot interrupt now'\n/bin/sleep 0.1\n\
          say '{{\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"A\",\"items\":[],\"status\":\"failed\",\"error\":null}}}}}}'\nhang",
@@ -1433,9 +1435,11 @@ fn a_refused_stop_then_a_completed_turn_closes_normally() {
         delta_of_a()
     );
     let world = World::new("refused-then-done", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    // Only the stop and the time it leaves the turn are bounded by `timeout`.
+    session.set_request_timeout(timeout).unwrap();
     session.stop().unwrap();
     assert_eq!(*last_outcome(&events_until(&mut session, 5, turn_end)), TurnOutcome::Stopped);
     let later = events_for(&mut session, timeout * 2);
@@ -1451,7 +1455,7 @@ fn a_refused_stop_then_a_completed_turn_closes_normally() {
 fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
     let timeout = Duration::from_millis(300);
     let body = format!(
-        "{}\nreq\n/bin/sleep 0.2\nok \"$id\" '{{\"turn\":{{\"status\":\"inProgress\"}}}}'\n\
+        "{}\nreq\nhold accept\nok \"$id\" '{{\"turn\":{{\"status\":\"inProgress\"}}}}'\n\
          say '{{\"method\":\"turn/started\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"N\",\"items\":[],\"status\":\"inProgress\"}}}}}}'\n\
          req\nok \"$id\" '{{}}'\n\
          say '{{\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"N\",\"items\":[],\"status\":\"interrupted\"}}}}}}'\n\
@@ -1460,10 +1464,12 @@ fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
         thread_prelude()
     );
     let world = World::new("unnamed-stop", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    // A long timeout until B: only the wait for B's name is bounded by `timeout`.
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     world.pump(&mut session, 4);
     session.stop().unwrap();
+    world.release("accept");
     assert_eq!(*last_outcome(&events_until(&mut session, 5, turn_end)), TurnOutcome::Stopped);
     let lines = world.stdin(5);
     assert_eq!(serde_json::from_str::<Value>(&lines[4]).unwrap()["params"], json!({"threadId": THREAD, "turnId": "N"}));
@@ -1471,6 +1477,7 @@ fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
     session.send("B").unwrap();
     world.pump(&mut session, 6);
     events_for(&mut session, Duration::from_millis(100));
+    session.set_request_timeout(timeout).unwrap();
     session.stop().unwrap();
     let events = events_until(&mut session, 5, turn_end);
     assert_eq!(*last_outcome(&events), TurnOutcome::Stopped);
