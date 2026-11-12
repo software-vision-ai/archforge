@@ -1,5 +1,5 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File and Edit, in the design's order. Each item is enabled while its action can
+//! system's Hide), File, Edit, Model and Versions, in the design's order. Each item is enabled while its action can
 //! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
 //! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -11,11 +11,14 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO};
+use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO, VERSIONS_MENU};
 use archforge_ui_egui::i18n::tr;
+use archforge_ui_egui::model_menu;
 
 /// A run of actions, set apart from the next by a separator.
 type Group = &'static [&'static str];
+/// Every item, by the action it runs.
+type Items = Vec<(&'static str, MenuItem)>;
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
@@ -26,12 +29,17 @@ pub struct NativeMenu {
     chosen: Receiver<MenuEvent>,
     /// Every item, by the action it runs.
     items: Vec<(&'static str, MenuItem)>,
+    model: Submenu,
+    /// The rows `model` holds, by section; none until the first frame fills it.
+    model_rows: Vec<Vec<&'static str>>,
+    /// Whether the last rebuild of `model` failed, so a failure is logged once, not every frame.
+    failing: bool,
 }
 
 /// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
 fn accelerator(keys: &Keys) -> Option<Accelerator> {
     let shift = if keys.modifiers.shift { "Shift+" } else { "" };
-    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.name())).ok()
+    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.symbol_or_name())).ok()
 }
 
 /// The table's item for action `id`, off until the first frame asks; recorded in `items`.
@@ -42,12 +50,12 @@ fn item(shell: &Shell, id: &'static str, items: &mut Vec<(&'static str, MenuItem
 }
 
 /// Appends `groups` to `menu`, with a separator between groups.
-fn append_groups(shell: &Shell, menu: &Submenu, groups: &[Group], items: &mut Vec<(&'static str, MenuItem)>) -> Result<(), muda::Error> {
+fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups: &[G], items: &mut Items) -> Result<(), muda::Error> {
     for (n, group) in groups.iter().enumerate() {
         if n > 0 {
             menu.append(&PredefinedMenuItem::separator())?;
         }
-        for id in *group {
+        for id in group.as_ref() {
             menu.append(&item(shell, id, items))?;
         }
     }
@@ -67,13 +75,16 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
-    menu.append_items(&[&app, &file, &edit]).map_err(err)?;
+    let model = Submenu::new(tr("Model"), true);
+    let versions = Submenu::new(tr("Versions"), true);
+    append_groups(shell, &versions, &VERSIONS_MENU, &mut items).map_err(err)?;
+    menu.append_items(&[&app, &file, &edit, &model, &versions]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
     menu.init_for_nsapp();
-    Ok(NativeMenu { _menu: menu, chosen, items })
+    Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new(), failing: false })
 }
 
 /// What the menu bar calls for each chosen item: queues it for the next frame and wakes the window,
@@ -95,13 +106,36 @@ fn run_chosen(chosen: &Receiver<MenuEvent>, shell: &mut Shell) {
 }
 
 impl NativeMenu {
-    /// Runs the items chosen since the last frame, then enables each for what the shell can do now.
-    pub fn frame(&self, shell: &mut Shell) {
+    /// Runs the items chosen since the last frame, then fits Model to the diagram and enables each for what the shell can do now.
+    pub fn frame(&mut self, shell: &mut Shell) {
         run_chosen(&self.chosen, shell);
+        self.follow_diagram(shell);
         for (id, item) in &self.items {
             item.set_enabled(actions::available(shell, id));
         }
     }
+
+    /// Rebuilds the Model menu when the diagram's rows have changed, again each frame while that fails.
+    fn follow_diagram(&mut self, shell: &Shell) {
+        let rows = model_menu::sections(shell);
+        if rows == self.model_rows {
+            return;
+        }
+        while self.model.remove_at(0).is_some() {}
+        self.items.retain(|(id, _)| !id.starts_with("model."));
+        let built = append_groups(shell, &self.model, &rows, &mut self.items);
+        self.model_rows = settle(rows, built, &mut self.failing);
+    }
+}
+
+/// The rows the Model menu holds after a rebuild of `rows`: all of them when it worked, none when it
+/// failed, so the next frame tries again. Only the first of failures in a row is logged.
+fn settle(rows: Vec<Vec<&'static str>>, built: Result<(), muda::Error>, failing: &mut bool) -> Vec<Vec<&'static str>> {
+    if !*failing && let Err(e) = &built {
+        log::warn!("the Model menu could not be rebuilt, trying again: {e}");
+    }
+    *failing = built.is_err();
+    if *failing { Vec::new() } else { rows }
 }
 
 // The queue and the wake, free of the operating system's menu bar: building a real `Menu` needs the
@@ -117,7 +151,10 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
+    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+
+    const ITEMS: [&str; 17] =
+        [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, SAVE_VERSION, VERSIONS, COMPARE, BRANCHES, OLDER, NEWER, BACK];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -177,7 +214,7 @@ mod tests {
     #[test]
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..]].concat().concat();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VERSIONS_MENU[..]].concat().concat();
         let mut sorted_items = ITEMS.to_vec();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
@@ -191,6 +228,13 @@ mod tests {
             (GENERATE, Some("CmdOrCtrl+Shift+G")),
             (UNDO, Some("CmdOrCtrl+Z")),
             (REDO, Some("CmdOrCtrl+Shift+Z")),
+            (SAVE_VERSION, Some("CmdOrCtrl+Shift+S")),
+            (VERSIONS, Some("CmdOrCtrl+Shift+H")),
+            (BRANCHES, Some("CmdOrCtrl+Shift+B")),
+            (OLDER, Some("CmdOrCtrl+BracketLeft")),
+            (NEWER, Some("CmdOrCtrl+BracketRight")),
+            (BACK, Some("CmdOrCtrl+Shift+H")),
+            (COMPARE, None),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),
@@ -200,6 +244,15 @@ mod tests {
             let keys = actions::keys(id).and_then(accelerator);
             assert_eq!(keys, wanted.map(|w| Accelerator::from_str(w).unwrap()), "{id}");
         }
+    }
+
+    /// A Model menu that failed to rebuild is tried again on the next frame, as no real rows are
+    /// empty; once it works its rows are kept.
+    #[test]
+    fn a_failed_rebuild_of_model_is_tried_again() {
+        let (rows, mut failing) = (vec![vec!["model.note", "model.link"]], false);
+        assert_eq!((settle(rows.clone(), Err(muda::Error::NotAChildOfThisMenu), &mut failing), failing), (vec![], true));
+        assert_eq!((settle(rows.clone(), Ok(()), &mut failing), failing), (rows, false));
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read
@@ -248,10 +301,13 @@ mod tests {
         assert_eq!(host.0.load(Ordering::SeqCst), 0, "only Open was chosen");
     }
 
-    /// Save asks the host once, and opens no picker.
+    /// Save asks the host once for unsaved work, and opens no picker.
     #[test]
     fn save_asks_the_host_to_save() {
         let (mut shell, host, picks) = shell_with_project();
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
         choose(SAVE, &mut shell);
         assert_eq!(host.0.load(Ordering::SeqCst), 1);
         assert_eq!(picks.load(Ordering::SeqCst), 0, "only Save was chosen");

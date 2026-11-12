@@ -8,6 +8,10 @@ str		Ctrl	Ctrl
 str		Shift	Maj
 str		The project is busy	Le projet est occupé
 str		Open or go back to a project first	Ouvrez d'abord un projet ou revenez à un projet
+str		Show a diagram first	Affichez d'abord un diagramme
+str		Current work is showing	Le travail en cours est affiché
+str		Back to current work first	Revenez d'abord au travail en cours
+str		This project has one branch	Ce projet a une seule branche
 str		Open…	Ouvrir…
 str		Save	Enregistrer
 # Générer
@@ -278,6 +282,8 @@ str		Saving…	Enregistrement…
 str		Opening…	Ouverture…
 str		Saved	Enregistré
 str		Unsaved changes · {chord} saves	Modifications non enregistrées · {chord} enregistre
+str		On {branch} · {status}	Sur {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Discussion utilise le modèle
 str		Agent access off	Accès des agents désactivé
 # Panneau Discussion
@@ -355,6 +361,9 @@ str		Open Settings	Ouvrir les Réglages
 str		Saved with {project}	Enregistrées avec {project}
 str		The conversations in this project cannot be read: {why}	Les conversations de ce projet ne peuvent pas être lues : {why}
 str		No conversations in this project yet.	Aucune conversation dans ce projet pour l’instant.
+str		No conversations on this branch yet.	Aucune conversation sur cette branche pour l’instant.
+str		Conversations stay on the branch where they started.	Les conversations restent sur la branche où elles ont commencé.
+str		Ask about the model below to start one.	Posez une question sur le modèle ci-dessous pour en commencer une.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Les conversations sont conservées dans le projet : elles voyagent avec lui et n’apparaissent jamais dans un autre projet.
 str		Delete conversation	Supprimer la conversation
@@ -419,7 +428,7 @@ plural		{n} table	{n} table|{n} tables
 plural		{n} column	{n} colonne|{n} colonnes
 plural		{n} schema	{n} schéma|{n} schémas
 plural		{n} diagram	{n} diagramme|{n} diagrammes
-plural		{n} skill	{n} skill|{n} skills
+plural		{n} skill	{n} compétence|{n} compétences
 str		Not saved	Non enregistré
 str		Changes could not be written to the project	Les modifications n’ont pas pu être écrites dans le projet
 str		No version was made: {why}	Aucune version n’a été créée : {why}
@@ -451,17 +460,28 @@ str		Restore this version?	Restaurer cette version ?
 str		The version of {what}	La version du {what}
 str		A new version with that content is added on top of the history, called "{name}".	Une nouvelle version avec ce contenu est ajoutée en haut de l’historique, nommée « {name} ».
 str		Nothing is rewound or removed, and later versions stay in History.	Rien n’est annulé ni supprimé, et les versions ultérieures restent dans l’historique.
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Vos modifications non enregistrées sont d’abord enregistrées comme une version nommée « Before restoring » suivie de l’heure.
+str		Your unsaved changes are saved first, as a version called "{name}".	Vos modifications non enregistrées sont d’abord enregistrées comme une version nommée « {name} ».
 str		You can reach them again from History.	Vous pourrez les retrouver dans l’historique.
 str		Undo starts fresh after a Restore.	L’annulation repart de zéro après une restauration.
 str		Restore	Restaurer
 str		The restore did not finish	La restauration n’a pas abouti
+str		A restore in {project} did not finish. Go to {project} to see why first.	Une restauration dans {project} n’a pas abouti. Allez d’abord dans {project} pour en voir la raison.
 str		{why} Nothing was changed.	{why} Rien n’a été modifié.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauration n'a pas pu avoir lieu car le projet a changé ou était occupé ; rien n'a donc été restauré.
 str		You are already on this branch.	Vous êtes déjà sur cette branche.
 str		The project stayed on its branch because it changed or was busy.	Le projet est resté sur sa branche car il a changé ou était occupé.
 str		Your latest changes could not be written, so the project stayed on its branch.	Vos dernières modifications n'ont pas pu être écrites ; le projet est donc resté sur sa branche.
 str		The project stayed on its branch: {why}	Le projet est resté sur sa branche : {why}
+str		Switch to {branch}?	Passer à {branch} ?
+str		Switch branch	Changer de branche
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} a des modifications non enregistrées. Elles restent sur {branch} et seront là à votre retour. Vous ne pourrez pas annuler les étapes précédentes.
+str		Save version and switch	Enregistrer la version et changer
+str		Switch	Changer
+str		Couldn't switch to {branch}	Impossible de passer à {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} Vous êtes toujours sur {branch} et votre travail n’a pas changé.
+str		{why} You are still on {branch}. Your work is saved.	{why} Vous êtes toujours sur {branch}. Votre travail est enregistré.
+str		Switching is refused	Changement refusé
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} Votre travail n’a pas pu être conservé, le changement n’a donc pas eu lieu. Vous êtes toujours sur {branch}.
 str		The switch did not finish, so the project stayed on its branch.	Le changement n'a pas abouti ; le projet est donc resté sur sa branche.
 str		The version could not be restored: {why}	La version n'a pas pu être restaurée : {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	Cette version est identique à votre travail en cours. Votre travail non enregistré a été conservé comme version.
@@ -485,11 +505,60 @@ str		Models	Modèles
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	Cette branche
+str	branch	Current	Actuelle
+str		Branches can't be merged yet.	Les branches ne peuvent pas encore être fusionnées.
+str		Only the first {n} branches are listed.	Seules les {n} premières branches sont listées.
+str		The branches couldn't be read.	Les branches n'ont pas pu être lues.
+str		New branch…	Nouvelle branche…
+str		New branch	Nouvelle branche
+str		A branch keeps its own versions, unsaved work and conversations.	Une branche a ses propres versions, son travail non enregistré et ses conversations.
+str		It starts from current work on {branch}.	Elle part du travail actuel sur {branch}.
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Elle part du travail actuel sur {branch}. Vos modifications non enregistrées la suivent, et {branch} les garde aussi.
+str		Start a branch here	Commencer une branche ici
+str		Start a branch here…	Commencer une branche ici…
+str		It starts from the version of {version}.	Elle part de la version du {version}.
+str		Viewing ends on the new branch.	L’affichage se termine sur la nouvelle branche.
+str		Your unsaved changes stay on {branch}.	Vos modifications non enregistrées restent sur {branch}.
+str		That name is already in use.	Ce nom est déjà utilisé.
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	La dernière nouvelle branche n'est pas encore nettoyée. Rouvrir le projet la supprime.
+str		The project changed before the branch was made, so none was made.	Le projet a changé avant la création de la branche, donc aucune n'a été créée.
+str		Couldn't make the branch: {why}	Impossible de créer la branche : {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge n'a pas pu savoir si la branche a été créée. Regardez dans Branches avant de réessayer.
+str		Rename…	Renommer…
+str		Rename branch	Renommer la branche
+str		The conversations and versions on this branch are not affected.	Les conversations et les versions de cette branche ne changent pas.
+str		The project changed before the branch was renamed, so its name stayed.	Le projet a changé avant que la branche soit renommée, elle a donc gardé son nom.
+str		Couldn't rename the branch: {why}	Impossible de renommer la branche : {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge n'a pas pu savoir si la branche a été renommée en {name}. Renommez-la à nouveau en {name} pour le savoir.
+str		Delete…	Supprimer…
+str		Delete {branch}?	Supprimer {branch} ?
+str		Goes with the branch:	Part avec la branche :
+str		Counting what goes with it…	Décompte de ce qui part avec elle…
+str		What goes with it couldn't be read: {why}	Impossible de lire ce qui part avec elle : {why}
+str		the host stopped without an answer	l'hôte s'est arrêté sans répondre
+plural		{n} version only on this branch	{n} version uniquement sur cette branche|{n} versions uniquement sur cette branche
+plural		{n} conversation	{n} conversation|{n} conversations
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · modifications non enregistrées
+str		It leaves the project's list.	Elle quitte la liste du projet.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Son contenu peut rester dans le stockage du dossier du projet, comme une conversation supprimée reste dans l'historique enregistré du projet.
+str		There is no Undo for deleting a branch.	La suppression d'une branche ne peut pas être annulée.
+str		Delete branch	Supprimer la branche
+str		Couldn't delete {branch}	Impossible de supprimer {branch}
+str		The project changed before the branch was deleted, so it stays.	Le projet a changé avant la suppression de la branche, elle reste donc.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge n'a pas pu savoir si la branche a été supprimée. Supprimez-la à nouveau pour le savoir.
+str		The branch stays: {why}	La branche reste : {why}
+str		At most {n} characters.	{n} caractères au maximum.
+str		Enter a name.	Saisissez un nom.
+str		A name has to be one line.	Un nom doit tenir sur une ligne.
+str		A name can't start or end with a space.	Un nom ne peut ni commencer ni finir par une espace.
 str		Working changes	Modifications en cours
 str		History	Historique
 str		Retry	Réessayer
 str		No changes since the last version.	Aucune modification depuis la dernière version.
+str		What you're typing isn't kept yet	Ce que vous saisissez n’est pas encore conservé
 str		No versions yet.	Aucune version pour l'instant.
+str		Shared with main up to here	Commun avec main jusqu'ici
 str		No versions yet. Save version records your first one.	Aucune version pour l'instant. Enregistrer la version crée la première.
 str		Loading	Chargement
 str		Save version…	Enregistrer la version…
@@ -504,6 +573,7 @@ str		One line, at most 200 characters. It stays in the history.	Une ligne, 200 c
 plural		{n} model element	{n} élément du modèle|{n} éléments du modèle
 str		Filter changes…	Filtrer les modifications…
 str		Filter versions…	Filtrer les versions…
+str		Filter branches…	Filtrer les branches…
 str		Model elements	Éléments du modèle
 str		Unnamed	Sans nom
 str		Added	Ajouté
@@ -530,20 +600,29 @@ str		The next versions couldn't be read.	Les versions suivantes n'ont pas pu êt
 str		{name}, selected	{name}, sélectionnée
 str		Compared with the version of {when}	Comparé à la version du {when}
 str		There is no version to compare with yet.	Il n’y a pas encore de version à comparer.
+str		This diagram couldn't be compared.	Impossible de comparer ce diagramme.
 str		This element couldn't be compared.	Impossible de comparer cet élément.
 str		Attributes	Attributs
 str		Operations	Opérations
 str		Literals	Littéraux
 str		Members	Membres
+str		Relationships	Relations
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Appartenance
 str		Not available on this side	Indisponible de ce côté
-str		Relationships aren't shown here yet.	Les relations ne sont pas encore affichées ici.
+str		Each difference is marked on the cards below.	Chaque différence est marquée sur les cartes ci-dessous.
+plural		Related change	Modification associée|Modifications associées
+str		{name} was added in this comparison.	{name} a été ajouté dans cette comparaison.
+str		{name} was changed in this comparison.	{name} a été modifié dans cette comparaison.
+str		{name} was removed in this comparison.	{name} a été supprimé dans cette comparaison.
+str		Go to {name}	Aller à {name}
 str		Only what these cards don't show changed	Seul ce que ces cartes n’affichent pas a changé
 str		The cards show the same on both sides.	Les cartes affichent la même chose des deux côtés.
 str		The owner changed	Le propriétaire a changé
 str		The owner changed.	Le propriétaire a changé.
 plural		{n} member changed	{n} membre modifié|{n} membres modifiés
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} relation modifiée|{n} relations modifiées
+str		{these} · {those}	{these} · {those}
 str		This element was added	Cet élément a été ajouté
 str		It is only on the After side, so there is nothing to compare.	Il ne se trouve que du côté Après : il n’y a donc rien à comparer.
 str		This element was removed	Cet élément a été supprimé
@@ -559,6 +638,30 @@ plural		{n} more value changed.	{n} autre valeur a changé.|{n} autres valeurs o
 str		Yes	Oui
 str		Not set	Non défini
 str		Nothing here yet	Rien pour l’instant
+str		Layout	Disposition
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} élément ajouté|{n} éléments ajoutés
+plural		{n} element changed	{n} élément modifié|{n} éléments modifiés
+plural		{n} element removed	{n} élément supprimé|{n} éléments supprimés
+plural		{n} box placed	{n} boîte placée|{n} boîtes placées
+plural		{n} box moved	{n} boîte déplacée|{n} boîtes déplacées
+plural		{n} box changed	{n} boîte modifiée|{n} boîtes modifiées
+plural		{n} box taken off	{n} boîte retirée|{n} boîtes retirées
+plural		{n} line drawn	{n} ligne tracée|{n} lignes tracées
+plural		{n} line changed	{n} ligne modifiée|{n} lignes modifiées
+plural		{n} line taken off	{n} ligne retirée|{n} lignes retirées
+str		The model didn't change	Le modèle n’a pas changé
+str		Only the layout changed.	Seule la disposition a changé.
+str		The layout didn't change	La disposition n’a pas changé
+str		Only the model changed.	Seul le modèle a changé.
+str		The diagram's own details changed	Les propres informations du diagramme ont changé
+str		Such as its name, or the order its boxes are drawn in.	Par exemple son nom, ou l’ordre dans lequel ses boîtes sont dessinées.
+str		This diagram was added	Ce diagramme a été ajouté
+str		It has no boxes or lines yet.	Il n’a encore ni boîte ni ligne.
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	Faites glisser, faites défiler ou utilisez les flèches pour déplacer les deux côtés ; + et − les zooment, et 0 les ajuste à nouveau.
+str		This diagram was removed	Ce diagramme a été supprimé
+str		It had no boxes or lines.	Il n’avait ni boîte ni ligne.
 str		Version of {when}	Version du {when}
 str		Last version	Dernière version
 str		No description	Aucune description
@@ -1077,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» sur {metaclass} est utilisé : {uses}. Retirez-les d’abord.
 str		«{stereotype}» on {elements}	«{stereotype}» sur {elements}
 str		{first} and {second}	{first} et {second}
+str		{first}, {second} and {third}	{first}, {second} et {third}
 plural		Show the use	Afficher l’utilisation|Afficher les {n} utilisations
 str		A stereotype is shown on its profile's diagram	Un stéréotype s’affiche sur le diagramme de son profil
 str		Place stereotype	Placer le stéréotype
@@ -1553,7 +1657,6 @@ str		Domain check	Contrainte de contrôle de domaine
 str		Drawing	Dessin
 str		Effect	Effet
 str		Entry point	Point d’entrée
-str		Enumeration literal	Littéral d’énumération
 str		Exactly one	Exactement un
 str		Execution location	Emplacement d’exécution
 str		Exit point	Point de sortie
@@ -1659,7 +1762,6 @@ str		Par	Parallèle
 str		Parallel	Parallèle
 str		Persistence	Persistance
 str		Profile application	Application de profil
-str		Property	Propriété
 str		Read	Lire
 str		Realization	Réalisation
 str		Redefinable template signature	Signature de modèle redéfinissable

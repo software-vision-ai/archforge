@@ -1,13 +1,16 @@
-//! A changed element opened in the centre (frames V1.1 and V3.3 of page 09): its name, what happened to it,
-//! where, and its two sides. Those are built off the interface thread from rows already held, so a click reads nothing.
+//! A changed element or diagram opened in the centre (frames V1.1, V3.3 and V3.4 of page 09): its name, what happened
+//! to it, where, and its two sides. Those are built off the interface thread from rows already held, so a click reads nothing.
 
 mod cards;
+mod diagram;
+mod related;
 mod summary;
 
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use archforge_mof::{Uuid, rows::snapshot};
-use archforge_notations::differences::{ChangeKind, Difference, ElementSides, element_sides};
+use archforge_notations::differences::{Area, ChangeKind, DiagramSides, Difference, ElementSides, diagram_sides, element_sides};
 use egui::{Rect, pos2, vec2};
 
 use crate::Shell;
@@ -17,29 +20,41 @@ use crate::settings::{Look, button, control};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, types};
 use crate::version_details::{BAND, MARGIN, breadcrumb};
-use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, when, working_key};
+use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, path_words, when, working_key};
+
+/// The two sides the centre shows: an element's cards, or a diagram's drawings.
+#[derive(Clone)]
+pub(crate) enum Sides {
+    Element(ElementSides),
+    /// Behind a lock as a store can move between threads but not be shared; only the interface thread takes it.
+    Diagram(Arc<Mutex<DiagramSides>>),
+}
 
 /// The changed element the centre shows: its row, which speaks for it until its sides are known, and what was last read of them.
 pub(crate) struct OpenedElement {
     pub(crate) row: Difference,
     read_of: Option<Compared>,
-    found: Option<Result<ElementSides, String>>,
+    found: Option<Result<Sides, String>>,
     scroll: TreeScroll,
+    /// The zoom and pan a diagram's two sides are drawn with once the person has moved either; none while they fit.
+    nav: Option<(f32, egui::Vec2)>,
 }
 
 /// The one read of an element's two sides under way, and what it is about.
 pub(crate) struct ElementReading {
     pub(crate) id: Uuid,
     pub(crate) key: Compared,
-    pub(crate) answer: Receiver<Result<Option<ElementSides>, String>>,
+    pub(crate) answer: Receiver<Result<Option<Sides>, String>>,
 }
 
 /// Opens the change `row` in place of a version's details and ends what was said of earlier work.
+/// Opening the one shown again keeps what was read of it, and fits a diagram's two sides again.
 pub(crate) fn open(shell: &mut Shell, row: Difference) {
     (shell.versions.details, shell.versions.selected, shell.canvas.notice) = (None, None, None);
     let v = &mut shell.versions;
-    if v.element.as_ref().is_none_or(|o| o.row.id != row.id) {
-        v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default() });
+    match v.element.as_mut() {
+        Some(o) if o.row.id == row.id => o.nav = None,
+        _ => v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default(), nav: None }),
     }
 }
 
@@ -64,7 +79,7 @@ fn take_answer(shell: &mut Shell) {
     let answer = match reading.answer.try_recv() {
         Err(TryRecvError::Empty) => return,
         Ok(answer) => answer,
-        Err(TryRecvError::Disconnected) => Err(tr("This element couldn't be compared.")),
+        Err(TryRecvError::Disconnected) => Err(failed_words(shell.versions.element.as_ref().map_or(Area::Model, |o| o.row.area))),
     };
     let (id, key) = (reading.id, reading.key.clone());
     let moved = shell.session.as_ref().map(|s| s.revision()) != Some(key.1);
@@ -82,7 +97,7 @@ fn take_answer(shell: &mut Shell) {
 }
 
 /// Keeps what a read found, or why it could not tell, with what it was about.
-fn land(v: &mut State, key: Compared, found: Result<ElementSides, String>) {
+fn land(v: &mut State, key: Compared, found: Result<Sides, String>) {
     if let Some(o) = v.element.as_mut() {
         (o.read_of, o.found) = (Some(key), Some(found));
     }
@@ -94,7 +109,7 @@ fn start_read(shell: &mut Shell) {
     let Some(key) = working_key(shell) else { return };
     let v = &shell.versions;
     let Some(o) = v.element.as_ref().filter(|o| v.element_reading.is_none() && o.read_of.as_ref() != Some(&key)) else { return };
-    let id = o.row.id;
+    let (id, area) = (o.row.id, o.row.area);
     let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
     let (tables, junctions) = archforge_notations::storage();
     let v = &mut shell.versions;
@@ -103,7 +118,14 @@ fn start_read(shell: &mut Shell) {
         Err(e) => return land(v, key, Err(e.to_string())),
     };
     let (tx, rx) = channel();
-    let read = move || drop(tx.send(element_sides(&before, &after, id, crate::editing::fit_tables).map_err(|e| e.to_string())));
+    let read = move || {
+        let repair = crate::editing::fit_tables;
+        let sides = match area {
+            Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
+            Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
+        };
+        drop(tx.send(sides.map_err(|e| e.to_string())));
+    };
     match std::thread::Builder::new().name("archforge-element-sides".into()).spawn(read) {
         Ok(_) => v.element_reading = Some(ElementReading { id, key, answer: rx }),
         Err(e) => land(v, key, Err(e.to_string())),
@@ -138,16 +160,13 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     }
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
-    let sides = found.as_ref().and_then(|f| f.as_ref().ok());
-    let card = sides.and_then(|s| s.after.as_ref().or(s.before.as_ref()));
-    let name = card.map_or(row.name.as_ref(), |c| c.name.as_ref()).filter(|n| !n.is_empty()).cloned().unwrap_or_else(|| tr("Unnamed"));
-    // From the two sides, as a change of table is one change, not the two rows the list has for it.
-    let kind =
-        sides.map(|s| s.before.as_ref().map_or(ChangeKind::Added, |_| if s.after.is_none() { ChangeKind::Removed } else { ChangeKind::Changed }));
-    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &row.path.join(" / ")), kind);
+    let (name, path, kind) = heading(&row, found.as_ref().and_then(|f| f.as_ref().ok()));
+    let name = name.filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
+    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &path), kind);
     match found {
         Some(Err(why)) => {
-            let (words, at) = (tr("This element couldn't be compared."), Rect::from_min_size(pos2(left, y), vec2((width - 80.0).max(0.0), 28.0)));
+            let words = failed_words(row.area);
+            let at = Rect::from_min_size(pos2(left, y), vec2((width - 80.0).max(0.0), 28.0));
             let _ = control(shell, ui, "workspace.change-view.failed", "status", at, false).on_hover_text(why).accessible_name(&words);
             ux::text_mid(ui.painter(), left, at.center().y, &words, types::SMALL, p.danger, Some(at.width()));
             let id = "workspace.change-view.retry";
@@ -158,7 +177,8 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
                 (o.read_of, o.found) = (None, None);
             }
         }
-        Some(Ok(sides)) => cards::draw(shell, ui, p, r, y, &sides),
+        Some(Ok(Sides::Element(sides))) => cards::draw(shell, ui, p, r, y, &sides),
+        Some(Ok(Sides::Diagram(sides))) => diagram::draw(shell, ui, p, r, y, &sides.lock().unwrap_or_else(PoisonError::into_inner)),
         None => {
             let _ = control(shell, ui, "workspace.change-view.loading", "status", Rect::from_min_size(pos2(left, y), vec2(width, 66.0)), false)
                 .accessible_name(tr("Loading"));
@@ -168,6 +188,32 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         }
     }
     true
+}
+
+/// What the centre says when a read of a change in `area` fails.
+fn failed_words(area: Area) -> String {
+    if area == Area::Diagram { tr("This diagram couldn't be compared.") } else { tr("This element couldn't be compared.") }
+}
+
+/// The name, path words and change the header says: of `sides` once known, of `row` until then. The change
+/// comes from the sides, as a change of table is one change, not the two rows the list has for it.
+fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, String, Option<ChangeKind>) {
+    let kind = |before: bool, after: bool| match (before, after) {
+        (false, _) => ChangeKind::Added,
+        (true, true) => ChangeKind::Changed,
+        (true, false) => ChangeKind::Removed,
+    };
+    match sides {
+        Some(Sides::Element(s)) => {
+            let card = s.after.as_ref().or(s.before.as_ref());
+            (card.map_or(row.name.clone(), |c| c.name.clone()), path_words(row), Some(kind(s.before.is_some(), s.after.is_some())))
+        }
+        Some(Sides::Diagram(d)) => {
+            let d = d.lock().unwrap_or_else(PoisonError::into_inner);
+            (d.name.clone(), d.path.join(" / "), Some(kind(d.before.is_some(), d.after.is_some())))
+        }
+        None => (row.name.clone(), path_words(row), None),
+    }
 }
 
 /// The title from `y` with the pill beside it and the path under it, read whole on hover; gives where the next part starts.

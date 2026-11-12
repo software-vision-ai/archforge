@@ -8,7 +8,7 @@ use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
-use crate::{Shell, edit_menu};
+use crate::{Shell, edit_menu, model_menu};
 
 pub const ABOUT: &str = "app.about";
 pub const SETTINGS: &str = "app.settings";
@@ -21,8 +21,15 @@ pub const CLOSE: &str = "file.close";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
+pub const BRANCHES: &str = "versions.branches";
+pub const SAVE_VERSION: &str = "versions.save";
+pub const COMPARE: &str = "versions.compare";
+pub const BACK: &str = "versions.back";
 pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
+
+/// The Versions menu's rows by section, on every system (`docs/design/versioning.md`, section 11).
+pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[BRANCHES], &[OLDER, NEWER, BACK]];
 
 /// One application action.
 pub struct Action {
@@ -148,11 +155,28 @@ pub static ACTIONS: &[Action] = &[
         search: Some(InSearch { icon: |_| &icons::LIST, label: None }),
     },
     Action {
+        id: SAVE_VERSION,
+        label: |_| tr("Save version…"),
+        available: |s| free(s) && s.project.is_some() && crate::save_version::off_because(s).is_none(),
+        run: crate::save_version::open,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::S }),
+        search: None,
+    },
+    Action {
         id: VERSIONS,
-        label: |_| tr("Versions"),
-        available: crate::version_chip::available,
-        run: crate::version_chip::toggle,
+        label: |_| tr("History"),
+        // Its keys are Back to current work's while a version is in view.
+        available: |s| crate::version_chip::available(s) && s.version_in_view().is_none(),
+        run: crate::version_chip::open,
         keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H }),
+        search: None,
+    },
+    Action {
+        id: COMPARE,
+        label: |_| tr("Compare…"),
+        available: crate::version_details::can_compare,
+        run: crate::version_details::compare_from_menu,
+        keys: None,
         search: None,
     },
     Action {
@@ -166,9 +190,27 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: NEWER,
         label: |_| tr("Newer version"),
-        available: crate::version_chip::available,
+        // From current work there is nothing newer; from a version the step reads what it needs.
+        available: |s| crate::version_chip::available(s) && s.stepping_from().is_some(),
         run: crate::version_chip::newer,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
+        search: None,
+    },
+    Action {
+        id: BRANCHES,
+        label: |_| tr("Switch branch"),
+        // While the list can open and there are branches to switch between.
+        available: |s| crate::version_chip::available(s) && crate::version_chip::branch_name(s).is_some(),
+        run: crate::version_chip::open_branches,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::B }),
+        search: None,
+    },
+    Action {
+        id: BACK,
+        label: |_| tr("Back to current work"),
+        available: |s| free(s) && s.version_in_view().is_some(),
+        run: |s| _ = s.back_to_current_work(),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::H }),
         search: None,
     },
     Action {
@@ -191,7 +233,7 @@ pub static ACTIONS: &[Action] = &[
 
 /// The action `id`.
 fn find(id: &str) -> Option<&'static Action> {
-    ACTIONS.iter().find(|a| a.id == id)
+    ACTIONS.iter().chain(model_menu::rows()).find(|a| a.id == id)
 }
 
 /// The name of the action `id`; empty when the table has none.
@@ -229,11 +271,11 @@ pub(crate) fn free(shell: &Shell) -> bool {
     window && shell.explorer.delete.is_none() && shell.chat_panel.ask.is_none() && shell.diagrams.new.is_none()
 }
 
-/// Whether `keys` were pressed in this frame, and takes them. Undo's and Redo's are matched exactly:
-/// `consume_key` lets an extra Shift through, which with Redo off would make ⇧⌘Z undo.
-fn pressed(ctx: &egui::Context, id: &str, keys: &Keys) -> bool {
+/// Whether `keys` were pressed in this frame, and takes them. Matched exactly: `consume_key` lets an
+/// extra Shift through, which would make ⇧⌘S save with Save version… off, and ⇧⌘Z undo with Redo off.
+fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {
     let exact = |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers));
-    ctx.input_mut(|i| (!id.starts_with("edit.") || i.events.iter().any(exact)) && i.consume_key(keys.modifiers, keys.key))
+    ctx.input_mut(|i| i.events.iter().any(exact) && i.consume_key(keys.modifiers, keys.key))
 }
 
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
@@ -242,7 +284,7 @@ fn pressed(ctx: &egui::Context, id: &str, keys: &Keys) -> bool {
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
-        if !(field && action.id.starts_with("edit.")) && (action.available)(shell) && pressed(ctx, action.id, keys) {
+        if !(field && action.id.starts_with("edit.")) && (action.available)(shell) && pressed(ctx, keys) {
             (action.run)(shell);
         }
     }
@@ -309,7 +351,7 @@ pub(crate) mod tests {
     }
 
     /// A new model named Shop, as a project holds one.
-    fn session() -> archforge_notations::Session {
+    pub(crate) fn session() -> archforge_notations::Session {
         let mut n: u128 = 0;
         let ids = Box::new(move || {
             n += 1;
@@ -335,6 +377,14 @@ pub(crate) mod tests {
         shell.tabs = vec![tab()];
         shell.active = Some(0);
         (shell, host, picks)
+    }
+
+    /// `shell` with unsaved work, which Save makes a version of: with none it asks for nothing.
+    fn unsaved(shell: &mut Shell) -> &mut Shell {
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
+        shell
     }
 
     /// A question about the open project, which keeps everything behind it off.
@@ -364,7 +414,7 @@ pub(crate) mod tests {
         type Setup = fn(&mut Shell);
         let states: [(&str, Setup, &[&str]); 18] = [
             ("a project", |_| {}, &[]),
-            ("saving", |s| s.save(), &[SAVE]),
+            ("saving", |s| unsaved(s).save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
             ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE]),
             ("About open", crate::support::open, &BEHIND_A_DIALOG),
@@ -443,6 +493,9 @@ pub(crate) mod tests {
         );
         for id in ALL {
             let (mut shell, saves, picks) = shell();
+            if id == SAVE {
+                unsaved(&mut shell);
+            }
             run(&mut shell, id);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
@@ -508,10 +561,13 @@ pub(crate) mod tests {
         ];
         for (id, modifiers, key) in pressed {
             let (mut shell, saves, picks) = shell();
+            unsaved(&mut shell);
             press(&mut shell, modifiers, key);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         let (mut shell, saves, picks) = shell();
+        // Unsaved, so a key that reached Save would show.
+        unsaved(&mut shell);
         shell.ask = Some(question());
         press(&mut shell, shift_cmd, Key::G);
         press(&mut shell, Modifiers::COMMAND, Key::O);
@@ -520,6 +576,6 @@ pub(crate) mod tests {
         press(&mut shell, Modifiers::NONE, Key::S);
         assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "not behind a question, nor with the wrong modifiers");
         press(&mut shell, shift_cmd, Key::S);
-        assert_eq!(effects(&shell, &saves, &picks), [SAVE], "only the Edit rows match exactly");
+        assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "⇧⌘S is Save version…'s, never Save's");
     }
 }

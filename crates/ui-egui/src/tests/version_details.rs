@@ -304,14 +304,15 @@ fn details_give_way_to_the_canvas() {
 }
 
 /// The cards say what changed from the version before to this one: the model's elements first,
-/// and the first version reads nothing. The later version lacks what was added, so only the
-/// details say Removed, and the id of the diagram sorts before the schema's.
+/// then diagrams, then skills, and the first version reads nothing. The later version lacks what was
+/// added, so only the details say Removed; the skill's id sorts first and the diagram's before the schema's.
 #[test]
 fn details_list_what_changed_since_the_version_before() {
     in_both(|h, host| {
         add_schema(h, "first");
         let without = rows_now(h);
         let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
         s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap();
@@ -325,9 +326,10 @@ fn details_list_what_changed_since_the_version_before() {
         answer(host, "c2", Ok(with));
         answer(host, "c3", Ok(without));
         settled(h);
-        assert!(painted_has(h, "3 changed items"), "the schema, the diagram and its root: {:?}", painted(h));
+        assert!(painted_has(h, "4 changed items"), "the schema, the diagram and its root, the skill: {:?}", painted(h));
         let gone: Vec<_> = h.query_all_by_label_contains(", Removed").map(|n| n.accesskit_node().label().unwrap_or_default().to_string()).collect();
-        assert!(gone.len() == 3 && gone[0].starts_with("shop,") && gone[1].starts_with("Shop schema,"), "drawn in this order: {gone:?}");
+        let at = |n: usize, start: &str| gone.get(n).is_some_and(|g| g.starts_with(start));
+        assert!(gone.len() == 4 && at(0, "shop,") && at(1, "Shop schema,") && at(3, "Naming, Skills, Removed"), "drawn in this order: {gone:?}");
         opened(h, "c1");
         assert!(painted_has(h, "First version: there is nothing earlier to compare it with."), "{:?}", painted(h));
         assert!(!has_id(h, "workspace.version-details.loading") && asked(host).is_empty(), "nothing read for it");
@@ -723,7 +725,7 @@ const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 const SUMMARY: &str = "workspace.change-view.summary";
-const NOT_SHOWN: &str = "Relationships aren't shown here yet.";
+const MARKED: &str = "Each difference is marked on the cards below.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -740,12 +742,12 @@ fn sided(id: Uuid, before: Option<ElementCard>, after: Option<ElementCard>, fiel
 
 /// The sides of an element called `name` on both sides of the comparison.
 fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
-    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) };
+    let card = ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false };
     Ok(Some(sided(id, Some(card.clone()), Some(card), Vec::new())))
 }
 
 /// Puts a read of `id` about `key` under way, the test holding its answer.
-fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<ElementSides>, String>> {
+fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<crate::change_view::Sides>, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { id, key, answer: rx });
     tx
@@ -753,7 +755,7 @@ fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::syn
 
 /// Lands `answer` as such a read.
 fn landed(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared, answer: Result<Option<ElementSides>, String>) {
-    reading(h, id, key).send(answer).unwrap();
+    reading(h, id, key).send(answer.map(|s| s.map(crate::change_view::Sides::Element))).unwrap();
     h.run_steps(1);
 }
 
@@ -900,14 +902,450 @@ fn two_rows_of_one_element_open_it_once() {
         let (mut row, key) = (h.state().versions.changes[0].clone(), h.state().versions.compared.clone().unwrap());
         let mut gone = row.clone();
         (gone.class, gone.kind, gone.name, row.name) = (archforge_er::ENTITY, ChangeKind::Removed, Some("old".into()), Some("new".into()));
-        let sheet = Difference { area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
+        let sheet = Difference { id: Uuid([9; 16]), area: Area::Diagram, class: archforge_er::ATTRIBUTE, name: Some("sheet".into()), ..gone.clone() };
         crate::versions::settle_changes(h.state_mut(), key, Ok(vec![row, gone, sheet]));
         h.run_steps(2);
         open_change(h, "sheet");
-        assert!(h.state().versions.element.is_none(), "a diagram's row does not open");
+        assert!(h.state().versions.element.is_none(), "a row in no diagram closes once that is known");
         open_change(h, "old");
         assert_eq!(h.query_all_by_label_contains(", selected").count(), 2, "both rows are the element");
         assert!(painted_has(h, "Added"), "the sides say Added, the row Removed: {:?}", painted(h));
+    });
+}
+
+/// The automation id of the link to `id`.
+fn related_link(id: Uuid) -> String {
+    format!("workspace.change-view.related.{id}")
+}
+
+/// Lands the sides of the open shop as connected to `related`.
+fn land_related(h: &mut Harness<'static, Shell>, key: Compared, related: Vec<Uuid>) {
+    let id = h.state().versions.element.as_ref().unwrap().row.id;
+    let card = ElementCard { class: archforge_er::SCHEMA, name: Some("shop".into()), made: false };
+    let lists = Arc::new(CardLists { related, ..Default::default() });
+    landed(h, id, key, Ok(Some(ElementSides { lists, ..sided(id, Some(card.clone()), Some(card), Vec::new()) })));
+    h.run_steps(1);
+}
+
+/// Turns the wheel far over the control `over`, down when `down`.
+fn wheel(h: &mut Harness<'static, Shell>, over: &str, down: bool) {
+    h.event(egui::Event::PointerMoved(rect_of(h, over).center()));
+    let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, if down { -40000.0 } else { 40000.0 }), egui::Modifiers::NONE);
+    h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+    h.run_steps(8);
+}
+
+/// Shop open among changes that hold warehouse too; gives warehouse's row and what the list was compared at.
+fn shop_and_warehouse(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Difference, Compared) {
+    before_and_after(h, host);
+    add_schema(h, "warehouse");
+    list_still(h);
+    host.reads.lock().unwrap().clear();
+    open_change(h, "shop");
+    let row = h.state().versions.changes.iter().find(|d| d.name.as_deref() == Some("warehouse")).unwrap().clone();
+    (row, h.state().versions.compared.clone().unwrap())
+}
+
+/// What the header says the element is compared with.
+fn compared_with(h: &Harness<'static, Shell>) -> String {
+    h.query_by_label_contains("Compared with").unwrap().accesskit_node().label().unwrap_or_default().to_string()
+}
+
+/// A link says what happened and opens that element in the same comparison, reading nothing.
+#[test]
+fn a_related_link_opens_its_element_in_the_same_comparison() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        land_related(h, key.clone(), vec![row.id]);
+        let header = compared_with(h);
+        assert!(h.query_by_label("warehouse was added in this comparison.").is_some(), "{:?}", painted(h));
+        tap(h, &related_link(row.id));
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading") && has_id(h, COMPARED));
+        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id));
+        assert_eq!(h.state().versions.compared, Some(key), "the same comparison");
+        assert!(asked(host).is_empty(), "nothing read: {:?}", asked(host));
+        assert_eq!(compared_with(h), header, "the header names the same pair");
+    });
+}
+
+/// Only what the list holds as a model's change gets a link; an element in two tables is one
+/// change, named from the side it is still on whichever row comes first, and a failed list offers none.
+#[test]
+fn only_a_listed_model_change_is_linked() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        let other = Uuid([9; 16]);
+        land_related(h, key.clone(), vec![row.id, other]);
+        let gone = Difference { kind: ChangeKind::Removed, class: archforge_er::ENTITY, name: Some("old".into()), ..row.clone() };
+        let sheet = Difference { id: other, area: Area::Diagram, ..row.clone() };
+        let held = h.state().versions.changes.clone();
+        for rows in [[held.clone(), vec![gone.clone(), sheet.clone()]].concat(), [vec![gone.clone(), sheet.clone()], held.clone()].concat()] {
+            crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+            h.run_steps(2);
+            assert!(has_id(h, &related_link(row.id)) && !has_id(h, &related_link(other)), "a diagram's row does not open");
+            assert!(h.query_by_label("warehouse was changed in this comparison.").is_some(), "{:?}", painted(h));
+        }
+        crate::versions::settle_changes(h.state_mut(), key, Err("list broken".into()));
+        h.run_steps(2);
+        assert!(!has_id(h, "workspace.change-view.related") && !has_id(h, &related_link(row.id)), "{:?}", painted(h));
+    });
+}
+
+/// An element connected to nothing that differs has no card; a long list draws only what shows and scrolls to its end.
+#[test]
+fn related_rows_are_drawn_only_in_view() {
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        land_related(h, key.clone(), Vec::new());
+        assert!(!has_id(h, "workspace.change-view.related"));
+        let many: Vec<_> = (0..400u16)
+            .map(|n| Difference { id: Uuid([n as u8, (n >> 8) as u8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]), ..row.clone() })
+            .collect();
+        let (first, last) = (related_link(many[1].id), related_link(many[399].id));
+        let related = many.iter().map(|d| d.id).collect();
+        let rows = [h.state().versions.changes.clone(), many].concat();
+        crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+        land_related(h, key, related);
+        assert!(has_id(h, &first) && !has_id(h, &last), "the end is out of view");
+        wheel(h, SUMMARY, true);
+        assert!(has_id(h, &last) && !has_id(h, &first), "the wheel reached the last row");
+    });
+}
+
+/// The keys reach a link out of view and bring it in: Tab from the way back finds the first after
+/// the wheel took it away, each Tab and Shift+Tab shows the one it reaches, the wheel may move away
+/// from it again and the keys still go on to its neighbours, and Enter still opens a link wheeled out of view.
+#[test]
+fn the_keys_reach_and_open_a_related_link_out_of_view() {
+    use egui::Key::{Enter, Tab};
+    in_both(|h, host| {
+        let (row, key) = shop_and_warehouse(h, host);
+        let many: Vec<_> = (0..60u8).map(|n| Difference { id: Uuid([n + 1; 16]), ..row.clone() }).chain([row.clone()]).collect();
+        let links: Vec<_> = many.iter().map(|d| related_link(d.id)).collect();
+        let rows = [h.state().versions.changes.clone(), many.clone()].concat();
+        crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+        land_related(h, key, many.iter().map(|d| d.id).collect());
+        wheel(h, SUMMARY, true);
+        assert!(!has_id(h, &links[0]), "the first is out of view");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.change-view.close")));
+        h.run_steps(1);
+        for (i, link) in links.iter().enumerate() {
+            h.key_press(Tab);
+            h.run_steps(3);
+            assert!(focused_on(h, link) && has_id(h, link), "link {i} reached and shown");
+        }
+        for (i, link) in links.iter().enumerate().rev().skip(1) {
+            h.key_press_modifiers(egui::Modifiers::SHIFT, Tab);
+            h.run_steps(3);
+            assert!(focused_on(h, link) && has_id(h, link), "link {i} reached back and shown");
+        }
+        wheel(h, &links[0], true);
+        assert!(focused_on(h, &links[0]) && !has_id(h, &links[0]), "the wheel moves away from the link that keeps the keys");
+        for (shift, to) in [(false, 1), (false, 2), (true, 1)] {
+            if shift {
+                wheel(h, &links[2], true);
+            }
+            h.key_press_modifiers(if shift { egui::Modifiers::SHIFT } else { egui::Modifiers::NONE }, Tab);
+            h.run_steps(3);
+            assert!(focused_on(h, &links[to]) && has_id(h, &links[to]), "the link next to one wheeled away, {to}");
+        }
+        wheel(h, &links[1], true);
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[60])));
+        h.run_steps(2);
+        wheel(h, &links[60], false);
+        assert!(focused_on(h, &links[60]) && !has_id(h, &links[60]), "a later link wheeled away keeps the keys");
+        h.key_press(Enter);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+        assert_eq!(h.state().versions.element.as_ref().map(|o| o.row.id), Some(row.id), "the one reached opens");
+    });
+}
+
+/// The ids a diagram comparison holds: the schema, the diagram, the boxes kept, gone, fresh and
+/// nested, the line and the box renamed.
+type Items = [String; 8];
+
+/// Runs the command `cmd` on the session; gives the id it answers with, if any.
+fn edit(h: &mut Harness<'static, Shell>, cmd: &str, args: serde_json::Value) -> String {
+    h.state_mut().session.as_mut().unwrap().execute(cmd, &args).unwrap().value["id"].as_str().unwrap_or_default().to_string()
+}
+
+/// Runs `test` once in each appearance, with Billing in the last version, these changes in current
+/// work and the box `fresh` opened from the list. Opening asks the host for nothing and leaves the session.
+fn diagram_compared(test: impl Fn(&mut Harness<'static, Shell>, &Items)) {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let shop = edit(&mut h, "er.schema.add", serde_json::json!({ "name": "shop" }));
+        let entity = |h: &mut _, name: &str| edit(h, "er.entity.add", serde_json::json!({ "schema": shop, "name": name }));
+        let (a, b, c, d) = (entity(&mut h, "kept"), entity(&mut h, "renamed"), entity(&mut h, "gone"), entity(&mut h, "fresh"));
+        let diagram = edit(&mut h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Billing" }));
+        let place = |h: &mut _, e: &str, x: i32, y: i32| {
+            edit(h, "diagram.place", serde_json::json!({ "diagram": diagram, "element": e, "x": x, "y": y, "width": 200, "height": 120 }))
+        };
+        // Only the Before side reaches far below, so fitting one side alone would differ.
+        let (kept, renamed, gone) = (place(&mut h, &a, 300, 0), place(&mut h, &b, 560, 0), place(&mut h, &c, 0, 20000));
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        super::compared(&mut h);
+        edit(&mut h, "er.entity.rename", serde_json::json!({ "entity": b, "name": "client" }));
+        edit(&mut h, "diagram.unplace", serde_json::json!({ "nodes": [gone] }));
+        let fresh = place(&mut h, &d, 560, 200);
+        // Far above every top-level box: it fits only if it is counted itself, and only below the
+        // canvas's least zoom.
+        let nested = edit(&mut h, "diagram.note", serde_json::json!({ "diagram": diagram, "text": "check", "parent": kept, "x": 300, "y": -60000 }));
+        let joins = edit(&mut h, "er.relationship.add", serde_json::json!({ "from": a, "to": d, "name": "joins", "create_foreign_key": false }));
+        let line = edit(&mut h, "diagram.connect", serde_json::json!({ "diagram": diagram, "element": joins, "source": kept, "target": fresh }));
+        list_still(&mut h);
+        host.reads.lock().unwrap().clear();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let row = h.state().versions.changes.iter().find(|r| r.area == Area::Diagram && r.id.to_string() == fresh).unwrap();
+        let row = format!("workspace.versions.change.{}.{}", row.id, row.class.0);
+        tap(&mut h, &row);
+        frames_until(&mut h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        assert!(asked(&host).is_empty() && h.state().session.as_ref().unwrap().revision() == revision, "it only reads what is held");
+        test(&mut h, &[shop.clone(), diagram.clone(), kept, gone, fresh, nested, line, renamed]);
+    });
+}
+
+/// Whether a shape `test` takes was painted.
+fn shape_painted(h: &Harness<'static, Shell>, test: &dyn Fn(&egui::Shape) -> bool) -> bool {
+    /// Whether `s`, or a shape it holds, is one `test` takes.
+    fn walk(s: &egui::Shape, test: &dyn Fn(&egui::Shape) -> bool) -> bool {
+        if let egui::Shape::Vec(v) = s { v.iter().any(|s| walk(s, test)) } else { test(s) }
+    }
+    h.output().shapes.iter().any(|c| walk(&c.shape, test))
+}
+
+/// A box that stayed is in the same place on both sides, however the canvas was last left, and
+/// the framing takes in what only one side holds.
+#[test]
+fn a_diagrams_two_sides_share_one_framing() {
+    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line, _]| {
+        let at = |h: &Harness<'static, Shell>, thing: &str, id: &str| rect_of(h, &format!("workspace.change-view.{thing}.{id}"));
+        let (before, after, was) = (rect_of(h, BEFORE), rect_of(h, AFTER), at(h, "before.node", kept));
+        assert_eq!(h.query_all_by_label("Billing, Commerce platform, Changed").count(), 1, "the diagram's title, not its box's");
+        let moved = at(h, "after.node", kept).translate(egui::vec2(before.left() - after.left(), 0.0));
+        assert!((moved.min - was.min).length() < 0.01 && (moved.max - was.max).length() < 0.01, "{moved:?} {was:?}");
+        assert!(before.contains_rect(at(h, "before.node", gone)) && after.contains_rect(at(h, "after.node", fresh)));
+        assert!(after.contains_rect(at(h, "after.node", nested)) && after.contains_rect(at(h, "after.edge", line)));
+        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.4, egui::vec2(90.0, 70.0));
+        h.run_steps(2);
+        assert_eq!(at(h, "before.node", kept), was, "how the canvas was left is no part of it");
+        let put = |h: &Harness<'static, Shell>, text: &str| {
+            h.output().shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Text(t) if t.galley.text() == text && after.contains(t.pos)))
+        };
+        // Then wide: a bend far right, and the near end's text put far left from that end, which is
+        // further than from the line's middle; then tall the same way, with the far end's text.
+        edit(h, "diagram.unplace", serde_json::json!({ "nodes": [nested] }));
+        edit(h, "diagram.route", serde_json::json!({ "edge": line, "points": [{ "x": 60000, "y": 100 }] }));
+        edit(h, "diagram.label", serde_json::json!({ "edge": line, "kind": "from_end", "at": "source", "dx": -60000 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, &format!("workspace.change-view.after.node.{nested}")));
+        let wide = at(h, "after.edge", line);
+        assert!(after.contains_rect(wide) && put(h, "1"), "the bend and the near end's text");
+        edit(h, "diagram.route", serde_json::json!({ "edge": line, "points": [{ "x": 0, "y": -120000 }] }));
+        edit(h, "diagram.label", serde_json::json!({ "edge": line, "kind": "to_end", "at": "target", "dy": 120000 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && at(h, "after.edge", line) != wide);
+        assert!(after.contains_rect(at(h, "after.edge", line)) && put(h, "0..*"), "the bend and the far end's text");
+    });
+}
+
+/// Each side marks what it holds that differs, nested boxes and lines too, and only that.
+#[test]
+fn each_side_of_a_diagram_marks_what_differs_on_it() {
+    diagram_compared(|h, [_, _, kept, gone, fresh, nested, line, renamed]| {
+        let on = |side: &str, id: &str| has_id(h, &format!("workspace.change-view.{side}.mark.{id}"));
+        assert!(
+            on("before", renamed) && on("after", renamed) && on("before", gone) && on("after", fresh) && on("after", nested) && on("after", line)
+        );
+        assert!(
+            !on("before", kept) && !on("after", kept) && !on("after", gone) && !on("before", fresh) && !on("before", nested) && !on("before", line)
+        );
+        for said in ["renamed, Changed, Go to client", "client, Changed, Go to client", "gone, Removed", "fresh, Added"] {
+            assert_eq!(h.query_all_by_label(said).count(), 1, "{said}");
+        }
+        let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
+        let ink = |kind| crate::versions::kind_look(kind, p).1;
+        let outlined = |side: &str, id: &str, kind| {
+            let area = rect_of(h, &format!("workspace.change-view.{side}.node.{id}"));
+            shape_painted(
+                h,
+                &|s| matches!(s, egui::Shape::Rect(r) if r.rect == area && r.stroke == egui::Stroke::new(2.0, ink(kind)) && r.stroke_kind == egui::StrokeKind::Outside),
+            )
+        };
+        assert!(outlined("after", fresh, ChangeKind::Added) && outlined("after", nested, ChangeKind::Added));
+        assert!(outlined("before", gone, ChangeKind::Removed) && outlined("before", renamed, ChangeKind::Changed));
+        assert!(!outlined("after", kept, ChangeKind::Added) && !outlined("after", kept, ChangeKind::Changed));
+        let added = egui::epaint::ColorMode::Solid(ink(ChangeKind::Added));
+        assert!(shape_painted(h, &|s| matches!(s, egui::Shape::Path(l) if l.stroke.width == 2.0 && l.stroke.color == added)), "the line");
+        let mark = |h: &Harness<'static, Shell>, id: &str| rect_of(h, &format!("workspace.change-view.after.mark.{id}"));
+        let (put, boxed) = (mark(h, fresh), rect_of(h, &format!("workspace.change-view.after.node.{fresh}")));
+        assert!((put.left() - boxed.left()).abs() < 0.01 && put.bottom() < boxed.top(), "above its box, from its left: {put:?} {boxed:?}");
+        // So far right that the box is narrowed at the edge, and its label would run past it.
+        let was = mark(h, renamed);
+        edit(h, "diagram.move", serde_json::json!({ "nodes": [renamed], "dx": 200000, "dy": 0 }));
+        list_still(h);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && mark(h, renamed) != was);
+        assert!(rect_of(h, AFTER).contains_rect(mark(h, renamed)), "{:?} {:?}", mark(h, renamed), rect_of(h, AFTER));
+    });
+}
+
+/// The two sides move and zoom together by the keys of either, by plain keys only, and by the wheel
+/// over either; 0 fits them again, and so does opening the diagram again.
+#[test]
+fn a_diagrams_two_sides_move_together() {
+    diagram_compared(|h, [_, _, kept, ..]| {
+        let row = h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap();
+        let at = |h: &Harness<'static, Shell>, side: &str| rect_of(h, &format!("workspace.change-view.{side}.node.{kept}"));
+        let near = |a: egui::Rect, b: egui::Rect| (a.min - b.min).length() < 0.01 && (a.max - b.max).length() < 0.01;
+        let shown = |h: &Harness<'static, Shell>| {
+            let (before, after) = (at(h, "before"), at(h, "after").translate(egui::vec2(rect_of(h, BEFORE).left() - rect_of(h, AFTER).left(), 0.0)));
+            assert!(near(before, after), "one framing: {before:?} {after:?}");
+            before
+        };
+        let press = |h: &mut Harness<'static, Shell>, modifiers, key| {
+            h.key_press_modifiers(modifiers, key);
+            h.run_steps(2);
+            shown(h)
+        };
+        let fitted = shown(h);
+        tap(h, AFTER);
+        assert!(focused_on(h, AFTER), "a click gives the side the keys");
+        assert!(near(press(h, egui::Modifiers::COMMAND, egui::Key::ArrowRight), fitted), "a chord stays the window's");
+        let right = press(h, egui::Modifiers::NONE, egui::Key::ArrowRight);
+        assert!(near(right, fitted.translate(egui::vec2(-40.0, 0.0))), "{right:?}");
+        let down = press(h, egui::Modifiers::NONE, egui::Key::ArrowDown);
+        assert!(near(down, right.translate(egui::vec2(0.0, -40.0))), "{down:?}");
+        let bigger = press(h, egui::Modifiers::NONE, egui::Key::Plus);
+        assert!((bigger.width() - down.width() * 1.25).abs() < 0.01, "{bigger:?}");
+        let smaller = press(h, egui::Modifiers::NONE, egui::Key::Minus);
+        assert!(near(smaller, down), "{smaller:?}");
+        assert!(near(press(h, egui::Modifiers::NONE, egui::Key::Num0), fitted), "0 fits again");
+        h.event(egui::Event::PointerMoved(rect_of(h, BEFORE).center()));
+        let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, -30.0), egui::Modifiers::NONE);
+        h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+        h.run_steps(8);
+        let wheeled = shown(h);
+        assert!(wheeled.top() < fitted.top() - 1.0 && (wheeled.left() - fitted.left()).abs() < 0.01, "{wheeled:?}");
+        tap(h, &row);
+        assert!(near(shown(h), fitted), "opening it again fits it again");
+    });
+}
+
+/// A mark whose element differs too opens that element's change, by a click or by Enter once Tab
+/// has brought it into view; a mark whose element doesn't differ is no link.
+#[test]
+fn a_diagrams_marks_link_to_their_elements_changes() {
+    diagram_compared(|h, [_, _, _, gone, _, _, line, renamed]| {
+        let mark = |side: &str, id: &str| format!("workspace.change-view.{side}.mark.{id}");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| (o.row.area, o.row.name.clone()));
+        let (diagram, row) =
+            (opened(h), h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap());
+        tap(h, &mark("before", gone));
+        h.run_steps(2);
+        assert_eq!(opened(h), diagram, "gone's element is not listed");
+        tap(h, BEFORE);
+        for _ in 0..30 {
+            h.key_press(egui::Key::ArrowLeft);
+        }
+        h.run_steps(2);
+        let link = mark("before", renamed);
+        assert!(!has_id(h, &link), "moved out of sight with its box");
+        for _ in 0..12 {
+            if !focused_on(h, &link) {
+                h.key_press(egui::Key::Tab);
+                h.run_steps(2);
+            }
+        }
+        assert!(focused_on(h, &link) && rect_of(h, BEFORE).contains_rect(rect_of(h, &link)), "Tab reached it and brought it into view");
+        h.key_press(egui::Key::Enter);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+        assert_eq!(opened(h), Some((Area::Model, Some("client".into()))), "Enter opens the renamed element");
+        tap(h, &row);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        tap(h, &mark("after", line));
+        h.run_steps(2);
+        assert_eq!(opened(h), Some((Area::Model, Some("joins".into()))), "a click opens the added relationship");
+    });
+}
+
+/// Above the sides, what differs in the model and in the layout is said apart, and a side with
+/// nothing says so and that the other alone changed.
+#[test]
+fn a_diagrams_model_and_layout_changes_are_said_apart() {
+    use archforge_notations::differences::{Apart, DiagramSides, Placed, Placing};
+    diagram_compared(|h, _| {
+        let said = [
+            "Model, 1 element added · 1 element changed, client, joins",
+            "Layout, 2 boxes placed · 1 box taken off · 1 line drawn, Unnamed, fresh, gone, joins",
+        ];
+        for words in said {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        let (model, layout) = (rect_of(h, "workspace.change-view.model"), rect_of(h, "workspace.change-view.layout"));
+        assert!(model.right() < layout.left() && layout.bottom() < rect_of(h, BEFORE).top(), "side by side, above the sides");
+        let (id, key) = (h.state().versions.element.as_ref().unwrap().row.id, h.state().versions.compared.clone().unwrap());
+        /// An item of a kept-apart difference named `name`.
+        fn item<K>(kind: K, name: &str, line: bool) -> Placed<K> {
+            Placed { id: Uuid([3; 16]), kind, name: Some(name.into()), line }
+        }
+        let only = |h: &mut Harness<'static, Shell>, apart: Apart| {
+            let sides = DiagramSides { id, name: None, path: Vec::new(), before: None, after: None, marks: Default::default(), apart };
+            let sides = crate::change_view::Sides::Diagram(std::sync::Arc::new(std::sync::Mutex::new(sides)));
+            reading(h, id, key.clone()).send(Ok(Some(sides))).unwrap();
+            h.run_steps(1);
+        };
+        only(h, Apart { model: vec![item(ChangeKind::Removed, "order", false)], ..Default::default() });
+        for words in ["Model, 1 element removed, order", "Layout, The layout didn't change, Only the model changed."] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the model changed, the layout did not: {words}");
+        }
+        only(h, Apart { layout: vec![item(Placing::Moved, "order", false), item(Placing::Changed, "joins", true)], ..Default::default() });
+        for words in ["Model, The model didn't change, Only the layout changed.", "Layout, 1 box moved · 1 line changed, order, joins"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the layout changed, the model did not: {words}");
+        }
+        only(h, Apart { itself: true, ..Default::default() });
+        let own = "Layout, The diagram's own details changed, Such as its name, or the order its boxes are drawn in.";
+        for words in ["Model, The model didn't change, Only the layout changed.", own] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        // An empty diagram that came or went draws no box or line, and still says so.
+        for (kind, own) in [
+            (ChangeKind::Added, "This diagram was added, It has no boxes or lines yet."),
+            (ChangeKind::Removed, "This diagram was removed, It had no boxes or lines."),
+        ] {
+            only(h, Apart { diagram: Some(kind), ..Default::default() });
+            for words in ["Model, The model didn't change, Only the layout changed.".to_string(), format!("Layout, {own}")] {
+                assert_eq!(h.query_all_by_label(&words).count(), 1, "{words}");
+            }
+        }
+        only(h, Apart::default());
+        for words in ["Model, The model didn't change", "Layout, The layout didn't change"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "nothing on either: {words}");
+        }
+    });
+}
+
+/// A side the diagram is not on says so, the title says what happened to it, and a failed read names a diagram.
+#[test]
+fn a_side_the_diagram_is_not_on_says_so() {
+    diagram_compared(|h, [shop, diagram, ..]| {
+        edit(h, "diagram.add", serde_json::json!({ "kind": "er", "element": shop, "name": "Extra" }));
+        list_still(h);
+        open_change(h, "Extra");
+        assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
+        assert_eq!(h.query_all_by_label("Extra, Commerce platform, Added").count(), 1, "the title");
+        assert_eq!(h.query_all_by_label("Layout, This diagram was added, It has no boxes or lines yet.").count(), 1, "empty, yet added");
+        edit(h, "diagram.remove", serde_json::json!({ "diagram": diagram }));
+        list_still(h);
+        open_change(h, "Billing");
+        assert_eq!(h.query_all_by_label("After, Removed").count(), 1);
+        assert_eq!(h.query_all_by_label("Billing, Commerce platform, Removed").count(), 1, "the title");
+        let (id, key) = (h.state().versions.element.as_ref().unwrap().row.id, h.state().versions.compared.clone().unwrap());
+        reading(h, id, key).send(Err("broken".into())).unwrap();
+        h.run_steps(1);
+        assert_eq!(h.query_all_by_label("This diagram couldn't be compared.").count(), 1);
     });
 }
 
@@ -1222,7 +1660,7 @@ fn an_edit_under_way_holds_the_comparison() {
 
 /// A side of `name`, a schema.
 fn schema(name: &str) -> Option<ElementCard> {
-    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()) })
+    Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false })
 }
 
 /// A field of the enumeration-typed Visibility with these values.
@@ -1297,9 +1735,9 @@ fn what_differs_is_marked_with_a_sign_and_a_tint() {
         assert_eq!((named(h, "Schema, was, Changed"), named(h, "Schema, is, Changed")), (1, 1), "a rename: {:?}", painted(h));
         assert_eq!((painted_times(h, "\u{2212}"), painted_times(h, "+")), (1, 1));
         assert!(filled(h, &format!("{BEFORE}.name"), p.danger_tint) && filled(h, &format!("{AFTER}.name"), p.green_tint));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()) });
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: Some("kept".into()), made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("kept"), entity, Vec::new()))));
-        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Entity, kept, Changed")), (1, 1), "a new kind");
+        assert_eq!((named(h, "Schema, kept, Changed"), named(h, "Table, kept, Changed")), (1, 1), "a new kind");
     });
 }
 
@@ -1331,14 +1769,13 @@ fn says(h: &Harness<'static, Shell>, head: &str, body: &str) {
 fn the_summary_says_added_or_removed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        says(h, "This element was added", &format!("It is only on the After side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
         landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
-        says(h, "This element was removed", &format!("It is only on the Before side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
     });
 }
 
-/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all;
-/// members are said not to be shown, so the count isn't read as all there is.
+/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all.
 #[test]
 fn the_summary_counts_and_says_each_difference() {
     in_both(|h, host| {
@@ -1347,11 +1784,11 @@ fn the_summary_counts_and_says_each_difference() {
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
         let fields = vec![visibility.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
-        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None });
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
+        let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None, made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
-        let said = "The name changed from was to Unnamed. The kind changed from Schema to Entity. Visibility changed from Not set to Private.";
-        says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
+        let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
+        says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1365,7 +1802,7 @@ fn the_summary_counts_what_it_does_not_write_out() {
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
             landed(h, id, key.clone(), Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-            says(h, &format!("{n} values changed"), &format!("{three}{more} {NOT_SHOWN}"));
+            says(h, &format!("{n} values changed"), &format!("{three}{more} {MARKED}"));
         }
     });
 }
@@ -1378,7 +1815,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         let said = "Visibility is only on the Before side. Visibility is only on the After side.";
-        says(h, "2 values changed", &format!("{said} {NOT_SHOWN}"));
+        says(h, "2 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1390,10 +1827,10 @@ fn unmarked_cards_never_read_as_nothing_changed() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "Only what these cards don't show changed", &format!("The cards show the same on both sides. {NOT_SHOWN}"));
+        says(h, "Only what these cards don't show changed", "The cards show the same on both sides.");
         h.state_mut().versions.compare_failed = Some("the list failed".into());
         h.run_steps(1);
-        says(h, "The cards show no difference", NOT_SHOWN);
+        says(h, "The cards show no difference", "The cards show the same on both sides.");
     });
 }
 
@@ -1405,7 +1842,7 @@ fn the_summary_cuts_a_long_value() {
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {NOT_SHOWN}", "x".repeat(40)));
+        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {MARKED}", "x".repeat(40)));
         assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
     });
 }
@@ -1431,7 +1868,7 @@ fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>
 
 /// A list of `kind` holding rows that say each `(words, change)`.
 fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
-    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, change };
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, to: None, note: String::new(), change };
     CardList { kind, rows: rows.into_iter().map(row).collect() }
 }
 
@@ -1479,7 +1916,51 @@ fn a_missing_name_is_said_in_words() {
         assert_eq!(named(h, "Ownership, None"), 1);
         let lists = CardLists { before: owner(Named::Unnamed), after: owner(Named::Said(String::new())), ..CardLists::default() };
         landed(h, id, key, listed(id, "a", lists));
-        assert_eq!(named(h, "Ownership, Attribute"), 2, "a nameless row goes by its kind");
+        assert_eq!(named(h, "Ownership, Column"), 2, "a nameless row goes by its kind");
+    });
+}
+
+/// A relationship reads as what it joins to, after its role, or after its kind when it has none, with
+/// its far end's multiplicity, and says when this side has nothing at its far end.
+#[test]
+fn a_relationship_reads_as_what_it_joins_to() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let row = |class, name: &str, to: Named, change| {
+            let note = if name.is_empty() { String::new() } else { " [1..*]".to_owned() };
+            ListRow { id: Uuid([9; 16]), class, name: Named::Said(name.into()), to: Some((None, to)), note, change }
+        };
+        let side = |far: Named| {
+            let rows = vec![
+                row(archforge_uml::ASSOCIATION, "lines", Named::Said("OrderLine".into()), None),
+                row(archforge_uml::GENERALIZATION, "", Named::Said("Shape".into()), None),
+                row(archforge_er::RELATIONSHIP, "", far, Some(ChangeKind::Changed)),
+            ];
+            vec![CardList { kind: ListKind::Relationships, rows }]
+        };
+        let lists = CardLists { before: side(Named::Unavailable), after: side(Named::Said("order".into())), ..CardLists::default() };
+        landed(h, id, key, listed(id, "a", lists));
+        assert_eq!(named(h, "Relationships, lines \u{2192} OrderLine [1..*]"), 2, "{:?}", painted(h));
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} Shape"), 2, "no role: its kind");
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} Not available on this side, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} order, Changed"), 1);
+        assert_eq!(painted_times(h, "RELATIONSHIPS"), 2);
+    });
+}
+
+/// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
+/// whose words differing is no renaming.
+#[test]
+fn an_er_element_reads_in_its_notations_words() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let line = |name: &str| Some(ElementCard { class: archforge_er::ENTITY, name: Some(name.into()), made: true });
+        let rows = |words: &str| vec![list(ListKind::Columns, vec![(Named::Made(words.into()), None)])];
+        let lists = CardLists { before: rows("a → b"), after: rows("c → b"), ..CardLists::default() };
+        landed(h, id, key, Ok(Some(ElementSides { lists: Arc::new(lists), ..sided(id, line("a → b"), line("c → b"), Vec::new()) })));
+        assert_eq!((named(h, "Table, a → b"), named(h, "Table, c → b")), (1, 1), "unmarked: {:?}", painted(h));
+        assert_eq!((named(h, "Columns, a → b"), named(h, "Columns, c → b")), (1, 1));
+        assert!(!painted_has(h, "The name changed"), "{:?}", painted(h));
     });
 }
 
@@ -1509,7 +1990,7 @@ fn a_long_list_draws_only_rows_in_view() {
     });
 }
 
-/// Members that differ are counted beside the values, the same count however many rows hold it;
+/// Members and relationships that differ are counted beside the values, the same count however many rows hold it;
 /// a changed owner is said in words, past the sentences a summary cuts, and is no value in the count.
 #[test]
 fn the_summary_counts_members_and_says_the_owner() {
@@ -1517,21 +1998,31 @@ fn the_summary_counts_members_and_says_the_owner() {
         let (id, key) = element_open(h, host);
         let some = |n| CardLists { member_changes: n, ..CardLists::default() };
         landed(h, id, key.clone(), listed(id, "a", some(2)));
-        says(h, "2 members changed", NOT_SHOWN);
+        says(h, "2 members changed", MARKED);
+        let joined = |members, relationships| CardLists { member_changes: members, relationship_changes: relationships, ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "a", joined(0, 1)));
+        says(h, "1 relationship changed", MARKED);
+        let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(joined(1, 2)), ..sided(id, schema("a"), schema("a"), fields) })));
+        says(
+            h,
+            "1 value changed \u{b7} 1 member changed \u{b7} 2 relationships changed",
+            &format!("Visibility changed from Not set to Private. {MARKED}"),
+        );
         let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
-        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
-        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n };
+        let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
-        says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
+        says(h, "The owner changed", &format!("The owner changed. {MARKED}"));
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
         landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {NOT_SHOWN}"));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {MARKED}"));
         landed(h, id, key, with_owner(vec![changed; 4]));
         let one = "Visibility changed from Not set to Private.";
-        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {NOT_SHOWN}"));
+        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {MARKED}"));
     });
 }
 
@@ -1723,7 +2214,7 @@ fn viewing(h: &mut Harness<'static, Shell>, host: &SavingHost, row: &str) {
 }
 
 /// The details ask before anything starts and say what the restore makes, unsaved work included;
-/// Cancel starts nothing, and the job is told the date the question quotes.
+/// Cancel starts nothing, and the job is told the dates the question quotes.
 #[test]
 fn the_details_ask_first_and_say_what_a_restore_makes() {
     in_both(|h, host| {
@@ -1735,10 +2226,10 @@ fn the_details_ask_first_and_say_what_a_restore_makes() {
         add_schema(h, "shop");
         list_still(h);
         asking(h, "c3");
-        assert!(painted_has(h, "\"Before restoring\""), "the last version is on offer with unsaved work: {:?}", painted(h));
+        assert!(painted_has(h, "\"Before restoring 9 Nov 13:00\""), "the last version is on offer with unsaved work: {:?}", painted(h));
         let _job = restoring(h, host, "c3");
         assert!(h.state().is_held() && h.state().ask.is_none());
-        assert_eq!(*host.restore_dates.lock().unwrap(), ["7 Nov 17:15"]);
+        assert_eq!(*host.restore_dates.lock().unwrap(), [("7 Nov 17:15".to_string(), "9 Nov 13:00".to_string())], "the dates quoted");
     });
 }
 
@@ -1775,11 +2266,132 @@ fn restore_is_not_offered_for_current_work_or_an_unreadable_version() {
     });
 }
 
-/// A failure brings the question back saying what happened, with Retry unless trying again can't
-/// help; one before anything is written says that nothing changed.
+const BRANCH: &str = "workspace.version-details.branch";
+const BRANCH_ON_BANNER: &str = "workspace.banner.branch";
+
+/// Opens Start a branch here… with `start` on a project on `main`, and names the branch Fresh.
+fn branching(h: &mut Harness<'static, Shell>, host: &SavingHost, start: &str) {
+    *host.branch_now.lock().unwrap() = Some("main".into());
+    h.run_steps(1);
+    tap(h, start);
+    h.run_steps(2);
+    h.event(egui::Event::Text("Fresh".into()));
+    h.run_steps(2);
+}
+
+/// Create on the dialog up; gives the branches the host was asked to make and where each starts.
+fn made_at(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, Option<String>)> {
+    tap(h, "branch-ask.create");
+    h.run_steps(2);
+    let names = host.branch_makes.lock().unwrap().iter().map(|m| m.0.clone()).collect::<Vec<_>>();
+    names.into_iter().zip(host.branch_starts.lock().unwrap().iter().cloned()).collect()
+}
+
+/// The details start a branch at their version, named with its date and description; unsaved work
+/// shown is said to stay. Made, the dialog closes and the switch to the new branch starts.
+#[test]
+fn the_details_start_a_branch_at_their_version_and_switch_to_it() {
+    in_both(|h, host| {
+        add_schema(h, "shop");
+        list_still(h);
+        opened(h, "c2");
+        branching(h, host, BRANCH);
+        let said = ["Start a branch here", "It starts from the version of 7 Nov 09:20 · First classes. Your unsaved changes stay on main."];
+        assert!(said.iter().all(|w| painted_has(h, w)) && !painted_has(h, "Viewing ends"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// The banner starts a branch at the version in view, saying viewing ends there; made, the switch
+/// leaves the version for the new branch.
+#[test]
+fn the_banner_starts_a_branch_and_viewing_ends_on_it() {
+    in_both(|h, host| {
+        viewing(h, host, "c2");
+        branching(h, host, BRANCH_ON_BANNER);
+        let said = "It starts from the version of 7 Nov 09:20. Viewing ends on the new branch.";
+        assert!(painted_has(h, said) && !painted_has(h, "stay on"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        assert_eq!(h.state().viewing(), Some("c2"), "still viewing while the host works");
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().viewing().is_none() && h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// A branch starts at any version that can be read, the last one too, in the details or the banner,
+/// and at none that can't; nor with no branches kept.
+#[test]
+fn start_a_branch_is_not_offered_on_an_unreadable_version() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        assert!(!has_id(h, BRANCH), "no branches kept");
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        assert!(has_id(h, BRANCH), "the last version");
+        h.state_mut().versions.unavailable.insert("c2".into(), Some("gone".into()));
+        opened(h, "c2");
+        assert!(has_id(h, VIEW) && !has_id(h, BRANCH), "unreadable");
+        h.state_mut().versions.unavailable.clear();
+        viewing(h, host, "c2");
+        assert!(has_id(h, BRANCH_ON_BANNER), "in view");
+        h.state_mut().versions.unavailable.insert("c2".into(), None);
+        h.run_steps(1);
+        assert!(!has_id(h, BRANCH_ON_BANNER), "unreadable in view");
+    });
+}
+
+/// In every language the bundled faces draw, at the narrowest centre beside the explorer and at the
+/// least window width, the details' four actions wrap rather than pass the centre column's right
+/// edge, and what the details show under them starts below their last line. Japanese and Chinese
+/// draw with an installed family, which a test can't count on, and their labels are shorter.
+#[test]
+fn the_details_actions_wrap_inside_a_narrow_centre() {
+    let actions = [VIEW, "workspace.version-details.compare", RESTORE, BRANCH];
+    in_both(|h, host| {
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        opened(h, "c2");
+        for language in crate::i18n::LANGUAGES.iter().filter(|l| !["ja", "zh-Hans"].contains(&l.code)) {
+            h.state_mut().state.language = language.code.into();
+            // 796 leaves the centre its least width beside the explorer; 640 hides the explorer.
+            for (width, explorer) in [(796.0, true), (640.0, false)] {
+                h.set_size(egui::vec2(width, 860.0));
+                h.run_steps(2);
+                assert_eq!(has_id(h, "workspace.versions.row.c2"), explorer, "{width}");
+                let left = rect_of(h, "workspace.version-details.close").left() - crate::version_details::MARGIN;
+                // The right rail's buttons sit 4 points inside it, and it starts where the centre ends.
+                let right = rect_of(h, "workspace.panels.agent").left() - 4.0;
+                for id in actions {
+                    let at = rect_of(h, id);
+                    assert!(at.left() >= left && at.right() <= right, "{}: {width}: {id} {at:?} outside {left}..{right}", language.code);
+                }
+                let lowest = actions.iter().map(|id| rect_of(h, id).bottom()).fold(0.0, f32::max);
+                let below = h
+                    .state()
+                    .widgets()
+                    .iter()
+                    .filter(|w| w.id.starts_with("workspace.version-details.") && !actions.contains(&w.id.as_str()) && !w.id.ends_with(".close"))
+                    .map(|w| w.rect[1])
+                    .fold(f32::MAX, f32::min);
+                assert!(below < f32::MAX && below > lowest, "{}: {width}: {below} under {lowest}", language.code);
+            }
+        }
+        h.state_mut().state.language = "en".into();
+    });
+}
+
+/// A failure brings the question back saying what happened, with Retry unless the host says the
+/// version is the same as current work, which trying again can't change, the work kept or not; one
+/// before anything is written says that nothing changed.
 #[test]
 fn a_failure_comes_back_and_says_what_happened() {
-    use crate::replace::JobFailure::{Failed, WorkSaved};
+    use crate::replace::JobFailure::{Failed, Same, WorkSaved};
     in_both(|h, host| {
         asking(h, "c2");
         let (ended, _reading) = restoring(h, host, "c2");
@@ -1792,9 +2404,23 @@ fn a_failure_comes_back_and_says_what_happened() {
                 && !h.state().is_held()
         );
         let (ended, _reading) = restoring(h, host, "c2");
-        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        ended.send(Err(Same { work_saved: false })).unwrap();
         h.run_steps(4);
         assert!(painted_has(h, "This version is the same") && !has_id(h, GO), "nothing to try again");
+        tap(h, CLOSE);
+        add_schema(h, "same");
+        list_still(h);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Same { work_saved: true })).unwrap();
+        h.run_steps(4);
+        assert!(painted_has(h, "Your unsaved work was kept") && !has_id(h, GO) && !h.state().shown_unsaved(), "{:?}", painted(h));
+        tap(h, CLOSE);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        h.run_steps(4);
+        assert!(has_id(h, GO), "only the typed reason ends retrying");
         tap(h, CLOSE);
         assert!(h.state().ask.is_none() && h.state().versions.details.is_some());
         tap(h, RESTORE);
@@ -1804,6 +2430,117 @@ fn a_failure_comes_back_and_says_what_happened() {
         answer(host, "c2", Err("gone".to_string().into()));
         h.run_steps(4);
         assert!(painted_has(h, "gone Nothing was changed.") && has_id(h, GO), "{:?}", painted(h));
+    });
+}
+
+/// A restore that fails behind another question says so, in the words it ended with, once that one
+/// closes and its project shows again; once another session has replaced the one it ended on, it
+/// is dropped.
+#[test]
+fn a_restore_failure_waits_for_the_question_up_when_it_ends() {
+    use crate::close_ask::Ask;
+    use crate::replace::JobFailure::Failed;
+    in_both(|h, host| {
+        let fail_behind_a_question = |h: &mut Harness<'static, Shell>| {
+            crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+            h.run_steps(2);
+            let (ended, _reading) = restoring(h, host, "c2");
+            h.state_mut().ask = Some(Ask::Unsaved { path: h.state().project.as_ref().unwrap().path.clone() });
+            ended.send(Err(Failed("Gone.".into()))).unwrap();
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })) && !h.state().is_held());
+        };
+        fail_behind_a_question(h);
+        let tab = h.state().active.unwrap();
+        h.state_mut().ask = None;
+        // Another ending meanwhile changes neither the failure's words nor the session it ended on.
+        h.state_mut().give_up(Some("Later.".into()));
+        h.state_mut().stash();
+        h.run_steps(2);
+        assert!(h.state().ask.is_none() && h.state().versions.restoring.is_some(), "kept while another project shows");
+        h.state_mut().activate(tab);
+        h.run_steps(3);
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
+        tap(h, CLOSE);
+        h.run_steps(2);
+        fail_behind_a_question(h);
+        let rows = rows_now(h);
+        (h.state_mut().session, h.state_mut().ask) = (Some(h.state().build(&rows).unwrap()), None);
+        crate::restore_ask::keep(h.state_mut());
+        assert!(h.state().ask.is_none() && h.state().versions.restoring.is_none());
+    });
+}
+
+/// Save answered to another tab's question shows that tab and closes it: a restore failure kept
+/// meanwhile isn't shown over that tab's session, and is shown once its own session shows again.
+#[test]
+fn a_restore_failure_outlasts_saving_and_closing_another_tab() {
+    use crate::close_ask::Ask;
+    in_both(|h, host| {
+        add_schema(h, "shop");
+        let (library, commerce) = (std::path::PathBuf::from("/tmp/Library.archforge"), commerce().path);
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library, ..Default::default() });
+        h.run_steps(2);
+        add_schema(h, "books");
+        let ended_on = h.state().session.as_ref().unwrap().history();
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        let (ended, _reading) = restoring(h, host, "c2");
+        h.state_mut().ask = Some(Ask::Unsaved { path: commerce.clone() });
+        ended.send(Err(crate::replace::JobFailure::Failed("Gone.".into()))).unwrap();
+        h.run_steps(4);
+        tap(h, "close-ask.save");
+        h.run_steps(3);
+        assert!(h.state().project.as_ref().is_some_and(|p| p.path == commerce) && h.state().ask.is_none(), "not over Commerce");
+        assert!(h.state().versions.restoring.is_some(), "kept");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
+        h.run_steps(3);
+        host.closings.lock().unwrap().pop().unwrap().send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state().session.as_ref().map(|s| s.history()), Some(ended_on), "Library's own session shows again");
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
+    });
+}
+
+/// While a restore failure waits in another open project, no restore starts here: the details and
+/// the banner offer it off and say why, and a question asked before is refused with those words, so
+/// the failure is still told once its project shows again.
+#[test]
+fn a_restore_failure_kept_elsewhere_holds_restoring_back() {
+    use crate::close_ask::Ask;
+    in_both(|h, host| {
+        let library = std::path::PathBuf::from("/tmp/Library.archforge");
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+        h.run_steps(2);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        let (ended, _reading) = restoring(h, host, "c2");
+        h.state_mut().ask = Some(Ask::Unsaved { path: library });
+        ended.send(Err(crate::replace::JobFailure::Failed("Gone.".into()))).unwrap();
+        h.run_steps(4);
+        h.state_mut().ask = None;
+        h.state_mut().activate(0);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        let held = "A restore in Library did not finish.";
+        opened(h, "c2");
+        tap(h, RESTORE);
+        h.run_steps(2);
+        assert!(h.state().ask.is_none(), "off in the details");
+        h.event(egui::Event::PointerMoved(rect_of(h, RESTORE).center()));
+        h.run_steps(4);
+        assert!(painted_has(h, held), "{:?}", painted(h));
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        tap(h, GO);
+        h.run_steps(3);
+        assert!(!h.state().is_held() && h.state().canvas.notice.as_deref().is_some_and(|n| n.starts_with(held)), "refused");
+        viewing(h, host, "c2");
+        tap(h, ON_BANNER);
+        h.run_steps(2);
+        assert!(h.state().ask.is_none(), "off in the banner");
+        h.state_mut().activate(1);
+        h.run_steps(3);
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
     });
 }
 
@@ -1821,7 +2558,7 @@ fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
         click(&mut h, at);
         h.event(egui::Event::Text("y".into()));
         h.run();
-        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
         h.run_steps(2);
         h.event(egui::Event::Text("x".into()));
         h.run();
@@ -1838,7 +2575,7 @@ fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
             assert_eq!(h.state().is_held(), answer == "close-ask.stop-chat", "{answer}");
             assert_eq!(h.state().versions.restoring.is_some(), h.state().is_held());
         }
-        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()), None);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(h.state().ask.is_none(), "about the session left");

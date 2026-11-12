@@ -7,6 +7,10 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
 str		Open or go back to a project first	Open or go back to a project first
+str		Show a diagram first	Show a diagram first
+str		Current work is showing	Current work is showing
+str		Back to current work first	Back to current work first
+str		This project has one branch	This project has one branch
 str		Open…	Open…
 str		Save	Save
 # Generate
@@ -277,6 +281,8 @@ str		Saving…	Saving…
 str		Opening…	Opening…
 str		Saved	Saved
 str		Unsaved changes · {chord} saves	Unsaved changes · {chord} saves
+str		On {branch} · {status}	On {branch} · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
 # Chat panel
@@ -354,6 +360,9 @@ str		Open Settings	Open Settings
 str		Saved with {project}	Saved with {project}
 str		The conversations in this project cannot be read: {why}	The conversations in this project cannot be read: {why}
 str		No conversations in this project yet.	No conversations in this project yet.
+str		No conversations on this branch yet.	No conversations on this branch yet.
+str		Conversations stay on the branch where they started.	Conversations stay on the branch where they started.
+str		Ask about the model below to start one.	Ask about the model below to start one.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Conversations are kept in the project, so they travel with it and never show in another project.
 str		Delete conversation	Delete conversation
@@ -450,17 +459,28 @@ str		Restore this version?	Restore this version?
 str		The version of {what}	The version of {what}
 str		A new version with that content is added on top of the history, called "{name}".	A new version with that content is added on top of the history, called "{name}".
 str		Nothing is rewound or removed, and later versions stay in History.	Nothing is rewound or removed, and later versions stay in History.
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Your unsaved changes are saved first, as a version called "Before restoring" and the time.
+str		Your unsaved changes are saved first, as a version called "{name}".	Your unsaved changes are saved first, as a version called "{name}".
 str		You can reach them again from History.	You can reach them again from History.
 str		Undo starts fresh after a Restore.	Undo starts fresh after a Restore.
 str		Restore	Restore
 str		The restore did not finish	The restore did not finish
+str		A restore in {project} did not finish. Go to {project} to see why first.	A restore in {project} did not finish. Go to {project} to see why first.
 str		{why} Nothing was changed.	{why} Nothing was changed.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	The restore could not go ahead because the project changed or was busy, so nothing was restored.
 str		You are already on this branch.	You are already on this branch.
 str		The project stayed on its branch because it changed or was busy.	The project stayed on its branch because it changed or was busy.
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
+str		Switch to {branch}?	Switch to {branch}?
+str		Switch branch	Switch branch
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.
+str		Save version and switch	Save version and switch
+str		Switch	Switch
+str		Couldn't switch to {branch}	Couldn't switch to {branch}
+str		{why} You are still on {branch} and your work is unchanged.	{why} You are still on {branch} and your work is unchanged.
+str		{why} You are still on {branch}. Your work is saved.	{why} You are still on {branch}. Your work is saved.
+str		Switching is refused	Switching is refused
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} Your work could not be kept, so the switch was not made. You are still on {branch}.
 str		The switch did not finish, so the project stayed on its branch.	The switch did not finish, so the project stayed on its branch.
 str		The version could not be restored: {why}	The version could not be restored: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	This version is the same as your current work. Your unsaved work was kept as a version.
@@ -484,11 +504,60 @@ str		Models	Models
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	This branch
+str	branch	Current	Current
+str		Branches can't be merged yet.	Branches can't be merged yet.
+str		Only the first {n} branches are listed.	Only the first {n} branches are listed.
+str		The branches couldn't be read.	The branches couldn't be read.
+str		New branch…	New branch…
+str		New branch	New branch
+str		A branch keeps its own versions, unsaved work and conversations.	A branch keeps its own versions, unsaved work and conversations.
+str		It starts from current work on {branch}.	It starts from current work on {branch}.
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.
+str		Start a branch here	Start a branch here
+str		Start a branch here…	Start a branch here…
+str		It starts from the version of {version}.	It starts from the version of {version}.
+str		Viewing ends on the new branch.	Viewing ends on the new branch.
+str		Your unsaved changes stay on {branch}.	Your unsaved changes stay on {branch}.
+str		That name is already in use.	That name is already in use.
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	The last new branch is not cleaned up yet. Opening the project again removes it.
+str		The project changed before the branch was made, so none was made.	The project changed before the branch was made, so none was made.
+str		Couldn't make the branch: {why}	Couldn't make the branch: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge could not tell whether the branch was made. Look at Branches before trying again.
+str		Rename…	Rename…
+str		Rename branch	Rename branch
+str		The conversations and versions on this branch are not affected.	The conversations and versions on this branch are not affected.
+str		The project changed before the branch was renamed, so its name stayed.	The project changed before the branch was renamed, so its name stayed.
+str		Couldn't rename the branch: {why}	Couldn't rename the branch: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.
+str		Delete…	Delete…
+str		Delete {branch}?	Delete {branch}?
+str		Goes with the branch:	Goes with the branch:
+str		Counting what goes with it…	Counting what goes with it…
+str		What goes with it couldn't be read: {why}	What goes with it couldn't be read: {why}
+str		the host stopped without an answer	the host stopped without an answer
+plural		{n} version only on this branch	{n} version only on this branch|{n} versions only on this branch
+plural		{n} conversation	{n} conversation|{n} conversations
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · unsaved changes
+str		It leaves the project's list.	It leaves the project's list.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.
+str		There is no Undo for deleting a branch.	There is no Undo for deleting a branch.
+str		Delete branch	Delete branch
+str		Couldn't delete {branch}	Couldn't delete {branch}
+str		The project changed before the branch was deleted, so it stays.	The project changed before the branch was deleted, so it stays.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge could not tell whether the branch was deleted. Delete it again to find out.
+str		The branch stays: {why}	The branch stays: {why}
+str		At most {n} characters.	At most {n} characters.
+str		Enter a name.	Enter a name.
+str		A name has to be one line.	A name has to be one line.
+str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry
 str		No changes since the last version.	No changes since the last version.
+str		What you're typing isn't kept yet	What you're typing isn't kept yet
 str		No versions yet.	No versions yet.
+str		Shared with main up to here	Shared with main up to here
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
 str		Save version…	Save version…
@@ -503,6 +572,7 @@ str		One line, at most 200 characters. It stays in the history.	One line, at mos
 plural		{n} model element	{n} model element|{n} model elements
 str		Filter changes…	Filter changes…
 str		Filter versions…	Filter versions…
+str		Filter branches…	Filter branches…
 str		Model elements	Model elements
 str		Unnamed	Unnamed
 str		Added	Added
@@ -529,20 +599,29 @@ str		The next versions couldn't be read.	The next versions couldn't be read.
 str		{name}, selected	{name}, selected
 str		Compared with the version of {when}	Compared with the version of {when}
 str		There is no version to compare with yet.	There is no version to compare with yet.
+str		This diagram couldn't be compared.	This diagram couldn't be compared.
 str		This element couldn't be compared.	This element couldn't be compared.
 str		Attributes	Attributes
 str		Operations	Operations
 str		Literals	Literals
 str		Members	Members
+str		Relationships	Relationships
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Ownership
 str		Not available on this side	Not available on this side
-str		Relationships aren't shown here yet.	Relationships aren't shown here yet.
+str		Each difference is marked on the cards below.	Each difference is marked on the cards below.
+plural		Related change	Related change|Related changes
+str		{name} was added in this comparison.	{name} was added in this comparison.
+str		{name} was changed in this comparison.	{name} was changed in this comparison.
+str		{name} was removed in this comparison.	{name} was removed in this comparison.
+str		Go to {name}	Go to {name}
 str		Only what these cards don't show changed	Only what these cards don't show changed
 str		The cards show the same on both sides.	The cards show the same on both sides.
 str		The owner changed	The owner changed
 str		The owner changed.	The owner changed.
 plural		{n} member changed	{n} member changed|{n} members changed
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} relationship changed|{n} relationships changed
+str		{these} · {those}	{these} · {those}
 str		This element was added	This element was added
 str		It is only on the After side, so there is nothing to compare.	It is only on the After side, so there is nothing to compare.
 str		This element was removed	This element was removed
@@ -558,6 +637,30 @@ plural		{n} more value changed.	{n} more value changed.|{n} more values changed.
 str		Yes	Yes
 str		Not set	Not set
 str		Nothing here yet	Nothing here yet
+str		Layout	Layout
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} element added|{n} elements added
+plural		{n} element changed	{n} element changed|{n} elements changed
+plural		{n} element removed	{n} element removed|{n} elements removed
+plural		{n} box placed	{n} box placed|{n} boxes placed
+plural		{n} box moved	{n} box moved|{n} boxes moved
+plural		{n} box changed	{n} box changed|{n} boxes changed
+plural		{n} box taken off	{n} box taken off|{n} boxes taken off
+plural		{n} line drawn	{n} line drawn|{n} lines drawn
+plural		{n} line changed	{n} line changed|{n} lines changed
+plural		{n} line taken off	{n} line taken off|{n} lines taken off
+str		The model didn't change	The model didn't change
+str		Only the layout changed.	Only the layout changed.
+str		The layout didn't change	The layout didn't change
+str		Only the model changed.	Only the model changed.
+str		The diagram's own details changed	The diagram's own details changed
+str		Such as its name, or the order its boxes are drawn in.	Such as its name, or the order its boxes are drawn in.
+str		This diagram was added	This diagram was added
+str		It has no boxes or lines yet.	It has no boxes or lines yet.
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.
+str		This diagram was removed	This diagram was removed
+str		It had no boxes or lines.	It had no boxes or lines.
 str		Version of {when}	Version of {when}
 str		Last version	Last version
 str		No description	No description
@@ -1076,6 +1179,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
 str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
 str		{first} and {second}	{first} and {second}
+str		{first}, {second} and {third}	{first}, {second} and {third}
 plural		Show the use	Show the use|Show the {n} uses
 str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
 str		Place stereotype	Place stereotype
@@ -1552,7 +1656,6 @@ str		Domain check	Domain check
 str		Drawing	Drawing
 str		Effect	Effect
 str		Entry point	Entry point
-str		Enumeration literal	Enumeration literal
 str		Exactly one	Exactly one
 str		Execution location	Execution location
 str		Exit point	Exit point
@@ -1658,7 +1761,6 @@ str		Par	Par
 str		Parallel	Parallel
 str		Persistence	Persistence
 str		Profile application	Profile application
-str		Property	Property
 str		Read	Read
 str		Realization	Realization
 str		Redefinable template signature	Redefinable template signature

@@ -15,7 +15,7 @@ use archforge_notations::Session;
 use crate::hold::{CHAT_SETTLE_LIMIT, ChatSettling, HoldRefused};
 use crate::i18n::{fmt, tr};
 use crate::leaving::{Cleared, Leaving};
-use crate::{BranchSwitch, SavedBy, Shell, VersionRead, chat_panel, editing};
+use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel, editing};
 
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
@@ -34,6 +34,9 @@ pub enum JobFailure {
     Failed(String),
     /// It failed after saving the unsaved work as a version: the model is the work, now saved.
     WorkSaved(String),
+    /// A restore made no version, as the version is the same as current work; `work_saved` says
+    /// unsaved work was saved as a version first. Trying again can't change it.
+    Same { work_saved: bool },
     /// It gave no clear answer: what happened has to be read back.
     Unclear,
 }
@@ -83,6 +86,8 @@ pub(crate) struct Replacing {
     arrives_unsaved: Option<Arc<AtomicBool>>,
     /// The project and branch a switch moves to, kept once it has arrived.
     switching_to: Option<(PathBuf, String)>,
+    /// The ordinary Save this switch does first: its ticket once asked for, gone once it is done.
+    save_first: Option<Option<u64>>,
 }
 
 impl Replacing {
@@ -101,7 +106,8 @@ impl Replacing {
 
 impl Shell {
     /// Restores the version `commit`, saved at `saved_at`, as a new version: the version in view
-    /// gives way to current work first, and the project is held before the version is read. Refused
+    /// gives way to current work first, and the project is held before the version is read. Unsaved
+    /// work is kept under a name dated now, as the question quotes it ([`crate::restore_ask::asked_at`]). Refused
     /// as [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn restore_version(&mut self, commit: &str, saved_at: &str) -> Result<(), HoldRefused> {
         let cleared = self.clear_to_leave(Some(Leaving::Restore { commit: commit.to_string(), saved_at: saved_at.to_string() }))?;
@@ -111,7 +117,8 @@ impl Shell {
         self.leave_version();
         self.begin_hold()?;
         let by = SavedBy::Person(self.state.user_name.clone());
-        let job = host.restore_job(&path, commit.to_string(), saved_at.to_string(), by, editing::fit_tables);
+        let dates = (saved_at.to_string(), crate::restore_ask::asked_at(self));
+        let job = host.restore_job(&path, commit.to_string(), dates, by, editing::fit_tables);
         self.start_replacing(host.read_version(&path, commit.to_string()), Some(job), None, cleared);
         Ok(())
     }
@@ -121,7 +128,14 @@ impl Shell {
     /// takes the session's place once the move has finished. Refused as
     /// [`Self::clear_to_leave`] says, or without a host, with nothing changed.
     pub fn switch_branch(&mut self, branch: String) -> Result<(), HoldRefused> {
-        let cleared = self.clear_to_leave(Some(Leaving::Switch(branch.clone())))?;
+        self.start_switch(branch, false)
+    }
+
+    /// [`Self::switch_branch`], saving first when `save_first` says so: an ordinary Save inside the
+    /// hold with the automatic description, and one that fails or can't be told ends the switch there.
+    pub(crate) fn start_switch(&mut self, branch: String, save_first: bool) -> Result<(), HoldRefused> {
+        // Chat's question can't carry the Save, so with one the hold settles a running turn without asking.
+        let cleared = self.clear_to_leave((!save_first).then(|| Leaving::Switch(branch.clone())))?;
         let (Some(host), Some(path)) = (self.services.projects.clone(), self.project.as_ref().map(|p| p.path.clone())) else {
             return Err(HoldRefused::NoProject);
         };
@@ -131,6 +145,7 @@ impl Shell {
         if let Some(r) = self.replacing.as_mut() {
             r.switching_to = Some((path.clone(), branch.clone()));
             r.switch = Some(Box::new(move || host.begin_branch_switch(&path, branch)));
+            r.save_first = save_first.then_some(None);
         }
         Ok(())
     }
@@ -176,6 +191,7 @@ impl Shell {
             switch: None,
             arrives_unsaved: None,
             switching_to: None,
+            save_first: None,
         });
     }
 
@@ -189,6 +205,7 @@ impl Shell {
         if let Some(r) = self.replacing.take() {
             self.replacing = self.advance(r);
         }
+        crate::switch_ask::keep(self);
         crate::restore_ask::keep(self);
     }
 
@@ -200,7 +217,7 @@ impl Shell {
                 ChatSettling::Settled => Stage::Save,
                 ChatSettling::Refused => {
                     self.save_error = Some(tr("Chat did not finish in time, so nothing was changed."));
-                    crate::restore_ask::failed(self);
+                    crate::restore_ask::failed(self, true);
                     return None;
                 }
             },
@@ -209,6 +226,16 @@ impl Shell {
                 if !self.hand_over_held() {
                     // The rows could not be made, and the status bar already says why.
                     return self.give_up(None);
+                }
+                match r.save_first.take() {
+                    Some(None) => {
+                        r.save_first = Some(Some(self.save_held()));
+                        r.stage = Stage::Save;
+                        return Some(r);
+                    }
+                    // The save's own error, which says whether a version was made, is what is told.
+                    Some(Some(ticket)) if !matches!(self.save_state(ticket), SaveState::Saved(_)) => return self.give_up(None),
+                    _ => {}
                 }
                 if let Some(start) = r.switch.take() {
                     match start() {
@@ -264,6 +291,7 @@ impl Shell {
                         // On another branch: the status bar's reasons about the branch left go, and
                         // the project reopens here.
                         self.save_error = None;
+                        self.versions.switching = None;
                         if let Some(o) = self.project.as_mut() {
                             o.notice = None;
                         }
@@ -290,6 +318,14 @@ impl Shell {
                 Ok(Err(JobFailure::WorkSaved(why))) => {
                     self.mark_work_saved();
                     return self.give_up(Some(why));
+                }
+                Ok(Err(JobFailure::Same { work_saved })) => {
+                    let mut why = tr("This version is the same as your current work.");
+                    if work_saved {
+                        self.mark_work_saved();
+                        why = tr("This version is the same as your current work. Your unsaved work was kept as a version.");
+                    }
+                    return self.end_failed(Some(why), false);
                 }
                 // A lost reply says nothing about what happened: it is read back, never guessed.
                 Ok(Err(JobFailure::Unclear)) | Err(TryRecvError::Disconnected) => match r.read_back.take() {
@@ -318,6 +354,17 @@ impl Shell {
         Some(r)
     }
 
+    /// Asks the host for an ordinary Save inside the hold, once the latest rows are over; gives its ticket.
+    fn save_held(&mut self) -> u64 {
+        self.save_ticket += 1;
+        if let (Some(host), Some(project), Some(revision)) = (&self.services.projects, &self.project, self.written) {
+            let by = SavedBy::Person(self.state.user_name.clone());
+            self.saving = Some((host.save(&project.path, None, by), revision, self.save_ticket));
+            self.save_error = None;
+        }
+        self.save_ticket
+    }
+
     /// A session of `rows`, repaired as an opening repairs it.
     pub(crate) fn build(&self, rows: &Rows) -> Result<Session, String> {
         let Some(source) = self.services.ids.clone() else { return Err(tr("The host gives no ids for the model's elements")) };
@@ -328,12 +375,17 @@ impl Shell {
     /// stays, so nothing else tells the Versions panel to look: a job that failed may have kept
     /// the work as a version first.
     pub(crate) fn give_up(&mut self, why: Option<String>) -> Option<Replacing> {
+        self.end_failed(why, true)
+    }
+
+    /// [`Self::give_up`], saying whether trying again could change the outcome (`retry`).
+    fn end_failed(&mut self, why: Option<String>, retry: bool) -> Option<Replacing> {
         if why.is_some() {
             self.save_error = why;
         }
         self.versions.stale = true;
         self.fail_hold();
-        crate::restore_ask::failed(self);
+        crate::restore_ask::failed(self, retry);
         None
     }
 

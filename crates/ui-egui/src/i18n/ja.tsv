@@ -8,6 +8,10 @@ str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
+str		Show a diagram first	先に図を表示してください
+str		Current work is showing	現在の作業を表示しています
+str		Back to current work first	先に現在の作業に戻ってください
+str		This project has one branch	このプロジェクトのブランチは 1 つです
 str		Open…	開く…
 str		Save	保存
 # 生成
@@ -278,6 +282,8 @@ str		Saving…	保存中…
 str		Opening…	開いています…
 str		Saved	保存済み
 str		Unsaved changes · {chord} saves	未保存の変更 · {chord} で保存
+str		On {branch} · {status}	{branch} 上 · {status}
+str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
 # チャットパネル
@@ -355,6 +361,9 @@ str		Open Settings	設定を開く
 str		Saved with {project}	{project} と一緒に保存
 str		The conversations in this project cannot be read: {why}	このプロジェクトの会話を読み込めません: {why}
 str		No conversations in this project yet.	このプロジェクトにはまだ会話がありません。
+str		No conversations on this branch yet.	このブランチにはまだ会話がありません。
+str		Conversations stay on the branch where they started.	会話は開始したブランチに残ります。
+str		Ask about the model below to start one.	下でモデルについて質問すると会話を始められます。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	会話はプロジェクト内に保存されるため、プロジェクトと一緒に移動し、別のプロジェクトには表示されません。
 str		Delete conversation	会話を削除
@@ -451,17 +460,28 @@ str		Restore this version?	このバージョンを復元しますか？
 str		The version of {what}	{what} のバージョン
 str		A new version with that content is added on top of the history, called "{name}".	その内容の新しいバージョンが「{name}」という名前で履歴の先頭に追加されます。
 str		Nothing is rewound or removed, and later versions stay in History.	巻き戻しや削除は行われず、以降のバージョンも履歴に残ります。
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	未保存の変更は、まず「Before restoring」と時刻が付いたバージョンとして保存されます。
+str		Your unsaved changes are saved first, as a version called "{name}".	未保存の変更は、まず「{name}」という名前のバージョンとして保存されます。
 str		You can reach them again from History.	履歴からいつでも確認できます。
 str		Undo starts fresh after a Restore.	復元のあとは、元に戻す操作の履歴は新しく始まります。
 str		Restore	復元
 str		The restore did not finish	復元は完了しませんでした
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} での復元が完了しませんでした。先に {project} に移動して理由を確認してください。
 str		{why} Nothing was changed.	{why} 何も変更されていません。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	プロジェクトが変更されたか使用中だったため、復元を実行できず、何も復元しませんでした。
 str		You are already on this branch.	すでにこのブランチにいます。
 str		The project stayed on its branch because it changed or was busy.	プロジェクトが変更されたか使用中だったため、現在のブランチのままです。
 str		Your latest changes could not be written, so the project stayed on its branch.	最新の変更を書き込めなかったため、プロジェクトは現在のブランチのままです。
 str		The project stayed on its branch: {why}	プロジェクトは現在のブランチのままです: {why}
+str		Switch to {branch}?	{branch} に切り替えますか？
+str		Switch branch	ブランチを切り替え
+str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} には未保存の変更があります。変更は {branch} に残り、戻ったときにそのままあります。以前の操作は元に戻せなくなります。
+str		Save version and switch	バージョンを保存して切り替え
+str		Switch	切り替え
+str		Couldn't switch to {branch}	{branch} に切り替えられませんでした
+str		{why} You are still on {branch} and your work is unchanged.	{why} 現在も {branch} にいて、作業内容は変わっていません。
+str		{why} You are still on {branch}. Your work is saved.	{why} 現在も {branch} にいます。作業内容は保存されました。
+str		Switching is refused	切り替えは拒否されました
+str		{why} Your work could not be kept, so the switch was not made. You are still on {branch}.	{why} 作業内容を保持できなかったため、切り替えませんでした。現在も {branch} にいます。
 str		The switch did not finish, so the project stayed on its branch.	切り替えが完了しなかったため、プロジェクトは現在のブランチのままです。
 str		The version could not be restored: {why}	バージョンを復元できませんでした: {why}
 str		This version is the same as your current work. Your unsaved work was kept as a version.	このバージョンは現在の作業と同じです。未保存の作業はバージョンとして保持しました。
@@ -485,11 +505,60 @@ str		Models	モデル
 str		Versions	バージョン
 str		Branches	ブランチ
 str		This branch	このブランチ
+str	branch	Current	現在
+str		Branches can't be merged yet.	ブランチはまだマージできません。
+str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
+str		The branches couldn't be read.	ブランチを読み込めませんでした。
+str		New branch…	新しいブランチ…
+str		New branch	新しいブランチ
+str		A branch keeps its own versions, unsaved work and conversations.	ブランチは独自のバージョン、未保存の作業、会話を持ちます。
+str		It starts from current work on {branch}.	{branch} の現在の作業から始まります。
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	{branch} の現在の作業から始まります。未保存の変更も引き継がれ、{branch} にもそのまま残ります。
+str		Start a branch here	ここからブランチを開始
+str		Start a branch here…	ここからブランチを開始…
+str		It starts from the version of {version}.	{version} のバージョンから始まります。
+str		Viewing ends on the new branch.	表示は新しいブランチで終わります。
+str		Your unsaved changes stay on {branch}.	未保存の変更は {branch} に残ります。
+str		That name is already in use.	その名前はすでに使われています。
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	前回の新しいブランチがまだ片付いていません。プロジェクトを開き直すと削除されます。
+str		The project changed before the branch was made, so none was made.	ブランチを作る前にプロジェクトが変わったため、作成されませんでした。
+str		Couldn't make the branch: {why}	ブランチを作成できませんでした: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	ブランチが作成されたかどうか Archforge では判断できませんでした。もう一度試す前にブランチを確認してください。
+str		Rename…	名前を変更…
+str		Rename branch	ブランチの名前を変更
+str		The conversations and versions on this branch are not affected.	このブランチの会話とバージョンには影響しません。
+str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
+str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
+str		Delete…	削除…
+str		Delete {branch}?	{branch} を削除しますか？
+str		Goes with the branch:	ブランチと一緒に削除されるもの：
+str		Counting what goes with it…	一緒に削除されるものを数えています…
+str		What goes with it couldn't be read: {why}	一緒に削除されるものを読み取れませんでした: {why}
+str		the host stopped without an answer	ホストが応答せずに停止しました
+plural		{n} version only on this branch	このブランチだけのバージョン {n} 件
+plural		{n} conversation	会話 {n} 件
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 保存されていない変更
+str		It leaves the project's list.	プロジェクトの一覧から消えます。
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	削除された会話がプロジェクトの保存済み履歴に残るように、その内容はプロジェクトフォルダーのストレージに残ることがあります。
+str		There is no Undo for deleting a branch.	ブランチの削除は元に戻せません。
+str		Delete branch	ブランチを削除
+str		Couldn't delete {branch}	{branch} を削除できませんでした
+str		The project changed before the branch was deleted, so it stays.	ブランチが削除される前にプロジェクトが変わったため、ブランチは残ります。
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	ブランチが削除されたかどうかを Archforge は判断できませんでした。確かめるには、もう一度削除してください。
+str		The branch stays: {why}	ブランチは残ります: {why}
+str		At most {n} characters.	{n} 文字以内。
+str		Enter a name.	名前を入力してください。
+str		A name has to be one line.	名前は 1 行にしてください。
+str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行
 str		No changes since the last version.	前のバージョンから変更はありません。
+str		What you're typing isn't kept yet	入力中のテキストはまだ保持されていません
 str		No versions yet.	バージョンはまだありません。
+str		Shared with main up to here	ここまで main と共通
 str		No versions yet. Save version records your first one.	バージョンはまだありません。「バージョンを保存」で最初のバージョンを記録します。
 str		Loading	読み込み中
 str		Save version…	バージョンを保存…
@@ -504,6 +573,7 @@ str		One line, at most 200 characters. It stays in the history.	1行、200文字
 plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
 str		Filter versions…	バージョンを絞り込む…
+str		Filter branches…	ブランチを絞り込む…
 str		Model elements	モデル要素
 str		Unnamed	名前なし
 str		Added	追加
@@ -530,20 +600,29 @@ str		The next versions couldn't be read.	次のバージョンを読み込めま
 str		{name}, selected	{name}、選択中
 str		Compared with the version of {when}	{when} のバージョンと比較
 str		There is no version to compare with yet.	比較するバージョンはまだありません。
+str		This diagram couldn't be compared.	この図を比較できませんでした。
 str		This element couldn't be compared.	この要素を比較できませんでした。
 str		Attributes	属性
 str		Operations	操作
 str		Literals	リテラル
 str		Members	メンバー
+str		Relationships	関連
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	所有関係
 str		Not available on this side	この側では利用できません
-str		Relationships aren't shown here yet.	関連はまだここには表示されません。
+str		Each difference is marked on the cards below.	各違いは下のカードに示されています。
+plural		Related change	関連する変更
+str		{name} was added in this comparison.	{name} はこの比較で追加されました。
+str		{name} was changed in this comparison.	{name} はこの比較で変更されました。
+str		{name} was removed in this comparison.	{name} はこの比較で削除されました。
+str		Go to {name}	{name} へ移動
 str		Only what these cards don't show changed	これらのカードに表示されないものだけが変更されました
 str		The cards show the same on both sides.	カードの内容は両側で同じです。
 str		The owner changed	所有者が変更されました
 str		The owner changed.	所有者が変更されました。
 plural		{n} member changed	{n} 件のメンバーが変更されました
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} 件の関連が変更されました
+str		{these} · {those}	{these} · {those}
 str		This element was added	この要素は追加されました
 str		It is only on the After side, so there is nothing to compare.	変更後の側にのみ存在するため、比較するものはありません。
 str		This element was removed	この要素は削除されました
@@ -559,6 +638,30 @@ plural		{n} more value changed.	ほかに {n} 件の値が変更されました�
 str		Yes	はい
 str		Not set	未設定
 str		Nothing here yet	まだ何もありません
+str		Layout	レイアウト
+str		{first}, {then}	{first}、{then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} 件の要素が追加されました
+plural		{n} element changed	{n} 件の要素が変更されました
+plural		{n} element removed	{n} 件の要素が削除されました
+plural		{n} box placed	{n} 個のボックスが配置されました
+plural		{n} box moved	{n} 個のボックスが移動しました
+plural		{n} box changed	{n} 個のボックスが変更されました
+plural		{n} box taken off	{n} 個のボックスが外されました
+plural		{n} line drawn	{n} 本の線が引かれました
+plural		{n} line changed	{n} 本の線が変更されました
+plural		{n} line taken off	{n} 本の線が外されました
+str		The model didn't change	モデルは変更されていません
+str		Only the layout changed.	レイアウトだけが変更されました。
+str		The layout didn't change	レイアウトは変更されていません
+str		Only the model changed.	モデルだけが変更されました。
+str		The diagram's own details changed	図そのものの情報が変更されました
+str		Such as its name, or the order its boxes are drawn in.	名前や、ボックスを描く順序などです。
+str		This diagram was added	この図が追加されました
+str		It has no boxes or lines yet.	まだボックスも線もありません。
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	ドラッグ、スクロール、または矢印キーで両側を移動します。+ と − で拡大・縮小し、0 で再び全体を収めます。
+str		This diagram was removed	この図が削除されました
+str		It had no boxes or lines.	ボックスも線もありませんでした。
 str		Version of {when}	{when} のバージョン
 str		Last version	最新のバージョン
 str		No description	説明なし
@@ -1077,6 +1180,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
 str		{first} and {second}	{first} と {second}
+str		{first}, {second} and {third}	{first}、{second}、{third}
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置
@@ -1553,7 +1657,6 @@ str		Domain check	ドメインチェック制約
 str		Drawing	描画
 str		Effect	効果
 str		Entry point	入口点
-str		Enumeration literal	列挙リテラル
 str		Exactly one	ちょうど 1
 str		Execution location	実行場所
 str		Exit point	出口点
@@ -1659,7 +1762,6 @@ str		Par	並列
 str		Parallel	並列
 str		Persistence	永続化
 str		Profile application	プロファイル適用
-str		Property	プロパティ
 str		Read	読み取り
 str		Realization	実現
 str		Redefinable template signature	再定義可能テンプレートシグネチャ

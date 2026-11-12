@@ -229,6 +229,8 @@ pub enum Menu {
     /// Home's order of the recent projects, a recent project's menu and a pinned folder's.
     RecentSort,
     Recent(usize),
+    /// A branch row's menu in the Versions panel, by the row.
+    Branch(usize),
     Pinned(usize),
     Kind,
     /// A relationship's foreign key (slice E3): what it points to, one key pair's child column,

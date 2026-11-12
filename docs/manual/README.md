@@ -46,6 +46,11 @@ the first time to a small model you can build on, and shows how an agent joins i
      command-line tool.
 8. [Help and support](08-help-and-support.md): About Archforge, supporting the project, and
    reporting a problem.
+9. [Versions](09-versions.md): what a version is, how it differs from autosave and undo,
+   [saving one](09-versions.md#save-a-version), and
+   [looking back at one](09-versions.md#look-back-at-a-version): History, viewing an earlier
+   version, what is read only meanwhile and
+   [coming back to current work](09-versions.md#back-to-current-work).
 
 ## Keys
 

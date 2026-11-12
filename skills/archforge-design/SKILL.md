@@ -67,13 +67,25 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
   and Home's search rows share each action's availability. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
-  `Shell::in_window_menu`): the groups of its own table (File, Edit and Help for now, others join by a
-  row), popups 300 wide of rows 30 high and dividers 9, each row off saying why on hover. Choosing
+  `Shell::in_window_menu`): the groups of its own table (File, Edit, Model, Versions and Help for now, others join by a
+  row), popups 300 wide of rows 30 high and dividers 9, the rows lower down to a line of text where a
+  long menu would leave the window, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
   open the frame's keys are held from the window behind, as under a dialog. F10 with no modifier
   opens the first menu on its first live row and closes it again (Shift+F10 stays with the row
   menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
   Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
+- The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
+  nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group
+  stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the
+  rows change. A row is off while no diagram shows or the model can't change.
+- The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History (⇧⌘H, the
+  chip's list), Compare… (the version whose details show, else the newest once the list is current,
+  against current work; off while it may be behind a save),
+  Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
+  even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
+  row off. New branch… is not a row yet; its dialog opens from the Branches header's +. Every shortcut is matched
+  exactly, so ⇧⌘S never saves.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
 
@@ -278,7 +290,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   to three, then back to text. Cmd B, Cmd I and Cmd K work while writing.
 - The text is kept a moment after typing pauses, when the tab closes, on Save and on quitting,
   each time one undo step. A text the model refuses keeps its tab, and its project, open, saying
-  why.
+  why. Text waiting to be kept, or refused, is unsaved work, as a description being typed is
+  (`typing_unkept` in `crates/ui-egui/src/lib.rs`): nothing says "Saved" or "No changes"
+  meanwhile, and closing or quitting asks, for a parked project too.
 - A link in Preview opens only after a confirmation that names its site and shows the whole
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.

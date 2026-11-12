@@ -10,7 +10,7 @@ use crate::branch_name::{SafeBranch, UnsafeBranch};
 use crate::chat::{head, is_commit};
 use crate::creation::{self, BranchStore, CreationRecord, CreationRecovery, Found};
 use crate::model::{ModelSchema, database_connection, database_name, sql, unsaved_tables};
-use crate::{DATABASE, Error, Project};
+use crate::{DATABASE, Error, Project, VersionReader};
 use archforge_mof::Uuid;
 use archforge_mof::rows::Rows;
 
@@ -529,7 +529,7 @@ impl Project {
     /// removed. If anything fails up to that commit the branch is deleted and then the record
     /// removed; after it the branch is finished and stays, whatever becomes of the record.
     ///
-    /// The screen that asks for this comes with AR-292.
+    /// Start a branch here… asks for this at the version shown.
     pub fn create_branch(&self, name: &SafeBranch, start: &str, schema: &ModelSchema) -> Result<BranchCreated, BranchCreationError> {
         self.create_branch_watched(name, start, None, schema, &mut |_| Ok(()))
     }
@@ -666,6 +666,14 @@ impl Project {
         outcome
     }
 
+    /// Whether `branch` holds model changes not saved as a version.
+    pub fn branch_has_unsaved(&self, branch: &SafeBranch) -> Result<bool, Error> {
+        let mut c = self.connection_to(branch)?;
+        Ok(!unsaved_tables(&mut c, self.path())?.is_empty())
+    }
+}
+
+impl VersionReader {
     /// The project's branches, at most `max` of them. A name that cannot be used is listed with
     /// its reason rather than left out. Refused when `max` is over [`MAX_BRANCHES`], before
     /// anything is read: a dirty branch costs its own statements.
@@ -705,12 +713,6 @@ impl Project {
     fn model_changed_on(&self, c: &mut mysql::Conn, branch: &SafeBranch) -> Result<bool, Error> {
         c.query_drop(format!("USE `{}`", database_name(branch))).map_err(sql("cannot use the branch"))?;
         Ok(!unsaved_tables(c, self.path())?.is_empty())
-    }
-
-    /// Whether `branch` holds model changes not saved as a version.
-    pub fn branch_has_unsaved(&self, branch: &SafeBranch) -> Result<bool, Error> {
-        let mut c = self.connection_to(branch)?;
-        Ok(!unsaved_tables(&mut c, self.path())?.is_empty())
     }
 
     /// A row of `dolt_branches` as its name and whether anything on it is uncommitted.

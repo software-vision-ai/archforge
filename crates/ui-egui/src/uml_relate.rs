@@ -69,7 +69,7 @@ impl Relate {
     ];
 
     /// Its name in the menu, in the catalogue.
-    fn word(self) -> &'static str {
+    pub(crate) fn word(self) -> &'static str {
         match self {
             Relate::Association => "Association",
             Relate::Directed => "Directed association",
@@ -116,7 +116,7 @@ impl Relate {
     }
 
     /// Its automation key.
-    fn key(self) -> &'static str {
+    pub(crate) fn key(self) -> &'static str {
         match self {
             Relate::Association => "association",
             Relate::Directed => "directed",

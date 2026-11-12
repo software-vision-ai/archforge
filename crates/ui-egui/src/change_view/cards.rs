@@ -6,7 +6,7 @@ use archforge_mof::{PropId, TypeRef, Universe, Value};
 use archforge_notations::differences::{CardList, ElementSides, ListKind, ListRow, Named};
 use egui::{CornerRadius, Rect, Stroke, StrokeKind, pos2, vec2};
 
-use super::summary;
+use super::{related, summary};
 use crate::Shell;
 use crate::explorer::scroll_tree;
 use crate::i18n::{fmt, tr};
@@ -17,12 +17,12 @@ use crate::version_details::MARGIN;
 use crate::versions::{kind_look, when};
 
 /// The room between the cards, and from a side's eyebrow to its card.
-const GUTTER: f32 = 24.0;
-const EYEBROW: f32 = 24.0;
+pub(super) const GUTTER: f32 = 24.0;
+pub(super) const EYEBROW: f32 = 24.0;
 /// The room between the summary and the eyebrows.
 const UNDER_SUMMARY: f32 = 18.0;
 /// A card's head band, the top of its identity, where its rows start and the room under them.
-const BAND: f32 = 46.0;
+pub(super) const BAND: f32 = 46.0;
 const IDENTITY: f32 = 52.0;
 const ROWS_AT: f32 = 116.0;
 const BELOW: f32 = 16.0;
@@ -34,7 +34,7 @@ const MARK: f32 = 16.0;
 const HEADING: f32 = 20.0;
 const AFTER_LIST: f32 = 7.0;
 
-/// Draws the summary and the cards of `sides` from `top` to the end of `r`, scrolling as one, so a value
+/// Draws the summary, the cards of `sides` and their related changes from `top` to the end of `r`, scrolling as one, so a value
 /// stays level with itself across them. Everything comes from the sides already held: nothing here asks the host.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, sides: &ElementSides) {
     let Some(universe) = shell.session.as_ref().map(|s| s.doc().universe().clone()) else { return };
@@ -44,9 +44,11 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let body = summary::laid_out(ui.painter(), p, &said, whole);
     let tall = summary::height(&body);
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
+    let links = related::links(&shell.versions.changes, &sides.lists.related);
+    let under = related::height(links.len());
     let Some(o) = shell.versions.element.as_mut() else { return };
     let lists = lists_height(&sides.lists.before).max(lists_height(&sides.lists.after));
-    let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + lists + BELOW;
+    let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + lists + BELOW + under;
     let offset = scroll_tree(ui, p, tree, top, sides.fields.len(), ROW, tail, true, None, &mut o.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -57,11 +59,12 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let before = Rect::from_min_size(at + vec2(0.0, tall + UNDER_SUMMARY + EYEBROW), size);
     card(shell, &clip, p, &universe, (before, true), sides, &head);
     card(shell, &clip, p, &universe, (before.translate(vec2(each + GUTTER, 0.0)), false), sides, &tr("Current work"));
+    related::draw(shell, &clip, p, &universe, Rect::from_min_size(pos2(at.x, before.bottom()), vec2(whole, under)), &links);
 }
 
 /// What the Before card's head calls its side: the version compared with, by its date while the
 /// history holds it, as a version further down the list is not read for this.
-fn head_before(shell: &Shell) -> String {
+pub(super) fn head_before(shell: &Shell) -> String {
     let v = &shell.versions;
     let hash = v.element.as_ref().and_then(|o| o.read_of.as_ref()).and_then(|key| key.0.as_ref());
     let listed = hash.and_then(|hash| v.page.iter().flat_map(|page| &page.versions).find(|e| e.hash == *hash));
@@ -92,7 +95,7 @@ fn card(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (b
     paint.hline(body.x_range(), body.top() + BAND, Stroke::new(1.0, p.border));
     ux::text_mid(&paint, body.left() + 20.0, body.top() + BAND / 2.0, head, types::UI, p.text, Some((body.width() - 40.0).max(0.0)));
     let line = Rect::from_min_size(body.min + vec2(MARK, IDENTITY), vec2((body.width() - MARK - INSET).max(0.0), ROWS_AT - IDENTITY - 14.0));
-    let marked = sides.before.as_ref().zip(sides.after.as_ref()).is_some_and(|(a, b)| a.name != b.name || a.class != b.class);
+    let marked = sides.before.as_ref().zip(sides.after.as_ref()).is_some_and(|(a, b)| b.renamed_from(a) || a.class != b.class);
     if marked {
         mark(&paint, p, line, before);
     }
@@ -161,7 +164,7 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
                     mark(&paint, p, row, before);
                 }
                 let x = body.left() + INSET + if item.change.is_some() { MARK } else { 0.0 };
-                let words = row_words(universe, item);
+                let words = row_words(universe, list.kind, item);
                 ux::text_mid(&paint, x, row.center().y, &words, types::UI, p.text, Some((row.right() - 8.0 - x).max(0.0)));
                 let said = item.change.map_or_else(|| format!("{heading}, {words}"), |c| format!("{heading}, {words}, {}", kind_look(c, p).0));
                 let id = format!("workspace.change-view.{side}.list.{l}.{i}");
@@ -176,21 +179,35 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
 fn heading(kind: ListKind) -> String {
     match kind {
         ListKind::Attributes => tr("Attributes"),
+        ListKind::Columns => tr("Columns"),
         ListKind::Operations => tr("Operations"),
         ListKind::Literals => tr("Literals"),
         ListKind::Members => tr("Members"),
+        ListKind::Relationships => tr("Relationships"),
         ListKind::Ownership => tr("Ownership"),
     }
 }
 
-/// What a row of a list says in the language shown: one with no name goes by its kind, and what
-/// isn't there is said to be missing, in words.
-fn row_words(universe: &Universe, row: &ListRow) -> String {
-    match &row.name {
-        Named::Said(words) if !words.is_empty() => words.clone(),
-        Named::Said(_) | Named::Unnamed => kind_label(universe, row.class),
-        Named::Nothing => tr("None"),
-        Named::Unavailable => tr("Not available on this side"),
+/// What a row of a list of `kind` says in the language shown: one with no name goes by its kind, a
+/// relationship by what it joins to as well, and what isn't there is said to be missing, in words.
+fn row_words(universe: &Universe, kind: ListKind, row: &ListRow) -> String {
+    let name = said(&row.name).unwrap_or_else(|| kind_label(universe, row.class));
+    match &row.to {
+        Some((_, to)) if kind == ListKind::Relationships => {
+            let to = said(to).unwrap_or_else(|| tr("Unnamed"));
+            fmt(&tr("{name} → {to}{note}"), &[("name", &name), ("to", &to), ("note", &row.note)])
+        }
+        _ => name,
+    }
+}
+
+/// `name` in the language shown; none when it is empty, for the caller to word.
+fn said(name: &Named) -> Option<String> {
+    match name {
+        Named::Said(words) | Named::Made(words) if !words.is_empty() => Some(words.clone()),
+        Named::Said(_) | Named::Made(_) | Named::Unnamed => None,
+        Named::Nothing => Some(tr("None")),
+        Named::Unavailable => Some(tr("Not available on this side")),
     }
 }
 

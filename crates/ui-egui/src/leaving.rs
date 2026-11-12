@@ -15,8 +15,10 @@ pub enum Leaving {
     View { commit: String, label: Option<String> },
     /// The version `commit`, saved at `saved_at`, restored as a new version.
     Restore { commit: String, saved_at: String },
-    /// The branch named.
+    /// The branch named, the question about unsaved work answered or not needed.
     Switch(String),
+    /// The branch named, the question about unsaved work still to come.
+    AskSwitch(String),
 }
 
 /// The proof that the guards let an operation through; only [`Shell::clear_to_leave`] makes one.
@@ -76,6 +78,7 @@ impl Shell {
             Leaving::View { commit, label } => self.move_to_version(&commit, label),
             Leaving::Restore { commit, saved_at } => self.restore_version(&commit, &saved_at),
             Leaving::Switch(branch) => self.switch_branch(branch),
+            Leaving::AskSwitch(branch) => self.ask_switch_branch(branch),
         };
         let words = done.err().and_then(|why| version_chip::refused_words(self, why));
         self.canvas.say_refused_step(words);

@@ -526,6 +526,12 @@ pub fn showing(shell: &mut Shell) {
             }
         }
     }
+    // With a second branch, whether the branch shown has conversations decides what an empty
+    // conversation says: read once, and again after one is made.
+    let panel = &shell.chat_panel;
+    if panel.history.is_none() && panel.listing.is_none() && branched(shell) {
+        read_list(shell);
+    }
 }
 
 // The project's answers.
@@ -1107,11 +1113,29 @@ pub fn toggle_history(shell: &mut Shell) {
     }
     shell.chat_panel.view = View::History;
     shell.chat_panel.load_error = None;
+    read_list(shell);
+}
+
+/// Asks for the conversations of the project shown, on the branch it is on; without a store, the
+/// history says the project keeps none.
+fn read_list(shell: &mut Shell) {
     if let (Some(store), Some(project)) = (store_of(shell), shell.project.as_ref()) {
         shell.chat_panel.listing = Some(store.list(&project.path));
     } else {
         shell.chat_panel.history = Some(Err(tr("This project keeps no conversations")));
     }
+}
+
+/// Whether the project shown has a second branch, so Chat says its conversations keep to one: a
+/// one-branch project never sees the word.
+pub(crate) fn branched(shell: &Shell) -> bool {
+    crate::version_chip::branch_name(shell).is_some()
+}
+
+/// Whether the branch shown holds no conversation, as last read, on a project of several branches:
+/// the panel then says so (frame V5.5).
+pub(crate) fn branch_empty(shell: &Shell, panel: &Panel) -> bool {
+    branched(shell) && matches!(&panel.history, Some(Ok(rows)) if rows.is_empty())
 }
 
 /// Opens a conversation from the history, read back whole; it opens read-only. The conversation
@@ -1435,6 +1459,14 @@ fn answers(shell: &mut Shell) {
     match step {
         Some(Step::Creating(rx, pending)) => match rx.try_recv() {
             Ok(Ok(Answer::Created { origin })) => {
+                // The branch holds a conversation now: a list that said none no longer holds, nor
+                // does one still on its way, read before this one was made (its answer would land
+                // later this frame). Both go, and the list is read again when next needed
+                // ([`showing`], [`toggle_history`]).
+                let stale = shell.chat_panel.listing.take().is_some();
+                if stale || matches!(&shell.chat_panel.history, Some(Ok(rows)) if rows.is_empty()) {
+                    shell.chat_panel.history = None;
+                }
                 let project = shell.project.as_ref().map(|p| p.path.clone()).unwrap_or_default();
                 let store = store_of(shell);
                 let now = clock(shell).now;
@@ -1748,11 +1780,14 @@ pub(crate) fn leaving(shell: &mut Shell) {
 }
 
 /// The project shown moved branch: the program of the conversation shown ends, the panel starts
-/// again keeping only the text being typed, and deleted conversations' toasts close with the branch.
+/// again keeping only the text being typed and whether the history shows, and deleted
+/// conversations' toasts close with the branch. Nothing read on the branch left stays: the
+/// conversations are read from the branch arrived on when the panel is next shown ([`showing`]).
 pub(crate) fn branch_changed(shell: &mut Shell) {
     retire(shell);
     let draft = std::mem::take(&mut shell.chat_panel.draft);
-    shell.chat_panel = Panel { draft, ..Panel::default() };
+    let view = shell.chat_panel.view;
+    shell.chat_panel = Panel { draft, view, ..Panel::default() };
     if let Some(path) = shell.project.as_ref().map(|p| p.path.clone()) {
         crate::chat_delete::settle(shell, Some(&path));
     }
