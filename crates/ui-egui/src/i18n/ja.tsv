@@ -602,6 +602,10 @@ str		The layout didn't change	レイアウトは変更されていません
 str		Only the model changed.	モデルだけが変更されました。
 str		The diagram's own details changed	図そのものの情報が変更されました
 str		Such as its name, or the order its boxes are drawn in.	名前や、ボックスを描く順序などです。
+str		This diagram was added	この図が追加されました
+str		It has no boxes or lines yet.	まだボックスも線もありません。
+str		This diagram was removed	この図が削除されました
+str		It had no boxes or lines.	ボックスも線もありませんでした。
 str		Version of {when}	{when} のバージョン
 str		Last version	最新のバージョン
 str		No description	説明なし

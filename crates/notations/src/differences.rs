@@ -188,6 +188,9 @@ pub struct Apart {
     pub layout: Vec<Placed<Placing>>,
     /// Whether the diagram's own row or lists differ on both sides, such as its name or the order it draws its boxes in.
     pub itself: bool,
+    /// Added when only the after side has the diagram, Removed when only the before side has it,
+    /// so an empty diagram that came or went still says so; none when both sides have it.
+    pub diagram: Option<ChangeKind>,
 }
 
 /// One item of [`Apart`]: its id, what happened to it, and its name from the side that has it, the after side first.
@@ -330,6 +333,11 @@ pub fn diagram_sides(before: &Rows, after: &Rows, id: Uuid, repair: impl Fn(&mut
     let side = |store: Store| store.by_uuid(diagram).map(|d| DiagramSide { grid: Grid::build(&store, d), diagram: d, store });
     let (before, after) = (side(old), side(new));
     apart.itself = before.is_some() && after.is_some() && changed.contains(&diagram);
+    apart.diagram = match (&before, &after) {
+        (None, _) => Some(ChangeKind::Added),
+        (_, None) => Some(ChangeKind::Removed),
+        _ => None,
+    };
     Ok(Some(DiagramSides { id: diagram, name, path, before, after, marks, apart }))
 }
 
@@ -391,7 +399,7 @@ fn marks_of(
     let mut model: Vec<_> = model.into_values().collect();
     model.sort_by(|a, b| a.name.cmp(&b.name));
     layout.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok((marks, Apart { model, layout, itself: false }))
+    Ok((marks, Apart { model, layout, itself: false, diagram: None }))
 }
 
 /// Every box of the diagram `diagram`, nested ones too, and every line, as [`Item`]s by id.

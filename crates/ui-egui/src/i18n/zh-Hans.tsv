@@ -602,6 +602,10 @@ str		The layout didn't change	布局未更改
 str		Only the model changed.	只有模型发生了变化。
 str		The diagram's own details changed	图本身的信息已更改
 str		Such as its name, or the order its boxes are drawn in.	例如其名称，或其框的绘制顺序。
+str		This diagram was added	此图已添加
+str		It has no boxes or lines yet.	还没有框或线。
+str		This diagram was removed	此图已删除
+str		It had no boxes or lines.	它没有框或线。
 str		Version of {when}	{when} 的版本
 str		Last version	最新版本
 str		No description	无描述

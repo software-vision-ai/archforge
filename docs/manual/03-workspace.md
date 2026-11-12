@@ -65,7 +65,8 @@ An open project fills the window with its workspace.
   boxes and lines draw that were added, changed or removed and names them, and **Layout** counts
   the boxes placed, moved, changed or taken off and the lines drawn, changed or taken off. When only
   one of them changed, the other card says so, such as *The layout didn't change* and *Only the
-  model changed.* Under the cards are **Before** and **After** side by side, each drawn as it was
+  model changed.* An empty diagram that was added or removed says *This diagram was added* or
+  *This diagram was removed*. Under the cards are **Before** and **After** side by side, each drawn as it was
   on its side and both at one zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
   line that differs is drawn over in colour, and each says *Added*, *Changed* or *Removed*. A side
   the diagram isn't on says so.

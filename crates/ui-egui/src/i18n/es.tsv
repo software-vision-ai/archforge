@@ -602,6 +602,10 @@ str		The layout didn't change	La disposición no ha cambiado
 str		Only the model changed.	Solo ha cambiado el modelo.
 str		The diagram's own details changed	Han cambiado los datos propios del diagrama
 str		Such as its name, or the order its boxes are drawn in.	Por ejemplo, su nombre o el orden en que se dibujan sus cajas.
+str		This diagram was added	Este diagrama se ha añadido
+str		It has no boxes or lines yet.	Aún no tiene cajas ni líneas.
+str		This diagram was removed	Este diagrama se ha eliminado
+str		It had no boxes or lines.	No tenía cajas ni líneas.
 str		Version of {when}	Versión del {when}
 str		Last version	Última versión
 str		No description	Sin descripción

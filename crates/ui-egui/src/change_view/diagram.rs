@@ -61,13 +61,22 @@ fn said_apart(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, at): (&str, 
     ux::text(paint, at.min + vec2(20.0, 14.0), what, types::SMALL, p.text_secondary, room);
     ux::text(paint, at.min + vec2(20.0, 34.0), head, types::DIALOG_TITLE, p.text, room);
     ux::text(paint, at.min + vec2(20.0, 60.0), detail, types::SMALL, if *names { p.accent } else { p.text_secondary }, room);
-    let whole = [what, head, detail].into_iter().filter(|w| !w.is_empty()).fold(String::new(), |all, w| joined(all, w));
+    let whole = listed(&tr("{first}, {then}"), [what, head, detail].into_iter().map(String::as_str));
     let _ = control(shell, ui, &format!("workspace.change-view.{area}"), "status", at, false).on_hover_text(&whole).accessible_name(whole);
 }
 
-/// `then` after `all`, as a list goes on; `all` alone when `then` is empty, and the other way round.
-fn joined(all: String, then: &str) -> String {
-    if all.is_empty() || then.is_empty() { all + then } else { fmt(&tr("{first}, {then}"), &[("first", &all), ("then", then)]) }
+/// `items` one after another in one buffer, the empty ones left out, with what `template` puts
+/// between its `{first}` and `{then}` between each two; that is worked out once for the whole list.
+fn listed<'a>(template: &str, items: impl Iterator<Item = &'a str>) -> String {
+    let between = fmt(template, &[("first", ""), ("then", "")]);
+    let mut all = String::new();
+    for item in items.filter(|i| !i.is_empty()) {
+        if !all.is_empty() {
+            all.push_str(&between);
+        }
+        all.push_str(item);
+    }
+    all
 }
 
 /// The Model card's words, then the Layout card's: what it is about, its headline, the names or
@@ -93,20 +102,22 @@ pub(super) fn apart_words(apart: &Apart) -> [(String, String, String, bool); 2] 
         (lines[2], trn("{n} line taken off", "{n} lines taken off", lines[2])),
     ];
     let counted = |pieces: &[(u64, String)]| {
-        let shown = pieces.iter().filter(|(n, _)| *n > 0).map(|(_, words)| words.clone());
-        shown.reduce(|all, then| fmt(&tr("{first} · {then}"), &[("first", &all), ("then", &then)]))
+        Some(listed(&tr("{first} · {then}"), pieces.iter().filter(|(n, _)| *n > 0).map(|(_, words)| words.as_str()))).filter(|s| !s.is_empty())
     };
-    let names = |of: &mut dyn Iterator<Item = &Option<String>>| {
-        of.map(|n| n.clone().unwrap_or_else(|| tr("Unnamed"))).fold(String::new(), |all, n| joined(all, &n))
-    };
+    let unnamed = tr("Unnamed");
+    let names = |of: &mut dyn Iterator<Item = &Option<String>>| listed(&tr("{first}, {then}"), of.map(|n| n.as_deref().unwrap_or(&unnamed)));
     let (model_said, layout_said) = (counted(&model), counted(&layout));
     let model = match model_said {
         Some(head) => (head, names(&mut apart.model.iter().map(|e| &e.name)), true),
-        None if layout_said.is_some() || apart.itself => (tr("The model didn't change"), tr("Only the layout changed."), false),
+        None if layout_said.is_some() || apart.itself || apart.diagram.is_some() => {
+            (tr("The model didn't change"), tr("Only the layout changed."), false)
+        }
         None => (tr("The model didn't change"), String::new(), false),
     };
     let layout = match layout_said {
         Some(head) => (head, names(&mut apart.layout.iter().map(|e| &e.name)), true),
+        None if apart.diagram == Some(ChangeKind::Added) => (tr("This diagram was added"), tr("It has no boxes or lines yet."), false),
+        None if apart.diagram == Some(ChangeKind::Removed) => (tr("This diagram was removed"), tr("It had no boxes or lines."), false),
         None if apart.itself => (tr("The diagram's own details changed"), tr("Such as its name, or the order its boxes are drawn in."), false),
         None if model.2 => (tr("The layout didn't change"), tr("Only the model changed."), false),
         None => (tr("The layout didn't change"), String::new(), false),

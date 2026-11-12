@@ -1228,6 +1228,16 @@ fn a_diagrams_model_and_layout_changes_are_said_apart() {
         for words in ["Model, The model didn't change, Only the layout changed.", own] {
             assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
         }
+        // An empty diagram that came or went draws no box or line, and still says so.
+        for (kind, own) in [
+            (ChangeKind::Added, "This diagram was added, It has no boxes or lines yet."),
+            (ChangeKind::Removed, "This diagram was removed, It had no boxes or lines."),
+        ] {
+            only(h, Apart { diagram: Some(kind), ..Default::default() });
+            for words in ["Model, The model didn't change, Only the layout changed.".to_string(), format!("Layout, {own}")] {
+                assert_eq!(h.query_all_by_label(&words).count(), 1, "{words}");
+            }
+        }
         only(h, Apart::default());
         for words in ["Model, The model didn't change", "Layout, The layout didn't change"] {
             assert_eq!(h.query_all_by_label(words).count(), 1, "nothing on either: {words}");
@@ -1244,6 +1254,7 @@ fn a_side_the_diagram_is_not_on_says_so() {
         open_change(h, "Extra");
         assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
         assert_eq!(h.query_all_by_label("Extra, Commerce platform, Added").count(), 1, "the title");
+        assert_eq!(h.query_all_by_label("Layout, This diagram was added, It has no boxes or lines yet.").count(), 1, "empty, yet added");
         edit(h, "diagram.remove", serde_json::json!({ "diagram": diagram }));
         list_still(h);
         open_change(h, "Billing");

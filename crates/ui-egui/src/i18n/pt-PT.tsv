@@ -602,6 +602,10 @@ str		The layout didn't change	A disposição não mudou
 str		Only the model changed.	Só o modelo mudou.
 str		The diagram's own details changed	Os dados próprios do diagrama mudaram
 str		Such as its name, or the order its boxes are drawn in.	Por exemplo, o nome ou a ordem em que as caixas são desenhadas.
+str		This diagram was added	Este diagrama foi adicionado
+str		It has no boxes or lines yet.	Ainda não tem caixas nem linhas.
+str		This diagram was removed	Este diagrama foi removido
+str		It had no boxes or lines.	Não tinha caixas nem linhas.
 str		Version of {when}	Versão de {when}
 str		Last version	Última versão
 str		No description	Sem descrição

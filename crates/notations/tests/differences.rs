@@ -668,10 +668,11 @@ fn a_diagram_on_one_side_has_an_absent_side() {
     let without = state(&s);
     let gone = drawn(&with, &without, &diagram);
     assert!(gone.before.is_some() && gone.after.is_none());
-    assert_eq!(gone.name.as_deref(), Some("Billing"));
+    assert_eq!((gone.name.as_deref(), gone.apart.diagram), (Some("Billing"), Some(ChangeKind::Removed)));
     let came = drawn(&without, &with, &diagram);
     assert!(came.before.is_none() && came.after.is_some());
-    assert_eq!(came.name.as_deref(), Some("Billing"));
+    assert_eq!((came.name.as_deref(), came.apart.diagram), (Some("Billing"), Some(ChangeKind::Added)));
+    assert_eq!(drawn(&with, &with, &diagram).apart.diagram, None, "on both sides");
 }
 
 /// A box is marked with its own change, or Changed for what it draws; one nothing touched has no mark.

@@ -425,7 +425,8 @@ changed or taken off and the lines drawn, changed or taken off: a box is moved w
 differs, and changed when only another part of its own does, such as its size, a bend, a label or
 its style. A card with nothing says so and that the other alone changed: "The layout didn't change.
 Only the model changed." When no box or line differs but the diagram's own row or the order of its
-boxes or lines does, Layout says the diagram's own details changed. The frame names each element's kind
+boxes or lines does, Layout says the diagram's own details changed; when an empty diagram was added or
+removed, Layout says that. The frame names each element's kind
 ("1 class changed") and each box's change ("Order moved"); the cards count elements and boxes and
 list names, as a count for every kind would not translate.
 
