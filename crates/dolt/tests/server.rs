@@ -256,6 +256,8 @@ fn a_server_left_by_a_crashed_archforge_is_stopped_at_the_next_start() {
     assert_eq!(env.leftovers(), (0, 0));
 }
 
+/// A server whose Archforge was killed is stopped politely at the next start-up, though its
+/// project is not opened, and its record and run folder go (AR-422).
 #[test]
 fn a_server_a_killed_archforge_left_running_is_stopped_at_start_up_without_opening_its_project() {
     let env = Env::new("orphan");
@@ -270,6 +272,7 @@ fn a_server_a_killed_archforge_left_running_is_stopped_at_start_up_without_openi
     assert!(!env.data().join(".dolt/sql-server.info").exists(), "it stopped politely, removing its lock");
 }
 
+/// A server whose Archforge still runs keeps running through a start-up's sweep, its record kept.
 #[test]
 fn start_up_leaves_a_server_whose_archforge_still_runs_alone() {
     let env = Env::new("owned");
@@ -281,6 +284,8 @@ fn start_up_leaves_a_server_whose_archforge_still_runs_alone() {
     server.stop().unwrap();
 }
 
+/// A recorded server id now held by another program, its Archforge gone, gets no signal; only the
+/// stale record goes.
 #[test]
 fn start_up_never_signals_a_process_that_took_a_recorded_servers_id() {
     let env = Env::new("reused");
