@@ -351,7 +351,15 @@ mod tests {
         let (mut s, ..) = shell();
         let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK, NEWER].map(|id| why_off(s, id));
         assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing", "No newer version"]);
-        let entry = crate::VersionEntry { hash: "c1".into(), description: None, author: None, by_agent: false, date: String::new(), previous: None };
+        let entry = crate::VersionEntry {
+            hash: "c1".into(),
+            description: None,
+            author: None,
+            by_agent: false,
+            date: String::new(),
+            previous: None,
+            shared: false,
+        };
         (s.versions.page, s.versions.stale) = (Some(crate::VersionsPage { versions: vec![entry], more: false }), true);
         assert_eq!(why_off(&s, COMPARE), "Loading", "listed, but perhaps not the newest");
         s.begin_hold().unwrap();

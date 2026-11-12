@@ -166,6 +166,11 @@ name. A version saved with ⌘S gives its date and *No description*. In a long h
 at the end lists older versions, and **With a description** above the list leaves out the versions
 that have none; **All** shows them again.
 
+On a branch other than `main`, History lists the branch's own versions and, below them, those it
+shares with `main`, the versions from before the two parted. A divider, *Shared with main up to
+here*, sits above the first shared version once the list has reached it. It says only what the two
+have in common, not which branch this one was made from. On `main` there is no divider.
+
 Click a version to open its details in the centre:
 
 - its description, when it was saved and, where that is recorded, by whom;

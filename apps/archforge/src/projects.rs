@@ -2429,6 +2429,7 @@ fn page_of(page: archforge_project::Versions) -> VersionsPage {
         by_agent: v.by_agent,
         date: v.date,
         previous: v.previous,
+        shared: v.shared,
     });
     VersionsPage { versions: versions.collect(), more: page.more }
 }

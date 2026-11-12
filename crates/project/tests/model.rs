@@ -1033,6 +1033,48 @@ fn the_versions_are_saves_only_newest_first_and_a_page_starts_after_a_version() 
     project.close().unwrap();
 }
 
+/// On a branch, the versions from where it parts from `main` on are marked shared, whatever page
+/// they come on and though `main` has moved since; on `main` none is.
+#[test]
+fn a_branch_marks_the_versions_it_shares_with_main() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("shared");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let commit = |c: &mut mysql::Conn, message: &str, author: &str| -> String {
+        c.exec_drop("CALL DOLT_COMMIT('--allow-empty', '-m', ?, '--author', ?)", (message, author)).unwrap();
+        c.query_first("SELECT commit_hash FROM dolt_log LIMIT 1").unwrap().unwrap()
+    };
+    let saved = "Ada <archforge@localhost>";
+    let mut main = on_branch(&project, "main");
+    let first = commit(&mut main, "First", saved);
+    let second = commit(&mut main, "Second", saved);
+    // The branch parts at a chat commit, which is not a version itself.
+    commit(&mut main, "Chat 1: turn 1", archforge_project::CHAT_AUTHOR);
+    main.query_drop("CALL DOLT_BRANCH('other')").unwrap();
+    main.query_drop("CALL DOLT_BRANCH('same')").unwrap();
+    commit(&mut main, "Later on main", saved);
+    let mut other = on_branch(&project, "other");
+    let own = commit(&mut other, "Own", saved);
+    let newest = commit(&mut other, "Newest", saved);
+
+    let marks = |page: archforge_project::Versions| page.versions.into_iter().map(|v| (v.hash, v.shared)).collect::<Vec<_>>();
+    let reader = project.version_reader();
+    let other_branch = SafeBranch::found("other").unwrap();
+    let all = [(newest.clone(), false), (own.clone(), false), (second.clone(), true), (first.clone(), true)];
+    assert_eq!(marks(reader.versions_on(&other_branch, None, 50).unwrap()), all);
+    assert_eq!(marks(reader.versions_on(&other_branch, Some(&own), 1).unwrap()), [all[2].clone()], "the base went by before the page");
+    assert_eq!(marks(reader.versions_on(&other_branch, None, 1).unwrap()), [all[0].clone()], "the base is beyond the page");
+    let same = marks(reader.versions_on(&SafeBranch::found("same").unwrap(), None, 50).unwrap());
+    assert_eq!(same, [(second.clone(), true), (first.clone(), true)], "nothing of its own yet");
+    for on_main in ["main", "MAIN"] {
+        let page = reader.versions_on(&SafeBranch::found(on_main).unwrap(), None, 50).unwrap();
+        assert_eq!(page.versions.len(), 3);
+        assert!(page.versions.iter().all(|v| !v.shared), "{on_main}");
+    }
+    project.close().unwrap();
+}
+
 /// Dolt takes every stored name as a branch, keeps names apart that differ only in case as typed,
 /// and a `USE` of each reaches that branch.
 #[test]

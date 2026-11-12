@@ -8479,8 +8479,15 @@ fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: R
 /// Two versions, the older without a description.
 fn two_versions() -> crate::VersionsPage {
     let date = "2026-11-08T15:30:00Z".to_string();
-    let aa =
-        crate::VersionEntry { hash: "aa".into(), description: Some("Add order status".into()), author: None, by_agent: false, date, previous: None };
+    let aa = crate::VersionEntry {
+        hash: "aa".into(),
+        description: Some("Add order status".into()),
+        author: None,
+        by_agent: false,
+        date,
+        previous: None,
+        shared: false,
+    };
     let bb = crate::VersionEntry { hash: "bb".into(), description: None, ..aa.clone() };
     crate::VersionsPage { versions: vec![aa, bb], more: false }
 }
@@ -8598,7 +8605,7 @@ fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Har
 /// A version with the things a row says.
 fn version_row(hash: &str, description: Option<&str>, by: (Option<&str>, bool), date: &str) -> crate::VersionEntry {
     let (description, author) = (description.map(str::to_string), by.0.map(str::to_string));
-    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None }
+    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None, shared: false }
 }
 
 /// A row's two lines, its date local and never as stored: with and without a description, by a
@@ -8648,6 +8655,34 @@ fn a_versions_row_says_what_it_holds_and_when() {
         assert!(german.starts_with("6.") && painted(&h).contains(&german), "{german}: {:?}", painted(&h));
         h.state_mut().state.language = "en".to_string();
         h.run_steps(2);
+    });
+}
+
+/// Over the first version `main` has too, and only there, History draws a divider a screen reader
+/// reads; none while no page read holds one, and one at the top when the branch has no version of
+/// its own yet.
+#[test]
+fn history_marks_where_a_branch_shares_its_versions_with_main() {
+    use egui_kittest::kittest::Queryable;
+    let words = "Shared with main up to here";
+    let row = |hash: &str, shared| crate::VersionEntry { shared, ..version_row(hash, Some(hash), (None, false), "2026-11-08T15:30:00Z") };
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_listed(theme, vec![row("a", false), row("b", false)]);
+        assert!(!has_id(&h, "workspace.versions.shared") && !painted(&h).iter().any(|t| t == words), "{theme:?}: not on this page");
+        h.state_mut().versions.page.as_mut().unwrap().more = true;
+        h.run_steps(2);
+        let at = rect_of(&h, "workspace.versions.more").center();
+        click(&mut h, at);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![row("c", true), row("d", true)], more: false }));
+        let [b, c, d, divider] = ["row.b", "row.c", "row.d", "shared"].map(|id| rect_of(&h, &format!("workspace.versions.{id}")));
+        assert!(b.bottom() < divider.top() && divider.bottom() < c.top(), "{theme:?}: {b:?} {divider:?} {c:?}");
+        assert_eq!((c.top() - b.top(), d.top() - c.top()), (68.0, 50.0), "{theme:?}: only the rows under it move");
+        assert_eq!(painted(&h).iter().filter(|t| *t == words).count(), 1, "{theme:?}");
+        assert_eq!(h.query_all_by_label(words).count(), 1, "{theme:?}: read out whole");
+
+        let (h, _host) = versions_listed(theme, vec![row("e", true)]);
+        let (divider, e) = (rect_of(&h, "workspace.versions.shared"), rect_of(&h, "workspace.versions.row.e"));
+        assert!(divider.bottom() < e.top(), "{theme:?}: over the newest");
     });
 }
 
