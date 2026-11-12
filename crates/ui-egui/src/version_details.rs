@@ -131,13 +131,15 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
 }
 
 /// The version Compare… in the Versions menu sets against current work: the one whose details show,
-/// otherwise the newest listed; none while the Compare page is already open.
+/// otherwise the newest listed once the list is known to be current (a save may have made a newer
+/// one); none while the Compare page is already open.
 pub(crate) fn to_compare(shell: &Shell) -> Option<VersionEntry> {
     let v = &shell.versions;
     if v.details.as_ref().is_some_and(|d| d.compare.is_some()) {
         return None;
     }
-    v.details.as_ref().map(|d| d.entry.clone()).or_else(|| v.page.as_ref()?.versions.first().cloned())
+    let newest = || v.page.as_ref().filter(|_| crate::versions::last_known(v))?.versions.first().cloned();
+    v.details.as_ref().map(|d| d.entry.clone()).or_else(newest)
 }
 
 /// Whether Compare… can act: a version to compare, a host to read it, nothing held and nothing over the window.

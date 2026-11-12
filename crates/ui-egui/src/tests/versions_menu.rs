@@ -23,11 +23,11 @@ fn the_rows_follow_viewing_a_version() {
         let drawn: Vec<String> = menu_ids(&h).iter().filter_map(|i| i.strip_prefix("strip.menu.row.")).map(String::from).collect();
         assert_eq!(drawn, VERSIONS_MENU.concat(), "{theme:?}: the design's order");
         key(&mut h, Key::Escape, Modifiers::NONE);
-        assert_eq!(on(&h), [VERSIONS, COMPARE, OLDER, NEWER], "{theme:?}: nothing to save, one branch");
+        assert_eq!(on(&h), [VERSIONS, COMPARE, OLDER], "{theme:?}: nothing to save, one branch, nothing newer");
         let earlier = rows_now(&h);
         add_schema(&mut h, "crm");
         compared(&mut h);
-        assert_eq!(on(&h), [SAVE_VERSION, VERSIONS, COMPARE, OLDER, NEWER], "{theme:?}: a change to save");
+        assert_eq!(on(&h), [SAVE_VERSION, VERSIONS, COMPARE, OLDER], "{theme:?}: a change to save");
         key(&mut h, Key::S, Modifiers::COMMAND | Modifiers::SHIFT);
         assert!(h.state().versions.dialog.is_some(), "{theme:?}: ⇧⌘S asks for the description");
         assert!(host.saves.lock().unwrap().is_empty(), "{theme:?}: and does not save");
@@ -43,6 +43,7 @@ fn the_rows_follow_viewing_a_version() {
         key(&mut h, Key::H, Modifiers::COMMAND | Modifiers::SHIFT);
         assert_eq!(h.state().viewing(), None, "{theme:?}: ⇧⌘H goes back");
         assert!(available(h.state(), VERSIONS) && !available(h.state(), BRANCHES), "{theme:?}");
+        assert!(!available(h.state(), NEWER), "{theme:?}: nothing newer than current work");
         h.state_mut().begin_hold().unwrap();
         assert_eq!(on(&h), Vec::<&str>::new(), "{theme:?}: a hold, as a switch of branch takes, turns every row off");
     });
@@ -57,6 +58,9 @@ fn compare_opens_the_newest_version_against_current_work() {
         let (mut h, _host) =
             versions_listed(theme, vec![version_row("c2", Some("Second"), (None, false), date), version_row("c1", None, (None, false), date)]);
         h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().versions.stale = true;
+        assert!(!available(h.state(), COMPARE), "{theme:?}: a save may have made a newer one than the list holds");
+        h.state_mut().versions.stale = false;
         assert_eq!(crate::version_details::to_compare(h.state()).map(|e| e.hash).as_deref(), Some("c2"), "{theme:?}: the newest");
         run(h.state_mut(), COMPARE);
         h.run_steps(2);

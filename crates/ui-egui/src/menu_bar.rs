@@ -7,7 +7,7 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
-    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SAVE_VERSION, SETTINGS, UNDO, VERSIONS,
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, GENERATE, Keys, NEW, NEWER, OPEN, QUIT, REDO, SAVE, SAVE_VERSION, SETTINGS, UNDO, VERSIONS,
 };
 use crate::home::{control, off_words};
 use crate::i18n::tr;
@@ -295,6 +295,8 @@ fn versions_off(shell: &Shell, id: &str) -> String {
         _ if shell.is_held() => tr("The project is busy"),
         VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
         COMPARE if !listed => tr("No versions yet."),
+        COMPARE => tr("Loading"),
+        NEWER if shell.stepping_from().is_none() => tr("No newer version"),
         BRANCHES => tr("This project has one branch"),
         _ => off_words(shell),
     }
@@ -347,8 +349,11 @@ mod tests {
     fn a_versions_row_off_says_why() {
         crate::i18n::set_language("en");
         let (mut s, ..) = shell();
-        let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK].map(|id| why_off(s, id));
-        assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing"]);
+        let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK, NEWER].map(|id| why_off(s, id));
+        assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing", "No newer version"]);
+        let entry = crate::VersionEntry { hash: "c1".into(), description: None, author: None, by_agent: false, date: String::new(), previous: None };
+        (s.versions.page, s.versions.stale) = (Some(crate::VersionsPage { versions: vec![entry], more: false }), true);
+        assert_eq!(why_off(&s, COMPARE), "Loading", "listed, but perhaps not the newest");
         s.begin_hold().unwrap();
         assert_eq!(why_off(&s, VERSIONS), "The project is busy");
         assert_eq!(why_off(&s, BACK), "Current work is showing", "its own reason comes before the hold");

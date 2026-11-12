@@ -80,8 +80,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the
   rows change. A row is off while no diagram shows or the model can't change.
 - The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History (⇧⌘H, the
-  chip's list), Compare… (the version whose details show, else the newest, against current work),
-  Switch branch, Older version, Newer version and Back to current work. While a version is in view,
+  chip's list), Compare… (the version whose details show, else the newest once the list is current,
+  against current work; off while it may be behind a save),
+  Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
   even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
   row off. New branch… joins once creating a branch has its dialog. Every shortcut is matched
   exactly, so ⇧⌘S never saves.

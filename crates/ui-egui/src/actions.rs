@@ -190,7 +190,8 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: NEWER,
         label: |_| tr("Newer version"),
-        available: crate::version_chip::available,
+        // From current work there is nothing newer; from a version the step reads what it needs.
+        available: |s| crate::version_chip::available(s) && s.stepping_from().is_some(),
         run: crate::version_chip::newer,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
         search: None,

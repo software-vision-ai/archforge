@@ -89,7 +89,7 @@ the diagram can't be changed, the rows are greyed out.
 **Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
 of versions, **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
 **Back to current work**. Compare… sets the version whose details show, or else the newest, against
-your current work. Save version… needs changes to save. While you look at an earlier version,
+your current work; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
 History gives way to Back to current work, which takes the same keys; Switch branch needs a second
 branch. While the project is busy, saving or switching branch, every row waits.
 
