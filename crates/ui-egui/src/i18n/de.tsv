@@ -9,6 +9,9 @@ str		Shift	Umschalt
 str		The project is busy	Das Projekt ist beschäftigt
 str		Open or go back to a project first	Öffnen Sie zuerst ein Projekt oder wechseln Sie zu einem zurück
 str		Show a diagram first	Zeigen Sie zuerst ein Diagramm an
+str		Current work is showing	Die aktuelle Arbeit wird angezeigt
+str		Back to current work first	Kehren Sie zuerst zur aktuellen Arbeit zurück
+str		This project has one branch	Dieses Projekt hat einen Zweig
 str		Open…	Öffnen …
 str		Save	Sichern
 # Generieren
@@ -358,6 +361,9 @@ str		Open Settings	Einstellungen öffnen
 str		Saved with {project}	Gespeichert mit {project}
 str		The conversations in this project cannot be read: {why}	Die Unterhaltungen in diesem Projekt können nicht gelesen werden: {why}
 str		No conversations in this project yet.	Noch keine Unterhaltungen in diesem Projekt.
+str		No conversations on this branch yet.	Noch keine Unterhaltungen auf diesem Zweig.
+str		Conversations stay on the branch where they started.	Unterhaltungen bleiben auf dem Zweig, auf dem sie begonnen wurden.
+str		Ask about the model below to start one.	Stellen Sie unten eine Frage zum Modell, um eine zu beginnen.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Unterhaltungen werden im Projekt aufbewahrt, wandern also mit ihm und erscheinen nie in einem anderen Projekt.
 str		Delete conversation	Unterhaltung löschen
@@ -459,6 +465,7 @@ str		You can reach them again from History.	Sie finden sie danach in der Histori
 str		Undo starts fresh after a Restore.	Nach einer Wiederherstellung beginnt Rückgängig neu.
 str		Restore	Wiederherstellen
 str		The restore did not finish	Die Wiederherstellung wurde nicht abgeschlossen
+str		A restore in {project} did not finish. Go to {project} to see why first.	Eine Wiederherstellung in {project} wurde nicht abgeschlossen. Wechseln Sie zuerst zu {project}, um den Grund zu sehen.
 str		{why} Nothing was changed.	{why} Es wurde nichts geändert.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	Die Wiederherstellung konnte nicht ausgeführt werden, weil sich das Projekt geändert hat oder beschäftigt war; daher wurde nichts wiederhergestellt.
 str		You are already on this branch.	Sie sind bereits auf diesem Zweig.
@@ -502,6 +509,10 @@ str	branch	Current	Aktuell
 str		Branches can't be merged yet.	Zweige können noch nicht zusammengeführt werden.
 str		Only the first {n} branches are listed.	Nur die ersten {n} Zweige sind aufgeführt.
 str		The branches couldn't be read.	Die Zweige konnten nicht gelesen werden.
+str		At most {n} characters.	Höchstens {n} Zeichen.
+str		Enter a name.	Geben Sie einen Namen ein.
+str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
+str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
 str		Retry	Erneut versuchen

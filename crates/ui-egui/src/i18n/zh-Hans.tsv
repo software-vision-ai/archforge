@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	项目正忙
 str		Open or go back to a project first	请先打开或返回一个项目
 str		Show a diagram first	请先显示一个图
+str		Current work is showing	正在显示当前工作
+str		Back to current work first	请先返回当前工作
+str		This project has one branch	此项目只有一个分支
 str		Open…	打开…
 str		Save	存储
 # 生成
@@ -358,6 +361,9 @@ str		Open Settings	打开设置
 str		Saved with {project}	随 {project} 保存
 str		The conversations in this project cannot be read: {why}	无法读取此项目中的对话：{why}
 str		No conversations in this project yet.	此项目中还没有对话。
+str		No conversations on this branch yet.	此分支上还没有对话。
+str		Conversations stay on the branch where they started.	对话会留在开始它的分支上。
+str		Ask about the model below to start one.	在下方询问模型即可开始一个对话。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	对话保存在项目中，因此会随项目一起移动，并且不会出现在其他项目中。
 str		Delete conversation	删除对话
@@ -459,6 +465,7 @@ str		You can reach them again from History.	之后可从历史记录中再次找
 str		Undo starts fresh after a Restore.	恢复后，撤销记录将重新开始。
 str		Restore	恢复
 str		The restore did not finish	恢复未完成
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} 中的恢复未完成。请先转到 {project} 查看原因。
 str		{why} Nothing was changed.	{why} 未进行任何更改。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	由于项目已更改或正忙，无法进行恢复，因此未恢复任何内容。
 str		You are already on this branch.	您已在此分支上。
@@ -502,6 +509,10 @@ str	branch	Current	当前
 str		Branches can't be merged yet.	分支暂不能合并。
 str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。
 str		The branches couldn't be read.	无法读取分支。
+str		At most {n} characters.	最多 {n} 个字符。
+str		Enter a name.	请输入名称。
+str		A name has to be one line.	名称必须只有一行。
+str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
 str		Retry	重试

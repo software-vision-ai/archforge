@@ -130,6 +130,33 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
     shell.versions.details = Some(Details { about, entry, comparison, compare: None, scroll: TreeScroll::default() });
 }
 
+/// The version Compare… in the Versions menu sets against current work: the one whose details show,
+/// otherwise the newest listed once the list is known to be current (a save may have made a newer
+/// one); none while the Compare page is already open.
+pub(crate) fn to_compare(shell: &Shell) -> Option<VersionEntry> {
+    let v = &shell.versions;
+    if v.details.as_ref().is_some_and(|d| d.compare.is_some()) {
+        return None;
+    }
+    let newest = || v.page.as_ref().filter(|_| crate::versions::last_known(v))?.versions.first().cloned();
+    v.details.as_ref().map(|d| d.entry.clone()).or_else(newest)
+}
+
+/// Whether Compare… can act: a version to compare, a host to read it, nothing held and nothing over the window.
+pub(crate) fn can_compare(shell: &Shell) -> bool {
+    crate::actions::free(shell) && !shell.is_held() && shell.services.projects.is_some() && to_compare(shell).is_some()
+}
+
+/// Compare…: the Compare page of that version against current work, in the Versions explorer.
+pub(crate) fn compare_from_menu(shell: &mut Shell) {
+    let Some(entry) = to_compare(shell).filter(|_| can_compare(shell)) else { return };
+    shell.state.show_explorer(Explorer::SourceControl);
+    if shell.versions.details.is_none() {
+        open(shell, entry);
+    }
+    compare::open(shell);
+}
+
 /// Once a frame: what belongs to another project or session is let go, the answers that have come
 /// are taken, the version before comes from the list when it holds it, the details shown get their
 /// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
@@ -238,9 +265,10 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     if crate::restore_ask::offered(shell, &entry.hash) {
         let (id, label) = ("workspace.version-details.restore", tr("Restore this version…"));
         let at = pos2(compared.right() + 8.0, y);
+        let off = off.or_else(|| crate::restore_ask::held_back(shell));
         if button(shell, ui, p, id, at, &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
             let saved = crate::version_chip::when(&entry.date, clock);
-            crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)), None);
+            crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)));
             return true;
         }
     }

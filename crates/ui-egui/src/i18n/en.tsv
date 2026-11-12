@@ -8,6 +8,9 @@ str		Shift	Shift
 str		The project is busy	The project is busy
 str		Open or go back to a project first	Open or go back to a project first
 str		Show a diagram first	Show a diagram first
+str		Current work is showing	Current work is showing
+str		Back to current work first	Back to current work first
+str		This project has one branch	This project has one branch
 str		Open…	Open…
 str		Save	Save
 # Generate
@@ -357,6 +360,9 @@ str		Open Settings	Open Settings
 str		Saved with {project}	Saved with {project}
 str		The conversations in this project cannot be read: {why}	The conversations in this project cannot be read: {why}
 str		No conversations in this project yet.	No conversations in this project yet.
+str		No conversations on this branch yet.	No conversations on this branch yet.
+str		Conversations stay on the branch where they started.	Conversations stay on the branch where they started.
+str		Ask about the model below to start one.	Ask about the model below to start one.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Conversations are kept in the project, so they travel with it and never show in another project.
 str		Delete conversation	Delete conversation
@@ -458,6 +464,7 @@ str		You can reach them again from History.	You can reach them again from Histor
 str		Undo starts fresh after a Restore.	Undo starts fresh after a Restore.
 str		Restore	Restore
 str		The restore did not finish	The restore did not finish
+str		A restore in {project} did not finish. Go to {project} to see why first.	A restore in {project} did not finish. Go to {project} to see why first.
 str		{why} Nothing was changed.	{why} Nothing was changed.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	The restore could not go ahead because the project changed or was busy, so nothing was restored.
 str		You are already on this branch.	You are already on this branch.
@@ -501,6 +508,10 @@ str	branch	Current	Current
 str		Branches can't be merged yet.	Branches can't be merged yet.
 str		Only the first {n} branches are listed.	Only the first {n} branches are listed.
 str		The branches couldn't be read.	The branches couldn't be read.
+str		At most {n} characters.	At most {n} characters.
+str		Enter a name.	Enter a name.
+str		A name has to be one line.	A name has to be one line.
+str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry

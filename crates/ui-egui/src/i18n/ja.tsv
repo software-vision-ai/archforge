@@ -9,6 +9,9 @@ str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
 str		Open or go back to a project first	先にプロジェクトを開くか、プロジェクトに戻ってください
 str		Show a diagram first	先に図を表示してください
+str		Current work is showing	現在の作業を表示しています
+str		Back to current work first	先に現在の作業に戻ってください
+str		This project has one branch	このプロジェクトのブランチは 1 つです
 str		Open…	開く…
 str		Save	保存
 # 生成
@@ -358,6 +361,9 @@ str		Open Settings	設定を開く
 str		Saved with {project}	{project} と一緒に保存
 str		The conversations in this project cannot be read: {why}	このプロジェクトの会話を読み込めません: {why}
 str		No conversations in this project yet.	このプロジェクトにはまだ会話がありません。
+str		No conversations on this branch yet.	このブランチにはまだ会話がありません。
+str		Conversations stay on the branch where they started.	会話は開始したブランチに残ります。
+str		Ask about the model below to start one.	下でモデルについて質問すると会話を始められます。
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	会話はプロジェクト内に保存されるため、プロジェクトと一緒に移動し、別のプロジェクトには表示されません。
 str		Delete conversation	会話を削除
@@ -459,6 +465,7 @@ str		You can reach them again from History.	履歴からいつでも確認でき
 str		Undo starts fresh after a Restore.	復元のあとは、元に戻す操作の履歴は新しく始まります。
 str		Restore	復元
 str		The restore did not finish	復元は完了しませんでした
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} での復元が完了しませんでした。先に {project} に移動して理由を確認してください。
 str		{why} Nothing was changed.	{why} 何も変更されていません。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	プロジェクトが変更されたか使用中だったため、復元を実行できず、何も復元しませんでした。
 str		You are already on this branch.	すでにこのブランチにいます。
@@ -502,6 +509,10 @@ str	branch	Current	現在
 str		Branches can't be merged yet.	ブランチはまだマージできません。
 str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
 str		The branches couldn't be read.	ブランチを読み込めませんでした。
+str		At most {n} characters.	{n} 文字以内。
+str		Enter a name.	名前を入力してください。
+str		A name has to be one line.	名前は 1 行にしてください。
+str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行

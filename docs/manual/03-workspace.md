@@ -40,8 +40,10 @@ An open project fills the window with its workspace.
   and later versions stay in History. A question names the version and says all this first, and
   that unsaved work is first kept as a version called *Before restoring* and the time. Undo starts
   fresh after a restore. If it doesn't finish, the same question says what happened and whether your
-  work is as it was, with **Retry**; when Archforge can't tell whether it finished, the status bar
-  says so instead. Restore isn't offered for the last version while nothing is
+  work is as it was, with **Retry**. When another question is open at that moment, this one follows
+  once that one is answered and the project shows again; until then Restore is off in your other
+  open projects and says why. When Archforge can't tell whether it
+  finished, the status bar says so instead. Restore isn't offered for the last version while nothing is
   unsaved, which is what you have now, or for a version that can't be read.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
@@ -62,7 +64,9 @@ An open project fills the window with its workspace.
   The project's name at the top closes it.
   Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
   way: **Before** and **After** side by side, each drawn as it was on its side and both at one
-  zoom, so a box that stayed is in the same place on both. A side the diagram isn't on says so.
+  zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
+  line that differs is drawn over in colour, and each says *Added*, *Changed* or *Removed*. A side
+  the diagram isn't on says so.
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
@@ -71,7 +75,7 @@ An open project fills the window with its workspace.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
-**Model** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+**Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
@@ -85,6 +89,13 @@ draw the relationship. **Note** and **Link note** are always listed; the rest fo
 diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram the kinds of the
 classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
 the diagram can't be changed, the rows are greyed out.
+
+**Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
+of versions, **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
+**Back to current work**. Compare… sets the version whose details show, or else the newest, against
+your current work; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
+History gives way to Back to current work, which takes the same keys; Switch branch needs a second
+branch. While the project is busy, saving or switching branch, every row waits.
 
 ## New diagram
 

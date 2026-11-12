@@ -9,6 +9,9 @@ str		Shift	Mayús
 str		The project is busy	El proyecto está ocupado
 str		Open or go back to a project first	Primero abre un proyecto o vuelve a uno
 str		Show a diagram first	Primero muestra un diagrama
+str		Current work is showing	Se muestra el trabajo actual
+str		Back to current work first	Vuelve primero al trabajo actual
+str		This project has one branch	Este proyecto tiene una rama
 str		Open…	Abrir…
 str		Save	Guardar
 # Generar
@@ -358,6 +361,9 @@ str		Open Settings	Abrir Ajustes
 str		Saved with {project}	Guardadas con {project}
 str		The conversations in this project cannot be read: {why}	No se pueden leer las conversaciones de este proyecto: {why}
 str		No conversations in this project yet.	Aún no hay conversaciones en este proyecto.
+str		No conversations on this branch yet.	Aún no hay conversaciones en esta rama.
+str		Conversations stay on the branch where they started.	Las conversaciones se quedan en la rama donde empezaron.
+str		Ask about the model below to start one.	Pregunta abajo sobre el modelo para empezar una.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Las conversaciones se guardan en el proyecto, así que viajan con él y nunca aparecen en otro proyecto.
 str		Delete conversation	Eliminar conversación
@@ -459,6 +465,7 @@ str		You can reach them again from History.	Podrás recuperarlos desde el Histor
 str		Undo starts fresh after a Restore.	Deshacer empieza de cero tras una restauración.
 str		Restore	Restaurar
 str		The restore did not finish	La restauración no terminó
+str		A restore in {project} did not finish. Go to {project} to see why first.	Una restauración en {project} no terminó. Ve primero a {project} para ver por qué.
 str		{why} Nothing was changed.	{why} No se ha cambiado nada.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauración no pudo continuar porque el proyecto cambió o estaba ocupado, por lo que no se restauró nada.
 str		You are already on this branch.	Ya estás en esta rama.
@@ -502,6 +509,10 @@ str	branch	Current	Actual
 str		Branches can't be merged yet.	Las ramas aún no se pueden fusionar.
 str		Only the first {n} branches are listed.	Solo se muestran las primeras {n} ramas.
 str		The branches couldn't be read.	No se pudieron leer las ramas.
+str		At most {n} characters.	Como máximo {n} caracteres.
+str		Enter a name.	Escribe un nombre.
+str		A name has to be one line.	Un nombre debe ocupar una sola línea.
+str		A name can't start or end with a space.	Un nombre no puede empezar ni terminar con un espacio.
 str		Working changes	Cambios en curso
 str		History	Historial
 str		Retry	Reintentar

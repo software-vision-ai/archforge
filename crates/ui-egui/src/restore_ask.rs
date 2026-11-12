@@ -1,10 +1,12 @@
 //! Restoring a version as the person meets it (`docs/design/versioning.md`, section 7, frames V4.1
 //! to V4.4): when it is offered, the question that says what it will do, and what is said when it
-//! did not finish. The restore itself is [`Shell::restore_version`].
+//! did not finish, once no other question is up. The restore itself is [`Shell::restore_version`].
+
+use std::path::PathBuf;
 
 use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
-use crate::close_ask::Ask;
+use crate::close_ask::{Ask, Due, due};
 use crate::hold::HoldRefused;
 use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button};
@@ -25,6 +27,14 @@ pub struct Confirm {
     failure: Option<String>,
 }
 
+/// A restore started here, kept until it ends and, ended without restoring, until that is said.
+pub(crate) struct Restoring {
+    path: PathBuf,
+    confirm: Confirm,
+    /// The undo history of the session it ended on, the only one its failure is about.
+    ended_on: Option<u64>,
+}
+
 /// Whether restoring `commit` is on offer: not a version that can't be read, nor the last version
 /// with nothing unsaved, which is what current work holds. A version equal to the work in any other
 /// way is only found when it runs (section 7).
@@ -35,19 +45,36 @@ pub(crate) fn offered(shell: &Shell, commit: &str) -> bool {
     !v.unavailable.contains_key(commit) && (shell.shown_unsaved() || !(listed || stepped))
 }
 
+/// Why no restore starts now: one in another project still open ended without restoring and
+/// waits to say so. Started, a restore here would take its place and that failure would be lost.
+pub(crate) fn held_back(shell: &Shell) -> Option<String> {
+    let r = shell.versions.restoring.as_ref().filter(|r| r.confirm.failure.is_some())?;
+    let tab = shell.tabs.iter().find(|t| t.path == r.path).filter(|_| shell.project.as_ref().is_none_or(|o| o.path != r.path))?;
+    Some(fmt(&tr("A restore in {project} did not finish. Go to {project} to see why first."), &[("project", &tab.name)]))
+}
+
 /// Asks whether to restore the version `commit`, saved at `saved` and called `named`, about the
-/// project and session shown now; with `failure`, says that the last try did not finish.
-pub(crate) fn ask(shell: &mut Shell, (commit, saved, named): (String, String, String), failure: Option<String>) {
+/// project and session shown now.
+pub(crate) fn ask(shell: &mut Shell, (commit, saved, named): (String, String, String)) {
     if let Some(path) = shell.project.as_ref().map(|o| o.path.clone()) {
-        shell.ask = Some(Ask::Restore { path, generation: shell.session_generation(), confirm: Confirm { commit, saved, named, failure } });
+        let confirm = Confirm { commit, saved, named, failure: None };
+        shell.ask = Some(Ask::Restore { path, generation: shell.session_generation(), confirm });
     }
 }
 
 /// Starts the restore asked for, its failure to come back here. Chat's question keeps it waiting;
-/// refused, the reason goes where a refused view's does.
+/// refused, or held back by another project's failure, the reason goes where a refused view's does.
 fn go(shell: &mut Shell, confirm: Confirm) {
+    if let Some(words) = held_back(shell) {
+        shell.canvas.say_refused_step(Some(words));
+        return;
+    }
     match shell.restore_version(&confirm.commit, &confirm.saved) {
-        Ok(()) | Err(HoldRefused::ChatRunning) => shell.versions.restoring = Some(Confirm { failure: None, ..confirm }),
+        Ok(()) | Err(HoldRefused::ChatRunning) => {
+            if let Some(path) = shell.project.as_ref().map(|o| o.path.clone()) {
+                shell.versions.restoring = Some(Restoring { path, confirm: Confirm { failure: None, ..confirm }, ended_on: None });
+            }
+        }
         Err(why) => {
             let words = version_chip::refused_words(shell, why);
             shell.canvas.say_refused_step(words);
@@ -55,20 +82,36 @@ fn go(shell: &mut Shell, confirm: Confirm) {
     }
 }
 
-/// Once a frame, after the replacement's step: a restore that is neither running nor waiting for
-/// Chat's question is over.
+/// Once a frame, after the replacement's step: a restore that is neither running, nor waiting for
+/// Chat's question, nor failed is over. A failed one comes back saying why, over the session it
+/// ended on, once no other question is up and its project shows again; one whose session another
+/// has replaced is no longer kept.
 pub(crate) fn keep(shell: &mut Shell) {
-    if shell.replacing.is_none() && !matches!(shell.ask, Some(Ask::StopChat { .. })) {
-        shell.versions.restoring = None;
+    if shell.replacing.is_some() {
+        return;
+    }
+    let Some(r) = shell.versions.restoring.take() else { return };
+    if r.confirm.failure.is_none() {
+        if matches!(shell.ask, Some(Ask::StopChat { .. })) {
+            shell.versions.restoring = Some(r);
+        }
+        return;
+    }
+    match due(shell, &r.path, r.ended_on) {
+        Due::Now => shell.ask = Some(Ask::Restore { path: r.path, generation: shell.session_generation(), confirm: r.confirm }),
+        Due::Later => shell.versions.restoring = Some(r),
+        Due::Never => {}
     }
 }
 
-/// A restore started here ended without restoring: the question comes back and says why, in the
-/// words `save_error` holds, unless another question is already up.
+/// A restore started here ended without restoring: why, in the words `save_error` holds now, and
+/// the session it ended on are kept for [`keep`] to tell. A failure already kept stays as it was.
 pub(crate) fn failed(shell: &mut Shell) {
-    let Some(c) = shell.versions.restoring.take().filter(|_| shell.ask.is_none()) else { return };
     let why = shell.save_error.clone().unwrap_or_else(|| tr("The change did not finish, so the project is as it was."));
-    ask(shell, (c.commit, c.saved, c.named), Some(why));
+    let ended_on = shell.session.as_ref().map(|s| s.history());
+    if let Some(r) = shell.versions.restoring.as_mut().filter(|r| r.confirm.failure.is_none()) {
+        (r.confirm.failure, r.ended_on) = (Some(why), ended_on);
+    }
 }
 
 /// Draws the question over the window and acts on its answer. Enter does nothing here: a Restore
