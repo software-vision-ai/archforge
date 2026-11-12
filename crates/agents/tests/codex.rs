@@ -1576,11 +1576,13 @@ fn timed_out_threads_are_released() {
 
     let body = format!("{}\nreq\nreq\ndrain", held_thread_prelude());
     let world = World::new("late-forgotten", &body);
-    let mut session = held_turn_start(&world, long, Duration::from_millis(50));
+    let asked = Instant::now();
+    let mut session = held_turn_start(&world, long, short / 10);
     let events = events_until(&mut session, 5, turn_end);
     assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "turn/start", .. })), "{events:?}");
     world.pump(&mut session, 5);
     assert_eq!(world.methods(5)[4], "thread/unsubscribe", "released when forgotten after ten request timeouts");
+    assert!(asked.elapsed() >= short, "forgotten after {:?}, before ten request timeouts", asked.elapsed());
     drop(session);
     world.remove();
 }
