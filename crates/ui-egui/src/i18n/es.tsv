@@ -525,6 +525,24 @@ str		The conversations and versions on this branch are not affected.	Las convers
 str		The project changed before the branch was renamed, so its name stayed.	El proyecto cambió antes de cambiar el nombre de la rama, así que conservó su nombre.
 str		Couldn't rename the branch: {why}	No se pudo cambiar el nombre de la rama: {why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge no pudo saber si la rama pasó a llamarse {name}. Vuelve a llamarla {name} para averiguarlo.
+str		Delete…	Eliminar…
+str		Delete {branch}?	¿Eliminar {branch}?
+str		Goes with the branch:	Se va con la rama:
+str		Counting what goes with it…	Contando lo que se va con ella…
+str		What goes with it couldn't be read: {why}	No se pudo leer lo que se va con ella: {why}
+str		the host stopped without an answer	el host se detuvo sin responder
+plural		{n} version only on this branch	{n} versión solo en esta rama|{n} versiones solo en esta rama
+plural		{n} conversation	{n} conversación|{n} conversaciones
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · cambios sin guardar
+str		It leaves the project's list.	Sale de la lista del proyecto.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Su contenido puede quedar en el almacenamiento de la carpeta del proyecto, como una conversación eliminada queda en el historial guardado del proyecto.
+str		There is no Undo for deleting a branch.	Eliminar una rama no se puede deshacer.
+str		Delete branch	Eliminar rama
+str		Couldn't delete {branch}	No se pudo eliminar {branch}
+str		The project changed before the branch was deleted, so it stays.	El proyecto cambió antes de que se eliminara la rama, así que se queda.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge no pudo saber si la rama se eliminó. Elimínela de nuevo para averiguarlo.
+str		The branch stays: {why}	La rama se queda: {why}
 str		At most {n} characters.	Como máximo {n} caracteres.
 str		Enter a name.	Escribe un nombre.
 str		A name has to be one line.	Un nombre debe ocupar una sola línea.

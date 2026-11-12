@@ -525,6 +525,24 @@ str		The conversations and versions on this branch are not affected.	このブ�
 str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
 str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
+str		Delete…	削除…
+str		Delete {branch}?	{branch} を削除しますか？
+str		Goes with the branch:	ブランチと一緒に削除されるもの：
+str		Counting what goes with it…	一緒に削除されるものを数えています…
+str		What goes with it couldn't be read: {why}	一緒に削除されるものを読み取れませんでした: {why}
+str		the host stopped without an answer	ホストが応答せずに停止しました
+plural		{n} version only on this branch	このブランチだけのバージョン {n} 件
+plural		{n} conversation	会話 {n} 件
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 保存されていない変更
+str		It leaves the project's list.	プロジェクトの一覧から消えます。
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	削除された会話がプロジェクトの保存済み履歴に残るように、その内容はプロジェクトフォルダーのストレージに残ることがあります。
+str		There is no Undo for deleting a branch.	ブランチの削除は元に戻せません。
+str		Delete branch	ブランチを削除
+str		Couldn't delete {branch}	{branch} を削除できませんでした
+str		The project changed before the branch was deleted, so it stays.	ブランチが削除される前にプロジェクトが変わったため、ブランチは残ります。
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	ブランチが削除されたかどうかを Archforge は判断できませんでした。確かめるには、もう一度削除してください。
+str		The branch stays: {why}	ブランチは残ります: {why}
 str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。

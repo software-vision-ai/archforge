@@ -35,6 +35,12 @@ An open project fills the window with its workspace.
   renamed, the reason shows under the field and the name stays. If Archforge can't tell whether it
   was renamed, the dialog names the name you asked for and offers only that one: rename it to that
   name again to find out.
+  **Delete…** in a branch's **More** menu deletes it; `main` and the branch you are on can't be
+  deleted. The dialog counts what goes with the branch: the versions only on it, its conversations,
+  and whether it holds unsaved changes. **Delete branch** waits for that count, or for word that it
+  can't be read. The branch leaves the project's list, but its contents may remain in the project
+  folder's storage, and there is no Undo. If it can't be deleted, the dialog says why and the branch
+  stays. If Archforge can't tell whether it was deleted, delete it again to find out.
   Once a project has a second branch, the version chip in the bar at the top names the branch you
   are on, before *Current work*, and the status bar says *On* and its name before whether your work
   is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),

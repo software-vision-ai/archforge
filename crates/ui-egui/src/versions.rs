@@ -75,6 +75,8 @@ pub struct State {
     pub(crate) switching: Option<crate::switch_ask::Switching>,
     /// A branch asked for in New branch…, until the host answers.
     pub(crate) making: Option<crate::branch_ask::Making>,
+    /// What goes with a branch asked to be deleted, while it is read.
+    pub(crate) counting: Option<crate::branch_ask::Counting>,
     /// A read begun for that has yet to succeed, so the first row may not be the last version.
     last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
@@ -543,12 +545,13 @@ fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
 enum Entry {
     Switch,
     Rename,
+    Delete,
 }
 
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
 /// unsaved changes to the model, and when its latest version was saved. A click or Enter on
 /// another branch switches to it, as its menu's Switch does; the menu renames any branch but
-/// `main`, the one in use too.
+/// `main`, the one in use too, and deletes any but `main` and the one in use.
 fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, usize), b: &BranchEntry) {
     // The branch in use shows its session's state as it changes; another's waits for a switch.
     let unsaved = if b.current { shell.shown_unsaved() } else { b.unsaved };
@@ -566,9 +569,11 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     };
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
     let menu = crate::panels::Menu::Branch(i);
-    // Delete… joins these with AR-393.
     let renames = !b.name.eq_ignore_ascii_case("main") && crate::branch_ask::offered(shell);
-    let entries = [(Entry::Switch, !b.current), (Entry::Rename, renames)].into_iter().filter_map(|(e, on)| on.then_some(e)).collect::<Vec<_>>();
+    let entries = [(Entry::Switch, !b.current), (Entry::Rename, renames), (Entry::Delete, renames && !b.current)]
+        .into_iter()
+        .filter_map(|(e, on)| on.then_some(e))
+        .collect::<Vec<_>>();
     let paint = ui.painter();
     if b.current {
         paint.rect_filled(area, 8.0, p.accent_tint);
@@ -614,11 +619,19 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
         shell.panels.menu = if open { None } else { Some(menu) };
     }
     let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
-    let items = entries.iter().map(|e| if *e == Entry::Switch { tr("Switch") } else { tr("Rename…") }).collect::<Vec<_>>();
+    let items = entries
+        .iter()
+        .map(|e| match e {
+            Entry::Switch => tr("Switch"),
+            Entry::Rename => tr("Rename…"),
+            Entry::Delete => tr("Delete…"),
+        })
+        .collect::<Vec<_>>();
     let chosen = if shell.panels.menu == Some(menu) { crate::panels::menu(shell, ui, p, anchor, &id("menu"), &items) } else { None };
     match chosen.and_then(|at| entries.get(at)) {
         Some(Entry::Switch) => _ = switch_to(shell, b.name.clone()),
         Some(Entry::Rename) => crate::branch_ask::open_rename(shell, b),
+        Some(Entry::Delete) => crate::branch_ask::open_delete(shell, b),
         None => {}
     }
 }

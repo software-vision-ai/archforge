@@ -369,6 +369,8 @@ struct SavingHost {
     branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
     /// Each branch rename, from and to as stored, and where the test answers it.
     branch_renames: std::sync::Mutex<Vec<(String, String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// Each count of what goes with a branch, by its stored name, and where the test answers it.
+    branch_counts: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<crate::BranchCounts, String>>)>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
     /// Each read of the versions waiting for the answer the test sends.
@@ -499,6 +501,13 @@ impl crate::ProjectHost for SavingHost {
     fn create_branch(&self, _path: &std::path::Path, name: &str) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.branch_makes.lock().unwrap().push((name.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn branch_counts(&self, _path: &std::path::Path, branch: &str) -> std::sync::mpsc::Receiver<Result<crate::BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_counts.lock().unwrap().push((branch.to_string(), tx));
         rx
     }
 

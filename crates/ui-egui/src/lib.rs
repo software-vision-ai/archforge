@@ -644,6 +644,17 @@ impl std::fmt::Display for BranchNotDeleted {
 
 impl std::error::Error for BranchNotDeleted {}
 
+impl From<BranchNotDeleted> for BranchRefused {
+    /// A delete's answer as the branch dialog takes it, each reason as itself.
+    fn from(not: BranchNotDeleted) -> Self {
+        match not {
+            BranchNotDeleted::Unclear(why) => BranchRefused::Unclear(why),
+            BranchNotDeleted::Moved => BranchRefused::Moved,
+            BranchNotDeleted::Failed(why) => BranchRefused::Failed(why),
+        }
+    }
+}
+
 /// What deleting a branch would take with it, as its confirmation says.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchCounts {

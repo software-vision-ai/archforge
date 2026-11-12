@@ -524,6 +524,24 @@ str		The conversations and versions on this branch are not affected.	The convers
 str		The project changed before the branch was renamed, so its name stayed.	The project changed before the branch was renamed, so its name stayed.
 str		Couldn't rename the branch: {why}	Couldn't rename the branch: {why}
 str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.
+str		Delete…	Delete…
+str		Delete {branch}?	Delete {branch}?
+str		Goes with the branch:	Goes with the branch:
+str		Counting what goes with it…	Counting what goes with it…
+str		What goes with it couldn't be read: {why}	What goes with it couldn't be read: {why}
+str		the host stopped without an answer	the host stopped without an answer
+plural		{n} version only on this branch	{n} version only on this branch|{n} versions only on this branch
+plural		{n} conversation	{n} conversation|{n} conversations
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · unsaved changes
+str		It leaves the project's list.	It leaves the project's list.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.
+str		There is no Undo for deleting a branch.	There is no Undo for deleting a branch.
+str		Delete branch	Delete branch
+str		Couldn't delete {branch}	Couldn't delete {branch}
+str		The project changed before the branch was deleted, so it stays.	The project changed before the branch was deleted, so it stays.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge could not tell whether the branch was deleted. Delete it again to find out.
+str		The branch stays: {why}	The branch stays: {why}
 str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
