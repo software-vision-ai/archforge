@@ -831,7 +831,7 @@ fn the_frame_builds_no_rows_for_compare() {
         let why = found(h).unwrap().unwrap_err();
         assert!(why.contains("too large to store"), "{why}");
         let revision = h.state().session.as_ref().map(|s| s.revision());
-        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), revision);
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), revision);
     });
 }
 
@@ -1660,6 +1660,28 @@ fn a_failed_read_waits_and_a_stopped_one_is_a_failure() {
     });
 }
 
+/// A comparison that failed after its rows went as too large is no failed read: it stands at its
+/// own revision, and the next edit reads the version again and compares, without Retry.
+#[test]
+fn a_failed_comparison_of_rows_let_go_reads_again_on_an_edit() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        host.reads.lock().unwrap().clear();
+        let now = h.state().session.as_ref().unwrap().revision();
+        let (tx, failed) = std::sync::mpsc::channel();
+        tx.send(Err("Failed".to_string())).unwrap();
+        let key = Key { sides: ("c3".to_string(), false), revision: now };
+        let r = &mut h.state_mut().versions.compare_results;
+        (r.held, r.reading, r.comparing) = (None, None, Some((key, failed)));
+        h.run_steps(3);
+        assert!(found(h) == Some(Err("Failed".to_string())) && asked(host).is_empty(), "{:?}", asked(host));
+        add_schema(h, "more");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+    });
+}
+
 /// A late answer about another version is dropped, failure or rows, and rows held are of one
 /// version: choosing another reads it. Against nothing, the model's root is still no change.
 #[test]
@@ -1678,7 +1700,7 @@ fn another_version_is_read_and_a_late_answer_dropped() {
         frames_until(h, |_| asked(host) == ["c1"]);
         let nothing = Rows { tables: vec![Vec::new(); before.tables.len()], junctions: vec![Vec::new(); before.junctions.len()] };
         answer(host, "c1", Ok(Arc::new(nothing)));
-        let of_c1 = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, _)| key.sides.0 == "c1");
+        let of_c1 = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, ..)| key.sides.0 == "c1");
         frames_until(h, |h| of_c1(h).is_some());
         let items = of_c1(h).unwrap().1.unwrap();
         assert!(!items.is_empty() && items.iter().all(|d| d.class != archforge_core::MODEL), "the model's root is no change of its own");
@@ -1763,13 +1785,13 @@ fn compare_takes_current_work_while_a_version_shows() {
         frames_until(h, |_| asked(host) == ["c3"]);
         answer(host, "c3", Err("Too many".to_string().into()));
         frames_until(h, |h| found(h).is_some());
-        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), Some(work), "a failure about current work");
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work), "a failure about current work");
         h.state_mut().versions.compare_results.found = None;
         frames_until(h, |_| asked(host) == ["c3"]);
         answer(host, "c3", Ok(before));
         frames_until(h, |h| matches!(found(h), Some(Ok(_))));
         assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])), "the schema only current work holds");
-        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, _)| key.revision), Some(work));
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work));
     });
 }
 

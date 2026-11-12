@@ -34,14 +34,21 @@ pub(crate) struct Held {
     pub(crate) keep: bool,
 }
 
-/// The page's one read and one comparison, and what the last comparison found.
+/// Which step gave what is found: differences always come from a comparison, a failure from either.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Origin {
+    Read,
+    Comparison,
+}
+
+/// The page's one read and one comparison, and what the last of them found, with which one it was.
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
     pub(crate) held: Option<Held>,
     pub(crate) reading: Option<(String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Key, Receiver<Found>)>,
-    pub(crate) found: Option<(Key, Found)>,
+    pub(crate) found: Option<(Key, Found, Origin)>,
 }
 
 /// The sides the page compares now; none without the page, or for a pair that is not a version and
@@ -99,7 +106,7 @@ fn take_answers(shell: &mut Shell) {
     {
         match answer {
             Ok(rows) => r.held = Some(Held { version, keep: bytes_of(&rows) <= MOST_KEPT_BYTES, rows }),
-            Err(why) => r.found = revision.map(|revision| (Key { sides, revision }, Err(why.to_string()))),
+            Err(why) => r.found = revision.map(|revision| (Key { sides, revision }, Err(why.to_string()), Origin::Read)),
         }
     }
     if let Some(answer) = r.comparing.as_ref().and_then(|(_, rx)| answered(rx))
@@ -107,19 +114,22 @@ fn take_answers(shell: &mut Shell) {
         && now.as_ref() == Some(&key.sides)
         && (answer.is_ok() || revision == Some(key.revision))
     {
-        r.found = Some((key, answer));
+        r.found = Some((key, answer, Origin::Comparison));
     }
 }
 
 /// Compares the newest rows when what is shown is not of them. One comparison runs at a time, so
-/// revisions that move while it runs fold into the next. A version that could not be read waits
-/// for Retry, or each edit would read it again; nothing is compared while an edit is under way.
+/// revisions that move while it runs fold into the next; nothing is compared while an edit is under
+/// way. What is shown for these sides is known at its own revision, whatever it is. At a later one,
+/// differences and a failed comparison give way: the rows held are compared again, or, if they went
+/// as too large, read again first. A failed read stays known until Retry clears it, or each edit
+/// would ask the host for the version again.
 fn next(shell: &mut Shell, sides: Sides) {
     let Some(session) = shell.current_work().filter(|s| !s.interacting()) else { return };
     let key = Key { sides, revision: session.revision() };
     let r = &shell.versions.compare_results;
     let held = r.held.as_ref().filter(|h| h.version == key.sides.0);
-    let known = r.found.as_ref().is_some_and(|(shown, found)| *shown == key || (shown.sides == key.sides && found.is_err() && held.is_none()));
+    let known = r.found.as_ref().is_some_and(|(shown, _, origin)| *shown == key || (shown.sides == key.sides && *origin == Origin::Read));
     if known || r.comparing.is_some() {
         return;
     }
@@ -129,7 +139,7 @@ fn next(shell: &mut Shell, sides: Sides) {
     let r = &mut shell.versions.compare_results;
     match started {
         Ok(answer) => r.comparing = Some((key, answer)),
-        Err(why) => r.found = Some((key, Err(why.to_string()))),
+        Err(why) => r.found = Some((key, Err(why.to_string()), Origin::Comparison)),
     }
     r.held = r.held.take().filter(|h| h.keep);
 }
