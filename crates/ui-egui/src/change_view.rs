@@ -9,7 +9,7 @@ mod summary;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use archforge_mof::{Uuid, rows::snapshot};
+use archforge_mof::Uuid;
 use archforge_notations::differences::{Area, ChangeKind, DiagramSides, Difference, ElementSides, diagram_sides, element_sides};
 use egui::{Rect, pos2, vec2};
 
@@ -113,18 +113,19 @@ fn start_read(shell: &mut Shell) {
     let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
     let (tables, junctions) = archforge_notations::storage();
     let v = &mut shell.versions;
-    let after = match snapshot(session.doc(), &tables, &junctions) {
-        Ok(rows) => rows,
-        Err(e) => return land(v, key, Err(e.to_string())),
-    };
+    // The frame only copies the objects; their rows are built with the sides.
+    let frozen = session.doc().freeze();
     let (tx, rx) = channel();
     let read = move || {
         let repair = crate::editing::fit_tables;
-        let sides = match area {
-            Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
-            Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
-        };
-        drop(tx.send(sides.map_err(|e| e.to_string())));
+        let sides = frozen.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|after| {
+            match area {
+                Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
+                Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
+            }
+            .map_err(|e| e.to_string())
+        });
+        drop(tx.send(sides));
     };
     match std::thread::Builder::new().name("archforge-element-sides".into()).spawn(read) {
         Ok(_) => v.element_reading = Some(ElementReading { id, key, answer: rx }),

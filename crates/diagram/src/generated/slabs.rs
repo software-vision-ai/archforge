@@ -6,7 +6,7 @@ use super::classes::*;
 use super::meta::*;
 
 /// One typed slab per concrete metaclass.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DiagramSlabs {
     pub diagrams: Vec<DiagramObj>,
     pub nodes: Vec<NodeObj>,
@@ -72,5 +72,9 @@ impl Slabs for DiagramSlabs {
             .saturating_add(self.points.capacity().saturating_mul(size_of::<PointObj>()))
             .saturating_add(self.labels.capacity().saturating_mul(size_of::<LabelObj>()))
             .saturating_add(self.styles.capacity().saturating_mul(size_of::<StyleObj>()))
+    }
+    /// Every slab copied, the objects' text shared.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(self.clone())
     }
 }

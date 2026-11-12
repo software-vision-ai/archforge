@@ -227,14 +227,14 @@ fn keep_changes(shell: &mut Shell) {
         }
         return;
     };
-    let after = match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
-        Ok(rows) => rows,
-        Err(e) => return settle_changes(shell, key, Err(e.to_string())),
-    };
+    // The frame only copies the objects; their rows are built with the comparison.
+    let frozen = session.doc().freeze();
     let (tx, rx) = std::sync::mpsc::channel();
     let compare = move || {
-        let found = archforge_notations::differences::classified(&before, &after, crate::editing::fit_tables);
-        let _ = tx.send(found.map_err(|e| e.to_string()));
+        let after = frozen.rows(&tables, &junctions).map_err(|e| e.to_string());
+        let found = after
+            .and_then(|after| archforge_notations::differences::classified(&before, &after, crate::editing::fit_tables).map_err(|e| e.to_string()));
+        let _ = tx.send(found);
     };
     match std::thread::Builder::new().name("archforge-working-changes".into()).spawn(compare) {
         Ok(_) => v.comparing = Some((key, rx)),

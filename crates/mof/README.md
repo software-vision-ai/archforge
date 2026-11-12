@@ -38,16 +38,18 @@ process. Caps: 10 million live objects, 1 million ops per change set, 1 million 
 | `Store::{get, list, owned_elements, container, contains, referrers, by_name, by_prefix, by_uuid, uuid, class_of, reflect}` | reading, including derived unions and the indexes |
 | `Store::{validate, validate_all}` | lower bounds and sibling names |
 | `Store::apply_delta` | a delta outside a recording, all or nothing |
-| `Reflect`, `Slabs` | what generated code implements |
+| `Store::freeze`, `Frozen::rows` | `pub fn freeze(&self) -> Frozen`: the objects as they are now, copied in bulk (the registry's arrays and each slab, text shared) into a `Send` copy with no indexes; `Frozen::rows(tables, junctions)` builds on another thread exactly the rows `rows::snapshot` gave at the copy, and later edits never reach it |
+| `Reflect`, `Slabs` | what generated code implements; `Slabs::duplicate` is the copy `freeze` takes |
 | `Op`, `Delta`, `Invalid`, `Problem`, `Value`, `Uuid` | the data |
 | `schema::{Table, Column, Junction}` | the storage schema a metamodel's generated code describes, as data for the project crate |
+| `rows::built_here` | feature `testing`: how many times rows were built on the calling thread, for tests of which thread builds them |
 | `toy` | feature `testing`: a twenty-metaclass metamodel in the generated shape, for tests; `tests/toy.xmi` is the same metamodel as XMI, and the generator's fidelity test proves they agree |
 
 **Engine.** `Store` implements `archforge_engine::Document`: `begin`, `end`, `apply`, `invert`,
 `compose`, `is_empty` (ops that cancel are dropped), `weight`.
 
 **Measured** (release, M4 Max): a million objects in 190 MB; 10,000 random edits with undo, edit
-p99 186 µs; undoing all 10,000 in 59 ms.
+p99 186 µs; undoing all 10,000 in 59 ms. Freezing an ER model of 19,002 objects takes 0.14 to 0.31 ms, against 5 ms to build its 38,003 rows.
 
 **Tests.** `tests/mof.rs`: the universe's resolution and its refusals, every op and its inverse
 back to the identical store, each refusal naming its cause and changing nothing, containment moves

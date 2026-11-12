@@ -35,6 +35,7 @@ egui_commonmark.workspace = true
 png.workspace = true
 
 [dev-dependencies]
+archforge-mof = { workspace = true, features = ["testing"] }
 egui_kittest = { workspace = true, features = ["wgpu"] }
 serde_json.workspace = true
 

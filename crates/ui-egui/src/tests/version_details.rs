@@ -766,6 +766,22 @@ fn element_open(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Uuid, Co
     (h.state().versions.changes[0].id, h.state().versions.compared.clone().unwrap())
 }
 
+/// The frame copies the objects and builds no rows: the working changes and an opened change's two
+/// sides are built from that copy off the interface thread, and hold the edit.
+#[test]
+fn the_frame_builds_no_rows_for_working_changes_or_their_sides() {
+    in_both(|h, _| {
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        // Handed over already, so only the list and the sides could build rows now.
+        h.state_mut().written = h.state().session.as_ref().map(|s| s.revision());
+        let built = archforge_mof::rows::built_here();
+        list_still(h);
+        open_change(h, "shop");
+        assert!(has_id(h, AFTER) && !has_id(h, ELEMENT_FAILED), "{:?}", painted(h));
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+    });
+}
+
 /// A row opens its element in place of the details, reading nothing; the project's name closes it.
 #[test]
 fn a_working_change_opens_in_the_centre_without_a_read() {
