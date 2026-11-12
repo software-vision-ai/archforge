@@ -29,7 +29,9 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{Combo, ComboOut, FIELD, Menu, PAD, Subject, check, editable_select, menu, run, section, select_field, text_field};
+use crate::panels::{
+    Combo, ComboOut, FIELD, FieldOut, Menu, PAD, Subject, check, edit_field, editable_select, menu, run, section, select_field, text_field,
+};
 use crate::ux::{self, Palette, icons, types};
 
 /// What the Relationship tool draws.
@@ -1043,7 +1045,7 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
         let half = ((width - 8.0) / 2.0).max(0.0);
         let key = format!("workspace.properties.end.{i}");
         let at = pos2(r.left() + PAD, y);
-        let role = text_field(
+        let role_out = edit_field(
             shell,
             ui,
             p,
@@ -1056,6 +1058,11 @@ fn ends_sections(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut
             false,
             true,
         );
+        // Escape gives the role up: the role as written comes back, and nothing is sent.
+        if role_out == FieldOut::Cancel {
+            edit.role[i] = edit.written_role[i].clone();
+        }
+        let role = role_out == FieldOut::Commit;
         let typed = edit.multiplicity[i].clone();
         let refusal = edit.refused[i].clone();
         // Where the other end is qualified, this end's multiplicity counts per qualifier value (AR-127).

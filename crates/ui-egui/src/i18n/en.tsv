@@ -550,6 +550,7 @@ str		The branch stays: {why}	The branch stays: {why}
 str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
+str		A name can't be empty.	A name can't be empty.
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History

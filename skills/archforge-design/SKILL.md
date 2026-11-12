@@ -233,11 +233,15 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   Skills is a tab of its own.
 - The panel opens with the selection's name, its kind and a Description field, pinned while the
   body scrolls. Enter, leaving the field or selecting something else keeps the description on the
-  element it was typed on, an empty field removes it; a UML
+  element it was typed on, an empty field removes it, Escape gives the typing up; a UML
   element's is a comment it owns (AR-186), recognised by its shape: an owned comment annotating its
   owner alone, so such a comment from a file counts as the description (the first one; setting
   removes any others, clearing removes them all). An association's end takes none. A box's element and its members (a table and its columns, a class and its
   attributes) share one page, so moving between them keeps the scroll.
+- A text field written in place (a name, a description, a role) keeps on Enter or when left, and
+  Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
+  sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
+  reason as a sentence, without the command's id, and goes when the selection changes.
 - Sections are divided by full-width lines, each headed by a regular title with its count
   ("Columns · 3") and an icon action such as +. Fields are filled and borderless with small muted
   labels above them. The panel carries no help or footer texts.

@@ -802,6 +802,90 @@ fn closing_with_a_description_being_typed_keeps_it_or_asks() {
     }
 }
 
+/// The name of the element `id`, as the model has it.
+fn name_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_core::name_of(st, st.by_uuid(id).unwrap())
+}
+
+/// Selects `id` and replaces what its Properties field `field` holds with `text`, without Enter.
+fn retype_on(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, field: &str, text: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    retype(h, field, text);
+}
+
+/// Escape in a Properties field gives the edit up: an emptied name and a typed description come
+/// back as the model has them, nothing is sent and no step is added. In light and dark (AR-417).
+#[test]
+fn escape_gives_up_a_properties_edit_and_sends_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        let before = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        retype_on(&mut h, class, "workspace.properties.name", "");
+        assert!(h.state().panels.name.as_ref().is_some_and(|n| n.text.is_empty()), "{theme:?}: emptied, not yet written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(h.state().session.as_ref().unwrap().view().selection.len(), 1, "{theme:?}: the class stays selected");
+        retype_on(&mut h, class, "workspace.properties.description", "Draft.");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.run();
+        assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+        assert_eq!(description_on(&h, class), "", "{theme:?}");
+        assert!(h.state().panels.name.is_none() && h.state().panels.description.is_none(), "{theme:?}: the drafts are gone");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: nothing was refused");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), before, "{theme:?}: no step");
+        assert!(!dirty(&h), "{theme:?}");
+    }
+}
+
+/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words; another
+/// refusal is the engine's reason without its command's id; the notice goes with another
+/// selection. In light and dark (AR-417).
+#[test]
+fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        for empty in ["", "   "] {
+            retype_on(&mut h, class, "workspace.properties.name", empty);
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+            assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
+            assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
+            assert!(h.state().panels.name.is_none() && !dirty(&h), "{theme:?}: the old name stays, nothing sent");
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [table.to_string()] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(!painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}");
+        // A clash the engine refuses: its reason, as a sentence, without the command's id.
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
+        s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
+        retype_on(&mut h, table, "workspace.properties.name", "order");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with(char::is_uppercase) && notice.contains("order") && !notice.contains("rename"), "{theme:?}: {notice}");
+    }
+}
+
+/// Enter with a new name still renames, and a click elsewhere still writes what was typed. In
+/// light and dark (AR-417).
+#[test]
+fn enter_and_a_click_elsewhere_still_rename_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        retype_on(&mut h, class, "workspace.properties.name", "Purchase");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Purchase", "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Rename class"), "{theme:?}");
+        retype_on(&mut h, class, "workspace.properties.name", "Sale");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        assert_eq!(name_on(&h, class), "Sale", "{theme:?}: written when left");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}");
+    }
+}
+
 #[test]
 fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
     use crate::control::answer;
@@ -18588,6 +18672,12 @@ fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_canc
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert_eq!(typed_multiplicity(&h, 1), "1");
     assert_eq!(revision(&h), before, "nothing was written");
+    // So does a role typed and given up with Escape (AR-417).
+    let role = h.state().panels.ends.as_ref().unwrap().written_role[1].clone();
+    retype(&mut h, "workspace.properties.end.1.role", "payer");
+    key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    assert_eq!(h.state().panels.ends.as_ref().unwrap().role[1], role);
+    assert_eq!(revision(&h), before, "no role was written");
     // Leaving the field writes what was typed: `0..*` reads as `*`.
     retype(&mut h, "workspace.properties.end.1.multiplicity", "0..*");
     let at = rect_of(&h, "workspace.properties.end.1.role").center();

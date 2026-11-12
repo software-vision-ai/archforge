@@ -551,6 +551,7 @@ str		The branch stays: {why}	分支保留：{why}
 str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。
+str		A name can't be empty.	名称不能为空。
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录

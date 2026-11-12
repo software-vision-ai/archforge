@@ -551,6 +551,7 @@ str		The branch stays: {why}	Der Zweig bleibt: {why}
 str		At most {n} characters.	Höchstens {n} Zeichen.
 str		Enter a name.	Geben Sie einen Namen ein.
 str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
+str		A name can't be empty.	Ein Name darf nicht leer sein.
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf

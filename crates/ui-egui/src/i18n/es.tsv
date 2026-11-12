@@ -551,6 +551,7 @@ str		The branch stays: {why}	La rama se queda: {why}
 str		At most {n} characters.	Como máximo {n} caracteres.
 str		Enter a name.	Escribe un nombre.
 str		A name has to be one line.	Un nombre debe ocupar una sola línea.
+str		A name can't be empty.	Un nombre no puede estar vacío.
 str		A name can't start or end with a space.	Un nombre no puede empezar ni terminar con un espacio.
 str		Working changes	Cambios en curso
 str		History	Historial
