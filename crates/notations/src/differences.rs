@@ -497,7 +497,7 @@ fn repaired(
 }
 
 /// The name of `obj` or the words made for it, or those of the element it shows; none when there are neither.
-fn shown_name(store: &Store, obj: Obj) -> Option<String> {
+pub fn shown_name(store: &Store, obj: Obj) -> Option<String> {
     resolved_name(store, obj).map(|(name, _)| name)
 }
 

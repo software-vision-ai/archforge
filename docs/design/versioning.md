@@ -411,7 +411,12 @@ Differences are found by comparing rows by identity, not from Dolt's diff output
 
 A diagram's two sides are each drawn from their own state in one framing: the zoom and pan that fit
 every box, line and line label on either side, wherever a label was put, from neither the project nor
-the canvas, so how someone last looked at it is never a difference.
+the canvas, so how someone last looked at it is never a difference. A box or line on one side only is
+Added or Removed; one on both is Changed when it or what it draws differs: its element, a member listed
+on it, a parameter of one, or a part of it such as a bend, a label or its style. A marked box has an
+outline in the change's colour and the change in words above it, without frame V3.4's tint, as a box's
+own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
+Words that would run past a pane's right edge are moved left to stay inside it.
 
 ---
 
