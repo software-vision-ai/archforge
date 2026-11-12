@@ -456,6 +456,7 @@ str		You can reach them again from History.	履歴からいつでも確認でき
 str		Undo starts fresh after a Restore.	復元のあとは、元に戻す操作の履歴は新しく始まります。
 str		Restore	復元
 str		The restore did not finish	復元は完了しませんでした
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} での復元が完了しませんでした。先に {project} に移動して理由を確認してください。
 str		{why} Nothing was changed.	{why} 何も変更されていません。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	プロジェクトが変更されたか使用中だったため、復元を実行できず、何も復元しませんでした。
 str		You are already on this branch.	すでにこのブランチにいます。

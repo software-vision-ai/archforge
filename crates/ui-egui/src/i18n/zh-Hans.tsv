@@ -456,6 +456,7 @@ str		You can reach them again from History.	之后可从历史记录中再次找
 str		Undo starts fresh after a Restore.	恢复后，撤销记录将重新开始。
 str		Restore	恢复
 str		The restore did not finish	恢复未完成
+str		A restore in {project} did not finish. Go to {project} to see why first.	{project} 中的恢复未完成。请先转到 {project} 查看原因。
 str		{why} Nothing was changed.	{why} 未进行任何更改。
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	由于项目已更改或正忙，无法进行恢复，因此未恢复任何内容。
 str		You are already on this branch.	您已在此分支上。

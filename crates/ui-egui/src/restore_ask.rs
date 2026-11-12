@@ -45,6 +45,14 @@ pub(crate) fn offered(shell: &Shell, commit: &str) -> bool {
     !v.unavailable.contains_key(commit) && (shell.shown_unsaved() || !(listed || stepped))
 }
 
+/// Why no restore starts now: one in another project still open ended without restoring and
+/// waits to say so. Started, a restore here would take its place and that failure would be lost.
+pub(crate) fn held_back(shell: &Shell) -> Option<String> {
+    let r = shell.versions.restoring.as_ref().filter(|r| r.confirm.failure.is_some())?;
+    let tab = shell.tabs.iter().find(|t| t.path == r.path).filter(|_| shell.project.as_ref().is_none_or(|o| o.path != r.path))?;
+    Some(fmt(&tr("A restore in {project} did not finish. Go to {project} to see why first."), &[("project", &tab.name)]))
+}
+
 /// Asks whether to restore the version `commit`, saved at `saved` and called `named`, about the
 /// project and session shown now.
 pub(crate) fn ask(shell: &mut Shell, (commit, saved, named): (String, String, String)) {
@@ -55,8 +63,12 @@ pub(crate) fn ask(shell: &mut Shell, (commit, saved, named): (String, String, St
 }
 
 /// Starts the restore asked for, its failure to come back here. Chat's question keeps it waiting;
-/// refused, the reason goes where a refused view's does.
+/// refused, or held back by another project's failure, the reason goes where a refused view's does.
 fn go(shell: &mut Shell, confirm: Confirm) {
+    if let Some(words) = held_back(shell) {
+        shell.canvas.say_refused_step(Some(words));
+        return;
+    }
     match shell.restore_version(&confirm.commit, &confirm.saved) {
         Ok(()) | Err(HoldRefused::ChatRunning) => {
             if let Some(path) = shell.project.as_ref().map(|o| o.path.clone()) {

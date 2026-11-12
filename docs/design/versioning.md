@@ -614,7 +614,7 @@ Checks against what exists:
 | Name can't be used | Row | Listed, disabled, with the reason |
 | Stored branch is gone on reopening | Status bar | Opens `main` and says "The branch {name} is no longer in this project" |
 | Stored branch can't be opened on reopening | Status bar | Opens `main` and gives the reason |
-| Restore failed | Dialog over the window | The question again, saying why, with Retry unless the version is the same as current work. Its words are fixed when the restore ends. Behind another question it waits until that one closes and its project shows again with the session it ended on; it is dropped once another session shows for that project |
+| Restore failed | Dialog over the window | The question again, saying why, with Retry unless the version is the same as current work. Its words are fixed when the restore ends. Behind another question it waits until that one closes and its project shows again with the session it ended on; it is dropped once another session shows for that project. While it waits, Restore in another open project is off with the reason, so no new failure takes its place |
 | Switch failed | Dialog over the window (frame V5.9's words) | The reason, then that the project stayed on its branch and what became of the work: unchanged, or saved by **Save version and switch** before the switch failed |
 | Delete refused | Dialog | The reason; the branch stays |
 

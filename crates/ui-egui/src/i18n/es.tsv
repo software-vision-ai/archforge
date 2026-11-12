@@ -456,6 +456,7 @@ str		You can reach them again from History.	Podrás recuperarlos desde el Histor
 str		Undo starts fresh after a Restore.	Deshacer empieza de cero tras una restauración.
 str		Restore	Restaurar
 str		The restore did not finish	La restauración no terminó
+str		A restore in {project} did not finish. Go to {project} to see why first.	Una restauración en {project} no terminó. Ve primero a {project} para ver por qué.
 str		{why} Nothing was changed.	{why} No se ha cambiado nada.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	La restauración no pudo continuar porque el proyecto cambió o estaba ocupado, por lo que no se restauró nada.
 str		You are already on this branch.	Ya estás en esta rama.

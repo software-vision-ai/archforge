@@ -455,6 +455,7 @@ str		You can reach them again from History.	You can reach them again from Histor
 str		Undo starts fresh after a Restore.	Undo starts fresh after a Restore.
 str		Restore	Restore
 str		The restore did not finish	The restore did not finish
+str		A restore in {project} did not finish. Go to {project} to see why first.	A restore in {project} did not finish. Go to {project} to see why first.
 str		{why} Nothing was changed.	{why} Nothing was changed.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	The restore could not go ahead because the project changed or was busy, so nothing was restored.
 str		You are already on this branch.	You are already on this branch.

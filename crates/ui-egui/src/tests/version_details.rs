@@ -1696,6 +1696,48 @@ fn a_restore_failure_outlasts_saving_and_closing_another_tab() {
     });
 }
 
+/// While a restore failure waits in another open project, no restore starts here: the details and
+/// the banner offer it off and say why, and a question asked before is refused with those words, so
+/// the failure is still told once its project shows again.
+#[test]
+fn a_restore_failure_kept_elsewhere_holds_restoring_back() {
+    use crate::close_ask::Ask;
+    in_both(|h, host| {
+        let library = std::path::PathBuf::from("/tmp/Library.archforge");
+        h.state_mut().open_project(crate::Opened { name: "Library".into(), path: library.clone(), ..Default::default() });
+        h.run_steps(2);
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        let (ended, _reading) = restoring(h, host, "c2");
+        h.state_mut().ask = Some(Ask::Unsaved { path: library });
+        ended.send(Err(crate::replace::JobFailure::Failed("Gone.".into()))).unwrap();
+        h.run_steps(4);
+        h.state_mut().ask = None;
+        h.state_mut().activate(0);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        let held = "A restore in Library did not finish.";
+        opened(h, "c2");
+        tap(h, RESTORE);
+        h.run_steps(2);
+        assert!(h.state().ask.is_none(), "off in the details");
+        h.event(egui::Event::PointerMoved(rect_of(h, RESTORE).center()));
+        h.run_steps(4);
+        assert!(painted_has(h, held), "{:?}", painted(h));
+        crate::restore_ask::ask(h.state_mut(), ("c2".into(), "d".into(), "d".into()));
+        h.run_steps(2);
+        tap(h, GO);
+        h.run_steps(3);
+        assert!(!h.state().is_held() && h.state().canvas.notice.as_deref().is_some_and(|n| n.starts_with(held)), "refused");
+        viewing(h, host, "c2");
+        tap(h, ON_BANNER);
+        h.run_steps(2);
+        assert!(h.state().ask.is_none(), "off in the banner");
+        h.state_mut().activate(1);
+        h.run_steps(3);
+        assert!(painted_has(h, "The restore did not finish") && painted_has(h, "Gone."), "{:?}", painted(h));
+    });
+}
+
 /// With a Chat turn running, Restore asks about it next and Keep working ends it; typing goes
 /// nowhere behind the question, and Escape cancels it.
 #[test]

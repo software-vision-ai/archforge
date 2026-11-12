@@ -456,6 +456,7 @@ str		You can reach them again from History.	Pode voltar a encontrá-las no Hist�
 str		Undo starts fresh after a Restore.	Anular recomeça do início após um Restauro.
 str		Restore	Restaurar
 str		The restore did not finish	O restauro não terminou
+str		A restore in {project} did not finish. Go to {project} to see why first.	Um restauro em {project} não terminou. Vá primeiro a {project} para ver porquê.
 str		{why} Nothing was changed.	{why} Nada foi alterado.
 str		The restore could not go ahead because the project changed or was busy, so nothing was restored.	O restauro não pôde avançar porque o projeto mudou ou estava ocupado, por isso nada foi restaurado.
 str		You are already on this branch.	Já está neste ramo.
