@@ -8694,16 +8694,23 @@ fn a_versions_row_says_what_it_holds_and_when() {
 }
 
 /// A restore's kept work named by an earlier Archforge, `Before restoring` and a stored time, shows
-/// that time as the list says it; the stored name is left as it is, and other names show as stored.
+/// that time as the list says it; the stored name is left as it is, and other names show as stored,
+/// a time not in the stored form or a day its month lacks among them.
 #[test]
 fn an_earlier_restores_kept_work_shows_its_time_as_the_list_says_it() {
     let earlier = "Before restoring 2026-11-07T16:15:00Z";
     let named = |hash, d| version_row(hash, Some(d), (None, false), "2026-11-07T16:15:00Z");
     in_both_appearances(|theme| {
-        let listed = vec![named("a", earlier), named("b", "Before restoring 9 Nov 12:59"), named("c", "Before restoring 2026-11-07")];
+        let kept = [
+            "Before restoring 9 Nov 12:59",
+            "Before restoring 2026-11-07",
+            "Before restoring 2026/11/07 16:15:00X",
+            "Before restoring 2026-02-31T10:00:00Z",
+        ];
+        let listed = [named("a", earlier)].into_iter().chain(kept.iter().zip(["b", "c", "d", "e"]).map(|(d, hash)| named(hash, d))).collect();
         let (h, _host) = versions_listed(theme, listed);
         let texts = painted(&h);
-        for t in ["Before restoring 7 Nov 17:15", "Before restoring 9 Nov 12:59", "Before restoring 2026-11-07"] {
+        for t in ["Before restoring 7 Nov 17:15"].iter().chain(&kept) {
             assert!(texts.iter().any(|x| x == t), "{theme:?}: {t}: {texts:?}");
         }
         assert!(!texts.iter().any(|t| t == earlier), "{theme:?}: {texts:?}");
