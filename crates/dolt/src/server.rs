@@ -549,3 +549,31 @@ fn tail(log: &Path) -> String {
     let _ = f.take(LOG_TAIL).read_to_end(&mut bytes);
     String::from_utf8_lossy(&bytes).trim().to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A record another start wrote after this one was read stays; the one read goes.
+    #[test]
+    fn forgetting_keeps_a_record_written_since_it_was_read() {
+        let dir = crate::home::tests::scratch("forget");
+        let read = Record {
+            data_dir: "/p/a".into(),
+            server_pid: 7,
+            run_root: "/t".into(),
+            run_dir: "/t/af-abcdefgh".into(),
+            command: vec!["dolt".into()],
+            owner_pid: 8,
+            owner_started: "x".into(),
+        };
+        let newer = Record { server_pid: 9, ..read.clone() };
+        assert!(record::write_new(&dir, &newer).unwrap());
+        let file = record::path(&dir, "/p/a");
+        forget(&file, &read, None);
+        assert_eq!(record::read(&dir, "/p/a").unwrap(), Some(newer.clone()), "the newer record stays");
+        forget(&file, &newer, None);
+        assert_eq!(record::read(&dir, "/p/a").unwrap(), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
