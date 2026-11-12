@@ -304,12 +304,16 @@ fn history_shown(shell: &Shell, project: &Path) -> bool {
     shell.project.as_ref().is_some_and(|p| p.path == project) && shell.chat_panel.view == View::History
 }
 
-/// Reads the history of `project` again when it is shown with its history open.
+/// Reads the history of `project` again when it is shown with its history open. Shown with a
+/// conversation instead, the list last read no longer holds and is dropped, so what an empty
+/// conversation says of the branch is read again ([`crate::chat_panel::showing`]).
 fn reread(shell: &mut Shell, project: &Path) {
     if history_shown(shell, project)
         && let Some(store) = shell.services.chats.clone()
     {
         shell.chat_panel.listing = Some(store.list(project));
+    } else if shell.project.as_ref().is_some_and(|p| p.path == project) {
+        shell.chat_panel.history = None;
     }
 }
 

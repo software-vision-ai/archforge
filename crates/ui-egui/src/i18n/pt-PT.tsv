@@ -358,6 +358,9 @@ str		Open Settings	Abrir Definições
 str		Saved with {project}	Guardadas com {project}
 str		The conversations in this project cannot be read: {why}	Não é possível ler as conversas deste projeto: {why}
 str		No conversations in this project yet.	Ainda não há conversas neste projeto.
+str		No conversations on this branch yet.	Ainda não há conversas neste ramo.
+str		Conversations stay on the branch where they started.	As conversas ficam no ramo onde começaram.
+str		Ask about the model below to start one.	Pergunte abaixo sobre o modelo para começar uma.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	As conversas são guardadas no projeto, por isso viajam com ele e nunca aparecem noutro projeto.
 str		Delete conversation	Eliminar conversa

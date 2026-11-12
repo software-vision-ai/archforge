@@ -358,6 +358,9 @@ str		Open Settings	Einstellungen öffnen
 str		Saved with {project}	Gespeichert mit {project}
 str		The conversations in this project cannot be read: {why}	Die Unterhaltungen in diesem Projekt können nicht gelesen werden: {why}
 str		No conversations in this project yet.	Noch keine Unterhaltungen in diesem Projekt.
+str		No conversations on this branch yet.	Noch keine Unterhaltungen auf diesem Zweig.
+str		Conversations stay on the branch where they started.	Unterhaltungen bleiben auf dem Zweig, auf dem sie begonnen wurden.
+str		Ask about the model below to start one.	Stellen Sie unten eine Frage zum Modell, um eine zu beginnen.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Unterhaltungen werden im Projekt aufbewahrt, wandern also mit ihm und erscheinen nie in einem anderen Projekt.
 str		Delete conversation	Unterhaltung löschen

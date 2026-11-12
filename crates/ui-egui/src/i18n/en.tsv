@@ -357,6 +357,9 @@ str		Open Settings	Open Settings
 str		Saved with {project}	Saved with {project}
 str		The conversations in this project cannot be read: {why}	The conversations in this project cannot be read: {why}
 str		No conversations in this project yet.	No conversations in this project yet.
+str		No conversations on this branch yet.	No conversations on this branch yet.
+str		Conversations stay on the branch where they started.	Conversations stay on the branch where they started.
+str		Ask about the model below to start one.	Ask about the model below to start one.
 str		{when} · {agent} · {messages}	{when} · {agent} · {messages}
 str		Conversations are kept in the project, so they travel with it and never show in another project.	Conversations are kept in the project, so they travel with it and never show in another project.
 str		Delete conversation	Delete conversation

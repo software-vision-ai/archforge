@@ -422,6 +422,11 @@ another.
 
 Conversations are kept in the project: they travel with it and its copies, and never show in a
 different project.
+Once the project has a second branch, the list says *Conversations stay on the branch where they
+started*: each branch lists only its own, and numbers them from *Chat 1*. A new branch starts with
+none, and an empty conversation there says *No conversations on this branch yet.* Switching branch
+ends a reply that runs, keeping what it has written so far, and the panel then shows the
+conversations of the branch you switched to.
 A conversation is kept as you go, without a save; the changes the agent made to the model are not:
 save them as your own (⌘S), or **Don't save** drops them and their card says *Not kept: the changes
 were not saved.* Anyone you give a copy of the project can read them. Leaving the project's tab
