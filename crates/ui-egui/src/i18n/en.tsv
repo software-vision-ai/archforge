@@ -594,6 +594,29 @@ plural		{n} more value changed.	{n} more value changed.|{n} more values changed.
 str		Yes	Yes
 str		Not set	Not set
 str		Nothing here yet	Nothing here yet
+str		Layout	Layout
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} element added|{n} elements added
+plural		{n} element changed	{n} element changed|{n} elements changed
+plural		{n} element removed	{n} element removed|{n} elements removed
+plural		{n} box placed	{n} box placed|{n} boxes placed
+plural		{n} box moved	{n} box moved|{n} boxes moved
+plural		{n} box changed	{n} box changed|{n} boxes changed
+plural		{n} box taken off	{n} box taken off|{n} boxes taken off
+plural		{n} line drawn	{n} line drawn|{n} lines drawn
+plural		{n} line changed	{n} line changed|{n} lines changed
+plural		{n} line taken off	{n} line taken off|{n} lines taken off
+str		The model didn't change	The model didn't change
+str		Only the layout changed.	Only the layout changed.
+str		The layout didn't change	The layout didn't change
+str		Only the model changed.	Only the model changed.
+str		The diagram's own details changed	The diagram's own details changed
+str		Such as its name, or the order its boxes are drawn in.	Such as its name, or the order its boxes are drawn in.
+str		This diagram was added	This diagram was added
+str		It has no boxes or lines yet.	It has no boxes or lines yet.
+str		This diagram was removed	This diagram was removed
+str		It had no boxes or lines.	It had no boxes or lines.
 str		Version of {when}	Version of {when}
 str		Last version	Last version
 str		No description	No description

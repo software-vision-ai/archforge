@@ -595,6 +595,29 @@ plural		{n} more value changed.	ほかに {n} 件の値が変更されました�
 str		Yes	はい
 str		Not set	未設定
 str		Nothing here yet	まだ何もありません
+str		Layout	レイアウト
+str		{first}, {then}	{first}、{then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} 件の要素が追加されました
+plural		{n} element changed	{n} 件の要素が変更されました
+plural		{n} element removed	{n} 件の要素が削除されました
+plural		{n} box placed	{n} 個のボックスが配置されました
+plural		{n} box moved	{n} 個のボックスが移動しました
+plural		{n} box changed	{n} 個のボックスが変更されました
+plural		{n} box taken off	{n} 個のボックスが外されました
+plural		{n} line drawn	{n} 本の線が引かれました
+plural		{n} line changed	{n} 本の線が変更されました
+plural		{n} line taken off	{n} 本の線が外されました
+str		The model didn't change	モデルは変更されていません
+str		Only the layout changed.	レイアウトだけが変更されました。
+str		The layout didn't change	レイアウトは変更されていません
+str		Only the model changed.	モデルだけが変更されました。
+str		The diagram's own details changed	図そのものの情報が変更されました
+str		Such as its name, or the order its boxes are drawn in.	名前や、ボックスを描く順序などです。
+str		This diagram was added	この図が追加されました
+str		It has no boxes or lines yet.	まだボックスも線もありません。
+str		This diagram was removed	この図が削除されました
+str		It had no boxes or lines.	ボックスも線もありませんでした。
 str		Version of {when}	{when} のバージョン
 str		Last version	最新のバージョン
 str		No description	説明なし

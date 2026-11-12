@@ -1189,6 +1189,62 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
     });
 }
 
+/// Above the sides, what differs in the model and in the layout is said apart, and a side with
+/// nothing says so and that the other alone changed.
+#[test]
+fn a_diagrams_model_and_layout_changes_are_said_apart() {
+    use archforge_notations::differences::{Apart, DiagramSides, Placed, Placing};
+    diagram_compared(|h, _| {
+        let said = [
+            "Model, 1 element added · 1 element changed, client, joins",
+            "Layout, 2 boxes placed · 1 box taken off · 1 line drawn, Unnamed, fresh, gone, joins",
+        ];
+        for words in said {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        let (model, layout) = (rect_of(h, "workspace.change-view.model"), rect_of(h, "workspace.change-view.layout"));
+        assert!(model.right() < layout.left() && layout.bottom() < rect_of(h, BEFORE).top(), "side by side, above the sides");
+        let (id, key) = (h.state().versions.element.as_ref().unwrap().row.id, h.state().versions.compared.clone().unwrap());
+        /// An item of a kept-apart difference named `name`.
+        fn item<K>(kind: K, name: &str, line: bool) -> Placed<K> {
+            Placed { id: Uuid([3; 16]), kind, name: Some(name.into()), line }
+        }
+        let only = |h: &mut Harness<'static, Shell>, apart: Apart| {
+            let sides = DiagramSides { id, name: None, path: Vec::new(), before: None, after: None, marks: Default::default(), apart };
+            let sides = crate::change_view::Sides::Diagram(std::sync::Arc::new(std::sync::Mutex::new(sides)));
+            reading(h, id, key.clone()).send(Ok(Some(sides))).unwrap();
+            h.run_steps(1);
+        };
+        only(h, Apart { model: vec![item(ChangeKind::Removed, "order", false)], ..Default::default() });
+        for words in ["Model, 1 element removed, order", "Layout, The layout didn't change, Only the model changed."] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the model changed, the layout did not: {words}");
+        }
+        only(h, Apart { layout: vec![item(Placing::Moved, "order", false), item(Placing::Changed, "joins", true)], ..Default::default() });
+        for words in ["Model, The model didn't change, Only the layout changed.", "Layout, 1 box moved · 1 line changed, order, joins"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the layout changed, the model did not: {words}");
+        }
+        only(h, Apart { itself: true, ..Default::default() });
+        let own = "Layout, The diagram's own details changed, Such as its name, or the order its boxes are drawn in.";
+        for words in ["Model, The model didn't change, Only the layout changed.", own] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        // An empty diagram that came or went draws no box or line, and still says so.
+        for (kind, own) in [
+            (ChangeKind::Added, "This diagram was added, It has no boxes or lines yet."),
+            (ChangeKind::Removed, "This diagram was removed, It had no boxes or lines."),
+        ] {
+            only(h, Apart { diagram: Some(kind), ..Default::default() });
+            for words in ["Model, The model didn't change, Only the layout changed.".to_string(), format!("Layout, {own}")] {
+                assert_eq!(h.query_all_by_label(&words).count(), 1, "{words}");
+            }
+        }
+        only(h, Apart::default());
+        for words in ["Model, The model didn't change", "Layout, The layout didn't change"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "nothing on either: {words}");
+        }
+    });
+}
+
 /// A side the diagram is not on says so, the title says what happened to it, and a failed read names a diagram.
 #[test]
 fn a_side_the_diagram_is_not_on_says_so() {
@@ -1198,6 +1254,7 @@ fn a_side_the_diagram_is_not_on_says_so() {
         open_change(h, "Extra");
         assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
         assert_eq!(h.query_all_by_label("Extra, Commerce platform, Added").count(), 1, "the title");
+        assert_eq!(h.query_all_by_label("Layout, This diagram was added, It has no boxes or lines yet.").count(), 1, "empty, yet added");
         edit(h, "diagram.remove", serde_json::json!({ "diagram": diagram }));
         list_still(h);
         open_change(h, "Billing");

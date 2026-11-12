@@ -3,8 +3,8 @@
 use archforge_mof::rows::{self, Cell, Rows};
 use archforge_mof::{ClassId, DataKind, PropId, Store, TypeRef, Uuid, Value};
 use archforge_notations::differences::{
-    Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
-    classified, diagram_sides, element_sides,
+    Apart, Area, CardField, CardList, ChangeKind, ClassifyError, DiagramSide, DiagramSides, Difference, ElementCard, ElementSides, ListKind, Named,
+    Placing, classified, diagram_sides, element_sides,
 };
 use archforge_notations::{Session, new_project_session, storage, universe};
 use serde_json::{Value as Json, json};
@@ -668,10 +668,11 @@ fn a_diagram_on_one_side_has_an_absent_side() {
     let without = state(&s);
     let gone = drawn(&with, &without, &diagram);
     assert!(gone.before.is_some() && gone.after.is_none());
-    assert_eq!(gone.name.as_deref(), Some("Billing"));
+    assert_eq!((gone.name.as_deref(), gone.apart.diagram), (Some("Billing"), Some(ChangeKind::Removed)));
     let came = drawn(&without, &with, &diagram);
     assert!(came.before.is_none() && came.after.is_some());
-    assert_eq!(came.name.as_deref(), Some("Billing"));
+    assert_eq!((came.name.as_deref(), came.apart.diagram), (Some("Billing"), Some(ChangeKind::Added)));
+    assert_eq!(drawn(&with, &with, &diagram).apart.diagram, None, "on both sides");
 }
 
 /// A box is marked with its own change, or Changed for what it draws; one nothing touched has no mark.
@@ -814,4 +815,43 @@ fn a_repair_marks_nothing() {
     assert_eq!(mark(&drawn(&before, &after, &diagram), &first), Some(ChangeKind::Changed), "without the repair it differs");
     let seen = diagram_sides(&before, &after, Uuid::parse(&diagram).unwrap(), fit).unwrap().unwrap();
     assert_eq!(seen.marks, Default::default());
+}
+
+/// What `apart` holds, by name, to compare at once: the model's elements, then the layout's boxes and lines.
+fn apart(seen: &Apart) -> (Vec<(&str, ChangeKind)>, Vec<(&str, Placing, bool)>, bool) {
+    let model = seen.model.iter().map(|m| (m.name.as_deref().unwrap_or_default(), m.kind)).collect();
+    let layout = seen.layout.iter().map(|l| (l.name.as_deref().unwrap_or_default(), l.kind, l.line)).collect();
+    (model, layout, seen.itself)
+}
+
+/// A diagram's differences kept apart: a rename is the model's alone, a move the layout's alone,
+/// and a new element placed is both; a line rerouted and the diagram renamed are the layout's.
+#[test]
+fn model_and_layout_changes_are_kept_apart() {
+    let Placed { mut s, shop, customer, invoice, diagram, first, second } = placed();
+    let before = state(&s);
+    run(&mut s, "er.entity.rename", json!({ "entity": customer, "name": "client" }));
+    assert_eq!(apart(&drawn(&before, &state(&s), &diagram).apart), (vec![("client", ChangeKind::Changed)], vec![], false), "the model only");
+
+    let renamed = state(&s);
+    run(&mut s, "diagram.move", json!({ "nodes": [second], "dx": 40, "dy": 0 }));
+    assert_eq!(apart(&drawn(&renamed, &state(&s), &diagram).apart), (vec![], vec![("invoice", Placing::Moved, false)], false), "the layout only");
+
+    let moved = state(&s);
+    let order = run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "order" }));
+    let ordered = run(&mut s, "diagram.place", json!({ "diagram": diagram, "element": order, "x": 0, "y": 400 }));
+    run(&mut s, "diagram.unplace", json!({ "nodes": [first] }));
+    let seen = drawn(&moved, &state(&s), &diagram);
+    let both = (vec![("order", ChangeKind::Added)], vec![("client", Placing::TakenOff, false), ("order", Placing::Placed, false)], false);
+    assert_eq!(apart(&seen.apart), both, "a box taken off leaves its element as it was");
+    assert_eq!(apart(&drawn(&state(&s), &moved, &diagram).apart).0, [("order", ChangeKind::Removed)], "swapped");
+
+    let relationship = run(&mut s, "er.relationship.add", json!({ "from": order, "to": invoice }));
+    let line = run(&mut s, "diagram.connect", json!({ "diagram": diagram, "element": relationship, "source": ordered, "target": second }));
+    let connected = state(&s);
+    run(&mut s, "diagram.route", json!({ "edge": line, "points": [{ "x": 200, "y": 300 }] }));
+    run(&mut s, "diagram.rename", json!({ "diagram": diagram, "name": "Invoices" }));
+    let seen = drawn(&connected, &state(&s), &diagram);
+    let (model, layout, itself) = apart(&seen.apart);
+    assert_eq!((model, layout.len(), layout[0].1, layout[0].2, itself), (vec![], 1, Placing::Changed, true, true), "rerouted and renamed");
 }

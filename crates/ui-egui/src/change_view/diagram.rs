@@ -1,18 +1,19 @@
-//! A changed diagram's Before and After (frame V3.4 of page 09): each side drawn from its own state
-//! in one shared framing, so a box that stayed is in the same place on both, with what differs marked.
+//! A changed diagram's Before and After (frame V3.4 of page 09): what differs in the model and in
+//! the layout, said apart, then each side drawn from its own state in one shared framing, so a box
+//! that stayed is in the same place on both, with what differs marked.
 
 use std::collections::BTreeMap;
 
 use archforge_diagram::grid::{bounds_of, middle_of};
 use archforge_diagram::{LabelPlace, diagram, edge, label, node_tree};
 use archforge_mof::{Obj, Uuid, Value};
-use archforge_notations::differences::{ChangeKind, DiagramSide, DiagramSides, shown_name};
+use archforge_notations::differences::{Apart, ChangeKind, DiagramSide, DiagramSides, Placing, shown_name};
 use egui::{Align2, CornerRadius, Pos2, Rect, Shape, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use super::cards::{self, BAND, EYEBROW, GUTTER};
 use crate::Shell;
 use crate::canvas::{Live, Scene, State, View, draw_scene, fit, real, refs};
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr, trn};
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
 use crate::version_details::MARGIN;
@@ -23,6 +24,10 @@ use crate::widgets::Registry;
 const MARK: f32 = 2.0;
 /// A mark's label's room around its word.
 const LABEL_PAD: Vec2 = vec2(6.0, 2.0);
+/// The Model and Layout cards' height, the gap between them and the room under them.
+const APART: f32 = 92.0;
+const APART_GAP: f32 = 16.0;
+const UNDER_APART: f32 = 18.0;
 
 /// Draws the two sides side by side from `top` to the end of `r`. Everything comes from the sides
 /// already held: nothing here asks the host or touches the session.
@@ -30,6 +35,12 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let area = Rect::from_min_max(pos2(r.left(), top), pos2(r.right(), r.bottom().max(top)));
     let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(area));
     ui.set_clip_rect(area.intersect(ui.clip_rect()));
+    let card = vec2(((r.width() - 2.0 * MARGIN - APART_GAP) / 2.0).max(0.0), APART);
+    for (i, (area, words)) in ["model", "layout"].into_iter().zip(apart_words(&sides.apart)).enumerate() {
+        let at = Rect::from_min_size(pos2(r.left() + MARGIN + i as f32 * (card.x + APART_GAP), top), card);
+        said_apart(shell, &ui, p, (area, at), &words);
+    }
+    let top = top + APART + UNDER_APART;
     let each = ((r.width() - 2.0 * MARGIN - GUTTER) / 2.0).max(0.0);
     let size = vec2(each, (r.bottom() - MARGIN - top - EYEBROW).max(0.0));
     let before = Rect::from_min_size(pos2(r.left() + MARGIN, top + EYEBROW), size);
@@ -38,6 +49,80 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     pane(shell, &mut ui, p, (before, true), (sides, framing), &head);
     let after = before.translate(vec2(each + GUTTER, 0.0));
     pane(shell, &mut ui, p, (after, false), (sides, framing), &tr("Current work"));
+}
+
+/// One of the cards above the sides in `at`, registered under `area`: what it is about, its headline
+/// and the names or sentence under it, read whole on hover. Names are in the accent colour, a sentence is not.
+fn said_apart(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, at): (&str, Rect), (what, head, detail, names): &(String, String, String, bool)) {
+    let paint = ui.painter();
+    paint.rect_filled(at, 10.0, p.surface);
+    paint.rect_stroke(at, 10.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+    let room = Some((at.width() - 40.0).max(0.0));
+    ux::text(paint, at.min + vec2(20.0, 14.0), what, types::SMALL, p.text_secondary, room);
+    ux::text(paint, at.min + vec2(20.0, 34.0), head, types::DIALOG_TITLE, p.text, room);
+    ux::text(paint, at.min + vec2(20.0, 60.0), detail, types::SMALL, if *names { p.accent } else { p.text_secondary }, room);
+    let whole = listed(&tr("{first}, {then}"), [what, head, detail].into_iter().map(String::as_str));
+    let _ = control(shell, ui, &format!("workspace.change-view.{area}"), "status", at, false).on_hover_text(&whole).accessible_name(whole);
+}
+
+/// `items` one after another in one buffer, the empty ones left out, with what `template` puts
+/// between its `{first}` and `{then}` between each two; that is worked out once for the whole list.
+fn listed<'a>(template: &str, items: impl Iterator<Item = &'a str>) -> String {
+    let between = fmt(template, &[("first", ""), ("then", "")]);
+    let mut all = String::new();
+    for item in items.filter(|i| !i.is_empty()) {
+        if !all.is_empty() {
+            all.push_str(&between);
+        }
+        all.push_str(item);
+    }
+    all
+}
+
+/// The Model card's words, then the Layout card's: what it is about, its headline, the names or
+/// sentence under it, and whether those are names. A side with nothing says so, and says the other alone changed.
+pub(super) fn apart_words(apart: &Apart) -> [(String, String, String, bool); 2] {
+    let model = |k: ChangeKind| apart.model.iter().filter(|e| e.kind == k).count() as u64;
+    let (added, changed, removed) = (model(ChangeKind::Added), model(ChangeKind::Changed), model(ChangeKind::Removed));
+    let model = [
+        (added, trn("{n} element added", "{n} elements added", added)),
+        (changed, trn("{n} element changed", "{n} elements changed", changed)),
+        (removed, trn("{n} element removed", "{n} elements removed", removed)),
+    ];
+    let layout = |line: bool, k: Placing| apart.layout.iter().filter(|e| e.line == line && e.kind == k).count() as u64;
+    let boxes = [Placing::Placed, Placing::Moved, Placing::Changed, Placing::TakenOff].map(|k| layout(false, k));
+    let lines = [Placing::Placed, Placing::Changed, Placing::TakenOff].map(|k| layout(true, k));
+    let layout = [
+        (boxes[0], trn("{n} box placed", "{n} boxes placed", boxes[0])),
+        (boxes[1], trn("{n} box moved", "{n} boxes moved", boxes[1])),
+        (boxes[2], trn("{n} box changed", "{n} boxes changed", boxes[2])),
+        (boxes[3], trn("{n} box taken off", "{n} boxes taken off", boxes[3])),
+        (lines[0], trn("{n} line drawn", "{n} lines drawn", lines[0])),
+        (lines[1], trn("{n} line changed", "{n} lines changed", lines[1])),
+        (lines[2], trn("{n} line taken off", "{n} lines taken off", lines[2])),
+    ];
+    let counted = |pieces: &[(u64, String)]| {
+        Some(listed(&tr("{first} · {then}"), pieces.iter().filter(|(n, _)| *n > 0).map(|(_, words)| words.as_str()))).filter(|s| !s.is_empty())
+    };
+    let unnamed = tr("Unnamed");
+    let names = |of: &mut dyn Iterator<Item = &Option<String>>| listed(&tr("{first}, {then}"), of.map(|n| n.as_deref().unwrap_or(&unnamed)));
+    let (model_said, layout_said) = (counted(&model), counted(&layout));
+    let model = match model_said {
+        Some(head) => (head, names(&mut apart.model.iter().map(|e| &e.name)), true),
+        None if layout_said.is_some() || apart.itself || apart.diagram.is_some() => {
+            (tr("The model didn't change"), tr("Only the layout changed."), false)
+        }
+        None => (tr("The model didn't change"), String::new(), false),
+    };
+    let layout = match layout_said {
+        Some(head) => (head, names(&mut apart.layout.iter().map(|e| &e.name)), true),
+        None if apart.diagram == Some(ChangeKind::Added) => (tr("This diagram was added"), tr("It has no boxes or lines yet."), false),
+        None if apart.diagram == Some(ChangeKind::Removed) => (tr("This diagram was removed"), tr("It had no boxes or lines."), false),
+        None if apart.itself => (tr("The diagram's own details changed"), tr("Such as its name, or the order its boxes are drawn in."), false),
+        None if model.2 => (tr("The layout didn't change"), tr("Only the model changed."), false),
+        None => (tr("The layout didn't change"), String::new(), false),
+    };
+    [(tr("Model"), model.0, model.1, model.2), (tr("Layout"), layout.0, layout.1, layout.2)]
 }
 
 /// The one zoom and pan both sides are drawn with: what fits all either side draws into `size`.
