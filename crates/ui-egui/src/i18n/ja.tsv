@@ -530,6 +530,7 @@ str		Delete {branch}?	{branch} を削除しますか？
 str		Goes with the branch:	ブランチと一緒に削除されるもの：
 str		Counting what goes with it…	一緒に削除されるものを数えています…
 str		What goes with it couldn't be read: {why}	一緒に削除されるものを読み取れませんでした: {why}
+str		the host stopped without an answer	ホストが応答せずに停止しました
 plural		{n} version only on this branch	このブランチだけのバージョン {n} 件
 plural		{n} conversation	会話 {n} 件
 str		{versions} · {conversations}	{versions} · {conversations}

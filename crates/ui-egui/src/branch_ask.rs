@@ -151,7 +151,7 @@ fn counted(shell: &mut Shell, ctx: &egui::Context) {
     let counts = match read.try_recv() {
         Ok(counts) => counts,
         Err(TryRecvError::Empty) => return ctx.request_repaint_after(std::time::Duration::from_millis(100)),
-        Err(TryRecvError::Disconnected) => Err("the host stopped without an answer".into()),
+        Err(TryRecvError::Disconnected) => Err(tr("the host stopped without an answer")),
     };
     shell.versions.counting = None;
     ctx.request_repaint();

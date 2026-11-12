@@ -530,6 +530,7 @@ str		Delete {branch}?	{branch} löschen?
 str		Goes with the branch:	Mit dem Zweig geht:
 str		Counting what goes with it…	Es wird gezählt, was mitgeht…
 str		What goes with it couldn't be read: {why}	Was mitgeht, konnte nicht gelesen werden: {why}
+str		the host stopped without an answer	der Host hat ohne Antwort aufgehört
 plural		{n} version only on this branch	{n} Version nur auf diesem Zweig|{n} Versionen nur auf diesem Zweig
 plural		{n} conversation	{n} Unterhaltung|{n} Unterhaltungen
 str		{versions} · {conversations}	{versions} · {conversations}

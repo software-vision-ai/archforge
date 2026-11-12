@@ -530,6 +530,7 @@ str		Delete {branch}?	删除 {branch}？
 str		Goes with the branch:	随分支一起删除：
 str		Counting what goes with it…	正在统计随之删除的内容…
 str		What goes with it couldn't be read: {why}	无法读取随之删除的内容：{why}
+str		the host stopped without an answer	主机未作答便已停止
 plural		{n} version only on this branch	仅在此分支上的 {n} 个版本
 plural		{n} conversation	{n} 个对话
 str		{versions} · {conversations}	{versions} · {conversations}

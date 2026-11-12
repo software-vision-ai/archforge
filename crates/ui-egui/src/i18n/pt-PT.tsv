@@ -530,6 +530,7 @@ str		Delete {branch}?	Eliminar {branch}?
 str		Goes with the branch:	Vai com o ramo:
 str		Counting what goes with it…	A contar o que vai com ele…
 str		What goes with it couldn't be read: {why}	Não foi possível ler o que vai com ele: {why}
+str		the host stopped without an answer	o anfitrião parou sem responder
 plural		{n} version only on this branch	{n} versão só neste ramo|{n} versões só neste ramo
 plural		{n} conversation	{n} conversa|{n} conversas
 str		{versions} · {conversations}	{versions} · {conversations}

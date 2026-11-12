@@ -529,6 +529,7 @@ str		Delete {branch}?	Delete {branch}?
 str		Goes with the branch:	Goes with the branch:
 str		Counting what goes with it…	Counting what goes with it…
 str		What goes with it couldn't be read: {why}	What goes with it couldn't be read: {why}
+str		the host stopped without an answer	the host stopped without an answer
 plural		{n} version only on this branch	{n} version only on this branch|{n} versions only on this branch
 plural		{n} conversation	{n} conversation|{n} conversations
 str		{versions} · {conversations}	{versions} · {conversations}
