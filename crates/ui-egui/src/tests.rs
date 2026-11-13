@@ -2610,6 +2610,41 @@ fn a_comparison_past_its_limit_counts_as_a_repair() {
     });
 }
 
+/// A Chat write that starts while a comparison holds the replacement gets the whole settle time
+/// from when it is seen, however long the comparison took.
+#[test]
+fn a_chat_write_after_a_long_comparison_gets_its_whole_settle_time() {
+    use crate::hold::CHAT_SETTLE_LIMIT;
+    use std::sync::atomic::Ordering::{Relaxed, SeqCst};
+    in_both(
+        || chat_history(ThemeKind::Light),
+        |mut h, rig, chats| {
+            h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
+            h.run_steps(2);
+            let rows = rows_now(&h);
+            let (comparison, answer_of_comparison) = std::sync::mpsc::channel();
+            crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(answer_of_comparison));
+            let read = start_replacing(&mut h, None);
+            read.send(Ok(rows)).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(crate::replace::COMPARE_LIMIT - 1, Relaxed);
+            h.run_steps(2);
+            assert!(h.state().is_held(), "the comparison holds it");
+            rig.store.hold.store(true, SeqCst);
+            crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+            crate::chat_delete::confirm(h.state_mut());
+            comparison.send(false).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(CHAT_SETTLE_LIMIT - 1, Relaxed);
+            h.run_steps(3);
+            assert!(h.state().is_held() && h.state().save_error.is_none(), "Chat still has time: {:?}", h.state().save_error);
+            rig.store.release();
+            h.run_steps(4);
+            assert!(!h.state().is_held() && h.state().save_error.is_none(), "then it goes on");
+        },
+    );
+}
+
 /// A refused view starts no read: the hold comes before the first step.
 #[test]
 fn a_version_is_not_read_over_another_hold_or_without_a_project() {

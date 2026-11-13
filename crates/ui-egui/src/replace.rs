@@ -352,9 +352,10 @@ impl Shell {
                     let repaired = match r.repaired.as_mut().map(|c| c.repaired(now)) {
                         None => false,
                         Some(Some(repaired)) => repaired,
-                        // Still being compared: the hold's wake-ups bring the next look.
+                        // Still being compared: the hold's wake-ups bring the next look. Chat is
+                        // settled here, so a Chat that is busy later gets its whole settle time.
                         Some(None) => {
-                            r.stage = Stage::Ready(session, Some(since));
+                            r.stage = Stage::Ready(session, None);
                             return Some(r);
                         }
                     };
