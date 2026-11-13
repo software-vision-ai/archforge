@@ -148,6 +148,22 @@ pub enum Reason {
     KindsDiffer { relationship: &'static str },
     /// An element of `kind` cannot be the `end` of a `relationship`.
     WrongEnd { relationship: &'static str, end: End, kind: &'static str },
+    /// An element holds at least `min` of `kind`, as a generalization set one generalization.
+    TooFew { kind: &'static str, min: usize },
+    /// The generalizations named, each as its specific and its general classifier's names,
+    /// specialize different classifiers, where a set groups the generalizations of one.
+    ParentsDiffer(Box<[(String, String)]>),
+    /// The other end of a binary association aggregates already: only the part's end does.
+    OtherEndAggregates,
+    /// A composition's part: the other end, the whole's, would allow more than one.
+    WholeAllowsMany,
+    /// This end is a composition's whole, which allows one at most.
+    WholeAllowsOne,
+    /// The whole's end of an aggregation or a composition would be navigable.
+    WholeNavigable,
+    /// An n-ary association's end would aggregate: only a binary association has a whole and a
+    /// part.
+    NaryAggregates,
     /// A template parameter of `kind`, as `"value"`, is not supported yet.
     KindNotSupported { kind: &'static str },
     /// An element holds at most `max` of `kind`, as a template at most so many template parameters.

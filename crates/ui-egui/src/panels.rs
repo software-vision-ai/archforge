@@ -432,7 +432,7 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
         Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
         Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
-        other => return relationship_said(other).or_else(|| template_said(other)),
+        other => return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other)),
     };
     let what = a_kind(kind)?;
     // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
@@ -531,6 +531,27 @@ fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
             &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
             &[("what", &a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
+        _ => return None,
+    })
+}
+
+/// A generalization set's or an association end's rule broken, in the words the set menu and the
+/// end editor say it with; none for a reason or a kind the catalogues don't say.
+fn set_and_end_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    Some(match reason {
+        Reason::TooFew { kind: "generalization", min: 1 } => tr("A set groups at least one generalization."),
+        Reason::TooMany { kind: "generalization", max } => {
+            crate::i18n::trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", u64::try_from(*max).ok()?)
+        }
+        Reason::ParentsDiffer(ends) => crate::uml_sets::parents_differ(ends),
+        Reason::TooFew { kind: "association end", min: 3 } => tr("An n-ary association needs three ends or more."),
+        Reason::TooMany { kind: "association end", max } => fmt(&tr("An association takes at most {n} ends"), &[("n", &max.to_string())]),
+        Reason::OtherEndAggregates => tr("The other end has an aggregation already: only the part's end has one."),
+        Reason::WholeAllowsMany => tr("A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first."),
+        Reason::WholeAllowsOne => tr("This end is a composition's whole, which allows one at most."),
+        Reason::WholeNavigable => tr("The whole's end of an aggregation or composition is not navigable."),
+        Reason::NaryAggregates => tr("An n-ary association's ends are not aggregations: only a binary association has a whole and a part."),
         _ => return None,
     })
 }

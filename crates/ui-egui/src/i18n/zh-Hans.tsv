@@ -1438,6 +1438,10 @@ str		Clear	清除
 str		Client	客户
 str		Composite	组合
 str		Composition	组合
+str		The other end has an aggregation already: only the part's end has one.	另一端已有聚合：只有部分一端才有聚合。
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	组合的整体一端最多只允许一个：请先把另一端的多重性设为 1 或 0..1。
+str		This end is a composition's whole, which allows one at most.	此端是组合的整体，最多只允许一个。
+str		The whole's end of an aggregation or composition is not navigable.	聚合或组合中整体一端不可导航。
 str		Dependency	依赖
 str		Dependency · model	依赖 · 模型
 str		Directed association	有向关联
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	点击一个类作为新的端
 str		Esc cancels	Esc 取消
 str		An n-ary association joins classes and interfaces	多元关联连接类和接口
 str		An association takes at most {n} ends	一个关联最多有 {n} 个端
+str		An n-ary association needs three ends or more.	多元关联需要三个或更多的端。
 str		An n-ary association needs three ends or more: click another class	多元关联需要三个或更多的端：请再点击一个类
 str		Add n-ary association	添加多元关联
 str		New n-ary association	新建多元关联
@@ -1554,6 +1559,7 @@ str		Reconnect end	重新连接端
 str		Drag a leg end	拖动分支的端点
 str		Open a class diagram to pick the new end's class	请打开一个类图以选择新端的类
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多元关联的端不是聚合，因此不提供聚合。角色不同时，两个端可以使用同一类型。
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	多元关联的端不是聚合：只有二元关联才有整体和部分。
 str		Another end has the role {role} already. Pick another role.	另一个端已有角色 {role}。请另选一个角色。
 str		Set association end	设置关联端
 str		End {role} removed	已移除端 {role}
@@ -1575,6 +1581,8 @@ str		Interface realization	接口实现
 str		Interface realization · model	接口实现 · 模型
 # 泛化集 (AR-129)
 str		A set groups generalizations of one class.	一个集合只归组同一个类的泛化。
+str		A set groups at least one generalization.	一个集合至少归组一个泛化。
+plural		A set groups at most {n} generalization.	一个集合最多归组 {n} 个泛化。
 str		Add member	添加成员
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	添加成员只提供指向 {general} 的泛化。编辑会打开该泛化。
 str		Add to a generalization set	添加到泛化集

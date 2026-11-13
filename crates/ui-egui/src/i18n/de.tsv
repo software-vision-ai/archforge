@@ -1438,6 +1438,10 @@ str		Clear	Leeren
 str		Client	Client
 str		Composite	Komposition
 str		Composition	Komposition
+str		The other end has an aggregation already: only the part's end has one.	Das andere Ende hat bereits eine Aggregation: Nur das Ende des Teils hat eine.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	Das Ganze einer Komposition lässt höchstens eins zu: Setzen Sie zuerst die Multiplizität des anderen Endes auf 1 oder 0..1.
+str		This end is a composition's whole, which allows one at most.	Dieses Ende ist das Ganze einer Komposition, das höchstens eins zulässt.
+str		The whole's end of an aggregation or composition is not navigable.	Das Ende des Ganzen einer Aggregation oder Komposition ist nicht navigierbar.
 str		Dependency	Abhängigkeit
 str		Dependency · model	Abhängigkeit · Modell
 str		Directed association	Gerichtete Assoziation
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	Klicken Sie auf eine Klasse für das neue End
 str		Esc cancels	Esc bricht ab
 str		An n-ary association joins classes and interfaces	Eine n-äre Assoziation verbindet Klassen und Schnittstellen
 str		An association takes at most {n} ends	Eine Assoziation hat höchstens {n} Enden
+str		An n-ary association needs three ends or more.	Eine n-äre Assoziation braucht drei Enden oder mehr.
 str		An n-ary association needs three ends or more: click another class	Eine n-äre Assoziation braucht drei Enden oder mehr: Klicken Sie auf eine weitere Klasse
 str		Add n-ary association	N-äre Assoziation hinzufügen
 str		New n-ary association	Neue n-äre Assoziation
@@ -1554,6 +1559,7 @@ str		Reconnect end	Ende neu verbinden
 str		Drag a leg end	Ein Schenkelende ziehen
 str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Die Enden einer n-ären Assoziation sind keine Aggregationen: Nur eine binäre Assoziation hat ein Ganzes und ein Teil.
 str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.
 str		Set association end	Assoziationsende festlegen
 str		End {role} removed	Ende {role} entfernt
@@ -1575,6 +1581,8 @@ str		Interface realization	Schnittstellenrealisierung
 str		Interface realization · model	Schnittstellenrealisierung · Modell
 # Generalisierungsmengen (AR-129)
 str		A set groups generalizations of one class.	Eine Menge fasst Generalisierungen einer Klasse zusammen.
+str		A set groups at least one generalization.	Eine Menge fasst mindestens eine Generalisierung zusammen.
+plural		A set groups at most {n} generalization.	Eine Menge fasst höchstens {n} Generalisierung zusammen.|Eine Menge fasst höchstens {n} Generalisierungen zusammen.
 str		Add member	Mitglied hinzufügen
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Mitglied hinzufügen bietet nur Generalisierungen zu {general} an. Bearbeiten öffnet diese Generalisierung.
 str		Add to a generalization set	Zu einer Generalisierungsmenge hinzufügen

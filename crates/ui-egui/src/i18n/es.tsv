@@ -1438,6 +1438,10 @@ str		Clear	Borrar
 str		Client	Cliente
 str		Composite	Compuesta
 str		Composition	Composición
+str		The other end has an aggregation already: only the part's end has one.	El otro extremo ya tiene una agregación: solo la tiene el extremo de la parte.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	El todo de una composición admite uno como máximo: establezca primero la multiplicidad del otro extremo en 1 o 0..1.
+str		This end is a composition's whole, which allows one at most.	Este extremo es el todo de una composición, que admite uno como máximo.
+str		The whole's end of an aggregation or composition is not navigable.	El extremo del todo de una agregación o composición no es navegable.
 str		Dependency	Dependencia
 str		Dependency · model	Dependencia · modelo
 str		Directed association	Asociación dirigida
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	Haga clic en una clase para el nuevo extremo
 str		Esc cancels	Esc cancela
 str		An n-ary association joins classes and interfaces	Una asociación n-aria une clases e interfaces
 str		An association takes at most {n} ends	Una asociación tiene como máximo {n} extremos
+str		An n-ary association needs three ends or more.	Una asociación n-aria necesita tres extremos o más.
 str		An n-ary association needs three ends or more: click another class	Una asociación n-aria necesita tres extremos o más: haga clic en otra clase
 str		Add n-ary association	Añadir asociación n-aria
 str		New n-ary association	Nueva asociación n-aria
@@ -1554,6 +1559,7 @@ str		Reconnect end	Reconectar extremo
 str		Drag a leg end	Arrastre el final de un tramo
 str		Open a class diagram to pick the new end's class	Abra un diagrama de clases para elegir la clase del nuevo extremo
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Los extremos de una asociación n-aria no son agregaciones, así que no se ofrece Agregación. Repita un tipo para dos extremos cuando los roles difieran.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Los extremos de una asociación n-aria no son agregaciones: solo una asociación binaria tiene un todo y una parte.
 str		Another end has the role {role} already. Pick another role.	Otro extremo ya tiene el rol {role}. Elija otro rol.
 str		Set association end	Definir extremo de asociación
 str		End {role} removed	Extremo {role} eliminado
@@ -1575,6 +1581,8 @@ str		Interface realization	Realización de interfaz
 str		Interface realization · model	Realización de interfaz · modelo
 # Conjuntos de generalización (AR-129)
 str		A set groups generalizations of one class.	Un conjunto agrupa generalizaciones de una sola clase.
+str		A set groups at least one generalization.	Un conjunto agrupa al menos una generalización.
+plural		A set groups at most {n} generalization.	Un conjunto agrupa como máximo {n} generalización.|Un conjunto agrupa como máximo {n} generalizaciones.
 str		Add member	Añadir miembro
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Añadir miembro solo ofrece generalizaciones hacia {general}. Editar abre esa generalización.
 str		Add to a generalization set	Añadir a un conjunto de generalización

@@ -1437,6 +1437,10 @@ str		Clear	Clear
 str		Client	Client
 str		Composite	Composite
 str		Composition	Composition
+str		The other end has an aggregation already: only the part's end has one.	The other end has an aggregation already: only the part's end has one.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.
+str		This end is a composition's whole, which allows one at most.	This end is a composition's whole, which allows one at most.
+str		The whole's end of an aggregation or composition is not navigable.	The whole's end of an aggregation or composition is not navigable.
 str		Dependency	Dependency
 str		Dependency · model	Dependency · model
 str		Directed association	Directed association
@@ -1536,6 +1540,7 @@ str		Click a class for the new end	Click a class for the new end
 str		Esc cancels	Esc cancels
 str		An n-ary association joins classes and interfaces	An n-ary association joins classes and interfaces
 str		An association takes at most {n} ends	An association takes at most {n} ends
+str		An n-ary association needs three ends or more.	An n-ary association needs three ends or more.
 str		An n-ary association needs three ends or more: click another class	An n-ary association needs three ends or more: click another class
 str		Add n-ary association	Add n-ary association
 str		New n-ary association	New n-ary association
@@ -1553,6 +1558,7 @@ str		Reconnect end	Reconnect end
 str		Drag a leg end	Drag a leg end
 str		Open a class diagram to pick the new end's class	Open a class diagram to pick the new end's class
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	An n-ary association's ends are not aggregations: only a binary association has a whole and a part.
 str		Another end has the role {role} already. Pick another role.	Another end has the role {role} already. Pick another role.
 str		Set association end	Set association end
 str		End {role} removed	End {role} removed
@@ -1574,6 +1580,8 @@ str		Interface realization	Interface realization
 str		Interface realization · model	Interface realization · model
 # Generalization sets (AR-129)
 str		A set groups generalizations of one class.	A set groups generalizations of one class.
+str		A set groups at least one generalization.	A set groups at least one generalization.
+plural		A set groups at most {n} generalization.	A set groups at most {n} generalization.|A set groups at most {n} generalizations.
 str		Add member	Add member
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Add member offers only generalizations to {general}. Edit opens that generalization.
 str		Add to a generalization set	Add to a generalization set

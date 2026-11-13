@@ -1438,6 +1438,10 @@ str		Clear	Effacer
 str		Client	Client
 str		Composite	Composite
 str		Composition	Composition
+str		The other end has an aggregation already: only the part's end has one.	L'autre extrémité a déjà une agrégation : seule l'extrémité de la partie en a une.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	Le tout d'une composition en admet un au plus : réglez d'abord la multiplicité de l'autre extrémité sur 1 ou 0..1.
+str		This end is a composition's whole, which allows one at most.	Cette extrémité est le tout d'une composition, qui en admet un au plus.
+str		The whole's end of an aggregation or composition is not navigable.	L'extrémité du tout d'une agrégation ou d'une composition n'est pas navigable.
 str		Dependency	Dépendance
 str		Dependency · model	Dépendance · modèle
 str		Directed association	Association orientée
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	Cliquez sur une classe pour la nouvelle extr�
 str		Esc cancels	Échap annule
 str		An n-ary association joins classes and interfaces	Une association n-aire relie des classes et des interfaces
 str		An association takes at most {n} ends	Une association compte au plus {n} extrémités
+str		An n-ary association needs three ends or more.	Une association n-aire demande trois extrémités ou plus.
 str		An n-ary association needs three ends or more: click another class	Une association n-aire demande trois extrémités ou plus : cliquez sur une autre classe
 str		Add n-ary association	Ajouter une association n-aire
 str		New n-ary association	Nouvelle association n-aire
@@ -1554,6 +1559,7 @@ str		Reconnect end	Reconnecter une extrémité
 str		Drag a leg end	Faites glisser le bout d’une branche
 str		Open a class diagram to pick the new end's class	Ouvrez un diagramme de classes pour choisir la classe de la nouvelle extrémité
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Les extrémités d’une association n-aire ne sont pas des agrégations, donc Agrégation n’est pas proposé. Répétez un type pour deux extrémités quand les rôles diffèrent.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Les extrémités d'une association n-aire ne sont pas des agrégations : seule une association binaire a un tout et une partie.
 str		Another end has the role {role} already. Pick another role.	Une autre extrémité a déjà le rôle {role}. Choisissez un autre rôle.
 str		Set association end	Définir l’extrémité d’association
 str		End {role} removed	Extrémité {role} supprimée
@@ -1575,6 +1581,8 @@ str		Interface realization	Réalisation d’interface
 str		Interface realization · model	Réalisation d’interface · modèle
 # Ensembles de généralisations (AR-129)
 str		A set groups generalizations of one class.	Un ensemble regroupe des généralisations d'une seule classe.
+str		A set groups at least one generalization.	Un ensemble regroupe au moins une généralisation.
+plural		A set groups at most {n} generalization.	Un ensemble regroupe au plus {n} généralisation.|Un ensemble regroupe au plus {n} généralisations.
 str		Add member	Ajouter un membre
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Ajouter un membre ne propose que des généralisations vers {general}. Modifier ouvre cette généralisation.
 str		Add to a generalization set	Ajouter à un ensemble de généralisations

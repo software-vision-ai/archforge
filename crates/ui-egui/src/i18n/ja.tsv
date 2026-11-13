@@ -1438,6 +1438,10 @@ str		Clear	クリア
 str		Client	クライアント
 str		Composite	コンポジット
 str		Composition	コンポジション
+str		The other end has an aggregation already: only the part's end has one.	もう一方の端にはすでに集約があります。集約を持てるのは部分側の端だけです。
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	コンポジションの全体側は最大 1 つしか許しません。先にもう一方の端の多重度を 1 または 0..1 にしてください。
+str		This end is a composition's whole, which allows one at most.	この端はコンポジションの全体側で、最大 1 つしか許しません。
+str		The whole's end of an aggregation or composition is not navigable.	集約やコンポジションの全体側の端はナビゲーション可能にできません。
 str		Dependency	依存
 str		Dependency · model	依存 · モデル
 str		Directed association	有向関連
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	新しい端のクラスをクリックして
 str		Esc cancels	Esc でキャンセル
 str		An n-ary association joins classes and interfaces	多項関連はクラスとインターフェースを結びます
 str		An association takes at most {n} ends	関連の端は最大 {n} 個です
+str		An n-ary association needs three ends or more.	多項関連には 3 つ以上の端が必要です。
 str		An n-ary association needs three ends or more: click another class	多項関連には 3 つ以上の端が必要です。別のクラスをクリックしてください
 str		Add n-ary association	多項関連を追加
 str		New n-ary association	新しい多項関連
@@ -1554,6 +1559,7 @@ str		Reconnect end	端をつなぎ直す
 str		Drag a leg end	脚の端をドラッグ
 str		Open a class diagram to pick the new end's class	新しい端のクラスを選ぶには、クラス図を開いてください
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多項関連の端は集約ではないため、集約は表示されません。ロールが異なる場合は、2 つの端に同じ型を使えます。
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	多項関連の端は集約になりません。全体と部分を持つのは二項関連だけです。
 str		Another end has the role {role} already. Pick another role.	別の端がすでにロール {role} を持っています。別のロールを選んでください。
 str		Set association end	関連の端を設定
 str		End {role} removed	端 {role} を削除しました
@@ -1575,6 +1581,8 @@ str		Interface realization	インターフェース実現
 str		Interface realization · model	インターフェース実現 · モデル
 # 汎化セット (AR-129)
 str		A set groups generalizations of one class.	セットは 1 つのクラスへの汎化をまとめます。
+str		A set groups at least one generalization.	セットには少なくとも 1 つの汎化が必要です。
+plural		A set groups at most {n} generalization.	セットにまとめられる汎化は最大 {n} 個です。
 str		Add member	メンバーを追加
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	メンバーを追加は {general} への汎化だけを示します。編集でその汎化を開きます。
 str		Add to a generalization set	汎化セットに追加
