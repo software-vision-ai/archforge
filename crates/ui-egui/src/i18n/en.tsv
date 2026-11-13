@@ -514,6 +514,9 @@ str		Models	Models
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	This branch
+str		Another branch	Another branch
+str		Latest version	Latest version
+str		Latest on {branch}	Latest on {branch}
 str	branch	Current	Current
 str		Branches can't be merged yet.	Branches can't be merged yet.
 str		Only the first {n} branches are listed.	Only the first {n} branches are listed.

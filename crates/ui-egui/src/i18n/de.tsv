@@ -515,6 +515,9 @@ str		Models	Modelle
 str		Versions	Versionen
 str		Branches	Zweige
 str		This branch	Dieser Zweig
+str		Another branch	Anderer Zweig
+str		Latest version	Neueste Version
+str		Latest on {branch}	Neueste auf {branch}
 str	branch	Current	Aktuell
 str		Branches can't be merged yet.	Zweige können noch nicht zusammengeführt werden.
 str		Only the first {n} branches are listed.	Nur die ersten {n} Zweige sind aufgeführt.

@@ -217,6 +217,8 @@ pub struct BranchEntry {
     pub unsaved: bool,
     /// When its latest version was saved, as the project stores it; none before the first.
     pub latest: Option<String>,
+    /// That version's hash, which Compare reads.
+    pub latest_version: Option<String>,
 }
 
 pub trait ProjectHost: Send + Sync {
@@ -368,6 +370,14 @@ pub trait ProjectHost: Send + Sync {
     fn read_version(&self, _project: &std::path::Path, _commit: String) -> std::sync::mpsc::Receiver<VersionRead> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err("this host keeps no versions".to_string().into()));
+        rx
+    }
+
+    /// [`ProjectHost::read_version`] of a version on the line of the branch stored as `branch`,
+    /// whichever branch the project is on. A host that keeps no branches has none to read.
+    fn read_branch_version(&self, _project: &std::path::Path, _branch: &str, _commit: String) -> std::sync::mpsc::Receiver<VersionRead> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(VersionReadError::Unavailable));
         rx
     }
 

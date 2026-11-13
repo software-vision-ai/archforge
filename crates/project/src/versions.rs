@@ -269,6 +269,11 @@ impl VersionReader {
         database_connection(&self.connector, &branch_now(&self.branch))
     }
 
+    /// A connection of this reader's own, using `branch` of the project's database.
+    pub(crate) fn branch_connection(&self, branch: &SafeBranch) -> Result<mysql::Conn, Error> {
+        database_connection(&self.connector, branch)
+    }
+
     /// The branch the project is on now.
     pub fn current_branch(&self) -> SafeBranch {
         branch_now(&self.branch)

@@ -290,6 +290,35 @@ fn only_a_commit_on_the_projects_own_line_is_a_version() {
     project.close().unwrap();
 }
 
+/// Another branch's version reads on that branch's line, as saved there, while the current branch
+/// stays where it was; on a line it is not on, it is refused.
+#[test]
+fn another_branchs_version_reads_on_its_own_line() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("onbranch");
+    let schema = schema();
+    let project = with_branches(&env, &schema, &["side", "bare"]);
+    let mut s = model();
+    run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    let written = rows_of(s.doc(), &schema);
+    let mut side = on_branch(&project, "side");
+    project.set_current_branch(SafeBranch::found("side").unwrap());
+    project.write_model(&schema, &written).unwrap();
+    project.set_current_branch(SafeBranch::found("main").unwrap());
+    let hash = commit_all(&mut side, "On side");
+    let (reader, before) = (project.version_reader(), untouched(&project));
+    let read = reader.read_model_on(&schema, &SafeBranch::found("side").unwrap(), &hash).unwrap();
+    assert_eq!(restored(&read, &schema), written, "the version as the other branch saved it");
+    assert!(matches!(reader.read_model_at(&schema, &hash), Err(Error::NotAVersion { .. })), "not on the current line");
+    let refused = reader.read_model_on(&schema, &SafeBranch::found("bare").unwrap(), &hash);
+    assert!(matches!(refused, Err(Error::NotAVersion { .. })), "nor on a line it is not on");
+    assert_eq!((untouched(&project), project.current_branch()), (before, SafeBranch::found("main").unwrap()), "reading moves nothing");
+    on_branch(&project, "main").query_drop("CALL DOLT_BRANCH('-D', 'side')").unwrap();
+    let gone = reader.read_model_on(&schema, &SafeBranch::found("side").unwrap(), &hash);
+    assert!(matches!(gone, Err(Error::NotAVersion { .. })), "a branch deleted since: {gone:?}");
+    project.close().unwrap();
+}
+
 /// Commits everything the working set of `c` holds and gives the new commit's hash.
 fn commit_all(c: &mut mysql::Conn, message: &str) -> String {
     c.exec_drop("CALL DOLT_COMMIT('-Am', ?, '--author', 'Test <test@localhost>')", (message,)).unwrap();

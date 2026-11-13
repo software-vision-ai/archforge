@@ -1083,6 +1083,17 @@ impl ProjectHost for Projects {
         })
     }
 
+    /// The model a version on another branch's line holds, read as [`Projects::read_version`] reads;
+    /// a name that can't be used has no versions to read.
+    fn read_branch_version(&self, project: &Path, branch: &str, commit: String) -> Receiver<VersionRead> {
+        let (inner, branch) = (self.inner.clone(), SafeBranch::found(branch));
+        self.on_a_reader(project, move |reader| {
+            let branch = branch.map_err(|_| VersionReadError::Unavailable)?;
+            let schema = schema(&inner).map_err(|e| format!("{e:?}"))?;
+            reader.read_model_on(&schema, &branch, &commit).map(Arc::new).map_err(version_read_error)
+        })
+    }
+
     /// The branch the project is on, from its reader: it waits for no write.
     fn current_branch(&self, project: &Path) -> Option<String> {
         lock(&self.inner.readers).get(project).map(|open| open.reader.current_branch().stored().to_string())
@@ -2496,12 +2507,13 @@ fn branch_entries(reader: &VersionReader, max: usize) -> Result<(Vec<BranchEntry
     let found = reader.branches(max).map_err(|e| e.to_string())?;
     let entry = |b: archforge_project::ListedBranch| {
         let latest = match &b.usable {
-            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
+            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next(),
             Err(_) => None,
         };
+        let (latest, latest_version) = latest.map_or((None, None), |v| (Some(v.date), Some(v.hash)));
         // Changes that can't be looked at may be the model's.
         let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
-        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
+        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest, latest_version })
     };
     Ok((found.listed.into_iter().map(entry).collect::<Result<_, String>>()?, found.cut))
 }
@@ -5409,11 +5421,13 @@ mod tests {
         let reader = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
         let (two, two_cut) = branch_entries(&reader, 2).unwrap();
         assert!(!cut && two.len() == 2 && two_cut, "only a list cut short says so");
-        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].date.clone();
+        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions.remove(0);
         let seen: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.current, b.latest.as_deref())).collect();
-        let main = ("main", true, Some(main_latest.as_str()));
+        let main = ("main", true, Some(main_latest.date.as_str()));
         assert!(seen.contains(&("elsewhere", false, Some("2030-01-02T03:04:05Z"))) && seen.contains(&main), "{seen:?}");
         assert!(seen.contains(&("odd+name", false, None)), "{seen:?}");
+        let hashes: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.latest_version.as_deref())).collect();
+        assert!(hashes.contains(&("main", Some(main_latest.hash.as_str()))) && hashes.contains(&("odd+name", None)), "{hashes:?}");
     }
 
     /// A chat seeded on `name`, a branch of its own, with the project back on `main`.

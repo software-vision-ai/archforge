@@ -515,6 +515,9 @@ str		Models	Modelos
 str		Versions	Versões
 str		Branches	Ramos
 str		This branch	Este ramo
+str		Another branch	Outro ramo
+str		Latest version	Versão mais recente
+str		Latest on {branch}	Mais recente de {branch}
 str	branch	Current	Atual
 str		Branches can't be merged yet.	Ainda não é possível juntar ramos.
 str		Only the first {n} branches are listed.	Apenas os primeiros {n} ramos são apresentados.

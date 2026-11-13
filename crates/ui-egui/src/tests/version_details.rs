@@ -1658,6 +1658,89 @@ fn two_versions_are_read_one_at_a_time_and_compared() {
     });
 }
 
+/// `main` in use, `try-cancellations` with a latest version `t1`, and `empty` with none, as the
+/// Branches section has them. The list's row of `try-cancellations`, after the three versions and
+/// the heading.
+fn branched(h: &mut Harness<'static, Shell>, host: &SavingHost) -> String {
+    let main = crate::BranchEntry {
+        name: "main".into(),
+        shown: "main".into(),
+        current: true,
+        unsaved: false,
+        latest: Some("2026-11-07T16:15:00Z".into()),
+        latest_version: Some("c3".into()),
+    };
+    let other = crate::BranchEntry {
+        name: "try-cancellations".into(),
+        shown: "Try cancellations".into(),
+        current: false,
+        latest_version: Some("t1".into()),
+        ..main.clone()
+    };
+    let empty =
+        crate::BranchEntry { name: "empty".into(), shown: "Empty".into(), current: false, latest: None, latest_version: None, ..main.clone() };
+    let listed = vec![empty, main, other];
+    *host.branch_list.lock().unwrap() = Some(Ok(listed.clone()));
+    h.state_mut().versions.branches = Some(listed);
+    row_id(5)
+}
+
+/// Another branch is listed under its heading by its latest version, the branch in use and one
+/// without a version left out. Picked, it is read on its own line and compared with a version as
+/// two versions are: an edit to current work reads nothing again.
+#[test]
+fn another_branchs_latest_version_is_read_on_its_line_and_compared() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let other = branched(h, host);
+        tap(h, SELECT_AFTER);
+        assert!(painted_has(h, "ANOTHER BRANCH") && has_id(h, &other) && !has_id(h, &row_id(4)) && !has_id(h, &row_id(6)), "{:?}", ids(h));
+        let option = |h: &Harness<'static, Shell>, name: &str| {
+            h.query_all_by_role(egui::accesskit::Role::ListBoxOption).any(|n| n.accesskit_node().label().unwrap_or_default().starts_with(name))
+        };
+        assert!(option(h, "Try cancellations, Latest version") && !option(h, "main") && !option(h, "Empty"), "only other branches with a version");
+        assert!(!has_id(h, "workspace.version-compare.list.cut"), "a whole list says nothing of a cut");
+        h.state_mut().versions.branches_cut = true;
+        h.run_steps(1);
+        assert!(h.query_by_label("Only the first 3 branches are listed.").is_some(), "a list cut short says so, as the section does");
+        tap(h, &other);
+        assert_eq!(holds(h, "After"), "After, Latest on Try cancellations");
+        // Renamed meanwhile, with work left on it: still the side held, read by its new name.
+        let renamed = h.state_mut().versions.branches.iter_mut().flatten().find(|b| b.name == "try-cancellations").unwrap();
+        (renamed.name, renamed.unsaved) = ("tried".into(), true);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["t1"]);
+        assert_eq!(*host.branch_version_reads.lock().unwrap(), [("tried".to_string(), "t1".to_string())], "on its own line, alone");
+        answer(host, "t1", Ok(rows_now(h)));
+        found_many(h, 1);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+        add_schema(h, "more");
+        h.run_steps(4);
+        assert!(asked(host).is_empty() && h.state().versions.compare_results.comparing.is_none(), "{:?}", asked(host));
+        tap(h, SELECT_AFTER);
+        let marked = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).filter(|n| n.accesskit_node().is_selected() == Some(true)).count();
+        assert!(at(h) == Some(5) && marked == 1, "the list opens on the branch held, and marks it");
+    });
+}
+
+/// The keys pass over the Another branch heading both ways, and Enter picks a branch.
+#[test]
+fn the_keys_pass_over_the_branch_heading() {
+    use egui::Key::{ArrowDown, ArrowUp, Enter};
+    let press = |h: &mut Harness<'static, Shell>, k| key(h, k, egui::Modifiers::NONE);
+    in_both(|h, host| {
+        compared(h, "c3");
+        let _ = branched(h, host);
+        tap(h, SELECT_AFTER);
+        for (k, row) in [(ArrowDown, 1), (ArrowDown, 2), (ArrowDown, 3), (ArrowDown, 5), (ArrowDown, 5), (ArrowUp, 3), (ArrowDown, 5)] {
+            press(h, k);
+            assert_eq!(at(h), Some(row), "{k:?}");
+        }
+        press(h, Enter);
+        assert!(at(h).is_none() && holds(h, "After") == "After, Latest on Try cancellations", "{}", holds(h, "After"));
+    });
+}
+
 /// A version of no use to read again says it can't be shown, with why and no Retry, and one past
 /// the read budget is too large to compare. Against current work, an edit asks the host for nothing
 /// and compares nothing.

@@ -515,6 +515,9 @@ str		Models	模型
 str		Versions	版本
 str		Branches	分支
 str		This branch	此分支
+str		Another branch	其他分支
+str		Latest version	最新版本
+str		Latest on {branch}	{branch} 的最新版本
 str	branch	Current	当前
 str		Branches can't be merged yet.	分支暂不能合并。
 str		Only the first {n} branches are listed.	仅列出前 {n} 个分支。

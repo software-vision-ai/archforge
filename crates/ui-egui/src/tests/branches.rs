@@ -13,13 +13,14 @@ const MENU: &str = "workspace.versions.branch.menu.try-cancellations.0";
 /// `main`, in use and with a version, and when `other`, a branch with unsaved work and a version
 /// of its own; `main` is marked unsaved, which only its session may decide.
 fn listed(other: bool) -> Vec<crate::BranchEntry> {
-    let main =
-        crate::BranchEntry { name: "main".into(), shown: "main".into(), current: true, unsaved: true, latest: Some("2026-11-08T14:02:00Z".into()) };
+    let (latest, latest_version) = (Some("2026-11-08T14:02:00Z".into()), Some("m1".into()));
+    let main = crate::BranchEntry { name: "main".into(), shown: "main".into(), current: true, unsaved: true, latest, latest_version };
     let try_it = crate::BranchEntry {
         name: "try-cancellations".into(),
         shown: "Try cancellations".into(),
         current: false,
         latest: Some("2026-11-09T15:30:00Z".into()),
+        latest_version: Some("t1".into()),
         ..main.clone()
     };
     if other { vec![main, try_it] } else { vec![main] }
@@ -28,7 +29,14 @@ fn listed(other: bool) -> Vec<crate::BranchEntry> {
 /// `listed(true)` with `names`, each another branch with nothing unsaved and no version, in order.
 fn with(names: impl IntoIterator<Item = String>) -> Vec<crate::BranchEntry> {
     let mut all = listed(true);
-    all.extend(names.into_iter().map(|n| crate::BranchEntry { shown: n.clone(), name: n, current: false, unsaved: false, latest: None }));
+    all.extend(names.into_iter().map(|n| crate::BranchEntry {
+        shown: n.clone(),
+        name: n,
+        current: false,
+        unsaved: false,
+        latest: None,
+        latest_version: None,
+    }));
     all.sort_by(|a, b| a.name.cmp(&b.name));
     all
 }

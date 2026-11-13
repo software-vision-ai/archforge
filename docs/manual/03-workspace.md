@@ -60,13 +60,16 @@ An open project fills the window with its workspace.
   through History, viewing an earlier version and coming back to your current work.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
-  and this branch's versions, reading further ones as you reach the end. Under them the page says
+  and this branch's versions, reading further ones as you reach the end, and under **Another
+  branch** each other branch that has a version. A branch chosen there stands for its latest
+  version, shown as *Latest on* and its name, so you can see how two branches differ while they
+  can't be merged; when Branches lists only the first 200, so does this list, and it says so. Under them the page says
   how many differences there are between the two sides, and lists them in
   groups (model elements, diagrams, then skills), keeping up as the work changes. While no button and not the Explorer has the keyboard
   (Esc lets it go), the arrow keys scroll the list by a difference, Page Up and Page Down by a page,
   and Home and End to either end. Your current work stays your own work while another
-  version is shown, not the version in view. Choosing a version on both sides compares two saved
-  versions, each as it was saved; your work since then doesn't change what they differ by. If the
+  version is shown, not the version in view. Choosing a version or a branch on both sides compares
+  two saved versions, each as it was saved; your work since then doesn't change what they differ by. If the
   two are the same the page says so, and if they can't be compared it says so, with **Retry**.
   A version that can't be read here, such as one made with a newer Archforge, says so and why. A
   version or a comparison too large for Archforge says **Too large to compare** and lists nothing.
