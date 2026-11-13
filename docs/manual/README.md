@@ -50,7 +50,9 @@ the first time to a small model you can build on, and shows how an agent joins i
    [saving one](09-versions.md#save-a-version), and
    [looking back at one](09-versions.md#look-back-at-a-version): History, viewing an earlier
    version, what is read only meanwhile and
-   [coming back to current work](09-versions.md#back-to-current-work).
+   [coming back to current work](09-versions.md#back-to-current-work); then
+   [seeing what changed](09-versions.md#see-what-changed): the changes list, the Compare page, an
+   element or a diagram side by side, and a model change against a layout change.
 
 ## Keys
 

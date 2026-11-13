@@ -4,8 +4,9 @@ You are about to rework part of a model and want a way back to it as it is now. 
 a point worth naming, such as what the team agreed on. A *version* is that point: the whole project
 as it stood at one moment, with a line that says what it is, kept in the project's history.
 
-This chapter explains what a version is, how to save one, and how to
-[look back at one](#look-back-at-a-version) and come back to your work.
+This chapter explains what a version is, how to save one, how to
+[look back at one](#look-back-at-a-version) and come back to your work, and how to
+[see what changed](#see-what-changed) between two of them.
 
 ## Current work and versions
 
@@ -280,8 +281,160 @@ Stepping from one version to another leaves no current work on screen, so Chat i
 If a version can't be shown when you leave your current work for it, your current work stays as it
 was and the status bar gives the reason.
 
-**Compare…**, **Restore this version…** and **Start a branch here…** in a version's details, and the
-restore and branch buttons beside **Back to current work** in the banner, are described in
-[The workspace](03-workspace.md).
+**Compare…** in a version's details opens the [Compare page](#choose-what-to-compare).
+**Restore this version…** and **Start a branch here…** there, and the restore and branch buttons
+beside **Back to current work** in the banner, are described in [The workspace](03-workspace.md).
+
+## See what changed
+
+Before you save, or when you look back, you will want to know what changed. Archforge shows it in
+three places, and all three list it the same way:
+
+| Where | Before | After |
+|---|---|---|
+| **Working changes**, in **Versions** | Your last version | Your current work |
+| **Changed items**, in a version's details | The version before it | That version |
+| The **Compare** page | Your choice | Your choice |
+
+*Before* is where you start from and *After* is where you arrive. Each change is named by what
+happened on the way from one to the other: **Added**, **Changed** or **Removed**.
+
+### The changes list
+
+Each row is one thing that differs: its name, where it is in the model, such as the package and
+class that hold it, and a letter for what happened, **A** for Added, **C** for Changed and **R** for
+Removed. Something without a name says *Unnamed*. The rows come in groups, **Model elements**, then
+**Diagrams**, then **Skills**, each with how many it holds. A diagram that changed, or a box or line
+on one, is listed under **Diagrams**.
+
+Under **Working changes** the list keeps up as you work, and once it holds more than 12 changes, the
+field **Filter changes…** above it narrows it to the rows whose name holds what you type. Click a
+row there, or press Enter on it, to open it in the centre beside your last version, as the next
+sections show. The rows in a version's details and on the Compare page are for reading only.
+
+In the example, after saving *Added Customer* you add *email*. **Working changes** lists one row
+under **Model elements**: *email*, with *Customer* at the end of where it is, and **A**. *Customer*
+itself isn't listed, because a member that comes is counted once, on its own row.
+
+### Choose what to compare
+
+The **Compare** page sets any two versions of the branch you are on, or one version and your
+current work, side by side. To open it:
+
+- in a version's details, choose **Compare…**;
+- or choose **Versions ▸ Compare…**, which takes the version whose details are open, or else the
+  newest version.
+
+The page starts with that version as **Before** and your current work as **After**. The top of the
+centre reads the project's name and **Compare**: click the project's name to close the page.
+
+Along the top are the two selects, **Before** and **After**, with a button between them and
+*Before → After* at the end. Click a select to see what it can hold: under **This branch**,
+**Current work** first, saying *Unsaved changes* or *No unsaved changes*, then the versions, newest
+first, by date and description. Scrolling to the end of the list reads older versions; if they
+can't be read, it says *The next versions couldn't be read.*, with **Retry**. ↑ and ↓ move through
+the list, Enter or Space chooses, and Escape or Tab closes it.
+
+- **Current work** is always your own work, even while you are
+  [viewing an earlier version](#view-an-earlier-version).
+- Two versions are compared as each was saved: what you do afterwards doesn't change them.
+- Only the versions of the branch you are on are offered. To compare another branch's versions,
+  switch to it first.
+
+**Which way round.** Put the older state on the left, as Before, to read the changes the way they
+happened. The button between the selects, **Swap Before and After** when you point at it, turns the
+pair round. Swapping changes only how the differences are named, never your work or your versions.
+
+In the example, with *Added Customer* as Before and your current work as After, the page lists
+*email* as Added. Swap the two and *email* is Removed, since going from your current work back to
+*Added Customer* takes it away.
+
+**What the page says.** Under the selects, the page counts the differences, such as *1 difference*,
+says how they divide, such as *1 model element*, and lists them in their groups. With current work
+on one side, it keeps up as you work. While no button and not the Explorer has the keyboard (Escape
+lets it go), the arrow keys scroll the list by a difference, Page Up and Page Down by a page, and
+Home and End to either end.
+
+| The page says | What it means | What to do |
+|---|---|---|
+| *These two versions are the same.*, *This version is the same as your current work.* or *Both sides are your current work.* | There is nothing to list | *Choose another pair above.* |
+| Bars, with **Stop** under them | The comparison is under way. When it runs again after a change, **Stop** is above the earlier list | Wait, or choose **Stop** |
+| *The comparison was stopped.*, with **Retry** | You chose **Stop**, and nothing is compared again until you choose **Retry** | Choose **Retry**, or another pair |
+| *The changes couldn't be compared.*, with **Retry** | The comparison failed. Point at the message to read why | Choose **Retry** |
+| *This version can't be shown*, and the reason | A version can't be read here, such as one made with a newer Archforge | Choose another pair |
+| *Too large to compare* | A version, or the comparison, is larger than Archforge can compare. Nothing is listed | Choose another pair |
+
+### An element side by side
+
+Click a model element under **Working changes**. The top of the centre reads the project's name and
+**Working changes**, and on the right *Compared with the version of* and its date, or, before your
+first version, *There is no version to compare with yet.* Click the project's name to close it.
+
+Under the element's name, with **Added**, **Changed** or **Removed** beside it and where it is
+below, a summary counts what differs, such as *1 value changed* or *2 members changed*, and says
+the first three values in words. *Each difference is marked on the cards below.* An element that
+came or went says *This element was added* or *This element was removed* instead.
+
+Two cards follow, **Before** headed *Last version* or *Version of* and its date, and **After**
+headed *Current work*. Each gives the element's kind, name and values, then its attributes or
+columns, operations, literals, other members, relationships and owner under headings. A long list
+scrolls with the cards.
+
+- Something that differs has a tint, with − on the Before card and + on the After card.
+- A side the element isn't on says *Nothing here yet* on Before or *Removed* on After.
+- A relationship is listed on the cards of both elements it joins, by its role at the far end or
+  its own name, else its kind, and what it joins to, such as `lines → OrderLine [1..*]` or
+  `Generalization → Shape`. *Not available on this side* means nothing is set there.
+- An element with no name goes by what it joins or says, such as *Customer → Order*. Renaming
+  *Customer* isn't marked as a change to it.
+
+Under the cards, **Related change** names the other model elements connected to this one that also
+differ: what it or its members refer to, what refers to them, and its owner. Point at one to read,
+for example, *Order was changed in this comparison.*, and choose **Go to** and its name to open it
+the same way.
+
+In the example, save *Added email*, then rename *email* to *contact*. The summary says
+*1 value changed* and *The name changed from email to contact.*, the Before card shows *email*
+marked −, and the After card *contact* marked +.
+
+### A diagram side by side
+
+Click a diagram, or a box or line of one, under **Working changes**. Two cards, **Model** and
+**Layout**, say what changed ([what each means](#a-model-change-or-a-layout-change)). Under them,
+**Before** and **After** draw the diagram as it was on each side, at one zoom, so a box that stayed
+is in the same place on both.
+
+- A box that differs has an outline, and a line that differs is drawn over in colour. Each says
+  *Added*, *Changed* or *Removed*.
+- When the element a marked box or line draws also differs, that word opens the element's change,
+  as **Go to** does under an element's cards.
+- A side the diagram isn't on says *Nothing here yet* or *Removed*.
+
+The two sides move together. Drag or scroll either to pan both, pinch or scroll with ⌘ (Ctrl) held
+to zoom both, or click a side, or Tab to it, and use the arrow keys, **+** and **−**, and **0** to
+fit both again. Pointing at a side reminds you of these keys. Clicking the diagram in the list again
+fits it too.
+
+### A model change or a layout change
+
+A diagram shows part of the model: the boxes and lines draw elements and their relationships. So a
+diagram can change in two ways, and the two cards keep them apart.
+
+- **Model** is about the elements its boxes and lines draw: a class renamed, an attribute added, a
+  relationship removed. It counts them, such as *1 element changed*, and names them. The model is
+  shared, so such a change reaches every diagram that draws the element.
+- **Layout** is about this diagram alone: a box placed, moved, taken off or changed, such as resized,
+  and a line drawn, bent, relabelled or taken off. It counts them, such as *1 box moved*, and names
+  them. Taking a box off a diagram is a layout change: the element stays in the model.
+
+When only one changed, the other card says so: *The model didn't change* and *Only the layout
+changed.*, or *The layout didn't change* and *Only the model changed.* *The diagram's own details
+changed* means something such as its name, or the order its boxes are drawn in. An empty diagram
+that came or went says *This diagram was added* or *This diagram was removed*.
+
+In the example, drag the box *Customer* to a new place on its class diagram. **Working changes**
+lists it under **Diagrams**. The **Layout** card says *1 box moved* and *Customer*, the **Model**
+card *The model didn't change* and *Only the layout changed.*, and only the Before and After places
+of *Customer* differ.
 
 Back to the [contents](README.md).
