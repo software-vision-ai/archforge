@@ -56,7 +56,7 @@ pub struct State {
 
 /// The New diagram dialog's fields: the step it is at, the name, the kind, the element the
 /// diagram is of (a schema, a package; none for a new one named like the diagram), the select that
-/// is open, the engine's refusal.
+/// is open, a refusal in plain words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDiagram {
     pub step: Step,
@@ -826,7 +826,7 @@ fn continue_to_details(shell: &mut Shell) {
 }
 
 /// The second step: the kind's name for a new diagram as the title, the name, what it is of, the
-/// engine's refusal; Back returns to the kinds with all of it kept, Cancel (or Escape) closes with
+/// refusal in plain words; Back returns to the kinds with all of it kept, Cancel (or Escape) closes with
 /// nothing made, Create (or Enter) makes it.
 fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect) {
     let Some(kind) = shell.diagrams.new.as_ref().and_then(|n| kind_named(shell, n.kind)) else { return };

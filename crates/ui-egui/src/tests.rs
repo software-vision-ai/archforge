@@ -5189,6 +5189,26 @@ fn the_explorer_s_refusals_are_read_out_as_a_status() {
     }
 }
 
+/// A new diagram whose new schema is refused says why in plain words, as Properties says a
+/// refusal: no command id, no engine wording. In light and dark (AR-427).
+#[test]
+fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap();
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        let step = crate::diagrams::Step::Details;
+        let new = crate::diagrams::NewDiagram { step, name: "Shop".into(), kind: "er", schema: None, menu: None, refused: None, opened: false };
+        h.state_mut().diagrams.new = Some(new);
+        h.run();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("a second schema named Shop is refused");
+        assert!(refused.starts_with("There is a schema named Shop") && !refused.contains("er."), "{theme:?}: {refused}");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
+    }
+}
+
 /// The Diagrams panel's notice is read out as a status under its tree until a diagram is opened
 /// from it. In light and dark (AR-425).
 #[test]
@@ -6017,7 +6037,8 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
         let notice = h.state().explorer.notice.clone().unwrap_or_default();
-        assert!(notice.contains("cannot go into itself"), "{theme:?}: {notice}");
+        // In plain words, as Properties says it: no command id, no engine wording (AR-427).
+        assert!(notice.starts_with("A package cannot go into itself") && !notice.contains("uml."), "{theme:?}: {notice}");
         // Onto Billing's row: shown on a diagram, it goes onto Billing's diagram too.
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{billing}")).center());

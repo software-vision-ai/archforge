@@ -131,7 +131,7 @@ pub struct ContextMenu {
 }
 
 /// A name being typed in place: the element, the text so far, whether the element was just made
-/// (its default name is then selected, so typing replaces it), and the engine's refusal, if any.
+/// (its default name is then selected, so typing replaces it), and a refusal in plain words, if any.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rename {
     pub target: Uuid,
