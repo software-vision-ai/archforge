@@ -41,9 +41,10 @@ it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the m
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
-ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name you
-are typing in place stays open for the **Edit** menu's rows to act on; it is finished before another
-menu's row runs, and by a click elsewhere, as it would be with no menu.
+ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name, a
+note's text or a class's member you are typing in place stays open for the **Edit** menu's rows to
+act on; it is finished before another menu's row runs, and by a click elsewhere, as it would be with
+no menu.
 
 **View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
 out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you

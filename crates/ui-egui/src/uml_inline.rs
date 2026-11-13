@@ -316,13 +316,18 @@ pub(crate) fn row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, view: View)
     let lost = name_resp.lost_focus() || type_resp.as_ref().is_some_and(|t| t.lost_focus());
     let (enter, escape) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
     shell.canvas.inline = Some(inline);
+    // The in-window Edit menu takes a field's keyboard, by a press away, for its rows to act on it:
+    // neither its leaving nor the press commits while the bar holds the field.
+    let left = crate::menu_bar::ends(shell, ui.ctx(), name_eid, name_resp.lost_focus(), name_resp.has_focus())
+        | type_resp.as_ref().is_some_and(|t| crate::menu_bar::ends(shell, ui.ctx(), type_eid, t.lost_focus(), t.has_focus()));
+    let held = shell.menu_bar.held.is_some_and(|h| h == name_eid || h == type_eid);
     if to_details {
         to_properties(shell);
     } else if escape && !menu_open && (has_focus || lost || ui.memory(|m| m.focused().is_none())) {
         cancel(shell);
     } else if enter && (has_focus || lost) && !menu_open {
         commit(shell, true);
-    } else if ((lost && !switched && !pressed_on_row) || pressed_away) && !has_focus && !menu_open && !enter {
+    } else if ((left && !switched && !pressed_on_row) || (pressed_away && !held)) && !has_focus && !menu_open && !enter {
         commit(shell, false);
     }
 }

@@ -470,16 +470,7 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
         // Selects the name's text, opens Edit, clicks `at`; whether the frames after copied "Customer".
         let menu = |h: &mut Harness<'static, Shell>, at: &str| {
             key(h, Key::A, Modifiers::COMMAND);
-            for id in ["strip.menu.edit", at] {
-                h.run();
-                let at = rect_of(h, id).center();
-                h.event(Event::PointerMoved(at));
-                h.run();
-                (0..2).for_each(|n| {
-                    h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
-                });
-            }
-            (0..4).any(|_| (h.step(), copied(h, "Customer")).1)
+            through_edit(h, at, "Customer")
         };
         assert!(menu(&mut h, "strip.menu.row.edit.copy") && name(&h).as_deref() == Some("Customer"), "{on_canvas}: Copy copied the name");
         assert!(menu(&mut h, "strip.menu.row.edit.cut") && name(&h).as_deref() == Some(""), "{on_canvas}: Cut took it");
@@ -496,6 +487,116 @@ fn the_inline_name_stays_open_through_the_in_window_edit_menu() {
         h.state_mut().menu_bar.held = Some(crate::widgets::egui_id("gone"));
         h.step();
         assert_eq!(h.state().menu_bar.held, None, "{on_canvas}: a name gone while held is let go once");
+    }
+}
+
+/// Opens the in-window Edit menu and clicks `at` by the pointer; whether the frames after copied `text`.
+fn through_edit(h: &mut Harness<'static, Shell>, at: &str, text: &str) -> bool {
+    for id in ["strip.menu.edit", at] {
+        h.run();
+        let at = rect_of(h, id).center();
+        h.event(Event::PointerMoved(at));
+        h.run();
+        (0..2).for_each(|n| {
+            h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
+        });
+    }
+    (0..4).any(|_| (h.step(), copied(h, text)).1)
+}
+
+/// An editor on the canvas, its text `typed` "Draft", stays open through the in-window Edit menu:
+/// Select all, Copy, Cut and Paste act on its text, `pasted` replacing it. File, opened from Edit
+/// with the field held, finds it committed.
+fn stays_open(h: &mut Harness<'static, Shell>, typed: fn(&Shell) -> Option<String>, pasted: &str, theme: ThemeKind) {
+    let row = |r: &str| format!("strip.menu.row.edit.{r}");
+    through_edit(h, &row("select-all"), "");
+    assert!(through_edit(h, &row("copy"), "Draft") && typed(h.state()).as_deref() == Some("Draft"), "{theme:?}: Copy copied all of it");
+    assert!(through_edit(h, &row("cut"), "Draft") && typed(h.state()).as_deref() == Some(""), "{theme:?}: Cut took it");
+    through_edit(h, &row("paste"), "");
+    h.event(Event::Paste(pasted.into()));
+    h.run();
+    assert_eq!(typed(h.state()).as_deref(), Some(pasted), "{theme:?}: pasted");
+    for id in ["strip.menu.edit", "strip.menu.file"] {
+        let at = rect_of(h, id).center();
+        click(h, at);
+    }
+    assert_eq!((h.state().menu_bar.open, typed(h.state())), (Some("file"), None), "{theme:?}: File, from Edit, found it committed");
+    key(h, Key::Escape, Modifiers::NONE);
+}
+
+/// A note's text typed on the canvas, and a class's member typed in place, in its name field and
+/// in its type field, stay open through the in-window Edit menu, whose press is a click away from
+/// the member's row; another menu commits them.
+#[test]
+fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = drawn(theme);
+        h.state_mut().in_window_menu = true;
+        h.run();
+        let text = |st: &archforge_mof::Store, o| st.get(o, archforge_diagram::node::TEXT).ok().and_then(|v| v.as_str().map(str::to_string));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let note = st.uuid(st.alive().find(|o| text(st, *o).as_deref() == Some("Why")).unwrap()).unwrap();
+        let at = rect_of(&h, &format!("workspace.canvas.node.{note}")).center();
+        (0..2).for_each(|_| click(&mut h, at));
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        h.event(Event::Text("Draft".into()));
+        key(&mut h, Key::End, Modifiers::NONE);
+        stays_open(&mut h, |s| s.canvas.note_edit.as_ref().map(|n| n.text.clone()), "Later", theme);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(text(st, st.by_uuid(note).unwrap()).as_deref(), Some("Later"), "{theme:?}: the note's text");
+        // From the keys as well: Edit ▸ Copy acts on the note, and File ▸ Settings… finds it committed.
+        let walk = |h: &mut Harness<'static, Shell>, edit: bool, to: &str| {
+            key(h, Key::F10, Modifiers::NONE);
+            if edit {
+                key(h, Key::ArrowRight, Modifiers::NONE);
+            }
+            while h.state().menu_bar.row != Some(to) {
+                key(h, Key::ArrowDown, Modifiers::NONE);
+            }
+            let enter = |pressed| Event::Key { key: Key::Enter, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
+            h.event(enter(true));
+            let copied = (0..4).any(|_| (h.step(), copied(h, "Later")).1);
+            h.event(enter(false));
+            copied
+        };
+        (0..2).for_each(|_| click(&mut h, at));
+        key(&mut h, Key::A, Modifiers::COMMAND);
+        assert!(walk(&mut h, true, COPY) && h.state().canvas.note_edit.is_some(), "{theme:?}: Copy from the keys copied the note");
+        key(&mut h, Key::End, Modifiers::NONE);
+        h.event(Event::Text("!".into()));
+        walk(&mut h, false, actions::SETTINGS);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(
+            (h.state().canvas.note_edit.is_none(), text(st, st.by_uuid(note).unwrap())),
+            (true, Some("Later!".into())),
+            "{theme:?}: committed"
+        );
+
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        crate::uml_ui::open_sample(h.state_mut()).unwrap();
+        h.state_mut().in_window_menu = true;
+        let st = h.state().session.as_ref().unwrap().doc();
+        let catalog = st
+            .uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::CLASS) && archforge_core::name_of(st, *o) == "Catalog").unwrap())
+            .unwrap();
+        for ty in [false, true] {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [catalog.to_string()] })).unwrap();
+            h.run();
+            let at = rect_of(&h, "workspace.canvas.class.add-attribute").center();
+            click(&mut h, at);
+            h.event(Event::Text(if ty { "rating" } else { "Draft" }.into()));
+            h.run();
+            if ty {
+                key(&mut h, Key::Tab, Modifiers::NONE);
+                h.event(Event::Text("Draft".into()));
+                h.run();
+                stays_open(&mut h, |s| s.canvas.inline.as_ref().map(|i| i.ty.clone()), "Real", theme);
+            } else {
+                stays_open(&mut h, |s| s.canvas.inline.as_ref().map(|i| i.edit.name.clone()), "Later", theme);
+            }
+        }
+        let rows = member_rows(&h, catalog, false);
+        assert!(rows.iter().any(|r| r == "+ Later") && rows.iter().any(|r| r == "+ rating : Real"), "{theme:?}: {rows:?}");
     }
 }
 

@@ -1061,7 +1061,8 @@ fn commit_note(shell: &mut Shell) {
 }
 
 /// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter or the keyboard
-/// leaving commits, Escape closes, a refusal stays under it.
+/// leaving commits, though not for the in-window Edit menu, whose rows act on it; Escape closes, a
+/// refusal stays under it.
 fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
     let field = rect.shrink(6.0 * z);
@@ -1090,7 +1091,7 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
     let nothing_focused = ui.memory(|m| m.focused().is_none());
     if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
         shell.canvas.note_edit = None;
-    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+    } else if (has_focus && enter) || (!fresh && crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), has_focus)) {
         commit_note(shell);
     }
 }
