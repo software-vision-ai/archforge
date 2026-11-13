@@ -460,6 +460,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
 str		These two versions are the same.	These two versions are the same.
+str		Too large to compare	Too large to compare
+str		The comparison was stopped.	The comparison was stopped.
 str		Both sides are your current work.	Both sides are your current work.
 str		Choose another pair above.	Choose another pair above.
 str		Restore this version…	Restore this version…
@@ -695,6 +697,7 @@ str		This version couldn't be read.	This version couldn't be read.
 str		{from} can't be shown. Skipped to {to}.	{from} can't be shown. Skipped to {to}.
 str		It isn't a version of this branch.	It isn't a version of this branch.
 str		Made with a newer Archforge.	Made with a newer Archforge.
+str		Its model is larger than Archforge reads.	Its model is larger than Archforge reads.
 str		Why?	Why?
 str		Date not known	Date not known
 plural		Versions · {n} change	Versions · {n} change|Versions · {n} changes

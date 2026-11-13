@@ -657,7 +657,9 @@ Checks against what exists:
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
 | Long history | List | Pages of 50, selection held by hash, Show more, filter All / With a description |
 | Metadata missing | Details | The row is left out; no invented author |
-| Very large model | Compare | The read budgets hold (`model.rs:26`, `:30`). Over them: "Too large to compare", no partial list |
+| Very large model | Compare | The read budgets hold (`MAX_TABLE_ROWS`, `MAX_READ_CELLS` and `MAX_READ_BYTES` in `crates/project/src/model.rs`), and so does the comparison's (`MAX_COMPARED`). Over them: "Too large to compare", no partial list and no Retry; it stays for that pair, edits or not. Viewing or stepping to a version over them marks its row unavailable, with "Its model is larger than Archforge reads." as the reason |
+| Version unavailable or newer | Compare | "This version can't be shown" and the reason, no Retry; it stays for that pair, edits or not |
+| Comparison under way | Compare | Bars, and **Stop** under them; when an earlier answer stays on screen, as after an edit, **Stop** is above it. Stop says "The comparison was stopped." with Retry, and nothing starts again until Retry; a read that fails meanwhile does not take its place. The comparison runs on to the end of its budget with its answer dropped, and none other starts before it ends; a read under way finishes and its rows are kept for Retry |
 | Only `main` | Branches | Folded; New branch… offered |
 | Name empty, too long, or taken | New branch dialog | Under the field, Create disabled |
 | A creation record remains | New branch, or a rename to the recorded name | Refused, saying the last new branch is not cleaned up yet; the next opening removes it |

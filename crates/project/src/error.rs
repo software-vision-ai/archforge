@@ -69,6 +69,11 @@ pub enum Error {
         path: PathBuf,
         why: String,
     },
+    /// The model is past a read budget (the rows of a table, or the cells or bytes of all of it), so
+    /// it is not read at all: asking again cannot help.
+    ModelTooLarge {
+        why: String,
+    },
     /// What was asked for as a version is no commit on the project's line of work: not the shape
     /// of a commit's hash, one Dolt does not know, or a commit of another branch.
     NotAVersion {
@@ -192,6 +197,7 @@ impl fmt::Display for Error {
                 path.display()
             ),
             Error::Damaged { path, why } => write!(f, "the project {} is damaged: {why}", path.display()),
+            Error::ModelTooLarge { why } => write!(f, "the model is larger than Archforge reads: {why}"),
             Error::NotAVersion { commit } => write!(f, "{commit:?} is not a version of this project"),
             Error::VersionShape { commit, why } => write!(f, "the version {commit} cannot be read by this Archforge: {why}"),
             Error::BranchUnclear { path } => write!(f, "whether a branch of {} was renamed cannot be told", path.display()),

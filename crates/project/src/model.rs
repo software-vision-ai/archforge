@@ -389,7 +389,8 @@ impl Project {
     /// The model's rows as the project holds them. Every table it holds must have exactly its
     /// generated shape (a base table with the generated columns and types, so no cell is longer
     /// than its type allows), and a table it lacks holds nothing; the rows are read one at a time
-    /// within the budgets of rows per table and of cells and bytes for the whole model.
+    /// within the budgets of rows per table and of cells and bytes for the whole model, past which it
+    /// is [`Error::ModelTooLarge`].
     pub fn read_model(&self, schema: &ModelSchema) -> Result<Rows, Error> {
         self.version_reader().read_rows(&mut self.model_connection()?, schema, None)
     }
@@ -482,18 +483,16 @@ impl VersionReader {
                 .map_err(|e| damaged(format!("the table {} cannot be read: {e}", t.name)))?;
             for row in read {
                 let row = row.map_err(|e| damaged(format!("the table {} cannot be read: {e}", t.name)))?;
-                if out.len() == MAX_TABLE_ROWS {
-                    return Err(damaged(format!("the table {} has more than {MAX_TABLE_ROWS} rows", t.name)));
-                }
-                budget.row().map_err(damaged)?;
+                within_rows(t.name, out.len())?;
+                budget.row()?;
                 let mut cells = Vec::with_capacity(t.columns.len());
                 for (i, col) in t.columns.iter().take(held).enumerate() {
                     let v = row.as_ref(i).cloned().unwrap_or(mysql::Value::NULL);
-                    budget.take(&v).map_err(damaged)?;
+                    budget.take(&v)?;
                     cells.push(from_sql(&v, col.sql).map_err(|why| damaged(format!("{}.{}: {why}", t.name, col.name)))?);
                 }
                 for (v, cell) in &filled {
-                    budget.take(v).map_err(damaged)?;
+                    budget.take(v)?;
                     cells.push(cell.clone());
                 }
                 out.push(cells);
@@ -513,13 +512,11 @@ impl VersionReader {
                 .map_err(|e| damaged(format!("the table {} cannot be read: {e}", j.name)))?;
             for row in read {
                 let row = row.map_err(|e| damaged(format!("the table {} cannot be read: {e}", j.name)))?;
-                if out.len() == MAX_TABLE_ROWS {
-                    return Err(damaged(format!("the table {} has more than {MAX_TABLE_ROWS} rows", j.name)));
-                }
+                within_rows(j.name, out.len())?;
                 let get = |i: usize| row.as_ref(i).cloned().unwrap_or(mysql::Value::NULL);
                 let (owner, at, value) = (get(0), get(1), get(2));
                 for v in [&owner, &at, &value] {
-                    budget.take(v).map_err(damaged)?;
+                    budget.take(v)?;
                 }
                 let Cell::Id(owner) = from_sql(&owner, "BINARY(16)").map_err(|why| damaged(format!("{}: {why}", j.name)))? else {
                     return Err(damaged(format!("{} has a row without its owner", j.name)));
@@ -712,6 +709,14 @@ fn cell_bytes(cell: &Cell) -> usize {
     }
 }
 
+/// Whether `table`, holding `held` rows read so far, may take one more.
+fn within_rows(table: &str, held: usize) -> Result<(), Error> {
+    if held >= MAX_TABLE_ROWS {
+        return Err(Error::ModelTooLarge { why: format!("the table {table} has more than {MAX_TABLE_ROWS} rows") });
+    }
+    Ok(())
+}
+
 /// What a reading has taken so far of the whole model's budgets.
 #[derive(Default)]
 struct Budget {
@@ -721,13 +726,13 @@ struct Budget {
 
 impl Budget {
     /// A row's list of cells.
-    fn row(&mut self) -> Result<(), String> {
+    fn row(&mut self) -> Result<(), Error> {
         self.bytes += std::mem::size_of::<Vec<Cell>>();
         self.check()
     }
 
     /// A cell as it is kept: the cell, and a text's bytes and shared header.
-    fn take(&mut self, v: &mysql::Value) -> Result<(), String> {
+    fn take(&mut self, v: &mysql::Value) -> Result<(), Error> {
         self.cells += 1;
         self.bytes += std::mem::size_of::<Cell>()
             + match v {
@@ -737,9 +742,10 @@ impl Budget {
         self.check()
     }
 
-    fn check(&self) -> Result<(), String> {
+    /// Whether what is taken is still within the budgets of cells and bytes.
+    fn check(&self) -> Result<(), Error> {
         if self.cells > MAX_READ_CELLS || self.bytes > MAX_READ_BYTES {
-            return Err(format!("the model is larger than Archforge reads ({MAX_READ_CELLS} values, {} MB)", MAX_READ_BYTES >> 20));
+            return Err(Error::ModelTooLarge { why: format!("more than {MAX_READ_CELLS} values or {} MB", MAX_READ_BYTES >> 20) });
         }
         Ok(())
     }
@@ -1078,6 +1084,18 @@ fn from_sql(v: &mysql::Value, sql: &str) -> Result<Cell, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Past a read budget the model is too large, not damaged: a table's rows, its cells or its bytes.
+    #[test]
+    fn a_model_past_a_read_budget_is_too_large() {
+        assert!(within_rows("t", MAX_TABLE_ROWS - 1).is_ok());
+        assert!(matches!(within_rows("t", MAX_TABLE_ROWS), Err(Error::ModelTooLarge { why }) if why.contains("the table t")));
+        let mut full = Budget { cells: MAX_READ_CELLS - 1, bytes: 0 };
+        assert!(full.take(&mysql::Value::Int(1)).is_ok());
+        assert!(matches!(full.take(&mysql::Value::Int(1)), Err(Error::ModelTooLarge { .. })));
+        let mut heavy = Budget { cells: 0, bytes: MAX_READ_BYTES };
+        assert!(matches!(heavy.row(), Err(Error::ModelTooLarge { .. })));
+    }
 
     #[test]
     fn cells_survive_the_trip_through_database_values() {

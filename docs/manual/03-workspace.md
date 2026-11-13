@@ -68,6 +68,10 @@ An open project fills the window with its workspace.
   version is shown, not the version in view. Choosing a version on both sides compares two saved
   versions, each as it was saved; your work since then doesn't change what they differ by. If the
   two are the same the page says so, and if they can't be compared it says so, with **Retry**.
+  A version that can't be read here, such as one made with a newer Archforge, says so and why. A
+  version or a comparison too large for Archforge says **Too large to compare** and lists nothing.
+  **Stop**, under the bars or above the last list while it is compared again, stops a comparison
+  that takes too long, and nothing is compared again until you choose **Retry**.
   **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
