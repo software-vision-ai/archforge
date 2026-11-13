@@ -976,3 +976,68 @@ fn every_template_rule_broken_carries_its_reason_typed() {
         assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
     }
 }
+
+/// Every binding argument rule broken carries its reason typed beside the unchanged English: an
+/// argument that does not fit, one missing (on add, and on a set or a reconnect to a template whose
+/// two parameters have no default, both named), one sent back to a default that is not there, too
+/// many, and a built-in type's name taken in Types, which only a hand-edited project holds (AR-442).
+#[test]
+fn every_argument_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Parameter, Reason};
+    let mut s = session();
+    let types = run(&mut s, "uml.package.add", json!({ "name": "Types" }));
+    let integer = run(&mut s, "uml.class.add", json!({ "package": types, "name": "Integral" }));
+    let (tables, junctions) = tables();
+    let mut st = store(1 << 30);
+    rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
+    st.set(obj(&st, &integer), archforge_uml::named_element::NAME, Value::str("Integer")).unwrap();
+    let mut s = session_over(st);
+    let shop = shop(&mut s);
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.money, "name": "M", "kind": "data-type", "default": shop.status }));
+    let price = run(&mut s, "uml.data-type.add", json!({ "package": shop.shop, "name": "Price" }));
+    let priced = run(&mut s, "uml.template-binding.add", json!({ "bound": price, "template": shop.money }));
+    let boxed = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Box" }));
+    for name in ["U", "V"] {
+        run(&mut s, "uml.template-parameter.add", json!({ "classifier": boxed, "name": name }));
+    }
+    let held =
+        run(&mut s, "uml.template-binding.add", json!({ "bound": shop.order, "template": shop.repository, "arguments": { "T": shop.entity } }));
+    let bind = |arguments: Json| json!({ "bound": shop.entity, "template": shop.repository, "arguments": arguments });
+    let many: serde_json::Map<String, Json> = (0..=templates::MAX_PARAMETERS).map(|i| (format!("P{i}"), json!(shop.order))).collect();
+    let misfit = Parameter { name: "T".into(), kind: "class", template: "Repository".into(), argument: "Money".into(), ..Parameter::default() };
+    let class = |name: &str, template: &str| Parameter { name: name.into(), kind: "class", template: template.into(), ..Parameter::default() };
+    let needs = Reason::NeedsArgument(Box::new([class("T", "Repository")]));
+    let box_needs = Reason::NeedsArgument(Box::new([class("U", "Box"), class("V", "Box")]));
+    let too_many = format!("{} arguments", templates::MAX_PARAMETERS + 1);
+    let add = "uml.template-binding.add";
+    let cases = [
+        (add, bind(json!({ "T": shop.money })), Reason::Misfit(Box::new(misfit)), "Money does not fit T"),
+        (add, bind(json!({})), needs.clone(), "needs an argument for T"),
+        (add, bind(json!({ "T": "" })), needs, "cannot go back to a default"),
+        (add, bind(Json::Object(many)), Reason::TooMany { kind: "template parameter", max: templates::MAX_PARAMETERS }, too_many.as_str()),
+        (
+            "uml.template-binding.set",
+            json!({ "binding": held, "template": boxed }),
+            box_needs.clone(),
+            "needs an argument for U (a class), V (a class)",
+        ),
+        (
+            "uml.relationship.reconnect",
+            json!({ "relationship": held, "end": "target", "class": boxed }),
+            box_needs,
+            "together with uml.template-binding.set",
+        ),
+        (
+            "uml.template-binding.set",
+            json!({ "binding": priced, "arguments": { "M": "Integer" } }),
+            Reason::BuiltInTaken { kind: "class", name: "Integer".into() },
+            "rename it",
+        ),
+    ];
+    for (cmd, p, reason, english) in cases {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    }
+}

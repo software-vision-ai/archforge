@@ -90,7 +90,7 @@ pub(crate) fn grouping(store: &Store, elements: &[Obj]) -> Grouping {
 }
 
 /// `a`, `a and b`, `a, b and c`.
-fn and_list(items: &[String]) -> String {
+pub(crate) fn and_list(items: &[String]) -> String {
     match items.split_last() {
         Some((last, rest)) if !rest.is_empty() => fmt(&tr("{names} and {last}"), &[("names", &rest.join(", ")), ("last", last)]),
         _ => items.join(", "),

@@ -152,7 +152,11 @@ pub enum Reason {
     KindNotSupported { kind: &'static str },
     /// An element holds at most `max` of `kind`, as a template at most so many template parameters.
     TooMany { kind: &'static str, max: usize },
-    /// What the parameter is given does not fit it: its arguments are of its `kind`.
+    /// The template parameters named, each with its kind, need an argument: they have no default.
+    /// Every one lacking is named, in the template's order.
+    NeedsArgument(Box<[Parameter]>),
+    /// What the parameter is given does not fit it: its arguments are of its kind and, when it is
+    /// constrained, the constraint or what specializes it.
     Misfit(Box<Parameter>),
     /// The parameter's default, its `argument`, does not fit it.
     DefaultMisfit(Box<Parameter>),
@@ -164,6 +168,9 @@ pub enum Reason {
     ParameterInUse(Box<Parameter>),
     /// The parameter is its template's last, and a binding names the template, so it stays.
     LastParameter(Box<Parameter>),
+    /// An element of `kind` named `name` holds a built-in type's name where the built-in types are
+    /// kept, so that built-in type cannot be used.
+    BuiltInTaken { kind: &'static str, name: String },
 }
 
 /// A template parameter as a refusal names it, with the binding of its template or the default

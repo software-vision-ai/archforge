@@ -1483,6 +1483,7 @@ str		{default} does not fit {name}: pick a default its arguments could be.	{defa
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} bindet {name} -> {actual}, was nicht mehr passen würde. Ändern oder entfernen Sie zuerst diese Bindung.
 str		A template has at most {max} parameters.	Ein Template hat höchstens {max} Parameter.
 str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} bindet {template} und gibt {name} kein Argument, daher braucht {name} einen Standardwert.
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	Im Paket {types}, in dem dieser eingebaute Typ liegt, trägt bereits {what} den Namen {name}: Benennen Sie {name} um, um den eingebauten Typ zu verwenden.
 str		template parameter	Template-Parameter
 str		template	Template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · Template, {n} Parameter · Modell, in jedem Diagramm|{kind} · Template, {n} Parameter · Modell, in jedem Diagramm
@@ -1511,6 +1512,8 @@ str		{name} needs an argument: pick an interface.	{name} braucht ein Argument: W
 str		{name} needs an argument: pick a data type.	{name} braucht ein Argument: Wählen Sie einen Datentyp.
 str		{name} needs an argument: pick an enumeration.	{name} braucht ein Argument: Wählen Sie eine Aufzählung.
 str		{name} needs an argument: pick a primitive type.	{name} braucht ein Argument: Wählen Sie einen primitiven Typ.
+str		{name} ({kind})	{name} ({kind})
+str		{names} have no default, so each needs an argument.	{names} haben keinen Standardwert, daher braucht jeder ein Argument.
 plural		{names} can keep its default.	{names} kann seinen Standardwert behalten.|{names} können ihre Standardwerte behalten.
 str		New template binding	Neue Template-Bindung
 str		Drawing · not in the model until you apply	Wird gezeichnet · erst nach Übernehmen im Modell

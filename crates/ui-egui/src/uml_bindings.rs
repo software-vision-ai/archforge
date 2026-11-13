@@ -156,7 +156,7 @@ fn kind_note(kind: Option<Kind>) -> String {
 }
 
 /// What a parameter still needs, in the user's words: `T needs an argument: pick a class.`
-fn needs(name: &str, kind: Option<Kind>) -> String {
+pub(crate) fn needs(name: &str, kind: Option<Kind>) -> String {
     let line = match kind {
         Some(Kind::Interface) => tr("{name} needs an argument: pick an interface."),
         Some(Kind::DataType) => tr("{name} needs an argument: pick a data type."),
@@ -165,6 +165,21 @@ fn needs(name: &str, kind: Option<Kind>) -> String {
         _ => tr("{name} needs an argument: pick a class."),
     };
     fmt(&line, &[("name", name)])
+}
+
+/// What the parameters `params`, each with its kind, need, none having a default, in the user's
+/// words: one as [`needs`] says it, several listed with their kinds, `T (class) and K (data type)
+/// have no default, so each needs an argument.`; None for none.
+pub(crate) fn lacking(params: &[(&str, Kind)]) -> Option<String> {
+    match params {
+        [] => None,
+        [(name, kind)] => Some(needs(name, Some(*kind))),
+        _ => {
+            let named: Vec<String> =
+                params.iter().map(|(name, kind)| fmt(&tr("{name} ({kind})"), &[("name", name), ("kind", &kind_note(Some(*kind)))])).collect();
+            Some(fmt(&tr("{names} have no default, so each needs an argument."), &[("names", &crate::uml_sets::and_list(&named))]))
+        }
+    }
 }
 
 /// The arguments parameter `p` may take, each as it reads and as the commands take it: Default

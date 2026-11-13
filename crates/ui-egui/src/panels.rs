@@ -504,17 +504,10 @@ fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
             fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &crate::uml_templates::kind_word(kind(k)?))])
         }
         Reason::TooMany { kind: "template parameter", max } => fmt(&tr("A template has at most {max} parameters."), &[("max", &max.to_string())]),
-        Reason::Misfit(p) => fmt(
-            &match p.kind {
-                "class" => tr("Arguments for {name} must be classes."),
-                "interface" => tr("Arguments for {name} must be interfaces."),
-                "data type" => tr("Arguments for {name} must be data types."),
-                "enumeration" => tr("Arguments for {name} must be enumerations."),
-                "primitive type" => tr("Arguments for {name} must be primitive types."),
-                _ => return None,
-            },
-            &[("name", &p.name)],
-        ),
+        Reason::NeedsArgument(params) => {
+            crate::uml_bindings::lacking(&params.iter().map(|p| Some((p.name.as_str(), kind(p.kind)?))).collect::<Option<Vec<_>>>()?)?
+        }
+        Reason::Misfit(p) => crate::uml_templates::must(&p.name, kind(p.kind)?, p.constraint.as_deref()),
         Reason::DefaultMisfit(p) => {
             fmt(&tr("{default} does not fit {name}: pick a default its arguments could be."), &[("default", &p.argument), ("name", &p.name)])
         }
@@ -533,6 +526,10 @@ fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::LastParameter(p) => fmt(
             &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
             &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
+        ),
+        Reason::BuiltInTaken { kind, name } => fmt(
+            &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
+            &[("what", &a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
         ),
         _ => return None,
     })
