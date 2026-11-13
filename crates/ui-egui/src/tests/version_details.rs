@@ -2919,6 +2919,26 @@ fn a_select_lists_the_versions_and_a_pick_sets_its_side() {
     });
 }
 
+/// An earlier Archforge's name for a restore's kept work shows its time as the list says it, in the
+/// select's row and in the select that holds it, and never as stored.
+#[test]
+fn an_old_restore_name_shows_its_time_as_the_list_says_it() {
+    let mut listed = history();
+    listed[1].description = Some("Before restoring 2026-11-07T09:20:00Z".into());
+    in_both_listing(listed, |h, _| {
+        compared(h, "c3");
+        let told = format!("Before restoring {}", crate::versions::when("2026-11-07T09:20:00Z", crate::chat_panel::clock(h.state())));
+        tap(h, SELECT_AFTER);
+        let row = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).nth(2).expect("the row of the restore's kept work");
+        let said = row.accesskit_node().label().unwrap_or_default().to_string();
+        assert!(said.ends_with(&format!(", {told}")), "{said}");
+        assert!(painted_has(h, &told) && !painted_has(h, "2026-11-07T09:20:00Z"), "{:?}", painted(h));
+        tap(h, &row_id(2));
+        let held = holds(h, "After");
+        assert!(held.ends_with(&told) && !held.contains("2026-"), "{held}");
+    });
+}
+
 /// The arrows stay in the list, Enter and Space pick or open, Esc closes, the keyboard stays on the
 /// select until a closed list lets Tab move on, and an open list keeps keys from the window behind.
 #[test]

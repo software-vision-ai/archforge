@@ -13,7 +13,7 @@ use crate::i18n::tr;
 use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
-use crate::versions::{dated, described, read_more, when};
+use crate::versions::{dated, read_more, told, when};
 use crate::{Shell, VersionEntry, widgets};
 
 pub(crate) mod results;
@@ -238,10 +238,9 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
             let at = Rect::from_min_size(pos2(r.left() + 4.0, y), vec2(LIST - 8.0, ROW));
             let (name, beside) = match &side {
                 Side::CurrentWork => (tr("Current work"), if shell.shown_unsaved() { tr("Unsaved changes") } else { tr("No unsaved changes") }),
-                Side::Version(v) => (
-                    when(&v.date, clock),
-                    described(v).map(str::to_string).or_else(|| v.by_agent.then(|| tr("Saved by an agent"))).unwrap_or_default(),
-                ),
+                Side::Version(v) => {
+                    (when(&v.date, clock), told(v, clock).or_else(|| v.by_agent.then(|| tr("Saved by an agent"))).unwrap_or_default())
+                }
             };
             let id = format!("{LIST_ID}.row.{n}");
             let resp = control(shell, &clip, &id, "option", at, true);
