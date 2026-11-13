@@ -23506,6 +23506,28 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
     }
 }
 
+/// Show stereotype values refused says why under Properties in plain words, as a sentence, never as
+/// the engine words it: a model that can't be changed at the moment. Nothing changes. In light and
+/// dark (AR-431).
+#[test]
+fn show_stereotype_values_refused_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, crate::uml_stereotypes::SHOW_ID).center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert_eq!(notice, "The model cannot be changed at the moment; nothing was changed.", "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing changed");
+    }
+}
+
 /// Deleting an element its stereotypes are applied to asks first, from Models too, and the dialog
 /// names the applications that go with it and with what it takes along (owner decision for
 /// AR-135, the design silent: as the nested classifiers are named); the confirmation removes them in

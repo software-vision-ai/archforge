@@ -578,7 +578,7 @@ fn write_values(shell: &mut Shell, element: Uuid, s_id: Uuid, p_id: Uuid, values
                 stereotype: s_id,
                 property: p_id,
                 text: typed.unwrap_or_else(|| values.join(", ")),
-                refused: Some(e.to_string()),
+                refused: Some(crate::panels::refusal(&e)),
             });
         }
     }
@@ -616,7 +616,7 @@ pub(crate) fn show_values(shell: &mut Shell, d: Uuid, on: bool) -> Result<(), St
     session
         .execute("uml.stereotype.show-values", &json!({ "diagram": d.to_string(), "show": on }))
         .map(|_| shell.panels.notice = None)
-        .map_err(|e| e.to_string())
+        .map_err(|e| crate::panels::refusal(&e))
 }
 
 /// The picker under `anchor` (F4): headed `APPLY TO ORDER`, then the filter as typed, the
