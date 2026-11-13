@@ -1705,7 +1705,10 @@ fn another_branchs_latest_version_is_read_on_its_line_and_compared() {
         assert!(h.query_by_label("Only the first 3 branches are listed.").is_some(), "a list cut short says so, as the section does");
         tap(h, &other);
         assert_eq!(holds(h, "After"), "After, Latest on Try cancellations");
-        // Renamed meanwhile, with work left on it: still the side held, read by its new name.
+        tap(h, SELECT_AFTER);
+        assert!(at(h) == Some(5) && marked(h) == ["Try cancellations, Latest version"], "the list opens on the branch held, and marks it");
+        tap(h, SELECT_AFTER);
+        // Renamed meanwhile: its own name is gone, so it is read by the name its version has now.
         let renamed = h.state_mut().versions.branches.iter_mut().flatten().find(|b| b.name == "try-cancellations").unwrap();
         (renamed.name, renamed.unsaved) = ("tried".into(), true);
         answer(host, "c3", Ok(before));
@@ -1717,9 +1720,56 @@ fn another_branchs_latest_version_is_read_on_its_line_and_compared() {
         add_schema(h, "more");
         h.run_steps(4);
         assert!(asked(host).is_empty() && h.state().versions.compare_results.comparing.is_none(), "{:?}", asked(host));
+    });
+}
+
+/// The labels of the options a list marks as held.
+fn marked(h: &Harness<'static, Shell>) -> Vec<String> {
+    let held = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).filter(|n| n.accesskit_node().is_selected() == Some(true));
+    held.map(|n| n.accesskit_node().label().unwrap_or_default().to_string()).collect()
+}
+
+/// Two branches with one latest version are two options: the one picked alone is marked and opened
+/// on, and it is read by its own name, which is still listed, never the other's.
+#[test]
+fn branches_sharing_a_version_stay_apart() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let _ = branched(h, host);
+        let listed = h.state().versions.branches.clone().unwrap_or_default();
+        let first = listed.iter().find(|b| b.name == "try-cancellations").unwrap().clone();
+        let again = crate::BranchEntry { name: "try-again".into(), shown: "Try again".into(), ..first };
+        h.state_mut().versions.branches.as_mut().unwrap().push(again);
         tap(h, SELECT_AFTER);
-        let marked = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).filter(|n| n.accesskit_node().is_selected() == Some(true)).count();
-        assert!(at(h) == Some(5) && marked == 1, "the list opens on the branch held, and marks it");
+        tap(h, &row_id(6));
+        tap(h, SELECT_AFTER);
+        assert!(at(h) == Some(6) && marked(h) == ["Try again, Latest version"], "{:?} {:?}", at(h), marked(h));
+        tap(h, SELECT_AFTER);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["t1"]);
+        assert_eq!(*host.branch_version_reads.lock().unwrap(), [("try-again".to_string(), "t1".to_string())]);
+    });
+}
+
+/// A page of versions read while a branch is highlighted moves its row, not the highlight: Enter
+/// still picks the branch.
+#[test]
+fn a_page_read_under_the_highlight_keeps_it() {
+    in_both(|h, host| {
+        compared(h, "c3");
+        let _ = branched(h, host);
+        tap(h, SELECT_AFTER);
+        for _ in 0..4 {
+            key(h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        assert_eq!(at(h), Some(5));
+        let older = |hash: &str, date: &str| version_row(hash, Some("Older"), (None, false), date);
+        let more = [older("c0", "2026-11-05T10:00:00Z"), older("cz", "2026-11-04T10:00:00Z")];
+        h.state_mut().versions.page.as_mut().unwrap().versions.extend(more);
+        h.run_steps(1);
+        assert_eq!(at(h), Some(7), "the branch's row now");
+        key(h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(holds(h, "After"), "After, Latest on Try cancellations");
     });
 }
 

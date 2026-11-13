@@ -46,12 +46,13 @@ enum Side {
 }
 
 impl PartialEq for Side {
-    /// A branch is the same side while it stands for the same version, whatever else a later read of
-    /// the branches says of it, such as a new name or unsaved work.
+    /// A version is the same side by its hash and a branch by its stored name, whatever else a later
+    /// read says of it, such as unsaved work: two branches may share their latest version. Which
+    /// version a side reads is [`Side::version`].
     fn eq(&self, other: &Side) -> bool {
         match (self, other) {
-            (Side::Version(a), Side::Version(b)) => a == b,
-            (Side::Branch(a), Side::Branch(b)) => a.latest_version == b.latest_version,
+            (Side::Version(a), Side::Version(b)) => a.hash == b.hash,
+            (Side::Branch(a), Side::Branch(b)) => a.name == b.name,
             (a, b) => matches!((a, b), (Side::CurrentWork, Side::CurrentWork)),
         }
     }
@@ -85,12 +86,13 @@ pub(super) struct Pair {
     dropdown: Option<Dropdown>,
 }
 
-/// A select's list while it is open: which side it is for, the row the keys are on, and how far it
-/// has scrolled.
+/// A select's list while it is open: which side it is for, the option the keys are on, kept as
+/// itself so a page of versions read meanwhile does not move it to another row, and how far it has
+/// scrolled.
 #[derive(Clone)]
 struct Dropdown {
     after: bool,
-    highlight: usize,
+    highlight: Side,
     scroll: TreeScroll,
 }
 
@@ -182,7 +184,17 @@ fn rows_of(versions: &[VersionEntry], branches: &[BranchEntry]) -> (usize, Optio
 
 /// The row the keys are on in a select's open list; any list open holds the window's keys.
 pub(crate) fn highlight(shell: &Shell) -> Option<usize> {
-    Some(dropdown_of(shell)?.highlight)
+    Some(row_of(&dropdown_of(shell)?.highlight, listed(shell), &others(shell)))
+}
+
+/// The row of `side` in a list ([`rows_of`]); the first, current work, for an option no longer listed.
+fn row_of(side: &Side, versions: &[VersionEntry], branches: &[BranchEntry]) -> usize {
+    let found = match side {
+        Side::CurrentWork => None,
+        Side::Version(held) => versions.iter().position(|v| v.hash == held.hash).map(|at| at + 1),
+        Side::Branch(held) => branches.iter().position(|b| b.name == held.name).map(|at| versions.len() + 2 + at),
+    };
+    found.unwrap_or(0)
 }
 
 /// Once a frame, before any key is read and on Home too: a list closes when the project or the
@@ -199,11 +211,8 @@ pub(crate) fn keep(shell: &mut Shell) {
 fn toggle(shell: &mut Shell, after: bool) {
     let (versions, branches) = (listed(shell).to_vec(), others(shell));
     let Some(pair) = pair_mut(shell) else { return };
-    let highlight = match if after { &pair.after } else { &pair.before } {
-        Side::CurrentWork => 0,
-        Side::Version(held) => versions.iter().position(|v| v.hash == held.hash).map_or(0, |at| at + 1),
-        Side::Branch(held) => branches.iter().position(|b| b.latest_version == held.latest_version).map_or(0, |at| versions.len() + 2 + at),
-    };
+    let held = if after { &pair.after } else { &pair.before };
+    let highlight = side_at(&versions, &branches, row_of(held, &versions, &branches)).unwrap_or(Side::CurrentWork);
     let same = pair.dropdown.as_ref().is_some_and(|d| d.after == after);
     pair.dropdown = (!same).then(|| Dropdown { after, highlight, scroll: TreeScroll::default() });
 }
@@ -231,7 +240,8 @@ fn pick(shell: &mut Shell, n: usize) {
 /// or Space picks, and Esc or Tab closes it. Gives whether a list was open, keys or none.
 pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
     use egui::Key::{ArrowDown, ArrowUp, Enter, Escape, Space, Tab};
-    let (rows, heading) = rows_of(listed(shell), &others(shell));
+    let (versions, branches) = (listed(shell).to_vec(), others(shell));
+    let (rows, heading) = rows_of(&versions, &branches);
     let press = |key, repeats| crate::menu_bar::press(ctx, key, repeats);
     let Some(pair) = pair_mut(shell).filter(|pair| pair.dropdown.is_some()) else { return false };
     if press(Escape, false) | press(Tab, false) {
@@ -242,8 +252,9 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
     let (down, up) = (press(ArrowDown, true), press(ArrowUp, true));
     let moved = |at: usize| (at + usize::from(down)).min(rows - 1).saturating_sub(usize::from(up));
     // The heading is no row to pick: the keys pass over it, the way they were going.
-    d.highlight = Some(moved(d.highlight)).filter(|at| Some(*at) != heading).unwrap_or_else(|| moved(moved(d.highlight)));
-    let at = d.highlight;
+    let was = row_of(&d.highlight, &versions, &branches);
+    let at = Some(moved(was)).filter(|at| Some(*at) != heading).unwrap_or_else(|| moved(moved(was)));
+    d.highlight = side_at(&versions, &branches, at).unwrap_or(Side::CurrentWork);
     if press(Enter, false) | press(Space, false) {
         pick(shell, at);
     }
@@ -272,7 +283,8 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
         let (first, bottom) = (r.top() + HEADING, r.bottom() - 4.0 - footer);
         let tree = Rect::from_min_max(pos2(r.left(), first), pos2(r.right() - 1.0, bottom + 8.0));
         // The highlight's place stands for its row: scroll_tree follows a row when its id changes.
-        let follow = Some((d.highlight, archforge_mof::Uuid((d.highlight as u128).to_be_bytes())));
+        let lit = row_of(&d.highlight, &versions, &branches);
+        let follow = Some((lit, archforge_mof::Uuid((lit as u128).to_be_bytes())));
         let offset = scroll_tree(ui, p, tree, first, rows, ROW, 0.0, true, follow, &mut d.scroll);
         let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
         clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), first), pos2(r.right(), bottom)));
@@ -301,7 +313,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
                 node.set_label(format!("{name}, {beside}"));
                 node.set_selected(side == *held);
             });
-            if n == d.highlight || resp.hovered() {
+            if n == lit || resp.hovered() {
                 clip.painter().rect_filled(at, 6.0, p.accent_tint);
             }
             let shown = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, &name, types::SMALL, p.text, Some(LIST * 0.45));

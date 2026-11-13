@@ -261,8 +261,9 @@ fn next(shell: &mut Shell, sides: Sides) {
 /// its limit, and that would read as a failed comparison. A read still under way, whichever version
 /// or project it is of, is waited for: one of this version lands as it answers, and the details'
 /// two and this one leave the host room for the list's read or a view. Another branch's version is
-/// read on that branch's line, as the current line does not hold it, by the name the branches last
-/// read give it, so a rename meanwhile does not fail the read.
+/// read on that branch's line, as the current line does not hold it: by its own name while the
+/// branches last read still list it, else by a listed branch's that has that version, as one
+/// renamed meanwhile does.
 fn read_side(shell: &mut Shell, version: String) {
     let v = &shell.versions;
     if v.compare_results.reading.is_some() || v.details_comparing.is_some() || v.details_reading.is_some() {
@@ -274,8 +275,10 @@ fn read_side(shell: &mut Shell, version: String) {
         Side::Branch(b) if b.latest_version.as_ref() == Some(&version) => Some(b.name.clone()),
         _ => None,
     });
-    let renamed = v.branches.iter().flatten().find(|b| !b.current && b.latest_version.as_ref() == Some(&version));
-    let branch = branch.map(|held| renamed.map_or(held, |b| b.name.clone()));
+    let listed = v.branches.iter().flatten();
+    let gone = |held: &String| !listed.clone().any(|b| b.name == *held);
+    let renamed = listed.clone().find(|b| !b.current && b.latest_version.as_ref() == Some(&version));
+    let branch = branch.map(|held| if gone(&held) { renamed.map_or(held, |b| b.name.clone()) } else { held });
     let answer = match branch {
         Some(branch) => host.read_branch_version(&of.0, &branch, version.clone()),
         None => host.read_version(&of.0, version.clone()),
