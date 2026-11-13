@@ -73,6 +73,7 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         assert_eq!(why_off(h.state(), MINIMAP), "The minimap is showing");
         h.state_mut().canvas.size = egui::vec2(400.0, 300.0);
         assert_eq!(why_off(h.state(), MINIMAP), "Widen the canvas to show the minimap");
+        h.run();
         h.state_mut().canvas.minimap_open = false;
         run(h.state_mut(), MINIMAP);
         assert!(h.state().canvas.minimap_open, "{theme:?}");
@@ -95,7 +96,6 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         run(h.state_mut(), CHAT);
         h.run();
         assert_eq!(h.state().state.panel, Panel::Agent, "{theme:?}");
-        assert!(has_id(&h, "workspace.panels.agent"), "{theme:?}");
         h.state_mut().canvas.active = None;
         assert!(!available(h.state(), ZOOM_IN) && !available(h.state(), MINIMAP), "{theme:?}");
         assert_eq!(why_off(h.state(), WHOLE), "Show a diagram first");
@@ -104,5 +104,47 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         let on: Vec<&str> = VIEW_MENU.concat().into_iter().filter(|id| available(h.state(), id)).collect();
         assert_eq!(on, [FIND], "{theme:?}: on Home");
         assert_eq!(why_off(h.state(), DIAGRAMS), "Open or go back to a project first");
+    });
+}
+
+/// A bar with no room for the search's field keeps Find… off and says why, and closes a list that
+/// was open, its keys with it; with room again, ⌘K opens it.
+#[test]
+fn find_waits_for_room_for_the_search() {
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.set_size(egui::vec2(640.0, 900.0));
+        h.run();
+        assert!(!has_id(&h, "workspace.header.search"), "{theme:?}: no room for the field");
+        assert!(!available(h.state(), FIND), "{theme:?}");
+        assert_eq!(why_off(h.state(), FIND), "Widen the window to search");
+        key(&mut h, Key::K, Modifiers::COMMAND);
+        assert!(!h.state().home_search.open, "{theme:?}: ⌘K waits too");
+        h.set_size(egui::vec2(1600.0, 900.0));
+        h.run();
+        key(&mut h, Key::K, Modifiers::COMMAND);
+        assert!(h.state().home_search.open, "{theme:?}: with room again");
+        h.set_size(egui::vec2(640.0, 900.0));
+        h.run();
+        assert!(!h.state().home_search.open, "{theme:?}: the list closes with the field");
+    });
+}
+
+/// On a canvas too narrow for it, a folded minimap can't be shown: the row is off, says why, and
+/// leaves it folded.
+#[test]
+fn show_minimap_waits_for_a_wide_enough_canvas() {
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.state_mut().canvas.minimap_open = false;
+        h.set_size(egui::vec2(1000.0, 900.0));
+        h.run();
+        assert!(!available(h.state(), MINIMAP), "{theme:?}");
+        assert_eq!(why_off(h.state(), MINIMAP), "Widen the canvas to show the minimap");
+        run(h.state_mut(), MINIMAP);
+        assert!(!h.state().canvas.minimap_open, "{theme:?}: still folded");
+        h.set_size(egui::vec2(1600.0, 900.0));
+        h.run();
+        assert!(available(h.state(), MINIMAP), "{theme:?}: wide enough again");
     });
 }

@@ -314,6 +314,11 @@ pub(crate) fn bar_tail(
     // The search field keeps its distance from the left part when the window is narrow.
     let end = help.left() - 12.0;
     let start = if prefix == "workspace.header" { crate::version_chip::bar(shell, ui, p, mid, start, end) } else { (end - 300.0).max(start) };
+    // Without room for the field the list, its keys with it, has nowhere to show: it closes, and Find… waits.
+    shell.home_search.cramped = end - start < SEARCH_MIN;
+    if shell.home_search.cramped && shell.home_search.open {
+        crate::home_search::close(shell);
+    }
     if end - start >= SEARCH_MIN {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
         // Home's field searches projects; a project's, its diagrams and elements.

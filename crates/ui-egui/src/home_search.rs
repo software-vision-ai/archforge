@@ -25,6 +25,8 @@ pub struct Search {
     pub highlight: usize,
     /// Find… was chosen: the frame's drawing opens the list, as opening it needs the window.
     pub asked: bool,
+    /// The bar last drawn had no room for the field, so the list has nowhere to show.
+    pub cramped: bool,
     focus: bool,
     found: Vec<Found>,
     finding: Option<std::sync::mpsc::Receiver<Vec<crate::FoundProject>>>,

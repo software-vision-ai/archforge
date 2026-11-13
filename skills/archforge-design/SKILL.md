@@ -76,8 +76,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
   Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
 - The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
-  field has the keyboard, so a skill's text keeps ⌘K for a link), Zoom in, Zoom out and Whole diagram (the
-  minimap's own steps, about the canvas's centre as last drawn), Show minimap (on while folded), then a row
+  field has the keyboard, so a skill's text keeps ⌘K for a link, and while the bar has no room for the
+  field, which then closes an open list), Zoom in, Zoom out and Whole diagram (the
+  minimap's own steps, about the canvas's centre as last drawn), Show minimap (on while folded and the canvas, as last drawn, has room for it), then a row
   per explorer and panel that opens it, off while it already shows. Only Find… is on at Home.
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
   nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group

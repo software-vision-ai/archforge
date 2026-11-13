@@ -2821,9 +2821,13 @@ fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
 
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
 /// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
-pub(crate) fn minimap_shown(shell: &Shell, r: Rect) -> bool {
-    let width = layout(crate::kinds::active_kind(shell)).width;
-    shell.canvas.minimap_open && r.width() >= 16.0 + width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+fn minimap_shown(shell: &Shell, r: Rect) -> bool {
+    shell.canvas.minimap_open && minimap_room(shell, r)
+}
+
+/// Whether the canvas `r` is wide enough for the minimap beside the toolbar, open or folded.
+pub(crate) fn minimap_room(shell: &Shell, r: Rect) -> bool {
+    r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
 }
 
 /// The minimap's box on the canvas `r` while it shows, for what must keep clear of it (the

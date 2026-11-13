@@ -121,8 +121,9 @@ pub static ACTIONS: &[Action] = &[
     Action {
         id: FIND,
         label: |_| tr("Find…"),
-        // A field with the keyboard keeps the keys: in a skill's text they make a link.
-        available: |s| free(s) && !edit_menu::on_field(s),
+        // A field with the keyboard keeps the keys: in a skill's text they make a link. A bar with
+        // no room for the search's field has nowhere to show the list.
+        available: |s| free(s) && !edit_menu::on_field(s) && !s.home_search.cramped,
         run: |s| s.home_search.asked = true,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::K }),
         search: None,

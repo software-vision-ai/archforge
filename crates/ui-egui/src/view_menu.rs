@@ -72,8 +72,8 @@ pub(crate) static ROWS: &[Action] = &[
     Action {
         id: MINIMAP,
         label: |_| tr("Show minimap"),
-        available: |s| drawn(s) && !s.canvas.minimap_open,
-        run: |s| s.canvas.minimap_open |= drawn(s),
+        available: can_show_minimap,
+        run: |s| s.canvas.minimap_open |= can_show_minimap(s),
         keys: None,
         search: None,
     },
@@ -96,6 +96,16 @@ fn drawn(shell: &Shell) -> bool {
     open_here(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
 }
 
+/// Whether the minimap is folded on a canvas, as last drawn, wide enough to show it.
+fn can_show_minimap(shell: &Shell) -> bool {
+    drawn(shell) && !shell.canvas.minimap_open && wide_enough(shell)
+}
+
+/// Whether the canvas, as last drawn, has room for the minimap beside the toolbar.
+fn wide_enough(shell: &Shell) -> bool {
+    canvas::minimap_room(shell, Rect::from_min_size(pos2(0.0, 0.0), shell.canvas.size))
+}
+
 /// Zooms by `factor` about the canvas's centre, as the minimap's − and + do.
 fn zoom(shell: &mut Shell, factor: f32) {
     let centre = shell.canvas.size / 2.0;
@@ -105,13 +115,15 @@ fn zoom(shell: &mut Shell, factor: f32) {
 /// Why the row `id` is off, in words: the first thing that keeps it off.
 pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
     let on_canvas = [ZOOM_IN, ZOOM_OUT, WHOLE, MINIMAP].contains(&id);
-    if id == FIND {
+    if id == FIND && shell.home_search.cramped {
+        tr("Widen the window to search")
+    } else if id == FIND {
         tr("Leave the text field first")
     } else if !open_here(shell) {
         tr("Open or go back to a project first")
     } else if on_canvas && !drawn(shell) {
         tr("Show a diagram first")
-    } else if id == MINIMAP && !canvas::minimap_shown(shell, Rect::from_min_size(pos2(0.0, 0.0), shell.canvas.size)) {
+    } else if id == MINIMAP && !wide_enough(shell) {
         tr("Widen the canvas to show the minimap")
     } else if id == MINIMAP {
         tr("The minimap is showing")
