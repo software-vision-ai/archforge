@@ -878,7 +878,7 @@ str		Minimap	Minimap
 str		Hide minimap	Masquer la minimap
 str		Show minimap	Afficher la minimap
 str		The minimap is showing	La minimap est affichée
-str		Widen the canvas to show the minimap	Élargissez le canevas pour afficher la mini-carte
+str		Make the canvas larger to show the minimap	Agrandissez le canevas pour afficher la mini-carte
 str		Whole diagram	Diagramme entier
 str		Zoom in	Zoom avant
 str		Zoom out	Zoom arrière

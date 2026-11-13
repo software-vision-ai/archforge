@@ -878,7 +878,7 @@ str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
 str		Show minimap	Mostrar minimapa
 str		The minimap is showing	El minimapa ya se muestra
-str		Widen the canvas to show the minimap	Ensanche el lienzo para mostrar el minimapa
+str		Make the canvas larger to show the minimap	Agrande el lienzo para mostrar el minimapa
 str		Whole diagram	Diagrama completo
 str		Zoom in	Acercar
 str		Zoom out	Alejar

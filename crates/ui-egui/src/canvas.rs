@@ -757,14 +757,14 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         minimap(shell, ui, p, r, bounds, &view);
     } else if r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + 28.0 + MINIMAP_GAP.x {
         // Its button, where the toolbar leaves room for it: live when the user folded the minimap,
-        // not available when the canvas is too narrow for it.
+        // not available when the canvas is too small for it.
         let b = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - 28.0, r.bottom() - MINIMAP_GAP.y - 26.0), vec2(28.0, 26.0));
         let folded = !shell.canvas.minimap_open;
         paint.rect_filled(b, 7.0, p.surface);
         paint.rect_stroke(b, 7.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, if folded { p.text_secondary } else { p.text_muted });
         let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, true);
-        let hint = if folded { tr("Show minimap") } else { tr("Widen the canvas to show the minimap") };
+        let hint = if folded { tr("Show minimap") } else { tr("Make the canvas larger to show the minimap") };
         if resp.on_hover_text(hint).clicked() && folded {
             shell.canvas.minimap_open = true;
         }
@@ -2825,9 +2825,11 @@ fn minimap_shown(shell: &Shell, r: Rect) -> bool {
     shell.canvas.minimap_open && minimap_room(shell, r)
 }
 
-/// Whether the canvas `r` is wide enough for the minimap beside the toolbar, open or folded.
+/// Whether the canvas `r` has room for the minimap, open or folded: wide enough beside the toolbar
+/// and tall enough for its box above the margin.
 pub(crate) fn minimap_room(shell: &Shell, r: Rect) -> bool {
-    r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+    let wide = r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + MINIMAP.x + MINIMAP_GAP.x;
+    wide && r.height() >= MINIMAP.y + MINIMAP_GAP.y
 }
 
 /// The minimap's box on the canvas `r` while it shows, for what must keep clear of it (the

@@ -72,7 +72,7 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         assert!(!available(h.state(), MINIMAP), "{theme:?}");
         assert_eq!(why_off(h.state(), MINIMAP), "The minimap is showing");
         h.state_mut().canvas.size = egui::vec2(400.0, 300.0);
-        assert_eq!(why_off(h.state(), MINIMAP), "Widen the canvas to show the minimap");
+        assert_eq!(why_off(h.state(), MINIMAP), "Make the canvas larger to show the minimap");
         h.run();
         h.state_mut().canvas.minimap_open = false;
         run(h.state_mut(), MINIMAP);
@@ -96,6 +96,7 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         run(h.state_mut(), CHAT);
         h.run();
         assert_eq!(h.state().state.panel, Panel::Agent, "{theme:?}");
+        assert!(has_id(&h, "workspace.panels.agent"), "{theme:?}");
         h.state_mut().canvas.active = None;
         assert!(!available(h.state(), ZOOM_IN) && !available(h.state(), MINIMAP), "{theme:?}");
         assert_eq!(why_off(h.state(), WHOLE), "Show a diagram first");
@@ -140,11 +141,32 @@ fn show_minimap_waits_for_a_wide_enough_canvas() {
         h.set_size(egui::vec2(1000.0, 900.0));
         h.run();
         assert!(!available(h.state(), MINIMAP), "{theme:?}");
-        assert_eq!(why_off(h.state(), MINIMAP), "Widen the canvas to show the minimap");
+        assert_eq!(why_off(h.state(), MINIMAP), "Make the canvas larger to show the minimap");
         run(h.state_mut(), MINIMAP);
         assert!(!h.state().canvas.minimap_open, "{theme:?}: still folded");
         h.set_size(egui::vec2(1600.0, 900.0));
         h.run();
         assert!(available(h.state(), MINIMAP), "{theme:?}: wide enough again");
+    });
+}
+
+/// On a canvas wide enough but too short for the minimap's box, Show minimap is off and says why,
+/// and an open minimap gives way to its button rather than to nothing.
+#[test]
+fn show_minimap_waits_for_a_tall_enough_canvas() {
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.state_mut().canvas.minimap_open = false;
+        h.set_size(egui::vec2(2000.0, 330.0));
+        h.run();
+        let size = h.state().canvas.size;
+        assert!(size.x > 1200.0 && size.y < 170.0, "{theme:?}: wide but short: {size:?}");
+        assert!(!available(h.state(), MINIMAP), "{theme:?}");
+        assert_eq!(why_off(h.state(), MINIMAP), "Make the canvas larger to show the minimap");
+        run(h.state_mut(), MINIMAP);
+        assert!(!h.state().canvas.minimap_open, "{theme:?}: still folded");
+        h.state_mut().canvas.minimap_open = true;
+        h.run();
+        assert!(!has_id(&h, "workspace.minimap") && has_id(&h, "workspace.minimap.toggle"), "{theme:?}: its button stands in");
     });
 }

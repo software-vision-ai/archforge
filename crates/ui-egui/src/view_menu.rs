@@ -96,13 +96,13 @@ fn drawn(shell: &Shell) -> bool {
     open_here(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
 }
 
-/// Whether the minimap is folded on a canvas, as last drawn, wide enough to show it.
+/// Whether the minimap is folded on a canvas, as last drawn, large enough to show it.
 fn can_show_minimap(shell: &Shell) -> bool {
-    drawn(shell) && !shell.canvas.minimap_open && wide_enough(shell)
+    drawn(shell) && !shell.canvas.minimap_open && has_room(shell)
 }
 
-/// Whether the canvas, as last drawn, has room for the minimap beside the toolbar.
-fn wide_enough(shell: &Shell) -> bool {
+/// Whether the canvas, as last drawn, has room for the minimap: wide and tall enough.
+fn has_room(shell: &Shell) -> bool {
     canvas::minimap_room(shell, Rect::from_min_size(pos2(0.0, 0.0), shell.canvas.size))
 }
 
@@ -123,8 +123,8 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
         tr("Open or go back to a project first")
     } else if on_canvas && !drawn(shell) {
         tr("Show a diagram first")
-    } else if id == MINIMAP && !wide_enough(shell) {
-        tr("Widen the canvas to show the minimap")
+    } else if id == MINIMAP && !has_room(shell) {
+        tr("Make the canvas larger to show the minimap")
     } else if id == MINIMAP {
         tr("The minimap is showing")
     } else {

@@ -877,7 +877,7 @@ str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap
 str		The minimap is showing	The minimap is showing
-str		Widen the canvas to show the minimap	Widen the canvas to show the minimap
+str		Make the canvas larger to show the minimap	Make the canvas larger to show the minimap
 str		Whole diagram	Whole diagram
 str		Zoom in	Zoom in
 str		Zoom out	Zoom out

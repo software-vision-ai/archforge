@@ -246,6 +246,8 @@ mod tests {
             (COMPARE, None),
             (NEW_BRANCH, None),
             (ZOOM_IN, None),
+            (WHOLE, None),
+            (SKILLS, None),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),

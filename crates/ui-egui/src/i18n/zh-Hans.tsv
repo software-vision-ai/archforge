@@ -878,7 +878,7 @@ str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
 str		The minimap is showing	缩略图已显示
-str		Widen the canvas to show the minimap	加宽画布以显示小地图
+str		Make the canvas larger to show the minimap	扩大画布以显示小地图
 str		Whole diagram	整个图
 str		Zoom in	放大
 str		Zoom out	缩小

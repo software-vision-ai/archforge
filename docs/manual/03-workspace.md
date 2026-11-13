@@ -132,7 +132,7 @@ ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it
 
 **View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
 out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you
-have folded it and the canvas is wide enough to show it; then **Diagrams**, **Models** and **Versions**, which open that explorer, and **Chat**,
+have folded it and the canvas is large enough to show it; then **Diagrams**, **Models** and **Versions**, which open that explorer, and **Chat**,
 **Appearance**, **Properties** and **Skills**, which open that panel. Find… waits while you type in a
 text field, where ⌘K stays the field's own, and while the window is too narrow to show the search; the canvas's rows need a diagram showing; a row that
 opens something is greyed out while it already shows, and every row but Find… needs a project open.

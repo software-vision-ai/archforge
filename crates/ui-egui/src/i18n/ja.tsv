@@ -878,7 +878,7 @@ str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示
 str		The minimap is showing	ミニマップは表示中です
-str		Widen the canvas to show the minimap	ミニマップを表示するにはキャンバスを広げてください
+str		Make the canvas larger to show the minimap	ミニマップを表示するにはキャンバスを大きくしてください
 str		Whole diagram	図全体
 str		Zoom in	拡大
 str		Zoom out	縮小
