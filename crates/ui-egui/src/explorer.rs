@@ -658,7 +658,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         );
     }
     if let Some(notice) = shell.explorer.notice.clone() {
-        ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        let area = ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.explorer.notice", area, &notice);
     }
     let no_widget_has_keys = ui.memory(|m| m.focused().is_none());
     let tree_keys =
@@ -855,7 +856,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         r.fresh = false;
     }
     if let Some(why) = &r.refused {
-        ux::text(&paint, pos2(field.left(), field.bottom() + 4.0), why, types::CAPTION, p.amber, Some(field.width()));
+        let area = ux::text(&paint, pos2(field.left(), field.bottom() + 4.0), why, types::CAPTION, p.amber, Some(field.width()));
+        widgets::announce(ui, &mut shell.registry, "workspace.explorer.rename.notice", area, why);
     }
     let has_keys = out.response.has_focus() || out.response.lost_focus();
     let enter = has_keys && ui.input(|i| i.key_pressed(egui::Key::Enter));

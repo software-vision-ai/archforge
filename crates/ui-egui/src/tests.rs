@@ -5083,6 +5083,69 @@ fn a_refused_appearance_change_is_read_out_as_a_status() {
     }
 }
 
+/// Asserts that `words` are read out as a polite live status, inside the area recorded as `id`.
+fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let status = h.get_by_label(words).accesskit_node();
+    assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{words}: read out");
+    assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
+}
+
+/// Delete refused in Models is read out as a status under the tree, and goes with the next
+/// Delete; a name refused in place is read out under its field until Escape closes it. In light
+/// and dark (AR-425).
+#[test]
+fn the_explorer_s_refusals_are_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        select_named(&mut h, archforge_uml::PACKAGE, "Types");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let said = "Types keeps the built-in types, so it stays while it holds them";
+        read_out(&h, said, "workspace.explorer.notice");
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        assert_eq!(h.state().explorer.notice, None, "{theme:?}: gone with the next Delete");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+        h.state_mut().explorer.delete = None;
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        h.state_mut().explorer.rename.as_mut().expect("F2 opens the name").text = String::new();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("an empty name is refused");
+        read_out(&h, &refused, "workspace.explorer.rename.notice");
+        // Enter gave up the field's keyboard, so it is clicked before Escape.
+        let at = rect_of(&h, "workspace.explorer.rename").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes the name");
+        assert!(h.query_by_label(&refused).is_none(), "{theme:?}: and its refusal is no longer read out");
+    }
+}
+
+/// The Diagrams panel's notice is read out as a status under its tree until a diagram is opened
+/// from it. In light and dark (AR-425).
+#[test]
+fn the_diagrams_panel_s_notice_is_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        // Nothing in the panel refuses yet, so the notice is set as a refusal would set it.
+        let said = "The diagram could not be opened";
+        h.state_mut().diagrams.notice = Some(said.into());
+        h.run();
+        read_out(&h, said, "workspace.diagrams.notice");
+        let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.diagrams.row.")).expect("a diagram is listed");
+        let at = rect_of(&h, &row).center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.notice, None, "{theme:?}: gone once a diagram is opened");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+    }
+}
+
 #[test]
 fn appearance_styles_the_selection_on_this_diagram() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -5588,11 +5651,13 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
         click(&mut h, at);
-        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_some()), "{theme:?}: the empty name is refused");
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
         assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
         let at = rect_of(&h, "workspace.new-diagram.back").center();
         click(&mut h, at);
         assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
         // A double click on a card goes straight on; Create opens the diagram in its group.
         let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
         // Past egui's double-click window, so the clicks before don't count with these two.
