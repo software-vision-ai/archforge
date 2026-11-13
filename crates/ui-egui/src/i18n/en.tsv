@@ -3,6 +3,7 @@
 str		Quit Archforge	Quit Archforge
 str		File	File
 str		Help	Help
+str	menu	View	View
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
@@ -11,7 +12,11 @@ str		Show a diagram first	Show a diagram first
 str		Current work is showing	Current work is showing
 str		Back to current work first	Back to current work first
 str		This project has one branch	This project has one branch
+str		Leave the text field first	Leave the text field first
+str		Widen the window to search	Widen the window to search
+str		Already showing	Already showing
 str		Open…	Open…
+str		Find…	Find…
 str		Save	Save
 # Generate
 str		Generate…	Generate…
@@ -454,6 +459,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
+str		These two versions are the same.	These two versions are the same.
 str		Both sides are your current work.	Both sides are your current work.
 str		Choose another pair above.	Choose another pair above.
 str		Restore this version…	Restore this version…
@@ -553,6 +559,21 @@ str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
 str		A name can't be empty.	A name can't be empty.
+str		There is {what} named {name} already.	There is {what} named {name} already.
+str		{what} cannot depend on itself.	{what} cannot depend on itself.
+str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
+str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
+str	refusal	a class	a class
+str	refusal	an association class	an association class
+str	refusal	an interface	an interface
+str	refusal	an enumeration	an enumeration
+str	refusal	a data type	a data type
+str	refusal	a primitive type	a primitive type
+str	refusal	a package	a package
+str	refusal	a profile	a profile
+str	refusal	a stereotype	a stereotype
+str	refusal	an element	an element
+str	refusal	a schema	a schema
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
@@ -871,7 +892,8 @@ plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap
-str		Widen the canvas to show the minimap	Widen the canvas to show the minimap
+str		The minimap is showing	The minimap is showing
+str		Make the canvas larger to show the minimap	Make the canvas larger to show the minimap
 str		Whole diagram	Whole diagram
 str		Zoom in	Zoom in
 str		Zoom out	Zoom out

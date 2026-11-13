@@ -4,6 +4,7 @@
 str		Quit Archforge	Sair do Archforge
 str		File	Ficheiro
 str		Help	Ajuda
+str	menu	View	Ver
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	O projeto está ocupado
@@ -12,7 +13,11 @@ str		Show a diagram first	Mostre primeiro um diagrama
 str		Current work is showing	O trabalho atual está a ser mostrado
 str		Back to current work first	Volte primeiro ao trabalho atual
 str		This project has one branch	Este projeto tem um ramo
+str		Leave the text field first	Saia primeiro do campo de texto
+str		Widen the window to search	Alargue a janela para pesquisar
+str		Already showing	Já está visível
 str		Open…	Abrir…
+str		Find…	Procurar…
 str		Save	Guardar
 # Gerar
 str		Generate…	Gerar…
@@ -455,6 +460,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	O projeto apresentado mudou depois de este pedido ser enviado, por isso não foi executado. Veja o que está apresentado agora e envie-o novamente.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	O projeto está retido enquanto é substituído, por isso este pedido não foi executado. Tente novamente quando terminar.
 str		This version is the same as your current work.	Esta versão é igual ao seu trabalho atual.
+str		These two versions are the same.	Estas duas versões são iguais.
 str		Both sides are your current work.	Os dois lados são o seu trabalho atual.
 str		Choose another pair above.	Escolha outro par acima.
 str		Restore this version…	Restaurar esta versão…
@@ -554,6 +560,21 @@ str		At most {n} characters.	No máximo {n} caracteres.
 str		Enter a name.	Introduza um nome.
 str		A name has to be one line.	Um nome tem de ocupar uma só linha.
 str		A name can't be empty.	Um nome não pode estar vazio.
+str		There is {what} named {name} already.	Já existe {what} com o nome {name}.
+str		{what} cannot depend on itself.	{what} não pode depender de si.
+str		A package cannot go into itself or a package it holds.	Um pacote não pode ir para dentro de si próprio nem de um pacote que contém.
+str		The model cannot be changed at the moment; nothing was changed.	O modelo não pode ser alterado de momento; nada foi alterado.
+str	refusal	a class	uma classe
+str	refusal	an association class	uma classe de associação
+str	refusal	an interface	uma interface
+str	refusal	an enumeration	uma enumeração
+str	refusal	a data type	um tipo de dados
+str	refusal	a primitive type	um tipo primitivo
+str	refusal	a package	um pacote
+str	refusal	a profile	um perfil
+str	refusal	a stereotype	um estereótipo
+str	refusal	an element	um elemento
+str	refusal	a schema	um esquema
 str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.
 str		Working changes	Alterações em curso
 str		History	Histórico
@@ -872,7 +893,8 @@ plural		+ {n} more column	+ {n} coluna mais|+ {n} colunas mais
 str		Minimap	Minimapa
 str		Hide minimap	Ocultar minimapa
 str		Show minimap	Mostrar minimapa
-str		Widen the canvas to show the minimap	Alargue a tela para mostrar o minimapa
+str		The minimap is showing	O minimapa está visível
+str		Make the canvas larger to show the minimap	Aumente a tela para mostrar o minimapa
 str		Whole diagram	Diagrama inteiro
 str		Zoom in	Ampliar
 str		Zoom out	Reduzir

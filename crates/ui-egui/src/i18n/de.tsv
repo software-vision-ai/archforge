@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge beenden
 str		File	Ablage
 str		Help	Hilfe
+str	menu	View	Ansicht
 str		Ctrl	Strg
 str		Shift	Umschalt
 str		The project is busy	Das Projekt ist beschäftigt
@@ -12,7 +13,11 @@ str		Show a diagram first	Zeigen Sie zuerst ein Diagramm an
 str		Current work is showing	Die aktuelle Arbeit wird angezeigt
 str		Back to current work first	Kehren Sie zuerst zur aktuellen Arbeit zurück
 str		This project has one branch	Dieses Projekt hat einen Zweig
+str		Leave the text field first	Verlassen Sie zuerst das Textfeld
+str		Widen the window to search	Vergrößern Sie das Fenster, um zu suchen
+str		Already showing	Wird bereits angezeigt
 str		Open…	Öffnen …
+str		Find…	Suchen …
 str		Save	Sichern
 # Generieren
 str		Generate…	Generieren …
@@ -455,6 +460,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Das angezeigte Projekt hat sich geändert, nachdem diese Anfrage gesendet wurde, daher wurde sie nicht ausgeführt. Prüfen Sie, was jetzt angezeigt wird, und senden Sie sie erneut.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Das Projekt wird angehalten, während es ersetzt wird, daher wurde diese Anfrage nicht ausgeführt. Versuchen Sie es erneut, wenn das abgeschlossen ist.
 str		This version is the same as your current work.	Diese Version entspricht Ihrer aktuellen Arbeit.
+str		These two versions are the same.	Diese beiden Versionen sind gleich.
 str		Both sides are your current work.	Beide Seiten sind Ihre aktuelle Arbeit.
 str		Choose another pair above.	Wählen Sie oben ein anderes Paar.
 str		Restore this version…	Diese Version wiederherstellen…
@@ -554,6 +560,21 @@ str		At most {n} characters.	Höchstens {n} Zeichen.
 str		Enter a name.	Geben Sie einen Namen ein.
 str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
 str		A name can't be empty.	Ein Name darf nicht leer sein.
+str		There is {what} named {name} already.	{what} namens {name} gibt es bereits.
+str		{what} cannot depend on itself.	{what} kann nicht von sich selbst abhängen.
+str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
+str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
+str	refusal	a class	eine Klasse
+str	refusal	an association class	eine Assoziationsklasse
+str	refusal	an interface	eine Schnittstelle
+str	refusal	an enumeration	eine Aufzählung
+str	refusal	a data type	ein Datentyp
+str	refusal	a primitive type	ein primitiver Typ
+str	refusal	a package	ein Paket
+str	refusal	a profile	ein Profil
+str	refusal	a stereotype	ein Stereotyp
+str	refusal	an element	ein Element
+str	refusal	a schema	ein Schema
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
@@ -872,7 +893,8 @@ plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden
 str		Show minimap	Minimap einblenden
-str		Widen the canvas to show the minimap	Verbreitern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
+str		The minimap is showing	Die Minimap wird angezeigt
+str		Make the canvas larger to show the minimap	Vergrößern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
 str		Whole diagram	Ganzes Diagramm
 str		Zoom in	Vergrößern
 str		Zoom out	Verkleinern

@@ -61,13 +61,13 @@ An open project fills the window with its workspace.
   **Compare…** opens the Compare page in the centre, with this version as Before and your current
   work as After; the button between them swaps the two, and each select lists your current work
   and this branch's versions, reading further ones as you reach the end. Under them the page says
-  how many differences there are between the version and your current work, and lists them in
+  how many differences there are between the two sides, and lists them in
   groups (model elements, diagrams, then skills), keeping up as the work changes. While no button and not the Explorer has the keyboard
   (Esc lets it go), the arrow keys scroll the list by a difference, Page Up and Page Down by a page,
   and Home and End to either end. Your current work stays your own work while another
-  version is shown, not the version in view. If the two are the same the page says so, and if
-  they can't be compared it says so, with **Retry**. Comparing two saved versions says **Not
-  available yet**.
+  version is shown, not the version in view. Choosing a version on both sides compares two saved
+  versions, each as it was saved; your work since then doesn't change what they differ by. If the
+  two are the same the page says so, and if they can't be compared it says so, with **Retry**.
   **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
@@ -122,13 +122,20 @@ An open project fills the window with its workspace.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
-**Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+**View**, **Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
 ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was.
+
+**View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
+out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you
+have folded it and the canvas is large enough to show it; then **Diagrams**, **Models** and **Versions**, which open that explorer, and **Chat**,
+**Appearance**, **Properties** and **Skills**, which open that panel. Find… waits while you type in a
+text field, where ⌘K stays the field's own, and while the window is too narrow to show the search; the canvas's rows need a diagram showing; a row that
+opens something is greyed out while it already shows, and every row but Find… needs a project open.
 
 **Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
 as a click on the tool does: click the canvas to place the element, or drag between two elements to

@@ -85,20 +85,50 @@ pub(crate) fn echo(s: &str) -> String {
     }
 }
 
-/// What a handler reports when it refuses: a message, and the parameter it is about.
+/// What a handler reports when it refuses: a message, the parameter it is about, and, for a reason
+/// an interface says in its own words, that reason typed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandError {
+    /// The refusal as an English sentence, which the command line, the control channel and the log
+    /// show.
     pub message: String,
     pub key: Option<String>,
+    /// The refusal as a reason with its values, for an interface to translate; none for a reason
+    /// not typed yet, which an interface shows as `message`.
+    pub reason: Option<Reason>,
+}
+
+/// Why a handler refused, typed, so an interface can say it in the user's language while the
+/// engine keeps no interface text. A kind is the element's kind as the notation names it in
+/// English, a lower-case noun such as `"class"` or `"schema"`; an interface that doesn't know a kind
+/// shows the message instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Reason {
+    /// Another element of the same kind where this one would be has the name already, whatever
+    /// the case; `name` is that other element's name.
+    NameTaken { kind: &'static str, name: String },
+    /// An element of `kind` would depend on itself.
+    DependsOnItself { kind: &'static str },
+    /// A package would go into itself or a package it holds.
+    PackageIntoItself,
 }
 
 impl CommandError {
+    /// A refusal about no parameter in particular, its reason not typed.
     pub fn new(message: impl Into<String>) -> CommandError {
-        CommandError { message: message.into(), key: None }
+        CommandError { message: message.into(), key: None, reason: None }
     }
 
+    /// A refusal about the parameter `key`, its reason not typed.
     pub fn about(key: &str, message: impl Into<String>) -> CommandError {
-        CommandError { message: message.into(), key: Some(key.to_string()) }
+        CommandError { message: message.into(), key: Some(key.to_string()), reason: None }
+    }
+
+    /// The same refusal with its reason typed as `reason`; the message stays as it was.
+    #[must_use]
+    pub fn because(self, reason: Reason) -> CommandError {
+        CommandError { reason: Some(reason), ..self }
     }
 }
 

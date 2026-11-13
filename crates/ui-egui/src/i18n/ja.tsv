@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge を終了
 str		File	ファイル
 str		Help	ヘルプ
+str	menu	View	表示
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
@@ -12,7 +13,11 @@ str		Show a diagram first	先に図を表示してください
 str		Current work is showing	現在の作業を表示しています
 str		Back to current work first	先に現在の作業に戻ってください
 str		This project has one branch	このプロジェクトのブランチは 1 つです
+str		Leave the text field first	先にテキスト欄から離れてください
+str		Widen the window to search	検索するにはウィンドウを広げてください
+str		Already showing	すでに表示中です
 str		Open…	開く…
+str		Find…	検索…
 str		Save	保存
 # 生成
 str		Generate…	生成…
@@ -455,6 +460,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	このリクエストの送信後に表示中のプロジェクトが変わったため、実行しませんでした。現在の表示を確認して、もう一度送信してください。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
+str		These two versions are the same.	この2つのバージョンは同じです。
 str		Both sides are your current work.	両側とも現在の作業です。
 str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…
@@ -554,6 +560,21 @@ str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。
 str		A name can't be empty.	名前は空にできません。
+str		There is {what} named {name} already.	{name} という名前の{what}はすでにあります。
+str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
+str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str	refusal	a class	クラス
+str	refusal	an association class	関連クラス
+str	refusal	an interface	インターフェース
+str	refusal	an enumeration	列挙
+str	refusal	a data type	データ型
+str	refusal	a primitive type	プリミティブ型
+str	refusal	a package	パッケージ
+str	refusal	a profile	プロファイル
+str	refusal	a stereotype	ステレオタイプ
+str	refusal	an element	要素
+str	refusal	a schema	スキーマ
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
@@ -872,7 +893,8 @@ plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示
-str		Widen the canvas to show the minimap	ミニマップを表示するにはキャンバスを広げてください
+str		The minimap is showing	ミニマップは表示中です
+str		Make the canvas larger to show the minimap	ミニマップを表示するにはキャンバスを大きくしてください
 str		Whole diagram	図全体
 str		Zoom in	拡大
 str		Zoom out	縮小

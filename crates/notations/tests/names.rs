@@ -137,24 +137,24 @@ fn two_elements_of_one_kind_named_alike_are_refused_by_every_command() {
     let payable = run(&mut s, "uml.interface.add", json!({ "package": sales, "name": "Payable" }));
     let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
     // Classifiers: one kind, whatever their metaclasses.
-    refused(&mut s, "uml.class.add", json!({ "package": sales, "name": "order" }), "there is a class named order already");
-    refused(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "ORDER" }), "there is a class named ORDER already");
-    refused(&mut s, "uml.data-type.add", json!({ "package": sales, "name": "state" }), "there is an enumeration named state already");
+    refused(&mut s, "uml.class.add", json!({ "package": sales, "name": "order" }), "there is a class named Order already");
+    refused(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "ORDER" }), "there is a class named Order already");
+    refused(&mut s, "uml.data-type.add", json!({ "package": sales, "name": "state" }), "there is an enumeration named State already");
     refused(&mut s, "uml.interface.rename", json!({ "interface": payable, "name": "Line" }), "there is a class named Line already");
     refused(
         &mut s,
         "uml.association-class.add",
         json!({ "from": order, "to": line, "name": "payable" }),
-        "there is an interface named payable already",
+        "there is an interface named Payable already",
     );
     let elsewhere = run(&mut s, "uml.package.add", json!({ "name": "Elsewhere" }));
     let other = run(&mut s, "uml.class.add", json!({ "package": elsewhere, "name": "STATE" }));
-    refused(&mut s, "uml.class.move", json!({ "class": other, "package": sales }), "there is an enumeration named STATE already");
+    refused(&mut s, "uml.class.move", json!({ "class": other, "package": sales }), "there is an enumeration named State already");
     // Packages.
     run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "Billing" }));
     let audit = run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "Audit" }));
-    refused(&mut s, "uml.package.add", json!({ "parent": sales, "name": "billing" }), "there is a package named billing already");
-    refused(&mut s, "uml.package.rename", json!({ "package": audit, "name": "BILLING" }), "there is a package named BILLING already");
+    refused(&mut s, "uml.package.add", json!({ "parent": sales, "name": "billing" }), "there is a package named Billing already");
+    refused(&mut s, "uml.package.rename", json!({ "package": audit, "name": "BILLING" }), "there is a package named Billing already");
     let billing = run(&mut s, "uml.package.add", json!({ "parent": elsewhere, "name": "Billing" }));
     refused(&mut s, "uml.package.move", json!({ "package": billing, "to": sales }), "there is a package named Billing already");
     // Attributes, operations and literals.

@@ -183,10 +183,10 @@ fn an_enumeration_is_added_renamed_moved_and_removed_each_one_step_its_name_free
     assert_eq!(archforge_core::name_of(s.doc(), obj(s.doc(), &status)), "State");
     // Classes, interfaces and enumerations share their package's names, whatever the case.
     for (cmd, p, key, why) in [
-        ("uml.enumeration.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named order already"),
-        ("uml.enumeration.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named PAYABLE already"),
-        ("uml.class.add", json!({ "package": sales, "name": "state" }), "name", "there is an enumeration named state already"),
-        ("uml.interface.rename", json!({ "interface": payable, "name": "STATE" }), "name", "enumeration named STATE"),
+        ("uml.enumeration.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named Order already"),
+        ("uml.enumeration.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named Payable already"),
+        ("uml.class.add", json!({ "package": sales, "name": "state" }), "name", "there is an enumeration named State already"),
+        ("uml.interface.rename", json!({ "interface": payable, "name": "STATE" }), "name", "enumeration named State"),
         ("uml.enumeration.rename", json!({ "enumeration": status, "name": "Order" }), "name", "class named Order"),
         ("uml.enumeration.add", json!({ "package": sales, "name": "" }), "name", "name"),
         ("uml.enumeration.add", json!({ "package": order, "name": "X" }), "package", "not a package"),
@@ -199,7 +199,10 @@ fn an_enumeration_is_added_renamed_moved_and_removed_each_one_step_its_name_free
     }
     // Moved to a package whose interface has its name: refused; to another: one step.
     let clash = run(&mut s, "uml.interface.add", json!({ "package": billing, "name": "state" }));
-    assert!(refused(&mut s, "uml.enumeration.move", json!({ "enumeration": status, "package": billing })).contains("interface named State"));
+    assert!(
+        refused(&mut s, "uml.enumeration.move", json!({ "enumeration": status, "package": billing })).contains("interface named state"),
+        "it names the interface there"
+    );
     run(&mut s, "uml.interface.rename", json!({ "interface": clash, "name": "Billable" }));
     one_step(&mut s, "uml.enumeration.move", json!({ "enumeration": status, "package": billing }));
     let st = s.doc();

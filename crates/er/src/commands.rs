@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -186,7 +186,10 @@ fn set_name(ctx: &mut C<'_>, obj: Obj, prop: archforge_mof::PropId, name: &str) 
 /// same rule (AR-209).
 fn schema_name(ctx: &C<'_>, model: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     match crate::names::clash(ctx.doc, model, SCHEMA, name, except) {
-        Some(other) => Err(refuse("name", format!("there is a schema named {} already", name_of(ctx.doc, other)))),
+        Some(other) => {
+            let name = name_of(ctx.doc, other);
+            Err(refuse("name", format!("there is a schema named {name} already")).because(Reason::NameTaken { kind: "schema", name }))
+        }
         None => Ok(()),
     }
 }

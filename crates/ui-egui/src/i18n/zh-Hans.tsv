@@ -4,6 +4,7 @@
 str		Quit Archforge	退出 Archforge
 str		File	文件
 str		Help	帮助
+str	menu	View	视图
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	项目正忙
@@ -12,7 +13,11 @@ str		Show a diagram first	请先显示一个图
 str		Current work is showing	正在显示当前工作
 str		Back to current work first	请先返回当前工作
 str		This project has one branch	此项目只有一个分支
+str		Leave the text field first	请先离开文本框
+str		Widen the window to search	请加宽窗口以进行搜索
+str		Already showing	已在显示
 str		Open…	打开…
+str		Find…	查找…
 str		Save	存储
 # 生成
 str		Generate…	生成…
@@ -455,6 +460,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		This version is the same as your current work.	此版本与您当前的工作相同。
+str		These two versions are the same.	这两个版本相同。
 str		Both sides are your current work.	两侧都是您当前的工作。
 str		Choose another pair above.	请在上方选择另一组。
 str		Restore this version…	恢复此版本…
@@ -554,6 +560,21 @@ str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。
 str		A name can't be empty.	名称不能为空。
+str		There is {what} named {name} already.	已有名为 {name} 的{what}。
+str		{what} cannot depend on itself.	{what}不能依赖自身。
+str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
+str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
+str	refusal	a class	类
+str	refusal	an association class	关联类
+str	refusal	an interface	接口
+str	refusal	an enumeration	枚举
+str	refusal	a data type	数据类型
+str	refusal	a primitive type	基本类型
+str	refusal	a package	包
+str	refusal	a profile	配置文件
+str	refusal	a stereotype	构造型
+str	refusal	an element	元素
+str	refusal	a schema	架构
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
@@ -872,7 +893,8 @@ plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
-str		Widen the canvas to show the minimap	加宽画布以显示小地图
+str		The minimap is showing	缩略图已显示
+str		Make the canvas larger to show the minimap	扩大画布以显示小地图
 str		Whole diagram	整个图
 str		Zoom in	放大
 str		Zoom out	缩小

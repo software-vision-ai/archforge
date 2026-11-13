@@ -15,7 +15,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
@@ -402,11 +402,16 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
 }
 
 /// An engine's refusal as the panel says it: the reason alone, without the command's id or the
-/// parameter it is about, as a sentence; a reason the catalogues know is translated.
+/// parameter it is about, as a sentence; a typed reason, read-only, and a reason the catalogues
+/// know are said in the user's language, any other in the engine's English.
 pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     let reason = match e {
-        archforge_engine::EngineError::Failed { error, .. } => error.message.clone(),
+        archforge_engine::EngineError::Failed { error, .. } => match error.reason.as_ref().and_then(said) {
+            Some(words) => return words,
+            None => error.message.clone(),
+        },
         archforge_engine::EngineError::Disabled { reason, .. } => (*reason).to_string(),
+        archforge_engine::EngineError::ReadOnly => return tr("The model cannot be changed at the moment; nothing was changed."),
         other => other.to_string(),
     };
     if reason == "the name is empty" {
@@ -415,6 +420,42 @@ pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     let mut chars = reason.chars();
     let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
     format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
+}
+
+/// A typed refusal in the user's words; none for a kind of element the catalogues don't name, which
+/// the engine's sentence then says.
+fn said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    let (template, kind, name) = match reason {
+        Reason::NameTaken { kind, name } => (tr("There is {what} named {name} already."), *kind, name.as_str()),
+        Reason::DependsOnItself { kind } => (tr("{what} cannot depend on itself."), *kind, ""),
+        Reason::PackageIntoItself => return Some(tr("A package cannot go into itself or a package it holds.")),
+        _ => return None,
+    };
+    let what = a_kind(kind)?;
+    // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
+    let what =
+        if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
+    Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A kind of element as a refusal names it, with its article where the language has one; none for
+/// a kind the catalogues don't name.
+fn a_kind(kind: &str) -> Option<String> {
+    Some(match kind {
+        "class" => tr_ctx("refusal", "a class"),
+        "association class" => tr_ctx("refusal", "an association class"),
+        "interface" => tr_ctx("refusal", "an interface"),
+        "enumeration" => tr_ctx("refusal", "an enumeration"),
+        "data type" => tr_ctx("refusal", "a data type"),
+        "primitive type" => tr_ctx("refusal", "a primitive type"),
+        "package" => tr_ctx("refusal", "a package"),
+        "profile" => tr_ctx("refusal", "a profile"),
+        "stereotype" => tr_ctx("refusal", "a stereotype"),
+        "element" => tr_ctx("refusal", "an element"),
+        "schema" => tr_ctx("refusal", "a schema"),
+        _ => return None,
+    })
 }
 
 fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {

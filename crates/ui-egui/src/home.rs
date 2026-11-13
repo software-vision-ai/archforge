@@ -134,7 +134,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         let strip = Rect::from_min_size(full.min, vec2(full.width(), STRIP));
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
-        crate::home_search::shortcut(shell, ui.ctx());
+        crate::home_search::open_if_asked(shell, ui.ctx());
         // The bar first, so the strip's drag area does not cover it; a tab clicked ends the frame.
         if !bar_row(shell, ui, &p, bar) {
             return;
@@ -314,6 +314,11 @@ pub(crate) fn bar_tail(
     // The search field keeps its distance from the left part when the window is narrow.
     let end = help.left() - 12.0;
     let start = if prefix == "workspace.header" { crate::version_chip::bar(shell, ui, p, mid, start, end) } else { (end - 300.0).max(start) };
+    // Without room for the field the list, its keys with it, has nowhere to show: it closes, and Find… waits.
+    shell.home_search.cramped = end - start < SEARCH_MIN;
+    if shell.home_search.cramped && shell.home_search.open {
+        crate::home_search::close(shell);
+    }
     if end - start >= SEARCH_MIN {
         let field = Rect::from_min_max(pos2(start, mid - 15.0), pos2(end, mid + 15.0));
         // Home's field searches projects; a project's, its diagrams and elements.
