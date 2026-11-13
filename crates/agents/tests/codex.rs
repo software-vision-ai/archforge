@@ -1344,9 +1344,11 @@ fn late_stop_body(a_stop: &str) -> String {
     body
 }
 
-/// Drives the late-stop scenario and checks B: it starts well within A's stop request's time, is
-/// stopped with Codex's acceptance, and then runs on past three times the request timeout with no
-/// end, as nothing about A's stop belongs to it.
+/// Drives the late-stop scenario and checks B: it starts within A's stop request's time, is
+/// stopped with Codex's acceptance, and then runs on with no end past A's expiry and past the
+/// deadline A's refusal or expiry would give it, as nothing about A's stop belongs to it. Only A's
+/// stop request is bounded by `timeout`, which leaves B's setup time under load; once B writes on
+/// the request timeout becomes short, so a deadline A's expiry wrongly gave B would come soon.
 fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
     let world = World::new(name, &late_stop_body(a_stop));
     let mut session = world.session(config(Start::New, timeout), chatgpt());
@@ -1359,10 +1361,16 @@ fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
     session.stop().unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { text } if text == "still working"));
-    // Everything about A's stop that was written came before this delta, inside A's request time.
-    assert!(stopped_at.elapsed() < timeout / 2, "B ran {:?} after A's stop, not well within its request time", stopped_at.elapsed());
-    let events = events_for(&mut session, timeout * 3);
-    assert!(stopped_at.elapsed() > timeout * 3, "watched past A's expiry and past what would be B's deadline");
+    // Everything about A's stop that was written came before this delta, inside A's request time,
+    // so B ran when A's stop was answered or expired.
+    let setup = stopped_at.elapsed();
+    assert!(setup < timeout, "B ran {setup:?} after A's stop, past its request time of {timeout:?}");
+    let grace = Duration::from_millis(250);
+    session.set_request_timeout(grace).unwrap();
+    // A refusal wrongly taken for B's would end it one request timeout after it came, before now.
+    let watch = timeout + grace * 4;
+    let events = events_for(&mut session, watch);
+    assert!(stopped_at.elapsed() >= watch + setup, "watched past A's expiry and past what would be B's deadline");
     assert!(!events.iter().any(|e| turn_end(e) || ended(e)), "{events:?}");
     assert!(session.turn_running(), "B still runs");
     assert!(matches!(session.send("C"), Err(AgentError::TurnRunning { .. })));
@@ -1372,18 +1380,18 @@ fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
 }
 
 /// Turn A is stopped and Codex ends it at once, before it answers the stop. Turn B starts (and is
-/// stopped, Codex accepting). Then A's stop is refused, after B started and well before A's stop
+/// stopped, Codex accepting). Then A's stop is refused, after B started and before A's stop
 /// request expires: B keeps running with no deadline, as the refusal belongs to turn A.
 #[test]
 fn a_late_stop_refusal_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_secs(1));
+    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_secs(3));
 }
 
 /// The same, but A's stop is never answered: its request expires while B runs, and B keeps running
 /// with no deadline.
 #[test]
 fn a_late_stop_timeout_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-timeout", "", Duration::from_secs(1));
+    late_stop_leaves_b_running("late-timeout", "", Duration::from_secs(3));
 }
 
 /// A shell line writing a piece of turn A's answer, which tells a test that A was named.
@@ -1800,7 +1808,8 @@ fn unknown_lines_are_skipped_and_counted() {
     let world = World::new("skipped", &body);
     let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
-    let events = events_for(&mut session, Duration::from_millis(500));
+    // The three skipped lines, however long a loaded machine takes to write them.
+    let events: Vec<SessionEvent> = (0..3).flat_map(|_| events_until(&mut session, 10, |e| matches!(e, SessionEvent::Ignored(_)))).collect();
     let skipped: Vec<&Skipped> = events
         .iter()
         .filter_map(|e| match e {
