@@ -42,14 +42,14 @@ pub(crate) enum Origin {
 }
 
 /// The page's one read and one comparison, and what the last of them found, with which one it was.
-/// The read, of a version of a project, is never let go before it answers: a host read cannot be
-/// called back and counts against the host's limit until it ends, so Compare never has more than
-/// this one under way, whatever was opened and closed meanwhile.
+/// The read, of a version in a project and session, is never let go before it answers: a host read
+/// cannot be called back and counts against the host's limit until it ends, so Compare never has
+/// more than this one under way, whatever was opened and closed meanwhile.
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
     pub(crate) held: Option<Held>,
-    pub(crate) reading: Option<(PathBuf, String, Receiver<VersionRead>)>,
+    pub(crate) reading: Option<((PathBuf, u64), String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Key, Receiver<Found>)>,
     pub(crate) found: Option<(Key, Found, Origin)>,
 }
@@ -107,17 +107,16 @@ fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T,
     }
 }
 
-/// Lands what has come, only on the sides it is about, a read only in the project it is of; what
-/// nobody wants is dropped. Rows that have only moved on still show what they were, or a steady
+/// Lands what has come, only on the sides it is about, a read only in the project and session it is
+/// of, however alike another opened at the same path; what nobody wants is dropped. Rows that have only moved on still show what they were, or a steady
 /// stream of edits would hide every answer; a failure for them says nothing of the newest rows,
 /// which the next comparison takes.
 fn take_answers(shell: &mut Shell) {
     let (now, revision) = (sides(shell), shell.current_work().map(|s| s.revision()));
     let r = &mut shell.versions.compare_results;
-    let shown = r.about.as_ref().map(|(path, _)| path.clone());
     if let Some(answer) = r.reading.as_ref().and_then(|(.., rx)| answered(rx))
-        && let Some((project, version, _)) = r.reading.take()
-        && let Some(sides) = now.clone().filter(|s| s.0 == version && shown == Some(project))
+        && let Some((of, version, _)) = r.reading.take()
+        && let Some(sides) = now.clone().filter(|s| s.0 == version && r.about.as_ref() == Some(&of))
     {
         match answer {
             Ok(rows) => r.held = Some(Held { version, keep: bytes_of(&rows) <= MOST_KEPT_BYTES, rows }),
@@ -168,9 +167,9 @@ fn read_before(shell: &mut Shell, version: String) {
     if v.compare_results.reading.is_some() || v.details_comparing.is_some() || v.details_reading.is_some() {
         return;
     }
-    let (Some(host), Some((path, _))) = (shell.services.projects.clone(), v.compare_results.about.clone()) else { return };
-    let answer = host.read_version(&path, version.clone());
-    shell.versions.compare_results.reading = Some((path, version, answer));
+    let (Some(host), Some(of)) = (shell.services.projects.clone(), v.compare_results.about.clone()) else { return };
+    let answer = host.read_version(&of.0, version.clone());
+    shell.versions.compare_results.reading = Some((of, version, answer));
 }
 
 /// Builds the rows of `live` and compares them with `version` on a thread of its own, `live` first

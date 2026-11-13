@@ -1606,7 +1606,7 @@ fn landing(h: &mut Harness<'static, Shell>, sides: (&str, bool), revision: u64, 
     let (tx, comparison) = std::sync::mpsc::channel();
     tx.send(answer).unwrap();
     let key = Key { sides: (sides.0.to_string(), sides.1), revision };
-    let project = h.state().project.as_ref().unwrap().path.clone();
+    let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
     let r = &mut h.state_mut().versions.compare_results;
     (r.held, r.found, r.reading, r.comparing) = (None, None, Some((project, "c3".to_string(), read)), Some((key, comparison)));
     h.run_steps(1);
@@ -1811,9 +1811,38 @@ fn a_read_of_another_project_lands_nowhere() {
         let before = page_reading(h, host);
         let (tx, read) = std::sync::mpsc::channel();
         tx.send(Ok(before)).unwrap();
-        h.state_mut().versions.compare_results.reading = Some(("/other".into(), "c3".to_string(), read));
+        let generation = h.state().session_generation();
+        h.state_mut().versions.compare_results.reading = Some((("/other".into(), generation), "c3".to_string(), read));
         h.run_steps(1);
         assert!(h.state().versions.compare_results.held.is_none());
+    });
+}
+
+/// The project closed and opened again at its path during the page's read is another session: the
+/// read's failure lands nowhere then, and the page opened again on that version reads it anew once
+/// that read ends, needing no Retry.
+#[test]
+fn a_read_from_before_the_project_opened_again_lands_nowhere() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let session = h.state_mut().session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        h.state_mut().close_project();
+        h.run_steps(1);
+        host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+        h.run_steps(2);
+        h.state_mut().open_project(commerce());
+        h.run_steps(2);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        compared(h, "c3");
+        answer_all_but_the_first(host, &before);
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_eq!(asked(host), ["c3"], "still the read from before");
+        answer(host, "c3", Err("Old".to_string().into()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert_eq!(found(h), None, "not this session's failure");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
     });
 }
 
@@ -1903,7 +1932,7 @@ fn leaving_the_project_lets_the_page_go() {
             answer(host, "c3", Ok(before.clone()));
             found_many(h, 1);
             let (tx, read) = std::sync::mpsc::channel();
-            let project = h.state().project.as_ref().unwrap().path.clone();
+            let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
             h.state_mut().versions.compare_results.reading = Some((project, "c3".to_string(), read));
             route(h.state_mut());
             h.run_steps(1);
