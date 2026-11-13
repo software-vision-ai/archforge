@@ -182,7 +182,9 @@ versions:
 - its description, when it was saved and, where that is recorded, by whom;
 - **View this version**, which [shows it in the window](#view-an-earlier-version);
 - under **Changed items**, what changed since the version before it, model elements first, then
-  diagrams, then skills. The first version says *First version: there is nothing earlier to compare it with.*;
+  diagrams, then skills. While no button and not the Explorer has the keyboard (Esc lets it go),
+  the arrow keys scroll the list by an item, Page Up and Page Down by a page, and Home and End to
+  either end. The first version says *First version: there is nothing earlier to compare it with.*;
 - under **Previous version**, the version before it, which opens its details the same way.
 
 Versions are compared one at a time, so when you click through History quickly, the changes of the

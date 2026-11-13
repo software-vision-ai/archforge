@@ -74,7 +74,8 @@ pub struct Details {
     comparison: Option<Comparison>,
     /// The Compare page shown in place of these details, while it is.
     compare: Option<compare::Pair>,
-    scroll: TreeScroll,
+    /// How far the changed items have scrolled.
+    pub(crate) scroll: TreeScroll,
 }
 
 /// What the person is told when a comparison failed, and the reason when none is known.
@@ -396,7 +397,10 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     // A little more than the cards: `scroll_tree` keeps that much of the area clear of a list that fits.
     let height = (items.len() as f32 * PITCH + 8.0).min(r.bottom() - BELOW_CARDS - top).max(PITCH);
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
+    let explorer = shell.explorer.focused;
     let Some(d) = shell.versions.details.as_mut() else { return tree.bottom() };
+    // What shows of the list, as scroll_tree measures it.
+    scroll_keys(ui, explorer, &mut d.scroll, PITCH, (height - 8.0).max(PITCH));
     let offset = scroll_tree(ui, p, tree, top, items.len(), PITCH, 0.0, true, None, &mut d.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -409,6 +413,28 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         }
     }
     tree.bottom()
+}
+
+/// The keys scroll a list of cards `step` apart while no control and not the `explorer` has them,
+/// as the explorer's keys work only while it has them: the arrows by a card, Page Up and Page Down
+/// by the `page` that shows, Home and End to either end. scroll_tree keeps the offset within the list.
+pub(crate) fn scroll_keys(ui: &egui::Ui, explorer: bool, scroll: &mut TreeScroll, step: f32, page: f32) {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    if explorer || ui.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    let press = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    for (key, by) in [(ArrowDown, step), (ArrowUp, -step), (PageDown, page), (PageUp, -page)] {
+        if press(key) {
+            scroll.offset += by;
+        }
+    }
+    if press(Home) {
+        scroll.offset = 0.0;
+    }
+    if press(End) {
+        scroll.offset = f32::MAX;
+    }
 }
 
 /// The version before, from `y`, as a link that opens its details; bars while it is on its way and
