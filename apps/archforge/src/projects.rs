@@ -4681,7 +4681,9 @@ mod tests {
     /// A move that started and whose wait ended, as it does at the limit or an exit, cannot be told:
     /// its answer is unclear, the read-back says it cannot tell until the writer has finished, and
     /// then finds where it went. The wait is ended by the exit flag once the writer holds the move,
-    /// as a short limit could pass before the writer reached it.
+    /// as a short limit could pass before the writer reached it. The move is held until the test
+    /// lets it go, and the probe of the writer is queued while it is held, so that neither depends
+    /// on how fast a loaded machine runs either thread.
     #[test]
     fn a_move_past_its_wait_is_read_back_only_once_the_writer_has_finished() {
         let (sandbox, path) = branched();
@@ -4691,7 +4693,8 @@ mod tests {
         let (go_on, hold) = channel::<()>();
         *lock(&host.inner.before_move) = Some(Box::new(move || {
             let _ = running.send(());
-            let _ = hold.recv_timeout(Duration::from_secs(30));
+            // Until the test lets go, or drops `go_on` as it fails.
+            let _ = hold.recv();
         }));
         let ReplacementJob { run, read_back } = moving.into_job();
         let answer = run();
@@ -4701,13 +4704,17 @@ mod tests {
         host.inner.cancel.store(false, Ordering::SeqCst);
         assert!(matches!(answer, Err(JobFailure::Unclear)), "unclear");
         let watch = lock(&host.inner.switches).get(&path).and_then(std::sync::Weak::upgrade).expect("still under way");
-        let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60)).unwrap();
-        assert!(told.is_err(), "not while the writer still runs it: {told:?}");
+        let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60));
+        assert!(matches!(told, Ok(Err(_))), "an answer, and not while the writer still runs it: {told:?}");
+        // Asked for while the move is held, the probe carries the generation from before it, and
+        // is refused by the generation the move changed: the writer has got past the move.
+        let probe = host.on_writer(&path, |_| Ok(()));
         drop(go_on);
-        // Refused by the generation the move changed, which is the writer having got past it.
-        host.on_writer(&path, |_| Ok(())).recv_timeout(Duration::from_secs(60)).expect("the writer finished the move").unwrap_err();
+        let probe = probe.recv_timeout(Duration::from_secs(60)).expect("the writer finished the move");
+        assert!(probe.is_err(), "the probe queued behind the move ran on the generation it was asked with: {probe:?}");
         assert_eq!(on(host), "elsewhere");
-        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true));
+        let told = read_back().recv_timeout(Duration::from_secs(60)).expect("the read-back answers");
+        assert_eq!(told, Ok(true), "the read-back finds the move");
     }
 
     /// A finished move that stayed reads back as not moved; and the branch is read after the job is
