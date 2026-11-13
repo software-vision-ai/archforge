@@ -1706,6 +1706,49 @@ fn a_comparison_past_its_budget_is_too_large() {
     });
 }
 
+/// Stop is a stop until Retry: a read that fails after it, even for good, does not take its place.
+#[test]
+fn a_read_that_fails_after_stop_keeps_it_stopped() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        tap(h, "workspace.version-compare.stop");
+        answer(host, "c3", Err(crate::VersionReadError::TooLarge));
+        frames_until(h, |h| h.state().versions.compare_results.reading.is_none());
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && has_id(h, "workspace.version-compare.retry"), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+    });
+}
+
+/// While an edit is compared again, the earlier list stays with Stop above it, and Stop stops that
+/// comparison: it runs on with its answer dropped. Another pair's comparison offers no Stop here.
+#[test]
+fn stop_is_offered_above_an_earlier_answer() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        assert!(!has_id(h, "workspace.version-compare.stop"), "nothing runs");
+        let (_other, of_the_other) = std::sync::mpsc::channel();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().versions.compare_results.comparing = Some((Key { sides: (None, Some("c3".to_string())), revision }, of_the_other));
+        h.run_steps(2);
+        assert!(!has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "another pair's comparison");
+        let (tx, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() + 1 };
+        h.state_mut().versions.compare_results.comparing = Some((key, pending));
+        h.run_steps(2);
+        assert!(has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "{:?}", painted(h));
+        let (stop, count) = (rect_of(h, "workspace.version-compare.stop"), rect_of(h, "workspace.version-compare.count"));
+        assert!(stop.bottom() <= count.top(), "Stop is above the list: {stop:?} {count:?}");
+        tap(h, "workspace.version-compare.stop");
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && !has_id(h, "workspace.version-compare.stop"), "{:?}", painted(h));
+        assert!(tx.send(Ok(Arc::new(Vec::new()))).is_ok(), "it runs on");
+    });
+}
+
 /// A comparison's failure past its budget, as its thread gives it.
 fn too_large_failure() -> Failure {
     Failure { why: "comparing these takes 2 steps, more than the 1 allowed".into(), origin: Origin::TooLarge }

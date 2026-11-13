@@ -35,6 +35,9 @@ const LIST_TOP: f32 = 64.0;
 const SAID: f32 = 96.0;
 /// The bars a comparison in progress shows in place of the cards.
 const SKELETON_CARDS: usize = 3;
+/// Stop's automation id, and the room it takes above an earlier answer while a comparison runs.
+const STOP: &str = "workspace.version-compare.stop";
+const STOP_ROW: f32 = 36.0;
 
 /// The Before and the After side compared: a version, or current work as none. Never both current
 /// work, nor one version on both sides.
@@ -187,6 +190,8 @@ fn take_answers(shell: &mut Shell) {
                 let kept = r.held.iter().filter(|h| h.keep).map(|h| bytes_of(&h.rows)).fold(bytes_of(&rows), usize::saturating_add);
                 r.held.push(Held { version, keep: kept <= MOST_KEPT_BYTES, rows });
             }
+            // The person stopped these sides: a failure says nothing until Retry, which reads again.
+            Err(_) if stopped(r, &sides) => {}
             Err(why) => {
                 // Asking again cannot make a version of another branch, a newer Archforge or past the read budget readable.
                 let origin = match why {
@@ -201,7 +206,7 @@ fn take_answers(shell: &mut Shell) {
     if let Some(answer) = r.comparing.as_ref().and_then(|(_, rx)| answered(rx))
         && let Some((key, _)) = r.comparing.take()
         && now.as_ref() == Some(&key.sides)
-        && !r.found.as_ref().is_some_and(|(shown, _, origin)| shown.sides == key.sides && *origin == Origin::Stopped)
+        && !stopped(r, &key.sides)
         && (answer.is_ok() || revision_of(&key.sides, work) == Some(key.revision))
     {
         if r.found.as_ref().is_none_or(|(shown, ..)| shown.sides != key.sides) {
@@ -212,6 +217,12 @@ fn take_answers(shell: &mut Shell) {
             Err(Failure { why, origin }) => (key, Err(why), origin),
         });
     }
+}
+
+/// Whether the person stopped comparing `sides`: until Retry or another pair, nothing that comes
+/// for them is shown.
+fn stopped(r: &Results, sides: &Sides) -> bool {
+    r.found.as_ref().is_some_and(|(shown, _, origin)| shown.sides == *sides && *origin == Origin::Stopped)
 }
 
 /// Compares the newest rows when what is shown is not of them. One comparison runs at a time, so
@@ -298,14 +309,25 @@ pub(crate) fn failure(e: ClassifyError) -> Failure {
 }
 
 /// Draws what the pair compares in `r`: the differences, or bars, or why there are none to list. A
-/// failure is said before any count, so it never reads as no differences.
+/// failure is said before any count, so it never reads as no differences. While a comparison of the
+/// pair runs with an earlier answer shown, as after an edit, Stop is above that answer.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let Some(pair) = shell.versions.details.as_ref().and_then(|d| d.compare.clone()) else { return };
     let Some(now) = sides(shell) else {
         let head = if pair.before == Side::CurrentWork { tr("Both sides are your current work.") } else { tr("These two versions are the same.") };
         return say(shell, ui, p, r, &head, &tr("Choose another pair above."));
     };
-    let found = shell.versions.compare_results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, origin)| (found.clone(), *origin));
+    let results = &shell.versions.compare_results;
+    let found = results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, origin)| (found.clone(), *origin));
+    let running = results.comparing.as_ref().is_some_and(|(key, _)| key.sides == now) && !stopped(results, &now);
+    let r = if running && found.is_some() {
+        if button(shell, ui, p, STOP, pos2(column(r).0, r.top()), &tr("Stop"), Look::Secondary, true, None).1.clicked() {
+            stop(shell, now.clone());
+        }
+        Rect::from_min_max(pos2(r.left(), r.top() + STOP_ROW), r.max)
+    } else {
+        r
+    };
     match found {
         None => loading(shell, ui, p, r, now),
         Some((Err(why), Origin::Unavailable)) => say(shell, ui, p, r, &tr("This version can't be shown"), &why),
@@ -346,7 +368,7 @@ fn loading(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, sides: Sides)
     for i in 0..SKELETON_CARDS {
         ui.painter().rect_filled(Rect::from_min_size(pos2(left, r.top() + i as f32 * PITCH), vec2(width, CARD)), 8.0, p.border);
     }
-    if button(shell, ui, p, "workspace.version-compare.stop", pos2(left, area.bottom() + 2.0), &tr("Stop"), Look::Secondary, true, None).1.clicked() {
+    if button(shell, ui, p, STOP, pos2(left, area.bottom() + 2.0), &tr("Stop"), Look::Secondary, true, None).1.clicked() {
         stop(shell, sides);
     }
 }
