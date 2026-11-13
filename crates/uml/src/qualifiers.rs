@@ -16,7 +16,7 @@
 //! `element.remove`; an association that goes takes them with its ends.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -116,15 +116,16 @@ fn check_name(store: &Store, end: Obj, name: &str, except: Option<Obj>) -> Resul
     }
     if let Some(q) = name_clash(store, end, name, except) {
         let class = one(store, end, typed_element::TYPE).map(|t| name_of(store, t)).unwrap_or_default();
+        let existing = name_of(store, q);
         return Err(refuse(
             "name",
             format!(
-                "the end at {class} has a qualifier named {} already, {}, and {:?} matches it whatever the case; choose a name none of the end's other qualifiers has",
-                name_of(store, q),
+                "the end at {class} has a qualifier named {existing} already, {}, and {:?} matches it whatever the case; choose a name none of the end's other qualifiers has",
                 uuid_of(store, q)?,
                 short(name)
             ),
-        ));
+        )
+        .because(Reason::NameTaken { kind: "qualifier", name: existing }));
     }
     Ok(())
 }

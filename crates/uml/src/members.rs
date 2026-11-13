@@ -15,7 +15,7 @@
 //! reason when it does not read (owner decision).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -421,7 +421,9 @@ fn check_name(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Res
         return Ok(());
     };
     if one(store, other, property::ASSOCIATION).is_none() {
-        return Err(refuse("name", format!("the {} has an attribute named {name} already", crate::commands::what(store, owner))));
+        let existing = name_of(store, other);
+        let message = format!("the {} has an attribute named {existing} already", crate::commands::what(store, owner));
+        return Err(refuse("name", message).because(Reason::NameTaken { kind: "attribute", name: existing }));
     }
     Err(refuse(
         "name",
@@ -458,17 +460,11 @@ pub fn attribute_clash(store: &Store, owner: Obj, role: &str) -> Option<Obj> {
 /// An operation's name in `owner`: none of its other operations' whatever the case, by the shared
 /// rule ([`crate::names`]); its attributes' names are another kind's.
 fn check_operation_name(store: &Store, owner: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
-    match crate::names::clash(store, owner, OPERATION, name, except) {
-        Some(other) => Err(refuse(
-            "name",
-            format!(
-                "the {} has an operation named {} already, and {name:?} matches it whatever the case",
-                crate::commands::what(store, owner),
-                name_of(store, other)
-            ),
-        )),
-        None => Ok(()),
-    }
+    let Some(other) = crate::names::clash(store, owner, OPERATION, name, except) else { return Ok(()) };
+    let existing = name_of(store, other);
+    let what = crate::commands::what(store, owner);
+    let message = format!("the {what} has an operation named {existing} already, and {name:?} matches it whatever the case");
+    Err(refuse("name", message).because(Reason::NameTaken { kind: "operation", name: existing }))
 }
 
 /// Why `c` takes no `members` (attributes or operations): its id, what it is (an enumeration,
@@ -774,15 +770,15 @@ fn check_literal_name(store: &Store, enumeration: Obj, name: &str, except: Optio
         return Err(refuse("name", format!("the name {p}")).because(p.reason));
     }
     if let Some(l) = literal_clash(store, enumeration, name, except) {
-        let owner = name_of(store, enumeration);
+        let (owner, existing) = (name_of(store, enumeration), name_of(store, l));
         return Err(refuse(
             "name",
             format!(
-                "there is a literal named {} already in {owner}, and {:?} matches it whatever the case; choose a name none of {owner}'s other literals has",
-                name_of(store, l),
+                "there is a literal named {existing} already in {owner}, and {:?} matches it whatever the case; choose a name none of {owner}'s other literals has",
                 short(name)
             ),
-        ));
+        )
+        .because(Reason::NameTaken { kind: "literal", name: existing }));
     }
     Ok(())
 }

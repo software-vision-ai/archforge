@@ -243,7 +243,7 @@ fn a_data_type_draws_its_attributes_and_operations_which_the_member_commands_edi
     one_step(&mut s, "uml.attribute.set", json!({ "attribute": currency, "name": "code", "type": "String", "visibility": "private" }));
     one_step(&mut s, "uml.attribute.move", json!({ "attribute": currency, "at": 0 }));
     let e = refused(&mut s, "uml.attribute.add", json!({ "class": money, "name": "AMOUNT" }));
-    assert!(e.contains("the data type has an attribute named AMOUNT already"), "{e}");
+    assert!(e.contains("the data type has an attribute named amount already"), "{e}");
     assert_eq!(rows_of(&card(&s, &money, &d))[0], ["- code : String", "+ amount : Real"]);
     let got = s.execute("uml.class.get", &json!({ "class": money })).unwrap().value;
     assert_eq!((got["kind"].as_str(), got["name"].as_str(), got["abstract"].as_bool()), (Some("data_type"), Some("Money"), Some(false)));

@@ -20,7 +20,7 @@
 //! nests, with their relationships and views, in the same step (`commands::remove_elements`).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{ClassId, Obj, PropId, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -313,7 +313,11 @@ fn set_owner(ctx: &mut C<'_>, p: &Params) -> R {
     let owner = owner_param(ctx.doc, p, "owner")?;
     if let Some(problem) = owner_problem(ctx.doc, c, owner) {
         let key = if problem == OwnerProblem::BuiltIn || problem == OwnerProblem::NotNestable { "classifier" } else { "owner" };
-        return Err(refuse(key, problem_text(ctx.doc, c, owner, &problem)));
+        let refusal = refuse(key, problem_text(ctx.doc, c, owner, &problem));
+        return Err(match problem {
+            OwnerProblem::NameTaken(s) => refusal.because(Reason::NameTaken { kind: what(ctx.doc, s), name: name_of(ctx.doc, s) }),
+            _ => refusal,
+        });
     }
     if owner_of(ctx.doc, c) != Some(owner) {
         // A move that would take stereotype applications out of their profile's scope is refused

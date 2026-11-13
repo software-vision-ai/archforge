@@ -581,6 +581,20 @@ str	refusal	a profile	配置文件
 str	refusal	a stereotype	构造型
 str	refusal	an element	元素
 str	refusal	a schema	架构
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	字面量
+str	refusal	a qualifier	限定符
+str	refusal	a template parameter	模板参数
+str	refusal	a generalization set	泛化集
+str	refusal	a table	表
+str	refusal	a column	列
+str	refusal	a relationship	关系
+str	refusal	a domain	域
+str	refusal	an enum type	枚举类型
+str	refusal	a sequence	序列
+str	refusal	a view	视图
+str	refusal	a skill	技能
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录

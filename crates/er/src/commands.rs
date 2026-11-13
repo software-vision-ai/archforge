@@ -50,6 +50,27 @@ fn text<'a>(p: &'a Params, key: &str) -> &'a str {
     p.str(key).unwrap_or_default()
 }
 
+/// Refuses `name` when `owner` holds an element, other than `except`, that one of `class` named so
+/// would clash with ([`crate::names`]): the English names that element by the word the interface
+/// uses for its kind (a table, a column, a domain, ...), and the reason is typed with its name.
+fn name_taken(store: &Store, owner: Obj, class: ClassId, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
+    let Some(other) = crate::names::clash(store, owner, class, name, except) else { return Ok(()) };
+    let kind = match store.class_of(other).ok() {
+        Some(c) if c == ENTITY => "table",
+        Some(c) if c == ATTRIBUTE => "column",
+        Some(c) if c == RELATIONSHIP => "relationship",
+        Some(c) if c == DOMAIN => "domain",
+        Some(c) if c == ENUM_TYPE => "enum type",
+        Some(c) if c == SEQUENCE => "sequence",
+        Some(c) if c == VIEW => "view",
+        _ => "element",
+    };
+    let (within, article) = (if kind == "column" { "table" } else { "schema" }, if kind.starts_with(['a', 'e']) { "an" } else { "a" });
+    let existing = name_of(store, other);
+    let message = format!("the {within} has {article} {kind} named {existing:?} already");
+    Err(refuse("name", message).because(Reason::NameTaken { kind, name: existing }))
+}
+
 /// A store refusal as a refusal of `key`; anything else as the command's failure.
 fn refused_as(key: &'static str) -> impl Fn(Invalid) -> CommandError {
     move |e| match e {
@@ -245,9 +266,7 @@ fn entity_add(ctx: &mut C<'_>, p: &Params) -> R {
     let s = id_of(ctx, p, "schema", SCHEMA)?;
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
-    if !rules::entity_name_free(ctx.doc, s, name, None) {
-        return Err(refuse("name", format!("the schema has an entity named {name:?} already")));
-    }
+    name_taken(ctx.doc, s, ENTITY, name, None)?;
     let e = ctx.doc.create(ENTITY).map_err(fail)?;
     set_name(ctx, e, named_element::NAME, name)?;
     ctx.doc.push(s, schema::ENTITY, Value::Ref(e)).map_err(fail)?;
@@ -259,10 +278,8 @@ fn entity_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
-    if let Some(s) = rules::schema_of(ctx.doc, e)
-        && !rules::entity_name_free(ctx.doc, s, name, Some(e))
-    {
-        return Err(refuse("name", format!("the schema has an entity named {name:?} already")));
+    if let Some(s) = rules::schema_of(ctx.doc, e) {
+        name_taken(ctx.doc, s, ENTITY, name, Some(e))?;
     }
     set_name(ctx, e, named_element::NAME, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
@@ -547,9 +564,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
-    if !rules::attribute_name_free(ctx.doc, e, name, None) {
-        return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
-    }
+    name_taken(ctx.doc, e, ATTRIBUTE, name, None)?;
     let kind = text(p, "type");
     check_type(kind)?;
     let typed = column_type(ctx, p, e, kind)?;
@@ -621,10 +636,8 @@ fn attribute_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
-    if let Some((e, _)) = ctx.doc.container(a).map_err(fail)?
-        && !rules::attribute_name_free(ctx.doc, e, name, Some(a))
-    {
-        return Err(refuse("name", format!("the entity has an attribute named {name:?} already")));
+    if let Some((e, _)) = ctx.doc.container(a).map_err(fail)? {
+        name_taken(ctx.doc, e, ATTRIBUTE, name, Some(a))?;
     }
     let old = name_of(ctx.doc, a);
     ctx.doc
@@ -1069,9 +1082,7 @@ fn set_column_type(st: &mut Store, a: Obj, kind: &str, typed: Typed, size: (Opti
 fn type_name(ctx: &C<'_>, p: &Params, s: Obj, except: Option<Obj>) -> Result<String, CommandError> {
     let name = text(p, "name");
     check_name("name", name, MAX_NAME)?;
-    if !rules::entity_name_free(ctx.doc, s, name, except) {
-        return Err(refuse("name", format!("the schema has a table, type, sequence or view named {name:?} already")));
-    }
+    name_taken(ctx.doc, s, ENTITY, name, except)?;
     Ok(name.to_string())
 }
 
@@ -1827,9 +1838,7 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     // The relationship may join two schemas (slice S7); it belongs to its child's, as its foreign
     // key does.
     let s = if child == from { from_schema } else { to_schema };
-    if !rules::relationship_name_free(ctx.doc, s, &name, None) {
-        return Err(refuse("name", format!("the schema has a relationship named {name:?} already")));
-    }
+    name_taken(ctx.doc, s, RELATIONSHIP, &name, None)?;
     let points_to = if text(p, "points_to").is_empty() { None } else { Some(key_id(ctx, p, "points_to")?) };
     if points_to.is_some() && !with_key {
         return Err(refuse("points_to", "only a relationship that brings its foreign key points at a key; set create_foreign_key"));
@@ -2000,10 +2009,8 @@ fn relationship_resolve(ctx: &mut C<'_>, p: &Params) -> R {
     let name = text(p, "name");
     if !name.is_empty() {
         check_name("name", name, MAX_NAME)?;
-        if let Some(s) = rules::schema_of(ctx.doc, r)
-            && !rules::entity_name_free(ctx.doc, s, name, None)
-        {
-            return Err(refuse("name", format!("the schema has an entity named {name:?} already")));
+        if let Some(s) = rules::schema_of(ctx.doc, r) {
+            name_taken(ctx.doc, s, ENTITY, name, None)?;
         }
     }
     let m = resolve(ctx.doc, r, name).map_err(|e| refuse("relationship", e.to_string()))?;
@@ -3008,13 +3015,13 @@ fn relationship_set_roles(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+/// `er.relationship.rename`: the relationship's new name, or none, free among its schema's
+/// relationships whatever the case ([`name_taken`]).
 fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
     let name = relationship_name(p)?.to_string();
-    if let Some((s, _)) = ctx.doc.container(r).ok().flatten()
-        && !rules::relationship_name_free(ctx.doc, s, &name, Some(r))
-    {
-        return Err(refuse("name", format!("the schema has a relationship named {name:?} already")));
+    if let Some((s, _)) = ctx.doc.container(r).ok().flatten() {
+        name_taken(ctx.doc, s, RELATIONSHIP, &name, Some(r))?;
     }
     set_name(ctx, r, relationship::NAME, &name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))

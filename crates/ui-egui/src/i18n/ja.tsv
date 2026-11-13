@@ -581,6 +581,20 @@ str	refusal	a profile	プロファイル
 str	refusal	a stereotype	ステレオタイプ
 str	refusal	an element	要素
 str	refusal	a schema	スキーマ
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	リテラル
+str	refusal	a qualifier	限定子
+str	refusal	a template parameter	テンプレートパラメーター
+str	refusal	a generalization set	汎化セット
+str	refusal	a table	テーブル
+str	refusal	a column	列
+str	refusal	a relationship	リレーションシップ
+str	refusal	a domain	ドメイン
+str	refusal	an enum type	列挙型
+str	refusal	a sequence	シーケンス
+str	refusal	a view	ビュー
+str	refusal	a skill	スキル
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
