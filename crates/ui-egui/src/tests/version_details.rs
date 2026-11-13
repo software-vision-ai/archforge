@@ -766,19 +766,20 @@ fn element_open(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Uuid, Co
     (h.state().versions.changes[0].id, h.state().versions.compared.clone().unwrap())
 }
 
-/// The frame copies the objects and builds no rows: the working changes and an opened change's two
-/// sides are built from that copy off the interface thread, and hold the edit.
+/// The frame copies the objects and builds no rows: the write of an edit, the working changes and
+/// an opened change's two sides are all built from that copy off the interface thread, and hold the edit.
 #[test]
-fn the_frame_builds_no_rows_for_working_changes_or_their_sides() {
-    in_both(|h, _| {
-        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
-        // Handed over already, so only the list and the sides could build rows now.
-        h.state_mut().written = h.state().session.as_ref().map(|s| s.revision());
+fn the_frame_builds_no_rows_for_writes_working_changes_or_their_sides() {
+    in_both(|h, host| {
+        let written = host.written.lock().unwrap().len();
         let built = archforge_mof::rows::built_here();
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
         list_still(h);
         open_change(h, "shop");
         assert!(has_id(h, AFTER) && !has_id(h, ELEMENT_FAILED), "{:?}", painted(h));
         assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+        let last = host.written.lock().unwrap().last().map(|(_, rows)| rows.clone());
+        assert!(host.written.lock().unwrap().len() > written && last.as_ref() == Some(&*rows_now(h)), "the edit was written");
     });
 }
 

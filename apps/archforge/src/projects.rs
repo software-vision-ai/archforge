@@ -55,6 +55,13 @@ const MOST_READS: usize = 4;
 /// The most projects open at once, one per tab: each runs a database server.
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
+/// A model handed to the writer: its rows, or a copy frozen on the interface thread whose rows the
+/// writer builds, so that thread never does.
+enum Handed {
+    Rows(Rows),
+    Model(Box<archforge_mof::Frozen>),
+}
+
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
 /// project named, recorded as who asked, under the description given or an automatic one, or only
 /// write when no project is named) with its answer; or a flush of one project (write what waits, answer whether that
@@ -63,9 +70,9 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// The generation a job carries is its project's when the job was asked for, before any key check;
 /// a job of another generation is refused rather than applied to a branch it was not made for.
 enum Job {
-    /// The rows, their generation, and the words to record if that generation has passed, put in
+    /// The model, its generation, and the words to record if that generation has passed, put in
     /// the language shown while still on the interface thread.
-    Write(PathBuf, Rows, u64, String),
+    Write(PathBuf, Handed, u64, String),
     Save(Option<(PathBuf, SavedBy, u64)>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
@@ -546,6 +553,27 @@ impl Projects {
         let _ = self.inner.keys.set(agents);
     }
 
+    /// Stops, on a thread of its own, the database servers a crashed or killed Archforge left
+    /// running for any project, and logs what it stopped: for the start-up. It holds the job lock,
+    /// so no opening or creation meets a record while it is swept. `None` when the thread could not
+    /// start; the next opening of each project still recovers its own server.
+    pub fn stop_orphans(&self) -> Option<std::thread::JoinHandle<()>> {
+        let inner = self.inner.clone();
+        let sweep = move || {
+            let _job = lock(&inner.job);
+            match archforge_dolt::stop_orphans(&ServerOptions::new(inner.settings.join("servers"))) {
+                Ok(0) => {}
+                Ok(n) => log::info!("stopped {n} database server(s) a closed Archforge left running"),
+                Err(e) => log::warn!("the database servers a closed Archforge left running were not looked for: {e}"),
+            }
+        };
+        std::thread::Builder::new()
+            .name("archforge-orphans".into())
+            .spawn(sweep)
+            .map_err(|e| log::warn!("the database servers a closed Archforge left running were not looked for: {e}"))
+            .ok()
+    }
+
     /// Runs `job` on the writer against the open project at `path`, after every job sent before
     /// it, and answers with what it gives; a project no longer open is an error.
     pub fn on_writer<T: Send + 'static>(
@@ -824,6 +852,21 @@ impl Projects {
         })
     }
 
+    /// Hands the writer `project`'s newest model, counted for any described save still being checked.
+    fn hand(&self, project: &Path, model: Handed) {
+        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
+        // Counted and sent under one lock, so the count always agrees with the writer's queue.
+        let mut handed = lock(&self.inner.handed);
+        *handed.entry(project.to_path_buf()).or_default() += 1;
+        let stale = tr("A change arrived after the branch changed, so it was not written.");
+        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), model, generation_of(&self.inner, project), stale));
+        drop(handed);
+        if let Err(e) = sent {
+            log::error!("the model could not be handed to the writer: {e}");
+            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
+        }
+    }
+
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
     /// short lock on the readers is taken here, so the read waits for no write and no write waits
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
@@ -994,17 +1037,12 @@ impl ProjectHost for Projects {
 
     /// Hands the writer `project`'s newest rows, counted for any described save still being checked.
     fn write(&self, project: &Path, rows: Rows) {
-        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
-        // Counted and sent under one lock, so the count always agrees with the writer's queue.
-        let mut handed = lock(&self.inner.handed);
-        *handed.entry(project.to_path_buf()).or_default() += 1;
-        let stale = tr("A change arrived after the branch changed, so it was not written.");
-        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows, generation_of(&self.inner, project), stale));
-        drop(handed);
-        if let Err(e) = sent {
-            log::error!("the model could not be handed to the writer: {e}");
-            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
-        }
+        self.hand(project, Handed::Rows(rows));
+    }
+
+    /// Hands the writer `project`'s model as frozen, for it to build the rows, counted as `write`'s are.
+    fn write_model(&self, project: &Path, model: archforge_mof::Frozen) {
+        self.hand(project, Handed::Model(Box::new(model)));
     }
 
     /// Save, under `description` when one is given. A description of the wrong shape is refused
@@ -1431,7 +1469,7 @@ fn writer(inner: &Arc<Inner>) -> Sender<Job> {
 /// commits. Rows that failed to be written are tried again with the next change or Save, not on a
 /// timer. What waits is one set of rows per open project at most.
 fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
-    let mut waiting: BTreeMap<PathBuf, Rows> = BTreeMap::new();
+    let mut waiting: BTreeMap<PathBuf, Handed> = BTreeMap::new();
     // How many sets of rows each project's queue has delivered, to hold against `Described::handed`.
     let mut seen: BTreeMap<PathBuf, u64> = BTreeMap::new();
     // Whether the last write left rows behind, which then wait for the next change or Save. It
@@ -1456,7 +1494,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             }
         };
         match job {
-            Some(Job::Write(project, rows, generation, stale)) => {
+            Some(Job::Write(project, handed, generation, stale)) => {
                 *seen.entry(project.clone()).or_default() += 1;
                 if generation != generation_of(inner, &project) {
                     log::warn!("changes for {} made before its branch changed are dropped", project.display());
@@ -1466,7 +1504,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     (state.pending, state.error) = (pending, Some(stale));
                     continue;
                 }
-                waiting.insert(project, rows);
+                waiting.insert(project, handed);
                 failed = false;
             }
             None => {
@@ -1582,7 +1620,7 @@ fn unwritten(inner: &Inner, project: &Path) -> String {
 
 /// Writes the waiting rows to their projects; those that fail stay waiting, and each project's
 /// state says how its own writing stands. Rows for a project that is no longer open are dropped.
-fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
+fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Handed>) {
     let targets: Vec<PathBuf> = waiting.keys().cloned().collect();
     for target in targets {
         let open = lock(&inner.open);
@@ -1593,7 +1631,21 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             lock(&inner.writing).remove(&target);
             continue;
         };
-        let Some(rows) = waiting.get(&target) else { continue };
+        let Some(handed) = waiting.get_mut(&target) else { continue };
+        // A model handed over frozen is built here, off the interface thread, once: a write that
+        // fails after keeps its rows. One that can't be built waits as a write that failed does.
+        if let Handed::Model(model) = handed {
+            let (tables, junctions) = archforge_notations::storage();
+            match model.rows(&tables, &junctions) {
+                Ok(rows) => *handed = Handed::Rows(rows),
+                Err(e) => {
+                    drop(open);
+                    failed_write(inner, &target, format!("the model could not be turned into rows: {e}"));
+                    continue;
+                }
+            }
+        }
+        let Handed::Rows(rows) = &*handed else { continue };
         #[cfg(test)]
         let refused = take_fault(inner, |f| matches!(f, Fault::WriteBack)).is_some();
         #[cfg(not(test))]
@@ -1604,23 +1656,26 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()))
         };
         drop(open);
-        let mut states = lock(&inner.writing);
         match result {
             Ok(()) => {
                 waiting.remove(&target);
-                states.remove(&target);
+                lock(&inner.writing).remove(&target);
             }
-            Err(e) => {
-                let state = states.entry(target.clone()).or_default();
-                // The same failure again is said once.
-                if state.error.as_deref() != Some(e.as_str()) {
-                    log::error!("the model of {} could not be written: {e}", target.display());
-                }
-                state.pending = true;
-                state.error = Some(e);
-            }
+            Err(e) => failed_write(inner, &target, e),
         }
     }
+}
+
+/// Records that `target`'s rows still wait, and why the write failed; the same failure again is
+/// logged once.
+fn failed_write(inner: &Inner, target: &Path, e: String) {
+    let mut states = lock(&inner.writing);
+    let state = states.entry(target.to_path_buf()).or_default();
+    if state.error.as_deref() != Some(e.as_str()) {
+        log::error!("the model of {} could not be written: {e}", target.display());
+    }
+    state.pending = true;
+    state.error = Some(e);
 }
 
 /// Moves `path` to `target`, on the writer, after everything [`checked_target`] does. Only then do
@@ -1632,7 +1687,7 @@ fn switch(
     path: &Path,
     target: SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Switched, SwitchError> {
     let moved = checked_target(inner, path, &target.clone(), asked, waiting, failed, |project, rows| {
@@ -1650,7 +1705,7 @@ fn check_switch(
     path: &Path,
     target: &SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<CheckedBranch, SwitchError> {
     checked_target(inner, path, target, asked, waiting, failed, |project, rows| {
@@ -1669,7 +1724,7 @@ fn checked_target<T>(
     path: &Path,
     target: &SafeBranch,
     (generation, instance): (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
     then: impl FnOnce(&Project, Rows) -> Result<T, SwitchError>,
 ) -> Result<T, SwitchError> {
@@ -1736,7 +1791,7 @@ fn restore(
     request: RestoreRequest,
     (generation, instance): (u64, u64),
     watch: &Arc<JobWatch>,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Restored, RestoreError> {
     if instance != instance_of(inner, path) {
@@ -1779,7 +1834,7 @@ fn restore(
         Ok(done) => Ok(done),
         Err(Stop::Unchanged(error)) => Err(error),
         Err(Stop::WriteBack { why, kept_work }) => {
-            waiting.insert(path.to_path_buf(), current);
+            waiting.insert(path.to_path_buf(), Handed::Rows(current));
             write_waiting(inner, waiting);
             *failed = !waiting.is_empty();
             Err(RestoreError::NotRestored { why, kept_work, written_back: !waiting.contains_key(path) })
@@ -2157,7 +2212,7 @@ fn create_branch(
     start: Option<&str>,
     generation: u64,
     instance: u64,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<BranchCreated, CreateBranchError> {
     if instance != instance_of(inner, path) {
@@ -2602,6 +2657,7 @@ fn kind(e: archforge_project::Error) -> CreateError {
 #[cfg(unix)]
 mod tests {
     use super::*;
+    use crate::test_host::Sandbox;
 
     fn wait(rx: &Receiver<Result<Opened, CreateError>>) -> Result<Opened, CreateError> {
         rx.recv_timeout(Duration::from_secs(60)).expect("the host answers")
@@ -2659,12 +2715,116 @@ mod tests {
         host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
     }
 
+    /// The marker that makes this test binary act as an Archforge that is killed with a project
+    /// open, and the folder it works in.
+    const ORPHAN_OWNER: &str = "ARCHFORGE_TEST_ORPHAN_OWNER";
+
+    /// Run only by the test below, as a process of its own: opens a project, saves a model, writes
+    /// another without saving, says so with its server's id, and waits to be killed.
+    #[test]
+    #[ignore = "run by the orphan test as a separate process"]
+    fn orphan_owner() {
+        let Some(base) = std::env::var_os(ORPHAN_OWNER).map(PathBuf::from) else { return };
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let path = wait(&host.create(&base.join("p"), "Shop")).unwrap().path;
+        host.write(&path, model("shop"));
+        assert_eq!(saved(&host, &path), Ok(true));
+        host.write(&path, model("crm"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        println!("READY {}", lock(&host.inner.open)[0].server().pid());
+        std::thread::sleep(Duration::from_secs(120));
+    }
+
+    /// Kills a server a failing test left behind, so no run leaves an orphan.
+    struct KillOnDrop(u32);
+
+    impl Drop for KillOnDrop {
+        /// Kills the server unless it is gone.
+        fn drop(&mut self) {
+            if !gone(self.0) {
+                let _ = std::process::Command::new("/bin/kill").args(["-KILL", &self.0.to_string()]).status();
+            }
+        }
+    }
+
+    /// An Archforge killed with a project open leaves its server running; the next start stops it,
+    /// and the project opens with what was saved and written (AR-422).
+    #[test]
+    fn a_server_a_killed_archforge_left_running_is_stopped_at_the_next_start_and_its_project_opens_whole() {
+        use std::io::BufRead;
+        let sandbox = Sandbox::named("orphan", None);
+        let mut owner = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "projects::tests::orphan_owner", "--ignored", "--nocapture", "--test-threads=1"])
+            .env(ORPHAN_OWNER, &sandbox.base)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let stdout = owner.stdout.take().unwrap();
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Some((_, pid)) = line.split_once("READY ") {
+                    let _ = tx.send(pid.trim().parse::<u32>().unwrap_or(0));
+                }
+            }
+        });
+        let ready = rx.recv_timeout(Duration::from_secs(120));
+        // SIGKILL: no exit path of the owner runs.
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        let orphan = ready.expect("the owner opened its project");
+        let _guard = KillOnDrop(orphan);
+        assert!(!gone(orphan), "the server outlives the killed Archforge");
+        sandbox.host.stop_orphans().unwrap().join().unwrap();
+        // Stopped means a zombie at least, which its new parent reaps a moment later.
+        let started = Instant::now();
+        while !gone(orphan) && started.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(gone(orphan), "the next start stopped it");
+        let path = sandbox.base.canonicalize().unwrap().join("p/Shop.archforge");
+        let back = wait(&sandbox.host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&model("crm")), "what was written stays");
+        assert!(back.unsaved, "and stays unsaved over the saved version");
+    }
+
+    /// The run folder of the database server `pid`: the folder of the configuration it runs with.
+    fn run_folder(pid: u32) -> PathBuf {
+        let out = std::process::Command::new("/bin/ps").args(["-o", "command=", "-p", &pid.to_string()]).output().unwrap();
+        let command = String::from_utf8(out.stdout).unwrap();
+        let (_, config) = command.trim().split_once(" --config ").unwrap_or_else(|| panic!("a server's command: {command:?}"));
+        Path::new(config).parent().unwrap().to_path_buf()
+    }
+
+    /// A test that fails with a project open and written to, through the test host's guard, leaves
+    /// no database server running, and neither its own folder nor the server's run folder behind (AR-421).
+    #[test]
+    fn a_test_that_panics_with_a_project_open_leaves_no_server_and_no_folder() {
+        let seen = Mutex::new(None);
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let sandbox = Sandbox::named("guard", None);
+            let path = sandbox.project();
+            // A write starts the writer thread, which holds the host: dropping the host alone
+            // no longer stops its servers.
+            sandbox.host.write(&path, model("shop"));
+            assert_eq!(saved(&sandbox.host, &path), Ok(true));
+            let pid = lock(&sandbox.host.inner.open)[0].server().pid();
+            *lock(&seen) = Some((pid, sandbox.base.clone(), run_folder(pid)));
+            panic!("a test fails with its project open");
+        }));
+        assert!(failed.is_err(), "the test failed");
+        let (pid, base, run) = seen.into_inner().unwrap().expect("the project opened");
+        assert!(gone(pid), "the server {pid} still runs");
+        assert!(!base.exists(), "{} is left", base.display());
+        assert!(!run.exists(), "{} is left", run.display());
+    }
+
+    /// The host keeps several projects open; closing one stops only its server, and exit stops the rest.
     #[test]
     fn the_host_keeps_several_projects_open_closes_one_on_request_and_all_on_exit() {
-        let base = std::env::temp_dir().join(format!("af-host-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("host", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let opened = wait(&host.create(&folder, "Commerce platform")).unwrap();
         assert_eq!(opened.path, folder.canonicalize().unwrap().join("Commerce platform.archforge"));
@@ -2691,12 +2851,12 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save puts a project back to its last save (or to how it was created) and closes it;
+    /// closing without writing keeps what was written.
     #[test]
     fn dont_save_puts_a_project_back_to_its_last_save_and_closes_it() {
-        let base = std::env::temp_dir().join(format!("af-discard-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("discard", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let path = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         let shop = model("shop");
@@ -2742,13 +2902,13 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save through the host puts the model back to its save but keeps the conversations
+    /// written on the writer.
     #[test]
     fn dont_save_through_the_host_keeps_the_conversations_written_on_the_writer() {
         use archforge_project::{NewChat, NewQuestion, NewTurn, Provider, TurnEnd, TurnOutcome};
-        let base = std::env::temp_dir().join(format!("af-chats-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("chats", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
         let shop = model("shop");
         host.write(&path, shop.clone());
@@ -2804,10 +2964,8 @@ mod tests {
         use archforge_ui_egui::chat_panel::Chip;
         use archforge_ui_egui::chat_store::{Anchor, AnchorRole, Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
         const CANARY: &str = "sk-ant-api03-canary-chat-store-0000-4F2a";
-        let base = std::env::temp_dir().join(format!("af-chat-store-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-store", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let keys = MemoryStore::new();
         keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(CANARY.to_string()).unwrap()).unwrap();
         let agents = std::sync::Arc::new(crate::agents::Agents::with(&base.join("settings"), Box::new(keys), archforge_agents::HostEnv::default()));
@@ -2924,10 +3082,8 @@ mod tests {
     fn the_hosts_chat_store_deletes_after_the_writes_before_it_and_brings_a_conversation_back_from_its_commit() {
         use archforge_ui_egui::ai_agents::Provider;
         use archforge_ui_egui::chat_store::{Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
-        let base = std::env::temp_dir().join(format!("af-chat-delete-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-delete", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let agents = std::sync::Arc::new(crate::agents::Agents::with(
             &base.join("settings"),
             Box::new(archforge_secrets::MemoryStore::new()),
@@ -3080,30 +3236,8 @@ mod tests {
         made(host.save(project, Some(text.to_string()), nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
     }
 
-    /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
-    /// against `keys` when given. Dropped, even by a failing test, it stops what it started and
-    /// the folder goes.
-    struct Sandbox {
-        base: PathBuf,
-        host: Arc<Projects>,
-        agents: Option<Arc<crate::agents::Agents>>,
-    }
-
+    /// What these tests ask of the shared test host.
     impl Sandbox {
-        /// The host, with its folder created and `keys` wired in.
-        fn new(keys: Option<Box<dyn archforge_secrets::SecretStore>>) -> Sandbox {
-            let base = (0..1000)
-                .map(|n| std::env::temp_dir().join(format!("af-d{}-{n}", std::process::id())))
-                .find(|p| std::fs::create_dir(p).is_ok())
-                .expect("a folder of the test's own");
-            let host = Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
-            let agents = keys.map(|k| Arc::new(crate::agents::Agents::with(&base.join("settings"), k, archforge_agents::HostEnv::default())));
-            if let Some(a) = &agents {
-                host.check_descriptions_with(a.clone());
-            }
-            Sandbox { base, host, agents }
-        }
-
         /// A project made in the sandbox.
         fn project(&self) -> PathBuf {
             wait(&self.host.create(&self.base.join("p"), "Shop")).unwrap().path
@@ -3112,23 +3246,6 @@ mod tests {
         /// The project's commit messages, newest first.
         fn messages(&self) -> Vec<String> {
             lock(&self.host.inner.open)[0].newest_commit_messages(50).unwrap()
-        }
-    }
-
-    impl Drop for Sandbox {
-        /// Stops the servers and threads, then removes the folder, retrying while a stopping server
-        /// still writes. It never panics, so it is safe while a failed test unwinds.
-        fn drop(&mut self) {
-            self.host.shutdown();
-            if let Some(a) = &self.agents {
-                a.shutdown();
-            }
-            for _ in 0..50 {
-                if std::fs::remove_dir_all(&self.base).is_ok() || !self.base.exists() {
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
         }
     }
 
@@ -6145,13 +6262,13 @@ mod tests {
         assert!(host.inner.keys.get().is_some(), "a description would be refused in the application");
     }
 
+    /// A project whose class skill has the name of a project skill saves, and its model opens again
+    /// with both skills.
     #[test]
     fn a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again() {
         // The project saved, but its model would not open again.
-        let base = std::env::temp_dir().join(format!("af-skills-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("skills", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "MVPFlowReview")).unwrap().path;
         let mut n = 0u64;
         let ids = move || {
@@ -6192,12 +6309,45 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// A model that no table can hold: an unlimited natural past what a cell stores.
+    fn unbuildable() -> archforge_mof::Frozen {
+        let mut st = archforge_notations::store(counted_ids()).unwrap();
+        let u = st.universe().clone();
+        let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
+        let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
+        let o = st.create(class).unwrap();
+        st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
+        st.freeze()
+    }
+
+    /// A model handed over frozen is built into rows by the writer and written as rows are; one
+    /// that cannot be turned into rows fails that write, which says why, and nothing is saved.
+    #[test]
+    fn the_writer_builds_and_writes_a_frozen_model() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(true));
+        let (tables, junctions) = archforge_notations::storage();
+        assert_eq!(work(host), archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), "the rows of the model handed over");
+        host.write_model(&path, unbuildable());
+        let answer = saved(host, &path);
+        let why = host.writing(&path).error.unwrap_or_default();
+        assert!(matches!(&answer, Err(SaveError::Failed(e)) if *e == why), "a model that could not be written is not saved: {answer:?}");
+        assert!(why.contains("too large to store") && host.writing(&path).pending, "it waits, and the status bar says why: {why}");
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(false), "the same model again leaves nothing to commit");
+        assert_eq!(host.writing(&path), Writing::default(), "and clears the failure");
+    }
+
+    /// The host writes, saves and reopens models per project, keeps a project whose rows cannot be
+    /// written open, and drops rows for a closed project.
     #[test]
     fn the_host_writes_saves_and_reopens_models_and_drops_rows_for_a_closed_project() {
-        let base = std::env::temp_dir().join(format!("af-save-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("save", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let first = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         // Rows written and saved come back on opening, with nothing unsaved.

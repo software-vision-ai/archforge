@@ -101,13 +101,15 @@ fn a_failed_save_or_switch_says_what_became_of_the_work() {
 
         add_schema(&mut h, "again");
         asking(&mut h, &host);
-        let revision = h.state().session.as_ref().unwrap().revision();
-        (h.state_mut().refused, h.state_mut().written, h.state_mut().save_error) = (Some(revision), None, Some("No rows.".into()));
+        // The host could not write the work: the switch it is asked for is refused.
+        *host.write_error.lock().unwrap() = Some("No rows.".into());
         click_id(&mut h, SWITCH);
+        h.run_steps(6);
+        host.switches.lock().unwrap().remove(0).check.send(Err("No rows.".to_string().into())).unwrap();
         h.run_steps(4);
         let said = ["Switching is refused", "No rows. Your work could not be kept", "You are still on main."];
         assert!(said.iter().all(|w| painted_has(&h, w)), "{:?}", painted(&h));
-        assert!(host.switches.lock().unwrap().is_empty() && !h.state().is_held());
+        assert!(!h.state().is_held());
     });
 }
 

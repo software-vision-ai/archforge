@@ -48,7 +48,9 @@ Three things look after your work, and each does a different job.
 project a moment after you make it. If Archforge or your computer stops, the changes it had written
 are there when you open the project again, and the status bar says *Unsaved changes*. A change made
 just before the stop, and not yet written, is lost. If a write fails, the status bar says *Changes
-could not be written to the project*, and Archforge tries again with your next change or save.
+could not be written to the project*, and Archforge tries again with your next change or save. If
+you close the project then and choose **Save**, Archforge says why it could not write your changes
+and asks whether to keep the project open or close it without writing them.
 
 What autosave writes is not a version. When you close a project with unsaved changes, Archforge asks
 what to do with them, and **Don't save** throws away what you changed since your last version. A

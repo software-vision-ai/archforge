@@ -181,8 +181,9 @@ impl Shell {
         ChatSettling::Refused
     }
 
-    /// Hands the latest rows to the host and stops handing any over for the rest of the hold. False,
-    /// with handing over left on, without a hold or when the rows could not be made.
+    /// Hands the latest model to the host and stops handing any over for the rest of the hold. False,
+    /// with handing over left on, without a hold or when nothing could be handed over (a drag still
+    /// runs, or a version is in view); the host's writer says when what it was handed is not written.
     pub fn hand_over_held(&mut self) -> bool {
         if !self.is_held() {
             return false;

@@ -539,6 +539,13 @@ impl crate::ProjectHost for SavingHost {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
     }
 
+    /// Builds the rows on a thread of its own, as the app's writer does, then records them.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
+        self.write(project, rows);
+    }
+
     /// Nothing waits; the write failed when the test says so.
     fn writing(&self, _project: &std::path::Path) -> crate::Writing {
         crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
@@ -799,6 +806,120 @@ fn closing_with_a_description_being_typed_keeps_it_or_asks() {
         assert!(h.state().tabs[0].closing.is_none());
         assert!(h.state().tabs[0].close_error.as_deref().is_some_and(|e| e.contains("control")), "{:?}", h.state().tabs[0].close_error);
         assert!(h.state().panels.description.is_some(), "the draft is still there");
+    }
+}
+
+/// The name of the element `id`, as the model has it.
+fn name_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_core::name_of(st, st.by_uuid(id).unwrap())
+}
+
+/// Selects `id` and replaces what its Properties field `field` holds with `text`, without Enter.
+fn retype_on(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, field: &str, text: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    retype(h, field, text);
+}
+
+/// Escape in a Properties field gives the edit up: an emptied name and a typed description come
+/// back as the model has them, nothing is sent and no step is added. In light and dark (AR-417).
+#[test]
+fn escape_gives_up_a_properties_edit_and_sends_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        let before = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        retype_on(&mut h, class, "workspace.properties.name", "");
+        assert!(h.state().panels.name.as_ref().is_some_and(|n| n.text.is_empty()), "{theme:?}: emptied, not yet written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        retype_on(&mut h, class, "workspace.properties.description", "Draft.");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+        assert_eq!(description_on(&h, class), "", "{theme:?}");
+        assert!(h.state().panels.name.is_none() && h.state().panels.description.is_none(), "{theme:?}: the drafts are gone");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: nothing was refused");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), before, "{theme:?}: no step");
+    }
+}
+
+/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words, read out as
+/// a status; another refusal is the engine's reason without its command's id; the notice, and its
+/// status, go with another selection. In light and dark (AR-417, AR-420).
+#[test]
+fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        for empty in ["", "   "] {
+            retype_on(&mut h, class, "workspace.properties.name", empty);
+            // A session that refuses every change in its own words shows whether anything reached it.
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+            assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
+            assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
+            let status = h.get_by_label("A name can't be empty.").accesskit_node();
+            assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
+            assert!(h.state().panels.name.is_none() && !dirty(&h), "{theme:?}: the old name stays, nothing sent");
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [table.to_string()] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label("A name can't be empty.").is_none(), "{theme:?}: and no longer read out");
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
+        s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
+        retype_on(&mut h, table, "workspace.properties.name", "order");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with(char::is_uppercase) && notice.contains("order") && !notice.contains("rename"), "{theme:?}: {notice}");
+    }
+}
+
+/// A draft left on the element selected before and refused when the selection moves on names
+/// that element at the panel's foot, so it is not read as about the one shown, until the selection
+/// moves again; a description's draft stays on its element. An association's ends too, which have
+/// no name. In light and dark (AR-417).
+#[test]
+fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        let select = |h: &mut Harness<'static, Shell>, id: String| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+        };
+        select(&mut h, class.to_string());
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: class, text: "a\u{7}b".into(), refused: false });
+        select(&mut h, table.to_string());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on Order: ") && notice.contains("control"), "{theme:?}: {notice}");
+        assert!(painted(&h).contains(&notice), "{theme:?}: at the panel's foot");
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.target == class && d.refused), "{theme:?}: the draft stays");
+        select(&mut h, class.to_string());
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
+        let (mut h, made) = modifiers_sample(theme);
+        select(&mut h, made["holds"].clone());
+        h.state_mut().panels.ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
+        select(&mut h, made["Order"].clone());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
+    }
+}
+
+/// Enter with a new name still renames, and a click elsewhere still writes what was typed. In
+/// light and dark (AR-417).
+#[test]
+fn enter_and_a_click_elsewhere_still_rename_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        retype_on(&mut h, class, "workspace.properties.name", "Purchase");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Purchase", "{theme:?}");
+        retype_on(&mut h, class, "workspace.properties.name", "Sale");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        assert_eq!(name_on(&h, class), "Sale", "{theme:?}: written when left");
     }
 }
 
@@ -1282,7 +1403,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let selection = s.view().selection.clone();
     let generation = h.state().session_generation();
     let shell = h.state_mut();
-    (shell.save_error, shell.refused) = (Some("kept".into()), Some(u64::MAX));
+    shell.save_error = Some("kept".into());
     (shell.explorer.filter, shell.diagrams.filter) = ("in tree".into(), "in list".into());
     shell.panels.menu_scroll = Some(("menu".into(), 9.0));
 
@@ -1308,7 +1429,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection);
     assert!(h.state().session.as_ref().unwrap().is_dirty());
     let shell = h.state();
-    assert_eq!((shell.save_error.as_deref(), shell.refused), (Some("kept"), Some(u64::MAX)));
+    assert_eq!(shell.save_error.as_deref(), Some("kept"));
     assert_eq!((shell.explorer.filter.as_str(), shell.diagrams.filter.as_str()), ("in tree", "in list"));
     assert_eq!(shell.panels.menu_scroll, Some(("menu".into(), 9.0)));
     let s = h.state_mut().session.as_mut().unwrap();
@@ -1553,20 +1674,39 @@ fn a_tab_named_during_the_read_is_the_one_acted_on() {
     }
 }
 
-/// Closing without asking answers for the work: its refused write stops it, not the version's.
+/// Closing without asking answers for the work: the host closes the work's project, and a write of
+/// it that failed keeps it open, said on its tab.
 #[test]
 fn closing_without_asking_stops_on_the_works_refused_write() {
     let (mut h, host, earlier) = work_and_earlier();
-    let shell = h.state_mut();
-    shell.refused = Some(shell.session.as_ref().unwrap().revision());
-    shell.save_error = Some("could not write".into());
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
     h.state_mut().close_tab_now(0);
     h.run_steps(2);
     assert_eq!(h.state().viewing(), None);
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
+    host.closings.lock().unwrap().remove(0).send(Err("could not write".into())).unwrap();
+    h.run_steps(2);
     assert_eq!(h.state().tabs[0].close_error.as_deref(), Some("could not write"));
-    assert!(host.closed.lock().unwrap().is_empty());
+}
+
+/// A tab closed while another shows hands its last edit over before the host closes it, the rows
+/// built off the interface thread.
+#[test]
+fn closing_a_parked_tab_hands_its_last_edit_over_off_the_frame() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    let parked = h.state_mut().tabs[0].parked.as_mut().and_then(|p| p.session.as_mut()).unwrap();
+    parked.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    let built = archforge_mof::rows::built_here();
+    h.state_mut().close_tab_now(0);
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+    let (tables, junctions) = archforge_notations::storage();
+    let session = h.state().tabs[0].parked.as_ref().and_then(|p| p.session.as_ref()).unwrap();
+    let edit = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).unwrap();
+    assert_eq!(host.written.lock().unwrap().last(), Some(&(std::path::PathBuf::from(COMMERCE), edit)), "the edit was handed over");
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
 }
 
 /// What a refusal while a version is in view starts with, whatever language the sentence is in.
@@ -4913,6 +5053,99 @@ fn look(h: &Harness<'static, Shell>, o: archforge_mof::Obj) -> crate::canvas::Lo
     crate::canvas::look_of(st, o, prop)
 }
 
+/// A refused change in Appearance is said under Use diagram defaults and read out as a status
+/// until the selection moves on. In light and dark (AR-420).
+#[test]
+fn a_refused_appearance_change_is_read_out_as_a_status() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer, _) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        let at = rect_of(&h, "workspace.panels.appearance").center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        h.run();
+        // A session that refuses every change makes the panel say why.
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, "workspace.appearance.fill.2").center();
+        click(&mut h, at);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(!notice.is_empty(), "{theme:?}: refused");
+        let status = h.get_by_label(&notice).accesskit_node();
+        assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
+        assert!(rect_of(&h, "workspace.appearance.notice").top() > rect_of(&h, "workspace.appearance.defaults").bottom(), "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label(&notice).is_none(), "{theme:?}: and no longer read out");
+    }
+}
+
+/// Asserts that `words` are read out as a polite live status, inside the area recorded as `id`.
+fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let status = h.get_by_label(words).accesskit_node();
+    assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{words}: read out");
+    assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
+}
+
+/// Delete refused in Models is read out as a status under the tree, and goes with the next
+/// Delete; a name refused in place is read out under its field until Escape closes it. In light
+/// and dark (AR-425).
+#[test]
+fn the_explorer_s_refusals_are_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        select_named(&mut h, archforge_uml::PACKAGE, "Types");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let said = "Types keeps the built-in types, so it stays while it holds them";
+        read_out(&h, said, "workspace.explorer.notice");
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        assert_eq!(h.state().explorer.notice, None, "{theme:?}: gone with the next Delete");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+        h.state_mut().explorer.delete = None;
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        h.state_mut().explorer.rename.as_mut().expect("F2 opens the name").text = String::new();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("an empty name is refused");
+        read_out(&h, &refused, "workspace.explorer.rename.notice");
+        // Enter gave up the field's keyboard, so it is clicked before Escape.
+        let at = rect_of(&h, "workspace.explorer.rename").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes the name");
+        assert!(h.query_by_label(&refused).is_none(), "{theme:?}: and its refusal is no longer read out");
+    }
+}
+
+/// The Diagrams panel's notice is read out as a status under its tree until a diagram is opened
+/// from it. In light and dark (AR-425).
+#[test]
+fn the_diagrams_panel_s_notice_is_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        // Nothing in the panel refuses yet, so the notice is set as a refusal would set it.
+        let said = "The diagram could not be opened";
+        h.state_mut().diagrams.notice = Some(said.into());
+        h.run();
+        read_out(&h, said, "workspace.diagrams.notice");
+        let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.diagrams.row.")).expect("a diagram is listed");
+        let at = rect_of(&h, &row).center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.notice, None, "{theme:?}: gone once a diagram is opened");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+    }
+}
+
 #[test]
 fn appearance_styles_the_selection_on_this_diagram() {
     let (mut h, customer, diagram) = diagram_harness();
@@ -5418,11 +5651,13 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
         click(&mut h, at);
-        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_some()), "{theme:?}: the empty name is refused");
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
         assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
         let at = rect_of(&h, "workspace.new-diagram.back").center();
         click(&mut h, at);
         assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
         // A double click on a card goes straight on; Create opens the diagram in its group.
         let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
         // Past egui's double-click window, so the clicks before don't count with these two.
@@ -20179,6 +20414,76 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(line(&h), (Some("/goods".into()), Some("* = few {ordered, subsets lines}".into())));
+    }
+}
+
+/// An association with both ends' Modifiers open, Read only changed on each end in `changed`.
+fn both_modifiers_open(theme: ThemeKind, changed: &[usize]) -> Harness<'static, Shell> {
+    let (mut h, made) = modifiers_sample(theme);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["holds"]] })).unwrap();
+    h.run();
+    for i in [0, 1] {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.modifiers")).center();
+        click(&mut h, at);
+    }
+    for i in changed {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.read-only")).center();
+        click(&mut h, at);
+    }
+    h
+}
+
+/// Escape in one end's Role gives up that role alone, and the other end's Modifiers keep their
+/// change. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[0]);
+        let (ends, before) = (|h: &Harness<'static, Shell>| h.state().panels.ends.clone().unwrap(), revision(&h));
+        retype(&mut h, "workspace.properties.end.1.role", "goods");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(ends(&h).role[1], "items", "{theme:?}: the role is given up");
+        assert!(ends(&h).modifiers[0].read_only && ends(&h).modifiers_open[0], "{theme:?}: end 0's Modifiers keep their change");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+    }
+}
+
+/// Escape in one end's Default field, which the toolkit lets go of as the frame begins, goes to
+/// that end's Modifiers, not to the other end's changed last. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_default_goes_to_its_own_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[1]);
+        let changed = |h: &Harness<'static, Shell>| h.state().panels.ends.as_ref().unwrap().modifiers.clone().map(|m| m.read_only);
+        let at = rect_of(&h, "workspace.properties.end.0.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, true], "{theme:?}: end 1's change stays");
+        let at = rect_of(&h, "workspace.properties.end.1.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, false], "{theme:?}: its own Default gives it up");
+    }
+}
+
+/// With no field holding the keyboard, Escape goes to the Modifiers changed last (end 1); once
+/// they are given up, cancelled or applied, the next goes on to end 0's. In light and dark (AR-417).
+#[test]
+fn escape_with_no_field_goes_on_to_the_other_end_once_the_last_is_resolved() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let pending = |h: &Harness<'static, Shell>| h.state().panels.ends.clone().map(|e| [0, 1].map(|i| e.modifiers[i] != e.written_modifiers[i]));
+        for way in ["escape", "cancel", "apply"] {
+            let mut h = both_modifiers_open(theme, &[0, 1]);
+            h.state_mut().panels.scroll = 10_000.0;
+            h.run();
+            match rect_of(&h, &format!("workspace.properties.end.1.{way}").replace(".escape", ".cancel")).center() {
+                _ if way == "escape" => key(&mut h, egui::Key::Escape, egui::Modifiers::NONE),
+                at => click(&mut h, at),
+            }
+            assert_eq!(pending(&h), Some([true, false]), "{theme:?} {way}: end 1 resolved, end 0 kept");
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            assert_eq!(pending(&h), Some([false, false]), "{theme:?} {way}: Escape reached end 0");
+        }
     }
 }
 

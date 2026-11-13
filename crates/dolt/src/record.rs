@@ -134,10 +134,38 @@ pub(crate) fn write_new(records: &Path, r: &Record) -> Result<bool, Error> {
 /// Removes the project's record only while it still names `server_pid`, so a start never removes
 /// the record of a server another start made.
 pub(crate) fn remove_if(records: &Path, data_dir: &str, server_pid: u32) {
-    if let Ok(Some(r)) = read(records, data_dir)
-        && r.server_pid == server_pid
-    {
-        remove(&path(records, data_dir));
+    remove_while(&path(records, data_dir), |r| r.data_dir == data_dir && r.server_pid == server_pid);
+}
+
+/// Removes the record in `file` only while `is_it` holds for it. It is taken aside under a new name
+/// first and compared there, so a record another start writes meanwhile is never the one removed.
+/// One that is not meant goes back, or, if a newer record took its name meanwhile, stays under the
+/// new name, which ends in `.json`, so the start-up sweep reads it again.
+pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) {
+    let aside = match crate::secret::random_name(8) {
+        Ok(n) => file.with_extension(format!("forget-{n}.json")),
+        Err(e) => return log::warn!("the server record {} stays: {e}", file.display()),
+    };
+    match std::fs::rename(file, &aside) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+        Err(e) => return log::warn!("the server record {} stays: it could not be taken aside: {e}", file.display()),
+    }
+    #[cfg(test)]
+    tests::after_aside(file);
+    match read_file(&aside) {
+        Ok(Some(r)) if is_it(&r) => remove(&aside),
+        // A damaged record was set aside by the read, and one that went is gone.
+        Ok(None) => {}
+        Ok(Some(_)) | Err(_) => put_back(&aside, file),
+    }
+}
+
+/// Puts a record taken aside back under its own name, unless a newer one took that name meanwhile.
+fn put_back(aside: &Path, file: &Path) {
+    match std::fs::hard_link(aside, file) {
+        Ok(()) => remove(aside),
+        Err(e) => log::warn!("the server record {} stays as {}: it could not be put back: {e}", file.display(), aside.display()),
     }
 }
 
@@ -150,10 +178,24 @@ pub(crate) fn remove(file: &Path) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    use std::cell::RefCell;
 
-    fn rec(data_dir: &str) -> Record {
+    thread_local! {
+        /// What another start does right after a record was taken aside, for the race tests.
+        static AFTER_ASIDE: RefCell<Option<Box<dyn FnOnce(&Path)>>> = const { RefCell::new(None) };
+    }
+
+    /// Runs the hook a test set for the moment after a record was taken aside, once.
+    pub(crate) fn after_aside(file: &Path) {
+        if let Some(hook) = AFTER_ASIDE.with(|h| h.borrow_mut().take()) {
+            hook(file);
+        }
+    }
+
+    /// A record of the project at `data_dir`, for the tests.
+    pub(crate) fn rec(data_dir: &str) -> Record {
         Record {
             data_dir: data_dir.into(),
             server_pid: 7,
@@ -199,5 +241,42 @@ mod tests {
         let aside = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".damaged-")).count();
         assert_eq!(aside, 4);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Another sweep forgets the record and another start writes its own right after this one
+    /// compared: the newer record stays, the old one goes.
+    #[test]
+    fn a_record_written_while_one_is_forgotten_stays() {
+        let dir = crate::home::tests::Scratch::new("forget-race");
+        assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
+        let newer = Record { server_pid: 9, ..rec("/p/a") };
+        let written = newer.clone();
+        AFTER_ASIDE.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move |file: &Path| {
+                remove(file);
+                assert!(write_new(file.parent().unwrap(), &written).unwrap());
+            }))
+        });
+        remove_while(&path(&dir.0, "/p/a"), |r| r == &rec("/p/a"));
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(newer));
+        assert_eq!(all(&dir.0).unwrap().len(), 1, "the old record went");
+    }
+
+    /// A record that is not the one meant goes back under its own name; when a newer one took
+    /// that name meanwhile, both stay.
+    #[test]
+    fn a_record_not_meant_goes_back_or_stays_beside_a_newer_one() {
+        let dir = crate::home::tests::Scratch::new("forget-back");
+        assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
+        remove_if(&dir.0, "/p/a", 99);
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")), "it went back");
+        assert_eq!(all(&dir.0).unwrap().len(), 1);
+        let newer = Record { server_pid: 9, ..rec("/p/a") };
+        let written = newer.clone();
+        AFTER_ASIDE.with(|h| *h.borrow_mut() = Some(Box::new(move |file: &Path| assert!(write_new(file.parent().unwrap(), &written).unwrap()))));
+        remove_if(&dir.0, "/p/a", 99);
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(newer));
+        let kept: Vec<Record> = all(&dir.0).unwrap().into_iter().map(|(_, r)| r).filter(|r| r.server_pid == 7).collect();
+        assert_eq!(kept, vec![rec("/p/a")], "the one taken aside stays where the sweep reads it");
     }
 }

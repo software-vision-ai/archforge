@@ -553,6 +553,7 @@ str		The branch stays: {why}	O ramo fica: {why}
 str		At most {n} characters.	No máximo {n} caracteres.
 str		Enter a name.	Introduza um nome.
 str		A name has to be one line.	Um nome tem de ocupar uma só linha.
+str		A name can't be empty.	Um nome não pode estar vazio.
 str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.
 str		Working changes	Alterações em curso
 str		History	Histórico
@@ -903,6 +904,8 @@ str		Selection · this diagram	Seleção · este diagrama
 str		{kind} · this diagram	{kind} · este diagrama
 plural		{n} item	{n} item|{n} itens
 str		The model could not be opened	Não foi possível abrir o modelo
+str		Not kept on {name}: {why}	Não guardado em {name}: {why}
+str		Not kept on the element selected before: {why}	Não guardado no elemento selecionado antes: {why}
 str		The host gives no ids for the model's elements	O anfitrião não fornece ids para os elementos do modelo
 str		Collapse panel	Recolher o painel
 str		Not available yet	Ainda não disponível

@@ -224,7 +224,7 @@ impl Shell {
             Stage::Save if self.is_saving() => Stage::Save,
             Stage::Save => {
                 if !self.hand_over_held() {
-                    // The rows could not be made, and the status bar already says why.
+                    // Nothing could be handed over: a drag still runs, or a version is in view.
                     return self.give_up(None);
                 }
                 match r.save_first.take() {
@@ -420,7 +420,6 @@ impl Shell {
         if repaired {
             session.mark_unsaved();
         }
-        self.refused = None;
         // One opened while held would write to the replacement's selection.
         self.panels.picker = None;
         self.session = Some(session);

@@ -21,27 +21,23 @@ struct Env {
     run_root: PathBuf,
     home: Home,
     dolt: Dolt,
-    cleanup: bool,
+    _folders: Option<Folders>,
 }
 
 impl Env {
+    /// A test's environment in folders of its own, removed with it.
     fn new(name: &str) -> Env {
-        let tag = format!("{}{}", std::process::id(), name.len());
-        let base = std::env::temp_dir().join(format!("af-it-{name}-{tag}"));
-        let run_root = std::env::temp_dir().join(format!("afr-{name}-{tag}"));
-        for d in [&base, &run_root] {
-            let _ = std::fs::remove_dir_all(d);
-            std::fs::create_dir_all(d).unwrap();
-        }
-        std::fs::create_dir_all(base.join("data")).unwrap();
-        Env::at(base, run_root, true)
+        let folders = Folders { base: unique_dir(&format!("af-it-{name}")), run_root: unique_dir(&format!("afr-{name}")) };
+        std::fs::create_dir(folders.base.join("data")).unwrap();
+        Env::at(folders.base.clone(), folders.run_root.clone(), Some(folders))
     }
 
-    fn at(base: PathBuf, run_root: PathBuf, cleanup: bool) -> Env {
+    /// The environment in `base` and `run_root`, which `folders`, when given, removes.
+    fn at(base: PathBuf, run_root: PathBuf, folders: Option<Folders>) -> Env {
         let home = Home::prepare(&base.join("home")).unwrap();
         let dolt = Dolt::find(&home)
             .unwrap_or_else(|e| panic!("these tests need dolt 2.6 or later within major version 2 on the PATH or in ARCHFORGE_DOLT: {e}"));
-        Env { base, run_root, home, dolt, cleanup }
+        Env { base, run_root, home, dolt, _folders: folders }
     }
 
     fn data(&self) -> PathBuf {
@@ -69,14 +65,33 @@ impl Env {
     }
 }
 
-impl Drop for Env {
-    fn drop(&mut self) {
-        if self.cleanup {
-            // A test that failed half way may leave a server under this run root: none survives it.
-            let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root).stderr(Stdio::null()).status();
-            let _ = std::fs::remove_dir_all(&self.base);
-            let _ = std::fs::remove_dir_all(&self.run_root);
+/// A folder in the temporary folder made under a new random name, never one that was there before.
+fn unique_dir(prefix: &str) -> PathBuf {
+    loop {
+        let mut bytes = [0u8; 4];
+        getrandom::fill(&mut bytes).unwrap();
+        let dir = std::env::temp_dir().join(format!("{prefix}-{:08x}", u32::from_le_bytes(bytes)));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return dir,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => panic!("cannot make {}: {e}", dir.display()),
         }
+    }
+}
+
+/// A test's own folders, removed when dropped, panics included, with any server left under them.
+struct Folders {
+    base: PathBuf,
+    run_root: PathBuf,
+}
+
+impl Drop for Folders {
+    /// Kills any server left under the run root and removes both folders.
+    fn drop(&mut self) {
+        // A test that failed half way may leave a server under this run root: none survives it.
+        let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root).stderr(Stdio::null()).status();
+        let _ = std::fs::remove_dir_all(&self.base);
+        let _ = std::fs::remove_dir_all(&self.run_root);
     }
 }
 
@@ -233,7 +248,7 @@ fn crash_helper() {
     let Some(spec) = std::env::var_os(HELPER) else { return };
     let spec = spec.to_string_lossy().into_owned();
     let (base, run_root) = spec.split_once('\n').unwrap();
-    let env = Env::at(PathBuf::from(base), PathBuf::from(run_root), false);
+    let env = Env::at(PathBuf::from(base), PathBuf::from(run_root), None);
     let server = env.start().unwrap();
     println!("READY {}", server.pid());
     std::thread::sleep(Duration::from_secs(120));
@@ -254,6 +269,60 @@ fn a_server_left_by_a_crashed_archforge_is_stopped_at_the_next_start() {
     assert_eq!(one(&mut server.connect().unwrap()), 1);
     server.stop().unwrap();
     assert_eq!(env.leftovers(), (0, 0));
+}
+
+/// A server whose Archforge was killed is stopped politely at the next start-up, though its
+/// project is not opened, and its record and run folder go (AR-422).
+#[test]
+fn a_server_a_killed_archforge_left_running_is_stopped_at_start_up_without_opening_its_project() {
+    let env = Env::new("orphan");
+    let (mut owner, orphan) = helper(&env);
+    let _guard = KillOnDrop(orphan);
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    assert!(alive(orphan), "the server outlives its owner");
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 1);
+    assert!(wait_gone(orphan), "start-up stopped it");
+    assert_eq!(env.leftovers(), (0, 0), "its record and run folder went with it");
+    assert!(!env.data().join(".dolt/sql-server.info").exists(), "it stopped politely, removing its lock");
+}
+
+/// A server whose Archforge still runs keeps running through a start-up's sweep, its record kept.
+#[test]
+fn start_up_leaves_a_server_whose_archforge_still_runs_alone() {
+    let env = Env::new("owned");
+    let server = env.start().unwrap();
+    let _guard = KillOnDrop(server.pid());
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 0);
+    assert_eq!(one(&mut server.connect().unwrap()), 1);
+    assert_eq!(env.leftovers(), (1, 1), "its record and run folder stay");
+    server.stop().unwrap();
+}
+
+/// A recorded server id now held by another program, its Archforge gone, gets no signal; only the
+/// stale record goes.
+#[test]
+fn start_up_never_signals_a_process_that_took_a_recorded_servers_id() {
+    let env = Env::new("reused");
+    let mut sleeper = Command::new("/bin/sleep").arg("60").spawn().unwrap();
+    let _guard = KillOnDrop(sleeper.id());
+    // The record's Archforge is gone: its process id is this test's, but its start time is not.
+    let record = serde_json::json!({
+        "data_dir": env.data(),
+        "server_pid": sleeper.id(),
+        "run_root": env.run_root,
+        "run_dir": env.run_root.join("af-zzzzzzzz"),
+        "command": [env.dolt.path(), "sql-server", "--config", env.run_root.join("af-zzzzzzzz/server.yaml")],
+        "owner_pid": std::process::id(),
+        "owner_started": "Thu Jan  1 00:00:00 1970",
+    });
+    std::os::unix::fs::DirBuilderExt::mode(&mut std::fs::DirBuilder::new(), 0o700).create(env.base.join("records")).unwrap();
+    std::fs::write(env.base.join("records/0000000000000000.json"), record.to_string()).unwrap();
+    assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 0);
+    assert!(alive(sleeper.id()), "the other program got no signal");
+    assert_eq!(env.leftovers().0, 0, "the stale record was forgotten");
+    sleeper.kill().unwrap();
+    sleeper.wait().unwrap();
 }
 
 #[test]

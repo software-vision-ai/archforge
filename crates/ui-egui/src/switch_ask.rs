@@ -93,7 +93,8 @@ pub(crate) fn keep(shell: &mut Shell) {
             return;
         }
         s.ended_on = shell.session.as_ref().map(|x| x.history());
-        let refused = shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision());
+        // The writer could not build or write the work's rows, so it could not be kept.
+        let refused = shell.write_failed();
         let why = shell.save_error.clone().unwrap_or_else(|| tr("The switch did not finish, so the project stayed on its branch."));
         // A Save that answered marked the session saved; one that failed left it unsaved.
         let template = if refused {

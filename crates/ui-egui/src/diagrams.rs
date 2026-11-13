@@ -499,7 +499,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         footer_lines(shell, &paint, p, r);
     }
     if let Some(notice) = shell.diagrams.notice.clone() {
-        ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        let area = ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.diagrams.notice", area, &notice);
     }
 }
 
@@ -885,6 +886,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
         let r = Rect::from_min_size(at(20.0, 190.0), vec2(inner_w, 24.0));
         paint.rect_filled(r, 6.0, p.amber_tint);
         ux::text_mid(paint, r.left() + 10.0, r.center().y, refused, types::CAPTION, p.amber, Some((inner_w - 20.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.new-diagram.notice", r, refused);
     }
     // Back at the left; Cancel and Create at the right.
     let back = Rect::from_min_size(pos2(dialog.left() + 20.0, dialog.bottom() - 48.0), vec2(70.0, 28.0));

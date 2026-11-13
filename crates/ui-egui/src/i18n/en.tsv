@@ -552,6 +552,7 @@ str		The branch stays: {why}	The branch stays: {why}
 str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
+str		A name can't be empty.	A name can't be empty.
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
@@ -902,6 +903,8 @@ str		Selection · this diagram	Selection · this diagram
 str		{kind} · this diagram	{kind} · this diagram
 plural		{n} item	{n} item|{n} items
 str		The model could not be opened	The model could not be opened
+str		Not kept on {name}: {why}	Not kept on {name}: {why}
+str		Not kept on the element selected before: {why}	Not kept on the element selected before: {why}
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel
 str		Not available yet	Not available yet

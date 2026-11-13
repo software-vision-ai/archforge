@@ -553,6 +553,7 @@ str		The branch stays: {why}	ブランチは残ります: {why}
 str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。
+str		A name can't be empty.	名前は空にできません。
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
@@ -903,6 +904,8 @@ str		Selection · this diagram	選択 · この図
 str		{kind} · this diagram	{kind} · この図
 plural		{n} item	{n} 個の項目
 str		The model could not be opened	モデルを開けませんでした
+str		Not kept on {name}: {why}	{name} には反映されませんでした: {why}
+str		Not kept on the element selected before: {why}	前に選択していた要素には反映されませんでした: {why}
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		Collapse panel	パネルを折りたたむ
 str		Not available yet	まだ利用できません
