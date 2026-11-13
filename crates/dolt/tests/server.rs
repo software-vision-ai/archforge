@@ -21,27 +21,23 @@ struct Env {
     run_root: PathBuf,
     home: Home,
     dolt: Dolt,
-    cleanup: bool,
+    _folders: Option<Folders>,
 }
 
 impl Env {
+    /// A test's environment in folders of its own, removed with it.
     fn new(name: &str) -> Env {
-        let tag = format!("{}{}", std::process::id(), name.len());
-        let base = std::env::temp_dir().join(format!("af-it-{name}-{tag}"));
-        let run_root = std::env::temp_dir().join(format!("afr-{name}-{tag}"));
-        for d in [&base, &run_root] {
-            let _ = std::fs::remove_dir_all(d);
-            std::fs::create_dir_all(d).unwrap();
-        }
-        std::fs::create_dir_all(base.join("data")).unwrap();
-        Env::at(base, run_root, true)
+        let folders = Folders { base: unique_dir(&format!("af-it-{name}")), run_root: unique_dir(&format!("afr-{name}")) };
+        std::fs::create_dir(folders.base.join("data")).unwrap();
+        Env::at(folders.base.clone(), folders.run_root.clone(), Some(folders))
     }
 
-    fn at(base: PathBuf, run_root: PathBuf, cleanup: bool) -> Env {
+    /// The environment in `base` and `run_root`, which `folders`, when given, removes.
+    fn at(base: PathBuf, run_root: PathBuf, folders: Option<Folders>) -> Env {
         let home = Home::prepare(&base.join("home")).unwrap();
         let dolt = Dolt::find(&home)
             .unwrap_or_else(|e| panic!("these tests need dolt 2.6 or later within major version 2 on the PATH or in ARCHFORGE_DOLT: {e}"));
-        Env { base, run_root, home, dolt, cleanup }
+        Env { base, run_root, home, dolt, _folders: folders }
     }
 
     fn data(&self) -> PathBuf {
@@ -69,14 +65,33 @@ impl Env {
     }
 }
 
-impl Drop for Env {
-    fn drop(&mut self) {
-        if self.cleanup {
-            // A test that failed half way may leave a server under this run root: none survives it.
-            let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root).stderr(Stdio::null()).status();
-            let _ = std::fs::remove_dir_all(&self.base);
-            let _ = std::fs::remove_dir_all(&self.run_root);
+/// A folder in the temporary folder made under a new random name, never one that was there before.
+fn unique_dir(prefix: &str) -> PathBuf {
+    loop {
+        let mut bytes = [0u8; 4];
+        getrandom::fill(&mut bytes).unwrap();
+        let dir = std::env::temp_dir().join(format!("{prefix}-{:08x}", u32::from_le_bytes(bytes)));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return dir,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => panic!("cannot make {}: {e}", dir.display()),
         }
+    }
+}
+
+/// A test's own folders, removed when dropped, panics included, with any server left under them.
+struct Folders {
+    base: PathBuf,
+    run_root: PathBuf,
+}
+
+impl Drop for Folders {
+    /// Kills any server left under the run root and removes both folders.
+    fn drop(&mut self) {
+        // A test that failed half way may leave a server under this run root: none survives it.
+        let _ = Command::new("/usr/bin/pkill").args(["-KILL", "-f"]).arg(&self.run_root).stderr(Stdio::null()).status();
+        let _ = std::fs::remove_dir_all(&self.base);
+        let _ = std::fs::remove_dir_all(&self.run_root);
     }
 }
 
@@ -233,7 +248,7 @@ fn crash_helper() {
     let Some(spec) = std::env::var_os(HELPER) else { return };
     let spec = spec.to_string_lossy().into_owned();
     let (base, run_root) = spec.split_once('\n').unwrap();
-    let env = Env::at(PathBuf::from(base), PathBuf::from(run_root), false);
+    let env = Env::at(PathBuf::from(base), PathBuf::from(run_root), None);
     let server = env.start().unwrap();
     println!("READY {}", server.pid());
     std::thread::sleep(Duration::from_secs(120));

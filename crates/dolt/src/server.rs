@@ -257,9 +257,7 @@ fn forget(file: &Path, r: &Record, uid: Option<u32>) {
     if root.is_absolute() {
         run_dir::remove(root, Path::new(&r.run_dir), uid);
     }
-    if record::read_file(file).ok().flatten().as_ref() == Some(r) {
-        record::remove(file);
-    }
+    record::remove_while(file, |found| found == r);
 }
 
 /// Recovery for this project: gathers the facts, decides, acts.
@@ -557,23 +555,14 @@ mod tests {
     /// A record another start wrote after this one was read stays; the one read goes.
     #[test]
     fn forgetting_keeps_a_record_written_since_it_was_read() {
-        let dir = crate::home::tests::scratch("forget");
-        let read = Record {
-            data_dir: "/p/a".into(),
-            server_pid: 7,
-            run_root: "/t".into(),
-            run_dir: "/t/af-abcdefgh".into(),
-            command: vec!["dolt".into()],
-            owner_pid: 8,
-            owner_started: "x".into(),
-        };
+        let dir = crate::home::tests::Scratch::new("forget");
+        let read = record::tests::rec("/p/a");
         let newer = Record { server_pid: 9, ..read.clone() };
-        assert!(record::write_new(&dir, &newer).unwrap());
-        let file = record::path(&dir, "/p/a");
+        assert!(record::write_new(&dir.0, &newer).unwrap());
+        let file = record::path(&dir.0, "/p/a");
         forget(&file, &read, None);
-        assert_eq!(record::read(&dir, "/p/a").unwrap(), Some(newer.clone()), "the newer record stays");
+        assert_eq!(record::read(&dir.0, "/p/a").unwrap(), Some(newer.clone()), "the newer record stays");
         forget(&file, &newer, None);
-        assert_eq!(record::read(&dir, "/p/a").unwrap(), None);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(record::read(&dir.0, "/p/a").unwrap(), None);
     }
 }
