@@ -11,70 +11,19 @@ An open project fills the window with its workspace.
   which lists what has changed since the last version and the project's history, newest first.
   **Save version…** there saves what changed as a new version:
   [Versions](09-versions.md#save-a-version) goes through it step by step.
-  **Branches**, above it, lists the project's branches, each with when its latest version was saved;
-  it stays folded while the project has only `main`. The branch you are on says *Current*, and a dot
-  marks a branch with unsaved changes to the model (conversations don't count). Click another
-  branch, press Enter on it, or choose **Switch** from its **More** menu to switch to it; ↑ and ↓
-  move between branches. If your work has unsaved changes, Archforge first asks whether to save a
-  version and switch, or switch and leave them on this branch for when you come back. Branches
-  can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
-  so under the list.
-  The **+** in the Branches header, there even while the section is folded, opens **New branch**, as
-  do **Versions ▸ New branch…** and **New branch…** at the foot of the version chip's list (↓ past
-  the last row reaches it):
-  a branch keeps its own versions, unsaved work and conversations, and the new one starts from
-  your current work, unsaved changes included, which the branch you are on keeps as well. Type a
-  name of at most 60 characters, on one line, not starting or ending with a space; a name another
-  branch has is refused under the field, and **Create** stays off until the name can
-  be used. **Create** (or Enter) makes the branch and switches to it; while Archforge makes it the
-  dialog stays up. If it can't be made, the reason shows under the field and you stay where you
-  were: change the name or try again. If Archforge can't tell whether it was made, look at the
-  Branches list before trying again. If the switch to the new branch can't start, the reason is
-  shown as for any switch, and the branch stays in the list for you to switch to later.
-  **Start a branch here…**, in a version's details and as the branch button beside **Back to
-  current work** in the banner of a version you are viewing, opens the same dialog for a branch that
-  starts from that version instead. Your unsaved changes stay on the branch you are on, and viewing
-  ends on the new branch once it is made. It isn't offered for a version that can't be read.
-  **Rename…** in a branch's **More** menu renames it, the branch you are on too; `main` keeps its
-  name. The name is checked as for a new branch, and **Rename** stays off while it is unchanged. The
-  branch keeps its conversations, versions and unsaved work, and you stay on it. If it can't be
-  renamed, the reason shows under the field and the name stays. If Archforge can't tell whether it
-  was renamed, the dialog names the name you asked for and offers only that one: rename it to that
-  name again to find out.
-  **Delete…** in a branch's **More** menu deletes it; `main` and the branch you are on can't be
-  deleted. The dialog counts what goes with the branch: the versions only on it, its conversations,
-  and whether it holds unsaved changes. **Delete branch** waits for that count, or for word that it
-  can't be read. The branch leaves the project's list, but its contents may remain in the project
-  folder's storage, and there is no Undo. If it can't be deleted, the dialog says why and the branch
-  stays. If Archforge can't tell whether it was deleted, delete it again to find out.
-  Once a project has a second branch, the version chip in the bar at the top names the branch you
-  are on, before *Current work*, and the status bar says *On* and its name before whether your work
-  is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),
-  to list the branches there, each with when its latest version was saved (the first 200, saying so
-  under them, as above), type to narrow them, and choose one, or move to it with ↑ and ↓ and press
-  Enter, to switch to it as above. In a narrower window the chip shortens the branch's name first,
-  then leaves out *Current work*, then shows only its icon, with the whole label when you point at
-  it.
+  **Branches**, above it, lists the project's branches, each a separate line of work that keeps its
+  own versions, unsaved work and conversations; it stays folded while the project has only `main`.
+  [Work on branches](09-versions.md#work-on-branches) goes through making, switching, renaming and
+  deleting them.
   Clicking a version in the history opens its details in the centre, and **View this version**
   there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
   through History, viewing an earlier version and coming back to your current work.
   **Compare…** opens the Compare page, which sets two versions of the branch, or one and your
   current work or another branch's latest version, side by side:
   [See what changed](09-versions.md#see-what-changed) goes through it.
-  **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
-  work** in the banner of a version you are viewing, makes the content of that version a new version
-  on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
-  and later versions stay in History. A question names the version and says all this first, and
-  that unsaved work is first kept as a version called *Before restoring* and the date and time, as
-  History shows them, for example *Before restoring 8 Nov 15:42*. Undo starts fresh after a
-  restore. If it doesn't finish, the same question says what happened and whether your work is as
-  it was, with **Retry**, unless the version turned out to be the same as your current work. When
-  another question is open at that moment, this one follows once that one is answered and the project shows again; until then Restore is off in your other
-  open projects and says why. When Archforge can't tell whether it
-  finished, the status bar says so instead. Restore isn't offered for the last version while nothing is
-  unsaved, which is what you have now, or for a version that can't be read.
-  While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
-  keeping what it has written so far, and **Keep working** leaves everything as it was.
+  **Restore this version…**, beside Compare… in the details, makes that version's content your
+  current work again, as a new version on top of the history:
+  [Restore a version](09-versions.md#restore-a-version) says what it keeps.
   Clicking a model element or a diagram under Working changes opens it in the centre beside your
   last version: see [An element side by side](09-versions.md#an-element-side-by-side) and
   [A diagram side by side](09-versions.md#a-diagram-side-by-side).

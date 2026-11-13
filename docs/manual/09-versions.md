@@ -5,8 +5,10 @@ a point worth naming, such as what the team agreed on. A *version* is that point
 as it stood at one moment, with a line that says what it is, kept in the project's history.
 
 This chapter explains what a version is, how to save one, how to
-[look back at one](#look-back-at-a-version) and come back to your work, and how to
-[see what changed](#see-what-changed) between two of them.
+[look back at one](#look-back-at-a-version) and come back to your work, how to
+[see what changed](#see-what-changed) between two of them, how to
+[restore one](#restore-a-version), and how to try something out on a
+[branch](#work-on-branches) of its own.
 
 ## Current work and versions
 
@@ -63,7 +65,7 @@ as it was, still with *email*, and the status bar goes back to *Unsaved changes*
 current work now differs from your last version. Undo never removes a version and never adds one.
 
 Undo remembers up to 500 steps, and only while the project stays open. A
-[restore](03-workspace.md) starts it afresh.
+[restore](#restore-a-version) and a [change of branch](#switch-branch) start it afresh.
 
 ## Save a version
 
@@ -203,7 +205,7 @@ There are three ways to show a version in place of your current work:
 - In its details, choose **View this version**.
 - Click the version chip, in the bar at the top, left of search. It says *Current work*, with a dot
   while you have unsaved changes. Its list starts with **Current work**, after the branch you are
-  on once the project has a second branch ([the workspace](03-workspace.md)), then the versions,
+  on once the project has a second branch ([Switch branch](#switch-branch)), then the versions,
   newest first, by date and description; the latest reads *Same as current work* when nothing is unsaved.
   Click a version to view it, or type to narrow the list, move with ↑ and ↓ and press Enter; Escape
   closes the list. Scrolling to its end lists older versions. From your current work,
@@ -283,7 +285,8 @@ was and the status bar gives the reason.
 
 **Compare…** in a version's details opens the [Compare page](#choose-what-to-compare).
 **Restore this version…** and **Start a branch here…** there, and the restore and branch buttons
-beside **Back to current work** in the banner, are described in [The workspace](03-workspace.md).
+beside **Back to current work** in the banner, are described under
+[Restore a version](#restore-a-version) and [Make a branch](#make-a-branch).
 
 ## See what changed
 
@@ -439,5 +442,184 @@ In the example, drag the box *Customer* to a new place on its class diagram. **W
 lists it under **Diagrams**. The **Layout** card says *1 box moved* and *Customer*, the **Model**
 card *The model didn't change* and *Only the layout changed.*, and only the Before and After places
 of *Customer* differ.
+
+## Restore a version
+
+Viewing an earlier version only looks. To go on working from it, restore it: its content becomes
+your current work again, as a new version on top of the history.
+
+1. Open the version: click it in **History**, or [view it](#view-an-earlier-version).
+2. Choose **Restore this version…** in its details, or the restore button beside **Back to current
+   work** in the banner while it shows.
+3. The question **Restore this version?** names the version and says what will happen. Choose
+   **Restore**. **Cancel** or Escape leaves everything as it was. Enter does nothing here.
+
+Archforge first takes you back to current work, if you were viewing, and makes sure nothing is left
+half done, as for [viewing a version](#back-to-current-work); while Chat is changing the model, it
+asks *Chat is still changing the model. Stop it and go on?* first. Then:
+
+- If you have unsaved changes, they are saved first as a version of their own, called *Before
+  restoring* and the date and time, such as *Before restoring 8 Nov 15:42*. The question says so
+  beforehand: *You can reach them again from History.*
+- The model, its diagrams and its skills are made as they were in that version, and saved as a new
+  version called *Restored the version of* and its date.
+
+### What a restore keeps
+
+*Nothing is rewound or removed, and later versions stay in History.* A restore only ever adds.
+
+| A restore changes | A restore keeps |
+|---|---|
+| Your current work: the model, the diagrams and the skills, as the version had them | Every version, the later ones too, and you can restore any of them in turn |
+| | Your Chat conversations, which stay as they are |
+| | Your other branches, since a restore works on the branch you are on |
+
+*Undo starts fresh after a Restore.* You can't undo a restore step by step: to go back, restore the
+version from before it, such as *Before restoring* or the version that was on top.
+
+**Restore this version…** isn't offered for the latest version while nothing is unsaved, since that
+is what you have now, nor for a version that can't be read.
+
+In the example, restore *Added Customer*. History then lists *Restored the version of* and its date
+above *Added email* and *Added Customer*, and your current work is *Customer* without *email*. To
+have *email* back, restore *Added email*.
+
+### When a restore doesn't finish
+
+The question comes back headed *The restore did not finish*, with the reason, **Retry** where trying
+again could help, and **Close**. If another question is open at that moment, it waits until that
+one is answered.
+
+| The message | What happened | What to do |
+|---|---|---|
+| *This version is the same as your current work.* | There was nothing to restore, and no version was made. Unsaved work may have been kept as a version first, and then the message says so | Nothing |
+| *The restore could not go ahead because the project changed or was busy, so nothing was restored.* | Something else changed the project first | Choose **Retry** |
+| *Your unsaved work could not be kept, so nothing was restored.* | Your unsaved work couldn't be written or saved first | Choose **Retry**, or save your work yourself first |
+| *Archforge could not tell whether your unsaved work was kept as a version, so nothing was restored.* | The answer was lost | Choose **Close** and look in **History** before trying again |
+| *The version could not be restored:* and a reason | Nothing was restored. The message adds whether your unsaved work was kept as a version and whether it is written with your next change | Choose **Retry**, or **Close** |
+| *Archforge could not tell whether an earlier restore finished. Close the project and open it again before restoring.* | An earlier restore's outcome is unknown | Choose **Close**, then close the project and open it again |
+
+When Archforge can't tell whether the restore itself finished, the status bar says *Archforge could
+not tell whether the last change finished. Nothing more was written. Close the project and reopen
+it.* Do that, then look in **History**.
+
+While a restore that didn't finish waits to tell you why, **Restore this version…** in your other
+open projects is off and says *A restore in* the project's name *did not finish.*: go to that
+project first.
+
+## Work on branches
+
+A *branch* is a separate line of work in the same project. *A branch keeps its own versions,
+unsaved work and conversations.* Use one to try out an idea without touching the work you share,
+and switch back whenever you like. Every project starts with one branch, `main`.
+
+*Branches can't be merged yet*: work on one branch doesn't reach another. To see how two branches
+differ, [compare](#choose-what-to-compare) with the other branch's latest version.
+
+### The Branches section
+
+**Branches**, at the top of **Versions**, lists the project's branches by name, each with when its
+latest version was saved. It stays folded while the project has only `main`. The branch you are on
+says *Current*, and a dot marks a branch with unsaved changes to the model; conversations don't
+count. ↑ and ↓ move between branches. A branch's **More** menu holds **Switch**, **Rename…** and
+**Delete…**. A project with more than 200 branches lists the first 200, and says so. If the list
+can't be read, it says *The branches couldn't be read.*, with **Retry**.
+
+Once there is a second branch, the version chip in the bar at the top names the branch you are on
+before *Current work*, and the status bar says *On* and its name before whether your work is saved.
+In a narrower window the chip shortens the name first, then leaves out *Current work*, then shows
+only its icon, with the whole label when you point at it.
+
+[History](#history-and-a-versions-details) on a branch lists its own versions, then those it shares
+with `main`.
+
+### Make a branch
+
+**New branch…** makes a branch from your current work. Open it with the **+** in the **Branches**
+header, there even while the section is folded, with **Versions ▸ New branch…**, or with **New
+branch…** at the foot of the version chip's list (↓ past the last row reaches it). The new branch
+starts with everything you have now, unsaved changes included, and the branch you are on keeps them
+too.
+
+**Start a branch here…** makes a branch from an earlier version instead. It is in a version's
+details, and it is the branch button beside **Back to current work** in the banner while a version
+shows. Your unsaved changes stay on the branch you are on. If you were viewing the version, viewing
+ends on the new branch. It isn't offered for a version that can't be read.
+
+In either dialog:
+
+1. In **Name**, type the branch's name: at most 60 characters, on one line, not starting or ending
+   with a space. A name another branch has, even with different capitals, is refused with *That
+   name is already in use.*
+2. Choose **Create**, or press Enter. It stays off until the name can be used.
+
+Archforge makes the branch and switches to it. The dialog stays up while it works. **Cancel** or
+Escape closes it without making anything.
+
+A new branch starts with no conversations: Chat says *No conversations on this branch yet.*
+*Conversations stay on the branch where they started*, and each branch lists only its own
+([Conversations](07-agents.md#conversations)). Undo starts fresh on the new branch.
+
+In the example, with *Added email* saved, make a branch called *Contact details* and rename *email*
+to *contact* there. Switch back to `main`, and *Customer* still has *email*.
+
+### Switch branch
+
+Click another branch in **Branches**, press Enter on it, or choose **Switch** from its **More**
+menu. From the version chip, choose the branch at the top of its list, or press ⇧⌘B (Ctrl Shift B),
+or choose **Versions ▸ Switch branch**, to list the branches there; type to narrow them, and click
+one or press Enter on it.
+
+With nothing unsaved, Archforge switches at once. With unsaved changes, it asks **Switch to** and
+the branch's name, and says *{branch} has unsaved changes. They stay on {branch} and are there when
+you come back. You won't be able to undo earlier steps.*, with the name of the branch you are on:
+
+- **Save version and switch** saves them as a version first, as ⌘S does, then switches;
+- **Switch** leaves them unsaved on this branch, waiting for you to come back;
+- **Cancel**, or Escape, stays where you are. Enter does nothing here.
+
+If you are viewing a version, Archforge takes you back to current work first. It makes sure nothing
+is left half done, and asks about Chat, as for [viewing a version](#back-to-current-work).
+
+After a switch:
+
+- you see the other branch's current work, with its own unsaved changes, versions and conversations;
+- undo starts fresh, so you can't undo steps made on the branch you left;
+- closing the project or quitting asks only about the branch you are on. Other branches keep their
+  unsaved work for the next time you switch to them.
+
+The project opens again on the branch you left it on. If that branch is gone, or can't be opened,
+it opens on `main`, and the status bar says *The branch* and its name *is no longer in this project*,
+or why it *could not be opened*.
+
+### Rename or delete a branch
+
+**Rename…** in a branch's **More** menu opens **Rename branch**, with the name filled in. The name is
+checked as for a new branch, and **Rename** stays off while it is unchanged. *The conversations and
+versions on this branch are not affected.* You can rename the branch you are on, and you stay on it.
+`main` keeps its name.
+
+**Delete…** opens **Delete** and the branch's name. Under *Goes with the branch:* it counts the
+versions only on this branch and its conversations, and says whether it holds unsaved changes.
+**Delete branch** waits for that count, or for word that it couldn't be read. The branch leaves the
+project's list, and its contents may remain in the project folder's storage. *There is no Undo for
+deleting a branch.* `main` and the branch you are on can't be deleted.
+
+### When a branch change doesn't work
+
+| The message | What happened | What to do |
+|---|---|---|
+| *Couldn't make the branch:* and a reason, under the name | No branch was made, and you stay where you were | Change the name, or try again |
+| *The project changed before the branch was made, so none was made.* | Something else changed the project first | Choose **Create** again |
+| *Archforge could not tell whether the branch was made. Look at Branches before trying again.* | The answer was lost | Choose **Cancel**, then look in **Branches** before trying again |
+| *The last new branch is not cleaned up yet. Opening the project again removes it.* | A branch that wasn't finished is still in the project's storage | Choose **Cancel**, then close the project and open it again |
+| **Couldn't switch to** and the branch's name, with the reason and *You are still on* your branch | The switch didn't happen. The message says whether your work is unchanged, or saved | Choose **Close**, then try again |
+| **Switching is refused**, with *Your work could not be kept, so the switch was not made.* | Your work couldn't be written to the project, so it stayed on screen | Choose **Close**, and switch again once the status bar no longer says your changes could not be written |
+| *Couldn't rename the branch:* and a reason | The name stays | Try again |
+| *Archforge could not tell whether the branch was renamed to* a name | The answer was lost | Rename it to that name again to find out |
+| **Couldn't delete** and the branch's name, with *The branch stays:* and a reason | Nothing was deleted | Try again |
+| *Archforge could not tell whether the branch was deleted. Delete it again to find out.* | The answer was lost | Delete it again |
+
+A new branch that was made but couldn't be switched to stays in **Branches**: switch to it later.
 
 Back to the [contents](README.md).

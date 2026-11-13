@@ -52,7 +52,10 @@ the first time to a small model you can build on, and shows how an agent joins i
    version, what is read only meanwhile and
    [coming back to current work](09-versions.md#back-to-current-work); then
    [seeing what changed](09-versions.md#see-what-changed): the changes list, the Compare page, an
-   element or a diagram side by side, and a model change against a layout change.
+   element or a diagram side by side, and a model change against a layout change;
+   [restoring one](09-versions.md#restore-a-version) and what it keeps; and
+   [working on branches](09-versions.md#work-on-branches): making, switching, renaming and
+   deleting them, and what to do when that fails.
 
 ## Keys
 
