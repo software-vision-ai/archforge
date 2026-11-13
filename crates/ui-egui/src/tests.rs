@@ -4935,6 +4935,31 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     assert_eq!(st.get(customer_obj, archforge_er::entity::KIND).unwrap(), archforge_mof::Value::Enum(archforge_er::EntityKind::Regular.index()));
 }
 
+/// A column's editor refused by the engine says why in plain words under the card, never with the
+/// command's id or the parameter it is about: a column renamed, or a new one added. In light and
+/// dark (AR-428).
+#[test]
+fn a_column_refused_in_properties_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for new in [false, true] {
+            let (mut h, _customer) = table_harness();
+            h.state_mut().state.theme = theme;
+            h.run();
+            let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+            let opener = if new { "workspace.properties.columns.add".to_string() } else { format!("{}.edit", rows[1]) };
+            let at = rect_of(&h, &opener).center();
+            click(&mut h, at);
+            h.state_mut().panels.column.as_mut().unwrap_or_else(|| panic!("{theme:?}: the editor opened")).name = "customer_id".into();
+            h.run();
+            let at = rect_of(&h, "workspace.properties.column.apply").center();
+            click(&mut h, at);
+            let refused = h.state().panels.column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+            let plain = refused.starts_with("The entity has an attribute named") && !refused.contains("er.") && !refused.contains("name:");
+            assert!(plain, "{theme:?}, new {new}: {refused}");
+        }
+    }
+}
+
 #[test]
 fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     let (mut h, customer) = table_harness();
@@ -7150,6 +7175,29 @@ fn the_marquee_selects_what_it_crosses_and_a_middle_drag_only_pans() {
     assert!((node_bounds(&h, &id).y - a0.y).abs() < 0.01, "one undo takes both nudges back");
 }
 
+/// A table's name refused on the canvas says why as Properties says it, in the chosen language,
+/// never with the command's id or the parameter it is about. In light and dark (AR-428).
+#[test]
+fn a_name_refused_on_the_canvas_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _customer, _diagram) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let nodes = node_ids(&h);
+        let customer = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+        let at = rect_of(&h, &customer).left_top() + egui::vec2(60.0, 30.0);
+        double_click(&mut h, at);
+        h.state_mut().canvas.rename.as_mut().unwrap_or_else(|| panic!("{theme:?}: the name opened")).text = String::new();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let said = crate::i18n::tr("A name can't be empty.");
+        assert_ne!(said, "A name can't be empty.", "{theme:?}: the catalogue has it in German");
+        let refused = h.state().canvas.rename.as_ref().and_then(|r| r.refused.clone());
+        assert_eq!(refused.as_deref(), Some(said.as_str()), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     let (mut h, customer, _diagram) = diagram_harness();
@@ -7312,6 +7360,34 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     drag(&mut h, from, from + egui::vec2(30.0, 0.0));
     assert!(h.state().canvas.toast.is_none(), "the toast went with the move");
     assert!(!ids(&h).iter().any(|i| i == "workspace.toast.undo"));
+}
+
+/// A mapping table refused for its name says why in plain words on the offer, never with the
+/// command's id or the parameter it is about. In light and dark (AR-428).
+#[test]
+fn a_mapping_table_refused_for_its_name_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer, order) = two_tables_harness();
+        h.state_mut().state.theme = theme;
+        let line = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let rel = s.execute(
+                "er.relationship.add",
+                &serde_json::json!({ "from": customer, "to": order, "from_end": "zero-or-more", "to_end": "zero-or-more" }),
+            );
+            rel.unwrap().value["id"].as_str().unwrap().to_string()
+        };
+        let relationship = archforge_mof::Uuid::parse(&line).unwrap();
+        h.state_mut().canvas.mapping = Some(crate::connect::MappingOffer { relationship, name: "Customer".into(), refused: None });
+        h.run();
+        let at = rect_of(&h, "workspace.mapping.add").center();
+        click(&mut h, at);
+        let refused = h.state().canvas.mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert!(
+            refused.starts_with("The schema has an entity named") && !refused.contains("er.") && !refused.contains("name:"),
+            "{theme:?}: {refused}"
+        );
+    }
 }
 
 /// ER's cardinality popover sets a new line's ends, and a many-to-many line offers its mapping table.

@@ -611,7 +611,7 @@ fn set_identifying(shell: &mut Shell, rel: &Rel, on: bool) {
         b.execute("er.relationship.set-identifying", &json!({ "relationship": rel_id, "identifying": on }))?;
         crate::editing::grow_to_fit(b, &[child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Adds an `id` column as the parent's primary key, then the foreign key with its new child
@@ -626,7 +626,7 @@ fn add_id_column(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
         b.execute("er.foreign-key.add", &json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel_id }))?;
         crate::editing::grow_to_fit(b, &[parent, child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Turns the foreign key on: the engine adds one child column per parent key column with the key.
@@ -659,7 +659,7 @@ fn remove_foreign_key(shell: &mut Shell, rel: &Rel) {
         }
         Ok(())
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// One row of a menu: its label, a detail at the right, whether it can be picked, whether it is

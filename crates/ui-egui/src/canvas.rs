@@ -249,9 +249,9 @@ impl Default for State {
     }
 }
 
+/// Runs a command for the canvas; a refusal comes back in plain words ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 fn select(shell: &mut Shell, ids: Vec<Uuid>) {
@@ -2997,7 +2997,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     {
         match session.execute("diagram.arrange", &json!({ "diagram": d.to_string() })) {
             Ok(_) => shell.canvas.fit_pending = true,
-            Err(e) => shell.canvas.notice = Some(e.to_string()),
+            Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
         }
     }
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {

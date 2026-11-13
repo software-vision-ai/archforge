@@ -1756,7 +1756,7 @@ pub(crate) fn write_in_sight(shell: &mut Shell, edit: &MemberEdit, cmd: &str, pa
     {
         return Err(why);
     }
-    session.execute(cmd, &params).map(|o| o.value).map_err(|e| e.to_string())
+    session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(&e))
 }
 
 /// Drops the editor whose class or member is gone.
