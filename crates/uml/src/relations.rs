@@ -45,7 +45,7 @@
 //! association class in UML and another association class would bind its ends to these.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -610,7 +610,8 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
     let supplier = classifier_of(ctx.doc, p, "supplier")?;
     if client == supplier {
-        return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))));
+        let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, client) };
+        return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))).because(why));
     }
     let name = text(p, "name");
     check_name(name)?;
@@ -1039,7 +1040,8 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
         if cl == su {
-            return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))));
+            let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, cl) };
+            return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))).because(why));
         }
         let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;

@@ -560,6 +560,21 @@ str		At most {n} characters.	No máximo {n} caracteres.
 str		Enter a name.	Introduza um nome.
 str		A name has to be one line.	Um nome tem de ocupar uma só linha.
 str		A name can't be empty.	Um nome não pode estar vazio.
+str		There is {what} named {name} already.	Já existe {what} com o nome {name}.
+str		{what} cannot depend on itself.	{what} não pode depender de si.
+str		A package cannot go into itself or a package it holds.	Um pacote não pode ir para dentro de si próprio nem de um pacote que contém.
+str		The model cannot be changed at the moment; nothing was changed.	O modelo não pode ser alterado de momento; nada foi alterado.
+str	refusal	a class	uma classe
+str	refusal	an association class	uma classe de associação
+str	refusal	an interface	uma interface
+str	refusal	an enumeration	uma enumeração
+str	refusal	a data type	um tipo de dados
+str	refusal	a primitive type	um tipo primitivo
+str	refusal	a package	um pacote
+str	refusal	a profile	um perfil
+str	refusal	a stereotype	um estereótipo
+str	refusal	an element	um elemento
+str	refusal	a schema	um esquema
 str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.
 str		Working changes	Alterações em curso
 str		History	Histórico

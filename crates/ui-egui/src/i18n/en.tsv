@@ -559,6 +559,21 @@ str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
 str		A name can't be empty.	A name can't be empty.
+str		There is {what} named {name} already.	There is {what} named {name} already.
+str		{what} cannot depend on itself.	{what} cannot depend on itself.
+str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
+str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
+str	refusal	a class	a class
+str	refusal	an association class	an association class
+str	refusal	an interface	an interface
+str	refusal	an enumeration	an enumeration
+str	refusal	a data type	a data type
+str	refusal	a primitive type	a primitive type
+str	refusal	a package	a package
+str	refusal	a profile	a profile
+str	refusal	a stereotype	a stereotype
+str	refusal	an element	an element
+str	refusal	a schema	a schema
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History

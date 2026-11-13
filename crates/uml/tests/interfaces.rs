@@ -122,10 +122,10 @@ fn an_interface_is_added_renamed_moved_and_removed_each_one_step_its_name_free_a
     assert_eq!(archforge_core::name_of(s.doc(), obj(s.doc(), &payable)), "Billable");
     // A class and an interface share their package's names, whatever the case.
     for (cmd, p, key, why) in [
-        ("uml.interface.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named order already"),
-        ("uml.class.add", json!({ "package": sales, "name": "BILLABLE" }), "name", "there is an interface named BILLABLE already"),
+        ("uml.interface.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named Order already"),
+        ("uml.class.add", json!({ "package": sales, "name": "BILLABLE" }), "name", "there is an interface named Billable already"),
         ("uml.interface.rename", json!({ "interface": payable, "name": "Order" }), "name", "class named Order"),
-        ("uml.class.rename", json!({ "class": order, "name": "billable" }), "name", "interface named billable"),
+        ("uml.class.rename", json!({ "class": order, "name": "billable" }), "name", "interface named Billable"),
         ("uml.interface.add", json!({ "package": sales, "name": "" }), "name", "name"),
         ("uml.interface.add", json!({ "package": order, "name": "X" }), "package", "not a package"),
         ("uml.interface.rename", json!({ "interface": order, "name": "X" }), "interface", "not an interface"),

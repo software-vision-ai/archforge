@@ -560,6 +560,21 @@ str		At most {n} characters.	最多 {n} 个字符。
 str		Enter a name.	请输入名称。
 str		A name has to be one line.	名称必须只有一行。
 str		A name can't be empty.	名称不能为空。
+str		There is {what} named {name} already.	已有名为 {name} 的{what}。
+str		{what} cannot depend on itself.	{what}不能依赖自身。
+str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
+str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
+str	refusal	a class	类
+str	refusal	an association class	关联类
+str	refusal	an interface	接口
+str	refusal	an enumeration	枚举
+str	refusal	a data type	数据类型
+str	refusal	a primitive type	基本类型
+str	refusal	a package	包
+str	refusal	a profile	配置文件
+str	refusal	a stereotype	构造型
+str	refusal	an element	元素
+str	refusal	a schema	架构
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录

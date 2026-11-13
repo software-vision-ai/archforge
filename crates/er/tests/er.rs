@@ -185,6 +185,20 @@ fn refusals_name_their_key_and_change_nothing() {
     let _ = sm.total;
 }
 
+/// A schema name another schema has, whatever the case, carries its reason typed with the other's
+/// name, for an interface to say in its own words; the English sentence stays (AR-429).
+#[test]
+fn a_schema_name_clash_carries_its_reason_typed() {
+    let mut s = session();
+    run(&mut s, "er.schema.add", json!({ "name": "Shop" }));
+    let other = run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    for (cmd, p) in [("er.schema.add", json!({ "name": "SHOP" })), ("er.schema.rename", json!({ "schema": other, "name": "shop" }))] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} is refused") };
+        assert_eq!(error.reason, Some(archforge_engine::Reason::NameTaken { kind: "schema", name: "Shop".into() }), "{cmd}");
+        assert_eq!(error.message, "there is a schema named Shop already", "{cmd}");
+    }
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.
