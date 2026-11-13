@@ -5150,6 +5150,33 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     assert!(!h.state().canvas.tabs.contains(&second));
 }
 
+/// A skill's name refused in its tab says why in plain words, never with the command's id or the
+/// parameter it is about: the name another skill on the same table has. In light and dark (AR-431).
+#[test]
+fn a_skill_name_refused_in_its_tab_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer) = table_harness();
+        h.state_mut().state.theme = theme;
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            s.execute("skill.add", &serde_json::json!({ "subject": customer, "name": "Customer naming" })).unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        }
+        let at = rect_of(&h, "workspace.panels.skills").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.skills.add").center();
+        click(&mut h, at);
+        h.run();
+        h.event(egui::Event::Text("Customer naming".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        let doc = h.state().canvas.skills.iter().find(|d| Some(d.skill) == h.state().canvas.active).unwrap();
+        let refused = doc.settings_refused.clone().unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert_eq!(refused, "A skill named \"Customer naming\" already sits there.", "{theme:?}");
+    }
+}
+
 #[test]
 fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     let (mut h, customer) = table_harness();
