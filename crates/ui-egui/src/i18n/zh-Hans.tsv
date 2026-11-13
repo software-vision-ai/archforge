@@ -1481,6 +1481,8 @@ str		Type a name: a template parameter without one stands for nothing.	请输入
 str		{template} already has a template parameter named {name}. Pick another name.	{template} 已有名为 {name} 的模板参数。请换一个名称。
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} 不适合 {name}：请选择可以作为其实参的默认值。
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} 将 {name} 绑定为 -> {actual}，修改后将不再适合。请先更改或删除该绑定。
+str		A template has at most {max} parameters.	一个模板最多有 {max} 个参数。
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} 绑定了 {template}，但没有为 {name} 提供实参，因此 {name} 需要一个默认值。
 str		template parameter	模板参数
 str		template	模板
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中

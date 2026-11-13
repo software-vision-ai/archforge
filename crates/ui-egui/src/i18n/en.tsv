@@ -1480,6 +1480,8 @@ str		Type a name: a template parameter without one stands for nothing.	Type a na
 str		{template} already has a template parameter named {name}. Pick another name.	{template} already has a template parameter named {name}. Pick another name.
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} does not fit {name}: pick a default its arguments could be.
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.
+str		A template has at most {max} parameters.	A template has at most {max} parameters.
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} binds {template} and gives {name} no argument, so {name} needs a default.
 str		template parameter	template parameter
 str		template	template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram

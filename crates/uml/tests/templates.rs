@@ -916,3 +916,63 @@ fn every_binding_rule_broken_carries_its_reason_typed() {
         assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
     }
 }
+
+/// Every template parameter rule broken carries its reason typed, with the names it is about,
+/// beside the unchanged English: a kind not supported, a constraint and a default of another kind,
+/// a default outside its constraint, a parameter too many, one a binding gives no argument, a kind a binding's argument would not
+/// fit, and a parameter a binding substitutes or a template's last that a binding names (AR-442).
+#[test]
+fn every_template_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Parameter, Reason};
+    let mut s = session();
+    let shop = shop(&mut s);
+    let t = run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T" }));
+    run(&mut s, "uml.template-binding.add", json!({ "bound": shop.order, "template": shop.repository, "arguments": { "T": shop.entity } }));
+    let m = run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.money, "name": "M", "kind": "data-type", "default": shop.status }));
+    let price = run(&mut s, "uml.data-type.add", json!({ "package": shop.shop, "name": "Price" }));
+    run(&mut s, "uml.template-binding.add", json!({ "bound": price, "template": shop.money }));
+    let big = run(&mut s, "uml.class.add", json!({ "package": shop.shop, "name": "Big" }));
+    for i in 0..templates::MAX_PARAMETERS {
+        run(&mut s, "uml.template-parameter.add", json!({ "classifier": big, "name": format!("P{i}") }));
+    }
+    let at = |name: &str, kind, template: &str, bound: &str, argument: &str| {
+        let [name, template, bound, argument] = [name, template, bound, argument].map(String::from);
+        Box::new(Parameter { name, kind, constraint: None, template, bound, argument })
+    };
+    let on = |mut p: Json| {
+        p["classifier"] = json!(shop.repository);
+        p
+    };
+    let (add, set, remove) = ("uml.template-parameter.add", "uml.template-parameter.set", "element.remove");
+    let cases = [
+        (add, on(json!({ "name": "V", "kind": "value" })), Reason::KindNotSupported { kind: "value" }, "not supported yet"),
+        (add, on(json!({ "name": "C", "constraint": shop.money })), Reason::Misfit(at("C", "class", "", "", "")), "constrain it to a class"),
+        (add, on(json!({ "name": "D", "default": shop.status })), Reason::DefaultMisfit(at("D", "", "", "", "Status")), "a default of a class"),
+        (
+            add,
+            on(json!({ "name": "E", "constraint": shop.entity, "default": shop.repository })),
+            Reason::DefaultMisfit(at("E", "", "", "", "Repository")),
+            "neither is Entity",
+        ),
+        (
+            add,
+            json!({ "classifier": big, "name": "Q" }),
+            Reason::TooMany { kind: "template parameter", max: templates::MAX_PARAMETERS },
+            "at most 32",
+        ),
+        (add, on(json!({ "name": "U" })), Reason::NeedsDefault(at("U", "", "Repository", "Order", "")), "needs a default"),
+        (
+            set,
+            json!({ "parameter": t, "kind": "interface" }),
+            Reason::WouldNotFit(at("T", "class", "Repository", "Order", "Entity")),
+            "not an interface",
+        ),
+        (remove, json!({ "ids": [t] }), Reason::ParameterInUse(at("T", "class", "Repository", "Order", "Entity")), "then remove T"),
+        (remove, json!({ "ids": [m] }), Reason::LastParameter(at("M", "data type", "Money", "Price", "")), "its last template parameter"),
+    ];
+    for (cmd, p, reason, english) in cases {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    }
+}

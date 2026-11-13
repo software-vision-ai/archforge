@@ -432,7 +432,7 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
         Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
         Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
-        other => return relationship_said(other),
+        other => return relationship_said(other).or_else(|| template_said(other)),
     };
     let what = a_kind(kind)?;
     // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
@@ -489,6 +489,51 @@ fn relationship_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::WrongEnd { relationship: "association class", .. } => tr("An association class joins only classes"),
         Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Source, .. } => tr("Only a class implements an interface"),
         Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Target, .. } => tr("A class realizes only an interface"),
+        _ => return None,
+    })
+}
+
+/// A template rule broken, in the words the template and binding editors say it with; none for a
+/// reason or a kind the catalogues don't say.
+fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    use archforge_uml::templates::Kind;
+    let kind = |noun: &str| Kind::ALL.into_iter().find(|k| k.noun() == noun);
+    Some(match reason {
+        Reason::KindNotSupported { kind: k } => {
+            fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &crate::uml_templates::kind_word(kind(k)?))])
+        }
+        Reason::TooMany { kind: "template parameter", max } => fmt(&tr("A template has at most {max} parameters."), &[("max", &max.to_string())]),
+        Reason::Misfit(p) => fmt(
+            &match p.kind {
+                "class" => tr("Arguments for {name} must be classes."),
+                "interface" => tr("Arguments for {name} must be interfaces."),
+                "data type" => tr("Arguments for {name} must be data types."),
+                "enumeration" => tr("Arguments for {name} must be enumerations."),
+                "primitive type" => tr("Arguments for {name} must be primitive types."),
+                _ => return None,
+            },
+            &[("name", &p.name)],
+        ),
+        Reason::DefaultMisfit(p) => {
+            fmt(&tr("{default} does not fit {name}: pick a default its arguments could be."), &[("default", &p.argument), ("name", &p.name)])
+        }
+        Reason::NeedsDefault(p) => fmt(
+            &tr("{bound} binds {template} and gives {name} no argument, so {name} needs a default."),
+            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
+        ),
+        Reason::WouldNotFit(p) => fmt(
+            &tr("{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first."),
+            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
+        ),
+        Reason::ParameterInUse(p) => fmt(
+            &tr("{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}."),
+            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
+        ),
+        Reason::LastParameter(p) => fmt(
+            &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
+            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
+        ),
         _ => return None,
     })
 }

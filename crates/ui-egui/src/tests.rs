@@ -4757,6 +4757,64 @@ fn a_binding_rule_broken_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A template parameter rule broken is said in the chosen language in the template editor's words,
+/// never in the engine's English: a kind not supported, a parameter too many, a constraint and a
+/// default of another kind, a parameter a binding gives no argument, a kind a binding's argument
+/// would not fit, and a parameter a binding substitutes or a template's last. In light and dark
+/// (AR-442).
+#[test]
+fn a_template_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, order, entity, big] =
+            ["Repository", "Order", "Entity", "Big"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let status = id("uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+        let [money, price] = ["Money", "Price"].map(|n| id("uml.data-type.add", json!({ "package": sales, "name": n })));
+        let t = id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-binding.add", json!({ "bound": order, "template": repository, "arguments": { "T": entity } }));
+        let m = id("uml.template-parameter.add", json!({ "classifier": money, "name": "M", "kind": "data-type", "default": status }));
+        id("uml.template-binding.add", json!({ "bound": price, "template": money }));
+        for i in 0..archforge_uml::templates::MAX_PARAMETERS {
+            id("uml.template-parameter.add", json!({ "classifier": big, "name": format!("P{i}") }));
+        }
+        let on = |mut p: serde_json::Value| {
+            p["classifier"] = json!(repository);
+            p
+        };
+        let (add, remove) = ("uml.template-parameter.add", "element.remove");
+        let not_yet = fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &tr("Value"))]);
+        let most = fmt(&tr("A template has at most {max} parameters."), &[("max", "32")]);
+        let must = fmt(&tr("Arguments for {name} must be classes."), &[("name", "C")]);
+        let misfit = &tr("{default} does not fit {name}: pick a default its arguments could be.");
+        let gives = &tr("{bound} binds {template} and gives {name} no argument, so {name} needs a default.");
+        let unfit = &tr("{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.");
+        let in_use = &tr("{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.");
+        let last = &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.");
+        let order_t = [("bound", "Order"), ("name", "T"), ("actual", "Entity")];
+        for (cmd, params, said) in [
+            (add, on(json!({ "name": "V", "kind": "value" })), not_yet),
+            (add, json!({ "classifier": big, "name": "Q" }), most),
+            (add, on(json!({ "name": "C", "constraint": money })), must),
+            (add, on(json!({ "name": "D", "default": status })), fmt(misfit, &[("default", "Status"), ("name", "D")])),
+            (add, on(json!({ "name": "U" })), fmt(gives, &[("bound", "Order"), ("template", "Repository"), ("name", "U")])),
+            ("uml.template-parameter.set", json!({ "parameter": t, "kind": "interface" }), fmt(unfit, &order_t)),
+            (remove, json!({ "ids": [t] }), fmt(in_use, &order_t)),
+            (remove, json!({ "ids": [m] }), fmt(last, &[("bound", "Price"), ("template", "Money"), ("name", "M")])),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+        }
+        assert_ne!(tr("A template has at most {max} parameters."), "A template has at most {max} parameters.", "{theme:?}: the language is German");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

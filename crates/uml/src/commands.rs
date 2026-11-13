@@ -775,8 +775,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // last while a binding names its signature (AR-130). A template going too takes its parameters
     // and the bindings to it along, so its own are not asked.
     let params = removed_parameters(store, objs);
-    if let Some(why) = crate::templates::removals_problem(store, &params) {
-        return Err(refuse("ids", why));
+    if let Some(refused) = crate::templates::removals_problem(store, &params) {
+        return Err(refused);
     }
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).

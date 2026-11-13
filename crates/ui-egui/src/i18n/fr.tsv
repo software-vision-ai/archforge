@@ -1481,6 +1481,8 @@ str		Type a name: a template parameter without one stands for nothing.	Saisissez
 str		{template} already has a template parameter named {name}. Pick another name.	{template} a déjà un paramètre de modèle nommé {name}. Choisissez un autre nom.
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} ne convient pas à {name} : choisissez une valeur par défaut qui pourrait être l’un de ses arguments.
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} lie {name} -> {actual}, qui ne conviendrait plus. Modifiez ou supprimez d’abord cette liaison.
+str		A template has at most {max} parameters.	Un modèle a au plus {max} paramètres.
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} lie {template} sans donner d’argument à {name}, donc {name} a besoin d’une valeur par défaut.
 str		template parameter	paramètre de modèle
 str		template	modèle
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · modèle, {n} paramètre · modèle, dans chaque diagramme|{kind} · modèle, {n} paramètres · modèle, dans chaque diagramme
