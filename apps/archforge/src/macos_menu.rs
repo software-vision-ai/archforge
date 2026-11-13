@@ -1,5 +1,5 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File, Edit, Model and Versions, in the design's order. Each item is enabled while its action can
+//! system's Hide), File, Edit, View, Model and Versions, in the design's order. Each item is enabled while its action can
 //! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
 //! and keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -12,8 +12,9 @@ use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
 use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO, VERSIONS_MENU};
-use archforge_ui_egui::i18n::tr;
+use archforge_ui_egui::i18n::{tr, tr_ctx};
 use archforge_ui_egui::model_menu;
+use archforge_ui_egui::view_menu::VIEW_MENU;
 
 /// A run of actions, set apart from the next by a separator.
 type Group = &'static [&'static str];
@@ -75,10 +76,12 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
+    let view = Submenu::new(tr_ctx("menu", "View"), true);
+    append_groups(shell, &view, &VIEW_MENU, &mut items).map_err(err)?;
     let model = Submenu::new(tr("Model"), true);
     let versions = Submenu::new(tr("Versions"), true);
     append_groups(shell, &versions, &VERSIONS_MENU, &mut items).map_err(err)?;
-    menu.append_items(&[&app, &file, &edit, &model, &versions]).map_err(err)?;
+    menu.append_items(&[&app, &file, &edit, &view, &model, &versions]).map_err(err)?;
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
@@ -151,11 +154,15 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, NEW_BRANCH, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, FIND, NEW_BRANCH, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+    use archforge_ui_egui::view_menu::{APPEARANCE, CHAT, DIAGRAMS, MINIMAP, MODELS, PROPERTIES, SKILLS, WHOLE, ZOOM_IN, ZOOM_OUT};
 
     const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
     /// The Versions menu's items, after the rest.
     const VERSION_ITEMS: [&str; 8] = [SAVE_VERSION, VERSIONS, COMPARE, NEW_BRANCH, BRANCHES, OLDER, NEWER, BACK];
+    /// The View menu's items.
+    const VIEW_ITEMS: [&str; 12] =
+        [FIND, ZOOM_IN, ZOOM_OUT, WHOLE, MINIMAP, DIAGRAMS, MODELS, archforge_ui_egui::view_menu::VERSIONS, CHAT, APPEARANCE, PROPERTIES, SKILLS];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -215,8 +222,8 @@ mod tests {
     #[test]
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VERSIONS_MENU[..]].concat().concat();
-        let mut sorted_items = [&ITEMS[..], &VERSION_ITEMS[..]].concat();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VIEW_MENU[..], &VERSIONS_MENU[..]].concat().concat();
+        let mut sorted_items = [&ITEMS[..], &VERSION_ITEMS[..], &VIEW_ITEMS[..]].concat();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
         sorted.sort_unstable();
@@ -235,8 +242,12 @@ mod tests {
             (OLDER, Some("CmdOrCtrl+BracketLeft")),
             (NEWER, Some("CmdOrCtrl+BracketRight")),
             (BACK, Some("CmdOrCtrl+Shift+H")),
+            (FIND, Some("CmdOrCtrl+K")),
             (COMPARE, None),
             (NEW_BRANCH, None),
+            (ZOOM_IN, None),
+            (WHOLE, None),
+            (SKILLS, None),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),
@@ -261,7 +272,7 @@ mod tests {
     /// inside the wake, so an item queued only after it would be missed here, as by its frame.
     #[test]
     fn every_item_wakes_the_window_and_is_waiting_when_it_wakes() {
-        for item in ITEMS.into_iter().chain(VERSION_ITEMS) {
+        for item in ITEMS.into_iter().chain(VERSION_ITEMS).chain(VIEW_ITEMS) {
             let ctx = egui::Context::default();
             let (sender, chosen) = channel();
             let chosen = Mutex::new(chosen);

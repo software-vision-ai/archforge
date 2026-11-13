@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge beenden
 str		File	Ablage
 str		Help	Hilfe
+str	menu	View	Ansicht
 str		Ctrl	Strg
 str		Shift	Umschalt
 str		The project is busy	Das Projekt ist beschäftigt
@@ -12,7 +13,10 @@ str		Show a diagram first	Zeigen Sie zuerst ein Diagramm an
 str		Current work is showing	Die aktuelle Arbeit wird angezeigt
 str		Back to current work first	Kehren Sie zuerst zur aktuellen Arbeit zurück
 str		This project has one branch	Dieses Projekt hat einen Zweig
+str		Leave the text field first	Verlassen Sie zuerst das Textfeld
+str		Already showing	Wird bereits angezeigt
 str		Open…	Öffnen …
+str		Find…	Suchen …
 str		Save	Sichern
 # Generieren
 str		Generate…	Generieren …
@@ -872,6 +876,7 @@ plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden
 str		Show minimap	Minimap einblenden
+str		The minimap is showing	Die Minimap wird angezeigt
 str		Widen the canvas to show the minimap	Verbreitern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
 str		Whole diagram	Ganzes Diagramm
 str		Zoom in	Vergrößern

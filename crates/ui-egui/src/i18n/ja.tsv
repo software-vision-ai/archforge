@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge を終了
 str		File	ファイル
 str		Help	ヘルプ
+str	menu	View	表示
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
@@ -12,7 +13,10 @@ str		Show a diagram first	先に図を表示してください
 str		Current work is showing	現在の作業を表示しています
 str		Back to current work first	先に現在の作業に戻ってください
 str		This project has one branch	このプロジェクトのブランチは 1 つです
+str		Leave the text field first	先にテキスト欄から離れてください
+str		Already showing	すでに表示中です
 str		Open…	開く…
+str		Find…	検索…
 str		Save	保存
 # 生成
 str		Generate…	生成…
@@ -872,6 +876,7 @@ plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示
+str		The minimap is showing	ミニマップは表示中です
 str		Widen the canvas to show the minimap	ミニマップを表示するにはキャンバスを広げてください
 str		Whole diagram	図全体
 str		Zoom in	拡大

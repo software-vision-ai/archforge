@@ -8,7 +8,7 @@ use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
-use crate::{Shell, edit_menu, model_menu};
+use crate::{Shell, edit_menu, model_menu, view_menu};
 
 pub const ABOUT: &str = "app.about";
 pub const SETTINGS: &str = "app.settings";
@@ -18,6 +18,7 @@ pub const SAVE: &str = "file.save";
 pub const NEW: &str = "file.new";
 pub const OPEN: &str = "file.open";
 pub const CLOSE: &str = "file.close";
+pub const FIND: &str = "view.find";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
@@ -115,6 +116,15 @@ pub static ACTIONS: &[Action] = &[
         available: |s| free(s) && s.active.and_then(|i| s.tabs.get(i)).is_some_and(|t| t.closing.is_none()),
         run: Shell::close_project,
         keys: None,
+        search: None,
+    },
+    Action {
+        id: FIND,
+        label: |_| tr("Find…"),
+        // A field with the keyboard keeps the keys: in a skill's text they make a link.
+        available: |s| free(s) && !edit_menu::on_field(s),
+        run: |s| s.home_search.asked = true,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::K }),
         search: None,
     },
     Action {
@@ -243,7 +253,7 @@ pub static ACTIONS: &[Action] = &[
 
 /// The action `id`.
 fn find(id: &str) -> Option<&'static Action> {
-    ACTIONS.iter().chain(model_menu::rows()).find(|a| a.id == id)
+    ACTIONS.iter().chain(model_menu::rows()).chain(view_menu::ROWS).find(|a| a.id == id)
 }
 
 /// The name of the action `id`; empty when the table has none.
@@ -338,10 +348,10 @@ pub(crate) mod tests {
     const APPEARANCE: &str = "home.appearance";
     const VIEW: &str = "home.recent-view";
     const SORT: &str = "home.recent-sort";
-    const ALL: [&str; 12] = [ABOUT, SETTINGS, QUIT, GENERATE, SAVE, NEW, OPEN, CLOSE, PIN, APPEARANCE, VIEW, SORT];
+    const ALL: [&str; 13] = [ABOUT, SETTINGS, QUIT, GENERATE, SAVE, NEW, OPEN, CLOSE, FIND, PIN, APPEARANCE, VIEW, SORT];
     const IN_SEARCH: [&str; 6] = [NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
     /// What a dialog or a question over the window turns off.
-    const BEHIND_A_DIALOG: [&str; 6] = [SETTINGS, GENERATE, SAVE, NEW, OPEN, CLOSE];
+    const BEHIND_A_DIALOG: [&str; 7] = [SETTINGS, GENERATE, SAVE, NEW, OPEN, CLOSE, FIND];
 
     /// A host that counts the saves asked of it; the saves never finish.
     #[derive(Default)]
@@ -484,6 +494,7 @@ pub(crate) mod tests {
             (SETTINGS, shell.settings.is_some()),
             (CLOSE, shell.project.is_none()),
             (OPEN, picks.load(Ordering::SeqCst) == 1),
+            (FIND, shell.home_search.asked),
             (PIN, !shell.state.pinned.is_empty()),
             (APPEARANCE, shell.state.theme != fresh.theme),
             (VIEW, shell.state.recent_view != fresh.recent_view),
@@ -538,6 +549,7 @@ pub(crate) mod tests {
             "New project…",
             "Open…",
             "Close project",
+            "Find…",
             "Pin a folder",
             "Switch to the dark appearance",
             "Show recent projects as a gallery",

@@ -3,6 +3,7 @@
 str		Quit Archforge	Quit Archforge
 str		File	File
 str		Help	Help
+str	menu	View	View
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
@@ -11,7 +12,10 @@ str		Show a diagram first	Show a diagram first
 str		Current work is showing	Current work is showing
 str		Back to current work first	Back to current work first
 str		This project has one branch	This project has one branch
+str		Leave the text field first	Leave the text field first
+str		Already showing	Already showing
 str		Open…	Open…
+str		Find…	Find…
 str		Save	Save
 # Generate
 str		Generate…	Generate…
@@ -871,6 +875,7 @@ plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap
+str		The minimap is showing	The minimap is showing
 str		Widen the canvas to show the minimap	Widen the canvas to show the minimap
 str		Whole diagram	Whole diagram
 str		Zoom in	Zoom in

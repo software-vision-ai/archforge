@@ -108,6 +108,8 @@ pub struct State {
     /// Where diagram unit (0, 0) is, in logical pixels from the canvas's top left.
     pub pan: Vec2,
     pub zoom: f32,
+    /// The canvas's size as last drawn, which the View menu's zooms keep their centre in.
+    pub size: Vec2,
     /// True until the diagram just opened has been fitted into the canvas once.
     pub fit_pending: bool,
     /// A node the next frame brings to the canvas's centre (what the search found).
@@ -213,6 +215,7 @@ impl Default for State {
             tool: Tool::Select,
             pan: Vec2::ZERO,
             zoom: 1.0,
+            size: Vec2::ZERO,
             fit_pending: false,
             centre_on: None,
             reopen_pending: false,
@@ -625,6 +628,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let Some(d) = active_diagram(shell) else {
         return 0.0;
     };
+    shell.canvas.size = r.size();
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas", "canvas", r);
     let bounds = shell.session.as_ref().map(|s| diagram_bounds(s.doc(), d)).unwrap_or_default();
     if shell.canvas.fit_pending {
@@ -2817,7 +2821,7 @@ fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
 
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
 /// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
-fn minimap_shown(shell: &Shell, r: Rect) -> bool {
+pub(crate) fn minimap_shown(shell: &Shell, r: Rect) -> bool {
     let width = layout(crate::kinds::active_kind(shell)).width;
     shell.canvas.minimap_open && r.width() >= 16.0 + width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
 }

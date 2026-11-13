@@ -134,7 +134,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         }
         let strip = Rect::from_min_size(full.min, vec2(full.width(), STRIP));
         let bar = Rect::from_min_size(pos2(full.left(), strip.bottom()), vec2(full.width(), BAR));
-        crate::home_search::shortcut(shell, ui.ctx());
+        crate::home_search::open_if_asked(shell, ui.ctx());
         // The bar first, so the strip's drag area does not cover it; a tab clicked ends the frame.
         if !bar_row(shell, ui, &p, bar) {
             return;

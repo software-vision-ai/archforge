@@ -86,6 +86,7 @@ pub mod version_chip;
 mod version_details;
 mod version_load;
 pub mod versions;
+pub mod view_menu;
 mod viewing;
 pub mod widgets;
 pub mod workspace;

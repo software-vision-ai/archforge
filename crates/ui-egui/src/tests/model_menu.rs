@@ -167,7 +167,7 @@ fn a_chosen_row_makes_its_element_as_the_tool_does() {
         click_menu(&mut h, "strip.menu.row.model.note");
         assert_eq!((h.state().menu_bar.open, h.state().canvas.tool), (Some("model"), Tool::Select), "{theme:?}: off, it stays open");
         let mut h = er(theme);
-        [F10, ArrowRight, ArrowRight, ArrowDown].into_iter().for_each(|key| menu_press(&mut h, key));
+        [F10, ArrowRight, ArrowRight, ArrowRight, ArrowDown].into_iter().for_each(|key| menu_press(&mut h, key));
         assert_eq!(menu_at(&h), (Some("model"), Some("model.relationship")), "{theme:?}");
         menu_press(&mut h, Enter);
         assert_eq!(h.state().canvas.tool, Tool::Connect("relationship"), "{theme:?}");

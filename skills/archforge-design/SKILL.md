@@ -67,7 +67,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
   and Home's search rows share each action's availability. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
-  `Shell::in_window_menu`): the groups of its own table (File, Edit, Model, Versions and Help for now, others join by a
+  `Shell::in_window_menu`): the groups of its own table (File, Edit, View, Model, Versions and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, the rows lower down to a line of text where a
   long menu would leave the window, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
@@ -75,6 +75,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   opens the first menu on its first live row and closes it again (Shift+F10 stays with the row
   menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
   Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
+- The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
+  field has the keyboard, so a skill's text keeps ⌘K for a link), Zoom in, Zoom out and Whole diagram (the
+  minimap's own steps, about the canvas's centre as last drawn), Show minimap (on while folded), then a row
+  per explorer and panel that opens it, off while it already shows. Only Find… is on at Home.
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
   nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group
   stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the

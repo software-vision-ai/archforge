@@ -4,6 +4,7 @@
 str		Quit Archforge	退出 Archforge
 str		File	文件
 str		Help	帮助
+str	menu	View	视图
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	项目正忙
@@ -12,7 +13,10 @@ str		Show a diagram first	请先显示一个图
 str		Current work is showing	正在显示当前工作
 str		Back to current work first	请先返回当前工作
 str		This project has one branch	此项目只有一个分支
+str		Leave the text field first	请先离开文本框
+str		Already showing	已在显示
 str		Open…	打开…
+str		Find…	查找…
 str		Save	存储
 # 生成
 str		Generate…	生成…
@@ -872,6 +876,7 @@ plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
+str		The minimap is showing	缩略图已显示
 str		Widen the canvas to show the minimap	加宽画布以显示小地图
 str		Whole diagram	整个图
 str		Zoom in	放大

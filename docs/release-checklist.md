@@ -69,7 +69,9 @@ About, type into a name field and, with the field still active, press ⌘Z and t
 field active again, press ⌘C, ⌘V and ⌘A. Open a class diagram and look through **Model**, choose
 **Model ▸ Interface** and click the canvas; open an ER diagram and look through **Model** again; go to Home
 and look once more. Open a project with a version and a change since; look through **Versions**,
-choose **Versions ▸ Save version…** and cancel; choose **Older version**, then press ⇧⌘H.
+choose **Versions ▸ Save version…** and cancel; choose **Older version**, then press ⇧⌘H. Look through
+**View**, choose **View ▸ Zoom in**, then **Whole diagram**, then **Skills**; type in a skill's text and press ⌘K;
+click the canvas and press ⌘K.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
@@ -83,7 +85,11 @@ tool, then **Note** and **Link note**, and Interface places an interface where y
 it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
 (⇧⌘H), **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
 current work** (⇧⌘H). While an earlier version shows, History is disabled and Back to current work enabled,
-and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. ⇧⌘S opens Save version and never saves.
+and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. ⇧⌘S opens Save version and never saves. View lists
+**Find…** (⌘K), **Zoom in**, **Zoom out**, **Whole diagram**, **Show minimap** (disabled while the minimap
+shows), **Diagrams**, **Models**, **Versions**, **Chat**, **Appearance**, **Properties** and **Skills**; the
+zoom grows about the canvas's centre, the whole diagram comes into view and the Skills panel opens. In the
+skill's text ⌘K makes a link and opens no search; on the canvas it opens the search.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
 when an item in it is chosen.
