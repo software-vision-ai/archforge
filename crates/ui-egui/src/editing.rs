@@ -161,9 +161,10 @@ pub(crate) fn only_looks(action: &Action) -> bool {
     matches!(action, Action::Nothing | Action::Select(_) | Action::Toggle(_) | Action::Start(Gesture::Marquee { .. }, _) | Action::Commit)
 }
 
+/// Runs a canvas command on the open project's session; a refusal comes back in Properties' plain
+/// words ([`crate::panels::refusal`]), never with the command's id.
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 fn select(shell: &mut Shell, ids: Vec<Uuid>) {
@@ -834,7 +835,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 Ok(())
             });
             if let Err(e) = out {
-                shell.canvas.notice = Some(e.to_string());
+                shell.canvas.notice = Some(crate::panels::refusal(&e));
             }
         }
         Gesture::EndText { edge, end, from, centre, anchor } => {
@@ -854,7 +855,7 @@ fn commit(shell: &mut Shell, view: View, d: Obj, pointer: Option<Pos2>, shift: b
                 Ok(())
             });
             if let Err(e) = out {
-                shell.canvas.notice = Some(e.to_string());
+                shell.canvas.notice = Some(crate::panels::refusal(&e));
             }
         }
         Gesture::Segment { edge, index, route, from } => {
@@ -1124,7 +1125,7 @@ pub(crate) fn place_entity(shell: &mut Shell, d: Obj, x: f64, y: f64) {
             }
             shell.canvas.tool = Tool::Select;
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -1190,7 +1191,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
                 shell.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -1271,7 +1272,7 @@ pub(crate) fn place_with_lines(
     });
     match out {
         Some(Ok(_)) => select(shell, vec![entity]),
-        Some(Err(e)) => shell.canvas.notice = Some(e.to_string()),
+        Some(Err(e)) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
         None => {}
     }
 }
@@ -1300,7 +1301,7 @@ pub fn add_entity(shell: &mut Shell, schema: Uuid, name: &str) -> Result<Uuid, S
     let session = shell.session.as_mut().ok_or_else(|| tr("The model could not be opened"))?;
     let add = json!({ "schema": schema.to_string(), "name": name });
     let entity = match placed {
-        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| e.to_string())?,
+        None => session.execute("er.entity.add", &add).map(|o| o.value).map_err(|e| crate::panels::refusal(&e))?,
         Some((diagram, x, y)) => {
             let out = session
                 .batch(&tr("Add table"), |b| {
@@ -1312,7 +1313,7 @@ pub fn add_entity(shell: &mut Shell, schema: Uuid, name: &str) -> Result<Uuid, S
                     )?;
                     Ok(())
                 })
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| crate::panels::refusal(&e))?;
             out.value.get(0).cloned().unwrap_or(serde_json::Value::Null)
         }
     };
@@ -1339,7 +1340,7 @@ pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json
         })
         .collect();
     if grow.is_empty() {
-        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| e.to_string());
+        return session.execute(cmd, &params).map(|o| o.value).map_err(|e| crate::panels::refusal(&e));
     }
     session
         .batch(label, |b| {
@@ -1350,7 +1351,7 @@ pub fn run_growing(shell: &mut Shell, label: &str, cmd: &str, params: serde_json
             Ok(())
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| e.to_string())
+        .map_err(|e| crate::panels::refusal(&e))
 }
 
 /// Grows every table box of the model read that is too short for its columns, before the project's
@@ -1431,7 +1432,7 @@ pub(crate) fn run_fitting(
             grow_to_fit(b, entities)
         })
         .map(|o| o.value.get(0).cloned().unwrap_or(serde_json::Value::Null))
-        .map_err(|e| e.to_string())
+        .map_err(|e| crate::panels::refusal(&e))
 }
 
 fn open_rename(shell: &mut Shell, node: Uuid, entity: Uuid) {
@@ -1882,7 +1883,7 @@ fn arrange_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, view: Vie
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 
@@ -2249,7 +2250,7 @@ fn remove_lines_here(shell: &mut Shell, d: Obj) {
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 

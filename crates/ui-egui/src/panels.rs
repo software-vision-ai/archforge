@@ -2188,7 +2188,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                 json!({ "attribute": id, "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
             ));
             if steps.len() == 1 {
-                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| e.to_string())
+                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| refusal(&e))
             } else {
                 session
                     .batch(&tr("Edit column"), |b| {
@@ -2198,7 +2198,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                         Ok(())
                     })
                     .map(|_| ())
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| refusal(&e))
             }
         }
     };

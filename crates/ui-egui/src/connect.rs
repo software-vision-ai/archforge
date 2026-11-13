@@ -86,9 +86,10 @@ pub struct Toast {
     pub undo_label: Option<String>,
 }
 
+/// Runs a command for a line being drawn or offered; a refusal comes back in plain words
+/// ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 pub(crate) fn cardinality_word(c: Cardinality) -> &'static str {
@@ -331,7 +332,7 @@ pub fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid) {
                 shell.canvas.notice = Some(tr("Identifying needs the parent's primary key; drawn as not identifying"));
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -465,8 +466,9 @@ pub fn remove_selected_relationship(shell: &mut Shell) -> bool {
     }
     ids.push(id.to_string());
     let Some(session) = shell.session.as_mut() else { return false };
-    let removed =
-        session.batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ())).map_err(|e| e.to_string());
+    let removed = session
+        .batch(&tr("Remove relationship"), |b| b.execute("element.remove", &json!({ "ids": ids })).map(|_| ()))
+        .map_err(|e| crate::panels::refusal(&e));
     match removed {
         Ok(_) => {
             let text = if name.is_empty() { tr("Relationship removed") } else { fmt(&tr("{name} removed"), &[("name", &name)]) };
@@ -509,7 +511,7 @@ pub fn remove_selected_line(shell: &mut Shell) -> bool {
     let gone = crate::uml_sets::emptied_names(store, &[element]);
     let said = crate::uml_constraints::before_removal(shell, &[id.to_string()]);
     let Some(session) = shell.session.as_mut() else { return false };
-    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| e.to_string());
+    let removed = session.execute("element.remove", &json!({ "ids": [id.to_string()] })).map_err(|e| crate::panels::refusal(&e));
     match removed {
         Ok(_) => {
             let text = crate::uml_sets::removed_text(&word, &gone);
