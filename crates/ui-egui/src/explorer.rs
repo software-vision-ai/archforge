@@ -822,7 +822,8 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
 }
 
 /// The name typed in place: a bordered field with the text selected when the element is new;
-/// Enter commits, Escape closes, a refusal stays under it in the engine's words.
+/// Enter commits, Escape closes, a refusal stays under it in the engine's words and the field keeps
+/// the keyboard (AR-426).
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(field, 5.0, p.surface);
@@ -844,7 +845,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let _ = (*out.response).clone().accessible_name(tr("Name"));
     if r.opened {
         // The first frame takes the keyboard once; a new element's default name is selected whole,
-        // so typing replaces it. Nothing asks for the keyboard again: a click elsewhere commits.
+        // so typing replaces it. Only a refused Enter asks for the keyboard again: a click
+        // elsewhere commits and leaves it where it went.
         out.response.request_focus();
         if fresh {
             let range = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(r.text.chars().count()));
@@ -866,6 +868,11 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         shell.explorer.rename = None;
     } else if enter || out.response.lost_focus() {
         commit_rename(shell);
+        // The one-line field let go of the keyboard on Enter; refused, it takes it back with the
+        // name as typed, so the name can be corrected or Escape can close it without a click.
+        if enter && shell.explorer.rename.is_some() {
+            out.response.request_focus();
+        }
     }
 }
 
