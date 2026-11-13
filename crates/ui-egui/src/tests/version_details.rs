@@ -2014,6 +2014,164 @@ fn an_edit_under_way_holds_the_comparison() {
     });
 }
 
+const COMPARE_LOADING: &str = "workspace.version-compare.loading";
+
+/// The page says how many differences there are and by area, and lists them in groups as cards;
+/// bars stand in until the first answer, and the band stays over all of it.
+#[test]
+fn the_differences_are_counted_and_grouped() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !painted(h).iter().any(|t| t.ends_with("differences")), "{:?}", painted(h));
+        let the_panels = painted_times(h, "MODEL ELEMENTS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        h.run_steps(1);
+        assert!(painted_has(h, "1 difference") && painted_has(h, "1 model element") && painted_times(h, "MODEL ELEMENTS") == the_panels + 1);
+        assert!(!painted_has(h, "DIAGRAMS") && !has_id(h, COMPARE_LOADING) && has_id(h, SWAP), "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label_contains(", Added").count(), 2, "the list's row and the page's card");
+    });
+}
+
+/// A list of other sides starts at its top.
+#[test]
+fn a_new_pair_lists_from_the_top() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.state_mut().versions.compare_results.scroll.offset = 40.0;
+        h.run_steps(1);
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 40.0, "a list longer than the page");
+        tap(h, SWAP);
+        frames_until(h, |h| matches!(found(h), Some(Ok(items)) if items[0].1 == ChangeKind::Removed));
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 0.0);
+    });
+}
+
+/// With no control and not the explorer holding the keys, they scroll the list: the arrows by a
+/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them.
+#[test]
+fn the_keys_scroll_the_list() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.run_steps(1);
+        let offset = |h: &Harness<'static, Shell>| h.state().versions.compare_results.scroll.offset;
+        let first = ids(h).into_iter().find(|i| i.starts_with("workspace.version-compare.change.")).unwrap();
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 56.0, "a card down");
+        key(h, ArrowUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "and back");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert!(offset(h) > 56.0, "more than a card: {}", offset(h));
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a page up");
+        key(h, End, egui::Modifiers::NONE);
+        let end = offset(h);
+        h.run_steps(1);
+        assert!(end > 0.0 && end < 15.0 * 56.0 && !has_id(h, &first), "the last cards show: {end}");
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), end, "nothing further");
+        key(h, Home, egui::Modifiers::NONE);
+        h.run_steps(1);
+        assert!(offset(h) == 0.0 && has_id(h, &first));
+        h.state_mut().explorer.focused = true;
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(SWAP)));
+        h.run();
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a control has the keys");
+    });
+}
+
+/// A failure is said with Retry, and no count; Retry reads again.
+#[test]
+fn a_failed_comparison_on_the_page_is_said_and_retried() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.failed"));
+        assert!(!painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, "workspace.version-compare.failed"));
+    });
+}
+
+/// Current work whose rows cannot be built is a failure on the page too: said, why on hover, no
+/// count, and Retry compares again.
+#[test]
+fn rows_that_cannot_be_built_are_said_on_the_page() {
+    const FAILED: &str = "workspace.version-compare.failed";
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        frames_until(h, |h| has_id(h, FAILED));
+        assert!(painted_has(h, "The changes couldn't be compared.") && !painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, FAILED).center()));
+        h.run_steps(4);
+        assert!(painted(h).iter().any(|t| t.contains("too large to store")), "{:?}", painted(h));
+        // An edit under way holds the comparison Retry asks for, so the bars show until it ends.
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        tap(h, "workspace.version-compare.retry");
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, FAILED));
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        frames_until(h, |h| has_id(h, FAILED));
+    });
+}
+
+/// Skills are a group of their own, after model elements, and counted as skills.
+#[test]
+fn skills_are_listed_on_their_own() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        frames_until(h, |h| h.state().versions.changes.iter().any(|d| d.area == Area::Skill));
+        let the_panels = painted_times(h, "SKILLS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+        h.run_steps(1);
+        assert!(painted_has(h, "2 differences") && painted_has(h, "1 model element · 1 skill"), "{:?}", painted(h));
+        assert_eq!(painted_times(h, "SKILLS"), the_panels + 1, "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label("Naming, Skills, Added").count(), 2, "the list's row and the page's card");
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let top = |d: &Difference| rect_of(h, &format!("workspace.version-compare.change.{}.{}", d.id, d.class.0)).top();
+        assert_eq!(items.iter().map(|d| d.area).collect::<Vec<_>>(), [Area::Model, Area::Skill]);
+        assert!(top(&items[0]) < top(&items[1]), "the skill's card under the model element's");
+    });
+}
+
+/// Nothing to list is said in words, and two saved versions are not compared yet.
+#[test]
+fn an_empty_result_and_two_versions_are_said() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Ok(rows_now(h)));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+        assert!(painted_has(h, "This version is the same as your current work.") && !painted_has(h, "0 differences"), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(2));
+        h.run_steps(1);
+        assert!(painted_has(h, "Not available yet") && asked(host).is_empty(), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(0));
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(0));
+        h.run_steps(1);
+        assert!(painted_has(h, "Both sides are your current work."), "{:?}", painted(h));
+    });
+}
+
 /// A side of `name`, a schema.
 fn schema(name: &str) -> Option<ElementCard> {
     Some(ElementCard { class: archforge_er::SCHEMA, name: Some(name.into()), made: false })

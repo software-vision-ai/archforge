@@ -455,6 +455,8 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	このリクエストの送信後に表示中のプロジェクトが変わったため、実行しませんでした。現在の表示を確認して、もう一度送信してください。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
+str		Both sides are your current work.	両側とも現在の作業です。
+str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…
 str		Restore this version?	このバージョンを復元しますか？
 str		The version of {what}	{what} のバージョン
@@ -571,6 +573,7 @@ str		{what} changed.	{what}が変更されました。
 str		These changes become a new version of {name}.	これらの変更は{name}の新しいバージョンになります。
 str		The model changed while this was open. The summary is up to date again.	開いている間にモデルが変更されました。概要は最新の状態に戻りました。
 str		One line, at most 200 characters. It stays in the history.	1行、200文字以内。履歴に残ります。
+plural		{n} difference	{n} 件の相違
 plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
 str		Filter versions…	バージョンを絞り込む…

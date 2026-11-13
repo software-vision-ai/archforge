@@ -1,7 +1,7 @@
 //! The Compare page in the centre, in place of a version's details (frames V3.1 and V3.2 of page 09
 //! of the design and section 6 of `docs/design/versioning.md`): Before and After in a band, in the
 //! direction Swap reverses. Each select opens a list of the versions already read, under the band;
-//! [`results`] finds what a version and current work differ by; nothing is drawn under the band yet.
+//! under it [`results`] says what a version and current work differ by. AR-280 compares two versions.
 
 use egui::accesskit::Role;
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
@@ -81,7 +81,7 @@ pub(super) fn open(shell: &mut Shell) {
 
 /// Draws the page in the centre `r`: the way back, the band and what was said since it opened, as
 /// this covers the canvas that says it. The details go with the page, so whatever ends them ends it.
-pub(super) fn draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let Some(pair) = shell.versions.details.as_ref().and_then(|d| d.compare.clone()) else { return };
     if breadcrumb(shell, ui, p, r, "workspace.version-compare.close", &tr("Compare")).0 {
         shell.versions.details = None;
@@ -120,7 +120,8 @@ pub(super) fn draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         let shown = ux::text_mid(&paint, right - width(&direction), mid, &direction, types::SMALL, p.text_muted, None);
         let _ = control(shell, ui, "workspace.version-compare.direction", "status", shown, false).accessible_name(&direction);
     }
-    crate::canvas::notice(shell, ui, p, pos2(left, band.bottom() + 6.0), (right - left).max(0.0));
+    let said = crate::canvas::notice(shell, ui, p, pos2(left, band.bottom() + 6.0), (right - left).max(0.0));
+    results::draw(shell, ui, p, Rect::from_min_max(pos2(r.left(), band.bottom() + 22.0 + (said - types::CAPTION.line).max(0.0)), r.max));
     if let Some(d) = dropdown_of(shell).cloned() {
         let (field, held) = if d.after { (second, &pair.after) } else { (first, &pair.before) };
         list(shell, ui, p, field, held, d);

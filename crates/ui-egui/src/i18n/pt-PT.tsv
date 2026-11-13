@@ -455,6 +455,8 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	O projeto apresentado mudou depois de este pedido ser enviado, por isso não foi executado. Veja o que está apresentado agora e envie-o novamente.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	O projeto está retido enquanto é substituído, por isso este pedido não foi executado. Tente novamente quando terminar.
 str		This version is the same as your current work.	Esta versão é igual ao seu trabalho atual.
+str		Both sides are your current work.	Os dois lados são o seu trabalho atual.
+str		Choose another pair above.	Escolha outro par acima.
 str		Restore this version…	Restaurar esta versão…
 str		Restore this version?	Restaurar esta versão?
 str		The version of {what}	A versão de {what}
@@ -571,6 +573,7 @@ str		{what} changed.	{what} alterado(s).
 str		These changes become a new version of {name}.	Estas alterações passam a ser uma nova versão de {name}.
 str		The model changed while this was open. The summary is up to date again.	O modelo mudou enquanto isto estava aberto. O resumo está novamente atualizado.
 str		One line, at most 200 characters. It stays in the history.	Uma linha, no máximo 200 caracteres. Fica no histórico.
+plural		{n} difference	{n} diferença|{n} diferenças
 plural		{n} model element	{n} elemento do modelo|{n} elementos do modelo
 str		Filter changes…	Filtrar alterações…
 str		Filter versions…	Filtrar versões…

@@ -402,6 +402,50 @@ fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
     assert_eq!(h.state().tabs.len(), 1, "still open");
 }
 
+/// The rows of History, top first.
+fn version_rows(s: &Shell) -> Vec<String> {
+    let mut rows: Vec<_> = s.widgets().iter().filter(|w| w.id.starts_with("workspace.versions.row.") && w.id.matches('.').count() == 3).collect();
+    rows.sort_by(|a, b| a.rect[1].total_cmp(&b.rect[1]));
+    rows.into_iter().map(|w| w.id.clone()).collect()
+}
+
+/// Opens the details of the version `row` and Compare… there, and waits for what it finds: the
+/// cards of the differences.
+fn compared(h: &mut H, row: &str) -> usize {
+    wait(h, "the version listed", |h| h.state().widgets().iter().any(|w| w.id == row));
+    click_on(h, row);
+    wait(h, "the details", |h| h.state().widgets().iter().any(|w| w.id == "workspace.version-details.compare"));
+    click_on(h, "workspace.version-details.compare");
+    wait(h, "the differences counted", |h| h.state().widgets().iter().any(|w| w.id == "workspace.version-compare.count"));
+    h.state().widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count()
+}
+
+/// A user saves two versions, then compares the older with current work, an unsaved change on top,
+/// first from current work and then while the newer version is shown: the work set aside is what
+/// it is compared with, not the version in view.
+#[test]
+fn a_user_compares_a_version_with_current_work_also_while_another_is_shown() {
+    let (mut h, _sandbox) = start("compare");
+    new_project(&mut h, "Shop");
+    for schema in ["sales", "billing", "returns"] {
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
+        h.run();
+        if schema != "returns" {
+            key(&mut h, egui::Key::S, egui::Modifiers::COMMAND);
+            wait(&mut h, "the version saved", |h| !h.state().is_saving() && h.state().session.as_ref().is_some_and(|x| !x.is_dirty()));
+        }
+    }
+    click_on(&mut h, "workspace.explorers.source-control");
+    wait(&mut h, "both versions listed", |h| version_rows(h.state()).len() == 2);
+    let [newer, older] = <[String; 2]>::try_from(version_rows(h.state())).unwrap();
+    assert_eq!(compared(&mut h, &older), 2, "billing and returns");
+    click_on(&mut h, "workspace.version-compare.close");
+    click_on(&mut h, &newer);
+    click_on(&mut h, "workspace.version-details.view");
+    wait(&mut h, "the newer version shown", |h| h.state().viewing().is_some());
+    assert_eq!(compared(&mut h, &older), 2, "against the version in view, only billing");
+}
+
 /// The place of a built-in type in the type menu of a project with no types of its own: None
 /// first, then the built-in types in their order.
 fn archforge_ui_egui_type_index(_h: &H, label: &str) -> usize {
