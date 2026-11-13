@@ -9,8 +9,9 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use archforge_mof::Frozen;
+use archforge_mof::compare::CompareError;
 use archforge_mof::rows::Rows;
-use archforge_notations::differences::{Area, Difference, classified};
+use archforge_notations::differences::{Area, ClassifyError, Difference, classified};
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
 
 use super::Side;
@@ -20,7 +21,7 @@ use crate::settings::{Look, button, control};
 use crate::ux::{self, Palette, types};
 use crate::version_details::{Found, MARGIN, about, not_compared, scroll_keys};
 use crate::version_load::{MOST_KEPT_BYTES, bytes_of};
-use crate::{Shell, VersionRead};
+use crate::{Shell, VersionRead, VersionReadError};
 
 /// A difference's card, the distance between cards, and what a group adds to its cards: its heading
 /// and the room under it.
@@ -56,11 +57,41 @@ pub(crate) struct Held {
 }
 
 /// Which step gave what is found: differences always come from a comparison, a failure from either.
+/// A version that cannot be shown, a version or comparison past its budget and a comparison the
+/// person stopped each say so in their own words.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Origin {
     Read,
     Comparison,
+    Unavailable,
+    TooLarge,
+    Stopped,
 }
+
+impl Origin {
+    /// Whether what it found stays for its sides, whatever current work's revision, until Retry or
+    /// another pair: a read again, or a comparison started again, would only say the same, spend
+    /// the budget again or undo the person's stop. Only a failed comparison gives way to an edit.
+    fn settled(self) -> bool {
+        matches!(self, Origin::Read | Origin::Unavailable | Origin::TooLarge | Origin::Stopped)
+    }
+}
+
+/// Why a comparison has no differences to give, and which kind of failure that is.
+pub(crate) struct Failure {
+    pub(crate) why: String,
+    pub(crate) origin: Origin,
+}
+
+impl From<String> for Failure {
+    /// Words alone are a comparison that failed, which Retry may mend.
+    fn from(why: String) -> Self {
+        Self { why, origin: Origin::Comparison }
+    }
+}
+
+/// What a comparison's thread answers.
+pub(crate) type Answer = Result<Arc<Vec<Difference>>, Failure>;
 
 /// The page's one read and one comparison, and what the last of them found, with which one it was.
 /// The read, of a version in a project and session, is never let go before it answers: a host read
@@ -71,7 +102,7 @@ pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
     pub(crate) held: Vec<Held>,
     pub(crate) reading: Option<((PathBuf, u64), String, Receiver<VersionRead>)>,
-    pub(crate) comparing: Option<(Key, Receiver<Found>)>,
+    pub(crate) comparing: Option<(Key, Receiver<Answer>)>,
     pub(crate) found: Option<(Key, Found, Origin)>,
     /// How far the list has scrolled; a list of other sides starts at its top.
     pub(crate) scroll: TreeScroll,
@@ -156,18 +187,30 @@ fn take_answers(shell: &mut Shell) {
                 let kept = r.held.iter().filter(|h| h.keep).map(|h| bytes_of(&h.rows)).fold(bytes_of(&rows), usize::saturating_add);
                 r.held.push(Held { version, keep: kept <= MOST_KEPT_BYTES, rows });
             }
-            Err(why) => r.found = revision_of(&sides, work).map(|revision| (Key { sides, revision }, Err(why.to_string()), Origin::Read)),
+            Err(why) => {
+                // Asking again cannot make a version of another branch, a newer Archforge or past the read budget readable.
+                let origin = match why {
+                    VersionReadError::Failed(_) => Origin::Read,
+                    VersionReadError::TooLarge => Origin::TooLarge,
+                    VersionReadError::Unavailable | VersionReadError::Shape => Origin::Unavailable,
+                };
+                r.found = revision_of(&sides, work).map(|revision| (Key { sides, revision }, Err(why.to_string()), origin));
+            }
         }
     }
     if let Some(answer) = r.comparing.as_ref().and_then(|(_, rx)| answered(rx))
         && let Some((key, _)) = r.comparing.take()
         && now.as_ref() == Some(&key.sides)
+        && !r.found.as_ref().is_some_and(|(shown, _, origin)| shown.sides == key.sides && *origin == Origin::Stopped)
         && (answer.is_ok() || revision_of(&key.sides, work) == Some(key.revision))
     {
         if r.found.as_ref().is_none_or(|(shown, ..)| shown.sides != key.sides) {
             r.scroll = TreeScroll::default();
         }
-        r.found = Some((key, answer, Origin::Comparison));
+        r.found = Some(match answer {
+            Ok(items) => (key, Ok(items), Origin::Comparison),
+            Err(Failure { why, origin }) => (key, Err(why), origin),
+        });
     }
 }
 
@@ -176,14 +219,14 @@ fn take_answers(shell: &mut Shell) {
 /// an edit is under way. What is shown for these sides is known at its own revision, whatever it is.
 /// At a later one, differences and a failed comparison give way: the rows held are compared again,
 /// or, if they went as too large, read again first, Before first. Two versions never move, so what
-/// is known of them stays. A failed read stays known until Retry clears it, or each edit would ask
-/// the host for the version again.
+/// is known of them stays. A failed read, a version that cannot be shown and a comparison stopped stay
+/// known until Retry clears them, or each edit would ask the host for the version again.
 fn next(shell: &mut Shell, sides: Sides) {
     let work = shell.current_work().filter(|s| !s.interacting()).map(|s| s.revision());
     let Some(revision) = revision_of(&sides, work) else { return };
     let key = Key { sides, revision };
     let r = &shell.versions.compare_results;
-    let known = r.found.as_ref().is_some_and(|(shown, _, origin)| *shown == key || (shown.sides == key.sides && *origin == Origin::Read));
+    let known = r.found.as_ref().is_some_and(|(shown, _, origin)| *shown == key || (shown.sides == key.sides && origin.settled()));
     if known || r.comparing.is_some() {
         return;
     }
@@ -225,19 +268,19 @@ enum Got {
 }
 
 /// Compares `before` with `after` on a thread of its own, building current work's rows there; rows
-/// that cannot be built fail the comparison with their reason. The model's root is no change of
-/// its own.
-fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Found>> {
+/// that cannot be built fail the comparison with their reason, and one past the comparison's budget
+/// is too large, with no partial list. The model's root is no change of its own.
+fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Answer>> {
     let (tx, rx) = channel();
     let (tables, junctions) = archforge_notations::storage();
     let work = move || {
         let rows = |side| match side {
             Got::Rows(rows) => Ok(rows),
-            Got::Live(live) => live.rows(&tables, &junctions).map(Arc::new).map_err(|e| e.to_string()),
+            Got::Live(live) => live.rows(&tables, &junctions).map(Arc::new).map_err(|e| Failure::from(e.to_string())),
         };
         let found = rows(before)
             .and_then(|before| Ok((before, rows(after)?)))
-            .and_then(|(before, after)| classified(&before, &after, crate::editing::fit_tables).map_err(|e| e.to_string()));
+            .and_then(|(before, after)| classified(&before, &after, crate::editing::fit_tables).map_err(failure));
         // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
@@ -248,6 +291,12 @@ fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Found>> {
     std::thread::Builder::new().name("archforge-version-compare".into()).spawn(work).map(|_| rx)
 }
 
+/// What a comparison that could not classify says: too large past its budget, a failure otherwise.
+pub(crate) fn failure(e: ClassifyError) -> Failure {
+    let origin = if matches!(e, ClassifyError::Compare(CompareError::TooLarge { .. })) { Origin::TooLarge } else { Origin::Comparison };
+    Failure { why: e.to_string(), origin }
+}
+
 /// Draws what the pair compares in `r`: the differences, or bars, or why there are none to list. A
 /// failure is said before any count, so it never reads as no differences.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
@@ -256,15 +305,18 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         let head = if pair.before == Side::CurrentWork { tr("Both sides are your current work.") } else { tr("These two versions are the same.") };
         return say(shell, ui, p, r, &head, &tr("Choose another pair above."));
     };
-    let found = shell.versions.compare_results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, _)| found.clone());
+    let found = shell.versions.compare_results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, origin)| (found.clone(), *origin));
     match found {
-        None => loading(shell, ui, p, r),
-        Some(Err(why)) => failed(shell, ui, p, r, &why),
-        Some(Ok(items)) if items.is_empty() => {
+        None => loading(shell, ui, p, r, now),
+        Some((Err(why), Origin::Unavailable)) => say(shell, ui, p, r, &tr("This version can't be shown"), &why),
+        Some((Err(_), Origin::TooLarge)) => say(shell, ui, p, r, &tr("Too large to compare"), &tr("Choose another pair above.")),
+        Some((Err(why), Origin::Stopped)) => failed(shell, ui, p, r, (&tr("The comparison was stopped."), &why)),
+        Some((Err(why), _)) => failed(shell, ui, p, r, (&not_compared(), &why)),
+        Some((Ok(items), _)) if items.is_empty() => {
             let head = if two_versions(&now) { tr("These two versions are the same.") } else { tr("This version is the same as your current work.") };
             say(shell, ui, p, r, &head, &tr("Choose another pair above."))
         }
-        Some(Ok(items)) => list(shell, ui, p, r, &items),
+        Some((Ok(items), _)) => list(shell, ui, p, r, &items),
     }
 }
 
@@ -286,22 +338,34 @@ fn say(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, head: &str, body:
     let _ = control(shell, ui, "workspace.version-compare.said", "status", card, false).accessible_name(format!("{head} {body}").trim_end());
 }
 
-/// Bars in place of the cards while the comparison is under way.
-fn loading(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+/// Bars in place of the cards while the comparison of `sides` is under way, and Stop under them.
+fn loading(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, sides: Sides) {
     let (left, width) = column(r);
     let area = Rect::from_min_size(pos2(left, r.top()), vec2(width, SKELETON_CARDS as f32 * PITCH));
     let _ = control(shell, ui, "workspace.version-compare.loading", "status", area, false).accessible_name(tr("Loading"));
     for i in 0..SKELETON_CARDS {
         ui.painter().rect_filled(Rect::from_min_size(pos2(left, r.top() + i as f32 * PITCH), vec2(width, CARD)), 8.0, p.border);
     }
+    if button(shell, ui, p, "workspace.version-compare.stop", pos2(left, area.bottom() + 2.0), &tr("Stop"), Look::Secondary, true, None).1.clicked() {
+        stop(shell, sides);
+    }
 }
 
-/// That the pair could not be compared, why on hover, and Retry.
-fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, why: &str) {
+/// Stops comparing `sides`: the page says it stopped until Retry. A comparison under way, whose work
+/// its budget bounds, runs on with its answer dropped, so none other starts before it ends; one
+/// still running at Retry lands then. A read under way cannot be called back, so its rows are held.
+fn stop(shell: &mut Shell, sides: Sides) {
+    let Some(revision) = revision_of(&sides, shell.current_work().map(|s| s.revision())) else { return };
+    shell.versions.compare_results.found = Some((Key { sides, revision }, Err(String::new()), Origin::Stopped));
+}
+
+/// That the pair was not compared, in `words`, why on hover when there is a why, and Retry.
+fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (words, why): (&str, &str)) {
     let (left, width) = column(r);
-    let (words, at) = (not_compared(), Rect::from_min_size(pos2(left, r.top()), vec2((width - 80.0).max(0.0), 28.0)));
-    let _ = control(shell, ui, "workspace.version-compare.failed", "status", at, false).on_hover_text(why).accessible_name(&words);
-    ux::text_mid(ui.painter(), left, at.center().y, &words, types::SMALL, p.danger, Some(at.width()));
+    let at = Rect::from_min_size(pos2(left, r.top()), vec2((width - 80.0).max(0.0), 28.0));
+    let said = control(shell, ui, "workspace.version-compare.failed", "status", at, false);
+    let _ = if why.is_empty() { said } else { said.on_hover_text(why) }.accessible_name(words);
+    ux::text_mid(ui.painter(), left, at.center().y, words, types::SMALL, p.danger, Some(at.width()));
     if button(shell, ui, p, "workspace.version-compare.retry", pos2(at.right() + 8.0, r.top()), &tr("Retry"), Look::Secondary, true, None).1.clicked()
     {
         shell.versions.compare_results.found = None;

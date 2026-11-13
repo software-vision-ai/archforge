@@ -456,6 +456,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		This version is the same as your current work.	此版本与您当前的工作相同。
 str		These two versions are the same.	这两个版本相同。
+str		Too large to compare	太大，无法比较
+str		The comparison was stopped.	比较已停止。
 str		Both sides are your current work.	两侧都是您当前的工作。
 str		Choose another pair above.	请在上方选择另一组。
 str		Restore this version…	恢复此版本…
@@ -676,6 +678,7 @@ str		This version couldn't be read.	无法读取此版本。
 str		{from} can't be shown. Skipped to {to}.	无法显示 {from}。已跳到 {to}。
 str		It isn't a version of this branch.	这不是此分支的版本。
 str		Made with a newer Archforge.	由更新版本的 Archforge 创建。
+str		Its model is larger than Archforge reads.	其模型超出了 Archforge 可读取的大小。
 str		Why?	原因
 str		Date not known	日期未知
 plural		Versions · {n} change	版本 · {n} 处更改

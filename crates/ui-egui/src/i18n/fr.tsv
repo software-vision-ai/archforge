@@ -456,6 +456,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Le projet est figé pendant son remplacement ; cette requête n'a donc pas été exécutée. Réessayez une fois l'opération terminée.
 str		This version is the same as your current work.	Cette version est identique à votre travail en cours.
 str		These two versions are the same.	Ces deux versions sont identiques.
+str		Too large to compare	Trop volumineux pour être comparé
+str		The comparison was stopped.	La comparaison a été arrêtée.
 str		Both sides are your current work.	Les deux côtés sont votre travail en cours.
 str		Choose another pair above.	Choisissez une autre paire ci-dessus.
 str		Restore this version…	Restaurer cette version…
@@ -676,6 +678,7 @@ str		This version couldn't be read.	Cette version n'a pas pu être lue.
 str		{from} can't be shown. Skipped to {to}.	{from} ne peut pas être affichée. Passage à {to}.
 str		It isn't a version of this branch.	Ce n’est pas une version de cette branche.
 str		Made with a newer Archforge.	Créée avec une version plus récente d’Archforge.
+str		Its model is larger than Archforge reads.	Son modèle est plus grand que ce qu’Archforge peut lire.
 str		Why?	Pourquoi ?
 str		Date not known	Date inconnue
 plural		Versions · {n} change	Versions · {n} modification|Versions · {n} modifications

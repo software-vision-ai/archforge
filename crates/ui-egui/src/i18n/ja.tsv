@@ -456,6 +456,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
 str		These two versions are the same.	この2つのバージョンは同じです。
+str		Too large to compare	大きすぎて比較できません
+str		The comparison was stopped.	比較を停止しました。
 str		Both sides are your current work.	両側とも現在の作業です。
 str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…
@@ -676,6 +678,7 @@ str		This version couldn't be read.	このバージョンを読み込めませ�
 str		{from} can't be shown. Skipped to {to}.	{from} は表示できません。{to} に移動しました。
 str		It isn't a version of this branch.	このブランチのバージョンではありません。
 str		Made with a newer Archforge.	より新しい Archforge で作成されました。
+str		Its model is larger than Archforge reads.	モデルが Archforge で読める大きさを超えています。
 str		Why?	理由
 str		Date not known	日付不明
 plural		Versions · {n} change	バージョン · {n} 件の変更

@@ -166,6 +166,8 @@ pub enum VersionReadError {
     Unavailable,
     /// Its model tables are another or a newer Archforge's.
     Shape,
+    /// Its model is past what Archforge reads: too large to show or compare, however often asked.
+    TooLarge,
     /// Anything else, in words for a person: asking again may well work.
     Failed(String),
 }
@@ -176,6 +178,7 @@ impl std::fmt::Display for VersionReadError {
         match self {
             Self::Unavailable => f.write_str(&i18n::tr("It isn't a version of this branch.")),
             Self::Shape => f.write_str(&i18n::tr("Made with a newer Archforge.")),
+            Self::TooLarge => f.write_str(&i18n::tr("Its model is larger than Archforge reads.")),
             Self::Failed(why) => f.write_str(why),
         }
     }
