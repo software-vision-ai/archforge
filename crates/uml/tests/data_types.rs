@@ -163,11 +163,11 @@ fn a_data_type_is_added_renamed_moved_and_removed_each_one_step_its_name_free_am
     assert_eq!(archforge_core::name_of(s.doc(), obj(s.doc(), &money)), "Amount");
     // Classes, interfaces, enumerations and data types share their package's names, whatever the case.
     for (cmd, p, key, why) in [
-        ("uml.data-type.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named order already"),
-        ("uml.data-type.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named PAYABLE already"),
-        ("uml.data-type.add", json!({ "package": sales, "name": "orderstatus" }), "name", "there is an enumeration named orderstatus already"),
-        ("uml.class.add", json!({ "package": sales, "name": "amount" }), "name", "there is a data type named amount already"),
-        ("uml.enumeration.add", json!({ "package": sales, "name": "AMOUNT" }), "name", "there is a data type named AMOUNT already"),
+        ("uml.data-type.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named Order already"),
+        ("uml.data-type.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named Payable already"),
+        ("uml.data-type.add", json!({ "package": sales, "name": "orderstatus" }), "name", "there is an enumeration named OrderStatus already"),
+        ("uml.class.add", json!({ "package": sales, "name": "amount" }), "name", "there is a data type named Amount already"),
+        ("uml.enumeration.add", json!({ "package": sales, "name": "AMOUNT" }), "name", "there is a data type named Amount already"),
         ("uml.interface.rename", json!({ "interface": payable, "name": "Amount" }), "name", "data type named Amount"),
         ("uml.data-type.rename", json!({ "data_type": money, "name": "Order" }), "name", "class named Order"),
         ("uml.data-type.add", json!({ "package": sales, "name": "" }), "name", "name"),
@@ -183,7 +183,10 @@ fn a_data_type_is_added_renamed_moved_and_removed_each_one_step_its_name_free_am
     }
     // Moved to a package whose class has its name: refused; to another: one step.
     let clash = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "amount" }));
-    assert!(refused(&mut s, "uml.data-type.move", json!({ "data_type": money, "package": billing })).contains("class named Amount"));
+    assert!(
+        refused(&mut s, "uml.data-type.move", json!({ "data_type": money, "package": billing })).contains("class named amount"),
+        "it names the class there"
+    );
     run(&mut s, "uml.class.rename", json!({ "class": clash, "name": "Invoice" }));
     one_step(&mut s, "uml.data-type.move", json!({ "data_type": money, "package": billing }));
     let st = s.doc();

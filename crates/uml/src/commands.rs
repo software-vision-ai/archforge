@@ -293,8 +293,9 @@ pub(crate) fn check_name(store: &Store, owner: Option<Obj>, class: ClassId, name
         return Err(refuse("name", format!("the name {p}")));
     }
     if let Some(s) = owner.and_then(|o| crate::names::clash(store, o, class, name, except)) {
-        let taken = Reason::NameTaken { kind: what(store, s), name: name_of(store, s) };
-        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, s))).because(taken));
+        let existing = name_of(store, s);
+        let message = format!("there is {} named {existing} already", a_what(store, s));
+        return Err(refuse("name", message).because(Reason::NameTaken { kind: what(store, s), name: existing }));
     }
     Ok(())
 }

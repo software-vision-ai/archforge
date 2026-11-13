@@ -89,7 +89,7 @@ fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_ea
     let deep = run(&mut s, "uml.package.add", json!({ "name": "lines", "parent": orders }));
     // The same name in another parent is fine; twice in one parent, whatever the case, is not.
     run(&mut s, "uml.package.add", json!({ "name": "orders" }));
-    refused(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }), "named Orders already");
+    refused(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }), "named orders already");
     refused(&mut s, "uml.package.add", json!({ "name": "x", "parent": "not-an-id" }), "parent");
     let listed = s.execute("uml.package.list", &json!({})).unwrap().value["packages"].as_array().unwrap().clone();
     let names: Vec<(&str, Option<&str>)> = listed.iter().map(|p| (p["name"].as_str().unwrap(), p["parent"].as_str())).collect();
@@ -117,7 +117,7 @@ fn a_clash_a_package_into_itself_and_a_self_dependency_carry_their_reason_typed(
         other => panic!("{cmd} {p}: {other:?}"),
     };
     let taken = Reason::NameTaken { kind: "class", name: "Order".into() };
-    assert_eq!(why("uml.interface.add", json!({ "package": sales, "name": "ORDER" })), (Some(taken), "there is a class named ORDER already".into()));
+    assert_eq!(why("uml.interface.add", json!({ "package": sales, "name": "ORDER" })), (Some(taken), "there is a class named Order already".into()));
     let into = (Some(Reason::PackageIntoItself), "a package cannot go into itself or a package it holds".to_string());
     assert_eq!(why("uml.package.move", json!({ "package": sales, "to": inner })), into);
     let itself = (Some(Reason::DependsOnItself { kind: "class" }), "a class cannot depend on itself".to_string());
@@ -149,7 +149,7 @@ fn a_class_and_a_package_move_a_cycle_or_a_clash_is_refused_and_the_diagrams_kee
     assert_eq!(card.eyebrow, archforge_diagram::figure::Text::Said("Class · {package}", vec![("package", "billing".into())]));
     // A class named like one already there is refused.
     let other = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "order" }));
-    refused(&mut s, "uml.class.move", json!({ "class": other, "package": billing }), "named order already");
+    refused(&mut s, "uml.class.move", json!({ "class": other, "package": billing }), "named Order already");
     // A package goes into another, or back into the model's root; into itself or what it holds is refused.
     round_trip(&mut s, "uml.package.move", json!({ "package": billing, "to": inner }));
     assert_eq!(parent_of(&s, &billing), Some(obj(&s, &inner)));
