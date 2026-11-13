@@ -279,10 +279,10 @@ fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
         in_both(|mut h, host| {
             press(&mut h, egui::Key::OpenBracket);
             answer_versions(&host);
-            h.run_steps(3);
+            h.steps(3);
             shown(&mut h, &host, "h2");
             job(&mut h, &host).0.send(if failed { Err(WorkSaved("no".into())) } else { Ok(()) }).unwrap();
-            h.run_steps(8);
+            h.steps(8);
             assert!(!h.state().is_held() && h.state().viewing().is_none(), "over, and back on the work");
             press(&mut h, egui::Key::OpenBracket);
             assert!(host.reads.lock().unwrap().is_empty(), "no step through what was read before");
@@ -672,7 +672,7 @@ fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
         let read = start_replacing(&mut h, None);
         h.state_mut().panels.picker = picker();
         read.send(Ok(earlier)).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         assert!(!h.state().is_held() && h.state().panels.picker.is_none(), "the replacement closes it");
     });
 }
@@ -769,7 +769,7 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
         assert!(h.state().panels.ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
         let read = start_replacing(&mut h, None);
         read.send(Ok(earlier)).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         assert!(!h.state().is_held() && h.state().session.as_ref().unwrap().doc().by_uuid(paid).is_none(), "replaced without it");
         assert!(h.state().panels.ends.is_none() && h.state().panels.notice.is_none());
     });

@@ -345,7 +345,10 @@ follows one order. Stepping between versions and returning have nothing to prote
    operation is refused and the hold ends.
 5. A save under way answers, and the latest rows are handed over.
 6. The replacement is read, checked and built into a session. One that cannot be built ends it here,
-   with nothing written.
+   with nothing written. Whether building repaired it is found off the interface thread: the frame
+   freezes the built session (`Store::freeze`), and its rows are built and compared with those read
+   on a worker while the job runs. Step 8 waits for its answer without stopping the window; one that
+   cannot finish, or none within 30 seconds of the build, counts as a repair.
 7. The operation's writes run as one job on the writer. Viewing has none.
 8. The replacement takes the session's place, and the hold ends.
 

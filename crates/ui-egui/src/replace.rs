@@ -20,12 +20,76 @@ use crate::{BranchSwitch, SaveState, SavedBy, Shell, VersionRead, chat_panel, ed
 /// The most seconds reading a job back may take before what happened counts as unknown.
 pub const READ_BACK_LIMIT: u64 = 30;
 
-/// Whether the session built from `rows` holds anything else, row order aside: a comparison that
-/// cannot finish counts as a difference.
-fn differs_from(session: &Session, rows: &Rows) -> bool {
-    let (tables, junctions) = archforge_notations::storage();
-    let Ok(built) = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) else { return true };
-    archforge_mof::compare::compare(rows, &built, &tables, &junctions, archforge_mof::compare::MAX_COMPARED).map_or(true, |found| !found.is_empty())
+/// The most seconds a replacement waits for [`compare_off_frame`]'s answer, from when it started;
+/// past it the replacement counts as repaired: it reads as unsaved and its rows are written again,
+/// which changes nothing stored.
+pub const COMPARE_LIMIT: u64 = 30;
+
+#[cfg(test)]
+thread_local! {
+    /// For tests: the answer the next comparison gives in place of a worker's.
+    pub(crate) static COMPARED: std::cell::RefCell<Option<Receiver<bool>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Whether the session built from `rows` holds anything else, row order aside, answered later: the
+/// frame only freezes the session's objects, and their rows are built and compared on another
+/// thread. A comparison that cannot finish, or a thread that cannot start, counts as a difference.
+fn compare_off_frame(session: &Session, rows: Arc<Rows>) -> Receiver<bool> {
+    #[cfg(test)]
+    if let Some(answer) = COMPARED.with(|c| c.borrow_mut().take()) {
+        return answer;
+    }
+    let frozen = session.doc().freeze();
+    let (tx, rx) = channel();
+    let compare = move || {
+        let (tables, junctions) = archforge_notations::storage();
+        let found = frozen
+            .rows(&tables, &junctions)
+            .ok()
+            .and_then(|built| archforge_mof::compare::compare(&rows, &built, &tables, &junctions, archforge_mof::compare::MAX_COMPARED).ok());
+        let _ = tx.send(found.is_none_or(|found| !found.is_empty()));
+    };
+    // A thread that cannot start drops the sender with it, which reads as a difference.
+    if let Err(e) = std::thread::Builder::new().name("archforge-replacement-repair".into()).spawn(compare) {
+        log::warn!("the replacement could not be compared off the interface thread: {e}");
+    }
+    rx
+}
+
+/// A comparison of a replacement running on another thread, when it started, and its answer once
+/// it has come.
+struct Comparing {
+    answer: Receiver<bool>,
+    since: u64,
+    got: Option<bool>,
+}
+
+impl Comparing {
+    /// The answer, once it has come: a sender gone without one counts as repaired.
+    fn answered(&mut self) -> Option<bool> {
+        if self.got.is_none() {
+            self.got = match self.answer.try_recv() {
+                Ok(differs) => Some(differs),
+                Err(TryRecvError::Disconnected) => Some(true),
+                Err(TryRecvError::Empty) => None,
+            };
+        }
+        self.got
+    }
+
+    /// Whether the replacement was repaired, once that is known at `now`: no answer within
+    /// [`COMPARE_LIMIT`] counts as repaired too.
+    fn repaired(&mut self, now: u64) -> Option<bool> {
+        self.answered().or_else(|| (now.saturating_sub(self.since) >= COMPARE_LIMIT).then_some(true))
+    }
+}
+
+#[cfg(test)]
+impl Shell {
+    /// Whether a replacement's comparison off the frame has not answered yet.
+    pub(crate) fn comparing(&mut self) -> bool {
+        self.replacing.as_mut().and_then(|r| r.repaired.as_mut()).is_some_and(|c| c.answered().is_none())
+    }
 }
 
 /// How a job that did not plainly finish went.
@@ -78,8 +142,9 @@ pub(crate) struct Replacing {
     wrote: bool,
     /// The version to show in place of the session, set aside rather than replaced.
     viewing: Option<String>,
-    /// The session built differs from the rows read: a repair made while building it.
-    repaired: bool,
+    /// Whether the session built differs from the rows read, a repair made while building it, once
+    /// its comparison on another thread answers; none when nothing is compared.
+    repaired: Option<Comparing>,
     /// A branch switch still to be asked of the host, once the latest rows have gone over.
     switch: Option<Box<dyn FnOnce() -> Result<BranchSwitch, String>>>,
     /// Asked of the host: whether the branch arrived on holds unsaved work.
@@ -187,7 +252,7 @@ impl Shell {
             read_back: None,
             wrote: false,
             viewing,
-            repaired: false,
+            repaired: None,
             switch: None,
             arrives_unsaved: None,
             switching_to: None,
@@ -257,7 +322,8 @@ impl Shell {
                 Ok(Err(why)) => return self.give_up(Some(r.before_writing(why.to_string()))),
                 Ok(Ok(rows)) => match self.build(&rows) {
                     Ok(session) => {
-                        r.repaired = r.viewing.is_none() && differs_from(&session, &rows);
+                        let since = chat_panel::clock(self).now;
+                        r.repaired = r.viewing.is_none().then(|| Comparing { answer: compare_off_frame(&session, rows), since, got: None });
                         Stage::Ready(Box::new(session), None)
                     }
                     Err(why) => {
@@ -283,9 +349,19 @@ impl Shell {
                     r.read_back = Some(job.read_back);
                     Stage::Writing(session, (job.run)())
                 } else {
+                    let repaired = match r.repaired.as_mut().map(|c| c.repaired(now)) {
+                        None => false,
+                        Some(Some(repaired)) => repaired,
+                        // Still being compared: the hold's wake-ups bring the next look. Chat is
+                        // settled here, so a Chat that is busy later gets its whole settle time.
+                        Some(None) => {
+                            r.stage = Stage::Ready(session, None);
+                            return Some(r);
+                        }
+                    };
                     match r.viewing.take() {
                         Some(commit) => self.show_version(*session, commit),
-                        None => self.install(*session, r.repaired),
+                        None => self.install(*session, repaired),
                     }
                     if let Some(unsaved) = r.arrives_unsaved {
                         // On another branch: the status bar's reasons about the branch left go, and

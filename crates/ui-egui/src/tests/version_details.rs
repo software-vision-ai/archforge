@@ -510,9 +510,9 @@ fn a_new_session_does_not_wait_for_the_comparison_left() {
 fn a_finished_restore_does_not_wait_for_the_comparison_left() {
     a_new_session_starts_its_own_comparison(|h, host, rows| {
         h.state_mut().restore_version("c1", "2026-11-06T15:05:00Z").unwrap();
-        h.run_steps(3);
+        h.steps(3);
         answer(host, "c1", Ok(rows));
-        h.run_steps(4);
+        h.steps(4);
         let (ended, _reading) = host.restores.lock().unwrap().remove(0);
         ended.send(Ok(())).unwrap();
     });

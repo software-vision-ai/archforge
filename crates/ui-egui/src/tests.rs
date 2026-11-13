@@ -1356,6 +1356,26 @@ fn start_replacing(h: &mut Harness<'static, Shell>, job: Option<crate::replace::
     read
 }
 
+/// Frames that wait out a replacement's comparison on another thread.
+trait Steps {
+    /// `n` frames, not counting those a replacement spends waiting for its comparison.
+    fn steps(&mut self, n: usize);
+}
+
+impl Steps for Harness<'static, Shell> {
+    /// Gives up past a generous bound, so a comparison that never answers fails the test.
+    fn steps(&mut self, n: usize) {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut left = n;
+        while left > 0 {
+            assert!(std::time::Instant::now() < until, "still comparing");
+            let waiting = self.state_mut().comparing();
+            self.run_steps(1);
+            left -= usize::from(!waiting);
+        }
+    }
+}
+
 /// A project with unsaved work, and the rows it held before that work: the earlier version.
 fn work_and_earlier() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
     let (mut h, host) = saving_harness(Some(commerce()), None);
@@ -2004,7 +2024,7 @@ fn a_refused_change_shows_as_refused_on_the_turns_rows() {
 /// Starts restoring a version holding `rows`, and has it built and handed to its job.
 fn restore_under_way(h: &mut Harness<'static, Shell>, host: &SavingHost, rows: std::sync::Arc<archforge_mof::rows::Rows>) -> RestoreEnds {
     h.state_mut().restore_version("c1", "2026-11-08T14:02:11Z").unwrap();
-    h.run_steps(3);
+    h.steps(3);
     answer_read(h, host, Ok(rows));
     host.restores.lock().unwrap().remove(0)
 }
@@ -2029,7 +2049,7 @@ fn a_finished_restore_installs_the_version_and_undo_starts_fresh() {
         assert!(h.state().is_held(), "held while the job runs");
         let written = host.written.lock().unwrap().len();
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         the_version_is_installed(&h);
         assert_eq!(host.written.lock().unwrap().len(), written);
     }
@@ -2107,13 +2127,13 @@ fn an_unclear_restore_installs_only_when_read_back_as_finished() {
         let (mut h, host, earlier) = work_and_earlier();
         let (answer, reading) = restore_under_way(&mut h, &host, earlier);
         answer.send(Err(JobFailure::Unclear)).unwrap();
-        h.run_steps(2);
+        h.steps(2);
         let finished = read == Some(Ok(true));
         match read {
             Some(said) => reading.send(said).unwrap(),
             None => drop(reading),
         }
-        h.run_steps(4);
+        h.steps(4);
         if finished {
             the_version_is_installed(&h);
         } else {
@@ -2133,7 +2153,7 @@ fn switch_asked(h: &mut Harness<'static, Shell>, host: &SavingHost) -> SwitchEnd
 /// Answers a switch's check with `rows`, reaching its move.
 fn switch_checked(h: &mut Harness<'static, Shell>, ends: &SwitchEnds, rows: std::sync::Arc<archforge_mof::rows::Rows>) {
     ends.check.send(Ok(rows)).unwrap();
-    h.run_steps(4);
+    h.steps(4);
 }
 
 /// Runs `test` on what `fixture` makes, once in each appearance.
@@ -2148,7 +2168,7 @@ fn in_both<A, B>(fixture: impl Fn() -> (Harness<'static, Shell>, A, B), test: im
 /// Answers a switch's move as finished.
 fn switch_moved(h: &mut Harness<'static, Shell>, ends: &SwitchEnds) {
     ends.moved.0.send(Ok(())).unwrap();
-    h.run_steps(8);
+    h.steps(8);
 }
 
 /// The status bar's reason, and that the work is as it was and no longer held.
@@ -2279,7 +2299,7 @@ fn a_request_from_before_any_change_of_session_is_refused_by_its_word() {
         }),
         ("Restore", ready, |h, host, earlier| {
             restore_under_way(h, host, earlier).0.send(Ok(())).unwrap();
-            h.run_steps(8);
+            h.steps(8);
         }),
         (
             "another tab",
@@ -2292,11 +2312,11 @@ fn a_request_from_before_any_change_of_session_is_refused_by_its_word() {
     for (what, first, moving) in ways {
         in_both(work_and_earlier, |mut h, host, earlier| {
             first(&mut h, &host, earlier.clone());
-            h.run_steps(3);
+            h.steps(3);
             let inspect = |h: &Harness<'static, Shell>| accepted(h, "document.inspect", serde_json::json!({}), false);
             let stale = inspect(&h);
             moving(&mut h, &host, earlier);
-            h.run_steps(3);
+            h.steps(3);
             let refused = crate::control::answer_request(h.state_mut(), &stale).unwrap_err();
             assert!(refused.starts_with(&format!("{}: ", crate::control::CHANGED)), "{what}: {refused}");
             let fresh = inspect(&h);
@@ -2372,9 +2392,9 @@ fn a_move_with_no_clear_answer_is_read_back() {
             let ends = switch_asked(&mut h, &host);
             switch_checked(&mut h, &ends, earlier);
             ends.moved.0.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
-            h.run_steps(3);
+            h.steps(3);
             ends.moved.1.send(answer.clone()).unwrap();
-            h.run_steps(6);
+            h.steps(6);
             then(&h);
         });
     }
@@ -2480,10 +2500,10 @@ fn closing_or_quitting_during_a_restore_waits_for_it() {
         let (mut h, host, earlier) = work_and_earlier();
         let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
         route(h.state_mut());
-        h.run_steps(3);
+        h.steps(3);
         assert!(!h.state().quit_confirmed() && host.closings.lock().unwrap().is_empty() && h.state().is_held(), "it waits");
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(6);
+        h.steps(6);
         assert!(if n == 0 { !host.closings.lock().unwrap().is_empty() } else { h.state().quit_confirmed() }, "then goes ahead");
     }
 }
@@ -2512,13 +2532,117 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
             rows.junctions.iter_mut().for_each(|j| j.reverse());
             assert!(rows.junctions.iter().any(|j| j.len() > 1), "a list to read in another order");
         }
-        h.run_steps(2);
+        h.steps(2);
         let (answer, _reading) = restore_under_way(&mut h, &host, std::sync::Arc::new(rows));
         let written = host.written.lock().unwrap().len();
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(5);
+        h.steps(5);
         assert_eq!((dirty(&h), host.written.lock().unwrap().len()), (!reordered, written + usize::from(!reordered)));
     }
+}
+
+/// A restore and a switch compare what they built with what they read off the interface thread:
+/// the frame builds no rows for it, and the version still takes the session's place, saved.
+#[test]
+fn a_restore_or_a_switch_builds_no_rows_on_the_frame() {
+    use crate::replace::JobFailure;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.steps(2);
+        let built = archforge_mof::rows::built_here();
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.steps(5);
+        the_version_is_installed(&h);
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame for a restore");
+    });
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.steps(2);
+        let built = archforge_mof::rows::built_here();
+        let ends = switch_asked(&mut h, &host);
+        switch_checked(&mut h, &ends, earlier);
+        switch_moved(&mut h, &ends);
+        the_version_is_installed(&h);
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame for a switch");
+    });
+}
+
+/// A comparison whose thread ends without an answer counts as a repair: the restored version reads
+/// as unsaved and its rows are written again.
+#[test]
+fn a_comparison_that_ends_without_an_answer_counts_as_a_repair() {
+    use crate::replace::JobFailure;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.run_steps(2);
+        crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(std::sync::mpsc::channel().1));
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        let written = host.written.lock().unwrap().len();
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.steps(5);
+        assert!(!h.state().is_held() && dirty(&h), "installed, unsaved");
+        assert_eq!(host.written.lock().unwrap().len(), written + 1, "its rows are written again");
+    });
+}
+
+/// A comparison with no answer holds the replacement back until its limit, counted from when it
+/// started; then it counts as a repair.
+#[test]
+fn a_comparison_past_its_limit_counts_as_a_repair() {
+    use crate::replace::{COMPARE_LIMIT, JobFailure};
+    use std::sync::atomic::Ordering::Relaxed;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        let now = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1_000));
+        let clock = now.clone();
+        h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now: clock.load(Relaxed), offset: None }));
+        h.run_steps(2);
+        let (_silent, answer_of_comparison) = std::sync::mpsc::channel();
+        crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(answer_of_comparison));
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        // The comparison started with the build; the job's time counts towards its limit.
+        now.fetch_add(COMPARE_LIMIT - 1, Relaxed);
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.run_steps(5);
+        assert!(h.state().is_held(), "waiting for the comparison");
+        let written = host.written.lock().unwrap().len();
+        now.fetch_add(1, Relaxed);
+        h.run_steps(3);
+        assert!(!h.state().is_held() && dirty(&h), "installed, unsaved");
+        assert_eq!(host.written.lock().unwrap().len(), written + 1, "its rows are written again");
+    });
+}
+
+/// A Chat write that starts while a comparison holds the replacement gets the whole settle time
+/// from when it is seen, however long the comparison took.
+#[test]
+fn a_chat_write_after_a_long_comparison_gets_its_whole_settle_time() {
+    use crate::hold::CHAT_SETTLE_LIMIT;
+    use std::sync::atomic::Ordering::{Relaxed, SeqCst};
+    in_both(
+        || chat_history(ThemeKind::Light),
+        |mut h, rig, chats| {
+            h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
+            h.run_steps(2);
+            let rows = rows_now(&h);
+            let (comparison, answer_of_comparison) = std::sync::mpsc::channel();
+            crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(answer_of_comparison));
+            let read = start_replacing(&mut h, None);
+            read.send(Ok(rows)).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(crate::replace::COMPARE_LIMIT - 1, Relaxed);
+            h.run_steps(2);
+            assert!(h.state().is_held(), "the comparison holds it");
+            rig.store.hold.store(true, SeqCst);
+            crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+            crate::chat_delete::confirm(h.state_mut());
+            comparison.send(false).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(CHAT_SETTLE_LIMIT - 1, Relaxed);
+            h.run_steps(3);
+            assert!(h.state().is_held() && h.state().save_error.is_none(), "Chat still has time: {:?}", h.state().save_error);
+            rig.store.release();
+            h.run_steps(4);
+            assert!(!h.state().is_held() && h.state().save_error.is_none(), "then it goes on");
+        },
+    );
 }
 
 /// A refused view starts no read: the hold comes before the first step.
@@ -2550,10 +2674,10 @@ fn a_replacement_waits_for_a_save_then_takes_the_sessions_place() {
     let read = start_replacing(&mut h, None);
     let handed = host.written.lock().unwrap().len();
     read.send(Ok(saved_rows)).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(h.state().is_held() && schema_names(&h).len() == 2, "the save has not answered: {:?}", schema_names(&h));
     host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
-    h.run_steps(4);
+    h.steps(4);
     assert!(!h.state().is_held());
     assert_eq!(schema_names(&h), ["shop"]);
     assert!(!h.state().session.as_ref().unwrap().can_undo(), "undo starts fresh");
@@ -2622,19 +2746,19 @@ fn a_job_runs_after_the_build_and_decides_by_its_answer() {
     let read = start_replacing(&mut h, Some(job));
     assert!(!started.load(SeqCst), "nothing is written before the replacement is built");
     read.send(Ok(empty.clone())).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(started.load(SeqCst) && h.state().is_held() && schema_names(&h) == ["shop"]);
     answer.send(Ok(())).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(!h.state().is_held() && schema_names(&h).is_empty(), "{:?}", schema_names(&h));
     // A job that says it failed leaves the session as it was, and nothing is read back.
     add_schema(&mut h, "shop");
     let (job, _, answer, _reading) = test_job();
     let read = start_replacing(&mut h, Some(job));
     read.send(Ok(empty)).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     answer.send(Err(Failed("the disk is full".into()))).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(!h.state().is_held() && schema_names(&h) == ["shop"]);
     assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
 }
@@ -2649,12 +2773,12 @@ fn a_lost_reply_is_read_back_and_that_decides() {
         let (job, _, answer, reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         read.send(Ok(empty)).unwrap();
-        h.run_steps(3);
+        h.steps(3);
         drop(answer);
-        h.run_steps(3);
+        h.steps(3);
         assert!(h.state().is_held(), "waiting for the reading back");
         reading.send(Ok(finished)).unwrap();
-        h.run_steps(3);
+        h.steps(3);
         assert!(!h.state().is_held());
         assert_eq!(schema_names(&h).is_empty(), finished, "finished {finished}");
     }
@@ -2870,39 +2994,39 @@ fn a_chat_write_started_after_settling_holds_the_replacement_back() {
     let deleting = |wrote_first: bool, release: bool| {
         let (mut h, rig, chats) = chat_history(ThemeKind::Light);
         h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
-        h.run_steps(2);
+        h.steps(2);
         let rows = rows_now(&h);
         let (job, started, answer, _reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         if wrote_first {
             read.send(Ok(rows.clone())).unwrap();
-            h.run_steps(3);
+            h.steps(3);
         }
         rig.store.hold.store(true, SeqCst);
         crate::chat_delete::ask(h.state_mut(), chats[2], 2);
         crate::chat_delete::confirm(h.state_mut());
-        h.run_steps(2);
+        h.steps(2);
         if wrote_first {
             answer.send(Ok(())).unwrap();
         } else {
             read.send(Ok(rows)).unwrap();
         }
-        h.run_steps(3);
+        h.steps(3);
         assert_eq!(started.load(SeqCst), wrote_first, "no job starts while Chat is writing");
         let generation = h.state().session_generation();
         assert!(h.state().is_held());
         if release {
             rig.store.release();
-            h.run_steps(3);
+            h.steps(3);
             if !wrote_first {
                 assert!(started.load(SeqCst));
                 answer.send(Ok(())).unwrap();
-                h.run_steps(3);
+                h.steps(3);
             }
             assert!(!h.state().is_held() && h.state().session_generation() > generation, "then it goes on");
         } else {
             rig.now.fetch_add(crate::hold::CHAT_SETTLE_LIMIT, Relaxed);
-            h.run_steps(3);
+            h.steps(3);
         }
         h
     };
