@@ -4815,6 +4815,50 @@ fn a_template_rule_broken_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A binding argument rule broken is said in the chosen language in the binding editor's words,
+/// never in the engine's English: an argument that does not fit, one missing and two missing, both
+/// named with their kinds; and, as said, a constrained parameter's misfit and a built-in type's
+/// name taken. In light and dark (AR-442).
+#[test]
+fn an_argument_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, tr_ctx};
+    use archforge_engine::{Parameter, Reason};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, entity] = ["Repository", "Entity"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let money = id("uml.data-type.add", json!({ "package": sales, "name": "Money" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "K", "kind": "data-type" }));
+        let bind = |arguments: serde_json::Value| json!({ "bound": entity, "template": repository, "arguments": arguments });
+        let named = |name: &str, kind: &str| fmt(&tr("{name} ({kind})"), &[("name", name), ("kind", &tr(kind))]);
+        let both = fmt(&tr("{names} and {last}"), &[("names", &named("T", "class")), ("last", &named("K", "data type"))]);
+        let each = "{names} have no default, so each needs an argument.";
+        assert_ne!(tr(each), each, "{theme:?}: the two missing are said in German");
+        for (params, said) in [
+            (bind(json!({ "T": money, "K": money })), fmt(&tr("Arguments for {name} must be classes."), &[("name", "T")])),
+            (bind(json!({ "K": money })), fmt(&tr("{name} needs an argument: pick a class."), &[("name", "T")])),
+            (bind(json!({})), fmt(&tr(each), &[("names", &both)])),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), "uml.template-binding.add", params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+        }
+        let taken = Reason::BuiltInTaken { kind: "class", name: "Integer".into() };
+        let words = &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
+        assert_ne!(words, "The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
+        let what = tr_ctx("refusal", "a class");
+        assert_eq!(crate::panels::said(&taken), Some(fmt(words, &[("types", "Types"), ("what", &what), ("name", "Integer")])), "{theme:?}");
+        let constrained = Parameter { name: "T".into(), kind: "class", constraint: Some("Entity".into()), ..Parameter::default() };
+        let words = fmt(&tr("Arguments for {name} must be {constraint} or specialise it."), &[("name", "T"), ("constraint", "Entity")]);
+        assert_eq!(crate::panels::said(&Reason::Misfit(Box::new(constrained))), Some(words), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

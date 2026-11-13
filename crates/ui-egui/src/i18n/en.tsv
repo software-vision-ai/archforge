@@ -1482,6 +1482,7 @@ str		{default} does not fit {name}: pick a default its arguments could be.	{defa
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.
 str		A template has at most {max} parameters.	A template has at most {max} parameters.
 str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} binds {template} and gives {name} no argument, so {name} needs a default.
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.
 str		template parameter	template parameter
 str		template	template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
@@ -1510,6 +1511,8 @@ str		{name} needs an argument: pick an interface.	{name} needs an argument: pick
 str		{name} needs an argument: pick a data type.	{name} needs an argument: pick a data type.
 str		{name} needs an argument: pick an enumeration.	{name} needs an argument: pick an enumeration.
 str		{name} needs an argument: pick a primitive type.	{name} needs an argument: pick a primitive type.
+str		{name} ({kind})	{name} ({kind})
+str		{names} have no default, so each needs an argument.	{names} have no default, so each needs an argument.
 plural		{names} can keep its default.	{names} can keep its default.|{names} can keep their defaults.
 str		New template binding	New template binding
 str		Drawing · not in the model until you apply	Drawing · not in the model until you apply

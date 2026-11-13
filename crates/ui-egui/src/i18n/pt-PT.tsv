@@ -1483,6 +1483,7 @@ str		{default} does not fit {name}: pick a default its arguments could be.	{defa
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} vincula {name} -> {actual}, que deixaria de servir. Altere ou remova primeiro essa vinculação.
 str		A template has at most {max} parameters.	Um modelo tem no máximo {max} parâmetros.
 str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} vincula {template} e não dá nenhum argumento a {name}, por isso {name} precisa de uma predefinição.
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	O pacote {types}, onde esse tipo integrado é guardado, contém {what} com o nome {name}: mude o nome de {name} para usar o tipo integrado.
 str		template parameter	parâmetro de modelo
 str		template	modelo
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · modelo, {n} parâmetro · modelo, em todos os diagramas|{kind} · modelo, {n} parâmetros · modelo, em todos os diagramas
@@ -1511,6 +1512,8 @@ str		{name} needs an argument: pick an interface.	{name} precisa de um argumento
 str		{name} needs an argument: pick a data type.	{name} precisa de um argumento: escolha um tipo de dados.
 str		{name} needs an argument: pick an enumeration.	{name} precisa de um argumento: escolha uma enumeração.
 str		{name} needs an argument: pick a primitive type.	{name} precisa de um argumento: escolha um tipo primitivo.
+str		{name} ({kind})	{name} ({kind})
+str		{names} have no default, so each needs an argument.	{names} não têm predefinição, por isso cada um precisa de um argumento.
 plural		{names} can keep its default.	{names} pode manter a sua predefinição.|{names} podem manter as suas predefinições.
 str		New template binding	Nova vinculação de modelo
 str		Drawing · not in the model until you apply	A desenhar · não está no modelo até aplicar

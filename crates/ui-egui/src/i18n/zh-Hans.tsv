@@ -1483,6 +1483,7 @@ str		{default} does not fit {name}: pick a default its arguments could be.	{defa
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} 将 {name} 绑定为 -> {actual}，修改后将不再适合。请先更改或删除该绑定。
 str		A template has at most {max} parameters.	一个模板最多有 {max} 个参数。
 str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} 绑定了 {template}，但没有为 {name} 提供实参，因此 {name} 需要一个默认值。
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	存放该内置类型的 {types} 包中已有名为 {name} 的{what}：请重命名 {name} 以使用内置类型。
 str		template parameter	模板参数
 str		template	模板
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · 模板，{n} 个参数 · 模型，在所有图中
@@ -1511,6 +1512,8 @@ str		{name} needs an argument: pick an interface.	{name} 需要一个实参：�
 str		{name} needs an argument: pick a data type.	{name} 需要一个实参：请选择一个数据类型。
 str		{name} needs an argument: pick an enumeration.	{name} 需要一个实参：请选择一个枚举。
 str		{name} needs an argument: pick a primitive type.	{name} 需要一个实参：请选择一个基本类型。
+str		{name} ({kind})	{name}（{kind}）
+str		{names} have no default, so each needs an argument.	{names} 都没有默认值，因此每个都需要一个实参。
 plural		{names} can keep its default.	{names} 可以保留默认值。
 str		New template binding	新建模板绑定
 str		Drawing · not in the model until you apply	正在绘制 · 应用之前不在模型中
