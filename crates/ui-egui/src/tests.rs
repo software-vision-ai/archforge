@@ -203,6 +203,14 @@ impl crate::ProjectHost for FakeHost {
     }
 }
 
+/// A host that keeps no branches refuses a read on another branch's line by a typed reason, which
+/// the page says in translated words, never words of the host's own.
+#[test]
+fn a_host_without_branches_refuses_a_branch_version_by_its_reason() {
+    let read = crate::ProjectHost::read_branch_version(&FakeHost::default(), std::path::Path::new("/p"), "side", "c1".into());
+    assert!(matches!(read.recv(), Ok(Err(crate::VersionReadError::Unavailable))));
+}
+
 /// The real shell with a fake host and the usual folder, the dialog open and a name typed.
 fn creating_harness() -> (Harness<'static, Shell>, std::sync::Arc<FakeHost>) {
     crate::i18n::set_language("en");
@@ -378,6 +386,8 @@ struct SavingHost {
     branch_counts: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<crate::BranchCounts, String>>)>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
+    /// The branch each read of another branch's version was asked on, by its stored name.
+    branch_version_reads: std::sync::Mutex<Vec<(String, String)>>,
     /// Each read of the versions waiting for the answer the test sends.
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// The version each read of the versions started after.
@@ -466,6 +476,12 @@ impl crate::ProjectHost for SavingHost {
         let (tx, rx) = std::sync::mpsc::channel();
         self.reads.lock().unwrap().push((commit, tx));
         rx
+    }
+
+    /// A read of a version, answered as [`SavingHost::read_version`]'s are, and kept with its branch.
+    fn read_branch_version(&self, project: &std::path::Path, branch: &str, commit: String) -> std::sync::mpsc::Receiver<crate::VersionRead> {
+        self.branch_version_reads.lock().unwrap().push((branch.to_string(), commit.clone()));
+        self.read_version(project, commit)
     }
 
     fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {

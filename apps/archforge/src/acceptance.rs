@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use archforge_ui_egui::{Folder, Services, Shell};
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 
 use crate::test_host::Sandbox;
 
@@ -449,6 +450,56 @@ fn a_user_compares_a_version_with_current_work_also_while_another_is_shown() {
     click_on(&mut h, "workspace.version-compare.list.row.1");
     let changes = |h: &Shell| h.widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count();
     wait(&mut h, "the newer version compared", |h| changes(h.state()) == 1);
+}
+
+/// Adds the schema `name` and saves it as a version.
+fn saved_schema(h: &mut H, name: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+    h.run();
+    key(h, egui::Key::S, egui::Modifiers::COMMAND);
+    wait(h, "the version saved", |h| !h.state().is_saving() && h.state().session.as_ref().is_some_and(|x| !x.is_dirty()));
+    settle(h, "the saved project's reads");
+}
+
+/// A user saves a version on `main`, makes a branch, saves another there and goes back to `main`;
+/// Compare then tells `main`'s version from the other branch's latest, which `main`'s line does not
+/// hold.
+#[test]
+fn a_user_compares_a_version_with_another_branchs_latest() {
+    let (mut h, sandbox) = start("compare-branch");
+    new_project(&mut h, "Shop");
+    saved_schema(&mut h, "sales");
+    click_on(&mut h, "workspace.explorers.source-control");
+    settle(&mut h, "the versions and branches read");
+    click_on(&mut h, "workspace.versions.branches.new");
+    type_text(&mut h, "side");
+    click_on(&mut h, "branch-ask.create");
+    wait(&mut h, "on the new branch", |h| {
+        h.state().ask.is_none() && h.state().widgets().iter().any(|w| w.id == "workspace.versions.branch.row.side")
+    });
+    settle(&mut h, "the switch's reads");
+    saved_schema(&mut h, "billing");
+    click_on(&mut h, "workspace.versions.branch.row.main");
+    wait(&mut h, "back on main", |h| !h.state().is_held() && version_rows(h.state()).len() == 1);
+    settle(&mut h, "main's reads");
+    let [sales] = <[String; 1]>::try_from(version_rows(h.state())).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "returns" })).unwrap();
+    assert_eq!(compared(&mut h, &sales), 1, "returns, unsaved on main");
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.3");
+    let changes = |h: &Shell| h.widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count();
+    // The one difference is billing, which only the other branch holds: not returns, unsaved on main.
+    let billing = |h: &H| h.query_by_label_contains("billing, ").is_some();
+    wait(&mut h, "the other branch's latest compared", |h| changes(h.state()) == 1 && billing(h));
+    // Deleted behind the list, which still offers it: the page says it can't be shown, translated.
+    click_on(&mut h, "workspace.version-compare.close");
+    let path = h.state().project.as_ref().unwrap().path.clone();
+    archforge_ui_egui::ProjectHost::delete_branch(&*sandbox.host, &path, "side").recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+    assert_eq!(compared(&mut h, &sales), 1);
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.3");
+    let said = |h: &H| h.query_by_label_contains("This version can't be shown It isn't a version of this branch.").is_some();
+    wait(&mut h, "the deleted branch said", said);
 }
 
 /// The place of a built-in type in the type menu of a project with no types of its own: None

@@ -515,6 +515,9 @@ str		Models	Modelos
 str		Versions	Versiones
 str		Branches	Ramas
 str		This branch	Esta rama
+str		Another branch	Otra rama
+str		Latest version	Última versión
+str		Latest on {branch}	Última de {branch}
 str	branch	Current	Actual
 str		Branches can't be merged yet.	Las ramas aún no se pueden fusionar.
 str		Only the first {n} branches are listed.	Solo se muestran las primeras {n} ramas.

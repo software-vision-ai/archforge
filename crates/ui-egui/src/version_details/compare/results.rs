@@ -1,6 +1,7 @@
 //! What the Compare page finds under its band (frame V3.2 of page 09 of the design and section 6 of
 //! `docs/design/versioning.md`): a version read at its revision against current work or another
-//! version read at its own, off the interface thread. The frame only copies current work's objects;
+//! version read at its own, off the interface thread; another branch's side is its latest version,
+//! read on that branch's line. The frame only copies current work's objects;
 //! their rows are built with the comparison. Comparing reads rows only, so the session is never
 //! replaced. While a version shows, current work is the session set aside.
 
@@ -115,8 +116,7 @@ pub(crate) struct Results {
 /// current work or one version on both sides.
 fn sides(shell: &Shell) -> Option<Sides> {
     let pair = shell.versions.details.as_ref()?.compare.as_ref()?;
-    let version = |side: &Side| if let Side::Version(v) = side { Some(v.hash.clone()) } else { None };
-    Some((version(&pair.before), version(&pair.after))).filter(|(before, after)| before != after)
+    Some((pair.before.version().cloned(), pair.after.version().cloned())).filter(|(before, after)| before != after)
 }
 
 /// Whether both of `sides` are versions, which a later revision of current work cannot change.
@@ -260,14 +260,29 @@ fn next(shell: &mut Shell, sides: Sides) {
 /// Asks for the rows of `version`, taking turns with the details' reads: the host refuses reads past
 /// its limit, and that would read as a failed comparison. A read still under way, whichever version
 /// or project it is of, is waited for: one of this version lands as it answers, and the details'
-/// two and this one leave the host room for the list's read or a view.
+/// two and this one leave the host room for the list's read or a view. Another branch's version is
+/// read on that branch's line, as the current line does not hold it: by its own name while the
+/// branches last read still list it, else by a listed branch's that has that version, as one
+/// renamed meanwhile does.
 fn read_side(shell: &mut Shell, version: String) {
     let v = &shell.versions;
     if v.compare_results.reading.is_some() || v.details_comparing.is_some() || v.details_reading.is_some() {
         return;
     }
     let (Some(host), Some(of)) = (shell.services.projects.clone(), v.compare_results.about.clone()) else { return };
-    let answer = host.read_version(&of.0, version.clone());
+    let pair = v.details.as_ref().and_then(|d| d.compare.as_ref());
+    let branch = pair.into_iter().flat_map(|p| [&p.before, &p.after]).find_map(|side| match side {
+        Side::Branch(b) if b.latest_version.as_ref() == Some(&version) => Some(b.name.clone()),
+        _ => None,
+    });
+    let listed = v.branches.iter().flatten();
+    let gone = |held: &String| !listed.clone().any(|b| b.name == *held);
+    let renamed = listed.clone().find(|b| !b.current && b.latest_version.as_ref() == Some(&version));
+    let branch = branch.map(|held| if gone(&held) { renamed.map_or(held, |b| b.name.clone()) } else { held });
+    let answer = match branch {
+        Some(branch) => host.read_branch_version(&of.0, &branch, version.clone()),
+        None => host.read_version(&of.0, version.clone()),
+    };
     shell.versions.compare_results.reading = Some((of, version, answer));
 }
 

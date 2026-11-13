@@ -383,6 +383,15 @@ tab. A request from an earlier generation is refused, so it cannot land on a ses
 | A version against current work | Read at revision | Live session snapshot |
 | Current work or a version against another branch's latest version | Read at revision | Read at revision or live snapshot |
 
+Another branch is chosen in either select, under frame V3.1's **Another branch** after this branch's
+versions: one row per other branch that has a version, "Latest version" beside its name; the branch in
+use and a branch with no version are left out, and a list the host cut short says so beside the
+heading, as Branches does. The frame does not show the select once one is picked:
+it says "Latest on {branch}". The row stands for the latest version the Branches section last listed,
+and that version is read on its own branch's line, as the current line does not hold it; a branch
+deleted or renamed since, under none of the names listed now, can't be shown, as a version of no
+line can't. Two branches, or a branch and a version, compare as two versions do.
+
 The live side comes from the session, not the database, so a comparison is pinned to one
 `session.revision()` and
 refreshes when that moves, an agent's edits like the person's. One comparison runs at a time: revisions that

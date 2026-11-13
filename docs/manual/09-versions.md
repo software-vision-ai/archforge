@@ -319,7 +319,7 @@ itself isn't listed, because a member that comes is counted once, on its own row
 ### Choose what to compare
 
 The **Compare** page sets any two versions of the branch you are on, or one version and your
-current work, side by side. To open it:
+current work or another branch's latest version, side by side. To open it:
 
 - in a version's details, choose **Compare…**;
 - or choose **Versions ▸ Compare…**, which takes the version whose details are open, or else the
@@ -332,13 +332,16 @@ Along the top are the two selects, **Before** and **After**, with a button betwe
 *Before → After* at the end. Click a select to see what it can hold: under **This branch**,
 **Current work** first, saying *Unsaved changes* or *No unsaved changes*, then the versions, newest
 first, by date and description. Scrolling to the end of the list reads older versions; if they
-can't be read, it says *The next versions couldn't be read.*, with **Retry**. ↑ and ↓ move through
-the list, Enter or Space chooses, and Escape or Tab closes it.
+can't be read, it says *The next versions couldn't be read.*, with **Retry**. Under **Another
+branch** come the project's other branches that have a version, each with *Latest version* beside
+it; when **Branches** lists only the first 200, so does this list, and it says so. ↑ and ↓ move
+through the list, passing over its headings, Enter or Space chooses, and Escape or Tab closes it.
 
 - **Current work** is always your own work, even while you are
   [viewing an earlier version](#view-an-earlier-version).
 - Two versions are compared as each was saved: what you do afterwards doesn't change them.
-- Only the versions of the branch you are on are offered. To compare another branch's versions,
+- Another branch stands for its latest version, and the select says *Latest on* and its name, so
+  you can see how two branches differ while they can't be merged. To compare its earlier versions,
   switch to it first.
 
 **Which way round.** Put the older state on the left, as Before, to read the changes the way they
@@ -361,7 +364,7 @@ Home and End to either end.
 | Bars, with **Stop** under them | The comparison is under way. When it runs again after a change, **Stop** is above the earlier list | Wait, or choose **Stop** |
 | *The comparison was stopped.*, with **Retry** | You chose **Stop**, and nothing is compared again until you choose **Retry** | Choose **Retry**, or another pair |
 | *The changes couldn't be compared.*, with **Retry** | The comparison failed. Point at the message to read why | Choose **Retry** |
-| *This version can't be shown*, and the reason | A version can't be read here, such as one made with a newer Archforge | Choose another pair |
+| *This version can't be shown*, and the reason | A version can't be read here, such as one made with a newer Archforge, or the branch chosen was deleted or renamed since the list was read | Choose another pair |
 | *Too large to compare* | A version, or the comparison, is larger than Archforge can compare. Nothing is listed | Choose another pair |
 
 ### An element side by side

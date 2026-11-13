@@ -59,7 +59,8 @@ An open project fills the window with its workspace.
   there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
   through History, viewing an earlier version and coming back to your current work.
   **Compare…** opens the Compare page, which sets two versions of the branch, or one and your
-  current work, side by side: [See what changed](09-versions.md#see-what-changed) goes through it.
+  current work or another branch's latest version, side by side:
+  [See what changed](09-versions.md#see-what-changed) goes through it.
   **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed

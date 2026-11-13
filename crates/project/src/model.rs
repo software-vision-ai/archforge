@@ -209,15 +209,20 @@ impl VersionReader {
     /// A connection to the version `commit` through Dolt's revision database: it sees that commit
     /// and nothing else, and the server itself refuses every write over it, so the working set
     /// cannot be touched. The name goes into a `USE` only once it has the shape of a hash, and only
-    /// a commit on the project's own line of work is opened ([`Error::NotAVersion`] otherwise). A
+    /// a commit on the line of work of `branch` is opened ([`Error::NotAVersion`] otherwise, also
+    /// when the server has no such branch, deleted or renamed since it was listed). A
     /// commit never changes, so what is read over the connection is one consistent state however
     /// many statements the reading takes and whatever is written meanwhile.
-    fn revision_connection(&self, commit: &str) -> Result<mysql::Conn, Error> {
+    fn revision_connection(&self, branch: &SafeBranch, commit: &str) -> Result<mysql::Conn, Error> {
         let refused = || Error::NotAVersion { commit: commit.chars().take(40).collect() };
         if !is_commit(commit) {
             return Err(refused());
         }
-        let mut c = self.model_connection()?;
+        // A branch the server refuses to use is no line to read a version on.
+        let mut c = self.branch_connection(branch).map_err(|e| match e {
+            Error::Sql { source: mysql::Error::MySqlError(_), .. } => refused(),
+            other => other,
+        })?;
         // One of the line's own commits: the merge base of it and the head is itself. A hash Dolt
         // does not know is the server's refusal; a connection lost here is not a wrong version.
         let base: Option<mysql::Row> = match c.exec_first("SELECT LEFT(CAST(DOLT_MERGE_BASE(?, 'HEAD') AS CHAR), 64)", (commit,)) {
@@ -416,7 +421,13 @@ impl VersionReader {
     /// Refused with [`Error::NotAVersion`] when `commit` is not a commit on the project's line of
     /// work. Dolt's own first commit holds no settings to read, which is an [`Error::Sql`].
     pub fn read_model_at(&self, schema: &ModelSchema, commit: &str) -> Result<Rows, Error> {
-        let mut c = self.revision_connection(commit)?;
+        self.read_model_on(schema, &self.current_branch(), commit)
+    }
+
+    /// [`VersionReader::read_model_at`] of a commit on the line of work of `branch`, whichever
+    /// branch is current: another branch's version, read as a version of this one is.
+    pub fn read_model_on(&self, schema: &ModelSchema, branch: &SafeBranch, commit: &str) -> Result<Rows, Error> {
+        let mut c = self.revision_connection(branch, commit)?;
         let refused = |why: String| Error::VersionShape { commit: commit.to_string(), why };
         let earlier = match self.held_fingerprint(&mut c)? {
             Some(held) if held == schema.fingerprint => None,

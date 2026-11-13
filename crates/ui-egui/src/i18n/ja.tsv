@@ -515,6 +515,9 @@ str		Models	モデル
 str		Versions	バージョン
 str		Branches	ブランチ
 str		This branch	このブランチ
+str		Another branch	別のブランチ
+str		Latest version	最新のバージョン
+str		Latest on {branch}	{branch} の最新
 str	branch	Current	現在
 str		Branches can't be merged yet.	ブランチはまだマージできません。
 str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
