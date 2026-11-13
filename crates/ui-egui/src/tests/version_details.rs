@@ -336,6 +336,56 @@ fn details_list_what_changed_since_the_version_before() {
     });
 }
 
+/// With no control and not the explorer holding the keys, they scroll the changed items: the
+/// arrows by a card, Page Down and Page Up by what shows, End to the last card and Home to the top.
+/// A focused control keeps them.
+#[test]
+fn the_keys_scroll_the_changed_items() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let without = rows_now(h);
+        (0..40).for_each(|i| add_schema(h, &format!("s{i}")));
+        let with = rows_now(h);
+        list_still(h);
+        host.reads.lock().unwrap().clear();
+        opened(h, "c3");
+        answer(host, "c2", Ok(with));
+        answer(host, "c3", Ok(without));
+        settled(h);
+        assert!(h.ctx.memory(|m| m.focused().is_none()), "nothing has the keys");
+        let offset = |h: &Harness<'static, Shell>| h.state().versions.details.as_ref().unwrap().scroll.offset;
+        let first = ids(h).into_iter().find(|i| i.starts_with("workspace.version-details.change.")).unwrap();
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 60.0, "a card down");
+        key(h, ArrowUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "and back");
+        key(h, PageDown, egui::Modifiers::NONE);
+        let page = offset(h);
+        assert!(page > 60.0, "more than a card: {page}");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert!(offset(h) > page, "another page: {}", offset(h));
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), page, "a page up");
+        key(h, End, egui::Modifiers::NONE);
+        let end = offset(h);
+        h.run_steps(1);
+        assert!(end > page && end < 40.0 * 60.0 && !has_id(h, &first), "the last cards show: {end}");
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), end, "nothing further");
+        key(h, Home, egui::Modifiers::NONE);
+        h.run_steps(1);
+        assert!(offset(h) == 0.0 && has_id(h, &first));
+        h.state_mut().explorer.focused = true;
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(COMPARE)));
+        h.run();
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a control has the keys");
+    });
+}
+
 /// A comparison on its way wakes the window, once input has stopped asking for frames, and the
 /// window rests when the answer has landed. Only the model's root differs from a version with
 /// nothing in it, and that is no change of its own.
