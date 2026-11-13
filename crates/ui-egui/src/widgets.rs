@@ -59,6 +59,17 @@ pub fn record_visible(ui: &Ui, reg: &mut Registry, id: &str, kind: &'static str,
     }
 }
 
+/// Records `area` as the status `id` for automation and has a screen reader say `words` whole, as
+/// a polite live status: announced when it appears, gone on the first frame it is not drawn.
+pub fn announce(ui: &Ui, reg: &mut Registry, id: &str, area: Rect, words: &str) {
+    record_visible(ui, reg, id, "status", area);
+    ui.ctx().accesskit_node_builder(egui_id(id), |node| {
+        node.set_role(egui::accesskit::Role::Status);
+        node.set_live(egui::accesskit::Live::Polite);
+        node.set_label(words);
+    });
+}
+
 /// The toolkit id for an automation identifier.
 pub fn egui_id(id: &str) -> egui::Id {
     egui::Id::unique(("automation", id))

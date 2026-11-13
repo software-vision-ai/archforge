@@ -512,7 +512,7 @@ pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, wi
     let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
     let area = Rect::from_min_size(at, g.size());
     ui.painter().galley(at, g, p.amber);
-    announce_notice(shell, ui, area, &notice);
+    widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", area, &notice);
     area.height()
 }
 
@@ -538,17 +538,7 @@ fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let at = pos2(card.left() + REFUSED_TOAST_TEXT, card.center().y - text.size().y / 2.0);
     paint.circle_filled(pos2(card.left() + 17.0, at.y + types::SMALL.line / 2.0), 3.0, p.amber);
     paint.galley(at, text, p.text);
-    announce_notice(shell, ui, card, &words);
-}
-
-/// Records `area` as the notice for automation and has a screen reader say `words` as a status.
-fn announce_notice(shell: &mut Shell, ui: &egui::Ui, area: Rect, words: &str) {
-    widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.notice", "status", area);
-    ui.ctx().accesskit_node_builder(widgets::egui_id("workspace.canvas.notice"), |node| {
-        node.set_role(egui::accesskit::Role::Status);
-        node.set_live(egui::accesskit::Live::Polite);
-        node.set_label(words);
-    });
+    widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", card, &words);
 }
 
 /// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.
