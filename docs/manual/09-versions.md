@@ -198,6 +198,8 @@ In the example, History lists *Added email* above *Added Customer*. The details 
 show what it changed, with *Added Customer* as its previous version. *Added Customer* is the first
 version.
 
+<!-- picture: workspace-version-details light | The details of Added email: its date and author, View this version, Compare…, Restore this version… and Start a branch here…, three changed items, and Added Customer as the previous version -->
+
 ### View an earlier version
 
 There are three ways to show a version in place of your current work:
@@ -214,6 +216,8 @@ There are three ways to show a version in place of your current work:
 - Press ⌘[ (Ctrl [). From your current work this goes to the latest version when you have unsaved
   changes, and otherwise to the one before it, the newest version that differs from what you see.
 
+<!-- picture: workspace-version-list light | The version chip's list: Current work with unsaved changes, then the two versions by date and description, and New branch… at its foot -->
+
 The version opens on the diagram you were looking at, if it has that diagram, and otherwise on its
 first diagram. Over the centre a banner says *Viewing the version of*, its date, and *· Read only*,
 and the status bar says the same. The chip is tinted and shows the date between ‹ and ›, with
@@ -229,6 +233,8 @@ says *No newer version*, since your current work is not a step away: use
 In the example, with nothing unsaved, ⌘[ shows *Added Customer*: the class *Customer* without
 *email*. ⌘] then shows *Added email*, the same as your current work, and a second ⌘] goes no
 further.
+
+<!-- picture: workspace-version-viewing dark | Viewing Added Customer: the banner over the centre, the tinted chip with its date, and Customer without email -->
 
 ### While a version shows
 
@@ -291,7 +297,9 @@ beside **Back to current work** in the banner, are described under
 ## See what changed
 
 Before you save, or when you look back, you will want to know what changed. Archforge shows it in
-three places, and all three list it the same way:
+three places, and all three name each change the same way:
+
+<!-- picture: workspace-versions light | Versions: two changes under Working changes, a model element and a box on a diagram, and two versions in History; the chip says Current work with a dot -->
 
 | Where | Before | After |
 |---|---|---|
@@ -306,18 +314,22 @@ happened on the way from one to the other: **Added**, **Changed** or **Removed**
 
 Each row is one thing that differs: its name, where it is in the model, such as the package and
 class that hold it, and a letter for what happened, **A** for Added, **C** for Changed and **R** for
-Removed. Something without a name says *Unnamed*. The rows come in groups, **Model elements**, then
-**Diagrams**, then **Skills**, each with how many it holds. A diagram that changed, or a box or line
-on one, is listed under **Diagrams**.
+Removed. Something without a name says *Unnamed*. Under **Working changes** and on the Compare page
+the rows come in groups, **Model elements**, then **Diagrams**, then **Skills**, each with how many
+it holds. In a version's details they come in the same order under **Changed items**, with one
+count for them all, such as *3 changed items*. A diagram that changed, or a box or line on one, is
+listed under **Diagrams**.
 
 Under **Working changes** the list keeps up as you work, and once it holds more than 12 changes, the
 field **Filter changes…** above it narrows it to the rows whose name holds what you type. Click a
 row there, or press Enter on it, to open it in the centre beside your last version, as the next
 sections show. The rows in a version's details and on the Compare page are for reading only.
 
-In the example, after saving *Added Customer* you add *email*. **Working changes** lists one row
-under **Model elements**: *email*, with *Customer* at the end of where it is, and **A**. *Customer*
-itself isn't listed, because a member that comes is counted once, on its own row.
+In the example, after saving *Added Customer* you add *email*. **Working changes** lists *email*
+under **Model elements**, with *Customer* at the end of where it is, and **A**. *Customer* itself
+isn't listed, because a member that comes is counted once, on its own row. As *email* is the
+project's first use of the type *String*, the type *String* and the package *Types* that holds it
+come with it, and are listed as added too.
 
 ### Choose what to compare
 
@@ -403,6 +415,8 @@ In the example, save *Added email*, then rename *email* to *contact*. The summar
 *1 value changed* and *The name changed from email to contact.*, the Before card shows *email*
 marked −, and the After card *contact* marked +.
 
+<!-- picture: workspace-change-element light | contact open from Working changes: 1 value changed, the name changed from email to contact, and the Before and After cards with email marked − and contact marked + -->
+
 ### A diagram side by side
 
 Click a diagram, or a box or line of one, under **Working changes**. Two cards, **Model** and
@@ -443,6 +457,8 @@ lists it under **Diagrams**. The **Layout** card says *1 box moved* and *Custome
 card *The model didn't change* and *Only the layout changed.*, and only the Before and After places
 of *Customer* differ.
 
+<!-- picture: workspace-change-diagram light | The box Customer moved: the Model card says the model didn't change, the Layout card 1 box moved, and Before and After draw Customer, marked Changed, in its two places -->
+
 ## Restore a version
 
 Viewing an earlier version only looks. To go on working from it, restore it: its content becomes
@@ -453,6 +469,8 @@ your current work again, as a new version on top of the history.
    work** in the banner while it shows.
 3. The question **Restore this version?** names the version and says what will happen. Choose
    **Restore**. **Cancel** or Escape leaves everything as it was. Enter does nothing here.
+
+<!-- picture: workspace-restore-ask light | Restore this version? for Added Customer: the new version it makes, the unsaved changes saved first as Before restoring, and Cancel and Restore -->
 
 Archforge first takes you back to current work, if you were viewing, and makes sure nothing is left
 half done, as for [viewing a version](#back-to-current-work); while Chat is changing the model, it
@@ -532,6 +550,8 @@ only its icon, with the whole label when you point at it.
 
 [History](#history-and-a-versions-details) on a branch lists its own versions, then those it shares
 with `main`.
+
+<!-- picture: workspace-branches light | On the branch Contact details: Branches lists main and Contact details, Current, with its unsaved dot; History shows the divider Shared with main up to here; the chip names the branch -->
 
 ### Make a branch
 

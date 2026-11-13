@@ -1,6 +1,8 @@
 //! Offscreen rendering of the window, behind the `snapshot` feature: a fresh shell in
 //! the headless harness, drawn once settled and rendered to RGBA.
 
+mod versions;
+
 use crate::theme::ThemeKind;
 use crate::{Folder, Services, Shell};
 
@@ -318,6 +320,24 @@ pub enum Screen {
     /// The sample class model edited, unsaved, and its close asking Save, Don't save or Cancel
     ///.
     WorkspaceCloseAsk,
+    /// Versions over the chapter's example, two versions saved and email renamed contact and
+    /// Customer moved since: Working changes, History, and the chip saying unsaved changes.
+    WorkspaceVersions,
+    /// The same with the version chip's list open.
+    WorkspaceVersionList,
+    /// The same with the details of Added email in the centre.
+    WorkspaceVersionDetails,
+    /// The same viewing Added Customer: the banner, the tinted chip and Back to current work.
+    WorkspaceVersionViewing,
+    /// email renamed contact alone, the attribute's two sides open from Working changes.
+    WorkspaceChangeElement,
+    /// Customer moved alone, the diagram's two sides open from Working changes.
+    WorkspaceChangeDiagram,
+    /// The same as Versions with the question Restore this version? asked of Added Customer.
+    WorkspaceRestoreAsk,
+    /// The same on the branch Contact details, where the rename is saved: Branches open with
+    /// main, History with the divider above the versions shared with main.
+    WorkspaceBranches,
     /// The routing sample with the top bar's search open on "order".
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -380,6 +400,9 @@ fn drawn(width: f32, height: f32, scale: f32, theme: ThemeKind, screen: Screen) 
         shell,
     );
     harness.run();
+    if versions::SCREENS.contains(&screen) {
+        versions::reach(&mut harness, screen)?;
+    }
     // The pointer over a control the screen names, as the design draws it there.
     if let Some(id) = hover
         && let Some(w) = harness.state().widgets().iter().find(|w| w.id == id)
@@ -764,6 +787,9 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::WorkspaceChatDeleted
     ) {
         chat_screen(&mut shell, screen)?;
+    }
+    if versions::SCREENS.contains(&screen) {
+        versions::sample(&mut shell, screen)?;
     }
     if screen == Screen::WorkspaceClassDiagramRead {
         shell.adopt_project();
