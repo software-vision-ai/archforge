@@ -611,7 +611,11 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], new: bool) -> bool {
     let l = &mut shell.version_list;
     l.on_new &= new;
     if l.on_new {
+        // Back to the last row as the list now holds it: a page may have come while on the row.
         l.on_new = !up;
+        if up {
+            l.highlight = last;
+        }
     } else if down && new && (rows.is_empty() || l.highlight >= last) {
         l.on_new = true;
     } else {
