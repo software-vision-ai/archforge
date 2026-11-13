@@ -873,7 +873,7 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
             .ok_or_else(|| refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))))?,
     };
     if kind != 0 && aggregation(ctx.doc, other) != 0 {
-        return Err(refuse("aggregation", "the other end aggregates already: only the part's end can"));
+        return Err(refuse("aggregation", "the other end aggregates already: only the part's end can").because(Reason::OtherEndAggregates));
     }
     // Left out, the multiplicity is the stored one as it is, never read again.
     let bounds = match p.str("multiplicity") {
@@ -882,17 +882,18 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     };
     // A part belongs to at most one whole: the whole's end allows one at most.
     if kind == 2 && upper(ctx.doc, other).is_none_or(|u| u > 1) {
-        return Err(refuse("aggregation", "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first"));
+        let why = "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first";
+        return Err(refuse("aggregation", why).because(Reason::WholeAllowsMany));
     }
     if aggregation(ctx.doc, other) == 2 && bounds.is_some_and(|(_, u)| u.is_none_or(|u| u > 1)) {
-        return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most"));
+        return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most").because(Reason::WholeAllowsOne));
     }
     // The whole's end, where the diamond sits, is never navigable (owner decision); left out, an
     // end keeps whether it is.
     let whole = aggregation(ctx.doc, other) != 0;
     let navigable = p.bool("navigable").unwrap_or(!whole && crate::figures::navigable(ctx.doc, a, end));
     if whole && navigable {
-        return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable"));
+        return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable").because(Reason::WholeNavigable));
     }
     // Its modifiers, checked against the end as it will be: its role, bounds and aggregation.
     let (lower, upper) = bounds.unwrap_or((1, Some(1)));
@@ -943,7 +944,8 @@ fn nary_set_end(ctx: &mut C<'_>, p: &Params, a: Obj) -> R {
         if !AGGREGATIONS.contains(&k) {
             return Err(refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))));
         }
-        return Err(refuse("aggregation", "an n-ary association's ends are not aggregations: only a binary association has a whole and a part"));
+        let why = "an n-ary association's ends are not aggregations: only a binary association has a whole and a part";
+        return Err(refuse("aggregation", why).because(Reason::NaryAggregates));
     }
     let bounds = match p.str("multiplicity") {
         Some(typed) => crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?,
@@ -1086,10 +1088,12 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         // realization's fault, not the classifier the moved end was dropped on.
         match realization_problem(ctx.doc, i, c, Some(r)) {
             Some(RealizationProblem::NotAClass) if !source => {
-                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")));
+                let reason = Reason::WrongEnd { relationship: "realization", end: End::Source, kind: what(ctx.doc, implementing) };
+                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")).because(reason));
             }
             Some(RealizationProblem::NotAnInterface) if source => {
-                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")));
+                let reason = Reason::WrongEnd { relationship: "realization", end: End::Target, kind: what(ctx.doc, contract) };
+                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")).because(reason));
             }
             Some(problem) => return Err(problem.refusal(ctx.doc, "class", i, c)),
             None => {}

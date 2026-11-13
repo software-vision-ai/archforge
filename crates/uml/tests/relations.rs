@@ -428,9 +428,11 @@ fn a_realization_reconnects_with_its_rules_kept_and_goes_alone_or_with_either_en
 }
 
 /// A realization whose end that stays is wrong already, owned by something else than a class (a
-/// project edited by hand), is refused when its other end moves, naming the realization's own end.
+/// project edited by hand), is refused when its other end moves, naming the realization's own end,
+/// its reason typed as that end's (AR-442).
 #[test]
 fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_moves() {
+    use archforge_engine::{End, EngineError, Reason};
     let mut st = store(0);
     st.create(archforge_core::MODEL).unwrap();
     let actor = st.create(archforge_uml::ACTOR).unwrap();
@@ -442,9 +444,11 @@ fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_mov
     let (r, refundable, actor) = (id(r), id(refundable), id(actor));
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     let before = snapshot(&s);
-    let e = s.execute("uml.relationship.reconnect", &json!({ "relationship": r, "end": "target", "class": refundable })).unwrap_err().to_string();
+    let p = json!({ "relationship": r, "end": "target", "class": refundable });
+    let Err(EngineError::Failed { error, .. }) = s.execute("uml.relationship.reconnect", &p) else { panic!("{p} is refused") };
     let want = format!("relationship: the realization's existing implementing end {actor} is of kind Actor; it must be a Class");
-    assert!(e.contains(&want), "{e}");
+    assert_eq!(error.to_string(), want);
+    assert_eq!(error.reason, Some(Reason::WrongEnd { relationship: "realization", end: End::Source, kind: "element" }));
     assert_eq!(snapshot(&s), before, "nothing changed");
 }
 
@@ -769,4 +773,45 @@ fn every_relationship_rule_broken_carries_its_reason_typed() {
         assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
         assert_eq!(snapshot(&s), before, "{cmd} {p} changed nothing");
     }
+}
+
+/// Every aggregation rule a binary association's end breaks, and every count of ends an n-ary
+/// association breaks, carries its reason typed beside the unchanged English, for an interface to
+/// say in its own words (AR-442).
+#[test]
+fn every_aggregation_and_end_count_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let (_, _, c, _) = classes(&mut s, &["Order", "Line", "Invoice"], 0);
+    let binary = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    let end = |e: u8, p: Json| {
+        let mut p = p;
+        p["association"] = json!(binary);
+        p["end"] = json!(e);
+        ("uml.association.set-end", p)
+    };
+    let nary = run(&mut s, "uml.association.add-nary", json!({ "classes": [c[0], c[1], c[2]] }));
+    let full = run(&mut s, "uml.association.add-nary", json!({ "classes": vec![&c[2]; 32] }));
+    let few = Reason::TooFew { kind: "association end", min: 3 };
+    let most = Reason::TooMany { kind: "association end", max: 32 };
+    let check = |s: &mut S, (cmd, p): (&str, Json), reason: Reason, english: &str| {
+        let before = snapshot(s);
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(snapshot(s), before, "{cmd} {p} changed nothing");
+    };
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "multiplicity": "*" }));
+    check(&mut s, end(1, json!({ "aggregation": "composite" })), Reason::WholeAllowsMany, "whole end allows one at most");
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "multiplicity": "1" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 1, "aggregation": "composite" }));
+    check(&mut s, end(0, json!({ "aggregation": "shared" })), Reason::OtherEndAggregates, "the other end aggregates already");
+    check(&mut s, end(0, json!({ "multiplicity": "*" })), Reason::WholeAllowsOne, "this end is a composition's whole");
+    check(&mut s, end(0, json!({ "navigable": true })), Reason::WholeNavigable, "is not navigable");
+    let nary_end = ("uml.association.set-end", json!({ "association": nary, "end": 0, "aggregation": "shared" }));
+    check(&mut s, nary_end, Reason::NaryAggregates, "ends are not aggregations");
+    check(&mut s, ("uml.association.add-nary", json!({ "classes": [c[0], c[1]] })), few.clone(), "joins 3 to 32 ends; 2 given");
+    check(&mut s, ("uml.association.add-nary", json!({ "classes": vec![&c[2]; 33] })), most.clone(), "joins 3 to 32 ends; 33 given");
+    check(&mut s, ("uml.association.add-end", json!({ "association": full, "class": c[0] })), most, "the most an association takes");
+    check(&mut s, ("uml.association.remove-end", json!({ "association": nary, "end": 0 })), few, "only two would remain");
 }

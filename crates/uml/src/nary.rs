@@ -205,13 +205,16 @@ pub fn role_problem(store: &Store, a: Obj, role: &str, except: Option<Obj>) -> O
 fn classifiers_of(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
     let items = p.get(key).and_then(Json::as_array).map(Vec::as_slice).unwrap_or_default();
     if items.len() < MIN_ENDS || items.len() > MAX_ENDS {
+        let kind = "association end";
+        let reason = if items.len() < MIN_ENDS { Reason::TooFew { kind, min: MIN_ENDS } } else { Reason::TooMany { kind, max: MAX_ENDS } };
         return Err(refuse(
             key,
             format!(
                 "an n-ary association joins {MIN_ENDS} to {MAX_ENDS} ends; {} given (two make a binary association: uml.association.add)",
                 items.len()
             ),
-        ));
+        )
+        .because(reason));
     }
     let mut out = Vec::with_capacity(items.len());
     for v in items {
@@ -309,7 +312,8 @@ fn add_end(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let all = ends(ctx.doc, a);
     if all.len() >= MAX_ENDS {
-        return Err(refuse("association", format!("{} has {MAX_ENDS} ends, the most an association takes", uuid_of(ctx.doc, a)?)));
+        let most = Reason::TooMany { kind: "association end", max: MAX_ENDS };
+        return Err(refuse("association", format!("{} has {MAX_ENDS} ends, the most an association takes", uuid_of(ctx.doc, a)?)).because(most));
     }
     let taken: Vec<String> = all.iter().map(|e| name_of(ctx.doc, *e)).collect();
     let role = match p.str("role") {
@@ -354,7 +358,8 @@ fn remove_end(ctx: &mut C<'_>, p: &Params) -> R {
                 "{id} has {MIN_ENDS} ends, and without {} only two would remain: an n-ary association needs three ends or more. Say binary: true to make it a binary association between the two classifiers left, or keep its ends",
                 short(&name_of(ctx.doc, end))
             ),
-        ));
+        )
+        .because(Reason::TooFew { kind: "association end", min: MIN_ENDS }));
     }
     if count > MIN_ENDS && binary {
         return Err(refuse(

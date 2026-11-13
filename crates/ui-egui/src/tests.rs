@@ -4859,6 +4859,71 @@ fn an_argument_rule_broken_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A generalization set's grouping rule, an association end's aggregation rule and an n-ary
+/// association's count of ends broken are said in the chosen language, never in the engine's
+/// English: a set of no member, of too many, of generalizations to different classes, an end
+/// aggregating beside one that does, a composition's whole allowing more than one or made
+/// navigable, an n-ary end aggregating, and too few or too many ends. In light and dark (AR-442).
+#[test]
+fn a_set_or_an_association_end_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, trn};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let sales = id(&mut h, "uml.package.add", json!({ "name": "Sales" }));
+        let [payment, card, product, voucher, order, line] =
+            ["Payment", "Card", "Product", "Voucher", "Order", "Line"].map(|n| id(&mut h, "uml.class.add", json!({ "package": sales, "name": n })));
+        let to_payment = id(&mut h, "uml.generalization.add", json!({ "specific": card, "general": payment }));
+        let to_product = id(&mut h, "uml.generalization.add", json!({ "specific": voucher, "general": product }));
+        let binary = id(&mut h, "uml.association.add", json!({ "from": order, "to": line }));
+        let nary = id(&mut h, "uml.association.add-nary", json!({ "classes": [order, line, card] }));
+        let end = |e: u8, field: &str, value: serde_json::Value| json!({ "association": binary, "end": e, field: value });
+        let set_end = "uml.association.set-end";
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let set = |gens: Vec<&String>| json!({ "generalizations": gens, "name": "Kinds" });
+        assert_eq!(refused(&mut h, "uml.generalization-set.add", set(vec![])), tr("A set groups at least one generalization."));
+        let pair = |specific: &str, general: &str| fmt(&tr("{specific} specialises {general}"), &[("specific", specific), ("general", general)]);
+        let both = fmt(&tr("{names} and {last}"), &[("names", &pair("Card", "Payment")), ("last", &pair("Voucher", "Product"))]);
+        let differ = format!("{both}. {}", tr("A set groups generalizations of one class."));
+        let said = refused(&mut h, "uml.generalization-set.add", set(vec![&to_payment, &to_product]));
+        assert_eq!(said, differ, "{theme:?}: in German");
+        id(&mut h, set_end, end(0, "multiplicity", json!("*")));
+        let whole_many = tr("A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.");
+        assert_eq!(refused(&mut h, set_end, end(1, "aggregation", json!("composite"))), whole_many);
+        id(&mut h, set_end, end(0, "multiplicity", json!("1")));
+        id(&mut h, set_end, end(1, "aggregation", json!("composite")));
+        for (cmd, p, said) in [
+            (set_end, end(0, "aggregation", json!("shared")), tr("The other end has an aggregation already: only the part's end has one.")),
+            (set_end, end(0, "multiplicity", json!("*")), tr("This end is a composition's whole, which allows one at most.")),
+            (set_end, end(0, "navigable", json!(true)), tr("The whole's end of an aggregation or composition is not navigable.")),
+            (
+                set_end,
+                json!({ "association": nary, "end": 0, "aggregation": "shared" }),
+                tr("An n-ary association's ends are not aggregations: only a binary association has a whole and a part."),
+            ),
+            ("uml.association.add-nary", json!({ "classes": [order, line] }), tr("An n-ary association needs three ends or more.")),
+            ("uml.association.add-nary", json!({ "classes": vec![&order; 33] }), fmt(&tr("An association takes at most {n} ends"), &[("n", "32")])),
+            ("uml.association.remove-end", json!({ "association": nary, "end": 0 }), tr("An n-ary association needs three ends or more.")),
+        ] {
+            assert_eq!(refused(&mut h, cmd, p), said, "{theme:?}: in German");
+        }
+        // A set's most members, said with the plural form its count takes: one and many differ.
+        let most = |max: usize| crate::panels::said(&Reason::TooMany { kind: "generalization", max });
+        let form = |n| trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", n);
+        assert_eq!((most(256), most(1)), (Some(form(256)), Some(form(1))), "{theme:?}");
+        assert_ne!(form(1), form(256).replace("256", "1"), "{theme:?}: German has a singular");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
@@ -19834,12 +19899,13 @@ fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_c
     h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.run();
     assert!(!ids(&h).contains(&"workspace.properties.end.0.navigable".to_string()));
-    // Shared on the Order end too is refused, and said.
+    // Shared on the Order end too is refused, and said in the interface's words (AR-442).
     let at = rect_of(&h, "workspace.properties.end.0.aggregation").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.end.0.aggregation.1").center();
     click(&mut h, at);
-    assert!(h.state().panels.notice.as_ref().is_some_and(|n| n.contains("aggregates already")), "{:?}", h.state().panels.notice);
+    let said = crate::i18n::tr("The other end has an aggregation already: only the part's end has one.");
+    assert_eq!(h.state().panels.notice.as_ref(), Some(&said));
     assert_eq!(ends(&mut h)[0]["aggregation"], "none");
     // The line's target end, at Payment, dragged onto Product: the association and its line move.
     let handle = rect_of(&h, "workspace.canvas.line-end.target").center();

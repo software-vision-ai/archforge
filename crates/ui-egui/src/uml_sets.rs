@@ -62,18 +62,14 @@ pub(crate) fn grouping(store: &Store, elements: &[Obj]) -> Grouping {
     match sets::shared_general(store, elements) {
         Ok(general) => Grouping::Shared { general, gens: elements.to_vec() },
         Err(sets::Grouping::ParentsDiffer(gens)) => {
-            let said: Vec<String> = gens
+            let ends: Vec<(String, String)> = gens
                 .iter()
                 .map(|g| {
                     let (s, p) = (sets::specific(store, *g), sets::general(store, *g));
-                    fmt(
-                        &tr("{specific} specialises {general}"),
-                        &[("specific", &s.map(|o| name(store, o)).unwrap_or_default()), ("general", &p.map(|o| name(store, o)).unwrap_or_default())],
-                    )
+                    (s.map(|o| name(store, o)).unwrap_or_default(), p.map(|o| name(store, o)).unwrap_or_default())
                 })
                 .collect();
-            let why = format!("{}. {}", and_list(&said), tr("A set groups generalizations of one class."));
-            Grouping::Refused { short: tr("parents differ"), short_add: tr("no shared parent"), why }
+            Grouping::Refused { short: tr("parents differ"), short_add: tr("no shared parent"), why: parents_differ(&ends) }
         }
         Err(sets::Grouping::NotAGeneralization(o)) => {
             let what = archforge_core::name_of(store, o);
@@ -87,6 +83,14 @@ pub(crate) fn grouping(store: &Store, elements: &[Obj]) -> Grouping {
             Grouping::Refused { short: tr("nothing selected"), short_add: tr("nothing selected"), why }
         }
     }
+}
+
+/// Why generalizations to different classifiers form no set, each given by its specific and its
+/// general classifier's names: `A specialises B and C specialises D. A set groups ...`.
+pub(crate) fn parents_differ(ends: &[(String, String)]) -> String {
+    let said: Vec<String> =
+        ends.iter().map(|(s, g)| fmt(&tr("{specific} specialises {general}"), &[("specific", s.as_str()), ("general", g.as_str())])).collect();
+    format!("{}. {}", and_list(&said), tr("A set groups generalizations of one class."))
 }
 
 /// `a`, `a and b`, `a, b and c`.

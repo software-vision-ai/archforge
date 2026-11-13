@@ -1438,6 +1438,10 @@ str		Clear	Limpar
 str		Client	Cliente
 str		Composite	Composta
 str		Composition	Composição
+str		The other end has an aggregation already: only the part's end has one.	A outra ponta já tem uma agregação: só a ponta da parte tem uma.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	O todo de uma composição admite no máximo um: defina primeiro a multiplicidade da outra ponta como 1 ou 0..1.
+str		This end is a composition's whole, which allows one at most.	Esta ponta é o todo de uma composição, que admite no máximo um.
+str		The whole's end of an aggregation or composition is not navigable.	A ponta do todo de uma agregação ou composição não é navegável.
 str		Dependency	Dependência
 str		Dependency · model	Dependência · modelo
 str		Directed association	Associação dirigida
@@ -1537,6 +1541,7 @@ str		Click a class for the new end	Clique numa classe para a nova ponta
 str		Esc cancels	Esc cancela
 str		An n-ary association joins classes and interfaces	Uma associação n-ária liga classes e interfaces
 str		An association takes at most {n} ends	Uma associação tem no máximo {n} pontas
+str		An n-ary association needs three ends or more.	Uma associação n-ária precisa de três pontas ou mais.
 str		An n-ary association needs three ends or more: click another class	Uma associação n-ária precisa de três pontas ou mais: clique noutra classe
 str		Add n-ary association	Adicionar associação n-ária
 str		New n-ary association	Nova associação n-ária
@@ -1554,6 +1559,7 @@ str		Reconnect end	Religar ponta
 str		Drag a leg end	Arraste a ponta de um ramo
 str		Open a class diagram to pick the new end's class	Abra um diagrama de classes para escolher a classe da nova ponta
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	As pontas de uma associação n-ária não são agregações, por isso Agregação não é oferecida. Repita um tipo em duas pontas quando os papéis forem diferentes.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	As pontas de uma associação n-ária não são agregações: só uma associação binária tem um todo e uma parte.
 str		Another end has the role {role} already. Pick another role.	Outra ponta já tem o papel {role}. Escolha outro papel.
 str		Set association end	Definir ponta de associação
 str		End {role} removed	Ponta {role} removida
@@ -1575,6 +1581,8 @@ str		Interface realization	Realização de interface
 str		Interface realization · model	Realização de interface · modelo
 # Conjuntos de generalização (AR-129)
 str		A set groups generalizations of one class.	Um conjunto agrupa generalizações de uma só classe.
+str		A set groups at least one generalization.	Um conjunto agrupa pelo menos uma generalização.
+plural		A set groups at most {n} generalization.	Um conjunto agrupa no máximo {n} generalização.|Um conjunto agrupa no máximo {n} generalizações.
 str		Add member	Adicionar membro
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Adicionar membro só oferece generalizações para {general}. Editar abre essa generalização.
 str		Add to a generalization set	Adicionar a um conjunto de generalização
