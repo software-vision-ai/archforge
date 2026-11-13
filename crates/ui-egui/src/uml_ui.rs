@@ -230,7 +230,7 @@ impl DiagramKind for UmlKind {
                 }
                 shell.canvas.tool = crate::canvas::Tool::Select;
             }
-            Err(e) => shell.canvas.notice = Some(e.to_string()),
+            Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
         }
     }
 
@@ -463,7 +463,7 @@ fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
             }
             shell.canvas.tool = crate::canvas::Tool::Select;
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -498,7 +498,7 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         Ok(_) => {
             let _ = crate::editing::run(shell, "view.select", json!({ "ids": [element.to_string()] }));
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 

@@ -455,7 +455,7 @@ pub(crate) fn connect(shell: &mut Shell, d: Obj, from_node: Uuid, to_node: Uuid)
                 shell.canvas.notice = Some(e);
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -547,7 +547,7 @@ pub(crate) fn connect_class(shell: &mut Shell, d: Obj, from: (Obj, Uuid), to: (O
                 shell.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -636,7 +636,7 @@ pub(crate) fn connect_to_new(shell: &mut Shell, d: Obj, from_node: Uuid, x: f64,
                 shell.canvas.focused = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 

@@ -5315,6 +5315,42 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     assert!(!h.state().canvas.tabs.contains(&second));
 }
 
+/// A skill's name refused in its tab says why in plain words and in the chosen language, never
+/// with the command's id, the parameter it is about or the engine's English: the name another skill
+/// on the same table has. In English and German, in light and dark (AR-431).
+#[test]
+fn a_skill_name_refused_in_its_tab_says_why_in_plain_words() {
+    for (language, theme) in [("en", ThemeKind::Light), ("en", ThemeKind::Dark), ("de", ThemeKind::Light), ("de", ThemeKind::Dark)] {
+        let (mut h, customer) = table_harness();
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = language.into();
+        h.run();
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            s.execute("skill.add", &serde_json::json!({ "subject": customer, "name": "Customer naming" })).unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        }
+        let at = rect_of(&h, "workspace.panels.skills").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.skills.add").center();
+        click(&mut h, at);
+        h.run();
+        h.event(egui::Event::Text("Customer naming".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        let doc = h.state().canvas.skills.iter().find(|d| Some(d.skill) == h.state().canvas.active).unwrap();
+        let refused = doc.settings_refused.clone().unwrap_or_else(|| panic!("{language} {theme:?}: refused"));
+        let what = crate::i18n::tr_ctx("refusal", "a skill");
+        if language == "de" {
+            assert_ne!(what, "a skill", "{theme:?}: the catalogue has the kind in German");
+        }
+        let said = crate::i18n::fmt(&crate::i18n::tr("There is {what} named {name} already."), &[("what", &what), ("name", "Customer naming")]);
+        assert_eq!(refused, said, "{language} {theme:?}: the kind and the other skill's name, in the chosen language");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     let (mut h, customer) = table_harness();
@@ -5459,6 +5495,29 @@ fn a_refused_appearance_change_is_read_out_as_a_status() {
         h.run();
         assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
         assert!(h.query_by_label(&notice).is_none(), "{theme:?}: and no longer read out");
+    }
+}
+
+/// A change in Appearance refused says why in plain words, as a sentence, never as the engine words
+/// it: a fill picked, and Use diagram defaults, while the model can't be changed. In light and dark
+/// (AR-431).
+#[test]
+fn a_refused_appearance_change_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["workspace.appearance.fill.2", "workspace.appearance.defaults"] {
+            let (mut h, customer, _) = diagram_harness();
+            h.state_mut().state.theme = theme;
+            let at = rect_of(&h, "workspace.panels.appearance").center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+            h.run();
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            let at = rect_of(&h, control).center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}, {control}: refused"));
+            assert_eq!(notice, crate::i18n::tr("The model cannot be changed at the moment; nothing was changed."), "{theme:?}, {control}");
+        }
     }
 }
 
@@ -17282,6 +17341,40 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
     }
 }
 
+/// A line the engine refuses on a class diagram is said at the canvas's top in plain words and in
+/// the chosen language, never with the command's id, the parameter it is about or the engine's
+/// English: a class drawn depending on itself, in English and German. Nothing changes. In light and
+/// dark (AR-431).
+#[test]
+fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for language in ["en", "de"] {
+            let (mut h, nodes, _) = enumeration_sample(theme);
+            h.state_mut().state.language = language.into();
+            h.run();
+            let node = archforge_mof::Uuid::parse(&nodes["OrderLine"]).unwrap();
+            let d = h.state().canvas.active.unwrap();
+            let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
+            let revision = h.state().session.as_ref().unwrap().revision();
+            h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+            crate::uml_relate::connect(h.state_mut(), d, node, node);
+            h.run();
+            // The sentence as the catalogue words it: the kind, with a capital, in its template.
+            let class = crate::i18n::tr_ctx("refusal", "a class");
+            let class: String = class.chars().take(1).flat_map(char::to_uppercase).chain(class.chars().skip(1)).collect();
+            let said = crate::i18n::fmt(&crate::i18n::tr("{what} cannot depend on itself."), &[("what", &class)]);
+            if language == "de" {
+                assert_ne!(said, "A class cannot depend on itself.", "{theme:?}: the catalogue has it in German");
+            }
+            let notice = h.state().canvas.notice.clone().unwrap_or_else(|| panic!("{theme:?}, {language}: the refusal is said"));
+            assert_eq!(notice, said, "{theme:?}, {language}");
+            assert!(painted(&h).contains(&notice), "{theme:?}, {language}: shown at the canvas's top");
+            assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}, {language}: nothing changed");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The sample class model in `theme` with two data types, Amount and Price, placed in its empty
 /// bottom row and the whole diagram in view: the harness, every card's node by name, the data
 /// types' ids and their nodes.
@@ -23647,6 +23740,28 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Unapply stereotype"));
         h.run();
         assert!(painted_has(&h, "Stereotypes · 0"));
+    }
+}
+
+/// Show stereotype values refused says why under Properties in plain words, as a sentence, never as
+/// the engine words it: a model that can't be changed at the moment. Nothing changes. In light and
+/// dark (AR-431).
+#[test]
+fn show_stereotype_values_refused_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, crate::uml_stereotypes::SHOW_ID).center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert_eq!(notice, crate::i18n::tr("The model cannot be changed at the moment; nothing was changed."), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing changed");
     }
 }
 

@@ -287,7 +287,7 @@ pub(crate) fn finish(shell: &mut Shell, d: Obj) {
             }
         }
         // Refused, the draft stays for another try and the model is as it was.
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -1100,7 +1100,7 @@ fn commit(shell: &mut Shell, edit: &EndEdit) {
         }
         Err(e) => {
             if let Some(ed) = shell.panels.nary_end.as_mut() {
-                ed.refused = Some((None, e.to_string()));
+                ed.refused = Some((None, crate::panels::refusal(&e)));
             }
         }
     }
