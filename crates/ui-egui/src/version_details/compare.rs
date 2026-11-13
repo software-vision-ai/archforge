@@ -1,7 +1,7 @@
 //! The Compare page in the centre, in place of a version's details (frames V3.1 and V3.2 of page 09
 //! of the design and section 6 of `docs/design/versioning.md`): Before and After in a band, in the
 //! direction Swap reverses. Each select opens a list of the versions already read, under the band;
-//! under it [`results`] says what a version and current work differ by. AR-280 compares two versions.
+//! under it [`results`] says what the two sides differ by: a version and current work, or two versions.
 
 use egui::accesskit::Role;
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};

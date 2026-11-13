@@ -454,6 +454,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
+str		These two versions are the same.	These two versions are the same.
 str		Both sides are your current work.	Both sides are your current work.
 str		Choose another pair above.	Choose another pair above.
 str		Restore this version…	Restore this version…

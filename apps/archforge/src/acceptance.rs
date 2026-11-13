@@ -422,7 +422,8 @@ fn compared(h: &mut H, row: &str) -> usize {
 
 /// A user saves two versions, then compares the older with current work, an unsaved change on top,
 /// first from current work and then while the newer version is shown: the work set aside is what
-/// it is compared with, not the version in view.
+/// it is compared with, not the version in view. Then the older with the newer, both read at their
+/// revisions.
 #[test]
 fn a_user_compares_a_version_with_current_work_also_while_another_is_shown() {
     let (mut h, _sandbox) = start("compare");
@@ -444,6 +445,10 @@ fn a_user_compares_a_version_with_current_work_also_while_another_is_shown() {
     click_on(&mut h, "workspace.version-details.view");
     wait(&mut h, "the newer version shown", |h| h.state().viewing().is_some());
     assert_eq!(compared(&mut h, &older), 2, "against the version in view, only billing");
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.1");
+    let changes = |h: &Shell| h.widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count();
+    wait(&mut h, "the newer version compared", |h| changes(h.state()) == 1);
 }
 
 /// The place of a built-in type in the type menu of a project with no types of its own: None

@@ -1,8 +1,8 @@
 //! What the Compare page finds under its band (frame V3.2 of page 09 of the design and section 6 of
-//! `docs/design/versioning.md`): a version read at its revision against current work, off the
-//! interface thread. The frame only copies current work's objects; their rows are built with the
-//! comparison. Comparing reads rows only, so the session is never replaced. While a version shows,
-//! current work is the session set aside.
+//! `docs/design/versioning.md`): a version read at its revision against current work or another
+//! version read at its own, off the interface thread. The frame only copies current work's objects;
+//! their rows are built with the comparison. Comparing reads rows only, so the session is never
+//! replaced. While a version shows, current work is the session set aside.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -35,17 +35,20 @@ const SAID: f32 = 96.0;
 /// The bars a comparison in progress shows in place of the cards.
 const SKELETON_CARDS: usize = 3;
 
-/// The version compared with current work, and whether current work is the Before side.
-pub(crate) type Sides = (String, bool);
+/// The Before and the After side compared: a version, or current work as none. Never both current
+/// work, nor one version on both sides.
+pub(crate) type Sides = (Option<String>, Option<String>);
 
-/// What a comparison is of: its sides, and the revision of current work it took.
+/// What a comparison is of: its sides, and the revision of current work it took; 0 for two
+/// versions, which never move.
 #[derive(Clone, PartialEq)]
 pub(crate) struct Key {
     pub(crate) sides: Sides,
     pub(crate) revision: u64,
 }
 
-/// A version's rows; `keep` is false for rows too large to hold past the comparison they start.
+/// A version's rows; `keep` is false for rows too large to hold, beside the others held, past the
+/// comparison they start.
 pub(crate) struct Held {
     pub(crate) version: String,
     pub(crate) rows: Arc<Rows>,
@@ -66,7 +69,7 @@ pub(crate) enum Origin {
 #[derive(Default)]
 pub(crate) struct Results {
     about: Option<(PathBuf, u64)>,
-    pub(crate) held: Option<Held>,
+    pub(crate) held: Vec<Held>,
     pub(crate) reading: Option<((PathBuf, u64), String, Receiver<VersionRead>)>,
     pub(crate) comparing: Option<(Key, Receiver<Found>)>,
     pub(crate) found: Option<(Key, Found, Origin)>,
@@ -74,15 +77,22 @@ pub(crate) struct Results {
     pub(crate) scroll: TreeScroll,
 }
 
-/// The sides the page compares now; none without the page, or for a pair that is not a version and
-/// current work.
+/// The sides the page compares now; none without the page, or for a pair with nothing to compare:
+/// current work or one version on both sides.
 fn sides(shell: &Shell) -> Option<Sides> {
     let pair = shell.versions.details.as_ref()?.compare.as_ref()?;
-    match (&pair.before, &pair.after) {
-        (Side::Version(v), Side::CurrentWork) => Some((v.hash.clone(), false)),
-        (Side::CurrentWork, Side::Version(v)) => Some((v.hash.clone(), true)),
-        _ => None,
-    }
+    let version = |side: &Side| if let Side::Version(v) = side { Some(v.hash.clone()) } else { None };
+    Some((version(&pair.before), version(&pair.after))).filter(|(before, after)| before != after)
+}
+
+/// Whether both of `sides` are versions, which a later revision of current work cannot change.
+fn two_versions(sides: &Sides) -> bool {
+    sides.0.is_some() && sides.1.is_some()
+}
+
+/// The revision a comparison of `sides` stands at: current work's, or 0 for two versions.
+fn revision_of(sides: &Sides, work: Option<u64>) -> Option<u64> {
+    if two_versions(sides) { Some(0) } else { work }
 }
 
 /// Lets go of all but the read once the project or session shown is another, or none is, and takes
@@ -107,7 +117,7 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     let_go(shell);
     let Some(now) = sides(shell) else {
         let r = &mut shell.versions.compare_results;
-        (r.held, r.found) = (None, None);
+        (r.held, r.found) = (Vec::new(), None);
         return;
     };
     let waits = shell.versions.details_comparing.is_some() || shell.versions.details_reading.is_some();
@@ -132,21 +142,27 @@ fn answered<T, E: From<String>>(rx: &Receiver<Result<T, E>>) -> Option<Result<T,
 /// stream of edits would hide every answer; a failure for them says nothing of the newest rows,
 /// which the next comparison takes.
 fn take_answers(shell: &mut Shell) {
-    let (now, revision) = (sides(shell), shell.current_work().map(|s| s.revision()));
+    let (now, work) = (sides(shell), shell.current_work().map(|s| s.revision()));
     let r = &mut shell.versions.compare_results;
     if let Some(answer) = r.reading.as_ref().and_then(|(.., rx)| answered(rx))
         && let Some((of, version, _)) = r.reading.take()
-        && let Some(sides) = now.clone().filter(|s| s.0 == version && r.about.as_ref() == Some(&of))
+        && let Some(sides) = now.clone().filter(|s| s.0.as_ref() == Some(&version) || s.1.as_ref() == Some(&version))
+        && r.about.as_ref() == Some(&of)
     {
         match answer {
-            Ok(rows) => r.held = Some(Held { version, keep: bytes_of(&rows) <= MOST_KEPT_BYTES, rows }),
-            Err(why) => r.found = revision.map(|revision| (Key { sides, revision }, Err(why.to_string()), Origin::Read)),
+            Ok(rows) => {
+                // Only rows of the sides shown stay, and those kept past a comparison fit the bytes allowed together.
+                r.held.retain(|h| [&sides.0, &sides.1].contains(&&Some(h.version.clone())));
+                let kept = r.held.iter().filter(|h| h.keep).map(|h| bytes_of(&h.rows)).fold(bytes_of(&rows), usize::saturating_add);
+                r.held.push(Held { version, keep: kept <= MOST_KEPT_BYTES, rows });
+            }
+            Err(why) => r.found = revision_of(&sides, work).map(|revision| (Key { sides, revision }, Err(why.to_string()), Origin::Read)),
         }
     }
     if let Some(answer) = r.comparing.as_ref().and_then(|(_, rx)| answered(rx))
         && let Some((key, _)) = r.comparing.take()
         && now.as_ref() == Some(&key.sides)
-        && (answer.is_ok() || revision == Some(key.revision))
+        && (answer.is_ok() || revision_of(&key.sides, work) == Some(key.revision))
     {
         if r.found.as_ref().is_none_or(|(shown, ..)| shown.sides != key.sides) {
             r.scroll = TreeScroll::default();
@@ -156,36 +172,42 @@ fn take_answers(shell: &mut Shell) {
 }
 
 /// Compares the newest rows when what is shown is not of them. One comparison runs at a time, so
-/// revisions that move while it runs fold into the next; nothing is compared while an edit is under
-/// way. What is shown for these sides is known at its own revision, whatever it is. At a later one,
-/// differences and a failed comparison give way: the rows held are compared again, or, if they went
-/// as too large, read again first. A failed read stays known until Retry clears it, or each edit
-/// would ask the host for the version again.
+/// revisions that move while it runs fold into the next; nothing is compared with current work while
+/// an edit is under way. What is shown for these sides is known at its own revision, whatever it is.
+/// At a later one, differences and a failed comparison give way: the rows held are compared again,
+/// or, if they went as too large, read again first, Before first. Two versions never move, so what
+/// is known of them stays. A failed read stays known until Retry clears it, or each edit would ask
+/// the host for the version again.
 fn next(shell: &mut Shell, sides: Sides) {
-    let Some(session) = shell.current_work().filter(|s| !s.interacting()) else { return };
-    let key = Key { sides, revision: session.revision() };
+    let work = shell.current_work().filter(|s| !s.interacting()).map(|s| s.revision());
+    let Some(revision) = revision_of(&sides, work) else { return };
+    let key = Key { sides, revision };
     let r = &shell.versions.compare_results;
-    let held = r.held.as_ref().filter(|h| h.version == key.sides.0);
     let known = r.found.as_ref().is_some_and(|(shown, _, origin)| *shown == key || (shown.sides == key.sides && *origin == Origin::Read));
     if known || r.comparing.is_some() {
         return;
     }
-    let Some(before) = held.map(|h| h.rows.clone()) else { return read_before(shell, key.sides.0) };
-    // The frame only copies the objects; their rows are built with the comparison.
-    let started = compare(before, session.doc().freeze(), key.sides.1);
+    let held = |v: &String| r.held.iter().find(|h| h.version == *v).map(|h| Got::Rows(h.rows.clone()));
+    if let Some(unread) = [&key.sides.0, &key.sides.1].into_iter().flatten().find(|v| held(v).is_none()) {
+        return read_side(shell, unread.clone());
+    }
+    // The frame only copies current work's objects; their rows are built with the comparison.
+    let got = |side: &Option<String>| side.as_ref().map_or_else(|| shell.current_work().map(|s| Got::Live(Box::new(s.doc().freeze()))), held);
+    let (Some(before), Some(after)) = (got(&key.sides.0), got(&key.sides.1)) else { return };
+    let started = compare(before, after);
     let r = &mut shell.versions.compare_results;
     match started {
         Ok(answer) => r.comparing = Some((key, answer)),
         Err(why) => r.found = Some((key, Err(why.to_string()), Origin::Comparison)),
     }
-    r.held = r.held.take().filter(|h| h.keep);
+    r.held.retain(|h| h.keep);
 }
 
 /// Asks for the rows of `version`, taking turns with the details' reads: the host refuses reads past
 /// its limit, and that would read as a failed comparison. A read still under way, whichever version
 /// or project it is of, is waited for: one of this version lands as it answers, and the details'
 /// two and this one leave the host room for the list's read or a view.
-fn read_before(shell: &mut Shell, version: String) {
+fn read_side(shell: &mut Shell, version: String) {
     let v = &shell.versions;
     if v.compare_results.reading.is_some() || v.details_comparing.is_some() || v.details_reading.is_some() {
         return;
@@ -195,17 +217,27 @@ fn read_before(shell: &mut Shell, version: String) {
     shell.versions.compare_results.reading = Some((of, version, answer));
 }
 
-/// Builds the rows of `live` and compares them with `version` on a thread of its own, `live` first
-/// when `swapped`; rows that cannot be built fail the comparison with their reason. The model's root
-/// is no change of its own.
-fn compare(version: Arc<Rows>, live: Frozen, swapped: bool) -> std::io::Result<Receiver<Found>> {
+/// One side's rows for a comparison: a version's as read, or current work's objects, whose rows are
+/// built on the comparison's thread.
+enum Got {
+    Rows(Arc<Rows>),
+    Live(Box<Frozen>),
+}
+
+/// Compares `before` with `after` on a thread of its own, building current work's rows there; rows
+/// that cannot be built fail the comparison with their reason. The model's root is no change of
+/// its own.
+fn compare(before: Got, after: Got) -> std::io::Result<Receiver<Found>> {
     let (tx, rx) = channel();
     let (tables, junctions) = archforge_notations::storage();
     let work = move || {
-        let found = live.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|live| {
-            let (before, after) = if swapped { (&live, &*version) } else { (&*version, &live) };
-            classified(before, after, crate::editing::fit_tables).map_err(|e| e.to_string())
-        });
+        let rows = |side| match side {
+            Got::Rows(rows) => Ok(rows),
+            Got::Live(live) => live.rows(&tables, &junctions).map(Arc::new).map_err(|e| e.to_string()),
+        };
+        let found = rows(before)
+            .and_then(|before| Ok((before, rows(after)?)))
+            .and_then(|(before, after)| classified(&before, &after, crate::editing::fit_tables).map_err(|e| e.to_string()));
         // Model elements come first, then diagrams, then skills, each in the order found.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
@@ -221,20 +253,16 @@ fn compare(version: Arc<Rows>, live: Frozen, swapped: bool) -> std::io::Result<R
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let Some(pair) = shell.versions.details.as_ref().and_then(|d| d.compare.clone()) else { return };
     let Some(now) = sides(shell) else {
-        let both_current = pair.before == Side::CurrentWork && pair.after == Side::CurrentWork;
-        let (head, body) = if both_current {
-            (tr("Both sides are your current work."), tr("Choose another pair above."))
-        } else {
-            (tr("Not available yet"), String::new())
-        };
-        return say(shell, ui, p, r, &head, &body);
+        let head = if pair.before == Side::CurrentWork { tr("Both sides are your current work.") } else { tr("These two versions are the same.") };
+        return say(shell, ui, p, r, &head, &tr("Choose another pair above."));
     };
     let found = shell.versions.compare_results.found.as_ref().filter(|(key, ..)| key.sides == now).map(|(_, found, _)| found.clone());
     match found {
         None => loading(shell, ui, p, r),
         Some(Err(why)) => failed(shell, ui, p, r, &why),
         Some(Ok(items)) if items.is_empty() => {
-            say(shell, ui, p, r, &tr("This version is the same as your current work."), &tr("Choose another pair above."))
+            let head = if two_versions(&now) { tr("These two versions are the same.") } else { tr("This version is the same as your current work.") };
+            say(shell, ui, p, r, &head, &tr("Choose another pair above."))
         }
         Some(Ok(items)) => list(shell, ui, p, r, &items),
     }
