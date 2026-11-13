@@ -280,7 +280,7 @@ fn add_nary(ctx: &mut C<'_>, p: &Params) -> R {
     if !name.is_empty()
         && let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME)
     {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
     let a = ctx.doc.create(ASSOCIATION).map_err(fail)?;
     set_name(ctx.doc, a, name)?;

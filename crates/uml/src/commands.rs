@@ -290,7 +290,7 @@ pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
 /// names what has it already. No owner, no clash.
 pub(crate) fn check_name(store: &Store, owner: Option<Obj>, class: ClassId, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
-        return Err(refuse("name", format!("the name {p}")));
+        return Err(refuse("name", format!("the name {p}")).because(p.reason));
     }
     if let Some(s) = owner.and_then(|o| crate::names::clash(store, o, class, name, except)) {
         let existing = name_of(store, s);

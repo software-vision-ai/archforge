@@ -566,6 +566,10 @@ str		There is {what} named {name} already.	已有名为 {name} 的{what}。
 str		{what} cannot depend on itself.	{what}不能依赖自身。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
+str		The text can't be empty.	文本不能为空。
+str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
+str		It can't hold a control or hidden character.	不能包含控制字符或隐藏字符。
+str		It can't start or end with a space.	不能以空格开头或结尾。
 str	refusal	a class	类
 str	refusal	an association class	关联类
 str	refusal	an interface	接口

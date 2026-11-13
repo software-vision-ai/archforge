@@ -566,6 +566,10 @@ str		There is {what} named {name} already.	{name} という名前の{what}はす
 str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str		The text can't be empty.	テキストは空にできません。
+str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
+str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。
+str		It can't start or end with a space.	先頭や末尾に空白は使えません。
 str	refusal	a class	クラス
 str	refusal	an association class	関連クラス
 str	refusal	an interface	インターフェース

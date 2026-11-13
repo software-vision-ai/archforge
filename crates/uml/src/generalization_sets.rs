@@ -334,7 +334,7 @@ fn check_set_name(store: &Store, name: &str, package: Obj, except: Option<Obj>) 
         return Err(refuse("name", "a generalization set needs a name"));
     }
     if let Some(why) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {why}")));
+        return Err(refuse("name", format!("the name {why}")).because(why.reason));
     }
     // Sets are a kind of their own among the package's elements (`crate::names`).
     if crate::names::clash(store, package, GENERALIZATION_SET, name, except).is_some() {
