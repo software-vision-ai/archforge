@@ -681,3 +681,92 @@ fn an_operation_is_made_leaf_and_one_redefined_is_refused_naming_what_redefines_
     round_trip(&mut s, "uml.operation.set", json!({ "operation": card_authorise, "name": "authorise", "returns": "Boolean", "leaf": true }));
     round_trip(&mut s, "uml.classifier.set", json!({ "classifier": c[1], "leaf": true }));
 }
+
+/// Every relationship rule a generalization, a realization, an association, an association class
+/// or an n-ary association breaks carries its reason typed beside the unchanged English, for an
+/// interface to say in its own words; a role another end has names that end's role (AR-436).
+#[test]
+fn every_relationship_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{End, EngineError, Reason};
+    let mut s = session();
+    let (pkg, _, c, _) = classes(&mut s, &["Order", "Invoice", "Line"], 0);
+    let add = |s: &mut S, cmd: &str, name: &str| run(s, cmd, json!({ "package": pkg, "name": name }));
+    let priced = add(&mut s, "uml.interface.add", "Priced");
+    let tier = add(&mut s, "uml.enumeration.add", "Tier");
+    let money = add(&mut s, "uml.data-type.add", "Money");
+    let sku = add(&mut s, "uml.primitive-type.add", "Sku");
+    let quote = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Quote" }));
+    run(&mut s, "uml.generalization.add", json!({ "specific": c[1], "general": c[0] }));
+    run(&mut s, "uml.realization.add", json!({ "class": c[0], "interface": priced }));
+    run(&mut s, "uml.attribute.add", json!({ "class": c[2], "name": "count", "type": "Integer" }));
+    let integer = s.execute("uml.class.get", &json!({ "class": c[2] })).unwrap().value["attributes"][0]["type"]["id"].as_str().unwrap().to_string();
+    let final_one = add(&mut s, "uml.class.add", "Sealed");
+    run(&mut s, "uml.classifier.set", json!({ "classifier": final_one, "final": true }));
+    let binary = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "role": "buyer" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": quote, "name": "price" }));
+    let nary = run(&mut s, "uml.association.add-nary", json!({ "classes": [c[0], c[1], c[2]] }));
+    let generalize = |specific: &str, general: &str| ("uml.generalization.add", json!({ "specific": specific, "general": general }));
+    let realize = |class: &str, interface: &str| ("uml.realization.add", json!({ "class": class, "interface": interface }));
+    let cases = [
+        (generalize(&priced, &c[0]), Reason::SpecializesOnlyItsKind { kind: "interface" }, "an interface specializes only an interface"),
+        (generalize(&c[2], &tier), Reason::OnlyItsKindSpecializes { kind: "enumeration" }, "only an enumeration specializes an enumeration"),
+        (generalize(&c[2], &money), Reason::OnlyItsKindSpecializes { kind: "data type" }, "only a data type specializes a data type"),
+        (generalize(&c[2], &priced), Reason::CannotSpecialize { kind: "class", general: "interface" }, "a class cannot specialize an interface"),
+        (generalize(&integer, &sku), Reason::SpecializesNothing { kind: "built-in type" }, "which specializes nothing"),
+        (generalize(&c[2], &quote), Reason::NothingSpecializes { kind: "association class" }, "which nothing specializes"),
+        (generalize(&c[2], &c[2]), Reason::Itself { relationship: "generalization", kind: "class" }, "a class cannot specialize itself"),
+        (generalize(&c[2], &final_one), Reason::Final { name: "Sealed".into() }, "nothing may specialize it"),
+        (generalize(&c[1], &c[0]), Reason::Again { relationship: "generalization" }, "specializes that class already"),
+        (generalize(&c[0], &c[1]), Reason::Cycle { relationship: "generalization" }, "which would make a cycle"),
+        (realize(&priced, &priced), Reason::WrongEnd { relationship: "realization", end: End::Source, kind: "interface" }, "only a class implements"),
+        (
+            realize(&c[0], &c[1]),
+            Reason::WrongEnd { relationship: "realization", end: End::Target, kind: "class" },
+            "a class realizes only an interface",
+        ),
+        (realize(&c[0], &priced), Reason::Again { relationship: "realization" }, "the class realizes that interface already"),
+        (
+            ("uml.association.add", json!({ "from": c[0], "to": tier })),
+            Reason::WrongEnd { relationship: "association", end: End::Target, kind: "enumeration" },
+            "joins no association",
+        ),
+        (
+            ("uml.association-class.add", json!({ "from": priced, "to": c[0] })),
+            Reason::WrongEnd { relationship: "association class", end: End::Source, kind: "interface" },
+            "an association class joins only classes",
+        ),
+        (
+            ("uml.relationship.reconnect", json!({ "relationship": quote, "end": "target", "class": quote })),
+            Reason::Itself { relationship: "association class", kind: "association class" },
+            "is the association class itself",
+        ),
+        (
+            ("uml.association.add-nary", json!({ "classes": [c[0], c[1], sku] })),
+            Reason::WrongEnd { relationship: "association", end: End::Any, kind: "primitive type" },
+            "joins no association",
+        ),
+        (
+            ("uml.association.set-end", json!({ "association": binary, "end": 1, "role": "BUYER" })),
+            Reason::NameTaken { kind: "association end", name: "buyer".into() },
+            "the other end's role is buyer already",
+        ),
+        (
+            ("uml.association.set-end", json!({ "association": quote, "end": 0, "role": "PRICE" })),
+            Reason::NameTaken { kind: "attribute", name: "price".into() },
+            "named price",
+        ),
+        (
+            ("uml.association.add-end", json!({ "association": nary, "class": c[0], "role": "ORDER" })),
+            Reason::NameTaken { kind: "association end", name: "order".into() },
+            "has the role",
+        ),
+    ];
+    for ((cmd, p), reason, english) in cases {
+        let before = snapshot(&s);
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(snapshot(&s), before, "{cmd} {p} changed nothing");
+    }
+}

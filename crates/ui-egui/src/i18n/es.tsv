@@ -595,6 +595,7 @@ str	refusal	an enum type	un tipo enumerado
 str	refusal	a sequence	una secuencia
 str	refusal	a view	una vista
 str	refusal	a skill	una habilidad
+str	refusal	an association end	un extremo de asociación
 str		A name can't start or end with a space.	Un nombre no puede empezar ni terminar con un espacio.
 str		Working changes	Cambios en curso
 str		History	Historial

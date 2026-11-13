@@ -595,6 +595,7 @@ str	refusal	an enum type	ein Aufzählungstyp
 str	refusal	a sequence	eine Sequenz
 str	refusal	a view	eine Sicht
 str	refusal	a skill	ein Skill
+str	refusal	an association end	ein Assoziationsende
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf

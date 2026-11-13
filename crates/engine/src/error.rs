@@ -122,6 +122,40 @@ pub enum Reason {
     ControlCharacter,
     /// A name or a text starts or ends with a space.
     EdgeSpace,
+    /// An element of `kind` specializes only one of its own kind, as an interface only an
+    /// interface.
+    SpecializesOnlyItsKind { kind: &'static str },
+    /// Only an element of `kind` specializes one, as only an enumeration an enumeration.
+    OnlyItsKindSpecializes { kind: &'static str },
+    /// An element of `kind` cannot specialize one of kind `general`, as a class an interface.
+    CannotSpecialize { kind: &'static str, general: &'static str },
+    /// An element of `kind` specializes nothing, as a built-in type.
+    SpecializesNothing { kind: &'static str },
+    /// Nothing specializes an element of `kind`, as an association class.
+    NothingSpecializes { kind: &'static str },
+    /// The element `name` is final: nothing may specialize it.
+    Final { name: String },
+    /// An element of `kind` would be at both ends of a `relationship`, which the notation names in
+    /// English, as `"generalization"`.
+    Itself { relationship: &'static str, kind: &'static str },
+    /// This element is joined to that one by a `relationship` of this direction already.
+    Again { relationship: &'static str },
+    /// That element is joined to this one by `relationship`s already, so this one would close a
+    /// cycle.
+    Cycle { relationship: &'static str },
+    /// An element of `kind` cannot be the `end` of a `relationship`.
+    WrongEnd { relationship: &'static str, end: End, kind: &'static str },
+}
+
+/// The end of a relationship a [`Reason::WrongEnd`] is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum End {
+    /// The end it is drawn from, as a generalization's specific classifier.
+    Source,
+    /// The end it is drawn to, as a generalization's general classifier.
+    Target,
+    /// One of an n-ary association's ends, which have no direction.
+    Any,
 }
 
 impl CommandError {

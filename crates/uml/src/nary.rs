@@ -19,7 +19,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -181,21 +181,23 @@ fn new_end(store: &mut Store, a: Obj, c: Obj, role: &str) -> Result<Obj, Command
     Ok(end)
 }
 
-/// Why `role` may not be the role of an end of association `a` (other than `except`): a name that
-/// does not read, or one another end has, whatever the case.
-pub fn role_problem(store: &Store, a: Obj, role: &str, except: Option<Obj>) -> Option<String> {
+/// Why `role` may not be the role of an end of association `a` (other than `except`), as a refusal
+/// of the parameter `role` with its reason typed: a name that does not read, or one another end
+/// has, whatever the case.
+pub fn role_problem(store: &Store, a: Obj, role: &str, except: Option<Obj>) -> Option<CommandError> {
     if role.is_empty() {
         return None;
     }
     if let Some(p) = archforge_core::skills::name_problem(role, crate::commands::MAX_NAME) {
-        return Some(format!("the role {p}"));
+        return Some(refuse("role", format!("the role {p}")).because(p.reason));
     }
     let other = crate::names::clash(store, a, PROPERTY, role, except)?;
-    Some(format!(
+    let message = format!(
         "another end of the association, {}, has the role {} already; each end takes a role of its own",
         uuid_of(store, other).unwrap_or_default(),
         name_of(store, other)
-    ))
+    );
+    Some(refuse("role", message).because(Reason::NameTaken { kind: "association end", name: name_of(store, other) }))
 }
 
 /// The classifiers the ids under `key` name, in order, repeats kept: an association may have
@@ -269,8 +271,8 @@ fn has_nary(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
 fn add_nary(ctx: &mut C<'_>, p: &Params) -> R {
     let classes = classifiers_of(ctx.doc, p, "classes")?;
     for c in &classes {
-        if let Some(why) = crate::relations::association_end_problem(ctx.doc, *c) {
-            return Err(refuse("classes", why));
+        if let Some(refused) = crate::relations::association_end_refusal(ctx.doc, "classes", End::Any, *c) {
+            return Err(refused);
         }
     }
     let first = classes.first().copied().ok_or_else(|| refuse("classes", "no classifier is given"))?;
@@ -302,8 +304,8 @@ fn add_nary(ctx: &mut C<'_>, p: &Params) -> R {
 fn add_end(ctx: &mut C<'_>, p: &Params) -> R {
     let a = nary_of(ctx.doc, p, "association")?;
     let c = classifier_of(ctx.doc, p, "class")?;
-    if let Some(why) = crate::relations::association_end_problem(ctx.doc, c) {
-        return Err(refuse("class", why));
+    if let Some(refused) = crate::relations::association_end_refusal(ctx.doc, "class", End::Any, c) {
+        return Err(refused);
     }
     let all = ends(ctx.doc, a);
     if all.len() >= MAX_ENDS {
@@ -314,8 +316,8 @@ fn add_end(ctx: &mut C<'_>, p: &Params) -> R {
         Some(r) => r.to_string(),
         None => default_role(ctx.doc, c, &taken),
     };
-    if let Some(why) = role_problem(ctx.doc, a, &role, None) {
-        return Err(refuse("role", why));
+    if let Some(refused) = role_problem(ctx.doc, a, &role, None) {
+        return Err(refused);
     }
     let end = new_end(ctx.doc, a, c, &role)?;
     draw_legs(ctx.doc, a, end)?;
@@ -407,8 +409,8 @@ fn reconnect_end(ctx: &mut C<'_>, p: &Params) -> R {
     let a = nary_of(ctx.doc, p, "association")?;
     let (_, end) = end_at(ctx.doc, a, p, "end")?;
     let c = classifier_of(ctx.doc, p, "class")?;
-    if let Some(why) = crate::relations::association_end_problem(ctx.doc, c) {
-        return Err(refuse("class", why));
+    if let Some(refused) = crate::relations::association_end_refusal(ctx.doc, "class", End::Any, c) {
+        return Err(refused);
     }
     let mut dropped: Vec<Json> = Vec::new();
     if end_type(ctx.doc, end) != Some(c) {

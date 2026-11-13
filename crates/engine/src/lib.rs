@@ -21,7 +21,7 @@ mod snapshot;
 pub mod testing;
 
 pub use cmd::{CommandInfo, CommandSpec, Ctx, Facts, Handler, ParamInfo, Registry, always};
-pub use error::{CommandError, EngineError, Reason};
+pub use error::{CommandError, End, EngineError, Reason};
 pub use params::{ParamDoc, Params, parse_params};
 pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session};
 pub use snapshot::{Replace, Snapshot, Snapshotted};

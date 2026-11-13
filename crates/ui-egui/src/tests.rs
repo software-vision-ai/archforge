@@ -4641,6 +4641,65 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A relationship rule broken is said in the chosen language in the canvas's words, never in the
+/// engine's English: a generalization's kinds, a final general one by its name, a repeat and a
+/// cycle, a realization's ends, an association's and an n-ary one's end at an enumeration or a
+/// primitive type, an association class's end at an interface and at itself, and a role another
+/// end has. In light and dark (AR-436).
+#[test]
+fn a_relationship_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, tr_ctx};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [order, invoice] = ["Order", "Invoice"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let priced = id("uml.interface.add", json!({ "package": sales, "name": "Priced" }));
+        let tier = id("uml.enumeration.add", json!({ "package": sales, "name": "Tier" }));
+        let sku = id("uml.primitive-type.add", json!({ "package": sales, "name": "Sku" }));
+        let sealed = id("uml.class.add", json!({ "package": sales, "name": "Sealed" }));
+        id("uml.classifier.set", json!({ "classifier": sealed, "final": true }));
+        id("uml.generalization.add", json!({ "specific": invoice, "general": order }));
+        let quote = id("uml.association-class.add", json!({ "from": order, "to": invoice, "name": "Quote" }));
+        let line = id("uml.association.add", json!({ "from": order, "to": invoice }));
+        id("uml.association.set-end", json!({ "association": line, "end": 0, "role": "buyer" }));
+        let named = |key: &str, name: &str| fmt(&tr("There is {what} named {name} already."), &[("what", &tr_ctx("refusal", key)), ("name", name)]);
+        let final_words =
+            fmt(&tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."), &[("name", "Sealed")]);
+        for (cmd, params, said) in [
+            ("uml.generalization.add", json!({ "specific": priced, "general": order }), tr("An interface specializes only an interface")),
+            ("uml.generalization.add", json!({ "specific": order, "general": tier }), tr("Only an enumeration specializes an enumeration")),
+            ("uml.generalization.add", json!({ "specific": order, "general": priced }), tr("A class cannot specialize an interface")),
+            ("uml.generalization.add", json!({ "specific": order, "general": sealed }), final_words),
+            ("uml.generalization.add", json!({ "specific": invoice, "general": order }), tr("This one specializes that one already")),
+            (
+                "uml.generalization.add",
+                json!({ "specific": order, "general": invoice }),
+                tr("That one specializes this one already, which would make a cycle"),
+            ),
+            ("uml.realization.add", json!({ "class": priced, "interface": priced }), tr("Only a class implements an interface")),
+            ("uml.realization.add", json!({ "class": order, "interface": invoice }), tr("A class realizes only an interface")),
+            ("uml.association.add", json!({ "from": order, "to": tier }), tr("An enumeration is a data type and joins no association")),
+            ("uml.association.add-nary", json!({ "classes": [order, invoice, sku] }), tr("A primitive type joins no association")),
+            ("uml.association-class.add", json!({ "from": priced, "to": order }), tr("An association class joins only classes")),
+            (
+                "uml.relationship.reconnect",
+                json!({ "relationship": quote, "end": "target", "class": quote }),
+                tr("An association class does not join itself"),
+            ),
+            ("uml.association.set-end", json!({ "association": line, "end": 1, "role": "BUYER" }), named("an association end", "buyer")),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?} {cmd}: in German");
+            assert!(!refused.is_empty() && !refused.contains(" only ") && !refused.contains(" already"), "{theme:?} {cmd}: not English: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
