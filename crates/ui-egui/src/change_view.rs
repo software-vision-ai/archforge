@@ -6,6 +6,7 @@ mod diagram;
 mod related;
 mod summary;
 
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -19,7 +20,7 @@ use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button, control};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, types};
-use crate::version_details::{BAND, MARGIN, breadcrumb};
+use crate::version_details::{BAND, MARGIN, about, breadcrumb};
 use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, path_words, when, working_key};
 
 /// The two sides the centre shows: an element's cards, or a diagram's drawings.
@@ -30,8 +31,10 @@ pub(crate) enum Sides {
     Diagram(Arc<Mutex<DiagramSides>>),
 }
 
-/// The changed element the centre shows: its row, which speaks for it until its sides are known, and what was last read of them.
+/// The changed element the centre shows, in the project and session it was opened in: its row, which
+/// speaks for it until its sides are known, and what was last read of them.
 pub(crate) struct OpenedElement {
+    about: Option<(PathBuf, u64)>,
     pub(crate) row: Difference,
     read_of: Option<Compared>,
     found: Option<Result<Sides, String>>,
@@ -40,8 +43,9 @@ pub(crate) struct OpenedElement {
     nav: Option<(f32, egui::Vec2)>,
 }
 
-/// The one read of an element's two sides under way, and what it is about.
+/// The one read of an element's two sides under way, and what it is about, in which project and session.
 pub(crate) struct ElementReading {
+    pub(crate) about: Option<(PathBuf, u64)>,
     pub(crate) id: Uuid,
     pub(crate) key: Compared,
     pub(crate) answer: Receiver<Result<Option<Sides>, String>>,
@@ -51,16 +55,33 @@ pub(crate) struct ElementReading {
 /// Opening the one shown again keeps what was read of it, and fits a diagram's two sides again.
 pub(crate) fn open(shell: &mut Shell, row: Difference) {
     (shell.versions.details, shell.versions.selected, shell.canvas.notice) = (None, None, None);
+    let about = about(shell);
     let v = &mut shell.versions;
     match v.element.as_mut() {
         Some(o) if o.row.id == row.id => o.nav = None,
-        _ => v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default(), nav: None }),
+        _ => v.element = Some(OpenedElement { about, row, read_of: None, found: None, scroll: TreeScroll::default(), nav: None }),
     }
 }
 
-/// Once a frame: takes the answer, closes an element the list no longer holds, starts the next read
-/// and wakes the window while one is awaited. A failed list says nothing of the element: that closes nothing.
+/// Lets go of the open element, its sides with it, and of the read of them with its answer still to
+/// come, once the project or session shown is another, or none is. Also once a frame before
+/// drawing, as Home and a project closed draw no rail to call [`keep`].
+pub(crate) fn let_go(shell: &mut Shell) {
+    let about = about(shell);
+    let v = &mut shell.versions;
+    if v.element.as_ref().is_some_and(|o| o.about != about) {
+        v.element = None;
+    }
+    if v.element_reading.as_ref().is_some_and(|r| r.about != about) {
+        v.element_reading = None;
+    }
+}
+
+/// Once a frame: lets go of what belongs to another project or session, takes the answer, closes an
+/// element the list no longer holds, starts the next read and wakes the window while one is
+/// awaited. A failed list says nothing of the element: that closes nothing.
 pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    let_go(shell);
     take_answer(shell);
     let v = &mut shell.versions;
     if v.compare_failed.is_none() && v.element.as_ref().is_some_and(|o| !v.changes.iter().any(|d| d.id == o.row.id)) {
@@ -112,6 +133,7 @@ fn start_read(shell: &mut Shell) {
     let (id, area) = (o.row.id, o.row.area);
     let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
     let (tables, junctions) = archforge_notations::storage();
+    let about = about(shell);
     let v = &mut shell.versions;
     // The frame only copies the objects; their rows are built with the sides.
     let frozen = session.doc().freeze();
@@ -125,10 +147,10 @@ fn start_read(shell: &mut Shell) {
             }
             .map_err(|e| e.to_string())
         });
-        drop(tx.send(sides));
+        let _ = tx.send(sides);
     };
     match std::thread::Builder::new().name("archforge-element-sides".into()).spawn(read) {
-        Ok(_) => v.element_reading = Some(ElementReading { id, key, answer: rx }),
+        Ok(_) => v.element_reading = Some(ElementReading { about, id, key, answer: rx }),
         Err(e) => land(v, key, Err(e.to_string())),
     }
 }
