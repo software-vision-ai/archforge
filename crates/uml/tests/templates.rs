@@ -870,3 +870,49 @@ fn the_sweep_over_bindings_breaks_nothing() {
     let calls = sweep_with(&mut s, &ids, picture).unwrap();
     assert!(calls > 20, "{calls}");
 }
+
+/// Every template binding rule broken carries its reason typed beside the unchanged English, for
+/// an interface to say in its own words: an enumeration binding, a class with no parameter as a
+/// template, a data type binding a class template, a template binding itself, a second binding,
+/// and a cycle; added, set and reconnected (AR-436).
+#[test]
+fn every_binding_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{End, EngineError, Reason};
+    let mut s = session();
+    let shop = shop(&mut s);
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "T" }));
+    run(&mut s, "uml.template-parameter.add", json!({ "classifier": shop.order, "name": "U" }));
+    let b = run(&mut s, "uml.template-binding.add", json!({ "bound": shop.order, "template": shop.repository, "arguments": { "T": shop.entity } }));
+    let bind = |bound: &str, template: &str| json!({ "bound": bound, "template": template, "arguments": { "T": shop.entity } });
+    let (add, set, reconnect) = ("uml.template-binding.add", "uml.template-binding.set", "uml.relationship.reconnect");
+    let cases = [
+        (
+            add,
+            bind(&shop.status, &shop.repository),
+            Reason::WrongEnd { relationship: "binding", end: End::Source, kind: "enumeration" },
+            "only a class",
+        ),
+        (add, bind(&shop.entity, &shop.money), Reason::WrongEnd { relationship: "binding", end: End::Target, kind: "data type" }, "no template"),
+        (add, bind(&shop.money, &shop.repository), Reason::KindsDiffer { relationship: "binding" }, "of its own kind"),
+        (add, bind(&shop.repository, &shop.repository), Reason::Itself { relationship: "binding", kind: "class" }, "does not bind itself"),
+        (add, bind(&shop.order, &shop.repository), Reason::Again { relationship: "binding" }, "binds Repository already"),
+        (add, bind(&shop.repository, &shop.order), Reason::Cycle { relationship: "binding" }, "would make a cycle"),
+        (
+            set,
+            json!({ "binding": b, "bound": shop.status }),
+            Reason::WrongEnd { relationship: "binding", end: End::Source, kind: "enumeration" },
+            "only a class",
+        ),
+        (
+            reconnect,
+            json!({ "relationship": b, "end": "target", "class": shop.money }),
+            Reason::WrongEnd { relationship: "binding", end: End::Target, kind: "data type" },
+            "no template",
+        ),
+    ];
+    for (cmd, p, reason, english) in cases {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    }
+}

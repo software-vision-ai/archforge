@@ -4716,6 +4716,47 @@ fn a_relationship_rule_broken_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A template binding rule broken is said in the chosen language in the canvas's words, never in
+/// the engine's English: an enumeration binding, a class with no parameter as the template, a data
+/// type binding a class template, a template binding itself, a second binding and a cycle; on the
+/// canvas in the same words. In light and dark (AR-436).
+#[test]
+fn a_binding_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::tr;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, order, entity] = ["Repository", "Order", "Entity"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let status = id("uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+        let money = id("uml.data-type.add", json!({ "package": sales, "name": "Money" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-parameter.add", json!({ "classifier": order, "name": "U" }));
+        let bind = |bound: &str, template: &str| json!({ "bound": bound, "template": template, "arguments": { "T": entity } });
+        id("uml.template-binding.add", bind(&order, &repository));
+        for (params, said) in [
+            (bind(&status, &repository), tr("Only a class, an interface or a data type binds a template")),
+            (bind(&entity, &money), tr("A binding ends at a template: a class, an interface or a data type with template parameters")),
+            (bind(&money, &repository), tr("A template is bound by a classifier of its own kind")),
+            (bind(&repository, &repository), tr("A template does not bind itself")),
+            (bind(&order, &repository), tr("This one binds that template already")),
+            (bind(&repository, &order), tr("That template binds this one already, which would make a cycle")),
+        ] {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let at = |key: &str| st.by_uuid(archforge_mof::Uuid::parse(params[key].as_str().unwrap()).unwrap()).unwrap();
+            let drawn = crate::uml_bindings::refusal(st, at("bound"), at("template"), None);
+            assert_eq!(drawn.as_ref(), Some(&said), "{theme:?}: the canvas says it as the engine's refusal is said");
+            let refused = crate::panels::run(h.state_mut(), "uml.template-binding.add", params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+            assert!(!refused.is_empty() && !refused.contains(" template") && !refused.contains(" already"), "{theme:?}: not English: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

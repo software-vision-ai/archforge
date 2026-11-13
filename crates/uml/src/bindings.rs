@@ -26,7 +26,7 @@
 //! nor is a default cleared that a binding relies on ([`needs_argument_problem`]).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, TypeRef, Value};
 use serde_json::{Map, Value as Json, json};
 
@@ -216,6 +216,26 @@ impl Problem {
                 name_of(store, bound)
             ),
         }
+    }
+
+    /// Why, typed, for an interface to say in its own words: the end that breaks the rule with its
+    /// kind, or the binding's own rule.
+    pub fn reason(self, store: &Store, bound: Obj, template: Obj) -> Reason {
+        let relationship = "binding";
+        match self {
+            Problem::NotBindable => Reason::WrongEnd { relationship, end: End::Source, kind: crate::commands::what(store, bound) },
+            Problem::NotATemplate => Reason::WrongEnd { relationship, end: End::Target, kind: crate::commands::what(store, template) },
+            Problem::OtherKind => Reason::KindsDiffer { relationship },
+            Problem::Itself => Reason::Itself { relationship, kind: crate::commands::what(store, bound) },
+            Problem::Again => Reason::Again { relationship },
+            Problem::Cycle => Reason::Cycle { relationship },
+        }
+    }
+
+    /// The refusal of `bound` binding `template`, under the parameter `key`: the English sentence
+    /// with its reason typed.
+    pub fn refusal(self, store: &Store, key: &str, bound: Obj, template: Obj) -> CommandError {
+        refuse(key, self.said(store, bound, template)).because(self.reason(store, bound, template))
     }
 }
 
@@ -454,7 +474,7 @@ fn binding_add(ctx: &mut C<'_>, p: &Params) -> R {
     let bound = classifier_param(ctx.doc, p, "bound")?;
     let template = classifier_param(ctx.doc, p, "template")?;
     if let Some(problem) = problem(ctx.doc, bound, template, None) {
-        return Err(refuse(problem.key(), problem.said(ctx.doc, bound, template)));
+        return Err(problem.refusal(ctx.doc, problem.key(), bound, template));
     }
     let given = arguments(ctx.doc, template, &arguments_param(p, "arguments")?)?;
     if let Some(why) = missing_problem(ctx.doc, template, &given, &[]) {
@@ -491,7 +511,7 @@ fn binding_set(ctx: &mut C<'_>, p: &Params) -> R {
         None => old_template,
     };
     if let Some(problem) = problem(ctx.doc, bound, template, Some(b)) {
-        return Err(refuse(if problem == Problem::NotBindable { "bound" } else { "template" }, problem.said(ctx.doc, bound, template)));
+        return Err(problem.refusal(ctx.doc, if problem == Problem::NotBindable { "bound" } else { "template" }, bound, template));
     }
     let given = arguments(ctx.doc, template, &arguments_param(p, "arguments")?)?;
     let same = template == old_template;
@@ -542,7 +562,7 @@ pub(crate) fn reconnect(store: &mut Store, b: Obj, source: bool, c: Obj) -> Resu
     let old_template = template_of(store, b).ok_or_else(|| refuse("relationship", "the binding names no template"))?;
     let (bound, template) = if source { (c, old_template) } else { (old_bound, c) };
     if let Some(problem) = problem(store, bound, template, Some(b)) {
-        return Err(refuse("class", problem.said(store, bound, template)));
+        return Err(problem.refusal(store, "class", bound, template));
     }
     if template != old_template
         && let Some(why) = missing_problem(store, template, &[], &[])

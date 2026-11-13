@@ -608,18 +608,11 @@ pub(crate) fn start_problem(store: &Store, element: Obj) -> Option<String> {
     (!ok).then(|| tr("Only a class, an interface or a data type binds a template"))
 }
 
-/// Why `bound` may not bind `template`, in the user's words, when it may not. `except` is a binding
-/// being reconnected.
+/// Why `bound` may not bind `template`, in the user's words, when it may not: the model's rule said
+/// as a refusal of the engine is. `except` is a binding being reconnected.
 pub(crate) fn refusal(store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
-    use archforge_uml::bindings::Problem as P;
-    Some(match bindings::problem(store, bound, template, except)? {
-        P::NotBindable => tr("Only a class, an interface or a data type binds a template"),
-        P::NotATemplate => tr("A binding ends at a template: a class, an interface or a data type with template parameters"),
-        P::OtherKind => tr("A template is bound by a classifier of its own kind"),
-        P::Itself => tr("A template does not bind itself"),
-        P::Again => tr("This one binds that template already"),
-        P::Cycle => tr("That template binds this one already, which would make a cycle"),
-    })
+    let problem = bindings::problem(store, bound, template, except)?;
+    Some(crate::panels::said(&problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
 }
 
 /// Whether moving binding `b`'s template end onto `template` needs arguments first: a parameter
