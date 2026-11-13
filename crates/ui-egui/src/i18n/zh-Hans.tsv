@@ -461,6 +461,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		This version is the same as your current work.	此版本与您当前的工作相同。
 str		These two versions are the same.	这两个版本相同。
+str		Too large to compare	太大，无法比较
+str		The comparison was stopped.	比较已停止。
 str		Both sides are your current work.	两侧都是您当前的工作。
 str		Choose another pair above.	请在上方选择另一组。
 str		Restore this version…	恢复此版本…
@@ -564,6 +566,10 @@ str		There is {what} named {name} already.	已有名为 {name} 的{what}。
 str		{what} cannot depend on itself.	{what}不能依赖自身。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
+str		The text can't be empty.	文本不能为空。
+str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
+str		It can't hold a control or hidden character.	不能包含控制字符或隐藏字符。
+str		It can't start or end with a space.	不能以空格开头或结尾。
 str	refusal	a class	类
 str	refusal	an association class	关联类
 str	refusal	an interface	接口
@@ -575,6 +581,20 @@ str	refusal	a profile	配置文件
 str	refusal	a stereotype	构造型
 str	refusal	an element	元素
 str	refusal	a schema	架构
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	字面量
+str	refusal	a qualifier	限定符
+str	refusal	a template parameter	模板参数
+str	refusal	a generalization set	泛化集
+str	refusal	a table	表
+str	refusal	a column	列
+str	refusal	a relationship	关系
+str	refusal	a domain	域
+str	refusal	an enum type	枚举类型
+str	refusal	a sequence	序列
+str	refusal	a view	视图
+str	refusal	a skill	技能
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
@@ -696,6 +716,7 @@ str		This version couldn't be read.	无法读取此版本。
 str		{from} can't be shown. Skipped to {to}.	无法显示 {from}。已跳到 {to}。
 str		It isn't a version of this branch.	这不是此分支的版本。
 str		Made with a newer Archforge.	由更新版本的 Archforge 创建。
+str		Its model is larger than Archforge reads.	其模型超出了 Archforge 可读取的大小。
 str		Why?	原因
 str		Date not known	日期未知
 plural		Versions · {n} change	版本 · {n} 处更改

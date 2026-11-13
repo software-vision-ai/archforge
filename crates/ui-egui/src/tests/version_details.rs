@@ -5,7 +5,7 @@ use archforge_mof::{Uuid, Value};
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
-use crate::version_details::compare::results::{Held, Key};
+use crate::version_details::compare::results::{Failure, Held, Key, Origin, failure};
 use crate::versions::Compared;
 use archforge_notations::differences::{
     Area, CardField, CardList, CardLists, ChangeKind, Difference, ElementCard, ElementSides, ListKind, ListRow, Named,
@@ -1658,6 +1658,147 @@ fn two_versions_are_read_one_at_a_time_and_compared() {
     });
 }
 
+/// A version of no use to read again says it can't be shown, with why and no Retry, and one past
+/// the read budget is too large to compare. Against current work, an edit asks the host for nothing
+/// and compares nothing.
+#[test]
+fn a_version_that_cannot_be_read_says_so_without_retry() {
+    use crate::VersionReadError::{Shape, TooLarge, Unavailable};
+    for (refused, head) in [(Unavailable, "This version can't be shown"), (Shape, "This version can't be shown"), (TooLarge, "Too large to compare")]
+    {
+        in_both(|h, host| {
+            let _ = page_reading(h, host);
+            answer(host, "c3", Err(refused.clone()));
+            frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+            let why = if refused == TooLarge { "Choose another pair above.".to_string() } else { refused.to_string() };
+            assert!(painted_has(h, head) && painted_has(h, &why), "{refused:?}: {:?}", painted(h));
+            assert!(!has_id(h, "workspace.version-compare.retry"));
+            add_schema(h, "more");
+            h.run_steps(3);
+            let r = &h.state().versions.compare_results;
+            assert!(asked(host).is_empty() && r.comparing.is_none() && has_id(h, "workspace.version-compare.said"), "{:?}", asked(host));
+        });
+    }
+}
+
+/// A comparison past its budget is too large, with no list and no count, and an edit does not spend
+/// the budget again; any other failure to classify is a failed comparison.
+#[test]
+fn a_comparison_past_its_budget_is_too_large() {
+    use archforge_mof::compare::CompareError;
+    use archforge_notations::differences::ClassifyError;
+    let too_large = failure(ClassifyError::Compare(CompareError::TooLarge { work: 2, max: 1 }));
+    assert!(too_large.origin == Origin::TooLarge && too_large.why.contains("more than the 1 allowed"), "{}", too_large.why);
+    assert_eq!(failure(ClassifyError::Compare(CompareError::RowWithoutId { table: "t" })).origin, Origin::Comparison);
+    assert_eq!(failure(ClassifyError::Unreadable { side: "before", why: "no".into() }).origin, Origin::Comparison);
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        let (tx, comparison) = std::sync::mpsc::channel();
+        tx.send(Err(too_large_failure())).unwrap();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
+        h.state_mut().versions.compare_results.comparing = Some((key, comparison));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+        assert!(painted_has(h, "Too large to compare") && !has_id(h, "workspace.version-compare.count"), "{:?}", painted(h));
+        answer(host, "c3", Ok(rows_now(h)));
+        add_schema(h, "more");
+        h.run_steps(3);
+        assert!(h.state().versions.compare_results.comparing.is_none() && painted_has(h, "Too large to compare"));
+    });
+}
+
+/// Stop is a stop until Retry: a read that fails after it, even for good, does not take its place.
+#[test]
+fn a_read_that_fails_after_stop_keeps_it_stopped() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        tap(h, "workspace.version-compare.stop");
+        answer(host, "c3", Err(crate::VersionReadError::TooLarge));
+        frames_until(h, |h| h.state().versions.compare_results.reading.is_none());
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && has_id(h, "workspace.version-compare.retry"), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+    });
+}
+
+/// While an edit is compared again, the earlier list stays with Stop above it, and Stop stops that
+/// comparison: it runs on with its answer dropped. Another pair's comparison offers no Stop here.
+#[test]
+fn stop_is_offered_above_an_earlier_answer() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        assert!(!has_id(h, "workspace.version-compare.stop"), "nothing runs");
+        let (_other, of_the_other) = std::sync::mpsc::channel();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().versions.compare_results.comparing = Some((Key { sides: (None, Some("c3".to_string())), revision }, of_the_other));
+        h.run_steps(2);
+        assert!(!has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "another pair's comparison");
+        let (tx, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() + 1 };
+        h.state_mut().versions.compare_results.comparing = Some((key, pending));
+        h.run_steps(2);
+        assert!(has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "{:?}", painted(h));
+        let (stop, count) = (rect_of(h, "workspace.version-compare.stop"), rect_of(h, "workspace.version-compare.count"));
+        assert!(stop.bottom() <= count.top(), "Stop is above the list: {stop:?} {count:?}");
+        tap(h, "workspace.version-compare.stop");
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && !has_id(h, "workspace.version-compare.stop"), "{:?}", painted(h));
+        assert!(tx.send(Ok(Arc::new(Vec::new()))).is_ok(), "it runs on");
+    });
+}
+
+/// A comparison's failure past its budget, as its thread gives it.
+fn too_large_failure() -> Failure {
+    Failure { why: "comparing these takes 2 steps, more than the 1 allowed".into(), origin: Origin::TooLarge }
+}
+
+/// Stop ends the wait, with nothing on hover, and nothing starts again until Retry, which compares the rows its read went
+/// on to hold. A comparison under way runs on with its answer dropped, and none other starts beside
+/// it: one still running at Retry is the one that lands.
+#[test]
+fn a_comparison_can_be_stopped_and_retried() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, "workspace.version-compare.stop");
+        h.run_steps(1);
+        assert!(painted_has(h, "The comparison was stopped.") && has_id(h, "workspace.version-compare.retry"), "{:?}", painted(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, "workspace.version-compare.failed").center()));
+        h.run_steps(4);
+        let tooltip = h.ctx.memory(|m| m.areas().visible_layer_ids().iter().any(|l| l.order == egui::Order::Tooltip));
+        assert!(!tooltip, "no empty tooltip: a stop has no why");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
+        add_schema(h, "more");
+        h.run_steps(3);
+        let r = &h.state().versions.compare_results;
+        assert!(r.comparing.is_none() && painted_has(h, "The comparison was stopped.") && asked(host).is_empty());
+        tap(h, "workspace.version-compare.retry");
+        found_many(h, 2);
+        assert!(asked(host).is_empty(), "{:?}", asked(host));
+    });
+    for retried in [false, true] {
+        in_both(|h, host| {
+            let before = page_reading(h, host);
+            answer(host, "c3", Ok(before));
+            let (tx, pending) = std::sync::mpsc::channel();
+            let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
+            h.state_mut().versions.compare_results.comparing = Some((key, pending));
+            frames_until(h, |h| has_id(h, "workspace.version-compare.stop"));
+            tap(h, "workspace.version-compare.stop");
+            if retried {
+                tap(h, "workspace.version-compare.retry");
+            }
+            h.run_steps(2);
+            assert!(tx.send(Ok(Arc::new(Vec::new()))).is_ok(), "it runs on, and none other has taken its place");
+            frames_until(h, |h| h.state().versions.compare_results.comparing.is_none());
+            let landed = if retried { Some(Ok(Vec::new())) } else { Some(Err(String::new())) };
+            assert_eq!(found(h), landed, "its answer lands only after Retry");
+        });
+    }
+}
+
 /// Differences found in id order are grouped by area, model elements first, each area keeping that
 /// order: a diagram made between two schemas lists after both, its unnamed part after it.
 #[test]
@@ -1686,7 +1827,7 @@ fn what_is_found_is_grouped_by_area() {
 fn landing(h: &mut Harness<'static, Shell>, sides: (&str, bool), revision: u64, answer: Result<Arc<Vec<Difference>>, String>) {
     let (waiting, read) = std::sync::mpsc::channel();
     let (tx, comparison) = std::sync::mpsc::channel();
-    tx.send(answer).unwrap();
+    tx.send(answer.map_err(Into::into)).unwrap();
     let key = Key { sides: if sides.1 { (None, Some(sides.0.to_string())) } else { (Some(sides.0.to_string()), None) }, revision };
     let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
     let r = &mut h.state_mut().versions.compare_results;
@@ -1790,7 +1931,7 @@ fn a_failed_comparison_of_rows_let_go_reads_again_on_an_edit() {
         host.reads.lock().unwrap().clear();
         let now = h.state().session.as_ref().unwrap().revision();
         let (tx, failed) = std::sync::mpsc::channel();
-        tx.send(Err("Failed".to_string())).unwrap();
+        tx.send(Err("Failed".to_string().into())).unwrap();
         let key = Key { sides: (Some("c3".to_string()), None), revision: now };
         let r = &mut h.state_mut().versions.compare_results;
         (r.held, r.reading, r.comparing) = (Vec::new(), None, Some((key, failed)));
@@ -2775,6 +2916,26 @@ fn a_select_lists_the_versions_and_a_pick_sets_its_side() {
         h.state_mut().state.explorer = crate::state::Explorer::SourceControl;
         h.run_steps(2);
         assert_eq!(at(h), None, "it goes with the page, or its keys would stay taken");
+    });
+}
+
+/// An earlier Archforge's name for a restore's kept work shows its time as the list says it, in the
+/// select's row and in the select that holds it, and never as stored.
+#[test]
+fn an_old_restore_name_shows_its_time_as_the_list_says_it() {
+    let mut listed = history();
+    listed[1].description = Some("Before restoring 2026-11-07T09:20:00Z".into());
+    in_both_listing(listed, |h, _| {
+        compared(h, "c3");
+        let told = format!("Before restoring {}", crate::versions::when("2026-11-07T09:20:00Z", crate::chat_panel::clock(h.state())));
+        tap(h, SELECT_AFTER);
+        let row = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).nth(2).expect("the row of the restore's kept work");
+        let said = row.accesskit_node().label().unwrap_or_default().to_string();
+        assert!(said.ends_with(&format!(", {told}")), "{said}");
+        assert!(painted_has(h, &told) && !painted_has(h, "2026-11-07T09:20:00Z"), "{:?}", painted(h));
+        tap(h, &row_id(2));
+        let held = holds(h, "After");
+        assert!(held.ends_with(&told) && !held.contains("2026-"), "{held}");
     });
 }
 

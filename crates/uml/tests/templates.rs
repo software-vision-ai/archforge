@@ -308,6 +308,7 @@ fn a_default_must_be_a_classifier_of_the_kind_and_the_other_wrong_edits_are_refu
         // Names, places, owners.
         ("uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "t" }), "has a template parameter named T already"),
         ("uml.template-parameter.set", json!({ "parameter": key, "name": "T" }), "has a template parameter named T already"),
+        ("uml.template-parameter.set", json!({ "parameter": key, "name": "t" }), r#"Some(NameTaken { kind: "template parameter", name: "T" })"#),
         ("uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "" }), "empty"),
         ("uml.template-parameter.add", json!({ "classifier": shop.repository, "name": "X", "at": 5 }), "past the end"),
         ("uml.template-parameter.move", json!({ "parameter": t, "at": 2 }), "past the last"),

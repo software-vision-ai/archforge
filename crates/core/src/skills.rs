@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, View, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, View, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -68,33 +68,71 @@ pub trait SkillHost: View<Store> {
 
 // Rules.
 
+/// What is wrong with a name or a text: the end of the English sentence "the name ...", which
+/// it displays as, and the same as a typed reason, for an interface to say in its own words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Problem {
+    /// The problem typed.
+    pub reason: Reason,
+    words: String,
+}
+
+impl Problem {
+    /// The problem `reason`, said in English as `words`, the end of a sentence "the name ...".
+    pub fn new(reason: Reason, words: impl Into<String>) -> Problem {
+        Problem { reason, words: words.into() }
+    }
+
+    /// Longer than `max` characters.
+    pub fn too_long(max: usize) -> Problem {
+        Problem::new(Reason::TooLong { max }, format!("is longer than {max} characters"))
+    }
+
+    /// Starts or ends with a space.
+    pub fn edge_space() -> Problem {
+        Problem::new(Reason::EdgeSpace, "starts or ends with a space")
+    }
+}
+
+impl std::fmt::Display for Problem {
+    /// The English words, as "is empty".
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.words)
+    }
+}
+
 /// Why a name is not acceptable, as the end of the sentence "the name ...".
-pub fn name_problem(name: &str, max: usize) -> Option<String> {
+pub fn name_problem(name: &str, max: usize) -> Option<Problem> {
     if name.is_empty() {
-        return Some("is empty".into());
+        return Some(Problem::new(Reason::NameEmpty, "is empty"));
     }
     if name.chars().count() > max {
-        return Some(format!("is longer than {max} characters"));
+        return Some(Problem::too_long(max));
     }
     if name.chars().any(hidden) {
-        return Some("holds a control or hidden character".into());
+        return Some(hidden_character());
     }
     if name.trim() != name {
-        return Some("starts or ends with a space".into());
+        return Some(Problem::edge_space());
     }
     None
 }
 
 /// Why a text is not acceptable: longer than `max` characters, or a control character other than
 /// a line break or a tab.
-pub fn text_problem(text: &str, max: usize) -> Option<String> {
+pub fn text_problem(text: &str, max: usize) -> Option<Problem> {
     if text.chars().count() > max {
-        return Some(format!("is longer than {max} characters"));
+        return Some(Problem::too_long(max));
     }
     if text.chars().any(|c| hidden(c) && c != '\n' && c != '\t' && c != '\r') {
-        return Some("holds a control or hidden character".into());
+        return Some(hidden_character());
     }
     None
+}
+
+/// Holds a control or hidden character.
+fn hidden_character() -> Problem {
+    Problem::new(Reason::ControlCharacter, "holds a control or hidden character")
 }
 
 /// A character that renders as nothing or reorders what follows: a control character, a zero-width
@@ -168,8 +206,21 @@ pub fn skills_on(store: &Store, obj: Obj) -> Vec<Obj> {
 /// Whether a skill named `name` may sit on `subject` (None: the model): no other skill of that
 /// name sits there.
 pub fn skill_name_free(store: &Store, subject: Option<Obj>, name: &str, except: Option<Obj>) -> bool {
+    name_taken(store, subject, name, except, "name").is_ok()
+}
+
+/// Refuses `name`, about the parameter `key`, when another skill of that name, whatever the case,
+/// sits on `subject` (None: the model), but for `except`: the English names that skill, and the
+/// reason is typed with its name.
+fn name_taken(store: &Store, subject: Option<Obj>, name: &str, except: Option<Obj>, key: &str) -> Result<(), CommandError> {
     let wanted = name.to_lowercase();
-    !skills(store).into_iter().any(|s| Some(s) != except && subject_of(store, s) == subject && name_of(store, s).to_lowercase() == wanted)
+    match skills(store).into_iter().find(|s| Some(*s) != except && subject_of(store, *s) == subject && name_of(store, *s).to_lowercase() == wanted) {
+        Some(other) => {
+            let existing = name_of(store, other);
+            Err(refuse(key, format!("a skill named {existing:?} already sits there")).because(Reason::NameTaken { kind: "skill", name: existing }))
+        }
+        None => Ok(()),
+    }
 }
 
 /// The key under which a class is named in a skill: the metamodel's name, a dot, the class's
@@ -502,7 +553,7 @@ fn target_params<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Opt
         return Ok((Some(key), None));
     }
     if let Some(problem) = name_problem(&pattern, MAX_TYPE_PATTERN) {
-        return Err(refuse("type_pattern", format!("the type pattern {problem}")));
+        return Err(refuse("type_pattern", format!("the type pattern {problem}")).because(problem.reason));
     }
     let typed = view.typed_classes();
     if typed.iter().any(|(c, _)| c == class) {
@@ -544,27 +595,27 @@ struct Fields {
     type_pattern: Option<String>,
 }
 
+/// A skill's fields from `p`, each checked: its name free on `subject` but for `except`, its
+/// description, body, triggers, dialect and the kind and type it aims at.
 fn fields<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Option<Obj>, except: Option<Obj>) -> Result<Fields, CommandError> {
     let name = text(p, "name").to_string();
     if let Some(problem) = name_problem(&name, MAX_NAME) {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
-    if !skill_name_free(store, subject, &name, except) {
-        return Err(refuse("name", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(store, subject, &name, except, "name")?;
     let description = text(p, "description").to_string();
     if let Some(problem) = text_problem(&description, MAX_DESCRIPTION) {
-        return Err(refuse("description", format!("the description {problem}")));
+        return Err(refuse("description", format!("the description {problem}")).because(problem.reason));
     }
     let body = text(p, "body").to_string();
     if let Some(problem) = text_problem(&body, MAX_BODY) {
-        return Err(refuse("body", format!("the body {problem}")));
+        return Err(refuse("body", format!("the body {problem}")).because(problem.reason));
     }
     let triggers = triggers_param(p)?;
     let dialect = text(p, "dialect").trim().to_string();
     if !dialect.is_empty() {
         if let Some(problem) = name_problem(&dialect, MAX_DIALECT) {
-            return Err(refuse("dialect", format!("the dialect {problem}")));
+            return Err(refuse("dialect", format!("the dialect {problem}")).because(problem.reason));
         }
         if !triggers.contains(&SkillTrigger::Export) {
             return Err(refuse("dialect", "a dialect belongs to a skill with the export trigger"));
@@ -644,11 +695,9 @@ fn skill_rename<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
     let name = text(p, "name");
     if let Some(problem) = name_problem(name, MAX_NAME) {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
-    if !skill_name_free(ctx.doc, subject_of(ctx.doc, s), name, Some(s)) {
-        return Err(refuse("name", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(ctx.doc, subject_of(ctx.doc, s), name, Some(s), "name")?;
     ctx.doc.set(s, named_element::NAME, Value::str(name)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
@@ -658,7 +707,7 @@ fn skill_set_body<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let s = skill_of(ctx.doc, p, "skill")?;
     let body = text(p, "body");
     if let Some(problem) = text_problem(body, MAX_BODY) {
-        return Err(refuse("body", format!("the body {problem}")));
+        return Err(refuse("body", format!("the body {problem}")).because(problem.reason));
     }
     ctx.doc.set(s, skill::BODY, opt(body)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
@@ -682,9 +731,7 @@ fn skill_move<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
         return Err(refuse("subject", format!("a skill for every {word} cannot sit on {class}")));
     }
     let name = name_of(ctx.doc, s);
-    if !skill_name_free(ctx.doc, subject, &name, Some(s)) {
-        return Err(refuse("subject", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(ctx.doc, subject, &name, Some(s), "subject")?;
     ctx.doc.set(s, skill::SUBJECT, subject.map(Value::Ref).unwrap_or(Value::Null)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }

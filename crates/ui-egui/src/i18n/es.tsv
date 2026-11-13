@@ -461,6 +461,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	El proyecto está en espera mientras se reemplaza, por lo que esta solicitud no se ejecutó. Inténtalo de nuevo cuando termine.
 str		This version is the same as your current work.	Esta versión es igual que tu trabajo actual.
 str		These two versions are the same.	Estas dos versiones son iguales.
+str		Too large to compare	Demasiado grande para comparar
+str		The comparison was stopped.	Se detuvo la comparación.
 str		Both sides are your current work.	Ambos lados son tu trabajo actual.
 str		Choose another pair above.	Elige otro par arriba.
 str		Restore this version…	Restaurar esta versión…
@@ -564,6 +566,10 @@ str		There is {what} named {name} already.	Ya existe {what} con el nombre {name}
 str		{what} cannot depend on itself.	{what} no puede depender de sí.
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
+str		The text can't be empty.	El texto no puede estar vacío.
+str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
+str		It can't hold a control or hidden character.	No se admiten caracteres de control ni ocultos.
+str		It can't start or end with a space.	No puede empezar ni terminar con un espacio.
 str	refusal	a class	una clase
 str	refusal	an association class	una clase de asociación
 str	refusal	an interface	una interfaz
@@ -575,6 +581,20 @@ str	refusal	a profile	un perfil
 str	refusal	a stereotype	un estereotipo
 str	refusal	an element	un elemento
 str	refusal	a schema	un esquema
+str	refusal	an attribute	un atributo
+str	refusal	an operation	una operación
+str	refusal	a literal	un literal
+str	refusal	a qualifier	un calificador
+str	refusal	a template parameter	un parámetro de plantilla
+str	refusal	a generalization set	un conjunto de generalización
+str	refusal	a table	una tabla
+str	refusal	a column	una columna
+str	refusal	a relationship	una relación
+str	refusal	a domain	un dominio
+str	refusal	an enum type	un tipo enumerado
+str	refusal	a sequence	una secuencia
+str	refusal	a view	una vista
+str	refusal	a skill	una habilidad
 str		A name can't start or end with a space.	Un nombre no puede empezar ni terminar con un espacio.
 str		Working changes	Cambios en curso
 str		History	Historial
@@ -696,6 +716,7 @@ str		This version couldn't be read.	No se pudo leer esta versión.
 str		{from} can't be shown. Skipped to {to}.	{from} no se puede mostrar. Se ha saltado a {to}.
 str		It isn't a version of this branch.	No es una versión de esta rama.
 str		Made with a newer Archforge.	Creada con una versión más reciente de Archforge.
+str		Its model is larger than Archforge reads.	Su modelo es más grande de lo que Archforge puede leer.
 str		Why?	¿Por qué?
 str		Date not known	Fecha desconocida
 plural		Versions · {n} change	Versiones · {n} cambio|Versiones · {n} cambios

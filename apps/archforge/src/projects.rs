@@ -2485,6 +2485,7 @@ fn version_read_error(e: archforge_project::Error) -> VersionReadError {
     match e {
         archforge_project::Error::NotAVersion { .. } => VersionReadError::Unavailable,
         archforge_project::Error::VersionShape { .. } => VersionReadError::Shape,
+        archforge_project::Error::ModelTooLarge { .. } => VersionReadError::TooLarge,
         other => VersionReadError::Failed(other.to_string()),
     }
 }
@@ -3423,9 +3424,10 @@ mod tests {
     /// Only what cannot pass counts as lasting: damage may be a connection lost while listing.
     #[test]
     fn a_read_failure_is_typed_by_whether_asking_again_can_help() {
-        use archforge_project::Error::{Damaged, NotAVersion, VersionShape};
+        use archforge_project::Error::{Damaged, ModelTooLarge, NotAVersion, VersionShape};
         assert_eq!(version_read_error(NotAVersion { commit: "c".into() }), VersionReadError::Unavailable);
         assert_eq!(version_read_error(VersionShape { commit: "c".into(), why: "newer".into() }), VersionReadError::Shape);
+        assert_eq!(version_read_error(ModelTooLarge { why: "more".into() }), VersionReadError::TooLarge);
         let damage = version_read_error(Damaged { path: "/p".into(), why: "the tables cannot be listed".into() });
         assert!(matches!(&damage, VersionReadError::Failed(why) if why.contains("cannot be listed")), "{damage:?}");
     }

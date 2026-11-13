@@ -239,7 +239,7 @@ fn its_ends_take_the_association_commands_and_its_members_the_class_commands() {
     let names: Vec<&str> = read["attributes"].as_array().unwrap().iter().filter_map(|a| a["name"].as_str()).collect();
     assert_eq!(names, ["text", "rating"], "its attributes, never its ends");
     assert_eq!(read["operations"][0]["id"], publish.as_str());
-    refused(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "Text" }), &["the association class has an attribute named Text already"]);
+    refused(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "Text" }), &["the association class has an attribute named text already"]);
     // Its card lists them; an end is no attribute to remove alone.
     let card = archforge_uml::figures::card(s.doc(), obj(&s, &ac), obj(&s, &ac)).unwrap();
     assert_eq!(card.compartments.iter().map(Vec::len).collect::<Vec<_>>(), [2, 1]);

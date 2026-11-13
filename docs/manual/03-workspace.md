@@ -58,16 +58,8 @@ An open project fills the window with its workspace.
   Clicking a version in the history opens its details in the centre, and **View this version**
   there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
   through History, viewing an earlier version and coming back to your current work.
-  **Compare…** opens the Compare page in the centre, with this version as Before and your current
-  work as After; the button between them swaps the two, and each select lists your current work
-  and this branch's versions, reading further ones as you reach the end. Under them the page says
-  how many differences there are between the two sides, and lists them in
-  groups (model elements, diagrams, then skills), keeping up as the work changes. While no button and not the Explorer has the keyboard
-  (Esc lets it go), the arrow keys scroll the list by a difference, Page Up and Page Down by a page,
-  and Home and End to either end. Your current work stays your own work while another
-  version is shown, not the version in view. Choosing a version on both sides compares two saved
-  versions, each as it was saved; your work since then doesn't change what they differ by. If the
-  two are the same the page says so, and if they can't be compared it says so, with **Retry**.
+  **Compare…** opens the Compare page, which sets two versions of the branch, or one and your
+  current work, side by side: [See what changed](09-versions.md#see-what-changed) goes through it.
   **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
   work** in the banner of a version you are viewing, makes the content of that version a new version
   on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
@@ -82,38 +74,9 @@ An open project fills the window with its workspace.
   unsaved, which is what you have now, or for a version that can't be read.
   While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
   keeping what it has written so far, and **Keep working** leaves everything as it was.
-  Clicking a model element under Working changes opens it in the centre: its name, whether it was
-  added, changed or removed, where it is, and the version it is compared with, or that there is
-  no version to compare with yet. Two cards side by side, **Before** (the last version) and
-  **After** (current work), give the element's kind, name and values. A name or value that differs
-  is marked with − on the Before card and + on the After card as well as a tint. An element with
-  no name goes by what it joins or says, such as *Customer → Order*, and those words following a
-  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values,
-  members and relationships that differ and says the first three values in words, or that the element was added
-  or removed. Below the values the cards group the element's attributes or columns, operations, literals,
-  other members, relationships and owner under headings, marked the same way when one came, went or changed; a
-  long list scrolls with the cards. A relationship between two elements is listed on both their cards,
-  whoever owns it, by its role at the far end or its own name, else its kind, and what it joins to,
-  or *Not available on this side* when nothing is set there, such as `lines → OrderLine [1..*]` or `Generalization → Shape`; an association's end that a class
-  owns is listed there rather than among its attributes. Renaming what it joins to isn't marked as a
-  change to it. Under the cards, **Related change** names the other model elements connected to this one
-  that also differ in this comparison: what it or its members refer to, what refers to them, and
-  its owner. **Go to** and the name opens that element against the same version.
-  The project's name at the top closes it.
-  Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
-  way. Two cards above it keep the model and the layout apart: **Model** counts the elements its
-  boxes and lines draw that were added, changed or removed and names them, and **Layout** counts
-  the boxes placed, moved, changed or taken off and the lines drawn, changed or taken off. When only
-  one of them changed, the other card says so, such as *The layout didn't change* and *Only the
-  model changed.* An empty diagram that was added or removed says *This diagram was added* or
-  *This diagram was removed*. Under the cards are **Before** and **After** side by side, each drawn as it was
-  on its side and both at one zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
-  line that differs is drawn over in colour, and each says *Added*, *Changed* or *Removed*. A side
-  the diagram isn't on says so. The two sides move together: drag or scroll either to pan both,
-  pinch or scroll with ⌘ (Ctrl) held to zoom both, or click a side (or Tab to it) and use the arrow keys,
-  **+** and **−**, and **0** to fit both again; clicking the diagram in the list again also fits it.
-  When the element a marked box or line draws also differs, its *Added*, *Changed* or *Removed*
-  opens that element's change.
+  Clicking a model element or a diagram under Working changes opens it in the centre beside your
+  last version: see [An element side by side](09-versions.md#an-element-side-by-side) and
+  [A diagram side by side](09-versions.md#a-diagram-side-by-side).
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or

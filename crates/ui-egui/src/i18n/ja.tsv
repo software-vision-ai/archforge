@@ -461,6 +461,8 @@ str		The project shown changed after this request was sent, so it was not run. L
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
 str		These two versions are the same.	この2つのバージョンは同じです。
+str		Too large to compare	大きすぎて比較できません
+str		The comparison was stopped.	比較を停止しました。
 str		Both sides are your current work.	両側とも現在の作業です。
 str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…
@@ -564,6 +566,10 @@ str		There is {what} named {name} already.	{name} という名前の{what}はす
 str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str		The text can't be empty.	テキストは空にできません。
+str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
+str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。
+str		It can't start or end with a space.	先頭や末尾に空白は使えません。
 str	refusal	a class	クラス
 str	refusal	an association class	関連クラス
 str	refusal	an interface	インターフェース
@@ -575,6 +581,20 @@ str	refusal	a profile	プロファイル
 str	refusal	a stereotype	ステレオタイプ
 str	refusal	an element	要素
 str	refusal	a schema	スキーマ
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	リテラル
+str	refusal	a qualifier	限定子
+str	refusal	a template parameter	テンプレートパラメーター
+str	refusal	a generalization set	汎化セット
+str	refusal	a table	テーブル
+str	refusal	a column	列
+str	refusal	a relationship	リレーションシップ
+str	refusal	a domain	ドメイン
+str	refusal	an enum type	列挙型
+str	refusal	a sequence	シーケンス
+str	refusal	a view	ビュー
+str	refusal	a skill	スキル
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
@@ -696,6 +716,7 @@ str		This version couldn't be read.	このバージョンを読み込めませ�
 str		{from} can't be shown. Skipped to {to}.	{from} は表示できません。{to} に移動しました。
 str		It isn't a version of this branch.	このブランチのバージョンではありません。
 str		Made with a newer Archforge.	より新しい Archforge で作成されました。
+str		Its model is larger than Archforge reads.	モデルが Archforge で読める大きさを超えています。
 str		Why?	理由
 str		Date not known	日付不明
 plural		Versions · {n} change	バージョン · {n} 件の変更

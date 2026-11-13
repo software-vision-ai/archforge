@@ -39,7 +39,7 @@
 //! bindings to it along.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Obj, PropId, Store, TypeRef, Value};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeSet;
@@ -602,19 +602,20 @@ fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Op
 /// A parameter's name in `template`: a name, none of its other parameters' whatever the case.
 fn check_name(store: &Store, template: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
     if let Some(other) = name_clash(store, template, name, except) {
+        let existing = parameter_name(store, other);
         return Err(refuse(
             "name",
             format!(
-                "{} has a template parameter named {} already, {}, and {:?} matches it whatever the case; choose a name none of its other parameters has",
+                "{} has a template parameter named {existing} already, {}, and {:?} matches it whatever the case; choose a name none of its other parameters has",
                 name_of(store, template),
-                parameter_name(store, other),
                 uuid_of(store, other)?,
                 short(name)
             ),
-        ));
+        )
+        .because(Reason::NameTaken { kind: "template parameter", name: existing }));
     }
     Ok(())
 }
