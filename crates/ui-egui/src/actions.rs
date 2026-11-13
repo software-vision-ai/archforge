@@ -22,6 +22,7 @@ pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
 pub const BRANCHES: &str = "versions.branches";
+pub const NEW_BRANCH: &str = "versions.new-branch";
 pub const SAVE_VERSION: &str = "versions.save";
 pub const COMPARE: &str = "versions.compare";
 pub const BACK: &str = "versions.back";
@@ -29,7 +30,7 @@ pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
 
 /// The Versions menu's rows by section, on every system (`docs/design/versioning.md`, section 11).
-pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[BRANCHES], &[OLDER, NEWER, BACK]];
+pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[NEW_BRANCH, BRANCHES], &[OLDER, NEWER, BACK]];
 
 /// One application action.
 pub struct Action {
@@ -194,6 +195,15 @@ pub static ACTIONS: &[Action] = &[
         available: |s| crate::version_chip::available(s) && s.stepping_from().is_some(),
         run: crate::version_chip::newer,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
+        search: None,
+    },
+    Action {
+        id: NEW_BRANCH,
+        label: |_| tr("New branch…"),
+        // As the Branches header's + is: the host keeps branches, and nothing holds the project.
+        available: |s| free(s) && crate::branch_ask::offered(s),
+        run: crate::branch_ask::open,
+        keys: None,
         search: None,
     },
     Action {

@@ -24,6 +24,8 @@ const MOST_ROWS: usize = 10;
 const ROW: f32 = 30.0;
 const WIDTH: f32 = 360.0;
 const FIELD: f32 = 28.0;
+/// New branch… at the list's foot, with the line above it.
+const NEW_ROW: f32 = ROW + 6.0;
 const ID: &str = "workspace.header.version";
 /// The chip at its narrowest: one icon.
 pub(crate) const NARROWEST: f32 = 32.0;
@@ -42,6 +44,8 @@ pub struct List {
     scroll: TreeScroll,
     /// It lists the branches in place of the versions.
     pub(crate) branches: bool,
+    /// The keys are on New branch… under the rows, in place of a row.
+    on_new: bool,
     /// The version last picked, and how the chip says it.
     pub(crate) shown: Option<(String, String)>,
     pub(crate) steps: Steps,
@@ -71,14 +75,15 @@ type Waiting = (bool, Option<String>);
 /// A row of the list: what picking it does; its name; the words beside it.
 type Row = (Pick, String, String);
 
-/// What a row of the list does: back to current work, view a version, list the branches, or
-/// switch to the branch stored by that name, none for the one in use.
+/// What a row of the list does: back to current work, view a version, list the branches, switch
+/// to the branch stored by that name, none for the one in use, or open New branch….
 #[derive(Clone)]
 enum Pick {
     Work,
     Version(String),
     Branches,
     Branch(Option<String>),
+    NewBranch,
 }
 
 /// Whether a dialog or question is open over the window.
@@ -163,7 +168,7 @@ pub(crate) fn open_branches(shell: &mut Shell) {
 /// The list shows the branches, from the first, unfiltered.
 fn show_branches(shell: &mut Shell) {
     let l = &mut shell.version_list;
-    (l.branches, l.highlight, l.filter, l.scroll) = (true, 0, String::new(), TreeScroll::default());
+    (l.branches, l.highlight, l.on_new, l.filter, l.scroll) = (true, 0, false, String::new(), TreeScroll::default());
 }
 
 /// ⌘[: the next older version.
@@ -389,6 +394,12 @@ fn pick(shell: &mut Shell, (pick, label, _): Row) {
         // A switch as a branch row in the Versions panel asks for it, and the same of a refusal.
         Pick::Branch(Some(name)) if !crate::versions::switch_to(shell, name.clone()) => {}
         Pick::Branch(_) => close(shell),
+        Pick::NewBranch => {
+            crate::branch_ask::open(shell);
+            if shell.ask.is_some() {
+                close(shell);
+            }
+        }
     }
 }
 
@@ -587,8 +598,9 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
     }
 }
 
-/// Moves the highlight by the keys, runs Enter and closes on Esc; true when the list is gone.
-fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row]) -> bool {
+/// Moves the highlight by the keys, past the last row to New branch… when `new` offers it, runs
+/// Enter and closes on Esc; true when the list is gone.
+fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], new: bool) -> bool {
     let press = |key| ui.input_mut(|i| i.consume_key(Modifiers::NONE, key));
     let (down, up, enter, esc) = (press(Key::ArrowDown), press(Key::ArrowUp), press(Key::Enter), press(Key::Escape));
     if esc {
@@ -597,10 +609,18 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row]) -> bool {
     }
     let last = rows.len().saturating_sub(1);
     let l = &mut shell.version_list;
-    l.highlight = (l.highlight + usize::from(down)).min(last).saturating_sub(usize::from(up));
-    match rows.get(l.highlight).filter(|_| enter) {
+    l.on_new &= new;
+    if l.on_new {
+        l.on_new = !up;
+    } else if down && new && (rows.is_empty() || l.highlight >= last) {
+        l.on_new = true;
+    } else {
+        l.highlight = (l.highlight + usize::from(down)).min(last).saturating_sub(usize::from(up));
+    }
+    let row = if l.on_new { Some(new_row()) } else { rows.get(l.highlight).cloned() };
+    match row.filter(|_| enter) {
         Some(row) => {
-            pick(shell, row.clone());
+            pick(shell, row);
             true
         }
         None => false,
@@ -630,7 +650,8 @@ fn filter_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let resp = ui.put(inner, edit);
     resp.request_focus();
     if resp.changed() {
-        (shell.version_list.highlight, shell.version_list.scroll) = (0, TreeScroll::default());
+        let l = &mut shell.version_list;
+        (l.highlight, l.on_new, l.scroll) = (0, false, TreeScroll::default());
     }
     let _ = resp.accessible_name(words);
 }
@@ -649,23 +670,46 @@ fn failure_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     }
 }
 
+/// The row New branch… makes.
+fn new_row() -> Row {
+    (Pick::NewBranch, tr("New branch…"), String::new())
+}
+
+/// New branch… under the rows and what fails or is cut under them, set apart by a line, at the
+/// foot of the list `r`, highlighted under the keys or the pointer; true when clicked.
+fn new_branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) -> bool {
+    let at = Rect::from_min_size(pos2(r.left() + 6.0, r.bottom() - 6.0 - ROW), vec2(WIDTH - 12.0, ROW));
+    ui.painter().rect_filled(Rect::from_min_max(pos2(r.left() + 1.0, at.top() - 4.0), pos2(r.right() - 1.0, at.top() - 3.0)), 0.0, p.border);
+    let words = tr("New branch…");
+    let resp = control(shell, ui, &format!("{ID}.new-branch"), "menu-item", at, true);
+    let resp = resp.accessible_name(words.as_str());
+    if shell.version_list.on_new || resp.hovered() {
+        ui.painter().rect_filled(at, 6.0, p.accent_tint);
+    }
+    ux::icon_in(ui.painter(), Rect::from_center_size(pos2(at.left() + 17.0, at.center().y), vec2(14.0, 14.0)), &icons::PLUS, p.text_secondary);
+    ux::text_mid(ui.painter(), at.left() + 32.0, at.center().y, &words, types::UI, p.text, Some(at.width() - 42.0));
+    resp.clicked()
+}
+
 /// The list under the chip: the filter, the rows the wheel and the keys move through, reading on
 /// as the end comes into view, and what could not be read.
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
     let rows = rows(shell);
-    if keys(shell, ui, &rows) {
+    let new = crate::branch_ask::offered(shell);
+    if keys(shell, ui, &rows, new) {
         return;
     }
     // What failed or is still to read is of the versions, not shown while the branches are.
     let failed = shell.version_list.steps.failed && !shell.version_list.branches;
     // A branch list cut short says so under its rows, as the Versions panel does.
     let cut = (shell.version_list.branches && shell.versions.branches_cut).then(|| branches(shell).map_or(0, |(_, l)| l.len()).to_string());
-    let footer = if failed || cut.is_some() { ROW } else { 0.0 };
+    let under = if failed || cut.is_some() { ROW } else { 0.0 };
+    let footer = under + if new { NEW_ROW } else { 0.0 };
     let top = chip.bottom() + 4.0;
     let wanted = 6.0 + FIELD + 6.0 + rows.len().clamp(1, MOST_ROWS) as f32 * ROW + footer + 8.0;
     let room = (ui.ctx().content_rect().bottom() - 8.0 - top).max(6.0 + FIELD + 6.0 + ROW + footer + 8.0);
     let r = Rect::from_min_size(pos2(chip.right() - WIDTH, top), vec2(WIDTH, wanted.min(room)));
-    let highlight = shell.version_list.highlight;
+    let highlight = (!shell.version_list.on_new).then_some(shell.version_list.highlight);
     let picked = ux::overlay(ui, widgets::egui_id(&format!("{ID}.list")), r, |ui| {
         let paint = ui.painter().clone();
         ux::shadow(&paint, r, 10.0, p.shadow);
@@ -675,7 +719,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
         let first = r.top() + 6.0 + FIELD + 6.0;
         let bottom = r.bottom() - 8.0 - footer;
         // The highlight's place stands for its row: scroll_tree follows a row when its id changes.
-        let follow = Some((shell.version_list.highlight, archforge_mof::Uuid((shell.version_list.highlight as u128).to_be_bytes())));
+        let follow = highlight.map(|n| (n, archforge_mof::Uuid((n as u128).to_be_bytes())));
         let tree = Rect::from_min_max(pos2(r.left(), first), pos2(r.right() - 1.0, bottom + 8.0));
         let offset = scroll_tree(ui, p, tree, first, rows.len(), ROW, 0.0, true, follow, &mut shell.version_list.scroll);
         let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
@@ -689,7 +733,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
             let at = Rect::from_min_size(pos2(r.left() + 6.0, y), vec2(WIDTH - 12.0, ROW));
             let resp = control(shell, &clip, &format!("{ID}.row.{n}"), "menu-item", at, true);
             let _ = resp.clone().accessible_name(format!("{label}, {detail}"));
-            if n == highlight || resp.hovered() {
+            if Some(n) == highlight || resp.hovered() {
                 clip.painter().rect_filled(at, 6.0, p.accent_tint);
             }
             let name = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, label, types::UI, p.text, Some(WIDTH * 0.45));
@@ -699,6 +743,9 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, chip: Rect) {
             if resp.clicked() {
                 picked = Some(row.clone());
             }
+        }
+        if new && new_branch_row(shell, ui, p, r) {
+            picked = Some(new_row());
         }
         let steps = &shell.version_list.steps;
         let reading_on = steps.more && !steps.failed && !shell.version_list.branches;

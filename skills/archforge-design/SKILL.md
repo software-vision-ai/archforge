@@ -82,9 +82,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History (⇧⌘H, the
   chip's list), Compare… (the version whose details show, else the newest once the list is current,
   against current work; off while it may be behind a save),
-  Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
+  New branch…, Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
   even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
-  row off. New branch… is not a row yet; its dialog opens from the Branches header's +. Every shortcut is matched
+  row off. New branch… (AR-407) opens the Branches header's dialog, on while the host keeps branches and
+  nothing holds the project; the chip's list ends in the same row, pinned under its rows and reached by ↓
+  past the last one. Every shortcut is matched
   exactly, so ⇧⌘S never saves.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.

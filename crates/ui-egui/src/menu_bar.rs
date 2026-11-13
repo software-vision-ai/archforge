@@ -7,7 +7,8 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
-    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, GENERATE, Keys, NEW, NEWER, OPEN, QUIT, REDO, SAVE, SAVE_VERSION, SETTINGS, UNDO, VERSIONS,
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, QUIT, REDO, SAVE, SAVE_VERSION, SETTINGS, UNDO,
+    VERSIONS,
 };
 use crate::home::{control, off_words};
 use crate::i18n::tr;
@@ -262,7 +263,7 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
 }
 
 /// Why the row of the action `id` is off, in words: the first thing that keeps it off.
-fn why_off(shell: &Shell, id: &str) -> String {
+pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
     let no_project = shell.session.is_none() || shell.active.is_none();
     match id {
         NEW | OPEN if shell.tabs.len() >= crate::MAX_TABS => tr("Close a project to open another"),
@@ -293,6 +294,7 @@ fn versions_off(shell: &Shell, id: &str) -> String {
     match id {
         BACK if shell.version_in_view().is_none() => tr("Current work is showing"),
         _ if shell.is_held() => tr("The project is busy"),
+        NEW_BRANCH if shell.versions.making.is_some() => tr("Wait for the change under way to finish."),
         VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
         COMPARE if !listed => tr("No versions yet."),
         COMPARE => tr("Loading"),

@@ -151,10 +151,11 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, NEW_BRANCH, NEWER, OLDER, SAVE_VERSION, VERSIONS};
 
-    const ITEMS: [&str; 17] =
-        [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, SAVE_VERSION, VERSIONS, COMPARE, BRANCHES, OLDER, NEWER, BACK];
+    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
+    /// The Versions menu's items, after the rest.
+    const VERSION_ITEMS: [&str; 8] = [SAVE_VERSION, VERSIONS, COMPARE, NEW_BRANCH, BRANCHES, OLDER, NEWER, BACK];
 
     /// The event the menu bar sends when the item `id` is chosen.
     fn event(id: &str) -> MenuEvent {
@@ -215,7 +216,7 @@ mod tests {
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
         let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VERSIONS_MENU[..]].concat().concat();
-        let mut sorted_items = ITEMS.to_vec();
+        let mut sorted_items = [&ITEMS[..], &VERSION_ITEMS[..]].concat();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
         sorted.sort_unstable();
@@ -235,6 +236,7 @@ mod tests {
             (NEWER, Some("CmdOrCtrl+BracketRight")),
             (BACK, Some("CmdOrCtrl+Shift+H")),
             (COMPARE, None),
+            (NEW_BRANCH, None),
             (ABOUT, None),
             (NEW, None),
             (CLOSE, None),
@@ -259,7 +261,7 @@ mod tests {
     /// inside the wake, so an item queued only after it would be missed here, as by its frame.
     #[test]
     fn every_item_wakes_the_window_and_is_waiting_when_it_wakes() {
-        for item in ITEMS {
+        for item in ITEMS.into_iter().chain(VERSION_ITEMS) {
             let ctx = egui::Context::default();
             let (sender, chosen) = channel();
             let chosen = Mutex::new(chosen);

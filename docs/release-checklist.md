@@ -81,7 +81,7 @@ change back and bring it again, and are disabled when there is no step to take. 
 field, as they always have. Model on a class diagram lists Class to Package, the kinds of the Relationship
 tool, then **Note** and **Link note**, and Interface places an interface where you click. On an ER diagram
 it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
-(⇧⌘H), **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
+(⇧⌘H), **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
 current work** (⇧⌘H). While an earlier version shows, History is disabled and Back to current work enabled,
 and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. ⇧⌘S opens Save version and never saves.
 
