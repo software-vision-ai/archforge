@@ -5297,6 +5297,29 @@ fn a_refused_appearance_change_is_read_out_as_a_status() {
     }
 }
 
+/// A change in Appearance refused says why in plain words, as a sentence, never as the engine words
+/// it: a fill picked, and Use diagram defaults, while the model can't be changed. In light and dark
+/// (AR-431).
+#[test]
+fn a_refused_appearance_change_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["workspace.appearance.fill.2", "workspace.appearance.defaults"] {
+            let (mut h, customer, _) = diagram_harness();
+            h.state_mut().state.theme = theme;
+            let at = rect_of(&h, "workspace.panels.appearance").center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+            h.run();
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            let at = rect_of(&h, control).center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}, {control}: refused"));
+            assert_eq!(notice, "The model cannot be changed at the moment; nothing was changed.", "{theme:?}, {control}");
+        }
+    }
+}
+
 /// Asserts that `words` are read out as a polite live status, inside the area recorded as `id`.
 fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
     use egui_kittest::kittest::{NodeT, Queryable};
