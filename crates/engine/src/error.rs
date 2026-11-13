@@ -143,6 +143,9 @@ pub enum Reason {
     /// That element is joined to this one by `relationship`s already, so this one would close a
     /// cycle.
     Cycle { relationship: &'static str },
+    /// The two ends of a `relationship` are of different kinds, where it joins two of one kind, as a
+    /// class binds only a class template.
+    KindsDiffer { relationship: &'static str },
     /// An element of `kind` cannot be the `end` of a `relationship`.
     WrongEnd { relationship: &'static str, end: End, kind: &'static str },
 }

@@ -470,6 +470,16 @@ fn relationship_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::Again { relationship: "generalization" } => tr("This one specializes that one already"),
         Reason::Again { relationship: "realization" } => tr("This class realizes that interface already"),
         Reason::Cycle { relationship: "generalization" } => tr("That one specializes this one already, which would make a cycle"),
+        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Source, .. } => {
+            tr("Only a class, an interface or a data type binds a template")
+        }
+        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Target, .. } => {
+            tr("A binding ends at a template: a class, an interface or a data type with template parameters")
+        }
+        Reason::KindsDiffer { relationship: "binding" } => tr("A template is bound by a classifier of its own kind"),
+        Reason::Itself { relationship: "binding", .. } => tr("A template does not bind itself"),
+        Reason::Again { relationship: "binding" } => tr("This one binds that template already"),
+        Reason::Cycle { relationship: "binding" } => tr("That template binds this one already, which would make a cycle"),
         Reason::WrongEnd { relationship: "association", kind, .. } => match *kind {
             "enumeration" => tr("An enumeration is a data type and joins no association"),
             "data type" => tr("A data type joins no association"),
