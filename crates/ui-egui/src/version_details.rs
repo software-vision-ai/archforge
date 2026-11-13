@@ -183,6 +183,8 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
         v.details_reading = None;
     }
     let Some(d) = v.details.as_mut() else { return };
+    // The Compare page's read takes turns with these while the page is open, never once it is gone.
+    let page_reads = d.compare.is_some() && v.compare_results.reading.is_some();
     let Some(c) = d.comparison.as_mut() else { return };
     let pair = (c.before.clone(), d.entry.hash.clone());
     if let Some((_, found)) = answered.filter(|(compared, _)| *compared == pair) {
@@ -196,8 +198,7 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     {
         c.earlier = Some(Ok(listed.clone()));
     }
-    // The Compare page's read takes turns with these too.
-    let idle = v.details_comparing.is_none() && v.compare_results.reading.is_none();
+    let idle = v.details_comparing.is_none() && !page_reads;
     if let (true, None, Some(host), Some(about)) = (idle, &v.details_reading, host, about) {
         if c.found.is_none() {
             let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
