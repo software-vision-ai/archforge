@@ -305,29 +305,12 @@ fn realization_refusal(store: &Store, implementing: Option<Obj>, contract: Optio
 }
 
 /// Why a generalization from `specific` to `general` is refused, in the user's words, when it is:
-/// the model's rules (`generalization_problem`) said as the canvas says them, a final general
+/// the model's rules (`generalization_problem`) said as a refusal of the engine is, a final general
 /// classifier by its name (AR-137). `except` is the generalization being reconnected.
 fn generalization_refusal(store: &Store, specific: Obj, general: Obj, except: Option<Obj>) -> Option<String> {
-    use archforge_uml::relations::GeneralizationProblem as P;
-    Some(match archforge_uml::relations::generalization_problem(store, specific, general, except)? {
-        P::NotAnInterface => tr("An interface specializes only an interface"),
-        P::ClassOfInterface => tr("A class cannot specialize an interface"),
-        P::NotAnEnumeration => tr("An enumeration specializes only an enumeration"),
-        P::NoEnumeration => tr("Only an enumeration specializes an enumeration"),
-        P::NotADataType => tr("A data type specializes only a data type"),
-        P::NoDataType => tr("Only a data type specializes a data type"),
-        P::NotAPrimitiveType => tr("A primitive type specializes only a primitive type"),
-        P::NoPrimitiveType => tr("Only a primitive type specializes a primitive type"),
-        P::BuiltIn => tr("A built-in type specializes nothing"),
-        P::AssociationClass => tr("Nothing specializes an association class"),
-        P::Itself => tr("A classifier cannot specialize itself"),
-        P::Final => fmt(
-            &tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."),
-            &[("name", &archforge_core::name_of(store, general))],
-        ),
-        P::Again => tr("This one specializes that one already"),
-        P::Cycle => tr("That one specializes this one already, which would make a cycle"),
-    })
+    let problem = archforge_uml::relations::generalization_problem(store, specific, general, except)?;
+    let reason = problem.reason(store, specific, general);
+    Some(crate::panels::said(&reason).unwrap_or_else(|| problem.why(store, specific, general)))
 }
 
 /// Whether `element` is a class: a plain class or an association class, which is one too.

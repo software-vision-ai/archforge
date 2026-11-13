@@ -421,7 +421,7 @@ pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
 
 /// A typed refusal in the user's words; none for a kind of element the catalogues don't name, which
 /// the engine's sentence then says.
-fn said(reason: &archforge_engine::Reason) -> Option<String> {
+pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::Reason;
     let (template, kind, name) = match reason {
         Reason::NameTaken { kind, name } => (tr("There is {what} named {name} already."), *kind, name.as_str()),
@@ -432,13 +432,55 @@ fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
         Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
         Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
-        _ => return None,
+        other => return relationship_said(other),
     };
     let what = a_kind(kind)?;
     // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
     let what =
         if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
     Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A relationship's rule broken, in the words the canvas says it with; none for a reason or a kind
+/// the catalogues don't say.
+fn relationship_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    Some(match reason {
+        Reason::SpecializesOnlyItsKind { kind } => match *kind {
+            "interface" => tr("An interface specializes only an interface"),
+            "enumeration" => tr("An enumeration specializes only an enumeration"),
+            "data type" => tr("A data type specializes only a data type"),
+            "primitive type" => tr("A primitive type specializes only a primitive type"),
+            _ => return None,
+        },
+        Reason::OnlyItsKindSpecializes { kind } => match *kind {
+            "enumeration" => tr("Only an enumeration specializes an enumeration"),
+            "data type" => tr("Only a data type specializes a data type"),
+            "primitive type" => tr("Only a primitive type specializes a primitive type"),
+            _ => return None,
+        },
+        Reason::CannotSpecialize { kind: "class" | "association class", general: "interface" } => tr("A class cannot specialize an interface"),
+        Reason::SpecializesNothing { kind: "built-in type" } => tr("A built-in type specializes nothing"),
+        Reason::NothingSpecializes { kind: "association class" } => tr("Nothing specializes an association class"),
+        Reason::Final { name } => {
+            fmt(&tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."), &[("name", name)])
+        }
+        Reason::Itself { relationship: "generalization", .. } => tr("A classifier cannot specialize itself"),
+        Reason::Itself { relationship: "association class", .. } => tr("An association class does not join itself"),
+        Reason::Again { relationship: "generalization" } => tr("This one specializes that one already"),
+        Reason::Again { relationship: "realization" } => tr("This class realizes that interface already"),
+        Reason::Cycle { relationship: "generalization" } => tr("That one specializes this one already, which would make a cycle"),
+        Reason::WrongEnd { relationship: "association", kind, .. } => match *kind {
+            "enumeration" => tr("An enumeration is a data type and joins no association"),
+            "data type" => tr("A data type joins no association"),
+            "primitive type" => tr("A primitive type joins no association"),
+            _ => return None,
+        },
+        Reason::WrongEnd { relationship: "association class", .. } => tr("An association class joins only classes"),
+        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Source, .. } => tr("Only a class implements an interface"),
+        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Target, .. } => tr("A class realizes only an interface"),
+        _ => return None,
+    })
 }
 
 /// A kind of element as a refusal names it, with its article where the language has one; none for
@@ -470,6 +512,7 @@ fn a_kind(kind: &str) -> Option<String> {
         "sequence" => tr_ctx("refusal", "a sequence"),
         "view" => tr_ctx("refusal", "a view"),
         "skill" => tr_ctx("refusal", "a skill"),
+        "association end" => tr_ctx("refusal", "an association end"),
         _ => return None,
     })
 }

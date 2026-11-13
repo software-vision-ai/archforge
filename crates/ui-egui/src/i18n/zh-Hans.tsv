@@ -598,6 +598,7 @@ str	refusal	an enum type	枚举类型
 str	refusal	a sequence	序列
 str	refusal	a view	视图
 str	refusal	a skill	技能
+str	refusal	an association end	关联端
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录

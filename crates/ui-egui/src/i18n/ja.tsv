@@ -598,6 +598,7 @@ str	refusal	an enum type	列挙型
 str	refusal	a sequence	シーケンス
 str	refusal	a view	ビュー
 str	refusal	a skill	スキル
+str	refusal	an association end	関連端
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
