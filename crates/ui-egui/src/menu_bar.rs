@@ -11,7 +11,7 @@ use crate::actions::{
     VERSIONS,
 };
 use crate::home::{control, off_words};
-use crate::i18n::tr;
+use crate::i18n::{tr, tr_ctx};
 use crate::ux::{self, Palette, types};
 use crate::widgets;
 
@@ -28,6 +28,7 @@ struct Group {
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
     Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO]] },
+    Group { id: "view", title: || tr_ctx("menu", "View"), sections: |_| crate::view_menu::VIEW_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
     Group { id: "versions", title: || tr("Versions"), sections: |_| actions::VERSIONS_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
@@ -274,6 +275,7 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
         _ if id.starts_with("model.") => crate::model_menu::why_off(shell),
         _ if id.starts_with("versions.") => versions_off(shell, id),
+        _ if id.starts_with("view.") => crate::view_menu::why_off(shell, id),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
         _ if id.starts_with("edit.") && !shell.looking_only() => tr("Nothing to act on here"),
         _ => off_words(shell),

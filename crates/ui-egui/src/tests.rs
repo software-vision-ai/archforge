@@ -15,6 +15,7 @@ mod switch_ask;
 mod version_chip;
 mod version_details;
 mod versions_menu;
+mod view_menu;
 
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -4026,7 +4027,11 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         h.state_mut().in_window_menu = true;
         h.run();
         let (file, help, mid) = (rect_of(&h, "strip.menu.file"), rect_of(&h, "strip.menu.help"), rect_of(&h, "strip.theme").center().y);
-        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.model", "strip.menu.versions", "strip.menu.help"], "{theme:?}");
+        assert_eq!(
+            menu_ids(&h),
+            ["strip.menu.file", "strip.menu.edit", "strip.menu.view", "strip.menu.model", "strip.menu.versions", "strip.menu.help"],
+            "{theme:?}"
+        );
         assert!(
             file.left() >= rect_of(&h, "strip.open-project").right() && file.height() == 24.0 && help.left() > file.right() && file.center().y == mid,
             "{theme:?}"
@@ -4034,7 +4039,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         click_menu(&mut h, "strip.menu.file");
         let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
             .map(|id| format!("strip.menu.row.{id}"));
-        assert_eq!(menu_ids(&h)[5..], want, "{theme:?}");
+        assert_eq!(menu_ids(&h)[6..], want, "{theme:?}");
         let rows = want.each_ref().map(|id| rect_of(&h, id));
         assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
         assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
@@ -4080,7 +4085,7 @@ fn a_click_moves_the_menu_or_closes_it() {
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.file");
         click_menu(&mut h, "strip.menu.help");
-        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[5..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
+        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[6..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
         click_menu(&mut h, "strip.menu.help");
         assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
     }
@@ -4214,14 +4219,16 @@ fn up_and_down_walk_the_live_rows_and_wrap() {
 /// Left and Right go between the groups, wrapping, each on its first live row.
 #[test]
 fn left_and_right_move_between_the_groups_and_wrap() {
-    use crate::actions::{ABOUT, SETTINGS};
+    use crate::actions::{ABOUT, FIND, SETTINGS};
     use egui::Key::{ArrowLeft, ArrowRight, F10};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
         let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", None), ("model", None), ("help", Some(ABOUT)));
-        let (versions, r, l) = (("versions", None), ArrowRight, ArrowLeft);
-        for (key, at) in [(r, edit), (r, model), (r, versions), (r, help), (r, file), (l, help), (l, versions), (l, model), (l, edit), (l, file)] {
+        let (versions, view, r, l) = (("versions", None), ("view", Some(FIND)), ArrowRight, ArrowLeft);
+        let rights = [(r, edit), (r, view), (r, model), (r, versions), (r, help), (r, file)];
+        let lefts = [(l, help), (l, versions), (l, model), (l, view), (l, edit), (l, file)];
+        for (key, at) in rights.into_iter().chain(lefts) {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some(at.0), at.1), "{theme:?}: {key:?}");
         }

@@ -83,12 +83,16 @@ pub fn sections(shell: &Shell) -> Vec<Vec<&'static str>> {
     own.iter().copied().chain([SHARED]).map(|section| section.iter().map(|a| a.id).collect()).collect()
 }
 
+/// Whether a version's details or a changed element covers the canvas.
+pub(crate) fn covered(shell: &Shell) -> bool {
+    shell.state.explorer == Explorer::SourceControl && (shell.versions.details.is_some() || shell.versions.element.is_some())
+}
+
 /// Whether a tool can be armed: a diagram of `kind` (any, for `None`) on the canvas of a project
 /// that can change, with no version's details or changed element over it and nothing over the window.
 fn can_pick(shell: &Shell, kind: Option<&str>) -> bool {
-    let covered = shell.state.explorer == Explorer::SourceControl && (shell.versions.details.is_some() || shell.versions.element.is_some());
     let shown = shell.active.is_some() && active_kind(shell).is_some_and(|k| kind.is_none_or(|wanted| k.kind() == wanted));
-    shown && !covered && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
+    shown && !covered(shell) && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
 }
 
 /// Arms a tool through `set`, closing the toolbar's popover. Asks again: a chosen row runs a frame later.
