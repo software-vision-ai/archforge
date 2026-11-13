@@ -1925,6 +1925,9 @@ impl Shell {
         }
         self.poll_host();
         version_chip::keep_valid(self);
+        // Home and a project closed draw no rail: what the versions' pages hold of another goes here.
+        version_details::let_go(self);
+        change_view::let_go(self);
         version_details::compare::results::let_go(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);

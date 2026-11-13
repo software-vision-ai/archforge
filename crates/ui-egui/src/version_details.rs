@@ -88,7 +88,7 @@ fn not_read() -> String {
 }
 
 /// The project and session shown.
-fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
+pub(crate) fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }
 
@@ -157,13 +157,11 @@ pub(crate) fn compare_from_menu(shell: &mut Shell) {
     compare::open(shell);
 }
 
-/// Once a frame: what belongs to another project or session is let go, the answers that have come
-/// are taken, the version before comes from the list when it holds it, the details shown get their
-/// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
-/// the two versions it is about, the link only for the version it names.
-pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+/// Lets go of the details, and of their reads with their answers still to come, once the project
+/// or session shown is another, or none is. Also once a frame before drawing, as Home and a project
+/// closed draw no rail to call [`keep`].
+pub(crate) fn let_go(shell: &mut Shell) {
     let about = about(shell);
-    let host = shell.services.projects.clone();
     let v = &mut shell.versions;
     if v.details.as_ref().is_some_and(|d| Some(&d.about) != about.as_ref()) {
         v.details = None;
@@ -174,6 +172,17 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     if v.details_reading.as_ref().is_some_and(|c| Some(&c.about) != about.as_ref()) {
         v.details_reading = None;
     }
+}
+
+/// Once a frame: what belongs to another project or session is let go, the answers that have come
+/// are taken, the version before comes from the list when it holds it, the details shown get their
+/// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
+/// the two versions it is about, the link only for the version it names.
+pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    let_go(shell);
+    let about = about(shell);
+    let host = shell.services.projects.clone();
+    let v = &mut shell.versions;
     let answered = v.details_comparing.as_ref().and_then(|c| c.answered(not_compared));
     if answered.is_some() {
         v.details_comparing = None;

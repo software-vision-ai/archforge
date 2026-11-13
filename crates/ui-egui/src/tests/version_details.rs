@@ -749,7 +749,8 @@ fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
 /// Puts a read of `id` about `key` under way, the test holding its answer.
 fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<crate::change_view::Sides>, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
-    h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { id, key, answer: rx });
+    let about = crate::version_details::about(h.state());
+    h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { about, id, key, answer: rx });
     tx
 }
 
@@ -1944,6 +1945,75 @@ fn leaving_the_project_lets_the_page_go() {
             tx.send(Ok(before.clone())).unwrap();
             h.run_steps(1);
             assert!(h.state().versions.compare_results.reading.is_none() && Arc::strong_count(&before) == 1, "dropped, rows and all");
+        });
+    }
+}
+
+/// Leaves the project for Home, or with `home` false closes it saved, every closing answered.
+fn leave(h: &mut Harness<'static, Shell>, host: &SavingHost, home: bool) {
+    if home {
+        h.state_mut().go_home();
+    } else {
+        let session = h.state_mut().session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        h.state_mut().close_project();
+    }
+    h.run_steps(1);
+    for closing in host.closings.lock().unwrap().drain(..) {
+        let _ = closing.send(Ok(()));
+    }
+    h.run_steps(2);
+    assert!(h.state().project.is_none(), "left");
+}
+
+/// Home and a project closed draw no rail, and the details go all the same, their comparison or
+/// their read of the version before with them, so an answer that comes later lands nowhere and
+/// nothing wakes the window.
+#[test]
+fn leaving_the_project_lets_the_details_and_their_reads_go() {
+    for (home, comparing) in [(true, true), (true, false), (false, true), (false, false)] {
+        in_both_listing(history()[..1].to_vec(), |h, host| {
+            let (before, after) = before_and_after(h, host);
+            host.version_reads.lock().unwrap().clear();
+            opened(h, "c3");
+            let read = (!comparing).then(|| {
+                answer(host, "c2", Ok(before.clone()));
+                answer(host, "c3", Ok(after.clone()));
+                the_read(h, host)
+            });
+            let v = &h.state().versions;
+            assert!(v.details.is_some() && (v.details_comparing.is_some() || v.details_reading.is_some()), "under way");
+            leave(h, host, home);
+            let v = &h.state().versions;
+            assert!(v.details.is_none() && v.details_comparing.is_none() && v.details_reading.is_none(), "let go");
+            if let Some(read) = read {
+                assert!(read.send(page_of(history().remove(1))).is_err(), "its answer goes nowhere");
+            } else {
+                answer(host, "c2", Ok(before.clone()));
+                answer(host, "c3", Ok(after.clone()));
+            }
+            h.run_steps(4);
+            assert!(h.state().versions.details.is_none() && !h.ctx.has_requested_repaint(), "at rest");
+        });
+    }
+}
+
+/// Home and a project closed draw no rail, and an opened change goes all the same, its sides and
+/// the read of them with it, so that read's answer lands nowhere and nothing wakes the window.
+#[test]
+fn leaving_the_project_lets_the_opened_change_go() {
+    for home in [true, false] {
+        in_both(|h, host| {
+            let (id, key) = element_open(h, host);
+            let sides = reading(h, id, key);
+            assert!(h.state().versions.element.is_some(), "open");
+            leave(h, host, home);
+            let v = &h.state().versions;
+            assert!(v.element.is_none() && v.element_reading.is_none(), "let go");
+            let late = both_sides(id, "shop").map(|s| s.map(crate::change_view::Sides::Element));
+            assert!(sides.send(late).is_err(), "its answer goes nowhere");
+            h.run_steps(4);
+            assert!(!h.ctx.has_requested_repaint(), "at rest");
         });
     }
 }
