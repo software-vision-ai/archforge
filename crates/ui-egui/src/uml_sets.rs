@@ -422,7 +422,7 @@ fn remove_lines(shell: &mut Shell, d: Obj, elements: &[Obj]) {
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 

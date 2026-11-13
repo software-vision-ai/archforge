@@ -17117,6 +17117,27 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
     }
 }
 
+/// A line the engine refuses on a class diagram is said at the canvas's top in plain words, never
+/// with the command's id or the parameter it is about: a class drawn depending on itself. Nothing
+/// changes. In light and dark (AR-431).
+#[test]
+fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes, _) = enumeration_sample(theme);
+        let node = archforge_mof::Uuid::parse(&nodes["OrderLine"]).unwrap();
+        let d = h.state().canvas.active.unwrap();
+        let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+        crate::uml_relate::connect(h.state_mut(), d, node, node);
+        h.run();
+        let notice = h.state().canvas.notice.clone().unwrap_or_else(|| panic!("{theme:?}: the refusal is said"));
+        assert_eq!(notice, "A class cannot depend on itself.", "{theme:?}");
+        assert!(painted(&h).contains(&notice), "{theme:?}: shown at the canvas's top");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing changed");
+    }
+}
+
 /// The sample class model in `theme` with two data types, Amount and Price, placed in its empty
 /// bottom row and the whole diagram in view: the harness, every card's node by name, the data
 /// types' ids and their nodes.

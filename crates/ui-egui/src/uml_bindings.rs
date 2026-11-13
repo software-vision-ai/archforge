@@ -516,7 +516,7 @@ fn apply_draft(shell: &mut Shell) {
                     Ok(())
                 })
                 .map(|o| o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse))
-                .map_err(|e| e.to_string())
+                .map_err(|e| crate::panels::refusal(&e))
         }
         _ => return,
     };
