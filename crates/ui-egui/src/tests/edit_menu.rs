@@ -600,17 +600,27 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
     }
 }
 
-/// A saved project with Customer's name being typed as "Item" in Models, the in-window menu shown.
-fn renaming_a_saved_project(theme: ThemeKind) -> Harness<'static, Shell> {
+/// A saved project with Customer's name being typed as "Item" in Models, or on the canvas when
+/// `on_canvas`, the in-window menu shown.
+fn renaming_a_saved_project(theme: ThemeKind, on_canvas: bool) -> Harness<'static, Shell> {
     let (mut h, _) = drawn(theme);
-    (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, true);
+    (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, !on_canvas);
     h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
     h.run();
     assert!(!h.state().tab_unsaved(h.state().active.unwrap()), "{theme:?}: nothing unsaved yet");
-    key(&mut h, Key::F2, Modifiers::NONE);
+    if on_canvas {
+        // The header's right end, clear of the note inside the box.
+        let node = node_of(&h, archforge_mof::Uuid::parse(&selection(&h)[0]).unwrap());
+        let at = rect_of(&h, &format!("workspace.canvas.node.{node}")).right_top() + egui::vec2(-20.0, 12.0);
+        (0..2).for_each(|_| click(&mut h, at));
+    } else {
+        key(&mut h, Key::F2, Modifiers::NONE);
+    }
     key(&mut h, Key::A, Modifiers::COMMAND);
     h.event(Event::Text("Item".into()));
     h.run();
+    let typed = if on_canvas { h.state().canvas.rename.as_ref().map(|r| &r.text) } else { h.state().explorer.rename.as_ref().map(|r| &r.text) };
+    assert_eq!(typed.map(String::as_str), Some("Item"), "{theme:?}: typed in place");
     h
 }
 
@@ -627,21 +637,30 @@ fn close_asks(mut h: Harness<'static, Shell>, theme: ThemeKind) {
     assert_eq!((h.state().tabs.len(), h.state().session.is_some()), (tabs, true), "{theme:?}: the project is still open");
 }
 
-/// A name typed in place is committed before a row of another menu runs, so File ▸ Close on a
-/// saved project asks about it, as it would with no menu.
+/// A name typed in place, in Models and on the canvas, is committed before a row of another menu
+/// runs, so File ▸ Close chosen by the pointer on a saved project asks about it, as it would with no
+/// menu: whether File is clicked straight away, or after Edit held the name, or after a press on
+/// Edit let go on File opened nothing. Each press and release is a frame of its own.
 #[test]
 fn another_menus_row_finds_the_name_typed_in_place_committed() {
-    for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = renaming_a_saved_project(theme);
-        let at = rect_of(&h, "strip.menu.file").center();
-        click(&mut h, at);
-        let at = rect_of(&h, "strip.menu.row.file.close").center();
-        h.event(Event::PointerMoved(at));
-        h.run();
-        (0..2).for_each(|n| {
-            h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n == 0, modifiers: Modifiers::NONE })
-        });
-        close_asks(h, theme);
+    let file = ["strip.menu.file", "strip.menu.file"];
+    let ways: [&[&str]; 3] = [&file, &["strip.menu.edit", "strip.menu.edit", file[0], file[1]], &["strip.menu.edit", file[0], file[0], file[1]]];
+    for (theme, on_canvas) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        for way in ways {
+            let mut h = renaming_a_saved_project(theme, on_canvas);
+            let presses: Vec<&str> = way.iter().copied().chain(["strip.menu.row.file.close"; 2]).collect();
+            for (n, id) in presses.iter().enumerate() {
+                let at = rect_of(&h, id).center();
+                h.event(Event::PointerMoved(at));
+                h.run();
+                h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: n % 2 == 0, modifiers: Modifiers::NONE });
+                // The release on Close is left for `close_asks` to draw.
+                if n + 1 < presses.len() {
+                    h.run();
+                }
+            }
+            close_asks(h, theme);
+        }
     }
 }
 
@@ -650,7 +669,7 @@ fn another_menus_row_finds_the_name_typed_in_place_committed() {
 #[test]
 fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let mut h = renaming_a_saved_project(theme);
+        let mut h = renaming_a_saved_project(theme, false);
         key(&mut h, Key::F10, Modifiers::NONE);
         key(&mut h, Key::ArrowRight, Modifiers::NONE);
         assert_eq!((h.state().menu_bar.open, h.state().explorer.rename.as_ref().map(|r| r.text.as_str())), (Some("edit"), Some("Item")), "{theme:?}");
