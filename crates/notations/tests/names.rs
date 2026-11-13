@@ -160,8 +160,8 @@ fn two_elements_of_one_kind_named_alike_are_refused_by_every_command() {
     // Attributes, operations and literals.
     let status = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "status" }));
     let total = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "total" }));
-    refused(&mut s, "uml.attribute.add", json!({ "class": order, "name": "STATUS" }), "the class has an attribute named STATUS already");
-    refused(&mut s, "uml.attribute.set", json!({ "attribute": total, "name": "Status" }), "the class has an attribute named Status already");
+    refused(&mut s, "uml.attribute.add", json!({ "class": order, "name": "STATUS" }), "the class has an attribute named status already");
+    refused(&mut s, "uml.attribute.set", json!({ "attribute": total, "name": "Status" }), "the class has an attribute named status already");
     let advance = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "advance" }));
     let cancel = run(&mut s, "uml.operation.add", json!({ "class": order, "name": "cancel" }));
     refused(&mut s, "uml.operation.add", json!({ "class": order, "name": "Advance" }), "the class has an operation named advance already");
@@ -184,15 +184,67 @@ fn two_elements_of_one_kind_named_alike_are_refused_by_every_command() {
         &mut s,
         "uml.generalization-set.add",
         json!({ "generalizations": [g], "name": "Kinds" }),
-        "there is a generalization set named Kinds already",
+        "there is a generalization set named kinds already",
     );
     run(&mut s, "uml.generalization-set.add", json!({ "generalizations": [h], "name": "KINDS" }));
-    refused(&mut s, "element.remove", json!({ "ids": [gone] }), "Sales has a generalization set named KINDS already");
+    refused(&mut s, "element.remove", json!({ "ids": [gone] }), "Sales has a generalization set named kinds already");
     // A class handed up onto a classifier's name is refused as it was.
     let set = set_of(&s, &h);
     run(&mut s, "uml.generalization-set.set", json!({ "set": set, "name": "Shapes" }));
     run(&mut s, "uml.class.rename", json!({ "class": a, "name": "payable" }));
-    refused(&mut s, "element.remove", json!({ "ids": [gone] }), "Sales has an interface named payable already");
+    refused(&mut s, "element.remove", json!({ "ids": [gone] }), "Sales has an interface named Payable already");
+}
+
+/// The reason `cmd` is refused with, typed as a name another element of `kind`, named `name`, has;
+/// the English names that element too, and nothing changes.
+fn taken(s: &mut Session, cmd: &str, p: Json, kind: &'static str, name: &str) {
+    let before = snapshot(s.doc());
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::NameTaken { kind, name: name.into() }), "{cmd} {p}");
+    assert!(error.message.contains(&format!("{kind} named {name}")) || error.message.contains(&format!("{kind} named {name:?}")), "{cmd}: {error:?}");
+    assert_eq!(snapshot(s.doc()), before, "{cmd} {p} changed nothing");
+}
+
+/// Every name clash of UML's members, sets, nesting and hand-up, ER's tables, types, columns and
+/// relationships, and skills carries its reason typed, naming the element that has the name, as
+/// the English does, for an interface to say in its own words (AR-435).
+#[test]
+fn every_name_clash_carries_its_reason_typed_with_the_element_that_has_the_name() {
+    let (mut s, sales) = project();
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let state = run(&mut s, "uml.enumeration.add", json!({ "package": sales, "name": "State" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "status" }));
+    run(&mut s, "uml.operation.add", json!({ "class": order, "name": "advance" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": state, "name": "open" }));
+    taken(&mut s, "uml.attribute.add", json!({ "class": order, "name": "STATUS" }), "attribute", "status");
+    taken(&mut s, "uml.operation.add", json!({ "class": order, "name": "Advance" }), "operation", "advance");
+    taken(&mut s, "uml.literal.add", json!({ "enumeration": state, "name": "OPEN" }), "literal", "open");
+    let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    let g = run(&mut s, "uml.generalization.add", json!({ "specific": line, "general": order }));
+    run(&mut s, "uml.generalization-set.add", json!({ "generalizations": [g], "name": "kinds" }));
+    taken(&mut s, "uml.generalization-set.add", json!({ "generalizations": [g], "name": "Kinds" }), "generalization set", "kinds");
+    // Nested under Order, which holds a class Item: another Item goes under it no more.
+    run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Item" }));
+    let item = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "ITEM" }));
+    taken(&mut s, "uml.classifier.set-owner", json!({ "classifier": item, "owner": order }), "class", "Item");
+    // A package removed hands up a class onto the name of one in its parent.
+    let gone = run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "Gone" }));
+    run(&mut s, "uml.class.add", json!({ "package": gone, "name": "line" }));
+    taken(&mut s, "element.remove", json!({ "ids": [gone] }), "class", "Line");
+    // Skills on one subject.
+    run(&mut s, "skill.add", json!({ "subject": sales, "name": "Naming" }));
+    let other = run(&mut s, "skill.add", json!({ "subject": sales, "name": "Style" }));
+    taken(&mut s, "skill.add", json!({ "subject": sales, "name": "NAMING" }), "skill", "Naming");
+    taken(&mut s, "skill.rename", json!({ "skill": other, "name": "naming" }), "skill", "Naming");
+    // ER: the interface's words, a table, a domain, a column and a relationship.
+    let mut s = er_project();
+    let shop = er_id(&s, archforge_er::SCHEMA, "shop");
+    let (customer, order) = (er_id(&s, archforge_er::ENTITY, "Customer"), er_id(&s, archforge_er::ENTITY, "Order"));
+    taken(&mut s, "er.entity.add", json!({ "schema": shop, "name": "ORDER" }), "table", "Order");
+    taken(&mut s, "er.entity.rename", json!({ "entity": order, "name": "Money" }), "domain", "money");
+    taken(&mut s, "er.view.add", json!({ "schema": shop, "name": "Counter", "query": "SELECT 1" }), "sequence", "counter");
+    taken(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "ID", "type": "TEXT" }), "column", "id");
+    taken(&mut s, "er.relationship.add", json!({ "from": customer, "to": order, "name": "Places" }), "relationship", "places");
 }
 
 /// A nested package removed hands up an element named like itself, since it goes; a clash with
@@ -205,7 +257,7 @@ fn a_removed_package_hands_up_an_element_of_its_own_name() {
     let class = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Billing" }));
     let audit = run(&mut s, "uml.package.add", json!({ "parent": billing, "name": "Audit" }));
     run(&mut s, "uml.package.add", json!({ "parent": sales, "name": "AUDIT" }));
-    refused(&mut s, "element.remove", json!({ "ids": [billing] }), "Sales has a package named Audit already");
+    refused(&mut s, "element.remove", json!({ "ids": [billing] }), "Sales has a package named AUDIT already");
     run(&mut s, "uml.package.rename", json!({ "package": audit, "name": "Reports" }));
     run(&mut s, "element.remove", json!({ "ids": [billing] }));
     let st = s.doc();
@@ -364,17 +416,17 @@ fn two_er_elements_of_one_kind_named_alike_are_refused_by_every_command() {
     // Tables, domains, enum types, sequences and views: one namespace per schema.
     let (order, state, counter) = (er_id(&s, ENTITY, "Order"), er_id(&s, ENUM_TYPE, "state"), er_id(&s, SEQUENCE, "counter"));
     let (money, report) = (er_id(&s, DOMAIN, "money"), er_id(&s, VIEW, "report"));
-    refused(&mut s, "er.entity.add", json!({ "schema": shop, "name": "customer" }), "named \"customer\" already");
-    refused(&mut s, "er.entity.rename", json!({ "entity": order, "name": "MONEY" }), "named \"MONEY\" already");
-    refused(&mut s, "er.domain.add", json!({ "schema": shop, "name": "STATE", "base_type": "TEXT" }), "named \"STATE\" already");
-    refused(&mut s, "er.enum.set", json!({ "enum": state, "name": "Report", "literals": ["open"] }), "named \"Report\" already");
-    refused(&mut s, "er.sequence.set", json!({ "sequence": counter, "name": "order" }), "named \"order\" already");
-    refused(&mut s, "er.view.add", json!({ "schema": shop, "name": "Counter", "query": "SELECT 1" }), "named \"Counter\" already");
-    refused(&mut s, "er.view.set", json!({ "view": report, "name": "customer", "query": "SELECT 1" }), "named \"customer\" already");
-    refused(&mut s, "er.domain.set", json!({ "domain": money, "name": "Customer", "base_type": "TEXT" }), "named \"Customer\" already");
+    refused(&mut s, "er.entity.add", json!({ "schema": shop, "name": "customer" }), "a table named \"Customer\" already");
+    refused(&mut s, "er.entity.rename", json!({ "entity": order, "name": "MONEY" }), "a domain named \"money\" already");
+    refused(&mut s, "er.domain.add", json!({ "schema": shop, "name": "STATE", "base_type": "TEXT" }), "an enum type named \"state\" already");
+    refused(&mut s, "er.enum.set", json!({ "enum": state, "name": "Report", "literals": ["open"] }), "a view named \"report\" already");
+    refused(&mut s, "er.sequence.set", json!({ "sequence": counter, "name": "order" }), "a table named \"Order\" already");
+    refused(&mut s, "er.view.add", json!({ "schema": shop, "name": "Counter", "query": "SELECT 1" }), "a sequence named \"counter\" already");
+    refused(&mut s, "er.view.set", json!({ "view": report, "name": "customer", "query": "SELECT 1" }), "a table named \"Customer\" already");
+    refused(&mut s, "er.domain.set", json!({ "domain": money, "name": "Customer", "base_type": "TEXT" }), "a table named \"Customer\" already");
     let customer = er_id(&s, ENTITY, "Customer");
     let m2m = run(&mut s, "er.relationship.add", json!({ "from": customer, "to": order, "from_end": "zero-or-more" }));
-    refused(&mut s, "er.relationship.resolve", json!({ "relationship": m2m, "name": "ORDER" }), "named \"ORDER\" already");
+    refused(&mut s, "er.relationship.resolve", json!({ "relationship": m2m, "name": "ORDER" }), "a table named \"Order\" already");
     // Columns: one name per column in a table.
     let column = |s: &Session, name: &str| {
         let st = s.doc();
@@ -384,26 +436,21 @@ fn two_er_elements_of_one_kind_named_alike_are_refused_by_every_command() {
         st.uuid(a.unwrap()).unwrap().to_string()
     };
     let (id, name) = (column(&s, "id"), column(&s, "name"));
-    refused(
-        &mut s,
-        "er.attribute.add",
-        json!({ "entity": customer, "name": "ID", "type": "TEXT" }),
-        "the entity has an attribute named \"ID\" already",
-    );
-    refused(&mut s, "er.attribute.rename", json!({ "attribute": name, "name": "Id" }), "the entity has an attribute named \"Id\" already");
+    refused(&mut s, "er.attribute.add", json!({ "entity": customer, "name": "ID", "type": "TEXT" }), "the table has a column named \"id\" already");
+    refused(&mut s, "er.attribute.rename", json!({ "attribute": name, "name": "Id" }), "the table has a column named \"id\" already");
     // Relationships: one name per relationship in a schema.
     let billed = er_id(&s, RELATIONSHIP, "billed");
     refused(
         &mut s,
         "er.relationship.add",
         json!({ "from": customer, "to": order, "name": "Places" }),
-        "the schema has a relationship named \"Places\" already",
+        "the schema has a relationship named \"places\" already",
     );
     refused(
         &mut s,
         "er.relationship.rename",
         json!({ "relationship": billed, "name": "PLACES" }),
-        "the schema has a relationship named \"PLACES\" already",
+        "the schema has a relationship named \"places\" already",
     );
     // Keys, foreign keys, checks and indexes: one constraint name per schema, more than opening asks.
     let taken = "the schema has a constraint named";

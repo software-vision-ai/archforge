@@ -4641,6 +4641,41 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A name another element has, whatever the case, is said in the chosen language with that
+/// element's kind and name, never in the engine's English: an attribute of a class, a column of a
+/// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
+#[test]
+fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let order = id("uml.class.add", serde_json::json!({ "package": sales, "name": "Order" }));
+        id("uml.attribute.add", serde_json::json!({ "class": order, "name": "status" }));
+        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
+        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Kunde" }));
+        id("er.attribute.add", serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT" }));
+        id("skill.add", serde_json::json!({ "subject": sales, "name": "Naming" }));
+        let style = id("skill.add", serde_json::json!({ "subject": sales, "name": "Style" }));
+        for (cmd, params, kind, name) in [
+            ("uml.attribute.add", serde_json::json!({ "class": order, "name": "STATUS" }), "an attribute", "status"),
+            ("er.attribute.add", serde_json::json!({ "entity": table, "name": "ID", "type": "TEXT" }), "a column", "id"),
+            ("skill.rename", serde_json::json!({ "skill": style, "name": "naming" }), "a skill", "Naming"),
+            ("skill.add", serde_json::json!({ "subject": sales, "name": "NAMING" }), "a skill", "Naming"),
+        ] {
+            let what = crate::i18n::tr_ctx("refusal", kind);
+            assert_ne!(what, kind, "{theme:?}: the catalogue has the kind in German");
+            let said = crate::i18n::fmt(&crate::i18n::tr("There is {what} named {name} already."), &[("what", &what), ("name", name)]);
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused.to_lowercase(), said.to_lowercase(), "{theme:?} {cmd}: the kind and the other's name in German");
+            assert!(refused.starts_with(char::is_uppercase) && refused.contains(name), "{theme:?} {cmd}: a sentence naming {name}: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).
@@ -5068,7 +5103,7 @@ fn a_column_refused_in_properties_says_why_in_plain_words() {
             let at = rect_of(&h, "workspace.properties.column.apply").center();
             click(&mut h, at);
             let refused = h.state().panels.column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
-            let plain = refused.starts_with("The entity has an attribute named") && !refused.contains("er.") && !refused.contains("name:");
+            let plain = refused.starts_with("There is a column named") && !refused.contains("er.") && !refused.contains("name:");
             assert!(plain, "{theme:?}, new {new}: {refused}");
         }
     }
@@ -7498,7 +7533,7 @@ fn a_mapping_table_refused_for_its_name_says_why_in_plain_words() {
         click(&mut h, at);
         let refused = h.state().canvas.mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
         assert!(
-            refused.starts_with("The schema has an entity named") && !refused.contains("er.") && !refused.contains("name:"),
+            refused.starts_with("There is a table named Customer") && !refused.contains("er.") && !refused.contains("name:"),
             "{theme:?}: {refused}"
         );
     }

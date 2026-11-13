@@ -239,7 +239,7 @@ fn a_mixed_selection_and_the_other_wrong_sets_are_refused_changing_nothing() {
         ),
         ("uml.generalization-set.add", json!({ "generalizations": [], "name": "x" }), "generalizations", "at least one"),
         ("uml.generalization-set.add", json!({ "generalizations": [shop.card, shop.card], "name": "x" }), "generalizations", "named twice"),
-        ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": "Method" }), "name", "named Method already"),
+        ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": "Method" }), "name", "named method already"),
         ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": " " }), "name", "needs a name"),
         ("uml.generalization-set.set", json!({ "set": set, "add": [shop.voucher] }), "add", "specialize different classifiers"),
         ("uml.generalization-set.set", json!({ "set": set, "remove": [shop.bank] }), "remove", "is not in the set"),

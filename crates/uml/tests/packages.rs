@@ -183,7 +183,7 @@ fn a_package_removed_hands_its_contents_and_diagrams_up_to_its_parent_the_root_i
     // A clash in the parent is refused, with nothing moved.
     let dup = run(&mut s, "uml.package.add", json!({ "name": "dup", "parent": sales }));
     run(&mut s, "uml.class.add", json!({ "package": dup, "name": "customer" }));
-    refused(&mut s, "element.remove", json!({ "ids": [dup] }), "named customer already");
+    refused(&mut s, "element.remove", json!({ "ids": [dup] }), "named Customer already");
     // Every package sits in the model's root package, so sales too hands everything up: into
     // the root, the relationships of its classes kept.
     let other = run(&mut s, "uml.package.add", json!({ "name": "other" }));

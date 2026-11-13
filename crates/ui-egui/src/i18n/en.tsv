@@ -580,6 +580,20 @@ str	refusal	a profile	a profile
 str	refusal	a stereotype	a stereotype
 str	refusal	an element	an element
 str	refusal	a schema	a schema
+str	refusal	an attribute	an attribute
+str	refusal	an operation	an operation
+str	refusal	a literal	a literal
+str	refusal	a qualifier	a qualifier
+str	refusal	a template parameter	a template parameter
+str	refusal	a generalization set	a generalization set
+str	refusal	a table	a table
+str	refusal	a column	a column
+str	refusal	a relationship	a relationship
+str	refusal	a domain	a domain
+str	refusal	an enum type	an enum type
+str	refusal	a sequence	a sequence
+str	refusal	a view	a view
+str	refusal	a skill	a skill
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History

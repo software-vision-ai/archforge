@@ -206,8 +206,21 @@ pub fn skills_on(store: &Store, obj: Obj) -> Vec<Obj> {
 /// Whether a skill named `name` may sit on `subject` (None: the model): no other skill of that
 /// name sits there.
 pub fn skill_name_free(store: &Store, subject: Option<Obj>, name: &str, except: Option<Obj>) -> bool {
+    name_taken(store, subject, name, except, "name").is_ok()
+}
+
+/// Refuses `name`, about the parameter `key`, when another skill of that name, whatever the case,
+/// sits on `subject` (None: the model), but for `except`: the English names that skill, and the
+/// reason is typed with its name.
+fn name_taken(store: &Store, subject: Option<Obj>, name: &str, except: Option<Obj>, key: &str) -> Result<(), CommandError> {
     let wanted = name.to_lowercase();
-    !skills(store).into_iter().any(|s| Some(s) != except && subject_of(store, s) == subject && name_of(store, s).to_lowercase() == wanted)
+    match skills(store).into_iter().find(|s| Some(*s) != except && subject_of(store, *s) == subject && name_of(store, *s).to_lowercase() == wanted) {
+        Some(other) => {
+            let existing = name_of(store, other);
+            Err(refuse(key, format!("a skill named {existing:?} already sits there")).because(Reason::NameTaken { kind: "skill", name: existing }))
+        }
+        None => Ok(()),
+    }
 }
 
 /// The key under which a class is named in a skill: the metamodel's name, a dot, the class's
@@ -589,9 +602,7 @@ fn fields<V: SkillHost>(view: &V, store: &Store, p: &Params, subject: Option<Obj
     if let Some(problem) = name_problem(&name, MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
-    if !skill_name_free(store, subject, &name, except) {
-        return Err(refuse("name", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(store, subject, &name, except, "name")?;
     let description = text(p, "description").to_string();
     if let Some(problem) = text_problem(&description, MAX_DESCRIPTION) {
         return Err(refuse("description", format!("the description {problem}")).because(problem.reason));
@@ -686,9 +697,7 @@ fn skill_rename<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
     if let Some(problem) = name_problem(name, MAX_NAME) {
         return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
-    if !skill_name_free(ctx.doc, subject_of(ctx.doc, s), name, Some(s)) {
-        return Err(refuse("name", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(ctx.doc, subject_of(ctx.doc, s), name, Some(s), "name")?;
     ctx.doc.set(s, named_element::NAME, Value::str(name)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }
@@ -722,9 +731,7 @@ fn skill_move<V: SkillHost>(ctx: &mut C<'_, V>, p: &Params) -> R {
         return Err(refuse("subject", format!("a skill for every {word} cannot sit on {class}")));
     }
     let name = name_of(ctx.doc, s);
-    if !skill_name_free(ctx.doc, subject, &name, Some(s)) {
-        return Err(refuse("subject", format!("a skill named {name:?} already sits there")));
-    }
+    name_taken(ctx.doc, subject, &name, Some(s), "subject")?;
     ctx.doc.set(s, skill::SUBJECT, subject.map(Value::Ref).unwrap_or(Value::Null)).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, s)? }))
 }

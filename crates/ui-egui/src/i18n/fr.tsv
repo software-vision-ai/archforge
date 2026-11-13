@@ -581,6 +581,20 @@ str	refusal	a profile	un profil
 str	refusal	a stereotype	un stéréotype
 str	refusal	an element	un élément
 str	refusal	a schema	un schéma
+str	refusal	an attribute	un attribut
+str	refusal	an operation	une opération
+str	refusal	a literal	un littéral
+str	refusal	a qualifier	un qualificatif
+str	refusal	a template parameter	un paramètre de modèle
+str	refusal	a generalization set	un ensemble de généralisations
+str	refusal	a table	une table
+str	refusal	a column	une colonne
+str	refusal	a relationship	une relation
+str	refusal	a domain	un domaine
+str	refusal	an enum type	un type énuméré
+str	refusal	a sequence	une séquence
+str	refusal	a view	une vue
+str	refusal	a skill	une compétence
 str		A name can't start or end with a space.	Un nom ne peut ni commencer ni finir par une espace.
 str		Working changes	Modifications en cours
 str		History	Historique

@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::{ProjectView, diagram, node};
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -337,8 +337,10 @@ fn check_set_name(store: &Store, name: &str, package: Obj, except: Option<Obj>) 
         return Err(refuse("name", format!("the name {why}")).because(why.reason));
     }
     // Sets are a kind of their own among the package's elements (`crate::names`).
-    if crate::names::clash(store, package, GENERALIZATION_SET, name, except).is_some() {
-        return Err(refuse("name", format!("there is a generalization set named {name} already")));
+    if let Some(other) = crate::names::clash(store, package, GENERALIZATION_SET, name, except) {
+        let existing = name_of(store, other);
+        let message = format!("there is a generalization set named {existing} already");
+        return Err(refuse("name", message).because(Reason::NameTaken { kind: "generalization set", name: existing }));
     }
     Ok(())
 }

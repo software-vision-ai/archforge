@@ -218,6 +218,7 @@ fn a_duplicate_name_and_the_other_wrong_edits_are_refused_changing_nothing() {
     assert!(e.contains("has a qualifier named lineNo already") && e.contains("name"), "{e}");
     let e = refused(&mut s, "uml.qualifier.set", json!({ "qualifier": kind, "name": "lineno" }));
     assert!(e.contains("has a qualifier named lineNo already"), "{e}");
+    assert!(e.contains(r#"reason: Some(NameTaken { kind: "qualifier", name: "lineNo" })"#), "typed, naming the qualifier that has it: {e}");
     assert_eq!(s.undo_label().map(str::to_string), undo, "no undo step");
     // The same name on the other end is another end's.
     run(&mut s, "uml.qualifier.add", json!({ "association": shop.contains, "end": 1, "name": "lineNo" }));

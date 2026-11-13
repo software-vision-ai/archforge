@@ -701,8 +701,10 @@ pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there with one of its kind
 /// ([`crate::names`]), a built-in type's name would land in the package Types, or a package handed
-/// up would become a second Types or a Types holding such a name.
-fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
+/// up would become a second Types or a Types holding such a name. A clash is typed, naming the
+/// element of `parent` that has the name.
+fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandError> {
+    let up = |why: String| refuse("ids", format!("its contents cannot move up: {why}"));
     for o in held(store, pkg) {
         let n = name_of(store, o);
         let Ok(class) = store.class_of(o) else { continue };
@@ -710,19 +712,21 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
         if crate::is_classifier(class)
             && let Some(why) = crate::members::reserved_problem(store, parent, &n)
         {
-            return Some(why);
+            return Err(up(why));
         }
         if class == PACKAGE
             && let Some(why) = crate::members::types_problem(store, o, &n, Some(parent))
         {
-            return Some(why);
+            return Err(up(why));
         }
         // The package itself goes, so its own name is free for what it hands up.
         if let Some(s) = crate::names::clash(store, parent, class, &n, Some(pkg)) {
-            return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, s)));
+            let existing = name_of(store, s);
+            let why = format!("{} has {} named {existing} already", name_of(store, parent), a_what(store, s));
+            return Err(up(why).because(Reason::NameTaken { kind: what(store, s), name: existing }));
         }
     }
-    None
+    Ok(())
 }
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
@@ -809,9 +813,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
-            && let Some(why) = hand_up_problem(store, *o, parent)
         {
-            return Err(refuse("ids", format!("its contents cannot move up: {why}")));
+            hand_up_problem(store, *o, parent)?;
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer
