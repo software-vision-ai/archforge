@@ -4641,6 +4641,42 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The engine's name and text rules are said in the chosen language, never in the engine's
+/// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
+/// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).
+#[test]
+fn the_engines_name_rules_are_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id(crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })));
+        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        h.run();
+        let max = archforge_er::rules::MAX_NAME;
+        let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
+        for (cmd, params, said) in [
+            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "n".repeat(max + 1) }), too_long),
+            (
+                "er.entity.add",
+                serde_json::json!({ "schema": schema, "name": "Auf\u{7}trag" }),
+                crate::i18n::tr("It can't hold a control or hidden character."),
+            ),
+            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "Auftrag " }), crate::i18n::tr("It can't start or end with a space.")),
+            ("diagram.note", serde_json::json!({ "diagram": diagram, "text": "", "x": 0, "y": 0 }), crate::i18n::tr("The text can't be empty.")),
+        ] {
+            assert!(
+                !said.contains("character") && !said.contains("space") && !said.contains("text"),
+                "{theme:?}: the catalogue has it in German: {said}"
+            );
+            assert_eq!(crate::panels::run(h.state_mut(), cmd, params).err(), Some(said), "{theme:?}: {cmd}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's typed refusals are said in the chosen language, never in the engine's English: a
 /// name another schema has, a package moved into one it holds, a class depending on itself, and a
 /// model that can't be changed at the moment. In light and dark (AR-429).

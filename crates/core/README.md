@@ -44,7 +44,7 @@ them. A skill's `appliesTo` holds a class key such as `er.Entity` (`skills::clas
 | `tag_name_free`, `problems`, `CoreProblem` | the rules |
 | `skills::SkillHost` | what the view answers: `selection_mut`, `skill_subjects`, `skill_kinds`, `typed_classes`, `skill_problem` (an element of a subject class that still carries none), `level_above` (the level above an element when it is not its container) |
 | `skills::specs::<V>()` | the commands `skill.add`, `skill.set`, `skill.set-body`, `skill.rename`, `skill.remove`, `skill.move` and the queries `skill.list`, `skill.effective`, for a notation's registry |
-| `skills::{effective_skills, EffectiveSkill, levels, aims_at, skills, skills_on, subject_of, triggers_of, name_of, model_of, skill_name_free, name_problem, text_problem, hidden, trigger_named, trigger_words, class_key, kind_by_key, class_by_key, category_of, type_matches, skill_json, problems, SkillProblem}` | the skill rules and lookups |
+| `skills::{effective_skills, EffectiveSkill, levels, aims_at, skills, skills_on, subject_of, triggers_of, name_of, model_of, skill_name_free, name_problem, text_problem, Problem, hidden, trigger_named, trigger_words, class_key, kind_by_key, class_by_key, category_of, type_matches, skill_json, problems, SkillProblem}` | the skill rules and lookups |
 | `skills::{MAX_NAME, MAX_DESCRIPTION, MAX_BODY, MAX_DIALECT, MAX_TYPE_PATTERN, MAX_TRIGGERS, CATEGORIES, NO_MODEL, NO_SKILLS}` | the limits, the type categories, the reasons a command is unavailable |
 | the generated constants, structs, `LinkKind`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 

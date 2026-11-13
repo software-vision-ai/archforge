@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use archforge_core::skills::Problem;
 use archforge_diagram::ProjectView;
 use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
@@ -122,9 +123,9 @@ fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, Comm
 }
 
 /// Refuses with `key` when a text problem is found.
-fn check_text(key: &str, problem: Option<String>) -> Result<(), CommandError> {
+fn check_text(key: &str, problem: Option<Problem>) -> Result<(), CommandError> {
     match problem {
-        Some(p) => Err(refuse(key, format!("the text {p}"))),
+        Some(p) => Err(refuse(key, format!("the text {p}")).because(p.reason)),
         None => Ok(()),
     }
 }
@@ -156,9 +157,10 @@ fn text_or_null(s: &str) -> Value {
     if s.is_empty() { Value::Null } else { Value::str(s) }
 }
 
+/// Refuses with `key` when `name` is not a name of at most `max` characters.
 fn check_name(key: &str, name: &str, max: usize) -> Result<(), CommandError> {
     match rules::name_problem(name, max) {
-        Some(p) => Err(refuse(key, format!("the name {p}"))),
+        Some(p) => Err(refuse(key, format!("the name {p}")).because(p.reason)),
         None => Ok(()),
     }
 }

@@ -414,3 +414,39 @@ fn a_skill_goes_with_the_element_it_sits_on_and_comes_back_with_undo() {
     s.undo().unwrap();
     assert_eq!(sitting(&s), (6, 0));
 }
+
+/// The core's name and text rules carry their reason typed beside the English sentence, which
+/// stays as it was: a skill's empty name, a class's name with a hidden character or too long, and a
+/// skill's body with a control character (AR-434).
+#[test]
+fn the_cores_name_rules_carry_their_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let max = archforge_uml::commands::MAX_NAME;
+    for (cmd, p, reason, message) in [
+        ("skill.add", json!({ "subject": sales, "name": "" }), Reason::NameEmpty, "the name is empty".to_string()),
+        (
+            "uml.class.add",
+            json!({ "package": sales, "name": "Or\u{200B}der" }),
+            Reason::ControlCharacter,
+            "the name holds a control or hidden character".into(),
+        ),
+        (
+            "uml.class.add",
+            json!({ "package": sales, "name": "n".repeat(max + 1) }),
+            Reason::TooLong { max },
+            format!("the name is longer than {max} characters"),
+        ),
+        ("uml.class.add", json!({ "package": sales, "name": "Order " }), Reason::EdgeSpace, "the name starts or ends with a space".into()),
+        (
+            "skill.add",
+            json!({ "subject": sales, "name": "Brief", "body": "a\u{7}b" }),
+            Reason::ControlCharacter,
+            "the body holds a control or hidden character".into(),
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message), (Some(reason), message), "{cmd} {p}");
+    }
+}

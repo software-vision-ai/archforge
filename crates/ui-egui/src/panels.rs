@@ -402,8 +402,8 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
 }
 
 /// An engine's refusal as the panel says it: the reason alone, without the command's id or the
-/// parameter it is about, as a sentence; a typed reason, read-only, and a reason the catalogues
-/// know are said in the user's language, any other in the engine's English.
+/// parameter it is about, as a sentence; a typed reason and read-only are said in the user's
+/// language, any other in the engine's English.
 pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     let reason = match e {
         archforge_engine::EngineError::Failed { error, .. } => match error.reason.as_ref().and_then(said) {
@@ -414,9 +414,6 @@ pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
         archforge_engine::EngineError::ReadOnly => return tr("The model cannot be changed at the moment; nothing was changed."),
         other => other.to_string(),
     };
-    if reason == "the name is empty" {
-        return tr("A name can't be empty.");
-    }
     let mut chars = reason.chars();
     let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
     format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
@@ -430,6 +427,11 @@ fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::NameTaken { kind, name } => (tr("There is {what} named {name} already."), *kind, name.as_str()),
         Reason::DependsOnItself { kind } => (tr("{what} cannot depend on itself."), *kind, ""),
         Reason::PackageIntoItself => return Some(tr("A package cannot go into itself or a package it holds.")),
+        Reason::NameEmpty => return Some(tr("A name can't be empty.")),
+        Reason::TextEmpty => return Some(tr("The text can't be empty.")),
+        Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
+        Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
+        Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
         _ => return None,
     };
     let what = a_kind(kind)?;

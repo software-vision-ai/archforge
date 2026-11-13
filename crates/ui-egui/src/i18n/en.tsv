@@ -563,6 +563,10 @@ str		There is {what} named {name} already.	There is {what} named {name} already.
 str		{what} cannot depend on itself.	{what} cannot depend on itself.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
+str		The text can't be empty.	The text can't be empty.
+str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
+str		It can't hold a control or hidden character.	It can't hold a control or hidden character.
+str		It can't start or end with a space.	It can't start or end with a space.
 str	refusal	a class	a class
 str	refusal	an association class	an association class
 str	refusal	an interface	an interface

@@ -564,6 +564,10 @@ str		There is {what} named {name} already.	Ya existe {what} con el nombre {name}
 str		{what} cannot depend on itself.	{what} no puede depender de sí.
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
+str		The text can't be empty.	El texto no puede estar vacío.
+str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
+str		It can't hold a control or hidden character.	No se admiten caracteres de control ni ocultos.
+str		It can't start or end with a space.	No puede empezar ni terminar con un espacio.
 str	refusal	a class	una clase
 str	refusal	an association class	una clase de asociación
 str	refusal	an interface	una interfaz

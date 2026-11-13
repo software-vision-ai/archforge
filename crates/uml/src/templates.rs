@@ -602,7 +602,7 @@ fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Op
 /// A parameter's name in `template`: a name, none of its other parameters' whatever the case.
 fn check_name(store: &Store, template: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
     if let Some(other) = name_clash(store, template, name, except) {
         return Err(refuse(

@@ -112,6 +112,16 @@ pub enum Reason {
     DependsOnItself { kind: &'static str },
     /// A package would go into itself or a package it holds.
     PackageIntoItself,
+    /// A name is empty.
+    NameEmpty,
+    /// A text that has to say something, as a note's, is empty.
+    TextEmpty,
+    /// A name or a text is longer than `max` characters.
+    TooLong { max: usize },
+    /// A name or a text holds a control character, or a name a hidden one.
+    ControlCharacter,
+    /// A name or a text starts or ends with a space.
+    EdgeSpace,
 }
 
 impl CommandError {

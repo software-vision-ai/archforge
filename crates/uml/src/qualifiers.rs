@@ -112,7 +112,7 @@ pub fn qualifiers_json(store: &Store, end: Obj) -> Json {
 /// clash names the name typed and the end's role and class.
 fn check_name(store: &Store, end: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {p}")));
+        return Err(refuse("name", format!("the name {p}")).because(p.reason));
     }
     if let Some(q) = name_clash(store, end, name, except) {
         let class = one(store, end, typed_element::TYPE).map(|t| name_of(store, t)).unwrap_or_default();

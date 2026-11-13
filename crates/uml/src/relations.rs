@@ -297,7 +297,7 @@ fn check_name(name: &str) -> Result<(), CommandError> {
         return Ok(());
     }
     match archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        Some(p) => Err(refuse("name", format!("the name {p}"))),
+        Some(p) => Err(refuse("name", format!("the name {p}")).because(p.reason)),
         None => Ok(()),
     }
 }
@@ -783,7 +783,7 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     let kept_role = name_of(ctx.doc, end);
     let role = p.str("role").unwrap_or(&kept_role);
     if let Some(problem) = (!role.is_empty()).then(|| archforge_core::skills::name_problem(role, crate::commands::MAX_NAME)).flatten() {
-        return Err(refuse("role", format!("the role {problem}")));
+        return Err(refuse("role", format!("the role {problem}")).because(problem.reason));
     }
     if !role.is_empty() && name_of(ctx.doc, other).to_lowercase() == role.to_lowercase() {
         return Err(refuse("role", format!("the other end's role is {role} already")));
