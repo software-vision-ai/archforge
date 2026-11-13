@@ -416,7 +416,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         defaults(shell, &targets);
     }
     if let Some(why) = shell.panels.notice.clone() {
-        ux::text(&paint, pos2(r.left() + PAD, button.bottom() + 10.0), &why, types::CAPTION, p.amber, Some(width));
+        let area = ux::text(&paint, pos2(r.left() + PAD, button.bottom() + 10.0), &why, types::CAPTION, p.amber, Some(width));
+        widgets::announce(ui, &mut shell.registry, "workspace.appearance.notice", area, &why);
     }
     // The picker over the panel, under its row's own-colour swatch.
     if let Some(picker) = shell.panels.picker.clone()

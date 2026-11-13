@@ -842,11 +842,12 @@ fn escape_gives_up_a_properties_edit_and_sends_nothing() {
     }
 }
 
-/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words; another
-/// refusal is the engine's reason without its command's id; the notice goes with another
-/// selection. In light and dark (AR-417).
+/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words, read out as
+/// a status; another refusal is the engine's reason without its command's id; the notice, and its
+/// status, go with another selection. In light and dark (AR-417, AR-420).
 #[test]
 fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
+    use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let (mut h, _host, class, table) = described_project(theme);
         for empty in ["", "   "] {
@@ -858,11 +859,14 @@ fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
             assert_eq!(name_on(&h, class), "Order", "{theme:?}");
             assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
             assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
+            let status = h.get_by_label("A name can't be empty.").accesskit_node();
+            assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
             assert!(h.state().panels.name.is_none() && !dirty(&h), "{theme:?}: the old name stays, nothing sent");
         }
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [table.to_string()] })).unwrap();
         h.run();
         assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label("A name can't be empty.").is_none(), "{theme:?}: and no longer read out");
         let s = h.state_mut().session.as_mut().unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
         s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
@@ -5047,6 +5051,36 @@ fn look(h: &Harness<'static, Shell>, o: archforge_mof::Obj) -> crate::canvas::Lo
     let st = h.state().session.as_ref().unwrap().doc();
     let prop = if st.class_of(o).ok() == Some(archforge_diagram::NODE) { archforge_diagram::node::STYLE } else { archforge_diagram::edge::STYLE };
     crate::canvas::look_of(st, o, prop)
+}
+
+/// A refused change in Appearance is said under Use diagram defaults and read out as a status
+/// until the selection moves on. In light and dark (AR-420).
+#[test]
+fn a_refused_appearance_change_is_read_out_as_a_status() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer, _) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        let at = rect_of(&h, "workspace.panels.appearance").center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        h.run();
+        // A session that refuses every change makes the panel say why.
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, "workspace.appearance.fill.2").center();
+        click(&mut h, at);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(!notice.is_empty(), "{theme:?}: refused");
+        let status = h.get_by_label(&notice).accesskit_node();
+        assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
+        assert!(rect_of(&h, "workspace.appearance.notice").top() > rect_of(&h, "workspace.appearance.defaults").bottom(), "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label(&notice).is_none(), "{theme:?}: and no longer read out");
+    }
 }
 
 #[test]

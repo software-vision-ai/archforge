@@ -2468,6 +2468,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         paint.rect_filled(thumb, 2.0, p.scroll_thumb);
     }
     if let Some(notice) = shell.panels.notice.clone() {
-        ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));
+        let area =
+            ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.properties.notice", area, &notice);
     }
 }
