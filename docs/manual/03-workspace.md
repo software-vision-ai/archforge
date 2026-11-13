@@ -19,7 +19,9 @@ An open project fills the window with its workspace.
   version and switch, or switch and leave them on this branch for when you come back. Branches
   can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
   so under the list.
-  The **+** in the Branches header, there even while the section is folded, opens **New branch**:
+  The **+** in the Branches header, there even while the section is folded, opens **New branch**, as
+  do **Versions ▸ New branch…** and **New branch…** at the foot of the version chip's list (↓ past
+  the last row reaches it):
   a branch keeps its own versions, unsaved work and conversations, and the new one starts from
   your current work, unsaved changes included, which the branch you are on keeps as well. Type a
   name of at most 60 characters, on one line, not starting or ending with a space; a name another
@@ -136,9 +138,9 @@ classifier tool, **Package**, and every kind of the Relationship tool. While no 
 the diagram can't be changed, the rows are greyed out.
 
 **Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
-of versions, **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
+of versions, **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
 **Back to current work**. Compare… sets the version whose details show, or else the newest, against
-your current work; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
+your current work; New branch… opens the dialog the Branches header's **+** opens; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
 History gives way to Back to current work, which takes the same keys; Switch branch needs a second
 branch. While the project is busy, saving or switching branch, every row waits.
 

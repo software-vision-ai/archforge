@@ -693,6 +693,88 @@ fn new_branch_keeps_the_skill_text_being_typed_first() {
     });
 }
 
+const NEW_ROW: &str = "workspace.header.version.new-branch";
+
+/// The Versions menu's New branch… opens the dialog while the host keeps branches, `main` alone
+/// too; off, it says why: behind the dialog while a branch is made, and a held project. The chip's
+/// list ends in New branch…, reached by a click or by ↓ past the last row and Enter; ↑ leaves it.
+#[test]
+fn the_versions_menu_and_the_chip_s_list_open_new_branch() {
+    use crate::actions::{NEW_BRANCH, available};
+    let why = |h: &Harness<'static, Shell>| crate::menu_bar::why_off(h.state(), NEW_BRANCH);
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        h.state_mut().in_window_menu = true;
+        h.run();
+        assert!(available(h.state(), NEW_BRANCH), "{theme:?}: one branch is enough");
+        click_menu(&mut h, "strip.menu.versions");
+        click_id(&mut h, &format!("strip.menu.row.{NEW_BRANCH}"));
+        h.run_steps(2);
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, "New branch"), "{theme:?}: the dialog");
+        assert!(!available(h.state(), NEW_BRANCH), "{theme:?}: not behind it");
+        h.event(egui::Event::Text("Fresh".into()));
+        h.run_steps(2);
+        assert_eq!(create(&mut h, &host), 1, "{theme:?}");
+        assert_eq!(why(&h), "Wait for the change under way to finish.", "{theme:?}: a branch on its way");
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && h.state().versions.making.is_none(), "{theme:?}: made");
+
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        click_id(&mut h, NEW_ROW);
+        h.run_steps(2);
+        let opened = |h: &Harness<'static, Shell>| matches!(h.state().ask, Some(Ask::Branch { .. })) && !has_id(h, NEW_ROW);
+        assert!(opened(&h), "{theme:?}: a click opens it and the list closes");
+        click_id(&mut h, "branch-ask.cancel");
+        chip_list(&mut h, &host, false);
+        // Past the last row, however many versions the list has read by now, and more stay there.
+        (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert!(opened(&h), "{theme:?}: Enter opens it");
+        click_id(&mut h, "branch-ask.cancel");
+        h.state_mut().begin_hold().unwrap();
+        assert!(!available(h.state(), NEW_BRANCH) && why(&h) == "The project is busy", "{theme:?}: held");
+        h.state_mut().end_hold();
+        *host.branch_now.lock().unwrap() = None;
+        chip_list(&mut h, &host, false);
+        assert!(!available(h.state(), NEW_BRANCH) && !has_id(&h, NEW_ROW), "{theme:?}: a host that keeps no branches");
+
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        (0..3).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        let shown = h.state().version_in_view().map(str::to_string);
+        assert!(h.state().ask.is_none() && shown.as_deref() == Some("bb"), "{theme:?}: ↑ went back to the last version, {shown:?}");
+    });
+}
+
+/// ↑ from New branch… goes to the list's last row as it is now: a page of history that came while
+/// the row was highlighted moves the last row on, and Enter views that one.
+#[test]
+fn up_from_new_branch_goes_to_the_last_row_read() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        (0..3).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        let reads: Vec<_> = host.version_reads.lock().unwrap().drain(..).collect();
+        assert_eq!(reads.len(), 1, "{theme:?}: the end in view reads on");
+        let next: Vec<crate::VersionEntry> =
+            ["cc", "dd"].map(|hash| crate::VersionEntry { hash: hash.into(), ..two_versions().versions[1].clone() }).into();
+        reads.into_iter().for_each(|read| drop(read.send(Ok(crate::VersionsPage { versions: next.clone(), more: false }))));
+        h.run_steps(2);
+        assert!(has_id(&h, "workspace.header.version.row.4"), "{theme:?}: the page came while on New branch…");
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        let shown = h.state().version_in_view().map(str::to_string);
+        assert!(h.state().ask.is_none() && shown.as_deref() == Some("dd"), "{theme:?}: the last row now, {shown:?}");
+    });
+}
+
 const RENAME: &str = "branch-ask.rename";
 
 /// Rename… from `branch`'s menu, its `at`th entry, with the field's name replaced by `typed`.
