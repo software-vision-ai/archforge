@@ -26,7 +26,7 @@
 //! nor is a default cleared that a binding relies on ([`needs_argument_problem`]).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Parameter, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, TypeRef, Value};
 use serde_json::{Map, Value as Json, json};
 
@@ -596,20 +596,23 @@ pub fn argument_removal_problem(store: &Store, classes: &[Obj], going: &[Obj]) -
     None
 }
 
-/// Why a parameter of `template` named `name` with no default (`has_default` false) would leave a
-/// binding of the template without an argument: a new parameter (`except` none), or one whose
-/// default is being cleared (`except` the parameter, whose own substitutions give it one).
-pub fn needs_argument_problem(store: &Store, template: Obj, name: &str, has_default: bool, except: Option<Obj>) -> Option<String> {
+/// The refusal, under `default`, of a parameter of `template` named `name` with no default
+/// (`has_default` false) that would leave a binding of the template without an argument: a new
+/// parameter (`except` none), or one whose default is being cleared (`except` the parameter, whose
+/// own substitutions give it one).
+pub fn needs_argument_problem(store: &Store, template: Obj, name: &str, has_default: bool, except: Option<Obj>) -> Option<CommandError> {
     if has_default {
         return None;
     }
     let b = templates::bindings_to(store, template).into_iter().find(|b| except.is_none_or(|p| substitution_for(store, *b, p).is_none()))?;
     let bound = templates::bound_element(store, b).map(|x| name_of(store, x)).unwrap_or_default();
-    Some(format!(
+    let said = format!(
         "{bound} binds {} and gives {name} no argument, so {name} needs a default; give it one, or give that binding ({}) an argument for it first",
         name_of(store, template),
         uuid_of(store, b).unwrap_or_default()
-    ))
+    );
+    let named = Parameter { name: name.to_string(), template: name_of(store, template), bound, ..Parameter::default() };
+    Some(refuse("default", said).because(Reason::NeedsDefault(Box::new(named))))
 }
 
 /// A binding as the reads give it: its id, bound element, template, its label, and every parameter

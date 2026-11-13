@@ -148,6 +148,40 @@ pub enum Reason {
     KindsDiffer { relationship: &'static str },
     /// An element of `kind` cannot be the `end` of a `relationship`.
     WrongEnd { relationship: &'static str, end: End, kind: &'static str },
+    /// A template parameter of `kind`, as `"value"`, is not supported yet.
+    KindNotSupported { kind: &'static str },
+    /// An element holds at most `max` of `kind`, as a template at most so many template parameters.
+    TooMany { kind: &'static str, max: usize },
+    /// What the parameter is given does not fit it: its arguments are of its `kind`.
+    Misfit(Box<Parameter>),
+    /// The parameter's default, its `argument`, does not fit it.
+    DefaultMisfit(Box<Parameter>),
+    /// A binding of the template gives the parameter no argument, so the parameter needs a default.
+    NeedsDefault(Box<Parameter>),
+    /// A binding's argument for the parameter would no longer fit it as changed.
+    WouldNotFit(Box<Parameter>),
+    /// A binding gives the parameter an argument, so the parameter stays.
+    ParameterInUse(Box<Parameter>),
+    /// The parameter is its template's last, and a binding names the template, so it stays.
+    LastParameter(Box<Parameter>),
+}
+
+/// A template parameter as a refusal names it, with the binding of its template or the default
+/// the refusal is about; boxed in a [`Reason`], so the error stays small.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Parameter {
+    /// The parameter's name.
+    pub name: String,
+    /// Its kind as an English noun, as `"class"` or `"data type"`.
+    pub kind: &'static str,
+    /// The classifier its arguments are constrained to, if any.
+    pub constraint: Option<String>,
+    /// The template it is a parameter of.
+    pub template: String,
+    /// The element a binding of the template binds; empty when the refusal names no binding.
+    pub bound: String,
+    /// What the parameter is given, a binding's argument or a default; empty when nothing.
+    pub argument: String,
 }
 
 /// The end of a relationship a [`Reason::WrongEnd`] is about.

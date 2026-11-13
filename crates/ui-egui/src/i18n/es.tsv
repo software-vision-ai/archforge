@@ -1481,6 +1481,8 @@ str		Type a name: a template parameter without one stands for nothing.	Escribe u
 str		{template} already has a template parameter named {name}. Pick another name.	{template} ya tiene un parámetro de plantilla llamado {name}. Elige otro nombre.
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} no encaja con {name}: elige un valor predeterminado que pueda ser uno de sus argumentos.
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} vincula {name} -> {actual}, que ya no encajaría. Cambia o elimina primero esa vinculación.
+str		A template has at most {max} parameters.	Una plantilla tiene como máximo {max} parámetros.
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} vincula {template} y no da ningún argumento a {name}, así que {name} necesita un valor por defecto.
 str		template parameter	parámetro de plantilla
 str		template	plantilla
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · plantilla, {n} parámetro · modelo, en todos los diagramas|{kind} · plantilla, {n} parámetros · modelo, en todos los diagramas
