@@ -171,13 +171,13 @@ impl DiagramKind for UmlKind {
     }
 
     /// A package named `name` for a new class diagram to be of, or the root package while the model
-    /// has none yet.
+    /// has none yet. A refusal comes back in plain words ([`crate::panels::refusal`]).
     fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
         let has_root = shell.session.as_ref().is_some_and(|s| archforge_uml::commands::root_package(s.doc()).is_some());
         let made = if has_root {
-            crate::editing::run(shell, "uml.package.add", json!({ "name": name }))
+            crate::panels::run(shell, "uml.package.add", json!({ "name": name }))
         } else {
-            crate::editing::run(shell, "uml.model.root", json!({}))
+            crate::panels::run(shell, "uml.model.root", json!({}))
         };
         made.map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }

@@ -131,7 +131,7 @@ pub struct ContextMenu {
 }
 
 /// A name being typed in place: the element, the text so far, whether the element was just made
-/// (its default name is then selected, so typing replaces it), and the engine's refusal, if any.
+/// (its default name is then selected, so typing replaces it), and a refusal in plain words, if any.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rename {
     pub target: Uuid,
@@ -310,10 +310,10 @@ fn offers(uis: &[&'static dyn NotationUi], store: &Store, selection: Option<Obj>
     }
 }
 
-/// Runs a command on the open project's session, keeping the engine's refusal as text.
+/// Runs a command on the open project's session; a refusal comes back in Properties' plain words
+/// ([`crate::panels::refusal`]), never with the command's id or the engine's own wording.
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(crate::i18n::tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 fn selected(shell: &Shell) -> Option<Obj> {

@@ -97,8 +97,10 @@ impl DiagramKind for ErKind {
         if store.class_of(selected).ok() == Some(archforge_er::SCHEMA) { Some(selected) } else { archforge_er::rules::schema_of(store, selected) }
     }
 
+    /// A schema named `name` for a new ER diagram to be of; a refusal comes back in plain words
+    /// ([`crate::panels::refusal`]).
     fn add_owner(&self, shell: &mut Shell, name: &str) -> Result<String, String> {
-        crate::editing::run(shell, "er.schema.add", serde_json::json!({ "name": name }))
+        crate::panels::run(shell, "er.schema.add", serde_json::json!({ "name": name }))
             .map(|v| v.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
     }
 
