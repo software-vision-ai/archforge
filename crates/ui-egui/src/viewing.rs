@@ -39,6 +39,11 @@ impl Shell {
         self.viewing.as_ref().map(|v| v.commit.as_str())
     }
 
+    /// The person's own work: the session set aside while a version shows, otherwise the one shown.
+    pub(crate) fn current_work(&self) -> Option<&Session> {
+        self.viewing.as_ref().map(|v| &v.session).or(self.session.as_ref())
+    }
+
     /// Whether a version shows, so that looking at it is all that is on.
     pub(crate) fn looking_only(&self) -> bool {
         self.viewing.is_some()

@@ -5,6 +5,7 @@ use archforge_mof::{Uuid, Value};
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
+use crate::version_details::compare::results::{Held, Key};
 use crate::versions::Compared;
 use archforge_notations::differences::{
     Area, CardField, CardList, CardLists, ChangeKind, Difference, ElementCard, ElementSides, ListKind, ListRow, Named,
@@ -782,6 +783,59 @@ fn the_frame_builds_no_rows_for_writes_working_changes_or_their_sides() {
     });
 }
 
+/// Puts beside current work an unlimited natural too large for its column, so its rows cannot be
+/// built, and hands the session over already.
+fn unbuildable(h: &mut Harness<'static, Shell>) {
+    let mut n = 0u64;
+    let ids = Box::new(move || {
+        n += 1;
+        let mut r = [7u8; 10];
+        r[2..].copy_from_slice(&n.to_be_bytes());
+        Uuid::v7(1_761_670_950_000, r)
+    });
+    let s = archforge_notations::session_from_rows_repaired(&rows_now(h), ids, |st| {
+        let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
+        st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+    })
+    .unwrap();
+    h.state_mut().written = Some(s.revision());
+    h.state_mut().session = Some(s);
+}
+
+/// Opens Compare on `c3` and answers its reads with `before`, all frames building no rows: the
+/// frame only copies current work, whose rows are built with the comparison.
+fn compared_off_the_frame(h: &mut Harness<'static, Shell>, host: &SavingHost, before: &Arc<Rows>) {
+    let built = archforge_mof::rows::built_here();
+    compared(h, "c3");
+    answer(host, "c2", Ok(before.clone()));
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |_| asked(host) == ["c3"]);
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |h| found(h).is_some());
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+}
+
+/// Compare builds no rows on the frame either, and rows that cannot be built land as the
+/// comparison's failure, with why, about the revision it took.
+#[test]
+fn the_frame_builds_no_rows_for_compare() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        h.state_mut().written = h.state().session.as_ref().map(|s| s.revision());
+        compared_off_the_frame(h, host, &before);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+    });
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        let why = found(h).unwrap().unwrap_err();
+        assert!(why.contains("too large to store"), "{why}");
+        let revision = h.state().session.as_ref().map(|s| s.revision());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), revision);
+    });
+}
+
 /// A row opens its element in place of the details, reading nothing; the project's name closes it.
 #[test]
 fn a_working_change_opens_in_the_centre_without_a_read() {
@@ -1443,7 +1497,7 @@ fn swap_reverses_the_pair() {
         h.run_steps(1);
         compared(h, "c3");
         assert_eq!((holds(h, "Before"), holds(h, "After")), (before, after), "a new page starts over");
-        assert_eq!(asked(host), ["c2", "c3"], "Swap reads nothing; only the details opened again do");
+        assert_eq!(asked(host), ["c3", "c2", "c3"], "Swap reads nothing: the page's read still under way, then the details'");
     });
 }
 
@@ -1476,6 +1530,487 @@ fn compare_gives_way_like_the_details() {
         h.state_mut().project.as_mut().unwrap().path.push("elsewhere");
         h.run_steps(2);
         assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "about the project left");
+    });
+}
+
+/// What the Compare page has found: each difference's name and kind, or why it could not tell.
+fn found(h: &Harness<'static, Shell>) -> Option<Result<Vec<(String, ChangeKind)>, String>> {
+    let found = &h.state().versions.compare_results.found.as_ref()?.1;
+    Some(found.as_ref().map(|items| items.iter().map(|d| (d.name.clone().unwrap_or_default(), d.kind)).collect()).map_err(Clone::clone))
+}
+
+/// Adds a schema, opens Compare on `c3` and waits for the page's read. Gives the rows without the schema.
+fn page_reading(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Arc<Rows> {
+    let (before, _) = before_and_after(h, host);
+    compared(h, "c3");
+    assert_eq!(asked(host), ["c2", "c3"], "the details first: the host limits the reads under way");
+    answer(host, "c2", Ok(before.clone()));
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |_| asked(host) == ["c3"]);
+    before
+}
+
+/// Frames until the page holds `n` differences.
+fn found_many(h: &mut Harness<'static, Shell>, n: usize) {
+    frames_until(h, |h| matches!(found(h), Some(Ok(items)) if items.len() == n));
+}
+
+/// Before is read once and current work is a snapshot, so the session stays. The window wakes for
+/// the answer and rests after it; Swap reverses what is found, and an edit is compared, without a read.
+#[test]
+fn a_version_is_compared_with_current_work_and_read_once() {
+    in_both(|h, host| {
+        let generation = h.state().session_generation();
+        let before = page_reading(h, host);
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint(), "waiting on another thread");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+        h.run_steps(4);
+        assert!(!h.ctx.has_requested_repaint(), "at rest once it has landed");
+        tap(h, SWAP);
+        frames_until(h, |h| found(h) == Some(Ok(vec![("shop".to_string(), ChangeKind::Removed)])));
+        add_schema(h, "more");
+        found_many(h, 2);
+        assert!(asked(host).is_empty() && h.state().session_generation() == generation, "{:?}", asked(host));
+    });
+}
+
+/// Differences found in id order are grouped by area, model elements first, each area keeping that
+/// order: a diagram made between two schemas lists after both, its unnamed part after it.
+#[test]
+fn what_is_found_is_grouped_by_area() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let mut made = |id: &str, params: serde_json::Value| {
+            let s = h.state_mut().session.as_mut().unwrap();
+            Uuid::parse(s.execute(id, &params).unwrap().value["id"].as_str().unwrap()).unwrap()
+        };
+        let alpha = made("er.schema.add", serde_json::json!({ "name": "alpha" }));
+        let diagram = made("diagram.add", serde_json::json!({ "kind": "er", "element": alpha.to_string(), "name": "Billing" }));
+        let omega = made("er.schema.add", serde_json::json!({ "name": "omega" }));
+        assert!(alpha < diagram && diagram < omega, "the diagram's id lies between the schemas'");
+        answer(host, "c3", Ok(before));
+        found_many(h, 5);
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let listed: Vec<_> = items.iter().map(|d| (d.area, d.name.clone().unwrap_or_default())).collect();
+        let names = ["shop", "alpha", "omega"].map(|n| (Area::Model, n.to_string()));
+        let diagrams = [(Area::Diagram, "Billing".to_string()), (Area::Diagram, String::new())];
+        assert_eq!(listed, [names.as_slice(), &diagrams].concat());
+    });
+}
+
+/// Lands `answer` for `sides` at `revision`, the page kept from starting anything of its own.
+fn landing(h: &mut Harness<'static, Shell>, sides: (&str, bool), revision: u64, answer: Result<Arc<Vec<Difference>>, String>) {
+    let (waiting, read) = std::sync::mpsc::channel();
+    let (tx, comparison) = std::sync::mpsc::channel();
+    tx.send(answer).unwrap();
+    let key = Key { sides: (sides.0.to_string(), sides.1), revision };
+    let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
+    let r = &mut h.state_mut().versions.compare_results;
+    (r.held, r.found, r.reading, r.comparing) = (None, None, Some((project, "c3".to_string(), read)), Some((key, comparison)));
+    h.run_steps(1);
+    drop(waiting);
+}
+
+/// An answer for rows that moved on still lands, or edits in a stream would hide every one; its
+/// failure does not, and neither does an answer for the other direction or another version. While
+/// one runs no other starts, and the window wakes for it.
+#[test]
+fn a_comparison_runs_alone_and_lands_only_on_its_sides() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let now = h.state().session.as_ref().unwrap().revision();
+        let none = || Ok(Arc::new(Vec::new()));
+        landing(h, ("c3", false), now - 1, none());
+        assert_eq!(found(h), Some(Ok(Vec::new())), "moved on");
+        landing(h, ("c3", false), now - 1, Err("Old".into()));
+        assert_eq!(found(h), None, "a failure says nothing of the newest rows");
+        landing(h, ("c3", false), now, Err("Now".into()));
+        assert_eq!(found(h), Some(Err("Now".to_string())));
+        landing(h, ("c3", true), now, none());
+        assert_eq!(found(h), None, "the other direction");
+        landing(h, ("c2", false), now, none());
+        assert_eq!(found(h), None, "another version");
+        let (_waiting, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: ("c3".to_string(), false), revision: now - 1 };
+        let r = &mut h.state_mut().versions.compare_results;
+        (r.held, r.reading, r.comparing) = (Some(Held { version: "c3".into(), rows: before, keep: true }), None, Some((key.clone(), pending)));
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && h.state().versions.compare_results.comparing.as_ref().is_some_and(|c| c.0 == key));
+    });
+}
+
+/// A page waiting behind a comparison the details have left still wakes the window.
+#[test]
+fn a_page_waiting_its_turn_wakes_the_window() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        compared(h, "c1");
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && asked(host) == ["c2", "c3"], "{:?}", asked(host));
+    });
+}
+
+/// Once the list names the version before, the details rest with their read of it still under
+/// way; the page waiting its turn behind that read wakes the window, and once it is answered asks
+/// for its own on the frames it wakes, with no pointer moving.
+#[test]
+fn a_page_behind_a_read_the_details_no_longer_need_goes_on_by_itself() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let (before, after) = before_and_after(h, host);
+        host.version_reads.lock().unwrap().clear();
+        opened(h, "c3");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        let read = the_read(h, host);
+        tap(h, COMPARE);
+        h.state_mut().versions.page = Some(crate::VersionsPage { versions: history(), more: false });
+        h.run_steps(4);
+        assert!(h.state().versions.details_reading.is_some() && asked(host).is_empty(), "{:?}", asked(host));
+        assert!(h.ctx.has_requested_repaint(), "waiting its turn");
+        read.send(page_of(history().remove(1))).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while asked(host).is_empty() {
+            assert!(h.ctx.has_requested_repaint() && std::time::Instant::now() < until, "the page stalls");
+            h.run_steps(1);
+        }
+        assert_eq!(asked(host), ["c3"]);
+    });
+}
+
+/// A failed read is a failure, not no differences; an edit does not read again but the other
+/// direction does, and a read that stops without an answer is a failure too.
+#[test]
+fn a_failed_read_waits_and_a_stopped_one_is_a_failure() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| found(h).is_some());
+        assert_eq!(found(h), Some(Err("Too many".to_string())));
+        add_schema(h, "more");
+        h.run_steps(3);
+        assert!(asked(host).is_empty(), "{:?}", asked(host));
+        tap(h, SWAP);
+        frames_until(h, |_| asked(host) == ["c3"]);
+        h.state_mut().versions.compare_results.found = None;
+        host.reads.lock().unwrap().clear();
+        frames_until(h, |h| matches!(found(h), Some(Err(_))));
+    });
+}
+
+/// A comparison that failed after its rows went as too large is no failed read: it stands at its
+/// own revision, and the next edit reads the version again and compares, without Retry.
+#[test]
+fn a_failed_comparison_of_rows_let_go_reads_again_on_an_edit() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        host.reads.lock().unwrap().clear();
+        let now = h.state().session.as_ref().unwrap().revision();
+        let (tx, failed) = std::sync::mpsc::channel();
+        tx.send(Err("Failed".to_string())).unwrap();
+        let key = Key { sides: ("c3".to_string(), false), revision: now };
+        let r = &mut h.state_mut().versions.compare_results;
+        (r.held, r.reading, r.comparing) = (None, None, Some((key, failed)));
+        h.run_steps(3);
+        assert!(found(h) == Some(Err("Failed".to_string())) && asked(host).is_empty(), "{:?}", asked(host));
+        add_schema(h, "more");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+    });
+}
+
+/// A late answer about another version is dropped, failure or rows, and rows held are of one
+/// version: choosing another reads it, choosing the same one again nothing. Against nothing, the
+/// model's root is still no change.
+#[test]
+fn another_version_is_read_and_a_late_answer_dropped() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(2));
+        answer(host, "c3", Err("Late".to_string().into()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        assert_eq!(found(h), None);
+        answer(host, "c2", Ok(before.clone()));
+        found_many(h, 1);
+        let shown = found(h);
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(2));
+        h.run_steps(2);
+        assert!(found(h) == shown && asked(host).is_empty(), "the same version again changes nothing");
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(3));
+        frames_until(h, |_| asked(host) == ["c1"]);
+        let nothing = Rows { tables: vec![Vec::new(); before.tables.len()], junctions: vec![Vec::new(); before.junctions.len()] };
+        answer(host, "c1", Ok(Arc::new(nothing)));
+        let of_c1 = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, ..)| key.sides.0 == "c1");
+        frames_until(h, |h| of_c1(h).is_some());
+        let items = of_c1(h).unwrap().1.unwrap();
+        assert!(!items.is_empty() && items.iter().all(|d| d.class != archforge_core::MODEL), "the model's root is no change of its own");
+    });
+}
+
+/// Rows too large to hold go once compared, so the next edit reads them again. Held rows retry a
+/// failed comparison on the next edit. A page gone holds nothing, nor a session left, whose read runs
+/// to its end with nothing taking its answer.
+#[test]
+fn what_is_held_goes_when_too_large_or_left() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        h.state_mut().versions.compare_results.found.as_mut().unwrap().1 = Err("Failed".into());
+        h.state_mut().versions.compare_results.held.as_mut().unwrap().keep = false;
+        add_schema(h, "more");
+        found_many(h, 2);
+        assert!(h.state().versions.compare_results.held.is_none() && asked(host).is_empty());
+        add_schema(h, "third");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(rows_now(h)));
+        frames_until(h, |h| h.state().versions.compare_results.held.is_some());
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(1);
+        assert!(h.state().versions.compare_results.held.is_none() && found(h).is_none());
+    });
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        answer(host, "c3", Ok(before));
+        h.run_steps(2);
+        let r = &h.state().versions.compare_results;
+        assert!(r.reading.is_none() && r.held.is_none() && asked(host).is_empty(), "{:?}", asked(host));
+    });
+}
+
+/// The page's read is never let go before it answers; the details opened in place of a page gone
+/// read beside it at once, the host having room for both, and its late answer is dropped with its
+/// rows, nothing held.
+#[test]
+fn a_page_gone_leaves_its_read_to_end_and_frees_its_answer() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        opened(h, "c2");
+        h.run_steps(2);
+        assert_eq!(asked(host), ["c3", "c1", "c2"], "the details do not wait");
+        assert!(h.state().versions.compare_results.reading.is_some(), "still counted");
+        answer(host, "c3", Ok(before.clone()));
+        h.run_steps(1);
+        let r = &h.state().versions.compare_results;
+        assert!(r.reading.is_none() && r.held.is_none() && r.found.is_none());
+        assert_eq!(Arc::strong_count(&before), 1, "its rows freed");
+    });
+}
+
+/// A read lands only in the project it is of, though another's version has the same name.
+#[test]
+fn a_read_of_another_project_lands_nowhere() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let (tx, read) = std::sync::mpsc::channel();
+        tx.send(Ok(before)).unwrap();
+        let generation = h.state().session_generation();
+        h.state_mut().versions.compare_results.reading = Some((("/other".into(), generation), "c3".to_string(), read));
+        h.run_steps(1);
+        assert!(h.state().versions.compare_results.held.is_none());
+    });
+}
+
+/// The project closed and opened again at its path during the page's read is another session: the
+/// read's failure lands nowhere then, and the page opened again on that version reads it anew once
+/// that read ends, needing no Retry.
+#[test]
+fn a_read_from_before_the_project_opened_again_lands_nowhere() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let session = h.state_mut().session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        h.state_mut().close_project();
+        h.run_steps(1);
+        host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+        h.run_steps(2);
+        h.state_mut().open_project(commerce());
+        h.run_steps(2);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        compared(h, "c3");
+        answer_all_but_the_first(host, &before);
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_eq!(asked(host), ["c3"], "still the read from before");
+        answer(host, "c3", Err("Old".to_string().into()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert_eq!(found(h), None, "not this session's failure");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
+    });
+}
+
+/// Answers every read asked for after the first, the page's, with `rows`.
+fn answer_all_but_the_first(host: &SavingHost, rows: &Arc<Rows>) {
+    for (_, read) in host.reads.lock().unwrap().drain(1..) {
+        let _ = read.send(Ok(rows.clone()));
+    }
+}
+
+/// A page closed and opened again on its version during its read takes that read as it answers,
+/// asking the host for no second one.
+#[test]
+fn a_page_back_on_its_version_takes_the_read_under_way() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(1);
+        compared(h, "c3");
+        answer_all_but_the_first(host, &before);
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        h.run_steps(3);
+        assert_eq!(asked(host), ["c3"], "one read only");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+    });
+}
+
+/// However quickly pages open and close during one read, Compare has that one read under way: a
+/// page on another version waits for it, awake, and then reads its own.
+#[test]
+fn pages_opened_and_closed_during_a_read_never_read_twice_at_once() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        for row in ["c2", "c3", "c2"] {
+            compared(h, row);
+            assert!(asked(host).len() <= 3, "{:?}", asked(host));
+            answer_all_but_the_first(host, &before);
+            frames_until(h, |h| h.state().versions.details_comparing.is_none());
+            h.run_steps(3);
+            assert_eq!(asked(host), ["c3"], "the one read under way");
+            assert!(h.ctx.has_requested_repaint(), "waiting for it");
+            tap(h, COMPARE_CLOSE);
+            h.run_steps(1);
+        }
+        compared(h, "c2");
+        answer_all_but_the_first(host, &before);
+        answer(host, "c3", Ok(before.clone()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(before));
+        found_many(h, 1);
+    });
+}
+
+/// A page gone wakes nothing for the read and comparison it leaves running; a page opened again on
+/// its sides takes the comparison.
+#[test]
+fn a_page_gone_rests_and_a_page_back_takes_its_comparison() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        let (tx, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: ("c3".to_string(), false), revision: h.state().session.as_ref().unwrap().revision() };
+        h.state_mut().versions.compare_results.comparing = Some((key, pending));
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(4);
+        assert!(!h.ctx.has_requested_repaint(), "at rest with the page gone");
+        compared(h, "c3");
+        tx.send(Ok(Arc::new(Vec::new()))).unwrap();
+        h.run_steps(2);
+        assert_eq!(found(h), Some(Ok(Vec::new())));
+    });
+}
+
+/// Home and a project closed draw no rail, and what the page held goes all the same, its read's
+/// answer too as it comes, rows and all.
+#[test]
+fn leaving_the_project_lets_the_page_go() {
+    let saved_and_closed = |s: &mut Shell| {
+        let session = s.session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        s.close_project();
+    };
+    let routes: [&dyn Fn(&mut Shell); 2] = [&Shell::go_home, &saved_and_closed];
+    for route in routes {
+        in_both(|h, host| {
+            let before = page_reading(h, host);
+            answer(host, "c3", Ok(before.clone()));
+            found_many(h, 1);
+            let (tx, read) = std::sync::mpsc::channel();
+            let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
+            h.state_mut().versions.compare_results.reading = Some((project, "c3".to_string(), read));
+            route(h.state_mut());
+            h.run_steps(1);
+            host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+            h.run_steps(2);
+            let r = &h.state().versions.compare_results;
+            assert!(h.state().project.is_none() && r.held.is_none() && r.found.is_none() && r.reading.is_some());
+            tx.send(Ok(before.clone())).unwrap();
+            h.run_steps(1);
+            assert!(h.state().versions.compare_results.reading.is_none() && Arc::strong_count(&before) == 1, "dropped, rows and all");
+        });
+    }
+}
+
+/// The page and the details take turns at reading, as the host limits the reads under way.
+#[test]
+fn the_page_and_the_details_take_turns_at_reading() {
+    in_both_listing(vec![history().remove(0)], |h, host| {
+        let rows = rows_now(h);
+        compared(h, "c3");
+        answer(host, "c2", Ok(rows.clone()));
+        answer(host, "c3", Ok(rows));
+        frames_until(h, |h| h.state().versions.details_reading.is_some());
+        h.run_steps(2);
+        assert!(asked(host).is_empty(), "behind the link's read: {:?}", asked(host));
+    });
+}
+
+/// While a version is in view, Compare pairs its version with the work set aside, not with the
+/// version shown: in what it finds and in the revision a failure is about.
+#[test]
+fn compare_takes_current_work_while_a_version_shows() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        let work = h.state().session.as_ref().unwrap().revision();
+        opened(h, "c2");
+        tap(h, VIEW);
+        h.run_steps(3);
+        while asked(host).iter().any(|c| c == "c2") {
+            answer(host, "c2", Ok(before.clone()));
+        }
+        h.run_steps(4);
+        assert_eq!(h.state().viewing(), Some("c2"));
+        for read in host.version_reads.lock().unwrap().drain(..) {
+            let _ = read.send(Ok(crate::VersionsPage { versions: history(), more: false }));
+        }
+        host.reads.lock().unwrap().clear();
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_ne!(h.state().session.as_ref().unwrap().revision(), work, "the version shown is another session");
+        compared(h, "c3");
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(before.clone()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| found(h).is_some());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work), "a failure about current work");
+        h.state_mut().versions.compare_results.found = None;
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])), "the schema only current work holds");
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work));
+    });
+}
+
+/// Nothing is compared during an edit.
+#[test]
+fn an_edit_under_way_holds_the_comparison() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| h.state().versions.compare_results.held.is_some());
+        h.run_steps(2);
+        assert!(found(h).is_none() && h.state().versions.compare_results.comparing.is_none());
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        found_many(h, 1);
     });
 }
 

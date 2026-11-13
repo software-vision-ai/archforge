@@ -1925,6 +1925,7 @@ impl Shell {
         }
         self.poll_host();
         version_chip::keep_valid(self);
+        version_details::compare::results::let_go(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);

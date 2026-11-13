@@ -309,6 +309,7 @@ fn activity_rail(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     // Before the rail says the count, so its words and its badge are of one frame.
     crate::versions::refresh(shell, ui.ctx());
     crate::version_details::keep(shell, ui.ctx());
+    crate::version_details::compare::results::keep(shell, ui.ctx());
     crate::change_view::keep(shell, ui.ctx());
     let active = shell.state.explorer;
     for (i, (id, which, icon, title)) in EXPLORERS.iter().enumerate() {
