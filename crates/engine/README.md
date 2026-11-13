@@ -43,6 +43,7 @@ is and clears the history it belonged to.
 | `Snapshot`, `Snapshotted<T>`, `Replace<T>` | a clone-and-compare state as a document, its delta both states whole |
 | `View` | view state, kept valid after every change |
 | `Session::poisoned` | why the session refuses edits, once a rollback failed |
+| `CommandError::{new, about, because}`, `Reason` | a handler's refusal: its English sentence, the parameter it is about, and, for an interface to say in the user's language, its reason typed (`NameTaken`, `DependsOnItself`, `PackageIntoItself`, with the element's kind as an English noun); a refusal not typed yet has only its sentence |
 | `testing::round_trip` | feature `testing`: a command, its undo and its redo give identical documents |
 | `testing::sweep`, `testing::sweep_with` | feature `testing`: every command with hostile parameters; no panic, refusals change nothing (`sweep_with` takes a picture function for documents that are not cloned) |
 

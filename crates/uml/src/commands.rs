@@ -12,7 +12,7 @@
 //! parent (owner decision, for every notation).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -293,7 +293,8 @@ pub(crate) fn check_name(store: &Store, owner: Option<Obj>, class: ClassId, name
         return Err(refuse("name", format!("the name {p}")));
     }
     if let Some(s) = owner.and_then(|o| crate::names::clash(store, o, class, name, except)) {
-        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, s))));
+        let taken = Reason::NameTaken { kind: what(store, s), name: name_of(store, s) };
+        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, s))).because(taken));
     }
     Ok(())
 }
@@ -406,7 +407,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let to = parent_param(ctx.doc, p, "to")?;
     if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
-        return Err(refuse("to", "a package cannot go into itself or a package it holds"));
+        return Err(refuse("to", "a package cannot go into itself or a package it holds").because(Reason::PackageIntoItself));
     }
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));

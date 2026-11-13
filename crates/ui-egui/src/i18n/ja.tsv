@@ -554,6 +554,21 @@ str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。
 str		A name can't be empty.	名前は空にできません。
+str		There is {what} named {name} already.	{name} という名前の{what}はすでにあります。
+str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
+str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str	refusal	a class	クラス
+str	refusal	an association class	関連クラス
+str	refusal	an interface	インターフェース
+str	refusal	an enumeration	列挙
+str	refusal	a data type	データ型
+str	refusal	a primitive type	プリミティブ型
+str	refusal	a package	パッケージ
+str	refusal	a profile	プロファイル
+str	refusal	a stereotype	ステレオタイプ
+str	refusal	an element	要素
+str	refusal	a schema	スキーマ
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴

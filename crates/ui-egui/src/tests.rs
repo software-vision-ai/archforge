@@ -4634,6 +4634,77 @@ fn a_name_refused_in_place_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The engine's typed refusals are said in the chosen language, never in the engine's English: a
+/// name another schema has, a package moved into one it holds, a class depending on itself, and a
+/// model that can't be changed at the moment. In light and dark (AR-429).
+#[test]
+fn the_engines_refusals_are_said_in_the_chosen_language() {
+    let renamed = |h: &mut Harness<'static, Shell>, name: &str| {
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(h, egui::Key::Backspace, egui::Modifiers::NONE);
+        h.event(egui::Event::Text(name.into()));
+        h.run();
+        key(h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone())
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        // A name another schema has, whatever the case: the kind and the other's name in German.
+        assert_eq!(renamed(&mut h, "Shop"), None, "{theme:?}: the first takes the name");
+        let refused = renamed(&mut h, "shop").unwrap_or_default();
+        let schema = crate::i18n::tr_ctx("refusal", "a schema");
+        assert_ne!(schema, "a schema", "{theme:?}: the catalogue has the kind in German");
+        assert!(refused.to_lowercase().contains(&schema.to_lowercase()) && refused.contains("Shop"), "{theme:?}: {refused}");
+        assert!(!refused.contains("named"), "{theme:?}: not the engine's English: {refused}");
+        // The model can't be changed at the moment.
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        h.event(egui::Event::Text("Lager".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let said = crate::i18n::tr("The model cannot be changed at the moment; nothing was changed.");
+        assert_ne!(said, "The model cannot be changed at the moment; nothing was changed.", "{theme:?}: the catalogue has it in German");
+        assert_eq!(h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()), Some(said), "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // A package dropped onto a package it holds, in Models.
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (root, sales, lines, order) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let lines = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Lines", "parent": sales.to_string() })).unwrap().value);
+            let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+            let st = s.doc();
+            (st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap(), sales, lines, order)
+        };
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.extend([root, sales]);
+        h.run();
+        let (from, target) =
+            (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{lines}")).center());
+        drag(&mut h, from, target);
+        let said = crate::i18n::tr("A package cannot go into itself or a package it holds.");
+        assert_ne!(said, "A package cannot go into itself or a package it holds.", "{theme:?}: the catalogue has it in German");
+        assert_eq!(h.state().explorer.notice.as_deref(), Some(said.as_str()), "{theme:?}");
+        // A class that would depend on itself: the reason a canvas or a panel shows.
+        let refused = crate::panels::run(
+            h.state_mut(),
+            "uml.dependency.add",
+            serde_json::json!({ "client": order.to_string(), "supplier": order.to_string() }),
+        );
+        let refused = refused.err().unwrap_or_default();
+        let class = crate::i18n::tr_ctx("refusal", "a class");
+        assert_ne!(class, "a class", "{theme:?}: the catalogue has the kind in German");
+        assert!(refused.to_lowercase().starts_with(&class.to_lowercase()), "{theme:?}: {refused}");
+        assert!(refused.starts_with(char::is_uppercase) && !refused.contains("depend"), "{theme:?}: a sentence, not the engine's English: {refused}");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -15304,7 +15375,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     // A name a class of the package has is refused, in place.
     let refused =
         crate::explorer::run(h.state_mut(), "uml.interface.rename", serde_json::json!({ "interface": payable.to_string(), "name": "order" }));
-    assert!(refused.is_err_and(|e| e.contains("class named order")));
+    assert!(refused.is_err_and(|e| e.contains("class named Order")), "it names the class that has the name");
     // The search finds it as an interface of Commerce.
     let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
     let hit = crate::project_search::hits(&index, "payable").1.into_iter().find(|e| e.label == "Payable").map(|e| e.detail.clone());

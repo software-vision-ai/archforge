@@ -102,6 +102,34 @@ fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_ea
     assert_eq!(parent_of(&s, &deep), Some(obj(&s, &orders)));
 }
 
+/// A name clash, a package into itself and a self-dependency carry their reason typed, with the
+/// kind and the name of the element that has the name, for an interface to say in its own words;
+/// the English sentence stays as the command line shows it (AR-429).
+#[test]
+fn a_clash_a_package_into_itself_and_a_self_dependency_carry_their_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let inner = run(&mut s, "uml.package.add", json!({ "name": "inner", "parent": sales }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let mut why = |cmd: &str, p: Json| match s.execute(cmd, &p) {
+        Err(EngineError::Failed { error, .. }) => (error.reason, error.message),
+        other => panic!("{cmd} {p}: {other:?}"),
+    };
+    let taken = Reason::NameTaken { kind: "class", name: "Order".into() };
+    assert_eq!(why("uml.interface.add", json!({ "package": sales, "name": "ORDER" })), (Some(taken), "there is a class named ORDER already".into()));
+    let into = (Some(Reason::PackageIntoItself), "a package cannot go into itself or a package it holds".to_string());
+    assert_eq!(why("uml.package.move", json!({ "package": sales, "to": inner })), into);
+    let itself = (Some(Reason::DependsOnItself { kind: "class" }), "a class cannot depend on itself".to_string());
+    assert_eq!(why("uml.dependency.add", json!({ "client": order, "supplier": order })), itself);
+    // Reconnected onto its client, a dependency would make it depend on itself too.
+    let line = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Line" }));
+    let uses = run(&mut s, "uml.dependency.add", json!({ "client": order, "supplier": line }));
+    let p = json!({ "relationship": uses, "end": "target", "class": order });
+    let Err(EngineError::Failed { error, .. }) = s.execute("uml.relationship.reconnect", &p) else { panic!("{p} is refused") };
+    assert_eq!((error.reason, error.message), itself, "reconnected");
+}
+
 #[test]
 fn a_class_and_a_package_move_a_cycle_or_a_clash_is_refused_and_the_diagrams_keep_showing_them() {
     let mut s = session();
