@@ -176,7 +176,8 @@ model. Other kinds of diagram get their own group once Archforge supports them.
 model's packages with their classes, attributes and operations. It starts folded; open a row with
 its arrow, or open every row with the button beside **+**. The filter field narrows the tree to
 what matches. **+** adds what fits the selection, with its name ready to type: press Enter to keep
-it, Escape to cancel.
+it, Escape to cancel. If a name is refused, the reason shows under it and the field keeps what you
+typed, still ready for typing: correct it and press Enter, or press Escape to keep the old name.
 
 An element exists once in the model and can appear on many diagrams. Drag an element from Models
 onto a diagram to show it there.

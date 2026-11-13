@@ -167,7 +167,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   every row (Expand all), or folds them all (Collapse all) once everything is open; a filter opens
   what it shows, and the button rests while one is typed. An element selected on the canvas or in
   Properties opens its schema and table once, so its row shows; folding them again sticks.
-- The + adds what fits the selection, named in place: Enter confirms, Esc cancels.
+- The + adds what fits the selection, named in place: Enter confirms, Esc cancels. A name refused
+  in place keeps the keyboard with the name as typed, for a correction or Esc (AR-426).
 - Dragging an element from Models onto the canvas places it; one already there is refused with a
   toast.
 - Deleting from the explorer asks first when the element is on diagrams or takes other elements

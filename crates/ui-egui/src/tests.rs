@@ -4445,6 +4445,47 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     assert_eq!(schema_names(&h), ["Shop"]);
 }
 
+/// A name refused in place by Enter keeps the keyboard with the name as typed: Escape then closes
+/// it, the old name staying and the tree taking its keys again, and a valid name typed after it is
+/// applied by Enter, with no click in between. A click elsewhere still takes the keyboard away from
+/// it. In light and dark (AR-426).
+#[test]
+fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for then in ["escape", "correct", "click"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+            crate::explorer::add(h.state_mut(), "schema");
+            h.run();
+            // The default name is selected whole: Backspace empties it, and Enter is refused.
+            key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("{theme:?}: the refused name stays open"));
+            assert!(rename.text.is_empty() && rename.refused.is_some(), "{theme:?}: {rename:?}");
+            assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("workspace.explorer.rename"))), "{theme:?}: the field kept the keyboard");
+            if then == "correct" {
+                h.event(egui::Event::Text("Shop".into()));
+                h.run();
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+                assert!(h.state().explorer.rename.is_none(), "{theme:?}: {:?}", h.state().explorer.rename);
+                assert_eq!(schema_names(&h), ["Shop"], "{theme:?}: the corrected name is applied");
+            } else if then == "click" {
+                let filter = rect_of(&h, "workspace.explorer.filter").center();
+                click(&mut h, filter);
+                h.event(egui::Event::Text("x".into()));
+                h.run();
+                assert_eq!(h.state().explorer.filter, "x", "{theme:?}: the filter has the keyboard, the refused name does not take it back");
+            } else {
+                key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+                assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes it: {:?}", h.state().explorer.rename);
+                assert_eq!(schema_names(&h), ["Schema 1"], "{theme:?}: the old name stays");
+                // The tree has its keys again: F2 opens the selected schema's name.
+                key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Schema 1"), "{theme:?}: F2 reaches the tree");
+            }
+        }
+    }
+}
+
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -5116,9 +5157,7 @@ fn the_explorer_s_refusals_are_read_out_as_a_status() {
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("an empty name is refused");
         read_out(&h, &refused, "workspace.explorer.rename.notice");
-        // Enter gave up the field's keyboard, so it is clicked before Escape.
-        let at = rect_of(&h, "workspace.explorer.rename").center();
-        click(&mut h, at);
+        // The refused field kept the keyboard, so Escape reaches it with no click (AR-426).
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes the name");
         assert!(h.query_by_label(&refused).is_none(), "{theme:?}: and its refusal is no longer read out");
