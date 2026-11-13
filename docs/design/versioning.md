@@ -57,11 +57,12 @@ Short file names: `lib.rs` is `crates/ui-egui/src/lib.rs` unless a path says oth
 
 ### Autosave
 
-- Each frame `Shell::write_changes` snapshots the session into rows and hands them to the host when
-  `session.revision()` moved and no drag runs (`crates/ui-egui/src/lib.rs:1028-1056`, called at `:1422`).
-- One writer thread keeps one set of rows per project and writes them after 300 ms of quiet
-  (`apps/archforge/src/projects.rs:35`, `:556-635`). A failed write keeps the rows and is tried again
-  with the next change or Save (`:5-6`, `:664-672`).
+- Each frame `Shell::write_changes` freezes the session's store (`Store::freeze`, a bulk copy that
+  builds no rows) and hands it to the host when `session.revision()` moved and no drag runs.
+- One writer thread keeps one model per project, builds its rows from the frozen copy, and writes them
+  after 300 ms of quiet (`apps/archforge/src/projects.rs`, `write_waiting`). A model that can't be
+  turned into rows fails like a write: it stays waiting with the reason, Save and closing say it, and it
+  is tried again with the next change or Save.
 - `Project::write_model` replaces every row of every model table in one transaction, with no commit
   (`crates/project/src/model.rs:247-312`). The same rows written again leave `dolt_status` empty
   (`crates/project/tests/model.rs`; measured).
@@ -344,7 +345,10 @@ follows one order. Stepping between versions and returning have nothing to prote
    operation is refused and the hold ends.
 5. A save under way answers, and the latest rows are handed over.
 6. The replacement is read, checked and built into a session. One that cannot be built ends it here,
-   with nothing written.
+   with nothing written. Whether building repaired it is found off the interface thread: the frame
+   freezes the built session (`Store::freeze`), and its rows are built and compared with those read
+   on a worker while the job runs. Step 8 waits for its answer without stopping the window; one that
+   cannot finish, or none within 30 seconds of the build, counts as a repair.
 7. The operation's writes run as one job on the writer. Viewing has none.
 8. The replacement takes the session's place, and the hold ends.
 
@@ -378,6 +382,15 @@ tab. A request from an earlier generation is refused, so it cannot land on a ses
 | Two chosen versions on this branch | Read at revision | Read at revision |
 | A version against current work | Read at revision | Live session snapshot |
 | Current work or a version against another branch's latest version | Read at revision | Read at revision or live snapshot |
+
+Another branch is chosen in either select, under frame V3.1's **Another branch** after this branch's
+versions: one row per other branch that has a version, "Latest version" beside its name; the branch in
+use and a branch with no version are left out, and a list the host cut short says so beside the
+heading, as Branches does. The frame does not show the select once one is picked:
+it says "Latest on {branch}". The row stands for the latest version the Branches section last listed,
+and that version is read on its own branch's line, as the current line does not hold it; a branch
+deleted or renamed since, under none of the names listed now, can't be shown, as a version of no
+line can't. Two branches, or a branch and a version, compare as two versions do.
 
 The live side comes from the session, not the database, so a comparison is pinned to one
 `session.revision()` and
@@ -416,7 +429,29 @@ Added or Removed; one on both is Changed when it or what it draws differs: its e
 on it, a parameter of one, or a part of it such as a bend, a label or its style. A marked box has an
 outline in the change's colour and the change in words above it, without frame V3.4's tint, as a box's
 own fill is opaque; a marked line is drawn over in the change's colour, with the words at its middle.
-Words that would run past a pane's right edge are moved left to stay inside it.
+Words that would run past a pane's right edge are moved left to stay inside it, while what they mark starts inside it.
+
+That framing is where both sides start, and the two move together: a drag or the wheel over either
+side pans both, a pinch or the wheel with the command key zooms both about the pointer, and a side
+with the keys pans both by the arrow keys, zooms both by + and − and fits both again by 0. Opening
+the diagram again from the list fits it again too. Where the person has moved them stays only while
+the diagram is open, never in the project or the canvas. A mark on a box or line whose element the
+same comparison lists is a link to that element's change: a click, or Enter once Tab reaches it,
+opens the element along the list held, as the related changes under an element's cards do, and Tab
+reaching a mark out of sight moves both sides to it. A side the diagram is not on (an added diagram's
+Before, a removed one's After) is a pane that says so and does not move.
+
+Above the two sides, frame V3.4's **Model** and **Layout** cards say the same differences apart.
+Model counts the elements a box or line draws, on either side, that were added, changed or removed,
+themselves or a member listed with them, and names them. Layout counts the boxes placed, moved,
+changed or taken off and the lines drawn, changed or taken off: a box is moved when its place
+differs, and changed when only another part of its own does, such as its size, a bend, a label or
+its style. A card with nothing says so and that the other alone changed: "The layout didn't change.
+Only the model changed." When no box or line differs but the diagram's own row or the order of its
+boxes or lines does, Layout says the diagram's own details changed; when an empty diagram was added or
+removed, Layout says that. The frame names each element's kind
+("1 class changed") and each box's change ("Order moved"); the cards count elements and boxes and
+list names, as a count for every kind would not translate.
 
 ---
 
@@ -433,7 +468,9 @@ included.
 
 Step 7 is one writer job:
 
-1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`.
+1. What waits is written, and any unsaved changes are saved as a version first, `Before restoring <date>`:
+   the time the restore was asked for as History says it (`8 Nov 15:42`), the date the question quotes.
+   Earlier versions named with a stored time keep their name; History shows that time as it shows dates.
 2. The version's model rows, in today's table shape, are written to the working set.
 3. They are committed as `Restored the version of <date>`. `Project::commit` returning `false` means
    nothing differed, and is reported as above.
@@ -615,6 +652,8 @@ Checks against what exists:
 | Before the first version | Working changes | No baseline: everything is Added, except the root Model element |
 | First version | Details, Compare | "First version: there is nothing earlier to compare it with." Before shows the absent state |
 | No changes | Working changes | "No changes since the last version." Save version… disabled, with the reason in its tooltip |
+| Nothing unsaved: the status bar says Saved (an untouched new project, or nothing changed since the last version) | ⌘S, File ▸ Save, an agent's save without a description | No version is made and the host is not asked. Text still being typed, or a failed save or write, is not Saved, so ⌘S keeps the text or tries again. A save with a description is still the host's to decide (AR-383, AR-413) |
+| Text typed and not yet kept (a skill's text before its typing pauses or refused, a description being typed or refused) | Working changes, status bar, chip, the close and quit questions, shown or parked | Unsaved work, never "No changes": Working changes lists what was kept, the status bar says Unsaved changes, and with nothing listed Save version… is off with "What you're typing isn't kept yet" |
 | Unsaved only in `settings` or `model_tables` (an upgrade, a table first used) | Working changes, status bar | Working changes lists nothing; the status bar keeps Unsaved changes, and ⌘S saves them. Save version… stays disabled |
 | A branch with no version | Compare | That branch is not offered as a side of a comparison |
 | Identical pair | Compare | "These two versions are the same." |
@@ -627,7 +666,9 @@ Checks against what exists:
 | Save failed | Status bar, dialog | Says whether a version was made, then Retry |
 | Long history | List | Pages of 50, selection held by hash, Show more, filter All / With a description |
 | Metadata missing | Details | The row is left out; no invented author |
-| Very large model | Compare | The read budgets hold (`model.rs:26`, `:30`). Over them: "Too large to compare", no partial list |
+| Very large model | Compare | The read budgets hold (`MAX_TABLE_ROWS`, `MAX_READ_CELLS` and `MAX_READ_BYTES` in `crates/project/src/model.rs`), and so does the comparison's (`MAX_COMPARED`). Over them: "Too large to compare", no partial list and no Retry; it stays for that pair, edits or not. Viewing or stepping to a version over them marks its row unavailable, with "Its model is larger than Archforge reads." as the reason |
+| Version unavailable or newer | Compare | "This version can't be shown" and the reason, no Retry; it stays for that pair, edits or not |
+| Comparison under way | Compare | Bars, and **Stop** under them; when an earlier answer stays on screen, as after an edit, **Stop** is above it. Stop says "The comparison was stopped." with Retry, and nothing starts again until Retry; a read that fails meanwhile does not take its place. The comparison runs on to the end of its budget with its answer dropped, and none other starts before it ends; a read under way finishes and its rows are kept for Retry |
 | Only `main` | Branches | Folded; New branch… offered |
 | Name empty, too long, or taken | New branch dialog | Under the field, Create disabled |
 | A creation record remains | New branch, or a rename to the recorded name | Refused, saying the last new branch is not cleaned up yet; the next opening removes it |

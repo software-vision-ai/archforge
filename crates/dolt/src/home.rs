@@ -138,6 +138,30 @@ fn restrict_file(_file: &Path) -> Result<(), Error> {
 pub(crate) mod tests {
     use super::*;
 
+    /// A folder made under a new random name for one test, removed when dropped, panics included.
+    pub struct Scratch(pub PathBuf);
+
+    impl Scratch {
+        /// Makes the folder; a name that is taken already is never reused.
+        pub fn new(name: &str) -> Scratch {
+            loop {
+                let p = std::env::temp_dir().join(format!("af-test-{name}-{}", crate::secret::random_name(10).unwrap()));
+                match std::fs::create_dir(&p) {
+                    Ok(()) => return Scratch(p),
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(e) => panic!("cannot make {}: {e}", p.display()),
+                }
+            }
+        }
+    }
+
+    impl Drop for Scratch {
+        /// Removes the folder with what is in it.
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// A fresh folder for one test, removed by the caller.
     pub fn scratch(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("af-test-{name}-{}-{}", std::process::id(), crate::secret::random_name(6).unwrap()));

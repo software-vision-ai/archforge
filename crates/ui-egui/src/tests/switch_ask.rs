@@ -33,7 +33,7 @@ fn unsaved_work_asks_and_each_answer_does_what_it_says() {
         let wording = ["Switch to elsewhere?", "main has unsaved changes. They stay on main", "won't be able to undo earlier steps"];
         assert!(wording.iter().all(|w| painted_has(&h, w)), "{:?}", painted(&h));
         click_id(&mut h, CANCEL);
-        h.run_steps(4);
+        h.steps(4);
         assert!(h.state().ask.is_none());
         assert!(!h.state().is_held() && host.switches.lock().unwrap().is_empty() && host.saves.lock().unwrap().is_empty());
 
@@ -41,7 +41,7 @@ fn unsaved_work_asks_and_each_answer_does_what_it_says() {
         assert!(h.state().is_held() && host.switches.lock().unwrap().is_empty(), "the switch waits for the save");
         assert_eq!(*host.descriptions.lock().unwrap(), [None], "an ordinary Save, its description automatic");
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
-        h.run_steps(6);
+        h.steps(6);
         let ends = host.switches.lock().unwrap().remove(0);
         assert_eq!(ends.branch, "elsewhere");
         assert!(!h.state().shown_unsaved(), "saved");
@@ -101,13 +101,15 @@ fn a_failed_save_or_switch_says_what_became_of_the_work() {
 
         add_schema(&mut h, "again");
         asking(&mut h, &host);
-        let revision = h.state().session.as_ref().unwrap().revision();
-        (h.state_mut().refused, h.state_mut().written, h.state_mut().save_error) = (Some(revision), None, Some("No rows.".into()));
+        // The host could not write the work: the switch it is asked for is refused.
+        *host.write_error.lock().unwrap() = Some("No rows.".into());
         click_id(&mut h, SWITCH);
+        h.run_steps(6);
+        host.switches.lock().unwrap().remove(0).check.send(Err("No rows.".to_string().into())).unwrap();
         h.run_steps(4);
         let said = ["Switching is refused", "No rows. Your work could not be kept", "You are still on main."];
         assert!(said.iter().all(|w| painted_has(&h, w)), "{:?}", painted(&h));
-        assert!(host.switches.lock().unwrap().is_empty() && !h.state().is_held());
+        assert!(!h.state().is_held());
     });
 }
 

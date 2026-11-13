@@ -19,7 +19,6 @@ pub(crate) struct Viewing {
     commit: String,
     session: Session,
     written: Option<u64>,
-    refused: Option<u64>,
     save_error: Option<String>,
     explorer: explorer::State,
     diagrams: diagrams::State,
@@ -30,7 +29,7 @@ pub(crate) struct Viewing {
 impl Viewing {
     /// Whether the real work holds changes not yet saved.
     pub(crate) fn unsaved(&self) -> bool {
-        self.session.is_dirty() || panels::description_pending(&self.panels)
+        self.session.is_dirty() || crate::typing_unkept(&self.panels, &self.canvas)
     }
 }
 
@@ -38,6 +37,11 @@ impl Shell {
     /// The version being viewed, if one is.
     pub fn viewing(&self) -> Option<&str> {
         self.viewing.as_ref().map(|v| v.commit.as_str())
+    }
+
+    /// The person's own work: the session set aside while a version shows, otherwise the one shown.
+    pub(crate) fn current_work(&self) -> Option<&Session> {
+        self.viewing.as_ref().map(|v| &v.session).or(self.session.as_ref())
     }
 
     /// Whether a version shows, so that looking at it is all that is on.
@@ -129,7 +133,6 @@ impl Shell {
             commit,
             session,
             written: self.written.take(),
-            refused: self.refused.take(),
             save_error: self.save_error.take(),
             explorer: std::mem::take(&mut self.explorer),
             diagrams: std::mem::take(&mut self.diagrams),
@@ -170,7 +173,6 @@ impl Shell {
         let v = *v;
         self.session = Some(v.session);
         self.written = v.written;
-        self.refused = v.refused;
         self.save_error = v.save_error;
         self.explorer = v.explorer;
         self.diagrams = v.diagrams;

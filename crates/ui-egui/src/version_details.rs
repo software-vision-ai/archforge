@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
-use archforge_notations::differences::{Area, Difference, classified};
-use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
+use archforge_notations::differences::{Difference, classified};
+use egui::{Pos2, Rect, Stroke, StrokeKind, pos2, vec2};
 
 use crate::explorer::{TreeScroll, scroll_tree};
 use crate::i18n::{tr, trn};
@@ -33,7 +33,7 @@ const LINK: f32 = 27.0;
 const SKELETON_CARDS: usize = 3;
 
 /// What a comparison of two versions found, or why it could not tell.
-type Found = Result<Arc<Vec<Difference>>, String>;
+pub(crate) type Found = Result<Arc<Vec<Difference>>, String>;
 
 /// What changed since the version before, and that version for the link: on their way, then known.
 struct Comparison {
@@ -74,7 +74,8 @@ pub struct Details {
     comparison: Option<Comparison>,
     /// The Compare page shown in place of these details, while it is.
     compare: Option<compare::Pair>,
-    scroll: TreeScroll,
+    /// How far the changed items have scrolled.
+    pub(crate) scroll: TreeScroll,
 }
 
 /// What the person is told when a comparison failed, and the reason when none is known.
@@ -88,7 +89,7 @@ fn not_read() -> String {
 }
 
 /// The project and session shown.
-fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
+pub(crate) fn about(shell: &Shell) -> Option<(PathBuf, u64)> {
     shell.project.as_ref().map(|o| (o.path.clone(), shell.session_generation()))
 }
 
@@ -106,10 +107,10 @@ fn compare(before: Receiver<VersionRead>, after: Receiver<VersionRead>) -> Recei
             .and_then(|old| Ok((old, new?)))
             .map_err(|e| e.to_string())
             .and_then(|(old, new)| classified(&old, &new, crate::editing::fit_tables).map_err(|e| e.to_string()));
-        // The model's root is no change of its own; model elements come before diagrams.
+        // The model's root is no change of its own; model elements come first, then diagrams, then skills.
         let _ = tx.send(found.map(|mut items| {
             items.retain(|d| d.class != archforge_core::MODEL);
-            items.sort_by_key(|d| d.area == Area::Diagram);
+            items.sort_by_key(|d| d.area);
             Arc::new(items)
         }));
     };
@@ -157,13 +158,11 @@ pub(crate) fn compare_from_menu(shell: &mut Shell) {
     compare::open(shell);
 }
 
-/// Once a frame: what belongs to another project or session is let go, the answers that have come
-/// are taken, the version before comes from the list when it holds it, the details shown get their
-/// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
-/// the two versions it is about, the link only for the version it names.
-pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+/// Lets go of the details, and of their reads with their answers still to come, once the project
+/// or session shown is another, or none is. Also once a frame before drawing, as Home and a project
+/// closed draw no rail to call [`keep`].
+pub(crate) fn let_go(shell: &mut Shell) {
     let about = about(shell);
-    let host = shell.services.projects.clone();
     let v = &mut shell.versions;
     if v.details.as_ref().is_some_and(|d| Some(&d.about) != about.as_ref()) {
         v.details = None;
@@ -174,6 +173,17 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     if v.details_reading.as_ref().is_some_and(|c| Some(&c.about) != about.as_ref()) {
         v.details_reading = None;
     }
+}
+
+/// Once a frame: what belongs to another project or session is let go, the answers that have come
+/// are taken, the version before comes from the list when it holds it, the details shown get their
+/// next read when none runs, and an answer still awaited wakes the window. An answer lands only on
+/// the two versions it is about, the link only for the version it names.
+pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    let_go(shell);
+    let about = about(shell);
+    let host = shell.services.projects.clone();
+    let v = &mut shell.versions;
     let answered = v.details_comparing.as_ref().and_then(|c| c.answered(not_compared));
     if answered.is_some() {
         v.details_comparing = None;
@@ -183,6 +193,8 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
         v.details_reading = None;
     }
     let Some(d) = v.details.as_mut() else { return };
+    // The Compare page's read takes turns with these while the page is open, never once it is gone.
+    let page_reads = d.compare.is_some() && v.compare_results.reading.is_some();
     let Some(c) = d.comparison.as_mut() else { return };
     let pair = (c.before.clone(), d.entry.hash.clone());
     if let Some((_, found)) = answered.filter(|(compared, _)| *compared == pair) {
@@ -196,7 +208,8 @@ pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
     {
         c.earlier = Some(Ok(listed.clone()));
     }
-    if let (true, None, Some(host), Some(about)) = (v.details_comparing.is_none(), &v.details_reading, host, about) {
+    let idle = v.details_comparing.is_none() && !page_reads;
+    if let (true, None, Some(host), Some(about)) = (idle, &v.details_reading, host, about) {
         if c.found.is_none() {
             let (old, new) = (host.read_version(&about.0, pair.0.clone()), host.read_version(&about.0, pair.1.clone()));
             v.details_comparing = Some(Running { about, pair, answer: compare(old, new) });
@@ -241,8 +254,10 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     } else {
         (!crate::version_chip::available(shell)).then(|| tr("Wait for the change under way to finish."))
     };
-    let id = "workspace.version-details.view";
-    let (view, pressed) = button(shell, ui, p, id, pos2(left, y), &tr("View this version"), Look::Primary, off.is_none(), off.as_deref());
+    let mut row = Row { left, right: left + width, at: pos2(left, y) };
+    let (id, label) = ("workspace.version-details.view", tr("View this version"));
+    let (view, pressed) = button(shell, ui, p, id, row.next(ui, p, &label), &label, Look::Primary, off.is_none(), off.as_deref());
+    row.after(view);
     if pressed.clicked() {
         // Refused, these details stay and say why, above: an editor still open is one of the reasons.
         if shell.viewing() == Some(entry.hash.as_str()) {
@@ -256,28 +271,64 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
         }
         return true;
     }
-    let id = "workspace.version-details.compare";
-    let (compared, compare_pressed) = button(shell, ui, p, id, pos2(view.right() + 8.0, y), &tr("Compare…"), Look::Secondary, true, None);
+    let (id, label) = ("workspace.version-details.compare", tr("Compare…"));
+    let (compared, compare_pressed) = button(shell, ui, p, id, row.next(ui, p, &label), &label, Look::Secondary, true, None);
     if compare_pressed.clicked() {
         compare::open(shell);
         return true;
     }
+    row.after(compared);
     if crate::restore_ask::offered(shell, &entry.hash) {
         let (id, label) = ("workspace.version-details.restore", tr("Restore this version…"));
-        let at = pos2(compared.right() + 8.0, y);
-        let off = off.or_else(|| crate::restore_ask::held_back(shell));
-        if button(shell, ui, p, id, at, &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
+        let at = row.next(ui, p, &label);
+        let held = off.clone().or_else(|| crate::restore_ask::held_back(shell));
+        let (restore, pressed) = button(shell, ui, p, id, at, &label, Look::Secondary, held.is_none(), held.as_deref());
+        if pressed.clicked() {
             let saved = crate::version_chip::when(&entry.date, clock);
             crate::restore_ask::ask(shell, (entry.hash.clone(), saved, dated(&entry, clock)));
             return true;
         }
+        row.after(restore);
     }
-    y += 45.0;
+    if crate::branch_ask::offered_at(shell, &entry.hash) {
+        let (id, label) = ("workspace.version-details.branch", tr("Start a branch here…"));
+        if button(shell, ui, p, id, row.next(ui, p, &label), &label, Look::Secondary, off.is_none(), off.as_deref()).1.clicked() {
+            crate::branch_ask::open_at(shell, entry.hash.clone(), dated(&entry, clock));
+            return true;
+        }
+    }
+    y = row.at.y + 45.0;
     ui.painter().rect_filled(Rect::from_min_size(pos2(left, y), vec2(width, 1.0)), 0.0, p.border);
     y += 22.0;
     let y = changes(shell, ui, p, r, y);
     previous(shell, ui, p, r, y, clock);
     true
+}
+
+/// The details' action buttons from `left` to `right`, wrapping onto a further line rather than
+/// running past the centre's edge in a narrow window or a longer language.
+struct Row {
+    left: f32,
+    right: f32,
+    /// Where the next button goes, if it fits on this line.
+    at: Pos2,
+}
+
+impl Row {
+    /// Where the button labelled `label` goes: here, or at the start of the next line when it would
+    /// pass the right edge and isn't the first on its line.
+    fn next(&mut self, ui: &egui::Ui, p: &Palette, label: &str) -> Pos2 {
+        let wide = (ux::galley(ui.painter(), label, types::UI, p.text, None).size().x + 20.0).ceil();
+        if self.at.x > self.left && self.at.x + wide > self.right {
+            self.at = pos2(self.left, self.at.y + 36.0);
+        }
+        self.at
+    }
+
+    /// The button drawn at `placed`: the next one goes after it.
+    fn after(&mut self, placed: Rect) {
+        self.at.x = placed.right() + 8.0;
+    }
 }
 
 /// The way back at the top of the centre `r`: the project's name, registered as `id`, and `place`,
@@ -346,7 +397,10 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     // A little more than the cards: `scroll_tree` keeps that much of the area clear of a list that fits.
     let height = (items.len() as f32 * PITCH + 8.0).min(r.bottom() - BELOW_CARDS - top).max(PITCH);
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
+    let explorer = shell.explorer.focused;
     let Some(d) = shell.versions.details.as_mut() else { return tree.bottom() };
+    // What shows of the list, as scroll_tree measures it.
+    scroll_keys(ui, explorer, &mut d.scroll, PITCH, (height - 8.0).max(PITCH));
     let offset = scroll_tree(ui, p, tree, top, items.len(), PITCH, 0.0, true, None, &mut d.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -359,6 +413,28 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         }
     }
     tree.bottom()
+}
+
+/// The keys scroll a list of cards `step` apart while no control and not the `explorer` has them,
+/// as the explorer's keys work only while it has them: the arrows by a card, Page Up and Page Down
+/// by the `page` that shows, Home and End to either end. scroll_tree keeps the offset within the list.
+pub(crate) fn scroll_keys(ui: &egui::Ui, explorer: bool, scroll: &mut TreeScroll, step: f32, page: f32) {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    if explorer || ui.memory(|m| m.focused().is_some()) {
+        return;
+    }
+    let press = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    for (key, by) in [(ArrowDown, step), (ArrowUp, -step), (PageDown, page), (PageUp, -page)] {
+        if press(key) {
+            scroll.offset += by;
+        }
+    }
+    if press(Home) {
+        scroll.offset = 0.0;
+    }
+    if press(End) {
+        scroll.offset = f32::MAX;
+    }
 }
 
 /// The version before, from `y`, as a link that opens its details; bars while it is on its way and

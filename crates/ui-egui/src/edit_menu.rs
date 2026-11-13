@@ -85,7 +85,7 @@ fn step(shell: &mut Shell, modifiers: Modifiers, command: &str, has: fn(&Session
         && let Some(session) = shell.session.as_mut()
         && let Err(e) = session.execute(command, &serde_json::Value::Null)
     {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 
@@ -139,11 +139,8 @@ pub(crate) fn paste(shell: &mut Shell) {
 fn canvas_diagram(shell: &Shell) -> Option<archforge_mof::Obj> {
     // The classifier's menu of kinds walks its rows by the keys while the canvas keeps the focus.
     let walked = shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys);
-    let shows = shell.canvas.focused
-        && !shell.explorer.focused
-        && !crate::model_menu::centre_covered(shell)
-        && !crate::editing::canvas_busy(shell)
-        && !walked;
+    let shows =
+        shell.canvas.focused && !shell.explorer.focused && !crate::model_menu::covered(shell) && !crate::editing::canvas_busy(shell) && !walked;
     let ready = window_free(shell) && shows && shell.canvas.gesture.is_none() && !shell.is_held();
     crate::canvas::active_diagram(shell).filter(|_| ready)
 }

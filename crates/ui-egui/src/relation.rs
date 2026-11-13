@@ -15,7 +15,7 @@ use crate::Shell;
 use crate::connect::cardinality_text;
 use crate::home::control;
 use crate::i18n::{fmt, tr};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, check, name_field, run, section, select_field, text_field};
+use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, check, edit_field, name_field, run, section, select_field};
 use crate::ux::{self, Palette, icons, types};
 
 /// A cardinality button's size and pitch.
@@ -218,15 +218,18 @@ pub(crate) fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, m
     foreign_key(shell, ui, p, r, y, &rel, &parent_name, &child_name);
 }
 
-/// A role field: typed in place, committed on Enter or when the keyboard leaves it.
+/// A role field: typed in place, committed on Enter or when the keyboard leaves it; Escape brings
+/// the role back.
 fn role_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, rel: &Rel, end: usize) {
     let mut text = match &shell.panels.role {
         Some(e) if e.target == rel.id && e.end == end => e.text.clone(),
         _ => rel.roles[end].clone(),
     };
     let id = format!("workspace.properties.role.{}", if end == 0 { "from" } else { "to" });
-    let committed = text_field(shell, ui, p, at, width, &id, &tr("Role"), &mut text, archforge_er::rules::MAX_NAME, false, true);
-    if committed {
+    let out = edit_field(shell, ui, p, at, width, &id, &tr("Role"), &mut text, archforge_er::rules::MAX_NAME, false, true);
+    if out == FieldOut::Cancel {
+        shell.panels.role = None;
+    } else if out == FieldOut::Commit {
         shell.panels.role = None;
         if text.trim() != rel.roles[end] {
             let mut roles = rel.roles.clone();
@@ -608,7 +611,7 @@ fn set_identifying(shell: &mut Shell, rel: &Rel, on: bool) {
         b.execute("er.relationship.set-identifying", &json!({ "relationship": rel_id, "identifying": on }))?;
         crate::editing::grow_to_fit(b, &[child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Adds an `id` column as the parent's primary key, then the foreign key with its new child
@@ -623,7 +626,7 @@ fn add_id_column(shell: &mut Shell, rel: &Rel, _parent_name: &str) {
         b.execute("er.foreign-key.add", &json!({ "entity": child.to_string(), "references": parent.to_string(), "relationship": rel_id }))?;
         crate::editing::grow_to_fit(b, &[parent, child])
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// Turns the foreign key on: the engine adds one child column per parent key column with the key.
@@ -656,7 +659,7 @@ fn remove_foreign_key(shell: &mut Shell, rel: &Rel) {
         }
         Ok(())
     });
-    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| e.to_string()));
+    apply(shell, rel.id, out.map(|o| o.value).map_err(|e| crate::panels::refusal(&e)));
 }
 
 /// One row of a menu: its label, a detail at the right, whether it can be picked, whether it is

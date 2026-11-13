@@ -185,6 +185,55 @@ fn refusals_name_their_key_and_change_nothing() {
     let _ = sm.total;
 }
 
+/// A schema name another schema has, whatever the case, carries its reason typed with the other's
+/// name, for an interface to say in its own words; the English sentence stays (AR-429).
+#[test]
+fn a_schema_name_clash_carries_its_reason_typed() {
+    let mut s = session();
+    run(&mut s, "er.schema.add", json!({ "name": "Shop" }));
+    let other = run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    for (cmd, p) in [("er.schema.add", json!({ "name": "SHOP" })), ("er.schema.rename", json!({ "schema": other, "name": "shop" }))] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} is refused") };
+        assert_eq!(error.reason, Some(archforge_engine::Reason::NameTaken { kind: "schema", name: "Shop".into() }), "{cmd}");
+        assert_eq!(error.message, "there is a schema named Shop already", "{cmd}");
+    }
+}
+
+/// A name or a text that breaks a rule carries its reason typed, for an interface to say in its
+/// own words, beside the English sentence, which stays as it was: an empty name, one too long, a
+/// control character, a space at an end, and a note's empty text (AR-434).
+#[test]
+fn name_and_text_rules_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    use archforge_er::rules::MAX_NAME;
+    let mut s = session();
+    let schema = run(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let entity = run(&mut s, "er.entity.add", json!({ "schema": schema, "name": "Order" }));
+    let diagram = run(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
+    let long = "n".repeat(MAX_NAME + 1);
+    for (cmd, p, reason, message) in [
+        ("er.entity.add", json!({ "schema": schema, "name": "" }), Reason::NameEmpty, "the name is empty".to_string()),
+        (
+            "er.entity.add",
+            json!({ "schema": schema, "name": long }),
+            Reason::TooLong { max: MAX_NAME },
+            format!("the name is longer than {MAX_NAME} characters"),
+        ),
+        ("er.entity.add", json!({ "schema": schema, "name": "Or\u{7}der" }), Reason::ControlCharacter, "the name holds a control character".into()),
+        ("er.entity.add", json!({ "schema": schema, "name": " Line" }), Reason::EdgeSpace, "the name starts or ends with a space".into()),
+        (
+            "er.attribute.add",
+            json!({ "entity": entity, "name": "state", "default": "'open' " }),
+            Reason::EdgeSpace,
+            "the text starts or ends with a space".into(),
+        ),
+        ("diagram.note", json!({ "diagram": diagram, "text": "", "x": 0, "y": 0 }), Reason::TextEmpty, "the text is empty".into()),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message), (Some(reason), message), "{cmd} {p}");
+    }
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.

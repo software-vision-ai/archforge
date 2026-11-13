@@ -973,7 +973,7 @@ pub(crate) fn drop_stereotype(shell: &mut Shell, d: Obj, s: Obj, at: (f64, f64))
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 

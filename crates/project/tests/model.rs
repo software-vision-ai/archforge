@@ -290,6 +290,35 @@ fn only_a_commit_on_the_projects_own_line_is_a_version() {
     project.close().unwrap();
 }
 
+/// Another branch's version reads on that branch's line, as saved there, while the current branch
+/// stays where it was; on a line it is not on, it is refused.
+#[test]
+fn another_branchs_version_reads_on_its_own_line() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("onbranch");
+    let schema = schema();
+    let project = with_branches(&env, &schema, &["side", "bare"]);
+    let mut s = model();
+    run(&mut s, "er.schema.add", json!({ "name": "billing" }));
+    let written = rows_of(s.doc(), &schema);
+    let mut side = on_branch(&project, "side");
+    project.set_current_branch(SafeBranch::found("side").unwrap());
+    project.write_model(&schema, &written).unwrap();
+    project.set_current_branch(SafeBranch::found("main").unwrap());
+    let hash = commit_all(&mut side, "On side");
+    let (reader, before) = (project.version_reader(), untouched(&project));
+    let read = reader.read_model_on(&schema, &SafeBranch::found("side").unwrap(), &hash).unwrap();
+    assert_eq!(restored(&read, &schema), written, "the version as the other branch saved it");
+    assert!(matches!(reader.read_model_at(&schema, &hash), Err(Error::NotAVersion { .. })), "not on the current line");
+    let refused = reader.read_model_on(&schema, &SafeBranch::found("bare").unwrap(), &hash);
+    assert!(matches!(refused, Err(Error::NotAVersion { .. })), "nor on a line it is not on");
+    assert_eq!((untouched(&project), project.current_branch()), (before, SafeBranch::found("main").unwrap()), "reading moves nothing");
+    on_branch(&project, "main").query_drop("CALL DOLT_BRANCH('-D', 'side')").unwrap();
+    let gone = reader.read_model_on(&schema, &SafeBranch::found("side").unwrap(), &hash);
+    assert!(matches!(gone, Err(Error::NotAVersion { .. })), "a branch deleted since: {gone:?}");
+    project.close().unwrap();
+}
+
 /// Commits everything the working set of `c` holds and gives the new commit's hash.
 fn commit_all(c: &mut mysql::Conn, message: &str) -> String {
     c.exec_drop("CALL DOLT_COMMIT('-Am', ?, '--author', 'Test <test@localhost>')", (message,)).unwrap();
@@ -1030,6 +1059,48 @@ fn the_versions_are_saves_only_newest_first_and_a_page_starts_after_a_version() 
         assert!(matches!(project.versions(Some(not_one), 2), Err(Error::NotAVersion { commit }) if commit == not_one));
     }
     assert!(matches!(project.versions(None, 201), Err(Error::TooLarge { size: 201, .. })));
+    project.close().unwrap();
+}
+
+/// On a branch, the versions from where it parts from `main` on are marked shared, whatever page
+/// they come on and though `main` has moved since; on `main` none is.
+#[test]
+fn a_branch_marks_the_versions_it_shares_with_main() {
+    use archforge_project::SafeBranch;
+    let env = Env::new("shared");
+    let project =
+        Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Commerce platform", "test", &timestamp(1_761_670_800)).unwrap();
+    let commit = |c: &mut mysql::Conn, message: &str, author: &str| -> String {
+        c.exec_drop("CALL DOLT_COMMIT('--allow-empty', '-m', ?, '--author', ?)", (message, author)).unwrap();
+        c.query_first("SELECT commit_hash FROM dolt_log LIMIT 1").unwrap().unwrap()
+    };
+    let saved = "Ada <archforge@localhost>";
+    let mut main = on_branch(&project, "main");
+    let first = commit(&mut main, "First", saved);
+    let second = commit(&mut main, "Second", saved);
+    // The branch parts at a chat commit, which is not a version itself.
+    commit(&mut main, "Chat 1: turn 1", archforge_project::CHAT_AUTHOR);
+    main.query_drop("CALL DOLT_BRANCH('other')").unwrap();
+    main.query_drop("CALL DOLT_BRANCH('same')").unwrap();
+    commit(&mut main, "Later on main", saved);
+    let mut other = on_branch(&project, "other");
+    let own = commit(&mut other, "Own", saved);
+    let newest = commit(&mut other, "Newest", saved);
+
+    let marks = |page: archforge_project::Versions| page.versions.into_iter().map(|v| (v.hash, v.shared)).collect::<Vec<_>>();
+    let reader = project.version_reader();
+    let other_branch = SafeBranch::found("other").unwrap();
+    let all = [(newest.clone(), false), (own.clone(), false), (second.clone(), true), (first.clone(), true)];
+    assert_eq!(marks(reader.versions_on(&other_branch, None, 50).unwrap()), all);
+    assert_eq!(marks(reader.versions_on(&other_branch, Some(&own), 1).unwrap()), [all[2].clone()], "the base went by before the page");
+    assert_eq!(marks(reader.versions_on(&other_branch, None, 1).unwrap()), [all[0].clone()], "the base is beyond the page");
+    let same = marks(reader.versions_on(&SafeBranch::found("same").unwrap(), None, 50).unwrap());
+    assert_eq!(same, [(second.clone(), true), (first.clone(), true)], "nothing of its own yet");
+    for on_main in ["main", "MAIN"] {
+        let page = reader.versions_on(&SafeBranch::found(on_main).unwrap(), None, 50).unwrap();
+        assert_eq!(page.versions.len(), 3);
+        assert!(page.versions.iter().all(|v| !v.shared), "{on_main}");
+    }
     project.close().unwrap();
 }
 

@@ -169,21 +169,26 @@ fn default_choices(store: &Store, kind: Kind, constraint: &str) -> Vec<(String, 
     std::iter::once((tr("None"), String::new())).chain(of_kind(store, kind).into_iter().filter(|(_, v)| fits(v))).collect()
 }
 
+/// What parameter `name` of `kind` constrained to `constraint` asks of its arguments, in the user's
+/// words: `Arguments for Key must be data types.`
+pub(crate) fn must(name: &str, kind: Kind, constraint: Option<&str>) -> String {
+    let line = match (kind, constraint) {
+        (_, Some(c)) => return fmt(&tr("Arguments for {name} must be {constraint} or specialise it."), &[("name", name), ("constraint", c)]),
+        (Kind::Class, None) => tr("Arguments for {name} must be classes."),
+        (Kind::Interface, None) => tr("Arguments for {name} must be interfaces."),
+        (Kind::DataType, None) => tr("Arguments for {name} must be data types."),
+        (Kind::Enumeration, None) => tr("Arguments for {name} must be enumerations."),
+        (Kind::PrimitiveType | Kind::Value | Kind::Operation, None) => tr("Arguments for {name} must be primitive types."),
+    };
+    fmt(&line, &[("name", name)])
+}
+
 /// What the parameter asks of its arguments, in the user's words: `Arguments for Key must be data
 /// types. Bindings that leave it out use Integer. Renaming or reordering keeps every binding.`
 fn help(store: &Store, edit: &TemplateEdit) -> String {
     let name = edit.name.trim();
     let name = if name.is_empty() { tr("this parameter") } else { name.to_string() };
-    let must = match (edit.kind, classifier_named(store, &edit.constraint)) {
-        (_, Some(c)) => {
-            fmt(&tr("Arguments for {name} must be {constraint} or specialise it."), &[("name", &name), ("constraint", &name_of(store, c))])
-        }
-        (Kind::Class, None) => fmt(&tr("Arguments for {name} must be classes."), &[("name", &name)]),
-        (Kind::Interface, None) => fmt(&tr("Arguments for {name} must be interfaces."), &[("name", &name)]),
-        (Kind::DataType, None) => fmt(&tr("Arguments for {name} must be data types."), &[("name", &name)]),
-        (Kind::Enumeration, None) => fmt(&tr("Arguments for {name} must be enumerations."), &[("name", &name)]),
-        (Kind::PrimitiveType | Kind::Value | Kind::Operation, None) => fmt(&tr("Arguments for {name} must be primitive types."), &[("name", &name)]),
-    };
+    let must = must(&name, edit.kind, classifier_named(store, &edit.constraint).map(|c| name_of(store, c)).as_deref());
     let default = if edit.default.is_empty() {
         String::new()
     } else {

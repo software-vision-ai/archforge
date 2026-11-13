@@ -141,6 +141,42 @@ fn a_model_with_every_element_kind_comes_back_from_its_rows_identical() {
     assert!(rules::problems(reopened.doc()).is_empty(), "{:?}", rules::problems(reopened.doc()));
 }
 
+/// Rows built on another thread from a copy are the rows of the moment of the copy: edits after it,
+/// one of them taken back, never reach them.
+#[test]
+fn a_frozen_copy_gives_the_rows_of_its_moment_on_another_thread() {
+    let mut s = rich_session();
+    let (tables, junctions) = (tables(), junctions());
+    let before = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let frozen = s.doc().freeze();
+    // Edits after the copy: a rename, a new element, a removal, and one taken back.
+    let shop = s.doc().alive().find(|o| rules::name_of(s.doc(), *o) == "shop").unwrap();
+    let shop = s.doc().uuid(shop).unwrap().to_string();
+    let vip = s.doc().alive().find(|o| rules::name_of(s.doc(), *o) == "Vip").unwrap();
+    let vip = s.doc().uuid(vip).unwrap().to_string();
+    run(&mut s, "er.schema.rename", json!({ "schema": shop, "name": "store" }));
+    run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Product" }));
+    run(&mut s, "er.entity.remove", json!({ "entity": vip }));
+    run(&mut s, "er.entity.add", json!({ "schema": shop, "name": "Basket" }));
+    s.undo().unwrap();
+    let after = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    assert_ne!(after, before, "the edits changed the model");
+    let built = std::thread::spawn(move || frozen.rows(&tables, &junctions)).join().unwrap().unwrap();
+    assert_eq!(built, before, "the rows are of the moment of the copy");
+    // A copy taken now gives the rows of now.
+    assert_eq!(s.doc().freeze().rows(&self::tables(), &self::junctions()).unwrap(), after);
+}
+
+/// A copy refuses objects with no table in the same words as the store it was taken from.
+#[test]
+fn a_frozen_copy_refuses_what_a_snapshot_refuses() {
+    let s = rich_session();
+    let without_skills: Vec<Table> = tables().into_iter().filter(|t| !t.name.contains("skill")).collect();
+    let refused = rows::snapshot(s.doc(), &without_skills, &junctions()).unwrap_err().to_string();
+    assert!(refused.contains("no table"), "{refused}");
+    assert_eq!(s.doc().freeze().rows(&without_skills, &junctions()).unwrap_err().to_string(), refused);
+}
+
 fn refused(saved: &Rows) -> String {
     let (tables, junctions) = (tables(), junctions());
     let mut back = store(other_ids()).unwrap();

@@ -119,7 +119,8 @@ fn quoted(text: &str) -> String {
 
 /// The shell functions every fake has: `req` reads one line into `$line` (recorded in `stdin`) and
 /// its request number into `$id`; `ok ID JSON` and `err ID CODE MESSAGE` answer; `say JSON` writes
-/// a line; `hello` answers the handshake; `drain` reads to the end and exits 0; `hang` never ends.
+/// a line; `hello` answers the handshake; `drain` reads to the end and exits 0; `hang` never ends;
+/// `hold NAME` waits until the test calls [`World::release`] with `NAME`.
 const PRELUDE: &str = r#"
 req() { IFS= read -r line || exit 0; printf '%s\n' "$line" >> "$IN"; id=$(printf '%s\n' "$line" | sed -n 's/^{"id":\([0-9][0-9]*\),.*/\1/p'); }
 ok() { printf '{"id":%s,"result":%s}\n' "$1" "$2"; }
@@ -128,6 +129,7 @@ say() { printf '%s\n' "$1"; }
 hello() { req; ok "$id" '{"userAgent":"archforge/0.166.0 (test)","codexHome":"/tmp/archforge-agent/codex-home","platformFamily":"unix","platformOs":"macos"}'; req; }
 drain() { while IFS= read -r line; do printf '%s\n' "$line" >> "$IN"; done; exit 0; }
 hang() { while :; do /bin/sleep 1; done; }
+hold() { while [ ! -e "$GO/go-$1" ]; do /bin/sleep 0.01; done; }
 "#;
 
 /// A test's world: the fake `codex` at `base/bin/codex` running `body` after [`PRELUDE`], found
@@ -149,10 +151,11 @@ impl World {
         std::fs::create_dir_all(program.parent().unwrap()).unwrap();
         let script = format!(
             "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 0.166.0'; exit 0; fi\n\
-             printf '%s\\n' \"$@\" > {args}\n/usr/bin/env > {env}\nIN={stdin}\n{PRELUDE}\n{body}\n",
+             printf '%s\\n' \"$@\" > {args}\n/usr/bin/env > {env}\nIN={stdin}\nGO={go}\n{PRELUDE}\n{body}\n",
             args = quoted(&base.join("args").display().to_string()),
             env = quoted(&base.join("env").display().to_string()),
             stdin = quoted(&base.join("stdin").display().to_string()),
+            go = quoted(&base.display().to_string()),
         );
         std::fs::write(&program, script).unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -177,6 +180,11 @@ impl World {
     /// An account process of this world with `store`, a request timeout of `timeout`.
     fn account(&self, store: CredentialStore, timeout: Duration) -> CodexAccount {
         CodexAccount::start(&self.runtime, &self.workspace, &self.home, store, Limits::default(), timeout, Duration::from_secs(5)).unwrap()
+    }
+
+    /// Lets the fake's `hold NAME` go on.
+    fn release(&self, name: &str) {
+        std::fs::write(self.base.join(format!("go-{name}")), "").unwrap();
     }
 
     /// The lines the fake read, waiting up to five seconds for `count` of them.
@@ -1027,15 +1035,17 @@ exit 2"#;
 }
 
 /// An API-key sign-in that times out is not taken for a ChatGPT sign-in: its late answer sends no
-/// cancel.
+/// cancel. Only the sign-in has a short timeout, and the fake holds its answer until it timed out.
 #[test]
 fn a_late_key_sign_in_sends_no_cancel() {
-    let body = "hello\nreq\nlate=$id\n/bin/sleep 0.3\nok \"$late\" '{\"type\":\"apiKey\"}'\nreq\nok \"$id\" '{\"account\":{\"type\":\"apiKey\"},\"requiresOpenaiAuth\":true}'\ndrain";
+    let body = "hello\nreq\nlate=$id\nhold late\nok \"$late\" '{\"type\":\"apiKey\"}'\nreq\nok \"$id\" '{\"account\":{\"type\":\"apiKey\"},\"requiresOpenaiAuth\":true}'\ndrain";
     capture_logs();
     let world = World::new("account-late-key", body);
-    let mut account = world.account(CredentialStore::Ephemeral, Duration::from_millis(100));
-    assert!(matches!(account.login_api_key(&canary(), Duration::from_secs(5)), Err(AgentError::TimedOut { .. })));
-    std::thread::sleep(Duration::from_millis(400));
+    let mut account = world.account(CredentialStore::Ephemeral, Duration::from_secs(5));
+    let error = account.login_api_key(&canary(), Duration::from_millis(100)).unwrap_err();
+    assert!(matches!(error, AgentError::TimedOut { request: "account/login/start", .. }), "{error:?}");
+    // The late answer comes before the read's, so the read handles it on the way.
+    world.release("late");
     let state = account.read(false, Duration::from_secs(5)).unwrap();
     assert!(state.account.is_some());
     assert_eq!(world.methods(4), vec!["initialize", "initialized", "account/login/start", "account/read"]);
@@ -1051,11 +1061,12 @@ fn a_late_key_sign_in_sends_no_cancel() {
 /// the late answer is read.
 #[test]
 fn a_sign_in_that_starts_late_is_cancelled() {
-    let body = "hello\nreq\nlate=$id\n/bin/sleep 0.3\nok \"$late\" '{\"type\":\"chatgpt\",\"loginId\":\"019a0000-0000-7000-8000-00000000c003\",\"authUrl\":\"https://auth.openai.com/x\"}'\nreq\ndrain";
+    let body = "hello\nreq\nlate=$id\nhold late\nok \"$late\" '{\"type\":\"chatgpt\",\"loginId\":\"019a0000-0000-7000-8000-00000000c003\",\"authUrl\":\"https://auth.openai.com/x\"}'\nreq\ndrain";
     let world = World::new("account-late-login", body);
-    let mut account = world.account(CredentialStore::File, Duration::from_millis(100));
-    let error = account.login_chatgpt(Duration::from_secs(5)).unwrap_err();
+    let mut account = world.account(CredentialStore::File, Duration::from_secs(5));
+    let error = account.login_chatgpt(Duration::from_millis(100)).unwrap_err();
     assert!(matches!(error, AgentError::TimedOut { request: "account/login/start", .. }), "{error:?}");
+    world.release("late");
     let deadline = Instant::now() + Duration::from_secs(5);
     while world.stdin(0).len() < 4 && Instant::now() < deadline {
         account.next_event(Duration::from_millis(20));
@@ -1333,9 +1344,11 @@ fn late_stop_body(a_stop: &str) -> String {
     body
 }
 
-/// Drives the late-stop scenario and checks B: it starts well within A's stop request's time, is
-/// stopped with Codex's acceptance, and then runs on past three times the request timeout with no
-/// end, as nothing about A's stop belongs to it.
+/// Drives the late-stop scenario and checks B: it starts within A's stop request's time, is
+/// stopped with Codex's acceptance, and then runs on with no end past A's expiry and past the
+/// deadline A's refusal or expiry would give it, as nothing about A's stop belongs to it. Only A's
+/// stop request is bounded by `timeout`, which leaves B's setup time under load; once B writes on
+/// the request timeout becomes short, so a deadline A's expiry wrongly gave B would come soon.
 fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
     let world = World::new(name, &late_stop_body(a_stop));
     let mut session = world.session(config(Start::New, timeout), chatgpt());
@@ -1348,10 +1361,16 @@ fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
     session.stop().unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { text } if text == "still working"));
-    // Everything about A's stop that was written came before this delta, inside A's request time.
-    assert!(stopped_at.elapsed() < timeout / 2, "B ran {:?} after A's stop, not well within its request time", stopped_at.elapsed());
-    let events = events_for(&mut session, timeout * 3);
-    assert!(stopped_at.elapsed() > timeout * 3, "watched past A's expiry and past what would be B's deadline");
+    // Everything about A's stop that was written came before this delta, inside A's request time,
+    // so B ran when A's stop was answered or expired.
+    let setup = stopped_at.elapsed();
+    assert!(setup < timeout, "B ran {setup:?} after A's stop, past its request time of {timeout:?}");
+    let grace = Duration::from_millis(250);
+    session.set_request_timeout(grace).unwrap();
+    // A refusal wrongly taken for B's would end it one request timeout after it came, before now.
+    let watch = timeout + grace * 4;
+    let events = events_for(&mut session, watch);
+    assert!(stopped_at.elapsed() >= watch + setup, "watched past A's expiry and past what would be B's deadline");
     assert!(!events.iter().any(|e| turn_end(e) || ended(e)), "{events:?}");
     assert!(session.turn_running(), "B still runs");
     assert!(matches!(session.send("C"), Err(AgentError::TurnRunning { .. })));
@@ -1361,18 +1380,18 @@ fn late_stop_leaves_b_running(name: &str, a_stop: &str, timeout: Duration) {
 }
 
 /// Turn A is stopped and Codex ends it at once, before it answers the stop. Turn B starts (and is
-/// stopped, Codex accepting). Then A's stop is refused, after B started and well before A's stop
+/// stopped, Codex accepting). Then A's stop is refused, after B started and before A's stop
 /// request expires: B keeps running with no deadline, as the refusal belongs to turn A.
 #[test]
 fn a_late_stop_refusal_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_secs(1));
+    late_stop_leaves_b_running("late-refusal", "err \"$stop_a\" -32600 'no running turn to interrupt'\n", Duration::from_secs(3));
 }
 
 /// The same, but A's stop is never answered: its request expires while B runs, and B keeps running
 /// with no deadline.
 #[test]
 fn a_late_stop_timeout_never_touches_the_next_turn() {
-    late_stop_leaves_b_running("late-timeout", "", Duration::from_secs(1));
+    late_stop_leaves_b_running("late-timeout", "", Duration::from_secs(3));
 }
 
 /// A shell line writing a piece of turn A's answer, which tells a test that A was named.
@@ -1393,9 +1412,11 @@ fn a_refused_stop_ends_the_session_naming_resume() {
         delta_of_a()
     );
     let world = World::new("refused-stop", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    // Only the stop and the time it leaves the turn are bounded by `timeout`.
+    session.set_request_timeout(timeout).unwrap();
     let stopped_at = Instant::now();
     session.stop().unwrap();
     let early = events_for(&mut session, timeout / 2);
@@ -1414,7 +1435,7 @@ fn a_refused_stop_ends_the_session_naming_resume() {
 /// A refused stop followed by Codex ending the turn closes it normally, as stopped.
 #[test]
 fn a_refused_stop_then_a_completed_turn_closes_normally() {
-    let timeout = Duration::from_millis(300);
+    let timeout = Duration::from_secs(1);
     let body = format!(
         "{}\nreq\nok \"$id\" '{{\"turn\":{{\"id\":\"A\",\"items\":[],\"status\":\"inProgress\"}}}}'\n{}req\nerr \"$id\" -32600 'cannot interrupt now'\n/bin/sleep 0.1\n\
          say '{{\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"A\",\"items\":[],\"status\":\"failed\",\"error\":null}}}}}}'\nhang",
@@ -1422,9 +1443,11 @@ fn a_refused_stop_then_a_completed_turn_closes_normally() {
         delta_of_a()
     );
     let world = World::new("refused-then-done", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     events_until(&mut session, 5, |e| matches!(e, SessionEvent::TextDelta { .. }));
+    // Only the stop and the time it leaves the turn are bounded by `timeout`.
+    session.set_request_timeout(timeout).unwrap();
     session.stop().unwrap();
     assert_eq!(*last_outcome(&events_until(&mut session, 5, turn_end)), TurnOutcome::Stopped);
     let later = events_for(&mut session, timeout * 2);
@@ -1440,7 +1463,7 @@ fn a_refused_stop_then_a_completed_turn_closes_normally() {
 fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
     let timeout = Duration::from_millis(300);
     let body = format!(
-        "{}\nreq\n/bin/sleep 0.2\nok \"$id\" '{{\"turn\":{{\"status\":\"inProgress\"}}}}'\n\
+        "{}\nreq\nhold accept\nok \"$id\" '{{\"turn\":{{\"status\":\"inProgress\"}}}}'\n\
          say '{{\"method\":\"turn/started\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"N\",\"items\":[],\"status\":\"inProgress\"}}}}}}'\n\
          req\nok \"$id\" '{{}}'\n\
          say '{{\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"{THREAD}\",\"turn\":{{\"id\":\"N\",\"items\":[],\"status\":\"interrupted\"}}}}}}'\n\
@@ -1449,10 +1472,12 @@ fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
         thread_prelude()
     );
     let world = World::new("unnamed-stop", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    // A long timeout until B: only the wait for B's name is bounded by `timeout`.
+    let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
     world.pump(&mut session, 4);
     session.stop().unwrap();
+    world.release("accept");
     assert_eq!(*last_outcome(&events_until(&mut session, 5, turn_end)), TurnOutcome::Stopped);
     let lines = world.stdin(5);
     assert_eq!(serde_json::from_str::<Value>(&lines[4]).unwrap()["params"], json!({"threadId": THREAD, "turnId": "N"}));
@@ -1460,6 +1485,7 @@ fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
     session.send("B").unwrap();
     world.pump(&mut session, 6);
     events_for(&mut session, Duration::from_millis(100));
+    session.set_request_timeout(timeout).unwrap();
     session.stop().unwrap();
     let events = events_until(&mut session, 5, turn_end);
     assert_eq!(*last_outcome(&events), TurnOutcome::Stopped);
@@ -1471,17 +1497,22 @@ fn a_stop_waits_for_the_turn_s_name_or_releases_its_thread() {
 
 /// Threads a timeout abandons are released: one a late `thread/start` answer names, one whose copy
 /// could not be handed over in time (at once), and one a late `turn/start` turns out to run a turn
-/// on (after that turn is stopped).
+/// on (after that turn is stopped). Only the request under test has a short timeout: the session
+/// starts with a long one and the test shortens it once the fake holds the answer before it, and
+/// a late answer comes only after the test saw its timeout.
 #[test]
 fn timed_out_threads_are_released() {
-    let timeout = Duration::from_millis(250);
+    let long = Duration::from_secs(5);
+    let short = Duration::from_millis(500);
     // A late thread/start answer.
-    let body = "hello\nreq\nfirst=$id\n/bin/sleep 0.5\nok \"$first\" '{\"thread\":{\"id\":\"LATE\"},\"model\":\"m\"}'\nreq\nreq\ndrain";
+    let body = "hello\nreq\nfirst=$id\nhold late\nok \"$first\" '{\"thread\":{\"id\":\"LATE\"},\"model\":\"m\"}'\nreq\nreq\ndrain";
     let world = World::new("late-thread", body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
+    let mut session = world.session(config(Start::New, long), chatgpt());
+    session.set_request_timeout(short).unwrap();
     session.send("A").unwrap();
     let events = events_until(&mut session, 5, turn_end);
     assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "thread/start", .. })), "{events:?}");
+    world.release("late");
     world.pump(&mut session, 4);
     assert_eq!(world.methods(4)[3], "thread/unsubscribe");
     assert_eq!(serde_json::from_str::<Value>(&world.stdin(4)[3]).unwrap()["params"], json!({"threadId": "LATE"}));
@@ -1490,12 +1521,15 @@ fn timed_out_threads_are_released() {
     world.remove();
 
     // A copy that cannot be handed over in time: released at once.
-    let body = "hello\nreq\nok \"$id\" '{\"thread\":{\"id\":\"T2\"},\"model\":\"m\"}'\nreq\nreq\ndrain";
+    let body = "hello\nreq\nhold resume\nok \"$id\" '{\"thread\":{\"id\":\"T2\"},\"model\":\"m\"}'\nreq\nreq\ndrain";
     let world = World::new("late-inject", body);
     let copy = json!({"messages": [{"role": "user", "text": "earlier"}, {"role": "assistant", "text": "answer"}], "version": 1}).to_string();
     std::fs::write(world.folder.path().join(COPY_FILE), copy).unwrap();
-    let mut session = world.session(config(Start::Resume, timeout), chatgpt());
+    let mut session = world.session(config(Start::Resume, long), chatgpt());
     session.send("again").unwrap();
+    world.pump(&mut session, 3);
+    session.set_request_timeout(short).unwrap();
+    world.release("resume");
     let events = events_until(&mut session, 5, turn_end);
     assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "thread/inject_items", .. })), "{events:?}");
     let lines = world.stdin(5);
@@ -1517,14 +1551,15 @@ fn timed_out_threads_are_released() {
 
     // A late turn/start: its turn is stopped, then its thread released; the question stays.
     let body = format!(
-        "{}\nreq\nlate=$id\n/bin/sleep 0.5\nok \"$late\" '{{\"turn\":{{\"id\":\"LT\",\"items\":[],\"status\":\"inProgress\"}}}}'\nreq\nok \"$id\" '{{}}'\nreq\ndrain",
-        thread_prelude()
+        "{}\nreq\nlate=$id\nhold late\nok \"$late\" '{{\"turn\":{{\"id\":\"LT\",\"items\":[],\"status\":\"inProgress\"}}}}'\nreq\nok \"$id\" '{{}}'\nreq\ndrain",
+        held_thread_prelude()
     );
     let world = World::new("late-turn", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
-    session.send("question").unwrap();
+    let mut session = held_turn_start(&world, long, short);
     let events = events_until(&mut session, 5, turn_end);
     assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "turn/start", .. })), "{events:?}");
+    session.set_request_timeout(long).unwrap();
+    world.release("late");
     world.pump(&mut session, 6);
     let lines = world.stdin(6);
     assert_eq!(serde_json::from_str::<Value>(&lines[4]).unwrap()["params"], json!({"threadId": THREAD, "turnId": "LT"}));
@@ -1536,26 +1571,47 @@ fn timed_out_threads_are_released() {
 
     // A late turn/start that names no turn: its thread is released at once; one never answered is
     // released when it is forgotten.
-    let body = format!("{}\nreq\nlate=$id\n/bin/sleep 0.5\nerr \"$late\" -32600 'too late'\nreq\ndrain", thread_prelude());
+    let body = format!("{}\nreq\nlate=$id\nhold late\nerr \"$late\" -32600 'too late'\nreq\ndrain", held_thread_prelude());
     let world = World::new("late-unnamed", &body);
-    let mut session = world.session(config(Start::New, timeout), chatgpt());
-    session.send("question").unwrap();
-    events_until(&mut session, 5, turn_end);
+    let mut session = held_turn_start(&world, long, short);
+    let events = events_until(&mut session, 5, turn_end);
+    assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "turn/start", .. })), "{events:?}");
+    world.release("late");
     world.pump(&mut session, 5);
     assert_eq!(world.methods(5)[4], "thread/unsubscribe");
     drop(session);
     world.remove();
 
-    let body = format!("{}\nreq\nreq\ndrain", thread_prelude());
+    let body = format!("{}\nreq\nreq\ndrain", held_thread_prelude());
     let world = World::new("late-forgotten", &body);
-    let short = Duration::from_millis(50);
-    let mut session = world.session(config(Start::New, short), chatgpt());
-    session.send("question").unwrap();
-    events_until(&mut session, 5, turn_end);
+    let mut session = held_turn_start(&world, long, short / 10);
+    // `turn/start` is sent after this, so its forgetting is ten request timeouts later at least.
+    let asked = Instant::now();
+    let events = events_until(&mut session, 5, turn_end);
+    assert!(matches!(last_outcome(&events), TurnOutcome::Failed(AgentError::TimedOut { request: "turn/start", .. })), "{events:?}");
     world.pump(&mut session, 5);
     assert_eq!(world.methods(5)[4], "thread/unsubscribe", "released when forgotten after ten request timeouts");
+    assert!(asked.elapsed() >= short, "forgotten after {:?}, before ten request timeouts", asked.elapsed());
     drop(session);
     world.remove();
+}
+
+/// The handshake and a thread named `THREAD` whose `thread/start` answer waits for
+/// `World::release("thread")`.
+fn held_thread_prelude() -> String {
+    format!("hello\nreq\nhold thread\nok \"$id\" '{{\"thread\":{{\"id\":\"{THREAD}\"}},\"model\":\"gpt-6.1-sol\"}}'")
+}
+
+/// A session of `world` (whose fake starts with [`held_thread_prelude`]) under the request timeout
+/// `long`, asked a question; once the fake holds the `thread/start` answer the timeout becomes
+/// `short` and the answer is let go, so `short` bounds `turn/start` and what follows it only.
+fn held_turn_start(world: &World, long: Duration, short: Duration) -> CodexSession {
+    let mut session = world.session(config(Start::New, long), chatgpt());
+    session.send("question").unwrap();
+    world.pump(&mut session, 3);
+    session.set_request_timeout(short).unwrap();
+    world.release("thread");
+    session
 }
 
 /// Tool server states that come before `thread/start`'s answer are held, and only those naming the
@@ -1752,7 +1808,8 @@ fn unknown_lines_are_skipped_and_counted() {
     let world = World::new("skipped", &body);
     let mut session = world.session(config(Start::New, Duration::from_secs(5)), chatgpt());
     session.send("A").unwrap();
-    let events = events_for(&mut session, Duration::from_millis(500));
+    // The three skipped lines, however long a loaded machine takes to write them.
+    let events: Vec<SessionEvent> = (0..3).flat_map(|_| events_until(&mut session, 10, |e| matches!(e, SessionEvent::Ignored(_)))).collect();
     let skipped: Vec<&Skipped> = events
         .iter()
         .filter_map(|e| match e {

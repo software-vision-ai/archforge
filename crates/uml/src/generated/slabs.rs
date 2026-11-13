@@ -6,7 +6,7 @@ use super::classes::*;
 use super::meta::*;
 
 /// One typed slab per concrete metaclass.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct UmlSlabs {
     pub classes: Vec<ClassObj>,
     pub activities: Vec<ActivityObj>,
@@ -1011,5 +1011,9 @@ impl Slabs for UmlSlabs {
             .saturating_add(self.test_identity_actions.capacity().saturating_mul(size_of::<TestIdentityActionObj>()))
             .saturating_add(self.unmarshall_actions.capacity().saturating_mul(size_of::<UnmarshallActionObj>()))
             .saturating_add(self.value_pins.capacity().saturating_mul(size_of::<ValuePinObj>()))
+    }
+    /// Every slab copied, the objects' text shared.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(self.clone())
     }
 }

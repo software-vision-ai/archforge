@@ -55,6 +55,13 @@ const MOST_READS: usize = 4;
 /// The most projects open at once, one per tab: each runs a database server.
 const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 
+/// A model handed to the writer: its rows, or a copy frozen on the interface thread whose rows the
+/// writer builds, so that thread never does.
+enum Handed {
+    Rows(Rows),
+    Model(Box<archforge_mof::Frozen>),
+}
+
 /// The writer's work: a project's rows to write; a save (write what waits, then commit the
 /// project named, recorded as who asked, under the description given or an automatic one, or only
 /// write when no project is named) with its answer; or a flush of one project (write what waits, answer whether that
@@ -63,9 +70,9 @@ const MAX_OPEN: usize = archforge_ui_egui::MAX_TABS;
 /// The generation a job carries is its project's when the job was asked for, before any key check;
 /// a job of another generation is refused rather than applied to a branch it was not made for.
 enum Job {
-    /// The rows, their generation, and the words to record if that generation has passed, put in
+    /// The model, its generation, and the words to record if that generation has passed, put in
     /// the language shown while still on the interface thread.
-    Write(PathBuf, Rows, u64, String),
+    Write(PathBuf, Handed, u64, String),
     Save(Option<(PathBuf, SavedBy, u64)>, Option<Described>, Sender<Result<Saved, SaveError>>),
     Flush(PathBuf, Sender<Result<(), String>>),
     /// Forget what waits for a project without writing it (Close without writing), then answer.
@@ -123,6 +130,8 @@ pub struct RestoreRequest {
     pub commit: String,
     /// When the version was saved, as the list says it, for the new version's message.
     pub saved_at: String,
+    /// When the restore was asked for, as the list says it, for the name unsaved work is kept under.
+    pub before_at: String,
     pub by: SavedBy,
     /// What an opening does to a model, applied to both sides of the comparison.
     pub repair: fn(&mut archforge_mof::Store),
@@ -544,6 +553,27 @@ impl Projects {
         let _ = self.inner.keys.set(agents);
     }
 
+    /// Stops, on a thread of its own, the database servers a crashed or killed Archforge left
+    /// running for any project, and logs what it stopped: for the start-up. It holds the job lock,
+    /// so no opening or creation meets a record while it is swept. `None` when the thread could not
+    /// start; the next opening of each project still recovers its own server.
+    pub fn stop_orphans(&self) -> Option<std::thread::JoinHandle<()>> {
+        let inner = self.inner.clone();
+        let sweep = move || {
+            let _job = lock(&inner.job);
+            match archforge_dolt::stop_orphans(&ServerOptions::new(inner.settings.join("servers"))) {
+                Ok(0) => {}
+                Ok(n) => log::info!("stopped {n} database server(s) a closed Archforge left running"),
+                Err(e) => log::warn!("the database servers a closed Archforge left running were not looked for: {e}"),
+            }
+        };
+        std::thread::Builder::new()
+            .name("archforge-orphans".into())
+            .spawn(sweep)
+            .map_err(|e| log::warn!("the database servers a closed Archforge left running were not looked for: {e}"))
+            .ok()
+    }
+
     /// Runs `job` on the writer against the open project at `path`, after every job sent before
     /// it, and answers with what it gives; a project no longer open is an error.
     pub fn on_writer<T: Send + 'static>(
@@ -567,8 +597,7 @@ impl Projects {
     }
 
     /// Starts making the branch `name` at the version `start` on the writer, and returns at once;
-    /// see [`create_branch`]. The screen that asks for this comes with AR-292.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// see [`create_branch`].
     pub fn create_branch(&self, project: &Path, name: SafeBranch, start: String) -> Receiver<Result<BranchCreated, CreateBranchError>> {
         self.ask_for_branch(project, name, Some(start))
     }
@@ -590,7 +619,7 @@ impl Projects {
     }
 
     /// Starts deleting `branch` on the writer, and returns at once; see [`Project::delete_branch`].
-    /// The answer is the conversations whose folders can go. The screen comes with AR-292.
+    /// The answer is the conversations whose folders can go. Delete… on a branch row asks for it.
     pub fn delete_branch(&self, project: &Path, branch: SafeBranch) -> Receiver<Result<Vec<Uuid>, DeleteJobError>> {
         let (tx, rx) = channel();
         let asked = (generation_of(&self.inner, project), instance_of(&self.inner, project));
@@ -823,6 +852,21 @@ impl Projects {
         })
     }
 
+    /// Hands the writer `project`'s newest model, counted for any described save still being checked.
+    fn hand(&self, project: &Path, model: Handed) {
+        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
+        // Counted and sent under one lock, so the count always agrees with the writer's queue.
+        let mut handed = lock(&self.inner.handed);
+        *handed.entry(project.to_path_buf()).or_default() += 1;
+        let stale = tr("A change arrived after the branch changed, so it was not written.");
+        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), model, generation_of(&self.inner, project), stale));
+        drop(handed);
+        if let Err(e) = sent {
+            log::error!("the model could not be handed to the writer: {e}");
+            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
+        }
+    }
+
     /// Runs `read` with the project's reader on a thread of its own and gives its answer. Only the
     /// short lock on the readers is taken here, so the read waits for no write and no write waits
     /// for it. Refused past [`MOST_READS`] reads under way, and for a project no longer open: its
@@ -900,8 +944,15 @@ impl ProjectHost for Projects {
     }
 
     /// Worded on the wait's own thread in the language shown when the job runs.
-    fn restore_job(&self, project: &Path, commit: String, saved_at: String, by: SavedBy, repair: fn(&mut archforge_mof::Store)) -> ReplacementJob {
-        self.restore_job_within(project, RestoreRequest { commit, saved_at, by, repair }, RESTORE_LIMIT)
+    fn restore_job(
+        &self,
+        project: &Path,
+        commit: String,
+        (saved_at, before_at): (String, String),
+        by: SavedBy,
+        repair: fn(&mut archforge_mof::Store),
+    ) -> ReplacementJob {
+        self.restore_job_within(project, RestoreRequest { commit, saved_at, before_at, by, repair }, RESTORE_LIMIT)
     }
 
     /// The name typed, stored as the project stores it; a refusal worded as the dialog says it.
@@ -914,11 +965,15 @@ impl ProjectHost for Projects {
         })
     }
 
-    /// The writer's creation from current work, its answer put as the window takes it. A branch
-    /// made whose record stays is made.
-    fn create_branch(&self, path: &Path, name: &str) -> Receiver<Result<(), BranchRefused>> {
+    /// The writer's creation at the version `start`, or with none from current work, its answer put
+    /// as the window takes it. A branch made whose record stays is made.
+    fn create_branch(&self, path: &Path, name: &str, start: Option<&str>) -> Receiver<Result<(), BranchRefused>> {
+        let made = |name| match start {
+            Some(start) => Projects::create_branch(self, path, name, start.to_string()),
+            None => self.create_branch_from_work(path, name),
+        };
         match SafeBranch::found(name) {
-            Ok(name) => branch_answer(self.create_branch_from_work(path, name), branch_made, not_made),
+            Ok(name) => branch_answer(made(name), branch_made, not_made),
             Err(e) => refused_at_once(e.to_string()),
         }
     }
@@ -946,23 +1001,16 @@ impl ProjectHost for Projects {
     /// The writer's delete, its answer put as the window takes it, on a thread of its own as only
     /// the writer can answer it.
     fn delete_branch(&self, path: &Path, name: &str) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
-        let (tx, rx) = channel();
-        let job = match SafeBranch::found(name) {
-            Ok(branch) => Projects::delete_branch(self, path, branch),
+        match SafeBranch::found(name) {
+            Ok(branch) => deleted_answer(Projects::delete_branch(self, path, branch), |wait| {
+                std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait).map(drop)
+            }),
             Err(e) => {
+                let (tx, rx) = channel();
                 let _ = tx.send(Err(BranchNotDeleted::Failed(e.to_string())));
-                return rx;
+                rx
             }
-        };
-        let reply = tx.clone();
-        let wait = move || {
-            let answer = job.recv().unwrap_or_else(|e| Err(DeleteJobError::Failed(format!("the writer stopped: {e}"))));
-            let _ = reply.send(answer.map_err(not_deleted));
-        };
-        if let Err(e) = std::thread::Builder::new().name("archforge-branch-delete".into()).spawn(wait) {
-            let _ = tx.send(Err(BranchNotDeleted::Failed(format!("no thread could wait for the answer: {e}"))));
         }
-        rx
     }
 
     /// Opens the project on `main`, with no branch stored for it.
@@ -989,17 +1037,12 @@ impl ProjectHost for Projects {
 
     /// Hands the writer `project`'s newest rows, counted for any described save still being checked.
     fn write(&self, project: &Path, rows: Rows) {
-        lock(&self.inner.writing).entry(project.to_path_buf()).or_default().pending = true;
-        // Counted and sent under one lock, so the count always agrees with the writer's queue.
-        let mut handed = lock(&self.inner.handed);
-        *handed.entry(project.to_path_buf()).or_default() += 1;
-        let stale = tr("A change arrived after the branch changed, so it was not written.");
-        let sent = writer(&self.inner).send(Job::Write(project.to_path_buf(), rows, generation_of(&self.inner, project), stale));
-        drop(handed);
-        if let Err(e) = sent {
-            log::error!("the model could not be handed to the writer: {e}");
-            lock(&self.inner.writing).entry(project.to_path_buf()).or_default().error = Some("the writer stopped".into());
-        }
+        self.hand(project, Handed::Rows(rows));
+    }
+
+    /// Hands the writer `project`'s model as frozen, for it to build the rows, counted as `write`'s are.
+    fn write_model(&self, project: &Path, model: archforge_mof::Frozen) {
+        self.hand(project, Handed::Model(Box::new(model)));
     }
 
     /// Save, under `description` when one is given. A description of the wrong shape is refused
@@ -1037,6 +1080,17 @@ impl ProjectHost for Projects {
         self.on_a_reader(project, move |reader| {
             let schema = schema(&inner).map_err(|e| format!("{e:?}"))?;
             reader.read_model_at(&schema, &commit).map(Arc::new).map_err(version_read_error)
+        })
+    }
+
+    /// The model a version on another branch's line holds, read as [`Projects::read_version`] reads;
+    /// a name that can't be used has no versions to read.
+    fn read_branch_version(&self, project: &Path, branch: &str, commit: String) -> Receiver<VersionRead> {
+        let (inner, branch) = (self.inner.clone(), SafeBranch::found(branch));
+        self.on_a_reader(project, move |reader| {
+            let branch = branch.map_err(|_| VersionReadError::Unavailable)?;
+            let schema = schema(&inner).map_err(|e| format!("{e:?}"))?;
+            reader.read_model_on(&schema, &branch, &commit).map(Arc::new).map_err(version_read_error)
         })
     }
 
@@ -1426,7 +1480,7 @@ fn writer(inner: &Arc<Inner>) -> Sender<Job> {
 /// commits. Rows that failed to be written are tried again with the next change or Save, not on a
 /// timer. What waits is one set of rows per open project at most.
 fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
-    let mut waiting: BTreeMap<PathBuf, Rows> = BTreeMap::new();
+    let mut waiting: BTreeMap<PathBuf, Handed> = BTreeMap::new();
     // How many sets of rows each project's queue has delivered, to hold against `Described::handed`.
     let mut seen: BTreeMap<PathBuf, u64> = BTreeMap::new();
     // Whether the last write left rows behind, which then wait for the next change or Save. It
@@ -1451,7 +1505,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
             }
         };
         match job {
-            Some(Job::Write(project, rows, generation, stale)) => {
+            Some(Job::Write(project, handed, generation, stale)) => {
                 *seen.entry(project.clone()).or_default() += 1;
                 if generation != generation_of(inner, &project) {
                     log::warn!("changes for {} made before its branch changed are dropped", project.display());
@@ -1461,7 +1515,7 @@ fn write_loop(inner: &Inner, rx: &Receiver<Job>) {
                     (state.pending, state.error) = (pending, Some(stale));
                     continue;
                 }
-                waiting.insert(project, rows);
+                waiting.insert(project, handed);
                 failed = false;
             }
             None => {
@@ -1577,7 +1631,7 @@ fn unwritten(inner: &Inner, project: &Path) -> String {
 
 /// Writes the waiting rows to their projects; those that fail stay waiting, and each project's
 /// state says how its own writing stands. Rows for a project that is no longer open are dropped.
-fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
+fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Handed>) {
     let targets: Vec<PathBuf> = waiting.keys().cloned().collect();
     for target in targets {
         let open = lock(&inner.open);
@@ -1588,7 +1642,21 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             lock(&inner.writing).remove(&target);
             continue;
         };
-        let Some(rows) = waiting.get(&target) else { continue };
+        let Some(handed) = waiting.get_mut(&target) else { continue };
+        // A model handed over frozen is built here, off the interface thread, once: a write that
+        // fails after keeps its rows. One that can't be built waits as a write that failed does.
+        if let Handed::Model(model) = handed {
+            let (tables, junctions) = archforge_notations::storage();
+            match model.rows(&tables, &junctions) {
+                Ok(rows) => *handed = Handed::Rows(rows),
+                Err(e) => {
+                    drop(open);
+                    failed_write(inner, &target, format!("the model could not be turned into rows: {e}"));
+                    continue;
+                }
+            }
+        }
+        let Handed::Rows(rows) = &*handed else { continue };
         #[cfg(test)]
         let refused = take_fault(inner, |f| matches!(f, Fault::WriteBack)).is_some();
         #[cfg(not(test))]
@@ -1599,23 +1667,26 @@ fn write_waiting(inner: &Inner, waiting: &mut BTreeMap<PathBuf, Rows>) {
             schema(inner).map_err(|e| format!("{e:?}")).and_then(|s| project.write_model(&s, rows).map_err(|e| e.to_string()))
         };
         drop(open);
-        let mut states = lock(&inner.writing);
         match result {
             Ok(()) => {
                 waiting.remove(&target);
-                states.remove(&target);
+                lock(&inner.writing).remove(&target);
             }
-            Err(e) => {
-                let state = states.entry(target.clone()).or_default();
-                // The same failure again is said once.
-                if state.error.as_deref() != Some(e.as_str()) {
-                    log::error!("the model of {} could not be written: {e}", target.display());
-                }
-                state.pending = true;
-                state.error = Some(e);
-            }
+            Err(e) => failed_write(inner, &target, e),
         }
     }
+}
+
+/// Records that `target`'s rows still wait, and why the write failed; the same failure again is
+/// logged once.
+fn failed_write(inner: &Inner, target: &Path, e: String) {
+    let mut states = lock(&inner.writing);
+    let state = states.entry(target.to_path_buf()).or_default();
+    if state.error.as_deref() != Some(e.as_str()) {
+        log::error!("the model of {} could not be written: {e}", target.display());
+    }
+    state.pending = true;
+    state.error = Some(e);
 }
 
 /// Moves `path` to `target`, on the writer, after everything [`checked_target`] does. Only then do
@@ -1627,7 +1698,7 @@ fn switch(
     path: &Path,
     target: SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Switched, SwitchError> {
     let moved = checked_target(inner, path, &target.clone(), asked, waiting, failed, |project, rows| {
@@ -1645,7 +1716,7 @@ fn check_switch(
     path: &Path,
     target: &SafeBranch,
     asked: (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<CheckedBranch, SwitchError> {
     checked_target(inner, path, target, asked, waiting, failed, |project, rows| {
@@ -1664,7 +1735,7 @@ fn checked_target<T>(
     path: &Path,
     target: &SafeBranch,
     (generation, instance): (u64, u64),
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
     then: impl FnOnce(&Project, Rows) -> Result<T, SwitchError>,
 ) -> Result<T, SwitchError> {
@@ -1731,7 +1802,7 @@ fn restore(
     request: RestoreRequest,
     (generation, instance): (u64, u64),
     watch: &Arc<JobWatch>,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<Restored, RestoreError> {
     if instance != instance_of(inner, path) {
@@ -1774,7 +1845,7 @@ fn restore(
         Ok(done) => Ok(done),
         Err(Stop::Unchanged(error)) => Err(error),
         Err(Stop::WriteBack { why, kept_work }) => {
-            waiting.insert(path.to_path_buf(), current);
+            waiting.insert(path.to_path_buf(), Handed::Rows(current));
             write_waiting(inner, waiting);
             *failed = !waiting.is_empty();
             Err(RestoreError::NotRestored { why, kept_work, written_back: !waiting.contains_key(path) })
@@ -1927,10 +1998,7 @@ fn stop_note(error: &RestoreError) -> String {
 fn job_answer(answer: Result<Restored, RestoreError>) -> Result<(), JobFailure> {
     let error = match answer {
         Ok(Restored::Version { .. }) => return Ok(()),
-        Ok(Restored::Same { kept_work: false }) => return Err(JobFailure::Failed(tr("This version is the same as your current work."))),
-        Ok(Restored::Same { kept_work: true }) => {
-            return Err(JobFailure::WorkSaved(tr("This version is the same as your current work. Your unsaved work was kept as a version.")));
-        }
+        Ok(Restored::Same { kept_work }) => return Err(JobFailure::Same { work_saved: kept_work }),
         Err(error) => error,
     };
     log::warn!("{}", stop_note(&error));
@@ -1984,6 +2052,11 @@ fn restored_message(saved_at: &str) -> String {
     format!("Restored the version of {saved_at}")
 }
 
+/// The message of the version unsaved work is kept as before a restore asked for at `before_at`.
+fn before_message(before_at: &str) -> String {
+    format!("Before restoring {before_at}")
+}
+
 /// How a restore's writing stopped, and what is left to do about it.
 enum Stop {
     /// The model did not change.
@@ -2005,7 +2078,7 @@ fn replace(
 ) -> Result<Restored, Stop> {
     use archforge_project::AfterFailure::{CannotTell, NoVersion, Version};
     let author = author_of(&request.by);
-    let kept_work = match save_step(inner, project, &format!("Before restoring {}", now()), &author) {
+    let kept_work = match save_step(inner, project, &before_message(&request.before_at), &author) {
         Ok(saved) => matches!(saved, archforge_project::Saved::Version { .. }),
         Err(f) => match f.version {
             Version(_) => true,
@@ -2150,7 +2223,7 @@ fn create_branch(
     start: Option<&str>,
     generation: u64,
     instance: u64,
-    waiting: &mut BTreeMap<PathBuf, Rows>,
+    waiting: &mut BTreeMap<PathBuf, Handed>,
     failed: &mut bool,
 ) -> Result<BranchCreated, CreateBranchError> {
     if instance != instance_of(inner, path) {
@@ -2234,6 +2307,29 @@ fn not_deleted(error: DeleteJobError) -> BranchNotDeleted {
         DeleteJobError::Delete(DeleteBranchError::CannotTell(why)) => BranchNotDeleted::Unclear(why),
         other => BranchNotDeleted::Failed(other.to_string()),
     }
+}
+
+/// Waits for the writer's answer `job` to a delete on what `spawn` starts, as only the writer can
+/// answer it, and gives it as the window takes it. A wait that can't start leaves the delete on the
+/// writer, where it may still run, and a writer that stops without answering may have deleted the
+/// branch already: in either case whether the branch went can't be told.
+fn deleted_answer(
+    job: Receiver<Result<Vec<Uuid>, DeleteJobError>>,
+    spawn: impl FnOnce(Box<dyn FnOnce() + Send>) -> std::io::Result<()>,
+) -> Receiver<Result<Vec<Uuid>, BranchNotDeleted>> {
+    let (tx, rx) = channel();
+    let reply = tx.clone();
+    let wait = move || {
+        let answer = match job.recv() {
+            Ok(answer) => answer.map_err(not_deleted),
+            Err(e) => Err(BranchNotDeleted::Unclear(format!("the writer stopped without answering: {e}"))),
+        };
+        let _ = reply.send(answer);
+    };
+    if let Err(e) = spawn(Box::new(wait)) {
+        let _ = tx.send(Err(BranchNotDeleted::Unclear(format!("no thread could wait for the answer: {e}"))));
+    }
+    rx
 }
 
 /// Waits on a thread of its own for the writer's answer `job`, as only the writer can answer it,
@@ -2400,6 +2496,7 @@ fn version_read_error(e: archforge_project::Error) -> VersionReadError {
     match e {
         archforge_project::Error::NotAVersion { .. } => VersionReadError::Unavailable,
         archforge_project::Error::VersionShape { .. } => VersionReadError::Shape,
+        archforge_project::Error::ModelTooLarge { .. } => VersionReadError::TooLarge,
         other => VersionReadError::Failed(other.to_string()),
     }
 }
@@ -2410,12 +2507,13 @@ fn branch_entries(reader: &VersionReader, max: usize) -> Result<(Vec<BranchEntry
     let found = reader.branches(max).map_err(|e| e.to_string())?;
     let entry = |b: archforge_project::ListedBranch| {
         let latest = match &b.usable {
-            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next().map(|v| v.date),
+            Ok(branch) => reader.versions_on(branch, None, 1).map_err(|e| e.to_string())?.versions.into_iter().next(),
             Err(_) => None,
         };
+        let (latest, latest_version) = latest.map_or((None, None), |v| (Some(v.date), Some(v.hash)));
         // Changes that can't be looked at may be the model's.
         let (shown, unsaved) = (b.usable.as_ref().map_or_else(|_| b.name.clone(), SafeBranch::shown), b.unsaved.unwrap_or(true));
-        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest })
+        Ok(BranchEntry { name: b.name, shown, current: b.current, unsaved, latest, latest_version })
     };
     Ok((found.listed.into_iter().map(entry).collect::<Result<_, String>>()?, found.cut))
 }
@@ -2429,6 +2527,7 @@ fn page_of(page: archforge_project::Versions) -> VersionsPage {
         by_agent: v.by_agent,
         date: v.date,
         previous: v.previous,
+        shared: v.shared,
     });
     VersionsPage { versions: versions.collect(), more: page.more }
 }
@@ -2571,6 +2670,7 @@ fn kind(e: archforge_project::Error) -> CreateError {
 #[cfg(unix)]
 mod tests {
     use super::*;
+    use crate::test_host::Sandbox;
 
     fn wait(rx: &Receiver<Result<Opened, CreateError>>) -> Result<Opened, CreateError> {
         rx.recv_timeout(Duration::from_secs(60)).expect("the host answers")
@@ -2628,12 +2728,116 @@ mod tests {
         host.close(path).recv_timeout(Duration::from_secs(60)).expect("the closing answers")
     }
 
+    /// The marker that makes this test binary act as an Archforge that is killed with a project
+    /// open, and the folder it works in.
+    const ORPHAN_OWNER: &str = "ARCHFORGE_TEST_ORPHAN_OWNER";
+
+    /// Run only by the test below, as a process of its own: opens a project, saves a model, writes
+    /// another without saving, says so with its server's id, and waits to be killed.
+    #[test]
+    #[ignore = "run by the orphan test as a separate process"]
+    fn orphan_owner() {
+        let Some(base) = std::env::var_os(ORPHAN_OWNER).map(PathBuf::from) else { return };
+        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let path = wait(&host.create(&base.join("p"), "Shop")).unwrap().path;
+        host.write(&path, model("shop"));
+        assert_eq!(saved(&host, &path), Ok(true));
+        host.write(&path, model("crm"));
+        assert_eq!(host.flush_for_test(&path), Ok(()));
+        println!("READY {}", lock(&host.inner.open)[0].server().pid());
+        std::thread::sleep(Duration::from_secs(120));
+    }
+
+    /// Kills a server a failing test left behind, so no run leaves an orphan.
+    struct KillOnDrop(u32);
+
+    impl Drop for KillOnDrop {
+        /// Kills the server unless it is gone.
+        fn drop(&mut self) {
+            if !gone(self.0) {
+                let _ = std::process::Command::new("/bin/kill").args(["-KILL", &self.0.to_string()]).status();
+            }
+        }
+    }
+
+    /// An Archforge killed with a project open leaves its server running; the next start stops it,
+    /// and the project opens with what was saved and written (AR-422).
+    #[test]
+    fn a_server_a_killed_archforge_left_running_is_stopped_at_the_next_start_and_its_project_opens_whole() {
+        use std::io::BufRead;
+        let sandbox = Sandbox::named("orphan", None);
+        let mut owner = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "projects::tests::orphan_owner", "--ignored", "--nocapture", "--test-threads=1"])
+            .env(ORPHAN_OWNER, &sandbox.base)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let stdout = owner.stdout.take().unwrap();
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            for line in std::io::BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Some((_, pid)) = line.split_once("READY ") {
+                    let _ = tx.send(pid.trim().parse::<u32>().unwrap_or(0));
+                }
+            }
+        });
+        let ready = rx.recv_timeout(Duration::from_secs(120));
+        // SIGKILL: no exit path of the owner runs.
+        owner.kill().unwrap();
+        owner.wait().unwrap();
+        let orphan = ready.expect("the owner opened its project");
+        let _guard = KillOnDrop(orphan);
+        assert!(!gone(orphan), "the server outlives the killed Archforge");
+        sandbox.host.stop_orphans().unwrap().join().unwrap();
+        // Stopped means a zombie at least, which its new parent reaps a moment later.
+        let started = Instant::now();
+        while !gone(orphan) && started.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(gone(orphan), "the next start stopped it");
+        let path = sandbox.base.canonicalize().unwrap().join("p/Shop.archforge");
+        let back = wait(&sandbox.host.open(&path)).unwrap();
+        assert_eq!(back.model.as_deref(), Some(&model("crm")), "what was written stays");
+        assert!(back.unsaved, "and stays unsaved over the saved version");
+    }
+
+    /// The run folder of the database server `pid`: the folder of the configuration it runs with.
+    fn run_folder(pid: u32) -> PathBuf {
+        let out = std::process::Command::new("/bin/ps").args(["-o", "command=", "-p", &pid.to_string()]).output().unwrap();
+        let command = String::from_utf8(out.stdout).unwrap();
+        let (_, config) = command.trim().split_once(" --config ").unwrap_or_else(|| panic!("a server's command: {command:?}"));
+        Path::new(config).parent().unwrap().to_path_buf()
+    }
+
+    /// A test that fails with a project open and written to, through the test host's guard, leaves
+    /// no database server running, and neither its own folder nor the server's run folder behind (AR-421).
+    #[test]
+    fn a_test_that_panics_with_a_project_open_leaves_no_server_and_no_folder() {
+        let seen = Mutex::new(None);
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let sandbox = Sandbox::named("guard", None);
+            let path = sandbox.project();
+            // A write starts the writer thread, which holds the host: dropping the host alone
+            // no longer stops its servers.
+            sandbox.host.write(&path, model("shop"));
+            assert_eq!(saved(&sandbox.host, &path), Ok(true));
+            let pid = lock(&sandbox.host.inner.open)[0].server().pid();
+            *lock(&seen) = Some((pid, sandbox.base.clone(), run_folder(pid)));
+            panic!("a test fails with its project open");
+        }));
+        assert!(failed.is_err(), "the test failed");
+        let (pid, base, run) = seen.into_inner().unwrap().expect("the project opened");
+        assert!(gone(pid), "the server {pid} still runs");
+        assert!(!base.exists(), "{} is left", base.display());
+        assert!(!run.exists(), "{} is left", run.display());
+    }
+
+    /// The host keeps several projects open; closing one stops only its server, and exit stops the rest.
     #[test]
     fn the_host_keeps_several_projects_open_closes_one_on_request_and_all_on_exit() {
-        let base = std::env::temp_dir().join(format!("af-host-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("host", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let opened = wait(&host.create(&folder, "Commerce platform")).unwrap();
         assert_eq!(opened.path, folder.canonicalize().unwrap().join("Commerce platform.archforge"));
@@ -2660,12 +2864,12 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save puts a project back to its last save (or to how it was created) and closes it;
+    /// closing without writing keeps what was written.
     #[test]
     fn dont_save_puts_a_project_back_to_its_last_save_and_closes_it() {
-        let base = std::env::temp_dir().join(format!("af-discard-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("discard", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let path = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         let shop = model("shop");
@@ -2711,13 +2915,13 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// Don't Save through the host puts the model back to its save but keeps the conversations
+    /// written on the writer.
     #[test]
     fn dont_save_through_the_host_keeps_the_conversations_written_on_the_writer() {
         use archforge_project::{NewChat, NewQuestion, NewTurn, Provider, TurnEnd, TurnOutcome};
-        let base = std::env::temp_dir().join(format!("af-chats-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("chats", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "Commerce platform")).unwrap().path;
         let shop = model("shop");
         host.write(&path, shop.clone());
@@ -2773,10 +2977,8 @@ mod tests {
         use archforge_ui_egui::chat_panel::Chip;
         use archforge_ui_egui::chat_store::{Anchor, AnchorRole, Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
         const CANARY: &str = "sk-ant-api03-canary-chat-store-0000-4F2a";
-        let base = std::env::temp_dir().join(format!("af-chat-store-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-store", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let keys = MemoryStore::new();
         keys.set(&SecretName::ANTHROPIC_API_KEY, &Secret::new(CANARY.to_string()).unwrap()).unwrap();
         let agents = std::sync::Arc::new(crate::agents::Agents::with(&base.join("settings"), Box::new(keys), archforge_agents::HostEnv::default()));
@@ -2893,10 +3095,8 @@ mod tests {
     fn the_hosts_chat_store_deletes_after_the_writes_before_it_and_brings_a_conversation_back_from_its_commit() {
         use archforge_ui_egui::ai_agents::Provider;
         use archforge_ui_egui::chat_store::{Answer, ChatStore, Outcome, Refusal, StoredBody, Write};
-        let base = std::env::temp_dir().join(format!("af-chat-delete-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = std::sync::Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
+        let sandbox = Sandbox::named("chat-delete", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let agents = std::sync::Arc::new(crate::agents::Agents::with(
             &base.join("settings"),
             Box::new(archforge_secrets::MemoryStore::new()),
@@ -3049,30 +3249,8 @@ mod tests {
         made(host.save(project, Some(text.to_string()), nobody()).recv_timeout(Duration::from_secs(60)).expect("the save answers"))
     }
 
-    /// A host in a folder of its own (`create_dir` refuses one that exists), checking descriptions
-    /// against `keys` when given. Dropped, even by a failing test, it stops what it started and
-    /// the folder goes.
-    struct Sandbox {
-        base: PathBuf,
-        host: Arc<Projects>,
-        agents: Option<Arc<crate::agents::Agents>>,
-    }
-
+    /// What these tests ask of the shared test host.
     impl Sandbox {
-        /// The host, with its folder created and `keys` wired in.
-        fn new(keys: Option<Box<dyn archforge_secrets::SecretStore>>) -> Sandbox {
-            let base = (0..1000)
-                .map(|n| std::env::temp_dir().join(format!("af-d{}-{n}", std::process::id())))
-                .find(|p| std::fs::create_dir(p).is_ok())
-                .expect("a folder of the test's own");
-            let host = Arc::new(Projects::new(&base.join("settings"), "Archforge test".into()));
-            let agents = keys.map(|k| Arc::new(crate::agents::Agents::with(&base.join("settings"), k, archforge_agents::HostEnv::default())));
-            if let Some(a) = &agents {
-                host.check_descriptions_with(a.clone());
-            }
-            Sandbox { base, host, agents }
-        }
-
         /// A project made in the sandbox.
         fn project(&self) -> PathBuf {
             wait(&self.host.create(&self.base.join("p"), "Shop")).unwrap().path
@@ -3081,23 +3259,6 @@ mod tests {
         /// The project's commit messages, newest first.
         fn messages(&self) -> Vec<String> {
             lock(&self.host.inner.open)[0].newest_commit_messages(50).unwrap()
-        }
-    }
-
-    impl Drop for Sandbox {
-        /// Stops the servers and threads, then removes the folder, retrying while a stopping server
-        /// still writes. It never panics, so it is safe while a failed test unwinds.
-        fn drop(&mut self) {
-            self.host.shutdown();
-            if let Some(a) = &self.agents {
-                a.shutdown();
-            }
-            for _ in 0..50 {
-                if std::fs::remove_dir_all(&self.base).is_ok() || !self.base.exists() {
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
         }
     }
 
@@ -3275,9 +3436,10 @@ mod tests {
     /// Only what cannot pass counts as lasting: damage may be a connection lost while listing.
     #[test]
     fn a_read_failure_is_typed_by_whether_asking_again_can_help() {
-        use archforge_project::Error::{Damaged, NotAVersion, VersionShape};
+        use archforge_project::Error::{Damaged, ModelTooLarge, NotAVersion, VersionShape};
         assert_eq!(version_read_error(NotAVersion { commit: "c".into() }), VersionReadError::Unavailable);
         assert_eq!(version_read_error(VersionShape { commit: "c".into(), why: "newer".into() }), VersionReadError::Shape);
+        assert_eq!(version_read_error(ModelTooLarge { why: "more".into() }), VersionReadError::TooLarge);
         let damage = version_read_error(Damaged { path: "/p".into(), why: "the tables cannot be listed".into() });
         assert!(matches!(&damage, VersionReadError::Failed(why) if why.contains("cannot be listed")), "{damage:?}");
     }
@@ -3563,6 +3725,9 @@ mod tests {
     /// The time the versions restored in these tests were saved at.
     const SAVED_AT: &str = "2026-11-08T14:02:11Z";
 
+    /// When the restores in these tests were asked for, as the list says it.
+    const BEFORE_AT: &str = "8 Nov 15:42";
+
     /// Restores `commit` and gives the answer.
     fn restore_of(host: &Projects, path: &Path, commit: &str) -> Result<Restored, RestoreError> {
         host.restore_version(path, restoring(commit)).recv_timeout(Duration::from_secs(60)).expect("the restore answers")
@@ -3570,7 +3735,8 @@ mod tests {
 
     /// A restore of `commit`, repaired as an opening repairs a model.
     fn restoring(commit: &str) -> RestoreRequest {
-        RestoreRequest { commit: commit.into(), saved_at: SAVED_AT.into(), by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
+        let (saved_at, before_at) = (SAVED_AT.into(), BEFORE_AT.into());
+        RestoreRequest { commit: commit.into(), saved_at, before_at, by: nobody(), repair: archforge_ui_egui::editing::fit_tables }
     }
 
     /// The commit of the `n`th newest version of the open project.
@@ -3601,7 +3767,7 @@ mod tests {
         assert_eq!(restore_of(host, &path, &old).unwrap(), Restored::Version { kept_work: true });
         let messages = sandbox.messages();
         assert_eq!(messages[0], format!("Restored the version of {SAVED_AT}"));
-        assert!(messages[1].starts_with("Before restoring 20"), "{messages:?}");
+        assert_eq!(messages[1], format!("Before restoring {BEFORE_AT}"), "named by the date the list shows");
         assert_eq!(work(host), model("a"));
         assert!(!unsaved(host));
         let before = version(host, 1);
@@ -3941,8 +4107,8 @@ mod tests {
     fn a_restores_answer_becomes_the_jobs() {
         let not_restored = |kept_work, written_back| RestoreError::NotRestored { why: "x".into(), kept_work, written_back };
         assert!(matches!(job_answer(Ok(Restored::Version { kept_work: true })), Ok(())));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Failed(_))));
-        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::WorkSaved(_))));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: false })), Err(JobFailure::Same { work_saved: false })));
+        assert!(matches!(job_answer(Ok(Restored::Same { kept_work: true })), Err(JobFailure::Same { work_saved: true })));
         assert!(matches!(job_answer(Err(RestoreError::CannotTell { why: "x".into(), kept_work: true })), Err(JobFailure::Unclear)));
         assert!(matches!(job_answer(Err(not_restored(true, true))), Err(JobFailure::WorkSaved(_))));
         assert!(matches!(job_answer(Err(not_restored(false, true))), Err(JobFailure::Failed(_))));
@@ -3994,17 +4160,13 @@ mod tests {
         use archforge_ui_egui::i18n::set_language;
         let (sandbox, path) = branched();
         let host = &sandbox.host;
-        let same = version(host, 0);
-        let english = |_: ()| job_answer(Ok(Restored::Same { kept_work: false }));
-        let word = |answer: Result<(), JobFailure>| match answer {
-            Err(JobFailure::Failed(text)) => text,
-            _ => panic!("a failure"),
-        };
+        let stale = job_of(host, &path, &version(host, 1));
+        switched(&host.inner, &path);
         set_language("en");
-        let in_english = word(english(()));
+        let in_english = not_going_ahead();
         set_language("de");
-        let in_german = word(english(()));
-        let told = word(ran(&(job_of(host, &path, &same).run)()));
+        let in_german = not_going_ahead();
+        let Err(JobFailure::Failed(told)) = ran(&(stale.run)()) else { panic!("a failure") };
         set_language("en");
         assert_ne!(in_german, in_english, "the sentence is translated");
         assert_eq!(told, in_german);
@@ -4022,7 +4184,14 @@ mod tests {
         switched(&host.inner, &path);
         assert!(matches!(ran(&(stale.run)()), Err(JobFailure::Failed(why)) if why == not_going_ahead()));
         assert_eq!(sandbox.messages(), messages);
-        let fresh = ProjectHost::restore_job(&**host, &path, old.clone(), SAVED_AT.into(), nobody(), archforge_ui_egui::editing::fit_tables);
+        let fresh = ProjectHost::restore_job(
+            &**host,
+            &path,
+            old.clone(),
+            (SAVED_AT.into(), BEFORE_AT.into()),
+            nobody(),
+            archforge_ui_egui::editing::fit_tables,
+        );
         assert!(matches!(ran(&(fresh.run)()), Ok(())), "a job asked for now runs");
         assert_eq!(work(host), model("a"));
         assert_eq!(close(host, &path), Ok(()));
@@ -4526,7 +4695,9 @@ mod tests {
     /// A move that started and whose wait ended, as it does at the limit or an exit, cannot be told:
     /// its answer is unclear, the read-back says it cannot tell until the writer has finished, and
     /// then finds where it went. The wait is ended by the exit flag once the writer holds the move,
-    /// as a short limit could pass before the writer reached it.
+    /// as a short limit could pass before the writer reached it. The move is held until the test
+    /// lets it go, and the probe of the writer is queued while it is held, so that neither depends
+    /// on how fast a loaded machine runs either thread.
     #[test]
     fn a_move_past_its_wait_is_read_back_only_once_the_writer_has_finished() {
         let (sandbox, path) = branched();
@@ -4536,7 +4707,8 @@ mod tests {
         let (go_on, hold) = channel::<()>();
         *lock(&host.inner.before_move) = Some(Box::new(move || {
             let _ = running.send(());
-            let _ = hold.recv_timeout(Duration::from_secs(30));
+            // Until the test lets go, or drops `go_on` as it fails.
+            let _ = hold.recv();
         }));
         let ReplacementJob { run, read_back } = moving.into_job();
         let answer = run();
@@ -4546,13 +4718,17 @@ mod tests {
         host.inner.cancel.store(false, Ordering::SeqCst);
         assert!(matches!(answer, Err(JobFailure::Unclear)), "unclear");
         let watch = lock(&host.inner.switches).get(&path).and_then(std::sync::Weak::upgrade).expect("still under way");
-        let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60)).unwrap();
-        assert!(told.is_err(), "not while the writer still runs it: {told:?}");
+        let told = host.read_back_switch(&path, branch("elsewhere"), watch).recv_timeout(Duration::from_secs(60));
+        assert!(matches!(told, Ok(Err(_))), "an answer, and not while the writer still runs it: {told:?}");
+        // Asked for while the move is held, the probe carries the generation from before it, and
+        // is refused by the generation the move changed: the writer has got past the move.
+        let probe = host.on_writer(&path, |_| Ok(()));
         drop(go_on);
-        // Refused by the generation the move changed, which is the writer having got past it.
-        host.on_writer(&path, |_| Ok(())).recv_timeout(Duration::from_secs(60)).expect("the writer finished the move").unwrap_err();
+        let probe = probe.recv_timeout(Duration::from_secs(60)).expect("the writer finished the move");
+        assert!(probe.is_err(), "the probe queued behind the move ran on the generation it was asked with: {probe:?}");
         assert_eq!(on(host), "elsewhere");
-        assert_eq!(read_back().recv_timeout(Duration::from_secs(60)).unwrap(), Ok(true));
+        let told = read_back().recv_timeout(Duration::from_secs(60)).expect("the read-back answers");
+        assert_eq!(told, Ok(true), "the read-back finds the move");
     }
 
     /// A finished move that stayed reads back as not moved; and the branch is read after the job is
@@ -4958,8 +5134,9 @@ mod tests {
 
     /// The window's side: a typed name is stored as the project stores it or refused in the
     /// dialog's words, translated; a creation from current work and a rename answer as the window
-    /// takes them, a name taken in another case, a record that remains, a project not open and a
-    /// name outside the safe set each by its own kind; the counts are the branch's.
+    /// takes them, as does one at a version, which leaves current work behind; a name taken in
+    /// another case, a record that remains, a project not open and a name outside the safe set each
+    /// by its own kind; the counts are the branch's.
     #[test]
     fn the_window_names_makes_renames_and_counts_branches() {
         let (sandbox, path) = branched();
@@ -4980,12 +5157,23 @@ mod tests {
         let counts = BranchCounts { versions_only_here: 1, conversations: 0, unsaved: false };
         let read = |name: &str| host.branch_counts(&path, name).recv_timeout(Duration::from_secs(60)).expect("it answers");
         assert_eq!((read("main"), read("odd+name").is_err()), (Ok(counts), true));
-        assert_eq!(answer(host.create_branch(&path, &typed)), Ok(()));
+        assert_eq!(answer(host.create_branch(&path, &typed, None)), Ok(()));
         assert!(has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
-        assert_eq!(answer(host.create_branch(&path, "ELSEWHERE")), Err(BranchRefused::Taken));
-        assert_eq!(answer(host.create_branch(&sandbox.base.join("nowhere"), "lost")), Err(BranchRefused::Moved));
+        // At a version, the branch starts there and leaves the unsaved work behind.
+        let schema = schema(&sandbox.host.inner).unwrap();
+        let (start, saved) = {
+            let open = lock(&sandbox.host.inner.open);
+            (open[0].head_of("main").unwrap(), open[0].read_model(&schema).unwrap())
+        };
+        host.write(&path, model("work"));
+        assert_eq!(sandbox.host.flush_for_test(&path), Ok(()));
+        assert_eq!(answer(host.create_branch(&path, "at-version", Some(&start))), Ok(()));
+        let at = lock(&sandbox.host.inner.open)[0].check_branch(&branch("at-version"), &schema).unwrap();
+        assert!(at == saved && at != model("work"), "it holds the version, and current work stayed behind");
+        assert_eq!(answer(host.create_branch(&path, "ELSEWHERE", None)), Err(BranchRefused::Taken));
+        assert_eq!(answer(host.create_branch(&sandbox.base.join("nowhere"), "lost", None)), Err(BranchRefused::Moved));
         let unsafe_name = BranchRefused::Failed(SafeBranch::found("odd+name").unwrap_err().to_string());
-        assert_eq!(answer(host.create_branch(&path, "odd+name")), Err(unsafe_name.clone()));
+        assert_eq!(answer(host.create_branch(&path, "odd+name", None)), Err(unsafe_name.clone()));
         assert_eq!(answer(host.rename_branch(&path, &typed, "renamed")), Ok(()));
         assert!(has_branch(&lock(&sandbox.host.inner.open)[0], "renamed") && !has_branch(&lock(&sandbox.host.inner.open)[0], &typed));
         assert_eq!(answer(host.rename_branch(&path, "renamed", "MAIN")), Err(BranchRefused::Taken));
@@ -4993,9 +5181,8 @@ mod tests {
         assert_eq!(answer(host.rename_branch(&path, "renamed", "odd+name")), Err(unsafe_name));
         let main = BranchRefused::Failed(RenameJobError::Rename(RenameBranchError::Main).to_string());
         assert_eq!(answer(host.rename_branch(&path, "main", "other")), Err(main));
-        let start = lock(&sandbox.host.inner.open)[0].head_of("main").unwrap();
         stopped_creation(&path, "held", "main", &start);
-        assert_eq!(answer(host.create_branch(&path, "another")), Err(BranchRefused::NotCleanedUp));
+        assert_eq!(answer(host.create_branch(&path, "another", None)), Err(BranchRefused::NotCleanedUp));
         assert_eq!(answer(host.rename_branch(&path, "renamed", "held")), Err(BranchRefused::NotCleanedUp));
         // A branch whose record stays is made; a writer that stopped without answering, or a rename
         // whose reply was lost, may have done it.
@@ -5234,11 +5421,13 @@ mod tests {
         let reader = lock(&host.inner.readers).get(&path).unwrap().reader.clone();
         let (two, two_cut) = branch_entries(&reader, 2).unwrap();
         assert!(!cut && two.len() == 2 && two_cut, "only a list cut short says so");
-        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions[0].date.clone();
+        let main_latest = host.versions(&path, None, 1).recv_timeout(Duration::from_secs(30)).unwrap().unwrap().versions.remove(0);
         let seen: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.current, b.latest.as_deref())).collect();
-        let main = ("main", true, Some(main_latest.as_str()));
+        let main = ("main", true, Some(main_latest.date.as_str()));
         assert!(seen.contains(&("elsewhere", false, Some("2030-01-02T03:04:05Z"))) && seen.contains(&main), "{seen:?}");
         assert!(seen.contains(&("odd+name", false, None)), "{seen:?}");
+        let hashes: Vec<_> = listed.iter().map(|b| (b.name.as_str(), b.latest_version.as_deref())).collect();
+        assert!(hashes.contains(&("main", Some(main_latest.hash.as_str()))) && hashes.contains(&("odd+name", None)), "{hashes:?}");
     }
 
     /// A chat seeded on `name`, a branch of its own, with the project back on `main`.
@@ -5507,6 +5696,27 @@ mod tests {
             assert_eq!(answer(host.delete_branch(&path, branch("scripted"))), Ok(Vec::new()));
             assert_eq!(answer(host.delete_branch(&path, branch("main"))), Err(DeleteJobError::Delete(DeleteBranchError::Main)));
         }
+    }
+
+    /// A delete whose wait can't start may still run on the writer, so it is unclear, even when
+    /// the writer has answered already; so is one whose writer stops without answering. A wait
+    /// that starts gives the writer's answer as it is.
+    #[test]
+    fn a_delete_nobody_sees_answered_is_unclear() {
+        let spawn = |wait: Box<dyn FnOnce() + Send>| std::thread::Builder::new().spawn(wait).map(drop);
+        let answered = |reply: Option<Result<Vec<Uuid>, DeleteJobError>>, waits: bool| {
+            let (tx, job) = channel();
+            if let Some(reply) = reply {
+                let _ = tx.send(reply);
+            }
+            drop(tx);
+            let asked = if waits { deleted_answer(job, spawn) } else { deleted_answer(job, |_| Err(std::io::Error::other("no threads left"))) };
+            asked.recv_timeout(Duration::from_secs(60)).expect("it answers")
+        };
+        assert!(matches!(answered(Some(Ok(Vec::new())), false), Err(BranchNotDeleted::Unclear(_))), "no wait");
+        assert!(matches!(answered(None, true), Err(BranchNotDeleted::Unclear(_))), "the writer stopped");
+        assert_eq!(answered(Some(Ok(Vec::new())), true), Ok(Vec::new()), "answered");
+        assert_eq!(answered(Some(Err(DeleteJobError::NotOpen)), true), Err(BranchNotDeleted::Moved), "refused");
     }
 
     /// The window is told of conversations only for a branch seen gone: not for a job's refusal,
@@ -6075,13 +6285,13 @@ mod tests {
         assert!(host.inner.keys.get().is_some(), "a description would be refused in the application");
     }
 
+    /// A project whose class skill has the name of a project skill saves, and its model opens again
+    /// with both skills.
     #[test]
     fn a_project_whose_class_skill_overrides_a_project_skill_saves_and_opens_again() {
         // The project saved, but its model would not open again.
-        let base = std::env::temp_dir().join(format!("af-skills-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("skills", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let path = wait(&host.create(&base.join("Documents/Archforge"), "MVPFlowReview")).unwrap().path;
         let mut n = 0u64;
         let ids = move || {
@@ -6122,12 +6332,45 @@ mod tests {
         remove_settled(&base);
     }
 
+    /// A model that no table can hold: an unlimited natural past what a cell stores.
+    fn unbuildable() -> archforge_mof::Frozen {
+        let mut st = archforge_notations::store(counted_ids()).unwrap();
+        let u = st.universe().clone();
+        let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
+        let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
+        let o = st.create(class).unwrap();
+        st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
+        st.freeze()
+    }
+
+    /// A model handed over frozen is built into rows by the writer and written as rows are; one
+    /// that cannot be turned into rows fails that write, which says why, and nothing is saved.
+    #[test]
+    fn the_writer_builds_and_writes_a_frozen_model() {
+        let sandbox = Sandbox::new(None);
+        let (host, path) = (&sandbox.host, sandbox.project());
+        let mut s = archforge_notations::new_project_session("Commerce platform", counted_ids()).unwrap();
+        s.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(true));
+        let (tables, junctions) = archforge_notations::storage();
+        assert_eq!(work(host), archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), "the rows of the model handed over");
+        host.write_model(&path, unbuildable());
+        let answer = saved(host, &path);
+        let why = host.writing(&path).error.unwrap_or_default();
+        assert!(matches!(&answer, Err(SaveError::Failed(e)) if *e == why), "a model that could not be written is not saved: {answer:?}");
+        assert!(why.contains("too large to store") && host.writing(&path).pending, "it waits, and the status bar says why: {why}");
+        host.write_model(&path, s.doc().freeze());
+        assert_eq!(saved(host, &path), Ok(false), "the same model again leaves nothing to commit");
+        assert_eq!(host.writing(&path), Writing::default(), "and clears the failure");
+    }
+
+    /// The host writes, saves and reopens models per project, keeps a project whose rows cannot be
+    /// written open, and drops rows for a closed project.
     #[test]
     fn the_host_writes_saves_and_reopens_models_and_drops_rows_for_a_closed_project() {
-        let base = std::env::temp_dir().join(format!("af-save-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        let host = Projects::new(&base.join("settings"), "Archforge test".into());
+        let sandbox = Sandbox::named("save", None);
+        let (base, host) = (sandbox.base.clone(), sandbox.host.clone());
         let folder = base.join("Documents/Archforge");
         let first = wait(&host.create(&folder, "Commerce platform")).unwrap().path;
         // Rows written and saved come back on opening, with nothing unsaved.

@@ -45,7 +45,7 @@
 //! association class in UML and another association class would bind its ends to these.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -297,7 +297,7 @@ fn check_name(name: &str) -> Result<(), CommandError> {
         return Ok(());
     }
     match archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        Some(p) => Err(refuse("name", format!("the name {p}"))),
+        Some(p) => Err(refuse("name", format!("the name {p}")).because(p.reason)),
         None => Ok(()),
     }
 }
@@ -337,14 +337,21 @@ pub fn association_end_problem(store: &Store, c: Obj) -> Option<String> {
     Some(format!("{id} is {is} and joins no association; an association joins classes and interfaces"))
 }
 
+/// The refusal of an association's `end` at `c`, under the parameter `key`, when there is one
+/// ([`association_end_problem`]), its reason typed.
+pub(crate) fn association_end_refusal(store: &Store, key: &str, end: End, c: Obj) -> Option<CommandError> {
+    let why = association_end_problem(store, c)?;
+    Some(refuse(key, why).because(Reason::WrongEnd { relationship: "association", end, kind: what(store, c) }))
+}
+
 /// `uml.association.add`: an association of the kind asked for between two classifiers, owning
 /// both ends; never to or from an enumeration, a data type or a primitive type.
 fn association_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
     let to = classifier_of(ctx.doc, p, "to")?;
-    for (key, c) in [("from", from), ("to", to)] {
-        if let Some(why) = association_end_problem(ctx.doc, c) {
-            return Err(refuse(key, why));
+    for (key, end, c) in [("from", End::Source, from), ("to", End::Target, to)] {
+        if let Some(refused) = association_end_refusal(ctx.doc, key, end, c) {
+            return Err(refused);
         }
     }
     let kind = match text(p, "kind") {
@@ -397,15 +404,29 @@ pub fn association_class_end_problem(store: &Store, c: Obj, ac: Option<Obj>) -> 
     }
 }
 
+/// The refusal of association class `ac`'s `end` at `c`, under the parameter `key`, when there is
+/// one ([`association_class_end_problem`]), its reason typed: the association class itself, or
+/// what is no class.
+fn association_class_end_refusal(store: &Store, key: &str, end: End, c: Obj, ac: Option<Obj>) -> Option<CommandError> {
+    let why = association_class_end_problem(store, c, ac)?;
+    let kind = what(store, c);
+    let reason = if Some(c) == ac {
+        Reason::Itself { relationship: "association class", kind }
+    } else {
+        Reason::WrongEnd { relationship: "association class", end, kind }
+    };
+    Some(refuse(key, why).because(reason))
+}
+
 /// `uml.association-class.add`: one association class between two classes, in the first class's
 /// package, owning both its ends as an association does: no roles, no multiplicities, navigable to
 /// neither end. Its name, when it has one, is free among the package's classifiers.
 fn association_class_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (from, pkg) = class_in_package(ctx.doc, p, "from")?;
     let to = classifier_of(ctx.doc, p, "to")?;
-    for (key, c) in [("from", from), ("to", to)] {
-        if let Some(why) = association_class_end_problem(ctx.doc, c, None) {
-            return Err(refuse(key, why));
+    for (key, end, c) in [("from", End::Source, from), ("to", End::Target, to)] {
+        if let Some(refused) = association_class_end_refusal(ctx.doc, key, end, c, None) {
+            return Err(refused);
         }
     }
     let name = text(p, "name");
@@ -533,6 +554,34 @@ impl GeneralizationProblem {
             }
         }
     }
+
+    /// The problem as a typed reason, for an interface to say in the user's language: the kinds
+    /// whose rule is broken, or the final classifier's name.
+    pub fn reason(self, store: &Store, specific: Obj, general: Obj) -> Reason {
+        let (s, g) = (what(store, specific), what(store, general));
+        match self {
+            GeneralizationProblem::NotAnInterface
+            | GeneralizationProblem::NotAnEnumeration
+            | GeneralizationProblem::NotADataType
+            | GeneralizationProblem::NotAPrimitiveType => Reason::SpecializesOnlyItsKind { kind: s },
+            GeneralizationProblem::NoEnumeration | GeneralizationProblem::NoDataType | GeneralizationProblem::NoPrimitiveType => {
+                Reason::OnlyItsKindSpecializes { kind: g }
+            }
+            GeneralizationProblem::ClassOfInterface => Reason::CannotSpecialize { kind: s, general: g },
+            GeneralizationProblem::BuiltIn => Reason::SpecializesNothing { kind: "built-in type" },
+            GeneralizationProblem::AssociationClass => Reason::NothingSpecializes { kind: g },
+            GeneralizationProblem::Itself => Reason::Itself { relationship: "generalization", kind: s },
+            GeneralizationProblem::Final => Reason::Final { name: name_of(store, general) },
+            GeneralizationProblem::Again => Reason::Again { relationship: "generalization" },
+            GeneralizationProblem::Cycle => Reason::Cycle { relationship: "generalization" },
+        }
+    }
+
+    /// The refusal of `specific` specializing `general`, under the parameter `key`: the English
+    /// sentence with the reason typed.
+    pub fn refusal(self, store: &Store, key: &str, specific: Obj, general: Obj) -> CommandError {
+        refuse(key, self.why(store, specific, general)).because(self.reason(store, specific, general))
+    }
 }
 
 /// Why `specific` may not specialize `general`, when it may not: an interface specializes only an
@@ -596,7 +645,7 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let specific = classifier_of(ctx.doc, p, "specific")?;
     let general = classifier_of(ctx.doc, p, "general")?;
     if let Some(problem) = generalization_problem(ctx.doc, specific, general, None) {
-        return Err(refuse(problem.key(), problem.why(ctx.doc, specific, general)));
+        return Err(problem.refusal(ctx.doc, problem.key(), specific, general));
     }
     let g = ctx.doc.create(GENERALIZATION).map_err(fail)?;
     ctx.doc.set(g, generalization::GENERAL, Value::Ref(general)).map_err(fail)?;
@@ -610,7 +659,8 @@ fn dependency_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (client, pkg) = class_in_package(ctx.doc, p, "client")?;
     let supplier = classifier_of(ctx.doc, p, "supplier")?;
     if client == supplier {
-        return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))));
+        let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, client) };
+        return Err(refuse("supplier", format!("{} cannot depend on itself", a_what(ctx.doc, client))).because(why));
     }
     let name = text(p, "name");
     check_name(name)?;
@@ -661,6 +711,18 @@ impl RealizationProblem {
         let offending = if self == RealizationProblem::NotAClass { implementing } else { contract };
         format!("{} is {}; {}", uuid_of(store, offending).unwrap_or_default(), a_what(store, offending), self.why())
     }
+
+    /// The refusal of `implementing` realizing `contract`, under the parameter `key`: the English
+    /// sentence with the reason typed, the end that breaks the rule and its kind, or the
+    /// realization made already.
+    pub fn refusal(self, store: &Store, key: &str, implementing: Obj, contract: Obj) -> CommandError {
+        let reason = match self {
+            RealizationProblem::NotAClass => Reason::WrongEnd { relationship: "realization", end: End::Source, kind: what(store, implementing) },
+            RealizationProblem::NotAnInterface => Reason::WrongEnd { relationship: "realization", end: End::Target, kind: what(store, contract) },
+            RealizationProblem::Again => Reason::Again { relationship: "realization" },
+        };
+        refuse(key, self.said(store, implementing, contract)).because(reason)
+    }
 }
 
 /// Why `implementing` may not realize `contract`, when it may not: only a class implements (an
@@ -705,7 +767,7 @@ fn realization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let implementing = classifier_of(ctx.doc, p, "class")?;
     let contract = classifier_of(ctx.doc, p, "interface")?;
     if let Some(problem) = realization_problem(ctx.doc, implementing, contract, None) {
-        return Err(refuse(problem.key(), problem.said(ctx.doc, implementing, contract)));
+        return Err(problem.refusal(ctx.doc, problem.key(), implementing, contract));
     }
     let r = ctx.doc.create(INTERFACE_REALIZATION).map_err(fail)?;
     ctx.doc.set(r, interface_realization::CONTRACT, Value::Ref(contract)).map_err(fail)?;
@@ -782,13 +844,16 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     let kept_role = name_of(ctx.doc, end);
     let role = p.str("role").unwrap_or(&kept_role);
     if let Some(problem) = (!role.is_empty()).then(|| archforge_core::skills::name_problem(role, crate::commands::MAX_NAME)).flatten() {
-        return Err(refuse("role", format!("the role {problem}")));
+        return Err(refuse("role", format!("the role {problem}")).because(problem.reason));
     }
-    if !role.is_empty() && name_of(ctx.doc, other).to_lowercase() == role.to_lowercase() {
-        return Err(refuse("role", format!("the other end's role is {role} already")));
+    let other_role = name_of(ctx.doc, other);
+    if !role.is_empty() && other_role.to_lowercase() == role.to_lowercase() {
+        let message = format!("the other end's role is {other_role} already");
+        return Err(refuse("role", message).because(Reason::NameTaken { kind: "association end", name: other_role }));
     }
     // An association class's ends' roles and its attributes share its names.
     if let Some(attribute) = crate::members::attribute_clash(ctx.doc, a, role) {
+        let taken = Reason::NameTaken { kind: "attribute", name: name_of(ctx.doc, attribute) };
         return Err(refuse(
             "role",
             format!(
@@ -797,7 +862,8 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
                 uuid_of(ctx.doc, attribute)?,
                 name_of(ctx.doc, attribute)
             ),
-        ));
+        )
+        .because(taken));
     }
     let kind = match p.str("aggregation") {
         None => aggregation(ctx.doc, end),
@@ -807,7 +873,7 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
             .ok_or_else(|| refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))))?,
     };
     if kind != 0 && aggregation(ctx.doc, other) != 0 {
-        return Err(refuse("aggregation", "the other end aggregates already: only the part's end can"));
+        return Err(refuse("aggregation", "the other end aggregates already: only the part's end can").because(Reason::OtherEndAggregates));
     }
     // Left out, the multiplicity is the stored one as it is, never read again.
     let bounds = match p.str("multiplicity") {
@@ -816,17 +882,18 @@ fn association_set_end(ctx: &mut C<'_>, p: &Params) -> R {
     };
     // A part belongs to at most one whole: the whole's end allows one at most.
     if kind == 2 && upper(ctx.doc, other).is_none_or(|u| u > 1) {
-        return Err(refuse("aggregation", "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first"));
+        let why = "a composition's whole end allows one at most; set the other end's multiplicity to 1 or 0..1 first";
+        return Err(refuse("aggregation", why).because(Reason::WholeAllowsMany));
     }
     if aggregation(ctx.doc, other) == 2 && bounds.is_some_and(|(_, u)| u.is_none_or(|u| u > 1)) {
-        return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most"));
+        return Err(refuse("multiplicity", "this end is a composition's whole, which allows one at most").because(Reason::WholeAllowsOne));
     }
     // The whole's end, where the diamond sits, is never navigable (owner decision); left out, an
     // end keeps whether it is.
     let whole = aggregation(ctx.doc, other) != 0;
     let navigable = p.bool("navigable").unwrap_or(!whole && crate::figures::navigable(ctx.doc, a, end));
     if whole && navigable {
-        return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable"));
+        return Err(refuse("navigable", "the whole's end of an aggregation or composition is not navigable").because(Reason::WholeNavigable));
     }
     // Its modifiers, checked against the end as it will be: its role, bounds and aggregation.
     let (lower, upper) = bounds.unwrap_or((1, Some(1)));
@@ -870,14 +937,15 @@ fn nary_set_end(ctx: &mut C<'_>, p: &Params, a: Obj) -> R {
     let end = end.ok_or_else(|| refuse("end", format!("the end is one of 0 to {last}")))?;
     let kept_role = name_of(ctx.doc, end);
     let role = p.str("role").unwrap_or(&kept_role).to_string();
-    if let Some(why) = crate::nary::role_problem(ctx.doc, a, &role, Some(end)) {
-        return Err(refuse("role", why));
+    if let Some(refused) = crate::nary::role_problem(ctx.doc, a, &role, Some(end)) {
+        return Err(refused);
     }
     if let Some(k) = p.str("aggregation").filter(|k| *k != "none") {
         if !AGGREGATIONS.contains(&k) {
             return Err(refuse("aggregation", format!("{k:?} is not one of {}", AGGREGATIONS.join(", "))));
         }
-        return Err(refuse("aggregation", "an n-ary association's ends are not aggregations: only a binary association has a whole and a part"));
+        let why = "an n-ary association's ends are not aggregations: only a binary association has a whole and a part";
+        return Err(refuse("aggregation", why).because(Reason::NaryAggregates));
     }
     let bounds = match p.str("multiplicity") {
         Some(typed) => crate::members::parse_multiplicity(typed).map_err(|why| refuse("multiplicity", format!("the multiplicity {why}")))?,
@@ -974,9 +1042,14 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
     let class = ctx.doc.class_of(r).map_err(fail)?;
     let mut dropped: Vec<Json> = Vec::new();
     if crate::is_association(class) {
-        let why = if class == ASSOCIATION_CLASS { association_class_end_problem(ctx.doc, c, Some(r)) } else { association_end_problem(ctx.doc, c) };
-        if let Some(why) = why {
-            return Err(refuse("class", why));
+        let end = if source { End::Source } else { End::Target };
+        let refused = if class == ASSOCIATION_CLASS {
+            association_class_end_refusal(ctx.doc, "class", end, c, Some(r))
+        } else {
+            association_end_refusal(ctx.doc, "class", end, c)
+        };
+        if let Some(refused) = refused {
+            return Err(refused);
         }
         let ends = ends_of(ctx.doc, r, key)?;
         let end = ends[if source { 0 } else { 1 }];
@@ -1000,7 +1073,7 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
             return Err(refuse(key, why));
         }
         if let Some(problem) = generalization_problem(ctx.doc, s, g, Some(r)) {
-            return Err(refuse("class", problem.why(ctx.doc, s, g)));
+            return Err(problem.refusal(ctx.doc, "class", s, g));
         }
         if source && s != specific {
             ctx.doc.remove_value(specific, classifier::GENERALIZATION, &Value::Ref(r)).map_err(fail)?;
@@ -1015,12 +1088,14 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         // realization's fault, not the classifier the moved end was dropped on.
         match realization_problem(ctx.doc, i, c, Some(r)) {
             Some(RealizationProblem::NotAClass) if !source => {
-                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")));
+                let reason = Reason::WrongEnd { relationship: "realization", end: End::Source, kind: what(ctx.doc, implementing) };
+                return Err(refuse(key, wrong_end(ctx.doc, "implementing", implementing, "a Class")).because(reason));
             }
             Some(RealizationProblem::NotAnInterface) if source => {
-                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")));
+                let reason = Reason::WrongEnd { relationship: "realization", end: End::Target, kind: what(ctx.doc, contract) };
+                return Err(refuse(key, wrong_end(ctx.doc, "contract", contract, "an Interface")).because(reason));
             }
-            Some(problem) => return Err(refuse("class", problem.said(ctx.doc, i, c))),
+            Some(problem) => return Err(problem.refusal(ctx.doc, "class", i, c)),
             None => {}
         }
         if i != implementing {
@@ -1039,7 +1114,8 @@ fn relationship_reconnect(ctx: &mut C<'_>, p: &Params) -> R {
         let (client, supplier) = crate::figures::ends(ctx.doc, r).ok_or_else(|| refuse(key, "the dependency joins no two classifiers"))?;
         let (cl, su) = if source { (c, supplier) } else { (client, c) };
         if cl == su {
-            return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))));
+            let why = Reason::DependsOnItself { kind: crate::commands::what(ctx.doc, cl) };
+            return Err(refuse("class", format!("{} cannot depend on itself", a_what(ctx.doc, cl))).because(why));
         }
         let (prop, old) = if source { (dependency::CLIENT, client) } else { (dependency::SUPPLIER, supplier) };
         ctx.doc.remove_value(r, prop, &Value::Ref(old)).map_err(fail)?;

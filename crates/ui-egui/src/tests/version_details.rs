@@ -5,6 +5,7 @@ use archforge_mof::{Uuid, Value};
 use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::*;
+use crate::version_details::compare::results::{Failure, Held, Key, Origin, failure};
 use crate::versions::Compared;
 use archforge_notations::differences::{
     Area, CardField, CardList, CardLists, ChangeKind, Difference, ElementCard, ElementSides, ListKind, ListRow, Named,
@@ -303,14 +304,15 @@ fn details_give_way_to_the_canvas() {
 }
 
 /// The cards say what changed from the version before to this one: the model's elements first,
-/// and the first version reads nothing. The later version lacks what was added, so only the
-/// details say Removed, and the id of the diagram sorts before the schema's.
+/// then diagrams, then skills, and the first version reads nothing. The later version lacks what was
+/// added, so only the details say Removed; the skill's id sorts first and the diagram's before the schema's.
 #[test]
 fn details_list_what_changed_since_the_version_before() {
     in_both(|h, host| {
         add_schema(h, "first");
         let without = rows_now(h);
         let s = h.state_mut().session.as_mut().unwrap();
+        s.execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
         let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).unwrap();
         let schema = s.doc().uuid(schema).unwrap().to_string();
         s.execute("diagram.add", &serde_json::json!({ "kind": "er", "element": schema, "name": "Shop schema" })).unwrap();
@@ -324,12 +326,63 @@ fn details_list_what_changed_since_the_version_before() {
         answer(host, "c2", Ok(with));
         answer(host, "c3", Ok(without));
         settled(h);
-        assert!(painted_has(h, "3 changed items"), "the schema, the diagram and its root: {:?}", painted(h));
+        assert!(painted_has(h, "4 changed items"), "the schema, the diagram and its root, the skill: {:?}", painted(h));
         let gone: Vec<_> = h.query_all_by_label_contains(", Removed").map(|n| n.accesskit_node().label().unwrap_or_default().to_string()).collect();
-        assert!(gone.len() == 3 && gone[0].starts_with("shop,") && gone[1].starts_with("Shop schema,"), "drawn in this order: {gone:?}");
+        let at = |n: usize, start: &str| gone.get(n).is_some_and(|g| g.starts_with(start));
+        assert!(gone.len() == 4 && at(0, "shop,") && at(1, "Shop schema,") && at(3, "Naming, Skills, Removed"), "drawn in this order: {gone:?}");
         opened(h, "c1");
         assert!(painted_has(h, "First version: there is nothing earlier to compare it with."), "{:?}", painted(h));
         assert!(!has_id(h, "workspace.version-details.loading") && asked(host).is_empty(), "nothing read for it");
+    });
+}
+
+/// With no control and not the explorer holding the keys, they scroll the changed items: the
+/// arrows by a card, Page Down and Page Up by what shows, End to the last card and Home to the top.
+/// A focused control keeps them.
+#[test]
+fn the_keys_scroll_the_changed_items() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let without = rows_now(h);
+        (0..40).for_each(|i| add_schema(h, &format!("s{i}")));
+        let with = rows_now(h);
+        list_still(h);
+        host.reads.lock().unwrap().clear();
+        opened(h, "c3");
+        answer(host, "c2", Ok(with));
+        answer(host, "c3", Ok(without));
+        settled(h);
+        assert!(h.ctx.memory(|m| m.focused().is_none()), "nothing has the keys");
+        let offset = |h: &Harness<'static, Shell>| h.state().versions.details.as_ref().unwrap().scroll.offset;
+        let first = ids(h).into_iter().find(|i| i.starts_with("workspace.version-details.change.")).unwrap();
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 60.0, "a card down");
+        key(h, ArrowUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "and back");
+        key(h, PageDown, egui::Modifiers::NONE);
+        let page = offset(h);
+        assert!(page > 60.0, "more than a card: {page}");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert!(offset(h) > page, "another page: {}", offset(h));
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), page, "a page up");
+        key(h, End, egui::Modifiers::NONE);
+        let end = offset(h);
+        h.run_steps(1);
+        assert!(end > page && end < 40.0 * 60.0 && !has_id(h, &first), "the last cards show: {end}");
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), end, "nothing further");
+        key(h, Home, egui::Modifiers::NONE);
+        h.run_steps(1);
+        assert!(offset(h) == 0.0 && has_id(h, &first));
+        h.state_mut().explorer.focused = true;
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(COMPARE)));
+        h.run();
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a control has the keys");
     });
 }
 
@@ -507,9 +560,9 @@ fn a_new_session_does_not_wait_for_the_comparison_left() {
 fn a_finished_restore_does_not_wait_for_the_comparison_left() {
     a_new_session_starts_its_own_comparison(|h, host, rows| {
         h.state_mut().restore_version("c1", "2026-11-06T15:05:00Z").unwrap();
-        h.run_steps(3);
+        h.steps(3);
         answer(host, "c1", Ok(rows));
-        h.run_steps(4);
+        h.steps(4);
         let (ended, _reading) = host.restores.lock().unwrap().remove(0);
         ended.send(Ok(())).unwrap();
     });
@@ -722,7 +775,7 @@ const AFTER: &str = "workspace.change-view.after";
 const ELEMENT_FAILED: &str = "workspace.change-view.failed";
 const COMPARED: &str = "workspace.change-view.compared";
 const SUMMARY: &str = "workspace.change-view.summary";
-const NOT_SHOWN: &str = "Relationships aren't listed on these cards yet.";
+const MARKED: &str = "Each difference is marked on the cards below.";
 
 /// Clicks the row of the change named `name` and frames until its read has answered.
 fn open_change(h: &mut Harness<'static, Shell>, name: &str) {
@@ -746,7 +799,8 @@ fn both_sides(id: Uuid, name: &str) -> Result<Option<ElementSides>, String> {
 /// Puts a read of `id` about `key` under way, the test holding its answer.
 fn reading(h: &mut Harness<'static, Shell>, id: Uuid, key: Compared) -> std::sync::mpsc::Sender<Result<Option<crate::change_view::Sides>, String>> {
     let (tx, rx) = std::sync::mpsc::channel();
-    h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { id, key, answer: rx });
+    let about = crate::version_details::about(h.state());
+    h.state_mut().versions.element_reading = Some(crate::change_view::ElementReading { about, id, key, answer: rx });
     tx
 }
 
@@ -761,6 +815,76 @@ fn element_open(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Uuid, Co
     before_and_after(h, host);
     open_change(h, "shop");
     (h.state().versions.changes[0].id, h.state().versions.compared.clone().unwrap())
+}
+
+/// The frame copies the objects and builds no rows: the write of an edit, the working changes and
+/// an opened change's two sides are all built from that copy off the interface thread, and hold the edit.
+#[test]
+fn the_frame_builds_no_rows_for_writes_working_changes_or_their_sides() {
+    in_both(|h, host| {
+        let written = host.written.lock().unwrap().len();
+        let built = archforge_mof::rows::built_here();
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+        list_still(h);
+        open_change(h, "shop");
+        assert!(has_id(h, AFTER) && !has_id(h, ELEMENT_FAILED), "{:?}", painted(h));
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+        let last = host.written.lock().unwrap().last().map(|(_, rows)| rows.clone());
+        assert!(host.written.lock().unwrap().len() > written && last.as_ref() == Some(&*rows_now(h)), "the edit was written");
+    });
+}
+
+/// Puts beside current work an unlimited natural too large for its column, so its rows cannot be
+/// built, and hands the session over already.
+fn unbuildable(h: &mut Harness<'static, Shell>) {
+    let mut n = 0u64;
+    let ids = Box::new(move || {
+        n += 1;
+        let mut r = [7u8; 10];
+        r[2..].copy_from_slice(&n.to_be_bytes());
+        Uuid::v7(1_761_670_950_000, r)
+    });
+    let s = archforge_notations::session_from_rows_repaired(&rows_now(h), ids, |st| {
+        let o = st.create(archforge_uml::LITERAL_UNLIMITED_NATURAL).unwrap();
+        st.set(o, archforge_uml::literal_unlimited_natural::VALUE, Value::Unlimited(Some(u64::MAX))).unwrap();
+    })
+    .unwrap();
+    h.state_mut().written = Some(s.revision());
+    h.state_mut().session = Some(s);
+}
+
+/// Opens Compare on `c3` and answers its reads with `before`, all frames building no rows: the
+/// frame only copies current work, whose rows are built with the comparison.
+fn compared_off_the_frame(h: &mut Harness<'static, Shell>, host: &SavingHost, before: &Arc<Rows>) {
+    let built = archforge_mof::rows::built_here();
+    compared(h, "c3");
+    answer(host, "c2", Ok(before.clone()));
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |_| asked(host) == ["c3"]);
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |h| found(h).is_some());
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+}
+
+/// Compare builds no rows on the frame either, and rows that cannot be built land as the
+/// comparison's failure, with why, about the revision it took.
+#[test]
+fn the_frame_builds_no_rows_for_compare() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        h.state_mut().written = h.state().session.as_ref().map(|s| s.revision());
+        compared_off_the_frame(h, host, &before);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+    });
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        let why = found(h).unwrap().unwrap_err();
+        assert!(why.contains("too large to store"), "{why}");
+        let revision = h.state().session.as_ref().map(|s| s.revision());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), revision);
+    });
 }
 
 /// A row opens its element in place of the details, reading nothing; the project's name closes it.
@@ -1160,7 +1284,7 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
         assert!(
             !on("before", kept) && !on("after", kept) && !on("after", gone) && !on("before", fresh) && !on("before", nested) && !on("before", line)
         );
-        for said in ["renamed, Changed", "client, Changed", "gone, Removed", "fresh, Added"] {
+        for said in ["renamed, Changed, Go to client", "client, Changed, Go to client", "gone, Removed", "fresh, Added"] {
             assert_eq!(h.query_all_by_label(said).count(), 1, "{said}");
         }
         let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
@@ -1189,6 +1313,141 @@ fn each_side_of_a_diagram_marks_what_differs_on_it() {
     });
 }
 
+/// The two sides move and zoom together by the keys of either, by plain keys only, and by the wheel
+/// over either; 0 fits them again, and so does opening the diagram again.
+#[test]
+fn a_diagrams_two_sides_move_together() {
+    diagram_compared(|h, [_, _, kept, ..]| {
+        let row = h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap();
+        let at = |h: &Harness<'static, Shell>, side: &str| rect_of(h, &format!("workspace.change-view.{side}.node.{kept}"));
+        let near = |a: egui::Rect, b: egui::Rect| (a.min - b.min).length() < 0.01 && (a.max - b.max).length() < 0.01;
+        let shown = |h: &Harness<'static, Shell>| {
+            let (before, after) = (at(h, "before"), at(h, "after").translate(egui::vec2(rect_of(h, BEFORE).left() - rect_of(h, AFTER).left(), 0.0)));
+            assert!(near(before, after), "one framing: {before:?} {after:?}");
+            before
+        };
+        let press = |h: &mut Harness<'static, Shell>, modifiers, key| {
+            h.key_press_modifiers(modifiers, key);
+            h.run_steps(2);
+            shown(h)
+        };
+        let fitted = shown(h);
+        tap(h, AFTER);
+        assert!(focused_on(h, AFTER), "a click gives the side the keys");
+        assert!(near(press(h, egui::Modifiers::COMMAND, egui::Key::ArrowRight), fitted), "a chord stays the window's");
+        let right = press(h, egui::Modifiers::NONE, egui::Key::ArrowRight);
+        assert!(near(right, fitted.translate(egui::vec2(-40.0, 0.0))), "{right:?}");
+        let down = press(h, egui::Modifiers::NONE, egui::Key::ArrowDown);
+        assert!(near(down, right.translate(egui::vec2(0.0, -40.0))), "{down:?}");
+        let bigger = press(h, egui::Modifiers::NONE, egui::Key::Plus);
+        assert!((bigger.width() - down.width() * 1.25).abs() < 0.01, "{bigger:?}");
+        let smaller = press(h, egui::Modifiers::NONE, egui::Key::Minus);
+        assert!(near(smaller, down), "{smaller:?}");
+        assert!(near(press(h, egui::Modifiers::NONE, egui::Key::Num0), fitted), "0 fits again");
+        h.event(egui::Event::PointerMoved(rect_of(h, BEFORE).center()));
+        let (unit, delta, modifiers) = (egui::MouseWheelUnit::Point, egui::vec2(0.0, -30.0), egui::Modifiers::NONE);
+        h.event(egui::Event::MouseWheel { unit, delta, modifiers, phase: egui::TouchPhase::Move, source: egui::MouseWheelSource::Wheel });
+        h.run_steps(8);
+        let wheeled = shown(h);
+        assert!(wheeled.top() < fitted.top() - 1.0 && (wheeled.left() - fitted.left()).abs() < 0.01, "{wheeled:?}");
+        tap(h, &row);
+        assert!(near(shown(h), fitted), "opening it again fits it again");
+    });
+}
+
+/// A mark whose element differs too opens that element's change, by a click or by Enter once Tab
+/// has brought it into view; a mark whose element doesn't differ is no link.
+#[test]
+fn a_diagrams_marks_link_to_their_elements_changes() {
+    diagram_compared(|h, [_, _, _, gone, _, _, line, renamed]| {
+        let mark = |side: &str, id: &str| format!("workspace.change-view.{side}.mark.{id}");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| (o.row.area, o.row.name.clone()));
+        let (diagram, row) =
+            (opened(h), h.state().versions.element.as_ref().map(|o| format!("workspace.versions.change.{}.{}", o.row.id, o.row.class.0)).unwrap());
+        tap(h, &mark("before", gone));
+        h.run_steps(2);
+        assert_eq!(opened(h), diagram, "gone's element is not listed");
+        tap(h, BEFORE);
+        for _ in 0..30 {
+            h.key_press(egui::Key::ArrowLeft);
+        }
+        h.run_steps(2);
+        let link = mark("before", renamed);
+        assert!(!has_id(h, &link), "moved out of sight with its box");
+        for _ in 0..12 {
+            if !focused_on(h, &link) {
+                h.key_press(egui::Key::Tab);
+                h.run_steps(2);
+            }
+        }
+        assert!(focused_on(h, &link) && rect_of(h, BEFORE).contains_rect(rect_of(h, &link)), "Tab reached it and brought it into view");
+        h.key_press(egui::Key::Enter);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && !has_id(h, "workspace.change-view.loading"));
+        assert_eq!(opened(h), Some((Area::Model, Some("client".into()))), "Enter opens the renamed element");
+        tap(h, &row);
+        frames_until(h, |h| h.state().versions.element_reading.is_none() && has_id(h, BEFORE));
+        tap(h, &mark("after", line));
+        h.run_steps(2);
+        assert_eq!(opened(h), Some((Area::Model, Some("joins".into()))), "a click opens the added relationship");
+    });
+}
+
+/// Above the sides, what differs in the model and in the layout is said apart, and a side with
+/// nothing says so and that the other alone changed.
+#[test]
+fn a_diagrams_model_and_layout_changes_are_said_apart() {
+    use archforge_notations::differences::{Apart, DiagramSides, Placed, Placing};
+    diagram_compared(|h, _| {
+        let said = [
+            "Model, 1 element added · 1 element changed, client, joins",
+            "Layout, 2 boxes placed · 1 box taken off · 1 line drawn, Unnamed, fresh, gone, joins",
+        ];
+        for words in said {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        let (model, layout) = (rect_of(h, "workspace.change-view.model"), rect_of(h, "workspace.change-view.layout"));
+        assert!(model.right() < layout.left() && layout.bottom() < rect_of(h, BEFORE).top(), "side by side, above the sides");
+        let (id, key) = (h.state().versions.element.as_ref().unwrap().row.id, h.state().versions.compared.clone().unwrap());
+        /// An item of a kept-apart difference named `name`.
+        fn item<K>(kind: K, name: &str, line: bool) -> Placed<K> {
+            Placed { id: Uuid([3; 16]), kind, name: Some(name.into()), line }
+        }
+        let only = |h: &mut Harness<'static, Shell>, apart: Apart| {
+            let sides = DiagramSides { id, name: None, path: Vec::new(), before: None, after: None, marks: Default::default(), apart };
+            let sides = crate::change_view::Sides::Diagram(std::sync::Arc::new(std::sync::Mutex::new(sides)));
+            reading(h, id, key.clone()).send(Ok(Some(sides))).unwrap();
+            h.run_steps(1);
+        };
+        only(h, Apart { model: vec![item(ChangeKind::Removed, "order", false)], ..Default::default() });
+        for words in ["Model, 1 element removed, order", "Layout, The layout didn't change, Only the model changed."] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the model changed, the layout did not: {words}");
+        }
+        only(h, Apart { layout: vec![item(Placing::Moved, "order", false), item(Placing::Changed, "joins", true)], ..Default::default() });
+        for words in ["Model, The model didn't change, Only the layout changed.", "Layout, 1 box moved · 1 line changed, order, joins"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "the layout changed, the model did not: {words}");
+        }
+        only(h, Apart { itself: true, ..Default::default() });
+        let own = "Layout, The diagram's own details changed, Such as its name, or the order its boxes are drawn in.";
+        for words in ["Model, The model didn't change, Only the layout changed.", own] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "{words}");
+        }
+        // An empty diagram that came or went draws no box or line, and still says so.
+        for (kind, own) in [
+            (ChangeKind::Added, "This diagram was added, It has no boxes or lines yet."),
+            (ChangeKind::Removed, "This diagram was removed, It had no boxes or lines."),
+        ] {
+            only(h, Apart { diagram: Some(kind), ..Default::default() });
+            for words in ["Model, The model didn't change, Only the layout changed.".to_string(), format!("Layout, {own}")] {
+                assert_eq!(h.query_all_by_label(&words).count(), 1, "{words}");
+            }
+        }
+        only(h, Apart::default());
+        for words in ["Model, The model didn't change", "Layout, The layout didn't change"] {
+            assert_eq!(h.query_all_by_label(words).count(), 1, "nothing on either: {words}");
+        }
+    });
+}
+
 /// A side the diagram is not on says so, the title says what happened to it, and a failed read names a diagram.
 #[test]
 fn a_side_the_diagram_is_not_on_says_so() {
@@ -1198,6 +1457,7 @@ fn a_side_the_diagram_is_not_on_says_so() {
         open_change(h, "Extra");
         assert_eq!(h.query_all_by_label("Before, Nothing here yet").count(), 1);
         assert_eq!(h.query_all_by_label("Extra, Commerce platform, Added").count(), 1, "the title");
+        assert_eq!(h.query_all_by_label("Layout, This diagram was added, It has no boxes or lines yet.").count(), 1, "empty, yet added");
         edit(h, "diagram.remove", serde_json::json!({ "diagram": diagram }));
         list_still(h);
         open_change(h, "Billing");
@@ -1288,7 +1548,7 @@ fn swap_reverses_the_pair() {
         h.run_steps(1);
         compared(h, "c3");
         assert_eq!((holds(h, "Before"), holds(h, "After")), (before, after), "a new page starts over");
-        assert_eq!(asked(host), ["c2", "c3"], "Swap reads nothing; only the details opened again do");
+        assert_eq!(asked(host), ["c3", "c2", "c3"], "Swap reads nothing: the page's read still under way, then the details'");
     });
 }
 
@@ -1321,6 +1581,1031 @@ fn compare_gives_way_like_the_details() {
         h.state_mut().project.as_mut().unwrap().path.push("elsewhere");
         h.run_steps(2);
         assert!(!has_id(h, SWAP) && h.state().versions.details.is_none(), "about the project left");
+    });
+}
+
+/// What the Compare page has found: each difference's name and kind, or why it could not tell.
+fn found(h: &Harness<'static, Shell>) -> Option<Result<Vec<(String, ChangeKind)>, String>> {
+    let found = &h.state().versions.compare_results.found.as_ref()?.1;
+    Some(found.as_ref().map(|items| items.iter().map(|d| (d.name.clone().unwrap_or_default(), d.kind)).collect()).map_err(Clone::clone))
+}
+
+/// Adds a schema, opens Compare on `c3` and waits for the page's read. Gives the rows without the schema.
+fn page_reading(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Arc<Rows> {
+    let (before, _) = before_and_after(h, host);
+    compared(h, "c3");
+    assert_eq!(asked(host), ["c2", "c3"], "the details first: the host limits the reads under way");
+    answer(host, "c2", Ok(before.clone()));
+    answer(host, "c3", Ok(before.clone()));
+    frames_until(h, |_| asked(host) == ["c3"]);
+    before
+}
+
+/// Frames until the page holds `n` differences.
+fn found_many(h: &mut Harness<'static, Shell>, n: usize) {
+    frames_until(h, |h| matches!(found(h), Some(Ok(items)) if items.len() == n));
+}
+
+/// Before is read once and current work is a snapshot, so the session stays. The window wakes for
+/// the answer and rests after it; Swap reverses what is found, and an edit is compared, without a read.
+#[test]
+fn a_version_is_compared_with_current_work_and_read_once() {
+    in_both(|h, host| {
+        let generation = h.state().session_generation();
+        let before = page_reading(h, host);
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint(), "waiting on another thread");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+        h.run_steps(4);
+        assert!(!h.ctx.has_requested_repaint(), "at rest once it has landed");
+        tap(h, SWAP);
+        frames_until(h, |h| found(h) == Some(Ok(vec![("shop".to_string(), ChangeKind::Removed)])));
+        add_schema(h, "more");
+        found_many(h, 2);
+        assert!(asked(host).is_empty() && h.state().session_generation() == generation, "{:?}", asked(host));
+    });
+}
+
+/// Two versions are both read at their revisions, Before first and one at a time, then compared.
+/// They never move, so an edit to current work reads and compares nothing again; Swap reverses what
+/// is found from the rows held, reading nothing.
+#[test]
+fn two_versions_are_read_one_at_a_time_and_compared() {
+    in_both(|h, host| {
+        let generation = h.state().session_generation();
+        let before = page_reading(h, host);
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(2));
+        h.run_steps(3);
+        assert_eq!(asked(host), ["c3"], "one read at a time");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(rows_now(h)));
+        found_many(h, 1);
+        let added = Some(Ok(vec![("shop".to_string(), ChangeKind::Added)]));
+        assert_eq!(found(h), added);
+        let key = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.clone());
+        let landed = key(h);
+        add_schema(h, "more");
+        h.run_steps(4);
+        let r = &h.state().versions.compare_results;
+        assert!(key(h) == landed && found(h) == added && r.comparing.is_none() && asked(host).is_empty(), "{:?}", asked(host));
+        tap(h, SWAP);
+        frames_until(h, |h| found(h) == Some(Ok(vec![("shop".to_string(), ChangeKind::Removed)])));
+        assert!(asked(host).is_empty() && h.state().session_generation() == generation, "{:?}", asked(host));
+    });
+}
+
+/// `main` in use, `try-cancellations` with a latest version `t1`, and `empty` with none, as the
+/// Branches section has them. The list's row of `try-cancellations`, after the three versions and
+/// the heading.
+fn branched(h: &mut Harness<'static, Shell>, host: &SavingHost) -> String {
+    let main = crate::BranchEntry {
+        name: "main".into(),
+        shown: "main".into(),
+        current: true,
+        unsaved: false,
+        latest: Some("2026-11-07T16:15:00Z".into()),
+        latest_version: Some("c3".into()),
+    };
+    let other = crate::BranchEntry {
+        name: "try-cancellations".into(),
+        shown: "Try cancellations".into(),
+        current: false,
+        latest_version: Some("t1".into()),
+        ..main.clone()
+    };
+    let empty =
+        crate::BranchEntry { name: "empty".into(), shown: "Empty".into(), current: false, latest: None, latest_version: None, ..main.clone() };
+    let listed = vec![empty, main, other];
+    *host.branch_list.lock().unwrap() = Some(Ok(listed.clone()));
+    h.state_mut().versions.branches = Some(listed);
+    row_id(5)
+}
+
+/// Another branch is listed under its heading by its latest version, the branch in use and one
+/// without a version left out. Picked, it is read on its own line and compared with a version as
+/// two versions are: an edit to current work reads nothing again.
+#[test]
+fn another_branchs_latest_version_is_read_on_its_line_and_compared() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let other = branched(h, host);
+        tap(h, SELECT_AFTER);
+        assert!(painted_has(h, "ANOTHER BRANCH") && has_id(h, &other) && !has_id(h, &row_id(4)) && !has_id(h, &row_id(6)), "{:?}", ids(h));
+        let option = |h: &Harness<'static, Shell>, name: &str| {
+            h.query_all_by_role(egui::accesskit::Role::ListBoxOption).any(|n| n.accesskit_node().label().unwrap_or_default().starts_with(name))
+        };
+        assert!(option(h, "Try cancellations, Latest version") && !option(h, "main") && !option(h, "Empty"), "only other branches with a version");
+        assert!(!has_id(h, "workspace.version-compare.list.cut"), "a whole list says nothing of a cut");
+        h.state_mut().versions.branches_cut = true;
+        h.run_steps(1);
+        assert!(h.query_by_label("Only the first 3 branches are listed.").is_some(), "a list cut short says so, as the section does");
+        tap(h, &other);
+        assert_eq!(holds(h, "After"), "After, Latest on Try cancellations");
+        tap(h, SELECT_AFTER);
+        assert!(at(h) == Some(5) && marked(h) == ["Try cancellations, Latest version"], "the list opens on the branch held, and marks it");
+        tap(h, SELECT_AFTER);
+        // Renamed meanwhile: its own name is gone, so it is read by the name its version has now.
+        let renamed = h.state_mut().versions.branches.iter_mut().flatten().find(|b| b.name == "try-cancellations").unwrap();
+        (renamed.name, renamed.unsaved) = ("tried".into(), true);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["t1"]);
+        assert_eq!(*host.branch_version_reads.lock().unwrap(), [("tried".to_string(), "t1".to_string())], "on its own line, alone");
+        answer(host, "t1", Ok(rows_now(h)));
+        found_many(h, 1);
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])));
+        add_schema(h, "more");
+        h.run_steps(4);
+        assert!(asked(host).is_empty() && h.state().versions.compare_results.comparing.is_none(), "{:?}", asked(host));
+    });
+}
+
+/// The labels of the options a list marks as held.
+fn marked(h: &Harness<'static, Shell>) -> Vec<String> {
+    let held = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).filter(|n| n.accesskit_node().is_selected() == Some(true));
+    held.map(|n| n.accesskit_node().label().unwrap_or_default().to_string()).collect()
+}
+
+/// Two branches with one latest version are two options: the one picked alone is marked and opened
+/// on, and it is read by its own name, which is still listed, never the other's.
+#[test]
+fn branches_sharing_a_version_stay_apart() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let _ = branched(h, host);
+        let listed = h.state().versions.branches.clone().unwrap_or_default();
+        let first = listed.iter().find(|b| b.name == "try-cancellations").unwrap().clone();
+        let again = crate::BranchEntry { name: "try-again".into(), shown: "Try again".into(), ..first };
+        h.state_mut().versions.branches.as_mut().unwrap().push(again);
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(6));
+        tap(h, SELECT_AFTER);
+        assert!(at(h) == Some(6) && marked(h) == ["Try again, Latest version"], "{:?} {:?}", at(h), marked(h));
+        tap(h, SELECT_AFTER);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["t1"]);
+        assert_eq!(*host.branch_version_reads.lock().unwrap(), [("try-again".to_string(), "t1".to_string())]);
+    });
+}
+
+/// A page of versions read while a branch is highlighted moves its row, not the highlight: Enter
+/// still picks the branch.
+#[test]
+fn a_page_read_under_the_highlight_keeps_it() {
+    in_both(|h, host| {
+        compared(h, "c3");
+        let _ = branched(h, host);
+        tap(h, SELECT_AFTER);
+        for _ in 0..4 {
+            key(h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        }
+        assert_eq!(at(h), Some(5));
+        let older = |hash: &str, date: &str| version_row(hash, Some("Older"), (None, false), date);
+        let more = [older("c0", "2026-11-05T10:00:00Z"), older("cz", "2026-11-04T10:00:00Z")];
+        h.state_mut().versions.page.as_mut().unwrap().versions.extend(more);
+        h.run_steps(1);
+        assert_eq!(at(h), Some(7), "the branch's row now");
+        key(h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(holds(h, "After"), "After, Latest on Try cancellations");
+    });
+}
+
+/// The keys pass over the Another branch heading both ways, and Enter picks a branch.
+#[test]
+fn the_keys_pass_over_the_branch_heading() {
+    use egui::Key::{ArrowDown, ArrowUp, Enter};
+    let press = |h: &mut Harness<'static, Shell>, k| key(h, k, egui::Modifiers::NONE);
+    in_both(|h, host| {
+        compared(h, "c3");
+        let _ = branched(h, host);
+        tap(h, SELECT_AFTER);
+        for (k, row) in [(ArrowDown, 1), (ArrowDown, 2), (ArrowDown, 3), (ArrowDown, 5), (ArrowDown, 5), (ArrowUp, 3), (ArrowDown, 5)] {
+            press(h, k);
+            assert_eq!(at(h), Some(row), "{k:?}");
+        }
+        press(h, Enter);
+        assert!(at(h).is_none() && holds(h, "After") == "After, Latest on Try cancellations", "{}", holds(h, "After"));
+    });
+}
+
+/// A version of no use to read again says it can't be shown, with why and no Retry, and one past
+/// the read budget is too large to compare. Against current work, an edit asks the host for nothing
+/// and compares nothing.
+#[test]
+fn a_version_that_cannot_be_read_says_so_without_retry() {
+    use crate::VersionReadError::{Shape, TooLarge, Unavailable};
+    for (refused, head) in [(Unavailable, "This version can't be shown"), (Shape, "This version can't be shown"), (TooLarge, "Too large to compare")]
+    {
+        in_both(|h, host| {
+            let _ = page_reading(h, host);
+            answer(host, "c3", Err(refused.clone()));
+            frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+            let why = if refused == TooLarge { "Choose another pair above.".to_string() } else { refused.to_string() };
+            assert!(painted_has(h, head) && painted_has(h, &why), "{refused:?}: {:?}", painted(h));
+            assert!(!has_id(h, "workspace.version-compare.retry"));
+            add_schema(h, "more");
+            h.run_steps(3);
+            let r = &h.state().versions.compare_results;
+            assert!(asked(host).is_empty() && r.comparing.is_none() && has_id(h, "workspace.version-compare.said"), "{:?}", asked(host));
+        });
+    }
+}
+
+/// A comparison past its budget is too large, with no list and no count, and an edit does not spend
+/// the budget again; any other failure to classify is a failed comparison.
+#[test]
+fn a_comparison_past_its_budget_is_too_large() {
+    use archforge_mof::compare::CompareError;
+    use archforge_notations::differences::ClassifyError;
+    let too_large = failure(ClassifyError::Compare(CompareError::TooLarge { work: 2, max: 1 }));
+    assert!(too_large.origin == Origin::TooLarge && too_large.why.contains("more than the 1 allowed"), "{}", too_large.why);
+    assert_eq!(failure(ClassifyError::Compare(CompareError::RowWithoutId { table: "t" })).origin, Origin::Comparison);
+    assert_eq!(failure(ClassifyError::Unreadable { side: "before", why: "no".into() }).origin, Origin::Comparison);
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        let (tx, comparison) = std::sync::mpsc::channel();
+        tx.send(Err(too_large_failure())).unwrap();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
+        h.state_mut().versions.compare_results.comparing = Some((key, comparison));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+        assert!(painted_has(h, "Too large to compare") && !has_id(h, "workspace.version-compare.count"), "{:?}", painted(h));
+        answer(host, "c3", Ok(rows_now(h)));
+        add_schema(h, "more");
+        h.run_steps(3);
+        assert!(h.state().versions.compare_results.comparing.is_none() && painted_has(h, "Too large to compare"));
+    });
+}
+
+/// Stop is a stop until Retry: a read that fails after it, even for good, does not take its place.
+#[test]
+fn a_read_that_fails_after_stop_keeps_it_stopped() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        tap(h, "workspace.version-compare.stop");
+        answer(host, "c3", Err(crate::VersionReadError::TooLarge));
+        frames_until(h, |h| h.state().versions.compare_results.reading.is_none());
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && has_id(h, "workspace.version-compare.retry"), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+    });
+}
+
+/// While an edit is compared again, the earlier list stays with Stop above it, and Stop stops that
+/// comparison: it runs on with its answer dropped. Another pair's comparison offers no Stop here.
+#[test]
+fn stop_is_offered_above_an_earlier_answer() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        assert!(!has_id(h, "workspace.version-compare.stop"), "nothing runs");
+        let (_other, of_the_other) = std::sync::mpsc::channel();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().versions.compare_results.comparing = Some((Key { sides: (None, Some("c3".to_string())), revision }, of_the_other));
+        h.run_steps(2);
+        assert!(!has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "another pair's comparison");
+        let (tx, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() + 1 };
+        h.state_mut().versions.compare_results.comparing = Some((key, pending));
+        h.run_steps(2);
+        assert!(has_id(h, "workspace.version-compare.stop") && has_id(h, "workspace.version-compare.count"), "{:?}", painted(h));
+        let (stop, count) = (rect_of(h, "workspace.version-compare.stop"), rect_of(h, "workspace.version-compare.count"));
+        assert!(stop.bottom() <= count.top(), "Stop is above the list: {stop:?} {count:?}");
+        tap(h, "workspace.version-compare.stop");
+        h.run_steps(2);
+        assert!(painted_has(h, "The comparison was stopped.") && !has_id(h, "workspace.version-compare.stop"), "{:?}", painted(h));
+        assert!(tx.send(Ok(Arc::new(Vec::new()))).is_ok(), "it runs on");
+    });
+}
+
+/// A comparison's failure past its budget, as its thread gives it.
+fn too_large_failure() -> Failure {
+    Failure { why: "comparing these takes 2 steps, more than the 1 allowed".into(), origin: Origin::TooLarge }
+}
+
+/// Stop ends the wait, with nothing on hover, and nothing starts again until Retry, which compares the rows its read went
+/// on to hold. A comparison under way runs on with its answer dropped, and none other starts beside
+/// it: one still running at Retry is the one that lands.
+#[test]
+fn a_comparison_can_be_stopped_and_retried() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, "workspace.version-compare.stop");
+        h.run_steps(1);
+        assert!(painted_has(h, "The comparison was stopped.") && has_id(h, "workspace.version-compare.retry"), "{:?}", painted(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, "workspace.version-compare.failed").center()));
+        h.run_steps(4);
+        let tooltip = h.ctx.memory(|m| m.areas().visible_layer_ids().iter().any(|l| l.order == egui::Order::Tooltip));
+        assert!(!tooltip, "no empty tooltip: a stop has no why");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
+        add_schema(h, "more");
+        h.run_steps(3);
+        let r = &h.state().versions.compare_results;
+        assert!(r.comparing.is_none() && painted_has(h, "The comparison was stopped.") && asked(host).is_empty());
+        tap(h, "workspace.version-compare.retry");
+        found_many(h, 2);
+        assert!(asked(host).is_empty(), "{:?}", asked(host));
+    });
+    for retried in [false, true] {
+        in_both(|h, host| {
+            let before = page_reading(h, host);
+            answer(host, "c3", Ok(before));
+            let (tx, pending) = std::sync::mpsc::channel();
+            let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
+            h.state_mut().versions.compare_results.comparing = Some((key, pending));
+            frames_until(h, |h| has_id(h, "workspace.version-compare.stop"));
+            tap(h, "workspace.version-compare.stop");
+            if retried {
+                tap(h, "workspace.version-compare.retry");
+            }
+            h.run_steps(2);
+            assert!(tx.send(Ok(Arc::new(Vec::new()))).is_ok(), "it runs on, and none other has taken its place");
+            frames_until(h, |h| h.state().versions.compare_results.comparing.is_none());
+            let landed = if retried { Some(Ok(Vec::new())) } else { Some(Err(String::new())) };
+            assert_eq!(found(h), landed, "its answer lands only after Retry");
+        });
+    }
+}
+
+/// Differences found in id order are grouped by area, model elements first, each area keeping that
+/// order: a diagram made between two schemas lists after both, its unnamed part after it.
+#[test]
+fn what_is_found_is_grouped_by_area() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let mut made = |id: &str, params: serde_json::Value| {
+            let s = h.state_mut().session.as_mut().unwrap();
+            Uuid::parse(s.execute(id, &params).unwrap().value["id"].as_str().unwrap()).unwrap()
+        };
+        let alpha = made("er.schema.add", serde_json::json!({ "name": "alpha" }));
+        let diagram = made("diagram.add", serde_json::json!({ "kind": "er", "element": alpha.to_string(), "name": "Billing" }));
+        let omega = made("er.schema.add", serde_json::json!({ "name": "omega" }));
+        assert!(alpha < diagram && diagram < omega, "the diagram's id lies between the schemas'");
+        answer(host, "c3", Ok(before));
+        found_many(h, 5);
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let listed: Vec<_> = items.iter().map(|d| (d.area, d.name.clone().unwrap_or_default())).collect();
+        let names = ["shop", "alpha", "omega"].map(|n| (Area::Model, n.to_string()));
+        let diagrams = [(Area::Diagram, "Billing".to_string()), (Area::Diagram, String::new())];
+        assert_eq!(listed, [names.as_slice(), &diagrams].concat());
+    });
+}
+
+/// Lands `answer` for `sides` at `revision`, the page kept from starting anything of its own.
+fn landing(h: &mut Harness<'static, Shell>, sides: (&str, bool), revision: u64, answer: Result<Arc<Vec<Difference>>, String>) {
+    let (waiting, read) = std::sync::mpsc::channel();
+    let (tx, comparison) = std::sync::mpsc::channel();
+    tx.send(answer.map_err(Into::into)).unwrap();
+    let key = Key { sides: if sides.1 { (None, Some(sides.0.to_string())) } else { (Some(sides.0.to_string()), None) }, revision };
+    let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
+    let r = &mut h.state_mut().versions.compare_results;
+    (r.held, r.found, r.reading, r.comparing) = (Vec::new(), None, Some((project, "c3".to_string(), read)), Some((key, comparison)));
+    h.run_steps(1);
+    drop(waiting);
+}
+
+/// An answer for rows that moved on still lands, or edits in a stream would hide every one; its
+/// failure does not, and neither does an answer for the other direction or another version. While
+/// one runs no other starts, and the window wakes for it.
+#[test]
+fn a_comparison_runs_alone_and_lands_only_on_its_sides() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let now = h.state().session.as_ref().unwrap().revision();
+        let none = || Ok(Arc::new(Vec::new()));
+        landing(h, ("c3", false), now - 1, none());
+        assert_eq!(found(h), Some(Ok(Vec::new())), "moved on");
+        landing(h, ("c3", false), now - 1, Err("Old".into()));
+        assert_eq!(found(h), None, "a failure says nothing of the newest rows");
+        landing(h, ("c3", false), now, Err("Now".into()));
+        assert_eq!(found(h), Some(Err("Now".to_string())));
+        landing(h, ("c3", true), now, none());
+        assert_eq!(found(h), None, "the other direction");
+        landing(h, ("c2", false), now, none());
+        assert_eq!(found(h), None, "another version");
+        let (_waiting, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: now - 1 };
+        let r = &mut h.state_mut().versions.compare_results;
+        (r.held, r.reading, r.comparing) = (vec![Held { version: "c3".into(), rows: before, keep: true }], None, Some((key.clone(), pending)));
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && h.state().versions.compare_results.comparing.as_ref().is_some_and(|c| c.0 == key));
+    });
+}
+
+/// A page waiting behind a comparison the details have left still wakes the window.
+#[test]
+fn a_page_waiting_its_turn_wakes_the_window() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        compared(h, "c1");
+        h.run_steps(4);
+        assert!(h.ctx.has_requested_repaint() && asked(host) == ["c2", "c3"], "{:?}", asked(host));
+    });
+}
+
+/// Once the list names the version before, the details rest with their read of it still under
+/// way; the page waiting its turn behind that read wakes the window, and once it is answered asks
+/// for its own on the frames it wakes, with no pointer moving.
+#[test]
+fn a_page_behind_a_read_the_details_no_longer_need_goes_on_by_itself() {
+    in_both_listing(history()[..1].to_vec(), |h, host| {
+        let (before, after) = before_and_after(h, host);
+        host.version_reads.lock().unwrap().clear();
+        opened(h, "c3");
+        answer(host, "c2", Ok(before));
+        answer(host, "c3", Ok(after));
+        let read = the_read(h, host);
+        tap(h, COMPARE);
+        h.state_mut().versions.page = Some(crate::VersionsPage { versions: history(), more: false });
+        h.run_steps(4);
+        assert!(h.state().versions.details_reading.is_some() && asked(host).is_empty(), "{:?}", asked(host));
+        assert!(h.ctx.has_requested_repaint(), "waiting its turn");
+        read.send(page_of(history().remove(1))).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while asked(host).is_empty() {
+            assert!(h.ctx.has_requested_repaint() && std::time::Instant::now() < until, "the page stalls");
+            h.run_steps(1);
+        }
+        assert_eq!(asked(host), ["c3"]);
+    });
+}
+
+/// A failed read is a failure, not no differences; an edit does not read again but the other
+/// direction does, and a read that stops without an answer is a failure too.
+#[test]
+fn a_failed_read_waits_and_a_stopped_one_is_a_failure() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| found(h).is_some());
+        assert_eq!(found(h), Some(Err("Too many".to_string())));
+        add_schema(h, "more");
+        h.run_steps(3);
+        assert!(asked(host).is_empty(), "{:?}", asked(host));
+        tap(h, SWAP);
+        frames_until(h, |_| asked(host) == ["c3"]);
+        h.state_mut().versions.compare_results.found = None;
+        host.reads.lock().unwrap().clear();
+        frames_until(h, |h| matches!(found(h), Some(Err(_))));
+    });
+}
+
+/// A comparison that failed after its rows went as too large is no failed read: it stands at its
+/// own revision, and the next edit reads the version again and compares, without Retry.
+#[test]
+fn a_failed_comparison_of_rows_let_go_reads_again_on_an_edit() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        host.reads.lock().unwrap().clear();
+        let now = h.state().session.as_ref().unwrap().revision();
+        let (tx, failed) = std::sync::mpsc::channel();
+        tx.send(Err("Failed".to_string().into())).unwrap();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: now };
+        let r = &mut h.state_mut().versions.compare_results;
+        (r.held, r.reading, r.comparing) = (Vec::new(), None, Some((key, failed)));
+        h.run_steps(3);
+        assert!(found(h) == Some(Err("Failed".to_string())) && asked(host).is_empty(), "{:?}", asked(host));
+        add_schema(h, "more");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+    });
+}
+
+/// A late answer about another version is dropped, failure or rows, and rows held are of one
+/// version: choosing another reads it, choosing the same one again nothing. Against nothing, the
+/// model's root is still no change.
+#[test]
+fn another_version_is_read_and_a_late_answer_dropped() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(2));
+        answer(host, "c3", Err("Late".to_string().into()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        assert_eq!(found(h), None);
+        answer(host, "c2", Ok(before.clone()));
+        found_many(h, 1);
+        let shown = found(h);
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(2));
+        h.run_steps(2);
+        assert!(found(h) == shown && asked(host).is_empty(), "the same version again changes nothing");
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(3));
+        frames_until(h, |_| asked(host) == ["c1"]);
+        let nothing = Rows { tables: vec![Vec::new(); before.tables.len()], junctions: vec![Vec::new(); before.junctions.len()] };
+        answer(host, "c1", Ok(Arc::new(nothing)));
+        let of_c1 =
+            |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, ..)| key.sides.0.as_deref() == Some("c1"));
+        frames_until(h, |h| of_c1(h).is_some());
+        let items = of_c1(h).unwrap().1.unwrap();
+        assert!(!items.is_empty() && items.iter().all(|d| d.class != archforge_core::MODEL), "the model's root is no change of its own");
+    });
+}
+
+/// Rows too large to hold go once compared, so the next edit reads them again. Held rows retry a
+/// failed comparison on the next edit. A page gone holds nothing, nor a session left, whose read runs
+/// to its end with nothing taking its answer.
+#[test]
+fn what_is_held_goes_when_too_large_or_left() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        h.state_mut().versions.compare_results.found.as_mut().unwrap().1 = Err("Failed".into());
+        h.state_mut().versions.compare_results.held[0].keep = false;
+        add_schema(h, "more");
+        found_many(h, 2);
+        assert!(h.state().versions.compare_results.held.is_empty() && asked(host).is_empty());
+        add_schema(h, "third");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(rows_now(h)));
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(1);
+        assert!(h.state().versions.compare_results.held.is_empty() && found(h).is_none());
+    });
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        answer(host, "c3", Ok(before));
+        h.run_steps(2);
+        let r = &h.state().versions.compare_results;
+        assert!(r.reading.is_none() && r.held.is_empty() && asked(host).is_empty(), "{:?}", asked(host));
+    });
+}
+
+/// The page's read is never let go before it answers; the details opened in place of a page gone
+/// read beside it at once, the host having room for both, and its late answer is dropped with its
+/// rows, nothing held.
+#[test]
+fn a_page_gone_leaves_its_read_to_end_and_frees_its_answer() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        opened(h, "c2");
+        h.run_steps(2);
+        assert_eq!(asked(host), ["c3", "c1", "c2"], "the details do not wait");
+        assert!(h.state().versions.compare_results.reading.is_some(), "still counted");
+        answer(host, "c3", Ok(before.clone()));
+        h.run_steps(1);
+        let r = &h.state().versions.compare_results;
+        assert!(r.reading.is_none() && r.held.is_empty() && r.found.is_none());
+        assert_eq!(Arc::strong_count(&before), 1, "its rows freed");
+    });
+}
+
+/// A read lands only in the project it is of, though another's version has the same name.
+#[test]
+fn a_read_of_another_project_lands_nowhere() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let (tx, read) = std::sync::mpsc::channel();
+        tx.send(Ok(before)).unwrap();
+        let generation = h.state().session_generation();
+        h.state_mut().versions.compare_results.reading = Some((("/other".into(), generation), "c3".to_string(), read));
+        h.run_steps(1);
+        assert!(h.state().versions.compare_results.held.is_empty());
+    });
+}
+
+/// The project closed and opened again at its path during the page's read is another session: the
+/// read's failure lands nowhere then, and the page opened again on that version reads it anew once
+/// that read ends, needing no Retry.
+#[test]
+fn a_read_from_before_the_project_opened_again_lands_nowhere() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        let session = h.state_mut().session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        h.state_mut().close_project();
+        h.run_steps(1);
+        host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+        h.run_steps(2);
+        h.state_mut().open_project(commerce());
+        h.run_steps(2);
+        versions_answer(h, host, Ok(crate::VersionsPage { versions: history(), more: false }));
+        compared(h, "c3");
+        answer_all_but_the_first(host, &before);
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_eq!(asked(host), ["c3"], "still the read from before");
+        answer(host, "c3", Err("Old".to_string().into()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert_eq!(found(h), None, "not this session's failure");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
+    });
+}
+
+/// Answers every read asked for after the first, the page's, with `rows`.
+fn answer_all_but_the_first(host: &SavingHost, rows: &Arc<Rows>) {
+    for (_, read) in host.reads.lock().unwrap().drain(1..) {
+        let _ = read.send(Ok(rows.clone()));
+    }
+}
+
+/// A page closed and opened again on its version during its read takes that read as it answers,
+/// asking the host for no second one.
+#[test]
+fn a_page_back_on_its_version_takes_the_read_under_way() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(1);
+        compared(h, "c3");
+        answer_all_but_the_first(host, &before);
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        h.run_steps(3);
+        assert_eq!(asked(host), ["c3"], "one read only");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+    });
+}
+
+/// However quickly pages open and close during one read, Compare has that one read under way: a
+/// page on another version waits for it, awake, and then reads its own.
+#[test]
+fn pages_opened_and_closed_during_a_read_never_read_twice_at_once() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        for row in ["c2", "c3", "c2"] {
+            compared(h, row);
+            assert!(asked(host).len() <= 3, "{:?}", asked(host));
+            answer_all_but_the_first(host, &before);
+            frames_until(h, |h| h.state().versions.details_comparing.is_none());
+            h.run_steps(3);
+            assert_eq!(asked(host), ["c3"], "the one read under way");
+            assert!(h.ctx.has_requested_repaint(), "waiting for it");
+            tap(h, COMPARE_CLOSE);
+            h.run_steps(1);
+        }
+        compared(h, "c2");
+        answer_all_but_the_first(host, &before);
+        answer(host, "c3", Ok(before.clone()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(before));
+        found_many(h, 1);
+    });
+}
+
+/// A page gone wakes nothing for the read and comparison it leaves running; a page opened again on
+/// its sides takes the comparison.
+#[test]
+fn a_page_gone_rests_and_a_page_back_takes_its_comparison() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        let (tx, pending) = std::sync::mpsc::channel();
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
+        h.state_mut().versions.compare_results.comparing = Some((key, pending));
+        tap(h, COMPARE_CLOSE);
+        h.run_steps(4);
+        assert!(!h.ctx.has_requested_repaint(), "at rest with the page gone");
+        compared(h, "c3");
+        tx.send(Ok(Arc::new(Vec::new()))).unwrap();
+        h.run_steps(2);
+        assert_eq!(found(h), Some(Ok(Vec::new())));
+    });
+}
+
+/// Home and a project closed draw no rail, and what the page held goes all the same, its read's
+/// answer too as it comes, rows and all.
+#[test]
+fn leaving_the_project_lets_the_page_go() {
+    let saved_and_closed = |s: &mut Shell| {
+        let session = s.session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        s.close_project();
+    };
+    let routes: [&dyn Fn(&mut Shell); 2] = [&Shell::go_home, &saved_and_closed];
+    for route in routes {
+        in_both(|h, host| {
+            let before = page_reading(h, host);
+            answer(host, "c3", Ok(before.clone()));
+            found_many(h, 1);
+            let (tx, read) = std::sync::mpsc::channel();
+            let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
+            h.state_mut().versions.compare_results.reading = Some((project, "c3".to_string(), read));
+            route(h.state_mut());
+            h.run_steps(1);
+            host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
+            h.run_steps(2);
+            let r = &h.state().versions.compare_results;
+            assert!(h.state().project.is_none() && r.held.is_empty() && r.found.is_none() && r.reading.is_some());
+            tx.send(Ok(before.clone())).unwrap();
+            h.run_steps(1);
+            assert!(h.state().versions.compare_results.reading.is_none() && Arc::strong_count(&before) == 1, "dropped, rows and all");
+        });
+    }
+}
+
+/// Leaves the project for Home, or with `home` false closes it saved, every closing answered.
+fn leave(h: &mut Harness<'static, Shell>, host: &SavingHost, home: bool) {
+    if home {
+        h.state_mut().go_home();
+    } else {
+        let session = h.state_mut().session.as_mut().unwrap();
+        session.mark_saved_at(session.revision()).unwrap();
+        h.state_mut().close_project();
+    }
+    h.run_steps(1);
+    for closing in host.closings.lock().unwrap().drain(..) {
+        let _ = closing.send(Ok(()));
+    }
+    h.run_steps(2);
+    assert!(h.state().project.is_none(), "left");
+}
+
+/// Home and a project closed draw no rail, and the details go all the same, their comparison or
+/// their read of the version before with them, so an answer that comes later lands nowhere and
+/// nothing wakes the window.
+#[test]
+fn leaving_the_project_lets_the_details_and_their_reads_go() {
+    for (home, comparing) in [(true, true), (true, false), (false, true), (false, false)] {
+        in_both_listing(history()[..1].to_vec(), |h, host| {
+            let (before, after) = before_and_after(h, host);
+            host.version_reads.lock().unwrap().clear();
+            opened(h, "c3");
+            let read = (!comparing).then(|| {
+                answer(host, "c2", Ok(before.clone()));
+                answer(host, "c3", Ok(after.clone()));
+                the_read(h, host)
+            });
+            let v = &h.state().versions;
+            assert!(v.details.is_some() && (v.details_comparing.is_some() || v.details_reading.is_some()), "under way");
+            leave(h, host, home);
+            let v = &h.state().versions;
+            assert!(v.details.is_none() && v.details_comparing.is_none() && v.details_reading.is_none(), "let go");
+            if let Some(read) = read {
+                assert!(read.send(page_of(history().remove(1))).is_err(), "its answer goes nowhere");
+            } else {
+                answer(host, "c2", Ok(before.clone()));
+                answer(host, "c3", Ok(after.clone()));
+            }
+            h.run_steps(4);
+            assert!(h.state().versions.details.is_none() && !h.ctx.has_requested_repaint(), "at rest");
+        });
+    }
+}
+
+/// Home and a project closed draw no rail, and an opened change goes all the same, its sides and
+/// the read of them with it, so that read's answer lands nowhere and nothing wakes the window.
+#[test]
+fn leaving_the_project_lets_the_opened_change_go() {
+    for home in [true, false] {
+        in_both(|h, host| {
+            let (id, key) = element_open(h, host);
+            let sides = reading(h, id, key);
+            assert!(h.state().versions.element.is_some(), "open");
+            leave(h, host, home);
+            let v = &h.state().versions;
+            assert!(v.element.is_none() && v.element_reading.is_none(), "let go");
+            let late = both_sides(id, "shop").map(|s| s.map(crate::change_view::Sides::Element));
+            assert!(sides.send(late).is_err(), "its answer goes nowhere");
+            h.run_steps(4);
+            assert!(!h.ctx.has_requested_repaint(), "at rest");
+        });
+    }
+}
+
+/// The page and the details take turns at reading, as the host limits the reads under way.
+#[test]
+fn the_page_and_the_details_take_turns_at_reading() {
+    in_both_listing(vec![history().remove(0)], |h, host| {
+        let rows = rows_now(h);
+        compared(h, "c3");
+        answer(host, "c2", Ok(rows.clone()));
+        answer(host, "c3", Ok(rows));
+        frames_until(h, |h| h.state().versions.details_reading.is_some());
+        h.run_steps(2);
+        assert!(asked(host).is_empty(), "behind the link's read: {:?}", asked(host));
+    });
+}
+
+/// While a version is in view, Compare pairs its version with the work set aside, not with the
+/// version shown: in what it finds and in the revision a failure is about.
+#[test]
+fn compare_takes_current_work_while_a_version_shows() {
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        let work = h.state().session.as_ref().unwrap().revision();
+        opened(h, "c2");
+        tap(h, VIEW);
+        h.run_steps(3);
+        while asked(host).iter().any(|c| c == "c2") {
+            answer(host, "c2", Ok(before.clone()));
+        }
+        h.run_steps(4);
+        assert_eq!(h.state().viewing(), Some("c2"));
+        for read in host.version_reads.lock().unwrap().drain(..) {
+            let _ = read.send(Ok(crate::VersionsPage { versions: history(), more: false }));
+        }
+        host.reads.lock().unwrap().clear();
+        frames_until(h, |h| h.state().versions.details_comparing.is_none());
+        assert_ne!(h.state().session.as_ref().unwrap().revision(), work, "the version shown is another session");
+        compared(h, "c3");
+        answer(host, "c2", Ok(before.clone()));
+        answer(host, "c3", Ok(before.clone()));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| found(h).is_some());
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work), "a failure about current work");
+        h.state_mut().versions.compare_results.found = None;
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| matches!(found(h), Some(Ok(_))));
+        assert_eq!(found(h), Some(Ok(vec![("shop".to_string(), ChangeKind::Added)])), "the schema only current work holds");
+        assert_eq!(h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.revision), Some(work));
+    });
+}
+
+/// Nothing is compared during an edit.
+#[test]
+fn an_edit_under_way_holds_the_comparison() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        answer(host, "c3", Ok(before));
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
+        h.run_steps(2);
+        assert!(found(h).is_none() && h.state().versions.compare_results.comparing.is_none());
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        found_many(h, 1);
+    });
+}
+
+const COMPARE_LOADING: &str = "workspace.version-compare.loading";
+
+/// The page says how many differences there are and by area, and lists them in groups as cards;
+/// bars stand in until the first answer, and the band stays over all of it.
+#[test]
+fn the_differences_are_counted_and_grouped() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !painted(h).iter().any(|t| t.ends_with("differences")), "{:?}", painted(h));
+        let the_panels = painted_times(h, "MODEL ELEMENTS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 1);
+        h.run_steps(1);
+        assert!(painted_has(h, "1 difference") && painted_has(h, "1 model element") && painted_times(h, "MODEL ELEMENTS") == the_panels + 1);
+        assert!(!painted_has(h, "DIAGRAMS") && !has_id(h, COMPARE_LOADING) && has_id(h, SWAP), "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label_contains(", Added").count(), 2, "the list's row and the page's card");
+    });
+}
+
+/// A list of other sides starts at its top.
+#[test]
+fn a_new_pair_lists_from_the_top() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.state_mut().versions.compare_results.scroll.offset = 40.0;
+        h.run_steps(1);
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 40.0, "a list longer than the page");
+        tap(h, SWAP);
+        frames_until(h, |h| matches!(found(h), Some(Ok(items)) if items[0].1 == ChangeKind::Removed));
+        assert_eq!(h.state().versions.compare_results.scroll.offset, 0.0);
+    });
+}
+
+/// With no control and not the explorer holding the keys, they scroll the list: the arrows by a
+/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them.
+#[test]
+fn the_keys_scroll_the_list() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        (0..14).for_each(|i| add_schema(h, &format!("s{i}")));
+        answer(host, "c3", Ok(before));
+        found_many(h, 15);
+        h.run_steps(1);
+        let offset = |h: &Harness<'static, Shell>| h.state().versions.compare_results.scroll.offset;
+        let first = ids(h).into_iter().find(|i| i.starts_with("workspace.version-compare.change.")).unwrap();
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 56.0, "a card down");
+        key(h, ArrowUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "and back");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert!(offset(h) > 56.0, "more than a card: {}", offset(h));
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a page up");
+        key(h, End, egui::Modifiers::NONE);
+        let end = offset(h);
+        h.run_steps(1);
+        assert!(end > 0.0 && end < 15.0 * 56.0 && !has_id(h, &first), "the last cards show: {end}");
+        key(h, ArrowDown, egui::Modifiers::NONE);
+        assert_eq!(offset(h), end, "nothing further");
+        key(h, Home, egui::Modifiers::NONE);
+        h.run_steps(1);
+        assert!(offset(h) == 0.0 && has_id(h, &first));
+        h.state_mut().explorer.focused = true;
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(SWAP)));
+        h.run();
+        key(h, End, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a control has the keys");
+    });
+}
+
+/// A failure is said with Retry, and no count; Retry reads again.
+#[test]
+fn a_failed_comparison_on_the_page_is_said_and_retried() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        answer(host, "c3", Err("Too many".to_string().into()));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.failed"));
+        assert!(!painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        tap(h, "workspace.version-compare.retry");
+        frames_until(h, |_| asked(host) == ["c3"]);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, "workspace.version-compare.failed"));
+    });
+}
+
+/// Current work whose rows cannot be built is a failure on the page too: said, why on hover, no
+/// count, and Retry compares again.
+#[test]
+fn rows_that_cannot_be_built_are_said_on_the_page() {
+    const FAILED: &str = "workspace.version-compare.failed";
+    in_both(|h, host| {
+        let (before, _) = before_and_after(h, host);
+        unbuildable(h);
+        compared_off_the_frame(h, host, &before);
+        frames_until(h, |h| has_id(h, FAILED));
+        assert!(painted_has(h, "The changes couldn't be compared.") && !painted(h).iter().any(|t| t.contains("difference")), "{:?}", painted(h));
+        h.event(egui::Event::PointerMoved(rect_of(h, FAILED).center()));
+        h.run_steps(4);
+        assert!(painted(h).iter().any(|t| t.contains("too large to store")), "{:?}", painted(h));
+        // An edit under way holds the comparison Retry asks for, so the bars show until it ends.
+        h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
+        tap(h, "workspace.version-compare.retry");
+        h.run_steps(1);
+        assert!(has_id(h, COMPARE_LOADING) && !has_id(h, FAILED));
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        frames_until(h, |h| has_id(h, FAILED));
+    });
+}
+
+/// Skills are a group of their own, after model elements, and counted as skills.
+#[test]
+fn skills_are_listed_on_their_own() {
+    in_both(|h, host| {
+        let before = page_reading(h, host);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        frames_until(h, |h| h.state().versions.changes.iter().any(|d| d.area == Area::Skill));
+        let the_panels = painted_times(h, "SKILLS");
+        answer(host, "c3", Ok(before));
+        found_many(h, 2);
+        h.run_steps(1);
+        assert!(painted_has(h, "2 differences") && painted_has(h, "1 model element · 1 skill"), "{:?}", painted(h));
+        assert_eq!(painted_times(h, "SKILLS"), the_panels + 1, "{:?}", painted(h));
+        assert_eq!(h.query_all_by_label("Naming, Skills, Added").count(), 2, "the list's row and the page's card");
+        let items = h.state().versions.compare_results.found.clone().unwrap().1.unwrap();
+        let top = |d: &Difference| rect_of(h, &format!("workspace.version-compare.change.{}.{}", d.id, d.class.0)).top();
+        assert_eq!(items.iter().map(|d| d.area).collect::<Vec<_>>(), [Area::Model, Area::Skill]);
+        assert!(top(&items[0]) < top(&items[1]), "the skill's card under the model element's");
+    });
+}
+
+/// Nothing to list is said in words: for a version and current work, for one version on both sides,
+/// which reads nothing, and for two versions alike.
+#[test]
+fn an_empty_result_and_two_versions_alike_are_said() {
+    in_both(|h, host| {
+        let _ = page_reading(h, host);
+        let now = rows_now(h);
+        answer(host, "c3", Ok(now.clone()));
+        frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
+        assert!(painted_has(h, "This version is the same as your current work.") && !painted_has(h, "0 differences"), "{:?}", painted(h));
+        let alike = "These two versions are the same.";
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(1));
+        h.run_steps(1);
+        assert!(painted_has(h, alike) && asked(host).is_empty(), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(2));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(now.clone()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(now));
+        frames_until(h, |h| found(h) == Some(Ok(Vec::new())));
+        h.run_steps(1);
+        assert!(painted_has(h, alike) && !painted_has(h, "0 differences"), "{:?}", painted(h));
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(0));
+        tap(h, SELECT_BEFORE);
+        tap(h, &row_id(0));
+        h.run_steps(1);
+        assert!(painted_has(h, "Both sides are your current work."), "{:?}", painted(h));
     });
 }
 
@@ -1435,14 +2720,13 @@ fn says(h: &Harness<'static, Shell>, head: &str, body: &str) {
 fn the_summary_says_added_or_removed() {
     in_both(|h, host| {
         let (id, key) = element_open(h, host);
-        says(h, "This element was added", &format!("It is only on the After side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was added", "It is only on the After side, so there is nothing to compare.");
         landed(h, id, key, Ok(Some(sided(id, schema("gone"), None, Vec::new()))));
-        says(h, "This element was removed", &format!("It is only on the Before side, so there is nothing to compare. {NOT_SHOWN}"));
+        says(h, "This element was removed", "It is only on the Before side, so there is nothing to compare.");
     });
 }
 
-/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all;
-/// members are said not to be shown, so the count isn't read as all there is.
+/// Each difference is counted and said in a whole sentence, the name and kind first, a same value not at all.
 #[test]
 fn the_summary_counts_and_says_each_difference() {
     in_both(|h, host| {
@@ -1451,11 +2735,11 @@ fn the_summary_counts_and_says_each_difference() {
         let same = field(Some(Value::str("same")), Some(Value::str("same")), false);
         let fields = vec![visibility.clone(), same];
         landed(h, id, key.clone(), Ok(Some(sided(id, schema("kept"), schema("kept"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
         let entity = Some(ElementCard { class: archforge_er::ENTITY, name: None, made: false });
         landed(h, id, key, Ok(Some(sided(id, schema("was"), entity, vec![visibility]))));
         let said = "The name changed from was to Unnamed. The kind changed from Schema to Table. Visibility changed from Not set to Private.";
-        says(h, "3 values changed", &format!("{said} {NOT_SHOWN}"));
+        says(h, "3 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1469,7 +2753,7 @@ fn the_summary_counts_what_it_does_not_write_out() {
         for (n, more) in [(3, String::new()), (4, " 1 more value changed.".to_owned()), (5, " 2 more values changed.".to_owned())] {
             let fields = vec![field(Some(Value::str("a")), Some(Value::str("b")), true); n];
             landed(h, id, key.clone(), Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-            says(h, &format!("{n} values changed"), &format!("{three}{more} {NOT_SHOWN}"));
+            says(h, &format!("{n} values changed"), &format!("{three}{more} {MARKED}"));
         }
     });
 }
@@ -1482,7 +2766,7 @@ fn the_summary_says_a_property_is_on_one_side_alone() {
         let fields = vec![field(Some(Value::str("a")), None, true), field(None, Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
         let said = "Visibility is only on the Before side. Visibility is only on the After side.";
-        says(h, "2 values changed", &format!("{said} {NOT_SHOWN}"));
+        says(h, "2 values changed", &format!("{said} {MARKED}"));
     });
 }
 
@@ -1494,10 +2778,10 @@ fn unmarked_cards_never_read_as_nothing_changed() {
         let (id, key) = element_open(h, host);
         let fields = vec![field(Some(Value::str("same")), Some(Value::str("same")), false)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "Only what these cards don't show changed", &format!("The cards show the same on both sides. {NOT_SHOWN}"));
+        says(h, "Only what these cards don't show changed", "The cards show the same on both sides.");
         h.state_mut().versions.compare_failed = Some("the list failed".into());
         h.run_steps(1);
-        says(h, "The cards show no difference", NOT_SHOWN);
+        says(h, "The cards show no difference", "The cards show the same on both sides.");
     });
 }
 
@@ -1509,7 +2793,7 @@ fn the_summary_cuts_a_long_value() {
         let long = "x".repeat(60);
         let fields = vec![field(Some(Value::str(&long)), Some(Value::str("b")), true)];
         landed(h, id, key, Ok(Some(sided(id, schema("k"), schema("k"), fields))));
-        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {NOT_SHOWN}", "x".repeat(40)));
+        says(h, "1 value changed", &format!("Visibility changed from {}… to b. {MARKED}", "x".repeat(40)));
         assert_eq!(named(h, &format!("Visibility, {long}, Changed")), 1, "the card holds it whole");
     });
 }
@@ -1535,7 +2819,7 @@ fn listed(id: Uuid, name: &str, lists: CardLists) -> Result<Option<ElementSides>
 
 /// A list of `kind` holding rows that say each `(words, change)`.
 fn list(kind: ListKind, rows: Vec<(Named, Option<ChangeKind>)>) -> CardList {
-    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, change };
+    let row = |(name, change)| ListRow { id: Uuid([7; 16]), class: archforge_er::ATTRIBUTE, name, to: None, note: String::new(), change };
     CardList { kind, rows: rows.into_iter().map(row).collect() }
 }
 
@@ -1587,6 +2871,34 @@ fn a_missing_name_is_said_in_words() {
     });
 }
 
+/// A relationship reads as what it joins to, after its role, or after its kind when it has none, with
+/// its far end's multiplicity, and says when this side has nothing at its far end.
+#[test]
+fn a_relationship_reads_as_what_it_joins_to() {
+    in_both(|h, host| {
+        let (id, key) = element_open(h, host);
+        let row = |class, name: &str, to: Named, change| {
+            let note = if name.is_empty() { String::new() } else { " [1..*]".to_owned() };
+            ListRow { id: Uuid([9; 16]), class, name: Named::Said(name.into()), to: Some((None, to)), note, change }
+        };
+        let side = |far: Named| {
+            let rows = vec![
+                row(archforge_uml::ASSOCIATION, "lines", Named::Said("OrderLine".into()), None),
+                row(archforge_uml::GENERALIZATION, "", Named::Said("Shape".into()), None),
+                row(archforge_er::RELATIONSHIP, "", far, Some(ChangeKind::Changed)),
+            ];
+            vec![CardList { kind: ListKind::Relationships, rows }]
+        };
+        let lists = CardLists { before: side(Named::Unavailable), after: side(Named::Said("order".into())), ..CardLists::default() };
+        landed(h, id, key, listed(id, "a", lists));
+        assert_eq!(named(h, "Relationships, lines \u{2192} OrderLine [1..*]"), 2, "{:?}", painted(h));
+        assert_eq!(named(h, "Relationships, Generalization \u{2192} Shape"), 2, "no role: its kind");
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} Not available on this side, Changed"), 1);
+        assert_eq!(named(h, "Relationships, Relationship \u{2192} order, Changed"), 1);
+        assert_eq!(painted_times(h, "RELATIONSHIPS"), 2);
+    });
+}
+
 /// A table reads in its notation's words: its kind, its columns, and a nameless line by what it joins,
 /// whose words differing is no renaming.
 #[test]
@@ -1629,7 +2941,7 @@ fn a_long_list_draws_only_rows_in_view() {
     });
 }
 
-/// Members that differ are counted beside the values, the same count however many rows hold it;
+/// Members and relationships that differ are counted beside the values, the same count however many rows hold it;
 /// a changed owner is said in words, past the sentences a summary cuts, and is no value in the count.
 #[test]
 fn the_summary_counts_members_and_says_the_owner() {
@@ -1637,21 +2949,31 @@ fn the_summary_counts_members_and_says_the_owner() {
         let (id, key) = element_open(h, host);
         let some = |n| CardLists { member_changes: n, ..CardLists::default() };
         landed(h, id, key.clone(), listed(id, "a", some(2)));
-        says(h, "2 members changed", NOT_SHOWN);
+        says(h, "2 members changed", MARKED);
+        let joined = |members, relationships| CardLists { member_changes: members, relationship_changes: relationships, ..CardLists::default() };
+        landed(h, id, key.clone(), listed(id, "a", joined(0, 1)));
+        says(h, "1 relationship changed", MARKED);
+        let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
+        landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(joined(1, 2)), ..sided(id, schema("a"), schema("a"), fields) })));
+        says(
+            h,
+            "1 value changed \u{b7} 1 member changed \u{b7} 2 relationships changed",
+            &format!("Visibility changed from Not set to Private. {MARKED}"),
+        );
         let fields = vec![field(Some(Value::Null), Some(Value::Enum(1)), true)];
         landed(h, id, key.clone(), Ok(Some(ElementSides { lists: Arc::new(some(1)), ..sided(id, schema("a"), schema("a"), fields) })));
-        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {NOT_SHOWN}"));
+        says(h, "1 value changed \u{b7} 1 member changed", &format!("Visibility changed from Not set to Private. {MARKED}"));
         let moved = || vec![list(ListKind::Ownership, vec![(Named::Said("p".into()), Some(ChangeKind::Changed))])];
         let owned = |n| CardLists { before: moved(), after: moved(), member_changes: n, ..Default::default() };
         landed(h, id, key.clone(), listed(id, "a", owned(0)));
-        says(h, "The owner changed", &format!("The owner changed. {NOT_SHOWN}"));
+        says(h, "The owner changed", &format!("The owner changed. {MARKED}"));
         let changed = field(Some(Value::Null), Some(Value::Enum(1)), true);
         let with_owner = |fields: Vec<CardField>| Ok(Some(ElementSides { lists: Arc::new(owned(0)), ..sided(id, schema("a"), schema("a"), fields) }));
         landed(h, id, key.clone(), with_owner(vec![changed.clone()]));
-        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {NOT_SHOWN}"));
+        says(h, "1 value changed", &format!("Visibility changed from Not set to Private. The owner changed. {MARKED}"));
         landed(h, id, key, with_owner(vec![changed; 4]));
         let one = "Visibility changed from Not set to Private.";
-        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {NOT_SHOWN}"));
+        says(h, "4 values changed", &format!("{one} {one} {one} 1 more value changed. The owner changed. {MARKED}"));
     });
 }
 
@@ -1727,6 +3049,26 @@ fn a_select_lists_the_versions_and_a_pick_sets_its_side() {
         h.state_mut().state.explorer = crate::state::Explorer::SourceControl;
         h.run_steps(2);
         assert_eq!(at(h), None, "it goes with the page, or its keys would stay taken");
+    });
+}
+
+/// An earlier Archforge's name for a restore's kept work shows its time as the list says it, in the
+/// select's row and in the select that holds it, and never as stored.
+#[test]
+fn an_old_restore_name_shows_its_time_as_the_list_says_it() {
+    let mut listed = history();
+    listed[1].description = Some("Before restoring 2026-11-07T09:20:00Z".into());
+    in_both_listing(listed, |h, _| {
+        compared(h, "c3");
+        let told = format!("Before restoring {}", crate::versions::when("2026-11-07T09:20:00Z", crate::chat_panel::clock(h.state())));
+        tap(h, SELECT_AFTER);
+        let row = h.query_all_by_role(egui::accesskit::Role::ListBoxOption).nth(2).expect("the row of the restore's kept work");
+        let said = row.accesskit_node().label().unwrap_or_default().to_string();
+        assert!(said.ends_with(&format!(", {told}")), "{said}");
+        assert!(painted_has(h, &told) && !painted_has(h, "2026-11-07T09:20:00Z"), "{:?}", painted(h));
+        tap(h, &row_id(2));
+        let held = holds(h, "After");
+        assert!(held.ends_with(&told) && !held.contains("2026-"), "{held}");
     });
 }
 
@@ -1843,7 +3185,7 @@ fn viewing(h: &mut Harness<'static, Shell>, host: &SavingHost, row: &str) {
 }
 
 /// The details ask before anything starts and say what the restore makes, unsaved work included;
-/// Cancel starts nothing, and the job is told the date the question quotes.
+/// Cancel starts nothing, and the job is told the dates the question quotes.
 #[test]
 fn the_details_ask_first_and_say_what_a_restore_makes() {
     in_both(|h, host| {
@@ -1855,10 +3197,10 @@ fn the_details_ask_first_and_say_what_a_restore_makes() {
         add_schema(h, "shop");
         list_still(h);
         asking(h, "c3");
-        assert!(painted_has(h, "\"Before restoring\""), "the last version is on offer with unsaved work: {:?}", painted(h));
+        assert!(painted_has(h, "\"Before restoring 9 Nov 13:00\""), "the last version is on offer with unsaved work: {:?}", painted(h));
         let _job = restoring(h, host, "c3");
         assert!(h.state().is_held() && h.state().ask.is_none());
-        assert_eq!(*host.restore_dates.lock().unwrap(), ["7 Nov 17:15"]);
+        assert_eq!(*host.restore_dates.lock().unwrap(), [("7 Nov 17:15".to_string(), "9 Nov 13:00".to_string())], "the dates quoted");
     });
 }
 
@@ -1895,11 +3237,132 @@ fn restore_is_not_offered_for_current_work_or_an_unreadable_version() {
     });
 }
 
-/// A failure brings the question back saying what happened, with Retry unless trying again can't
-/// help; one before anything is written says that nothing changed.
+const BRANCH: &str = "workspace.version-details.branch";
+const BRANCH_ON_BANNER: &str = "workspace.banner.branch";
+
+/// Opens Start a branch here… with `start` on a project on `main`, and names the branch Fresh.
+fn branching(h: &mut Harness<'static, Shell>, host: &SavingHost, start: &str) {
+    *host.branch_now.lock().unwrap() = Some("main".into());
+    h.run_steps(1);
+    tap(h, start);
+    h.run_steps(2);
+    h.event(egui::Event::Text("Fresh".into()));
+    h.run_steps(2);
+}
+
+/// Create on the dialog up; gives the branches the host was asked to make and where each starts.
+fn made_at(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, Option<String>)> {
+    tap(h, "branch-ask.create");
+    h.run_steps(2);
+    let names = host.branch_makes.lock().unwrap().iter().map(|m| m.0.clone()).collect::<Vec<_>>();
+    names.into_iter().zip(host.branch_starts.lock().unwrap().iter().cloned()).collect()
+}
+
+/// The details start a branch at their version, named with its date and description; unsaved work
+/// shown is said to stay. Made, the dialog closes and the switch to the new branch starts.
+#[test]
+fn the_details_start_a_branch_at_their_version_and_switch_to_it() {
+    in_both(|h, host| {
+        add_schema(h, "shop");
+        list_still(h);
+        opened(h, "c2");
+        branching(h, host, BRANCH);
+        let said = ["Start a branch here", "It starts from the version of 7 Nov 09:20 · First classes. Your unsaved changes stay on main."];
+        assert!(said.iter().all(|w| painted_has(h, w)) && !painted_has(h, "Viewing ends"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// The banner starts a branch at the version in view, saying viewing ends there; made, the switch
+/// leaves the version for the new branch.
+#[test]
+fn the_banner_starts_a_branch_and_viewing_ends_on_it() {
+    in_both(|h, host| {
+        viewing(h, host, "c2");
+        branching(h, host, BRANCH_ON_BANNER);
+        let said = "It starts from the version of 7 Nov 09:20. Viewing ends on the new branch.";
+        assert!(painted_has(h, said) && !painted_has(h, "stay on"), "{:?}", painted(h));
+        assert_eq!(made_at(h, host), [("fresh".to_string(), Some("c2".to_string()))]);
+        assert_eq!(h.state().viewing(), Some("c2"), "still viewing while the host works");
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().viewing().is_none() && h.state().ask.is_none());
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh"]);
+    });
+}
+
+/// A branch starts at any version that can be read, the last one too, in the details or the banner,
+/// and at none that can't; nor with no branches kept.
+#[test]
+fn start_a_branch_is_not_offered_on_an_unreadable_version() {
+    in_both(|h, host| {
+        opened(h, "c3");
+        assert!(!has_id(h, BRANCH), "no branches kept");
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        assert!(has_id(h, BRANCH), "the last version");
+        h.state_mut().versions.unavailable.insert("c2".into(), Some("gone".into()));
+        opened(h, "c2");
+        assert!(has_id(h, VIEW) && !has_id(h, BRANCH), "unreadable");
+        h.state_mut().versions.unavailable.clear();
+        viewing(h, host, "c2");
+        assert!(has_id(h, BRANCH_ON_BANNER), "in view");
+        h.state_mut().versions.unavailable.insert("c2".into(), None);
+        h.run_steps(1);
+        assert!(!has_id(h, BRANCH_ON_BANNER), "unreadable in view");
+    });
+}
+
+/// In every language the bundled faces draw, at the narrowest centre beside the explorer and at the
+/// least window width, the details' four actions wrap rather than pass the centre column's right
+/// edge, and what the details show under them starts below their last line. Japanese and Chinese
+/// draw with an installed family, which a test can't count on, and their labels are shorter.
+#[test]
+fn the_details_actions_wrap_inside_a_narrow_centre() {
+    let actions = [VIEW, "workspace.version-details.compare", RESTORE, BRANCH];
+    in_both(|h, host| {
+        *host.branch_now.lock().unwrap() = Some("main".into());
+        h.run_steps(1);
+        opened(h, "c2");
+        for language in crate::i18n::LANGUAGES.iter().filter(|l| !["ja", "zh-Hans"].contains(&l.code)) {
+            h.state_mut().state.language = language.code.into();
+            // 796 leaves the centre its least width beside the explorer; 640 hides the explorer.
+            for (width, explorer) in [(796.0, true), (640.0, false)] {
+                h.set_size(egui::vec2(width, 860.0));
+                h.run_steps(2);
+                assert_eq!(has_id(h, "workspace.versions.row.c2"), explorer, "{width}");
+                let left = rect_of(h, "workspace.version-details.close").left() - crate::version_details::MARGIN;
+                // The right rail's buttons sit 4 points inside it, and it starts where the centre ends.
+                let right = rect_of(h, "workspace.panels.agent").left() - 4.0;
+                for id in actions {
+                    let at = rect_of(h, id);
+                    assert!(at.left() >= left && at.right() <= right, "{}: {width}: {id} {at:?} outside {left}..{right}", language.code);
+                }
+                let lowest = actions.iter().map(|id| rect_of(h, id).bottom()).fold(0.0, f32::max);
+                let below = h
+                    .state()
+                    .widgets()
+                    .iter()
+                    .filter(|w| w.id.starts_with("workspace.version-details.") && !actions.contains(&w.id.as_str()) && !w.id.ends_with(".close"))
+                    .map(|w| w.rect[1])
+                    .fold(f32::MAX, f32::min);
+                assert!(below < f32::MAX && below > lowest, "{}: {width}: {below} under {lowest}", language.code);
+            }
+        }
+        h.state_mut().state.language = "en".into();
+    });
+}
+
+/// A failure brings the question back saying what happened, with Retry unless the host says the
+/// version is the same as current work, which trying again can't change, the work kept or not; one
+/// before anything is written says that nothing changed.
 #[test]
 fn a_failure_comes_back_and_says_what_happened() {
-    use crate::replace::JobFailure::{Failed, WorkSaved};
+    use crate::replace::JobFailure::{Failed, Same, WorkSaved};
     in_both(|h, host| {
         asking(h, "c2");
         let (ended, _reading) = restoring(h, host, "c2");
@@ -1912,9 +3375,23 @@ fn a_failure_comes_back_and_says_what_happened() {
                 && !h.state().is_held()
         );
         let (ended, _reading) = restoring(h, host, "c2");
-        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        ended.send(Err(Same { work_saved: false })).unwrap();
         h.run_steps(4);
         assert!(painted_has(h, "This version is the same") && !has_id(h, GO), "nothing to try again");
+        tap(h, CLOSE);
+        add_schema(h, "same");
+        list_still(h);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Same { work_saved: true })).unwrap();
+        h.run_steps(4);
+        assert!(painted_has(h, "Your unsaved work was kept") && !has_id(h, GO) && !h.state().shown_unsaved(), "{:?}", painted(h));
+        tap(h, CLOSE);
+        asking(h, "c2");
+        let (ended, _reading) = restoring(h, host, "c2");
+        ended.send(Err(Failed("This version is the same as your current work.".into()))).unwrap();
+        h.run_steps(4);
+        assert!(has_id(h, GO), "only the typed reason ends retrying");
         tap(h, CLOSE);
         assert!(h.state().ask.is_none() && h.state().versions.details.is_some());
         tap(h, RESTORE);

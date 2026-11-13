@@ -156,7 +156,7 @@ fn kind_note(kind: Option<Kind>) -> String {
 }
 
 /// What a parameter still needs, in the user's words: `T needs an argument: pick a class.`
-fn needs(name: &str, kind: Option<Kind>) -> String {
+pub(crate) fn needs(name: &str, kind: Option<Kind>) -> String {
     let line = match kind {
         Some(Kind::Interface) => tr("{name} needs an argument: pick an interface."),
         Some(Kind::DataType) => tr("{name} needs an argument: pick a data type."),
@@ -165,6 +165,21 @@ fn needs(name: &str, kind: Option<Kind>) -> String {
         _ => tr("{name} needs an argument: pick a class."),
     };
     fmt(&line, &[("name", name)])
+}
+
+/// What the parameters `params`, each with its kind, need, none having a default, in the user's
+/// words: one as [`needs`] says it, several listed with their kinds, `T (class) and K (data type)
+/// have no default, so each needs an argument.`; None for none.
+pub(crate) fn lacking(params: &[(&str, Kind)]) -> Option<String> {
+    match params {
+        [] => None,
+        [(name, kind)] => Some(needs(name, Some(*kind))),
+        _ => {
+            let named: Vec<String> =
+                params.iter().map(|(name, kind)| fmt(&tr("{name} ({kind})"), &[("name", name), ("kind", &kind_note(Some(*kind)))])).collect();
+            Some(fmt(&tr("{names} have no default, so each needs an argument."), &[("names", &crate::uml_sets::and_list(&named))]))
+        }
+    }
 }
 
 /// The arguments parameter `p` may take, each as it reads and as the commands take it: Default
@@ -516,7 +531,7 @@ fn apply_draft(shell: &mut Shell) {
                     Ok(())
                 })
                 .map(|o| o.value.get(0).and_then(|v| v.get("id")).and_then(|v| v.as_str()).and_then(Uuid::parse))
-                .map_err(|e| e.to_string())
+                .map_err(|e| crate::panels::refusal(&e))
         }
         _ => return,
     };
@@ -608,18 +623,11 @@ pub(crate) fn start_problem(store: &Store, element: Obj) -> Option<String> {
     (!ok).then(|| tr("Only a class, an interface or a data type binds a template"))
 }
 
-/// Why `bound` may not bind `template`, in the user's words, when it may not. `except` is a binding
-/// being reconnected.
+/// Why `bound` may not bind `template`, in the user's words, when it may not: the model's rule said
+/// as a refusal of the engine is. `except` is a binding being reconnected.
 pub(crate) fn refusal(store: &Store, bound: Obj, template: Obj, except: Option<Obj>) -> Option<String> {
-    use archforge_uml::bindings::Problem as P;
-    Some(match bindings::problem(store, bound, template, except)? {
-        P::NotBindable => tr("Only a class, an interface or a data type binds a template"),
-        P::NotATemplate => tr("A binding ends at a template: a class, an interface or a data type with template parameters"),
-        P::OtherKind => tr("A template is bound by a classifier of its own kind"),
-        P::Itself => tr("A template does not bind itself"),
-        P::Again => tr("This one binds that template already"),
-        P::Cycle => tr("That template binds this one already, which would make a cycle"),
-    })
+    let problem = bindings::problem(store, bound, template, except)?;
+    Some(crate::panels::said(&problem.reason(store, bound, template)).unwrap_or_else(|| problem.said(store, bound, template)))
 }
 
 /// Whether moving binding `b`'s template end onto `template` needs arguments first: a parameter

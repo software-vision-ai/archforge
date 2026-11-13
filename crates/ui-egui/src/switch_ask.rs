@@ -58,6 +58,17 @@ impl Shell {
     }
 }
 
+/// Goes to the branch stored as `branch`, just made from current work: the work came along, so
+/// nothing is asked about it, and a switch that ends without arriving says why as any other does.
+pub(crate) fn to_new_branch(shell: &mut Shell, branch: String) -> Result<(), HoldRefused> {
+    let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|p| p.path.clone())) else {
+        return Err(HoldRefused::NoProject);
+    };
+    let from = host.current_branch(&path).ok_or(HoldRefused::NoProject)?;
+    let after_chat = shell.chat_answered;
+    go(shell, Confirm { target: host.branch_shown(&branch), from: host.branch_shown(&from), branch, after_chat, failure: None }, false)
+}
+
 /// Starts the switch asked for, its ending to come back here. One that doesn't start says why in
 /// its result; Chat's question for a turn begun after this question leaves it to the status bar.
 fn go(shell: &mut Shell, confirm: Confirm, save_first: bool) -> Result<(), HoldRefused> {
@@ -82,7 +93,8 @@ pub(crate) fn keep(shell: &mut Shell) {
             return;
         }
         s.ended_on = shell.session.as_ref().map(|x| x.history());
-        let refused = shell.refused.is_some() && shell.refused == shell.session.as_ref().map(|x| x.revision());
+        // The writer could not build or write the work's rows, so it could not be kept.
+        let refused = shell.write_failed();
         let why = shell.save_error.clone().unwrap_or_else(|| tr("The switch did not finish, so the project stayed on its branch."));
         // A Save that answered marked the session saved; one that failed left it unsaved.
         let template = if refused {

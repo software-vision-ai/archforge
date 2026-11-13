@@ -45,7 +45,8 @@ pub(crate) fn waiting(shell: &Shell) -> bool {
     shell.is_held() || (!settled(shell) && shell.versions.compare_failed.is_none())
 }
 
-/// Why Save version… is off, when it is: it needs current work with settled changes to save.
+/// Why Save version… is off, when it is: it needs current work with settled changes to save. With
+/// none listed, text typed that waits to be written is why, never "no changes" (AR-381).
 pub(crate) fn off_because(shell: &Shell) -> Option<String> {
     if shell.viewing.is_some() {
         Some(tr("Back to current work to save a version"))
@@ -55,6 +56,8 @@ pub(crate) fn off_because(shell: &Shell) -> Option<String> {
         Some(tr("Loading"))
     } else if shell.versions.compare_failed.is_some() {
         Some(tr("The changes couldn't be compared."))
+    } else if shell.versions.working == 0 && shell.typing_unkept() {
+        Some(tr("What you're typing isn't kept yet"))
     } else if shell.versions.working == 0 {
         Some(tr("No changes since the last version."))
     } else {
@@ -118,18 +121,26 @@ fn save(shell: &mut Shell) {
     }
 }
 
-/// What the review says changed, and since when.
+/// What the review says changed, and since when: model elements, diagrams and skills, each only
+/// when there is one.
 fn summary(shell: &Shell) -> String {
     let count = |area| shell.versions.changes.iter().filter(|d| d.area == area).count() as u64;
-    let (model, diagrams) = (count(Area::Model), count(Area::Diagram));
-    let models = trn("{n} model element", "{n} model elements", model);
-    let shown = trn("{n} diagram", "{n} diagrams", diagrams);
-    let what = match (model, diagrams) {
-        (0, 0) if shell.versions.compare_failed.is_some() => return tr("The changes couldn't be compared."),
-        (0, 0) => return tr("No changes since the last version."),
-        (_, 0) => models,
-        (0, _) => shown,
-        _ => fmt(&tr("{first} and {second}"), &[("first", &models), ("second", &shown)]),
+    let (model, diagrams, skills) = (count(Area::Model), count(Area::Diagram), count(Area::Skill));
+    let parts: Vec<String> = [
+        (model, trn("{n} model element", "{n} model elements", model)),
+        (diagrams, trn("{n} diagram", "{n} diagrams", diagrams)),
+        (skills, trn("{n} skill", "{n} skills", skills)),
+    ]
+    .into_iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(_, words)| words)
+    .collect();
+    let what = match parts.as_slice() {
+        [] if shell.versions.compare_failed.is_some() => return tr("The changes couldn't be compared."),
+        [] => return tr("No changes since the last version."),
+        [one] => one.clone(),
+        [first, second] => fmt(&tr("{first} and {second}"), &[("first", first), ("second", second)]),
+        [first, second, third, ..] => fmt(&tr("{first}, {second} and {third}"), &[("first", first), ("second", second), ("third", third)]),
     };
     match last_saved(&shell.versions, crate::chat_panel::clock(shell)) {
         Some(when) => fmt(&tr("{what} changed since {when}."), &[("what", &what), ("when", &when)]),

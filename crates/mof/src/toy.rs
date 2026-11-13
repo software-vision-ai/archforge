@@ -571,4 +571,9 @@ impl Slabs for ToySlabs {
             + self.enumerations.capacity() * size_of::<EnumerationObj>()
             + self.enumeration_literals.capacity() * size_of::<EnumerationLiteralObj>()
     }
+
+    /// Every slab copied, the objects' text shared.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(self.clone())
+    }
 }

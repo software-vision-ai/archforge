@@ -428,9 +428,11 @@ fn a_realization_reconnects_with_its_rules_kept_and_goes_alone_or_with_either_en
 }
 
 /// A realization whose end that stays is wrong already, owned by something else than a class (a
-/// project edited by hand), is refused when its other end moves, naming the realization's own end.
+/// project edited by hand), is refused when its other end moves, naming the realization's own end,
+/// its reason typed as that end's (AR-442).
 #[test]
 fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_moves() {
+    use archforge_engine::{End, EngineError, Reason};
     let mut st = store(0);
     st.create(archforge_core::MODEL).unwrap();
     let actor = st.create(archforge_uml::ACTOR).unwrap();
@@ -442,9 +444,11 @@ fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_mov
     let (r, refundable, actor) = (id(r), id(refundable), id(actor));
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(ALONE));
     let before = snapshot(&s);
-    let e = s.execute("uml.relationship.reconnect", &json!({ "relationship": r, "end": "target", "class": refundable })).unwrap_err().to_string();
+    let p = json!({ "relationship": r, "end": "target", "class": refundable });
+    let Err(EngineError::Failed { error, .. }) = s.execute("uml.relationship.reconnect", &p) else { panic!("{p} is refused") };
     let want = format!("relationship: the realization's existing implementing end {actor} is of kind Actor; it must be a Class");
-    assert!(e.contains(&want), "{e}");
+    assert_eq!(error.to_string(), want);
+    assert_eq!(error.reason, Some(Reason::WrongEnd { relationship: "realization", end: End::Source, kind: "element" }));
     assert_eq!(snapshot(&s), before, "nothing changed");
 }
 
@@ -680,4 +684,134 @@ fn an_operation_is_made_leaf_and_one_redefined_is_refused_naming_what_redefines_
     // The one nothing redefines is made leaf.
     round_trip(&mut s, "uml.operation.set", json!({ "operation": card_authorise, "name": "authorise", "returns": "Boolean", "leaf": true }));
     round_trip(&mut s, "uml.classifier.set", json!({ "classifier": c[1], "leaf": true }));
+}
+
+/// Every relationship rule a generalization, a realization, an association, an association class
+/// or an n-ary association breaks carries its reason typed beside the unchanged English, for an
+/// interface to say in its own words; a role another end has names that end's role (AR-436).
+#[test]
+fn every_relationship_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{End, EngineError, Reason};
+    let mut s = session();
+    let (pkg, _, c, _) = classes(&mut s, &["Order", "Invoice", "Line"], 0);
+    let add = |s: &mut S, cmd: &str, name: &str| run(s, cmd, json!({ "package": pkg, "name": name }));
+    let priced = add(&mut s, "uml.interface.add", "Priced");
+    let tier = add(&mut s, "uml.enumeration.add", "Tier");
+    let money = add(&mut s, "uml.data-type.add", "Money");
+    let sku = add(&mut s, "uml.primitive-type.add", "Sku");
+    let quote = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Quote" }));
+    run(&mut s, "uml.generalization.add", json!({ "specific": c[1], "general": c[0] }));
+    run(&mut s, "uml.realization.add", json!({ "class": c[0], "interface": priced }));
+    run(&mut s, "uml.attribute.add", json!({ "class": c[2], "name": "count", "type": "Integer" }));
+    let integer = s.execute("uml.class.get", &json!({ "class": c[2] })).unwrap().value["attributes"][0]["type"]["id"].as_str().unwrap().to_string();
+    let final_one = add(&mut s, "uml.class.add", "Sealed");
+    run(&mut s, "uml.classifier.set", json!({ "classifier": final_one, "final": true }));
+    let binary = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "role": "buyer" }));
+    run(&mut s, "uml.attribute.add", json!({ "class": quote, "name": "price" }));
+    let nary = run(&mut s, "uml.association.add-nary", json!({ "classes": [c[0], c[1], c[2]] }));
+    let generalize = |specific: &str, general: &str| ("uml.generalization.add", json!({ "specific": specific, "general": general }));
+    let realize = |class: &str, interface: &str| ("uml.realization.add", json!({ "class": class, "interface": interface }));
+    let cases = [
+        (generalize(&priced, &c[0]), Reason::SpecializesOnlyItsKind { kind: "interface" }, "an interface specializes only an interface"),
+        (generalize(&c[2], &tier), Reason::OnlyItsKindSpecializes { kind: "enumeration" }, "only an enumeration specializes an enumeration"),
+        (generalize(&c[2], &money), Reason::OnlyItsKindSpecializes { kind: "data type" }, "only a data type specializes a data type"),
+        (generalize(&c[2], &priced), Reason::CannotSpecialize { kind: "class", general: "interface" }, "a class cannot specialize an interface"),
+        (generalize(&integer, &sku), Reason::SpecializesNothing { kind: "built-in type" }, "which specializes nothing"),
+        (generalize(&c[2], &quote), Reason::NothingSpecializes { kind: "association class" }, "which nothing specializes"),
+        (generalize(&c[2], &c[2]), Reason::Itself { relationship: "generalization", kind: "class" }, "a class cannot specialize itself"),
+        (generalize(&c[2], &final_one), Reason::Final { name: "Sealed".into() }, "nothing may specialize it"),
+        (generalize(&c[1], &c[0]), Reason::Again { relationship: "generalization" }, "specializes that class already"),
+        (generalize(&c[0], &c[1]), Reason::Cycle { relationship: "generalization" }, "which would make a cycle"),
+        (realize(&priced, &priced), Reason::WrongEnd { relationship: "realization", end: End::Source, kind: "interface" }, "only a class implements"),
+        (
+            realize(&c[0], &c[1]),
+            Reason::WrongEnd { relationship: "realization", end: End::Target, kind: "class" },
+            "a class realizes only an interface",
+        ),
+        (realize(&c[0], &priced), Reason::Again { relationship: "realization" }, "the class realizes that interface already"),
+        (
+            ("uml.association.add", json!({ "from": c[0], "to": tier })),
+            Reason::WrongEnd { relationship: "association", end: End::Target, kind: "enumeration" },
+            "joins no association",
+        ),
+        (
+            ("uml.association-class.add", json!({ "from": priced, "to": c[0] })),
+            Reason::WrongEnd { relationship: "association class", end: End::Source, kind: "interface" },
+            "an association class joins only classes",
+        ),
+        (
+            ("uml.relationship.reconnect", json!({ "relationship": quote, "end": "target", "class": quote })),
+            Reason::Itself { relationship: "association class", kind: "association class" },
+            "is the association class itself",
+        ),
+        (
+            ("uml.association.add-nary", json!({ "classes": [c[0], c[1], sku] })),
+            Reason::WrongEnd { relationship: "association", end: End::Any, kind: "primitive type" },
+            "joins no association",
+        ),
+        (
+            ("uml.association.set-end", json!({ "association": binary, "end": 1, "role": "BUYER" })),
+            Reason::NameTaken { kind: "association end", name: "buyer".into() },
+            "the other end's role is buyer already",
+        ),
+        (
+            ("uml.association.set-end", json!({ "association": quote, "end": 0, "role": "PRICE" })),
+            Reason::NameTaken { kind: "attribute", name: "price".into() },
+            "named price",
+        ),
+        (
+            ("uml.association.add-end", json!({ "association": nary, "class": c[0], "role": "ORDER" })),
+            Reason::NameTaken { kind: "association end", name: "order".into() },
+            "has the role",
+        ),
+    ];
+    for ((cmd, p), reason, english) in cases {
+        let before = snapshot(&s);
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(snapshot(&s), before, "{cmd} {p} changed nothing");
+    }
+}
+
+/// Every aggregation rule a binary association's end breaks, and every count of ends an n-ary
+/// association breaks, carries its reason typed beside the unchanged English, for an interface to
+/// say in its own words (AR-442).
+#[test]
+fn every_aggregation_and_end_count_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let (_, _, c, _) = classes(&mut s, &["Order", "Line", "Invoice"], 0);
+    let binary = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));
+    let end = |e: u8, p: Json| {
+        let mut p = p;
+        p["association"] = json!(binary);
+        p["end"] = json!(e);
+        ("uml.association.set-end", p)
+    };
+    let nary = run(&mut s, "uml.association.add-nary", json!({ "classes": [c[0], c[1], c[2]] }));
+    let full = run(&mut s, "uml.association.add-nary", json!({ "classes": vec![&c[2]; 32] }));
+    let few = Reason::TooFew { kind: "association end", min: 3 };
+    let most = Reason::TooMany { kind: "association end", max: 32 };
+    let check = |s: &mut S, (cmd, p): (&str, Json), reason: Reason, english: &str| {
+        let before = snapshot(s);
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(snapshot(s), before, "{cmd} {p} changed nothing");
+    };
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "multiplicity": "*" }));
+    check(&mut s, end(1, json!({ "aggregation": "composite" })), Reason::WholeAllowsMany, "whole end allows one at most");
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 0, "multiplicity": "1" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": binary, "end": 1, "aggregation": "composite" }));
+    check(&mut s, end(0, json!({ "aggregation": "shared" })), Reason::OtherEndAggregates, "the other end aggregates already");
+    check(&mut s, end(0, json!({ "multiplicity": "*" })), Reason::WholeAllowsOne, "this end is a composition's whole");
+    check(&mut s, end(0, json!({ "navigable": true })), Reason::WholeNavigable, "is not navigable");
+    let nary_end = ("uml.association.set-end", json!({ "association": nary, "end": 0, "aggregation": "shared" }));
+    check(&mut s, nary_end, Reason::NaryAggregates, "ends are not aggregations");
+    check(&mut s, ("uml.association.add-nary", json!({ "classes": [c[0], c[1]] })), few.clone(), "joins 3 to 32 ends; 2 given");
+    check(&mut s, ("uml.association.add-nary", json!({ "classes": vec![&c[2]; 33] })), most.clone(), "joins 3 to 32 ends; 33 given");
+    check(&mut s, ("uml.association.add-end", json!({ "association": full, "class": c[0] })), most, "the most an association takes");
+    check(&mut s, ("uml.association.remove-end", json!({ "association": nary, "end": 0 })), few, "only two would remain");
 }

@@ -9,6 +9,7 @@
 pub mod actions;
 pub mod ai_agents;
 pub mod appearance;
+mod branch_ask;
 pub mod canvas;
 mod change_view;
 pub mod chat;
@@ -85,6 +86,7 @@ pub mod version_chip;
 mod version_details;
 mod version_load;
 pub mod versions;
+pub mod view_menu;
 mod viewing;
 pub mod widgets;
 pub mod workspace;
@@ -165,6 +167,8 @@ pub enum VersionReadError {
     Unavailable,
     /// Its model tables are another or a newer Archforge's.
     Shape,
+    /// Its model is past what Archforge reads: too large to show or compare, however often asked.
+    TooLarge,
     /// Anything else, in words for a person: asking again may well work.
     Failed(String),
 }
@@ -175,6 +179,7 @@ impl std::fmt::Display for VersionReadError {
         match self {
             Self::Unavailable => f.write_str(&i18n::tr("It isn't a version of this branch.")),
             Self::Shape => f.write_str(&i18n::tr("Made with a newer Archforge.")),
+            Self::TooLarge => f.write_str(&i18n::tr("Its model is larger than Archforge reads.")),
             Self::Failed(why) => f.write_str(why),
         }
     }
@@ -212,6 +217,8 @@ pub struct BranchEntry {
     pub unsaved: bool,
     /// When its latest version was saved, as the project stores it; none before the first.
     pub latest: Option<String>,
+    /// That version's hash, which Compare reads.
+    pub latest_version: Option<String>,
 }
 
 pub trait ProjectHost: Send + Sync {
@@ -247,6 +254,19 @@ pub trait ProjectHost: Send + Sync {
     /// project). Rows for a project that is no longer open are dropped.
     fn write(&self, _project: &std::path::Path, _rows: archforge_mof::rows::Rows) {}
 
+    /// [`ProjectHost::write`] of the model as `model` froze it, its rows built off the interface
+    /// thread by the host's writer; a model that cannot be turned into rows is that write's failure,
+    /// which [`ProjectHost::writing`] tells. This default, for a host with no writer of its own,
+    /// builds them where it is called and only logs a model it cannot turn into rows, so every
+    /// host that writes overrides it.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        match model.rows(&tables, &junctions) {
+            Ok(rows) => self.write(project, rows),
+            Err(e) => log::error!("the model could not be turned into rows to save: {e}"),
+        }
+    }
+
     /// Save: writes what waits, then commits it in the project at `project`, and says what that
     /// did to the history, or, when it failed, whether a version exists. The commit carries `description`, or the automatic `Saved <time>`
     /// when there is none. A description that is empty, more than one line or too long, or that
@@ -268,14 +288,16 @@ pub trait ProjectHost: Send + Sync {
         rx
     }
 
-    /// The job that restores the version `commit` of the project at `project`, saved at `saved_at`
-    /// as the list says it, as a new version recorded as `by`, for [`Shell::begin_replacement`];
-    /// `repair` is what an opening does to a model. Its callbacks only hand the work over.
+    /// The job that restores the version `commit` of the project at `project` as a new version
+    /// recorded as `by`, for [`Shell::begin_replacement`]. `dates` are when the version was saved,
+    /// which names the new version, and when the restore was asked for, which names the version
+    /// unsaved work is kept as first, both as the list says them. `repair` is what an opening does
+    /// to a model. Its callbacks only hand the work over.
     fn restore_job(
         &self,
         _project: &std::path::Path,
         _commit: String,
-        _saved_at: String,
+        _dates: (String, String),
         _by: SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> replace::Job {
@@ -318,9 +340,9 @@ pub trait ProjectHost: Send + Sync {
         Err("this host keeps no branches".to_string())
     }
 
-    /// Starts making the branch stored as `name` from the current work of the open project at
-    /// `path`, without switching to it, and returns at once.
-    fn create_branch(&self, _path: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
+    /// Starts making the branch stored as `name` of the open project at `path`, from its version
+    /// `start` or with none from its current work, without switching to it, and returns at once.
+    fn create_branch(&self, _path: &std::path::Path, _name: &str, _start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), BranchRefused>> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err(BranchRefused::Failed("this host keeps no branches".into())));
         rx
@@ -348,6 +370,14 @@ pub trait ProjectHost: Send + Sync {
     fn read_version(&self, _project: &std::path::Path, _commit: String) -> std::sync::mpsc::Receiver<VersionRead> {
         let (tx, rx) = std::sync::mpsc::channel();
         let _ = tx.send(Err("this host keeps no versions".to_string().into()));
+        rx
+    }
+
+    /// [`ProjectHost::read_version`] of a version on the line of the branch stored as `branch`,
+    /// whichever branch the project is on. A host that keeps no branches has none to read.
+    fn read_branch_version(&self, _project: &std::path::Path, _branch: &str, _commit: String) -> std::sync::mpsc::Receiver<VersionRead> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = tx.send(Err(VersionReadError::Unavailable));
         rx
     }
 
@@ -428,6 +458,8 @@ pub struct VersionEntry {
     pub date: String,
     /// The nearest earlier version; none for the first.
     pub previous: Option<String>,
+    /// Whether `main` has it too; never on `main` itself. History marks where these start.
+    pub shared: bool,
 }
 
 /// A page of a project's versions, newest first.
@@ -571,7 +603,6 @@ pub(crate) struct Parked {
     session_error: Option<SessionError>,
     adopted: Option<std::path::PathBuf>,
     written: Option<u64>,
-    refused: Option<u64>,
     saving: Option<Saving>,
     save_error: Option<String>,
     explorer: explorer::State,
@@ -640,6 +671,17 @@ impl std::fmt::Display for BranchNotDeleted {
 }
 
 impl std::error::Error for BranchNotDeleted {}
+
+impl From<BranchNotDeleted> for BranchRefused {
+    /// A delete's answer as the branch dialog takes it, each reason as itself.
+    fn from(not: BranchNotDeleted) -> Self {
+        match not {
+            BranchNotDeleted::Unclear(why) => BranchRefused::Unclear(why),
+            BranchNotDeleted::Moved => BranchRefused::Moved,
+            BranchNotDeleted::Failed(why) => BranchRefused::Failed(why),
+        }
+    }
+}
 
 /// What deleting a branch would take with it, as its confirmation says.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -774,8 +816,6 @@ pub struct Shell {
     adopted: Option<std::path::PathBuf>,
     /// The model's revision last handed to the host to write.
     written: Option<u64>,
-    /// The model's revision that could not be turned into rows, so it is not tried every frame.
-    refused: Option<u64>,
     /// A save the host works on, and the state it writes.
     saving: Option<Saving>,
     /// The last save's ticket, and how the latest finished ones went (the revision written, or
@@ -841,6 +881,14 @@ pub struct Shell {
     pub(crate) own_agent_access: bool,
 }
 
+/// Whether `panels` and `canvas` hold text typed that the work doesn't have yet: a description
+/// draft, being typed or refused, or a skill's text not yet kept, waiting for its typing to pause
+/// or refused by the store. It is unsaved work like a change to the model, so nothing calls the
+/// work saved or unchanged, and a close or a quit asks, while it waits (AR-381).
+pub(crate) fn typing_unkept(panels: &panels::State, canvas: &canvas::State) -> bool {
+    panels::description_pending(panels) || !skill_tab::unkept(canvas).is_empty()
+}
+
 impl Shell {
     pub fn new(services: Services) -> Self {
         Self {
@@ -874,7 +922,6 @@ impl Shell {
             session_error: None,
             adopted: None,
             written: None,
-            refused: None,
             saving: None,
             save_ticket: 0,
             saves: std::collections::VecDeque::new(),
@@ -963,7 +1010,6 @@ impl Shell {
             self.session_error = p.session_error;
             self.adopted = p.adopted;
             self.written = p.written;
-            self.refused = p.refused;
             self.saving = p.saving;
             self.save_error = p.save_error;
             self.explorer = p.explorer;
@@ -1000,19 +1046,19 @@ impl Shell {
         }
     }
 
-    /// Whether tab `i`'s project holds changes not yet saved, a description typed but not yet
-    /// written, or refused, among them (AR-186).
+    /// Whether tab `i`'s project holds changes not yet saved, text typed that it doesn't have yet
+    /// among them (`crate::typing_unkept`; AR-186, AR-381), whether it is shown or parked.
     pub fn tab_unsaved(&self, i: usize) -> bool {
         if self.active == Some(i) {
             if let Some(viewing) = &self.viewing {
                 return viewing.unsaved();
             }
-            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&self.panels);
+            return self.session.as_ref().is_some_and(|s| s.is_dirty()) || self.typing_unkept();
         }
         self.tabs
             .get(i)
             .and_then(|t| t.parked.as_ref())
-            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || panels::description_pending(&p.panels))
+            .is_some_and(|p| p.session.as_ref().is_some_and(|s| s.is_dirty()) || typing_unkept(&p.panels, &p.canvas))
     }
 
     /// The tab of the project at `path`.
@@ -1176,8 +1222,7 @@ impl Shell {
                 return;
             }
             self.write_changes();
-            let current = self.session.as_ref().map(|s| s.revision());
-            if current.is_some() && self.refused == current { Err(self.save_error.clone().unwrap_or_default()) } else { Ok(()) }
+            Ok(())
         } else {
             self.hand_over_parked(i)
         };
@@ -1244,9 +1289,7 @@ impl Shell {
         if parked.written == Some(revision) {
             return Ok(());
         }
-        let (tables, junctions) = archforge_notations::storage();
-        let rows = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).map_err(|e| e.to_string())?;
-        host.write(&path, rows);
+        host.write_model(&path, session.doc().freeze());
         parked.written = Some(revision);
         Ok(())
     }
@@ -1318,7 +1361,6 @@ impl Shell {
             session_error: self.session_error.take(),
             adopted: self.adopted.take(),
             written: self.written.take(),
-            refused: self.refused.take(),
             saving: self.saving.take(),
             save_error: self.save_error.take(),
             explorer: std::mem::take(&mut self.explorer),
@@ -1347,7 +1389,6 @@ impl Shell {
         self.session_error = None;
         self.adopted = None;
         self.written = None;
-        self.refused = None;
         // A save of another project answers for that one, never for this.
         if let Some((_, _, ticket)) = self.saving.take() {
             self.finished_save(ticket, SaveState::Unknown);
@@ -1484,41 +1525,23 @@ impl Shell {
         self.state.keep_view(&path, view);
     }
 
-    /// Hands the model to the host when it changed since the last hand-over; the host writes it a
-    /// moment later. Nothing is handed over in the middle of a drag.
+    /// Hands the model to the host when it changed since the last hand-over, frozen as it is now:
+    /// the host's writer builds its rows and writes them a moment later, and says through
+    /// [`ProjectHost::writing`] when they could not be. Nothing is handed over in the middle of a drag.
     fn write_changes(&mut self) {
         let (Some(session), Some(host), Some(project)) = (&self.session, &self.services.projects, &self.project) else { return };
         let revision = session.revision();
-        if self.written == Some(revision)
-            || self.refused == Some(revision)
-            || session.interacting()
-            || self.holding.writes_stopped()
-            || self.viewing.is_some()
-        {
+        if self.written == Some(revision) || session.interacting() || self.holding.writes_stopped() || self.viewing.is_some() {
             return;
         }
-        let (tables, junctions) = archforge_notations::storage();
-        match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
-            Ok(rows) => {
-                host.write(&project.path, rows);
-                self.written = Some(revision);
-                // A change handed over replaces the word on a refused closing.
-                if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
-                    tab.close_error = None;
-                }
-                // The model could not be turned into rows before; now it could.
-                if self.refused.take().is_some() {
-                    self.save_error = None;
-                }
-                // A failed opening is old news once the open project changes.
-                self.open_error = None;
-            }
-            Err(e) => {
-                log::error!("the model could not be turned into rows to save: {e}");
-                self.save_error = Some(e.to_string());
-                self.refused = Some(revision);
-            }
+        host.write_model(&project.path, session.doc().freeze());
+        self.written = Some(revision);
+        // A change handed over replaces the word on a refused closing.
+        if let Some(tab) = self.active.and_then(|i| self.tabs.get_mut(i)) {
+            tab.close_error = None;
         }
+        // A failed opening is old news once the open project changes.
+        self.open_error = None;
     }
 
     /// Save: the host writes what waits and commits it, a skill's text and a description being
@@ -1541,6 +1564,21 @@ impl Shell {
         self.start_save(Some((description, Some(reviewed))), SavedBy::Person(self.state.user_name.clone()));
     }
 
+    /// Whether the status bar says Saved: no change and no text typed that the work hasn't got, and
+    /// no save or write failed, which a save tries again. Save without a description then makes no
+    /// version, not even an untouched new project's first one.
+    fn nothing_to_save(&self) -> bool {
+        !self.session.as_ref().is_some_and(|s| s.is_dirty()) && !self.typing_unkept() && self.save_error.is_none() && !self.write_failed()
+    }
+
+    /// Whether the host's last write of the open project failed, its rows not built or not written.
+    pub(crate) fn write_failed(&self) -> bool {
+        match (&self.services.projects, &self.project) {
+            (Some(host), Some(project)) => host.writing(&project.path).error.is_some(),
+            _ => false,
+        }
+    }
+
     /// Starts a save recorded as `by`: under the description in `review` when there is one, and
     /// only if the model still stands at the revision `review` names when it names one.
     fn start_save(&mut self, review: Option<(String, Option<u64>)>, by: SavedBy) {
@@ -1553,12 +1591,12 @@ impl Shell {
         if refused {
             return;
         }
-        // A state that could not be written cannot be saved: its error stays on the status bar.
         let current = self.session.as_ref().map(|s| s.revision());
-        if current.is_some() && self.refused == current {
+        let Some(revision) = self.written else { return };
+        // After the writes above, which made typed text a change: no version of nothing (AR-383).
+        if review.is_none() && self.nothing_to_save() {
             return;
         }
-        let Some(revision) = self.written else { return };
         // After the writes above: text still being typed counts as a move, since it was not reviewed.
         let moved = review.as_ref().and_then(|(_, reviewed)| *reviewed).is_some_and(|reviewed| current != Some(reviewed) || revision != reviewed);
         if let (Some(host), Some(project)) = (&self.services.projects, &self.project) {
@@ -1733,6 +1771,11 @@ impl Shell {
         self.active.is_some_and(|i| self.tab_unsaved(i))
     }
 
+    /// Whether current work holds text typed that it doesn't have yet (`crate::typing_unkept`).
+    pub(crate) fn typing_unkept(&self) -> bool {
+        typing_unkept(&self.panels, &self.canvas)
+    }
+
     /// Whether File → Generate… can open: a project is open and the dialog is not.
     pub fn can_generate(&self) -> bool {
         self.session.is_some() && self.generate.is_none() && self.about.is_none() && self.versions.dialog.is_none()
@@ -1783,13 +1826,19 @@ impl Shell {
         // Any ending may have made a version, one that failed or went unanswered too: History reads again.
         self.versions.stale = true;
         // A closing that waited for this save goes on, asks again when edits came in meanwhile,
-        // or stops with the save's error.
+        // or stops with the save's error: asking to close without writing when the host could
+        // not write the project's changes, a model it could not turn into rows among them.
         let waiting: Vec<std::path::PathBuf> = self.close_after_save.iter().filter(|(_, t)| *t == ticket).map(|(p, _)| p.clone()).collect();
         self.close_after_save.retain(|(_, t)| *t != ticket);
         for path in waiting {
+            let unwritten = self.services.projects.as_ref().is_some_and(|h| h.writing(&path).error.is_some());
             match (&outcome, self.tab_of(&path)) {
                 (SaveState::Saved(_), Some(i)) if self.tab_unsaved(i) => self.ask = Some(close_ask::Ask::Unsaved { path }),
                 (SaveState::Saved(_), Some(i)) => self.close_tab_now(i),
+                (SaveState::Failed(why), Some(_)) if unwritten => {
+                    self.quitting = None;
+                    self.ask = Some(close_ask::Ask::CannotWrite { path, why: why.clone() });
+                }
                 _ => self.quitting = None,
             }
         }
@@ -1890,6 +1939,10 @@ impl Shell {
         }
         self.poll_host();
         version_chip::keep_valid(self);
+        // Home and a project closed draw no rail: what the versions' pages hold of another goes here.
+        version_details::let_go(self);
+        change_view::let_go(self);
+        version_details::compare::results::let_go(self);
         // The agent programs and keys are looked for once at start, never by opening Settings.
         ai_agents::start(self);
         ai_agents::poll(self, ctx);
@@ -1901,6 +1954,7 @@ impl Shell {
         // Deleted conversations: the project's answers, the toast's time, the folders let go.
         chat_delete::frame(self);
         save_version::frame(self);
+        branch_ask::frame(self, ctx);
         // While the host works on an opening, a save or a write, the window looks again soon, so
         // its answer shows without waiting for the pointer to move.
         // A write that failed waits for the next change or Save, and the status bar already says
@@ -1970,9 +2024,10 @@ impl Shell {
     /// The window title: the open project's name and the application's, or the application's alone.
     pub fn title(&self) -> String {
         match &self.project {
-            // Unsaved changes mark the title with a dot before the name.
+            // Unsaved changes mark the title with a dot before the name, as they mark its tab: text
+            // typed and not yet kept among them.
             Some(p) => {
-                let name = if self.session.as_ref().is_some_and(|s| s.is_dirty()) { format!("• {}", p.name) } else { p.name.clone() };
+                let name = if self.shown_unsaved() { format!("• {}", p.name) } else { p.name.clone() };
                 crate::i18n::fmt(&crate::i18n::tr("{name} — Archforge"), &[("name", &name)])
             }
             None => "Archforge".to_string(),
@@ -2008,7 +2063,12 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || matches!(self.ask, Some(close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. }));
+            || matches!(
+                self.ask,
+                Some(
+                    close_ask::Ask::StopChat { .. } | close_ask::Ask::Switch { .. } | close_ask::Ask::Restore { .. } | close_ask::Ask::Branch { .. }
+                )
+            );
         let held = if dialog { hold_keys(ui.ctx()) } else { Vec::new() };
         if self.project.is_some() {
             workspace::show(self, ui);

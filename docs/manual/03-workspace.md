@@ -11,62 +11,22 @@ An open project fills the window with its workspace.
   which lists what has changed since the last version and the project's history, newest first.
   **Save version…** there saves what changed as a new version:
   [Versions](09-versions.md#save-a-version) goes through it step by step.
-  **Branches**, above it, lists the project's branches, each with when its latest version was saved;
-  it stays folded while the project has only `main`. The branch you are on says *Current*, and a dot
-  marks a branch with unsaved changes to the model (conversations don't count). Click another
-  branch, press Enter on it, or choose **Switch** from its **More** menu to switch to it; ↑ and ↓
-  move between branches. If your work has unsaved changes, Archforge first asks whether to save a
-  version and switch, or switch and leave them on this branch for when you come back. Branches
-  can't be merged yet. A project with more than 200 branches lists the first 200 by name, and says
-  so under the list.
-  Once a project has a second branch, the version chip in the bar at the top names the branch you
-  are on, before *Current work*, and the status bar says *On* and its name before whether your work
-  is saved. The chip's list then starts with that branch: choose it, or press ⇧⌘B (Ctrl Shift B),
-  to list the branches there, each with when its latest version was saved (the first 200, saying so
-  under them, as above), type to narrow them, and choose one, or move to it with ↑ and ↓ and press
-  Enter, to switch to it as above. In a narrower window the chip shortens the branch's name first,
-  then leaves out *Current work*, then shows only its icon, with the whole label when you point at
-  it.
+  **Branches**, above it, lists the project's branches, each a separate line of work that keeps its
+  own versions, unsaved work and conversations; it stays folded while the project has only `main`.
+  [Work on branches](09-versions.md#work-on-branches) goes through making, switching, renaming and
+  deleting them.
   Clicking a version in the history opens its details in the centre, and **View this version**
   there shows it read-only: [Look back at a version](09-versions.md#look-back-at-a-version) goes
   through History, viewing an earlier version and coming back to your current work.
-  **Compare…** opens the Compare page in the centre, with this version as Before and your current
-  work as After; the button between them swaps the two, and each select lists your current work
-  and this branch's versions, reading further ones as you reach the end. What differs between the
-  two is not shown there yet.
-  **Restore this version…**, beside Compare… in the details and the arrow beside **Back to current
-  work** in the banner of a version you are viewing, makes the content of that version a new version
-  on top of the history, named *Restored the version of* and its date. Nothing is rewound or removed
-  and later versions stay in History. A question names the version and says all this first, and
-  that unsaved work is first kept as a version called *Before restoring* and the time. Undo starts
-  fresh after a restore. If it doesn't finish, the same question says what happened and whether your
-  work is as it was, with **Retry**. When another question is open at that moment, this one follows
-  once that one is answered and the project shows again; until then Restore is off in your other
-  open projects and says why. When Archforge can't tell whether it
-  finished, the status bar says so instead. Restore isn't offered for the last version while nothing is
-  unsaved, which is what you have now, or for a version that can't be read.
-  While Chat is still changing the model, Archforge asks first: **Stop and go on** ends its reply,
-  keeping what it has written so far, and **Keep working** leaves everything as it was.
-  Clicking a model element under Working changes opens it in the centre: its name, whether it was
-  added, changed or removed, where it is, and the version it is compared with, or that there is
-  no version to compare with yet. Two cards side by side, **Before** (the last version) and
-  **After** (current work), give the element's kind, name and values. A name or value that differs
-  is marked with − on the Before card and + on the After card as well as a tint. An element with
-  no name goes by what it joins or says, such as *Customer → Order*, and those words following a
-  rename of *Customer* aren't marked as a change to it. A side the element isn't on says *Nothing here yet* or *Removed*. A summary above the cards counts the values
-  and members that differ and says the first three values in words, or that the element was added
-  or removed. Below the values the cards group the element's attributes or columns, operations, literals,
-  other members and owner under headings, marked the same way when one came, went or changed; a
-  long list scrolls with the cards. Relationships aren't listed on the cards yet, and the summary
-  says so. Under the cards, **Related change** names the other model elements connected to this one
-  that also differ in this comparison: what it or its members refer to, what refers to them, and
-  its owner. **Go to** and the name opens that element against the same version.
-  The project's name at the top closes it.
-  Clicking a diagram, or a box or line of one, under Working changes opens that diagram the same
-  way: **Before** and **After** side by side, each drawn as it was on its side and both at one
-  zoom, so a box that stayed is in the same place on both. A box that differs has an outline, a
-  line that differs is drawn over in colour, and each says *Added*, *Changed* or *Removed*. A side
-  the diagram isn't on says so.
+  **Compare…** opens the Compare page, which sets two versions of the branch, or one and your
+  current work or another branch's latest version, side by side:
+  [See what changed](09-versions.md#see-what-changed) goes through it.
+  **Restore this version…**, beside Compare… in the details, makes that version's content your
+  current work again, as a new version on top of the history:
+  [Restore a version](09-versions.md#restore-a-version) says what it keeps.
+  Clicking a model element or a diagram under Working changes opens it in the centre beside your
+  last version: see [An element side by side](09-versions.md#an-element-side-by-side) and
+  [A diagram side by side](09-versions.md#a-diagram-side-by-side).
 - **The centre** shows the open diagrams and skills, each in a tab. The **+** at the start of the
   tab strip makes a new diagram (see *New diagram* below).
 - **The right rail** opens the right panel on **Chat**, **Appearance**, **Properties** or
@@ -75,7 +35,7 @@ An open project fills the window with its workspace.
 - **The status bar** at the bottom says whether the project is saved, and where the project is.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
-**Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
+**View**, **Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
@@ -85,6 +45,13 @@ ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it
 are typing in place stays open for the **Edit** menu's rows to act on; it is finished before another
 menu's row runs, and by a click elsewhere, as it would be with no menu.
 
+**View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
+out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you
+have folded it and the canvas is large enough to show it; then **Diagrams**, **Models** and **Versions**, which open that explorer, and **Chat**,
+**Appearance**, **Properties** and **Skills**, which open that panel. Find… waits while you type in a
+text field, where ⌘K stays the field's own, and while the window is too narrow to show the search; the canvas's rows need a diagram showing; a row that
+opens something is greyed out while it already shows, and every row but Find… needs a project open.
+
 **Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
 as a click on the tool does: click the canvas to place the element, or drag between two elements to
 draw the relationship. **Note** and **Link note** are always listed; the rest follow the open
@@ -93,9 +60,9 @@ classifier tool, **Package**, and every kind of the Relationship tool. While no 
 the diagram can't be changed, the rows are greyed out.
 
 **Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
-of versions, **Compare…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
+of versions, **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
 **Back to current work**. Compare… sets the version whose details show, or else the newest, against
-your current work; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
+your current work; New branch… opens the dialog the Branches header's **+** opens; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
 History gives way to Back to current work, which takes the same keys; Switch branch needs a second
 branch. While the project is busy, saving or switching branch, every row waits.
 
@@ -139,7 +106,8 @@ model. Other kinds of diagram get their own group once Archforge supports them.
 model's packages with their classes, attributes and operations. It starts folded; open a row with
 its arrow, or open every row with the button beside **+**. The filter field narrows the tree to
 what matches. **+** adds what fits the selection, with its name ready to type: press Enter to keep
-it, Escape to cancel.
+it, Escape to cancel. If a name is refused, the reason shows under it and the field keeps what you
+typed, still ready for typing: correct it and press Enter, or press Escape to keep the old name.
 
 An element exists once in the model and can appear on many diagrams. Drag an element from Models
 onto a diagram to show it there.
@@ -152,9 +120,15 @@ every diagram. Each row has an edit button (a pencil) at its right end; it opens
 which changes nothing until you apply it with the check at its foot (or Enter). The cross (or
 Escape) cancels, and the red bin removes the row.
 
-Type a description in the **Description** field and press Enter, or leave the field, to keep it;
-empty the field to remove it. Each change is one undo step. In a UML model the description is
-kept as a comment the element owns: it goes with the element when you remove it, and an agent
+Type a new name in the **Name** field, or a description in the **Description** field, and press
+Enter, or leave the field, to keep it; press Escape to give up what you typed and get back what
+was there, with nothing changed. Empty the **Description** field to remove the description. A
+name can't be empty: an emptied name is refused before anything changes, and the old name stays
+(a relationship or a diagram may be left unnamed). Each change is one undo step. When a change is
+refused, the reason shows at the foot of Properties until you select something else. A description
+or an end's role you leave by selecting something else is kept then; if that is refused, the reason
+names the element you typed it on, and a description stays in that element's field. In a UML model the
+description is kept as a comment the element owns: it goes with the element when you remove it, and an agent
 reading the element reads it too.
 
 **Appearance** styles the selection on the open diagram only: fill, border and text colours, the

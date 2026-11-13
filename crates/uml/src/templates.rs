@@ -39,7 +39,7 @@
 //! bindings to it along.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Parameter, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Obj, PropId, Store, TypeRef, Value};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeSet;
@@ -105,6 +105,15 @@ impl Kind {
             Kind::PrimitiveType => "PrimitiveType",
             Kind::Value => "Value",
             Kind::Operation => "Operation",
+        }
+    }
+
+    /// The kind as a typed refusal names it, an English noun: `class`, `data type`.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Kind::DataType => "data type",
+            Kind::PrimitiveType => "primitive type",
+            other => other.key(),
         }
     }
 
@@ -362,9 +371,9 @@ fn use_text(store: &Store, p: Obj, (binding, bound, actual): (Obj, Option<Obj>, 
     }
 }
 
-/// Why template parameter `p` may not be removed, when a binding substitutes it: the bindings
-/// named, and what to do first.
-pub fn removal_problem(store: &Store, p: Obj) -> Option<String> {
+/// Why template parameter `p` may not be removed, when a binding substitutes it: the refusal under
+/// `ids` naming the bindings and what to do first, typed with the first binding.
+pub fn removal_problem(store: &Store, p: Obj) -> Option<CommandError> {
     let users = users(store, p);
     let first = *users.first()?;
     let more = users.len().saturating_sub(1);
@@ -373,14 +382,33 @@ pub fn removal_problem(store: &Store, p: Obj) -> Option<String> {
         1 => " and 1 other binding".to_string(),
         n => format!(" and {n} other bindings"),
     };
-    Some(format!("{}{others}; change or remove that binding first, then remove {}", use_text(store, p, first), parameter_name(store, p)))
+    let said = format!("{}{others}; change or remove that binding first, then remove {}", use_text(store, p, first), parameter_name(store, p));
+    Some(refuse("ids", said).because(Reason::ParameterInUse(Box::new(in_binding(store, p, first)))))
+}
+
+/// Template parameter `p` as a typed refusal names it: its name, kind, constraint and template.
+pub fn parameter_named(store: &Store, p: Obj) -> Parameter {
+    Parameter {
+        name: parameter_name(store, p),
+        kind: kind_of(store, p).map_or("", Kind::noun),
+        constraint: constraint_of(store, p).map(|c| name_of(store, c)),
+        template: template_of(store, p).map(|t| name_of(store, t)).unwrap_or_default(),
+        ..Parameter::default()
+    }
+}
+
+/// Template parameter `p` as a typed refusal names it with a binding's use of it: the element
+/// bound and the argument given, each empty when there is none.
+fn in_binding(store: &Store, p: Obj, (_, bound, actual): (Obj, Option<Obj>, Option<Obj>)) -> Parameter {
+    let name = |o: Option<Obj>| o.map(|o| name_of(store, o)).unwrap_or_default();
+    Parameter { bound: name(bound), argument: name(actual), ..parameter_named(store, p) }
 }
 
 /// Why removing template parameters `params` together may not happen, worked out before anything
 /// changes: a binding substitutes one of them ([`removal_problem`]), or they are all a template's
 /// parameters, whose signature would go with the last, while a binding still names that signature,
 /// substitutions or none ([`last_parameter_problem`]).
-pub fn removals_problem(store: &Store, params: &[Obj]) -> Option<String> {
+pub fn removals_problem(store: &Store, params: &[Obj]) -> Option<CommandError> {
     for p in params {
         if let Some(why) = removal_problem(store, *p) {
             return Some(why);
@@ -402,27 +430,30 @@ pub fn removals_problem(store: &Store, params: &[Obj]) -> Option<String> {
 }
 
 /// Why `p`, the last parameter of template `t`, may not be removed: its signature would go with
-/// it, and a binding names that signature. None while no binding does.
-fn signature_problem(store: &Store, t: Obj, p: Obj) -> Option<String> {
+/// it, and a binding names that signature; the refusal under `ids`, typed. None while no binding
+/// does.
+fn signature_problem(store: &Store, t: Obj, p: Obj) -> Option<CommandError> {
     let bindings = bindings_to(store, t);
     let first = *bindings.first()?;
     let bound = bound_element(store, first).map(|b| name_of(store, b)).unwrap_or_else(|| uuid_of(store, first).unwrap_or_default());
+    let named = Parameter { bound: bound.clone(), ..parameter_named(store, p) };
     let others = match bindings.len().saturating_sub(1) {
         0 => String::new(),
         1 => " and 1 other binding".to_string(),
         n => format!(" and {n} other bindings"),
     };
-    Some(format!(
+    let said = format!(
         "{bound} binds {}{others}, and {} is its last template parameter: its signature, which the binding names, would go with it; remove that binding first, then remove {}",
         name_of(store, t),
         parameter_name(store, p),
         parameter_name(store, p)
-    ))
+    );
+    Some(refuse("ids", said).because(Reason::LastParameter(Box::new(named))))
 }
 
 /// Why template parameter `p` may not be removed on its own: a binding substitutes it, or it is its
 /// template's last and a binding names the template's signature. The shell asks this one rule.
-pub fn last_parameter_problem(store: &Store, p: Obj) -> Option<String> {
+pub fn last_parameter_problem(store: &Store, p: Obj) -> Option<CommandError> {
     let t = template_of(store, p)?;
     (parameters(store, t).as_slice() == [p]).then(|| signature_problem(store, t, p)).flatten()
 }
@@ -529,7 +560,8 @@ fn kind_param(p: &Params, key: &str) -> Result<Kind, CommandError> {
                 "{} template parameters are not supported yet and are never turned into another kind; the kinds supported are class, interface, data-type, enumeration and primitive-type",
                 kind.keyword()
             ),
-        ));
+        )
+        .because(Reason::KindNotSupported { kind: kind.noun() }));
     }
     Ok(kind)
 }
@@ -545,9 +577,9 @@ fn classifier_param(store: &mut Store, key: &str, value: &str) -> Result<Option<
     if crate::constraints::in_model(store, c) { Ok(Some(c)) } else { Err(refuse(key, format!("{} is not in this model", short(value)))) }
 }
 
-/// The constraint of a parameter of `kind`: a classifier whose metaclass is of the kind, so an
+/// The constraint of parameter `name` of `kind`: a classifier whose metaclass is of the kind, so an
 /// argument can be it or specialize it.
-fn check_constraint(store: &Store, kind: Kind, constraint: Option<Obj>) -> Result<(), CommandError> {
+fn check_constraint(store: &Store, name: &str, kind: Kind, constraint: Option<Obj>) -> Result<(), CommandError> {
     let Some(c) = constraint else { return Ok(()) };
     let Some(meta) = kind.metaclass() else { return Ok(()) };
     if !store.class_of(c).is_ok_and(|k| store.universe().conforms(k, TypeRef::Class(meta))) {
@@ -561,16 +593,18 @@ fn check_constraint(store: &Store, kind: Kind, constraint: Option<Obj>) -> Resul
                 kind_words(kind),
                 kind_words(kind)
             ),
-        ));
+        )
+        .because(Reason::Misfit(Box::new(Parameter { name: name.to_string(), kind: kind.noun(), ..Parameter::default() }))));
     }
     Ok(())
 }
 
-/// The default of a parameter of `kind` constrained to `constraint`: of the kind, and the
+/// The default of parameter `name` of `kind` constrained to `constraint`: of the kind, and the
 /// constraining classifier or one that specializes it.
-fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Option<Obj>) -> Result<(), CommandError> {
+fn check_default(store: &Store, name: &str, kind: Kind, constraint: Option<Obj>, default: Option<Obj>) -> Result<(), CommandError> {
     let Some(d) = default else { return Ok(()) };
     let Some(meta) = kind.metaclass() else { return Ok(()) };
+    let misfit = || Reason::DefaultMisfit(Box::new(Parameter { name: name.to_string(), argument: name_of(store, d), ..Parameter::default() }));
     if !store.class_of(d).is_ok_and(|k| store.universe().conforms(k, TypeRef::Class(meta))) {
         return Err(refuse(
             "default",
@@ -581,7 +615,8 @@ fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Op
                 kind_words(kind),
                 kind_words(kind)
             ),
-        ));
+        )
+        .because(misfit()));
     }
     if let Some(c) = constraint
         && !crate::relations::specializes(store, d, c)
@@ -594,7 +629,8 @@ fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Op
                 name_of(store, c),
                 name_of(store, c)
             ),
-        ));
+        )
+        .because(misfit()));
     }
     Ok(())
 }
@@ -602,19 +638,20 @@ fn check_default(store: &Store, kind: Kind, constraint: Option<Obj>, default: Op
 /// A parameter's name in `template`: a name, none of its other parameters' whatever the case.
 fn check_name(store: &Store, template: Obj, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(problem) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {problem}")));
+        return Err(refuse("name", format!("the name {problem}")).because(problem.reason));
     }
     if let Some(other) = name_clash(store, template, name, except) {
+        let existing = parameter_name(store, other);
         return Err(refuse(
             "name",
             format!(
-                "{} has a template parameter named {} already, {}, and {:?} matches it whatever the case; choose a name none of its other parameters has",
+                "{} has a template parameter named {existing} already, {}, and {:?} matches it whatever the case; choose a name none of its other parameters has",
                 name_of(store, template),
-                parameter_name(store, other),
                 uuid_of(store, other)?,
                 short(name)
             ),
-        ));
+        )
+        .because(Reason::NameTaken { kind: "template parameter", name: existing }));
     }
     Ok(())
 }
@@ -646,14 +683,15 @@ fn parameter_param(store: &Store, p: &Params, key: &str) -> Result<(Obj, Obj), C
 }
 
 /// Why the bindings of parameter `p` would no longer fit it as `kind` constrained to `constraint`:
-/// the first argument that does not, named with its binding.
-fn bindings_problem(store: &Store, p: Obj, kind: Kind, constraint: Option<Obj>) -> Option<String> {
+/// the refusal under `key` naming the first argument that does not with its binding, typed.
+fn bindings_problem(store: &Store, key: &str, p: Obj, kind: Kind, constraint: Option<Obj>) -> Option<CommandError> {
     let bad = users(store, p).into_iter().find(|(_, _, actual)| actual.is_some_and(|a| !fits(store, a, kind, constraint)))?;
     let why = match constraint {
         Some(c) => format!("as {} constrained to {} it would not fit", kind_words(kind), name_of(store, c)),
         None => format!("it is not {}", kind_words(kind)),
     };
-    Some(format!("{}, and {why}; change or remove that binding first", use_text(store, p, bad)))
+    let said = format!("{}, and {why}; change or remove that binding first", use_text(store, p, bad));
+    Some(refuse(key, said).because(Reason::WouldNotFit(Box::new(in_binding(store, p, bad)))))
 }
 
 /// Gives template parameter `p` a classifier of `kind` named `name` in place of `old`, typing by the
@@ -711,7 +749,8 @@ fn parameter_add(ctx: &mut C<'_>, p: &Params) -> R {
                 "{} has {count} template parameters already, and a template has at most {MAX_PARAMETERS}; remove one before adding another",
                 name_of(ctx.doc, template)
             ),
-        ));
+        )
+        .because(Reason::TooMany { kind: "template parameter", max: MAX_PARAMETERS }));
     }
     let name = text(p, "name").to_string();
     check_name(ctx.doc, template, &name, None)?;
@@ -725,12 +764,12 @@ fn parameter_add(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let at = u32::try_from(at).map_err(|_| refuse("at", format!("{at} is too far; a place from 0 to {count}, or -1 for the end")))?;
     let constraint = classifier_param(ctx.doc, "constraint", text(p, "constraint"))?;
-    check_constraint(ctx.doc, kind, constraint)?;
+    check_constraint(ctx.doc, &name, kind, constraint)?;
     let default = classifier_param(ctx.doc, "default", text(p, "default"))?;
-    check_default(ctx.doc, kind, constraint, default)?;
+    check_default(ctx.doc, &name, kind, constraint, default)?;
     // A binding of the template would have no argument for a parameter without a default.
-    if let Some(why) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), None) {
-        return Err(refuse("default", why));
+    if let Some(refused) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), None) {
+        return Err(refused);
     }
     let meta = kind.metaclass().ok_or_else(|| refuse("kind", "not supported yet"))?;
     let sig = match signature(ctx.doc, template) {
@@ -793,22 +832,22 @@ fn parameter_set(ctx: &mut C<'_>, p: &Params) -> R {
         Some(c) => classifier_param(ctx.doc, "constraint", c)?,
         None => constraint_of(ctx.doc, param),
     };
-    check_constraint(ctx.doc, kind, constraint)?;
+    check_constraint(ctx.doc, &name, kind, constraint)?;
     let default = match p.str("default") {
         Some(d) => classifier_param(ctx.doc, "default", d)?,
         None => default_of(ctx.doc, param),
     };
-    check_default(ctx.doc, kind, constraint, default)?;
+    check_default(ctx.doc, &name, kind, constraint, default)?;
     // A binding that leaves the parameter out uses its default, which then stays.
     if default_of(ctx.doc, param).is_some()
-        && let Some(why) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), Some(param))
+        && let Some(refused) = crate::bindings::needs_argument_problem(ctx.doc, template, &name, default.is_some(), Some(param))
     {
-        return Err(refuse("default", why));
+        return Err(refused);
     }
     if (kind != was || constraint != constraint_of(ctx.doc, param))
-        && let Some(why) = bindings_problem(ctx.doc, param, kind, constraint)
+        && let Some(refused) = bindings_problem(ctx.doc, if kind != was { "kind" } else { "constraint" }, param, kind, constraint)
     {
-        return Err(refuse(if kind != was { "kind" } else { "constraint" }, why));
+        return Err(refused);
     }
     let element = if kind != was { change_kind(ctx.doc, param, element, kind, &name)? } else { element };
     set_name(ctx.doc, element, &name)?;
@@ -874,8 +913,8 @@ fn parameter_list(ctx: &mut C<'_>, p: &Params) -> R {
 /// substitutes one), each signature left with none going with its last: what `element.remove`
 /// does with them.
 pub(crate) fn remove(store: &mut Store, params: &[Obj]) -> Result<usize, CommandError> {
-    if let Some(why) = removals_problem(store, params) {
-        return Err(refuse("ids", why));
+    if let Some(refused) = removals_problem(store, params) {
+        return Err(refused);
     }
     let mut gone = 0;
     for p in params {

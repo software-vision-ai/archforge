@@ -220,7 +220,7 @@ fn restyle(shell: &mut Shell, targets: &[Obj], edit: impl Fn(&mut serde_json::Va
         }
         Ok(())
     });
-    shell.panels.notice = outcome.err().map(|e| e.to_string());
+    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(&e));
 }
 
 /// The routing `o`'s own style gives (a `Routing` literal past as-diagram) and whether it avoids
@@ -311,7 +311,7 @@ fn defaults(shell: &mut Shell, targets: &[Obj]) {
     let Some(session) = shell.session.as_mut() else { return };
     let ids: Vec<String> = targets.iter().filter_map(|o| session.doc().uuid(*o).ok()).map(|u| u.to_string()).collect();
     let outcome = session.execute("diagram.style", &json!({ "ids": ids }));
-    shell.panels.notice = outcome.err().map(|e| e.to_string());
+    shell.panels.notice = outcome.err().map(|e| crate::panels::refusal(&e));
 }
 
 /// The heading's two lines for the targets: a name and what it is, on this diagram.
@@ -416,7 +416,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
         defaults(shell, &targets);
     }
     if let Some(why) = shell.panels.notice.clone() {
-        ux::text(&paint, pos2(r.left() + PAD, button.bottom() + 10.0), &why, types::CAPTION, p.amber, Some(width));
+        let area = ux::text(&paint, pos2(r.left() + PAD, button.bottom() + 10.0), &why, types::CAPTION, p.amber, Some(width));
+        widgets::announce(ui, &mut shell.registry, "workspace.appearance.notice", area, &why);
     }
     // The picker over the panel, under its row's own-colour swatch.
     if let Some(picker) = shell.panels.picker.clone()

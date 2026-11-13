@@ -23,6 +23,10 @@ pub struct Search {
     pub open: bool,
     pub query: String,
     pub highlight: usize,
+    /// Find… was chosen: the frame's drawing opens the list, as opening it needs the window.
+    pub asked: bool,
+    /// The bar last drawn had no room for the field, so the list has nowhere to show.
+    pub cramped: bool,
     focus: bool,
     found: Vec<Found>,
     finding: Option<std::sync::mpsc::Receiver<Vec<crate::FoundProject>>>,
@@ -70,13 +74,10 @@ struct Hit {
     detail: String,
 }
 
-/// Opens the search with the keyboard: the command key with K, on Home or in a project, unless a
-/// text is being typed (in a skill's text the same keys make a link).
-pub(crate) fn shortcut(shell: &mut Shell, ctx: &egui::Context) {
-    if ctx.egui_wants_keyboard_input() {
-        return;
-    }
-    if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::K))) {
+/// Opens the search when Find… asked for it, by ⌘K or a menu, on Home or in a project; the table of
+/// actions keeps it off while a text is being typed (in a skill's text the same keys make a link).
+pub(crate) fn open_if_asked(shell: &mut Shell, ctx: &egui::Context) {
+    if std::mem::take(&mut shell.home_search.asked) {
         open(shell, ctx);
     }
 }

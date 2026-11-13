@@ -26,7 +26,7 @@
 //! nor is a default cleared that a binding relies on ([`needs_argument_problem`]).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, Parameter, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, TypeRef, Value};
 use serde_json::{Map, Value as Json, json};
 
@@ -217,6 +217,26 @@ impl Problem {
             ),
         }
     }
+
+    /// Why, typed, for an interface to say in its own words: the end that breaks the rule with its
+    /// kind, or the binding's own rule.
+    pub fn reason(self, store: &Store, bound: Obj, template: Obj) -> Reason {
+        let relationship = "binding";
+        match self {
+            Problem::NotBindable => Reason::WrongEnd { relationship, end: End::Source, kind: crate::commands::what(store, bound) },
+            Problem::NotATemplate => Reason::WrongEnd { relationship, end: End::Target, kind: crate::commands::what(store, template) },
+            Problem::OtherKind => Reason::KindsDiffer { relationship },
+            Problem::Itself => Reason::Itself { relationship, kind: crate::commands::what(store, bound) },
+            Problem::Again => Reason::Again { relationship },
+            Problem::Cycle => Reason::Cycle { relationship },
+        }
+    }
+
+    /// The refusal of `bound` binding `template`, under the parameter `key`: the English sentence
+    /// with its reason typed.
+    pub fn refusal(self, store: &Store, key: &str, bound: Obj, template: Obj) -> CommandError {
+        refuse(key, self.said(store, bound, template)).because(self.reason(store, bound, template))
+    }
 }
 
 /// Why `bound` may not bind `template`, when it may not. `except` is a binding being changed,
@@ -309,14 +329,15 @@ fn kind_words(kind: Option<Kind>) -> &'static str {
     }
 }
 
-/// Why `arg` does not fit parameter `p`, as a refusal says it.
-fn misfit(store: &Store, p: Obj, arg: Arg) -> String {
+/// The refusal of `arg` as the argument of parameter `p`, which it does not fit.
+fn misfit(store: &Store, p: Obj, arg: Arg) -> CommandError {
     let name = match arg {
         Arg::Classifier(c) => name_of(store, c),
         Arg::BuiltIn(b) => b.to_string(),
     };
     let kind = templates::kind_of(store, p);
-    match templates::constraint_of(store, p) {
+    let reason = Reason::Misfit(Box::new(Parameter { argument: name.clone(), ..templates::parameter_named(store, p) }));
+    let said = match templates::constraint_of(store, p) {
         Some(c) => format!(
             "{name} does not fit {}: its argument is {} and must be {} or specialize it",
             templates::parameter_name(store, p),
@@ -324,7 +345,8 @@ fn misfit(store: &Store, p: Obj, arg: Arg) -> String {
             name_of(store, c)
         ),
         None => format!("{name} does not fit {}: its argument is {}", templates::parameter_name(store, p), kind_words(kind)),
-    }
+    };
+    refuse("arguments", said).because(reason)
 }
 
 /// The parameters of `template` a call's `arguments` object names, each with the argument it is
@@ -333,7 +355,8 @@ fn misfit(store: &Store, p: Obj, arg: Arg) -> String {
 fn arguments(store: &Store, template: Obj, given: &Map<String, Json>) -> Result<Vec<(Obj, Option<Arg>)>, CommandError> {
     let params = templates::parameters(store, template);
     if given.len() > templates::MAX_PARAMETERS {
-        return Err(refuse("arguments", format!("{} arguments, and a template has at most {}", given.len(), templates::MAX_PARAMETERS)));
+        return Err(refuse("arguments", format!("{} arguments, and a template has at most {}", given.len(), templates::MAX_PARAMETERS))
+            .because(Reason::TooMany { kind: "template parameter", max: templates::MAX_PARAMETERS }));
     }
     let mut out: Vec<(Obj, Option<Arg>)> = Vec::new();
     for (key, value) in given {
@@ -371,36 +394,47 @@ fn arguments(store: &Store, template: Obj, given: &Map<String, Json>) -> Result<
                     a_what(store, c),
                     name_of(store, c)
                 ),
-            ));
+            )
+            .because(Reason::BuiltInTaken { kind: crate::commands::what(store, c), name: name_of(store, c) }));
         }
         if let Some(a) = arg
             && !arg_fits(store, p, a)
         {
-            return Err(refuse("arguments", misfit(store, p, a)));
+            return Err(misfit(store, p, a));
         }
         if arg.is_none() && templates::default_of(store, p).is_none() {
             return Err(refuse(
                 "arguments",
                 format!("{} has no default, so a binding gives it an argument; it cannot go back to a default", templates::parameter_name(store, p)),
-            ));
+            )
+            .because(needs_arguments(store, &[p])));
         }
         out.push((p, arg));
     }
     Ok(out)
 }
 
+/// Parameters `params`' need of an argument, typed: none of them has a default.
+fn needs_arguments(store: &Store, params: &[Obj]) -> Reason {
+    Reason::NeedsArgument(params.iter().map(|p| templates::parameter_named(store, *p)).collect())
+}
+
 /// Why a binding of `template` that gives the arguments `given` (and, for a binding being changed,
 /// `kept` substitutions' parameters) leaves a parameter without an argument and without a default:
-/// the parameters named, and what to do.
-fn missing_problem(store: &Store, template: Obj, given: &[(Obj, Option<Arg>)], kept: &[Obj]) -> Option<String> {
-    let lacking: Vec<String> = templates::parameters(store, template)
+/// the parameters named, and what to do, with their need typed.
+fn missing_problem(store: &Store, template: Obj, given: &[(Obj, Option<Arg>)], kept: &[Obj]) -> Option<(String, Reason)> {
+    let lacking: Vec<Obj> = templates::parameters(store, template)
         .into_iter()
         .filter(|p| templates::default_of(store, *p).is_none())
         .filter(|p| !given.iter().any(|(q, a)| q == p && a.is_some()) && !kept.contains(p))
-        .map(|p| format!("{} ({})", templates::parameter_name(store, p), kind_words(templates::kind_of(store, p))))
         .collect();
-    (!lacking.is_empty())
-        .then(|| format!("{} needs an argument for {}, which has no default; give it in arguments", name_of(store, template), lacking.join(", ")))
+    if lacking.is_empty() {
+        return None;
+    }
+    let named: Vec<String> =
+        lacking.iter().map(|p| format!("{} ({})", templates::parameter_name(store, *p), kind_words(templates::kind_of(store, *p)))).collect();
+    let said = format!("{} needs an argument for {}, which has no default; give it in arguments", name_of(store, template), named.join(", "));
+    Some((said, needs_arguments(store, &lacking)))
 }
 
 /// Writes the argument of parameter `p` into `binding`: a new substitution, or the one it has
@@ -454,11 +488,11 @@ fn binding_add(ctx: &mut C<'_>, p: &Params) -> R {
     let bound = classifier_param(ctx.doc, p, "bound")?;
     let template = classifier_param(ctx.doc, p, "template")?;
     if let Some(problem) = problem(ctx.doc, bound, template, None) {
-        return Err(refuse(problem.key(), problem.said(ctx.doc, bound, template)));
+        return Err(problem.refusal(ctx.doc, problem.key(), bound, template));
     }
     let given = arguments(ctx.doc, template, &arguments_param(p, "arguments")?)?;
-    if let Some(why) = missing_problem(ctx.doc, template, &given, &[]) {
-        return Err(refuse("arguments", why));
+    if let Some((why, reason)) = missing_problem(ctx.doc, template, &given, &[]) {
+        return Err(refuse("arguments", why).because(reason));
     }
     let sig = templates::signature(ctx.doc, template).ok_or_else(|| refuse("template", "the template has no signature"))?;
     let b = ctx.doc.create(TEMPLATE_BINDING).map_err(fail)?;
@@ -491,7 +525,7 @@ fn binding_set(ctx: &mut C<'_>, p: &Params) -> R {
         None => old_template,
     };
     if let Some(problem) = problem(ctx.doc, bound, template, Some(b)) {
-        return Err(refuse(if problem == Problem::NotBindable { "bound" } else { "template" }, problem.said(ctx.doc, bound, template)));
+        return Err(problem.refusal(ctx.doc, if problem == Problem::NotBindable { "bound" } else { "template" }, bound, template));
     }
     let given = arguments(ctx.doc, template, &arguments_param(p, "arguments")?)?;
     let same = template == old_template;
@@ -500,8 +534,8 @@ fn binding_set(ctx: &mut C<'_>, p: &Params) -> R {
     } else {
         Vec::new()
     };
-    if let Some(why) = missing_problem(ctx.doc, template, &given, &kept) {
-        return Err(refuse(if same { "arguments" } else { "template" }, why));
+    if let Some((why, reason)) = missing_problem(ctx.doc, template, &given, &kept) {
+        return Err(refuse(if same { "arguments" } else { "template" }, why).because(reason));
     }
     move_binding(ctx.doc, b, old_bound, bound, (!same).then_some(template))?;
     let order = templates::parameters(ctx.doc, template);
@@ -542,12 +576,12 @@ pub(crate) fn reconnect(store: &mut Store, b: Obj, source: bool, c: Obj) -> Resu
     let old_template = template_of(store, b).ok_or_else(|| refuse("relationship", "the binding names no template"))?;
     let (bound, template) = if source { (c, old_template) } else { (old_bound, c) };
     if let Some(problem) = problem(store, bound, template, Some(b)) {
-        return Err(refuse("class", problem.said(store, bound, template)));
+        return Err(problem.refusal(store, "class", bound, template));
     }
     if template != old_template
-        && let Some(why) = missing_problem(store, template, &[], &[])
+        && let Some((why, reason)) = missing_problem(store, template, &[], &[])
     {
-        return Err(refuse("class", format!("{why}: set the template and its arguments together with uml.template-binding.set")));
+        return Err(refuse("class", format!("{why}: set the template and its arguments together with uml.template-binding.set")).because(reason));
     }
     move_binding(store, b, old_bound, bound, (template != old_template).then_some(template))
 }
@@ -576,20 +610,23 @@ pub fn argument_removal_problem(store: &Store, classes: &[Obj], going: &[Obj]) -
     None
 }
 
-/// Why a parameter of `template` named `name` with no default (`has_default` false) would leave a
-/// binding of the template without an argument: a new parameter (`except` none), or one whose
-/// default is being cleared (`except` the parameter, whose own substitutions give it one).
-pub fn needs_argument_problem(store: &Store, template: Obj, name: &str, has_default: bool, except: Option<Obj>) -> Option<String> {
+/// The refusal, under `default`, of a parameter of `template` named `name` with no default
+/// (`has_default` false) that would leave a binding of the template without an argument: a new
+/// parameter (`except` none), or one whose default is being cleared (`except` the parameter, whose
+/// own substitutions give it one).
+pub fn needs_argument_problem(store: &Store, template: Obj, name: &str, has_default: bool, except: Option<Obj>) -> Option<CommandError> {
     if has_default {
         return None;
     }
     let b = templates::bindings_to(store, template).into_iter().find(|b| except.is_none_or(|p| substitution_for(store, *b, p).is_none()))?;
     let bound = templates::bound_element(store, b).map(|x| name_of(store, x)).unwrap_or_default();
-    Some(format!(
+    let said = format!(
         "{bound} binds {} and gives {name} no argument, so {name} needs a default; give it one, or give that binding ({}) an argument for it first",
         name_of(store, template),
         uuid_of(store, b).unwrap_or_default()
-    ))
+    );
+    let named = Parameter { name: name.to_string(), template: name_of(store, template), bound, ..Parameter::default() };
+    Some(refuse("default", said).because(Reason::NeedsDefault(Box::new(named))))
 }
 
 /// A binding as the reads give it: its id, bound element, template, its label, and every parameter

@@ -178,7 +178,7 @@ pub fn create(shell: &mut Shell, subject: Option<Uuid>) {
                 doc.focus_name = true;
             }
         }
-        Err(e) => shell.canvas.notice = Some(e.to_string()),
+        Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
     }
 }
 
@@ -195,7 +195,7 @@ pub fn sync(shell: &mut Shell, now: f64, force: bool, only: Option<Uuid>) {
                     doc.saved = doc.text.clone();
                     doc.refused = None;
                 }
-                Err(e) => doc.refused = Some((doc.text.clone(), e.to_string())),
+                Err(e) => doc.refused = Some((doc.text.clone(), crate::panels::refusal(&e))),
             }
         } else if doc.text == doc.saved {
             let body = body_of(session.doc(), s);
@@ -288,7 +288,7 @@ fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f
         let outcome = shell.session.as_mut().map(|x| x.execute("skill.rename", &json!({ "skill": id.to_string(), "name": name.trim() })));
         let doc = &mut shell.canvas.skills[i];
         doc.settings_refused = match outcome {
-            Some(Err(e)) => Some(e.to_string()),
+            Some(Err(e)) => Some(crate::panels::refusal(&e)),
             _ => None,
         };
         // The text's title follows the name, kept at the next frame.
@@ -304,7 +304,7 @@ fn header(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, left: f32, width: f
     if crate::panels::icon_button(shell, ui, p, pos2(left + width - 28.0, y + 6.0), "workspace.skill.remove", &icons::TRASH, p.danger, None, "Remove")
     {
         if let Some(Err(e)) = shell.session.as_mut().map(|x| x.execute("skill.remove", &json!({ "skill": id.to_string() }))) {
-            shell.canvas.skills[i].settings_refused = Some(e.to_string());
+            shell.canvas.skills[i].settings_refused = Some(crate::panels::refusal(&e));
         }
         return y;
     }

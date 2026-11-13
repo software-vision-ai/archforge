@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge を終了
 str		File	ファイル
 str		Help	ヘルプ
+str	menu	View	表示
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	プロジェクトは使用中です
@@ -12,7 +13,11 @@ str		Show a diagram first	先に図を表示してください
 str		Current work is showing	現在の作業を表示しています
 str		Back to current work first	先に現在の作業に戻ってください
 str		This project has one branch	このプロジェクトのブランチは 1 つです
+str		Leave the text field first	先にテキスト欄から離れてください
+str		Widen the window to search	検索するにはウィンドウを広げてください
+str		Already showing	すでに表示中です
 str		Open…	開く…
+str		Find…	検索…
 str		Save	保存
 # 生成
 str		Generate…	生成…
@@ -455,12 +460,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	このリクエストの送信後に表示中のプロジェクトが変わったため、実行しませんでした。現在の表示を確認して、もう一度送信してください。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
+str		These two versions are the same.	この2つのバージョンは同じです。
+str		Too large to compare	大きすぎて比較できません
+str		The comparison was stopped.	比較を停止しました。
+str		Both sides are your current work.	両側とも現在の作業です。
+str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…
 str		Restore this version?	このバージョンを復元しますか？
 str		The version of {what}	{what} のバージョン
 str		A new version with that content is added on top of the history, called "{name}".	その内容の新しいバージョンが「{name}」という名前で履歴の先頭に追加されます。
 str		Nothing is rewound or removed, and later versions stay in History.	巻き戻しや削除は行われず、以降のバージョンも履歴に残ります。
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	未保存の変更は、まず「Before restoring」と時刻が付いたバージョンとして保存されます。
+str		Your unsaved changes are saved first, as a version called "{name}".	未保存の変更は、まず「{name}」という名前のバージョンとして保存されます。
 str		You can reach them again from History.	履歴からいつでも確認できます。
 str		Undo starts fresh after a Restore.	復元のあとは、元に戻す操作の履歴は新しく始まります。
 str		Restore	復元
@@ -505,19 +515,98 @@ str		Models	モデル
 str		Versions	バージョン
 str		Branches	ブランチ
 str		This branch	このブランチ
+str		Another branch	別のブランチ
+str		Latest version	最新のバージョン
+str		Latest on {branch}	{branch} の最新
 str	branch	Current	現在
 str		Branches can't be merged yet.	ブランチはまだマージできません。
 str		Only the first {n} branches are listed.	最初の {n} 件のブランチのみ表示しています。
 str		The branches couldn't be read.	ブランチを読み込めませんでした。
+str		New branch…	新しいブランチ…
+str		New branch	新しいブランチ
+str		A branch keeps its own versions, unsaved work and conversations.	ブランチは独自のバージョン、未保存の作業、会話を持ちます。
+str		It starts from current work on {branch}.	{branch} の現在の作業から始まります。
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	{branch} の現在の作業から始まります。未保存の変更も引き継がれ、{branch} にもそのまま残ります。
+str		Start a branch here	ここからブランチを開始
+str		Start a branch here…	ここからブランチを開始…
+str		It starts from the version of {version}.	{version} のバージョンから始まります。
+str		Viewing ends on the new branch.	表示は新しいブランチで終わります。
+str		Your unsaved changes stay on {branch}.	未保存の変更は {branch} に残ります。
+str		That name is already in use.	その名前はすでに使われています。
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	前回の新しいブランチがまだ片付いていません。プロジェクトを開き直すと削除されます。
+str		The project changed before the branch was made, so none was made.	ブランチを作る前にプロジェクトが変わったため、作成されませんでした。
+str		Couldn't make the branch: {why}	ブランチを作成できませんでした: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	ブランチが作成されたかどうか Archforge では判断できませんでした。もう一度試す前にブランチを確認してください。
+str		Rename…	名前を変更…
+str		Rename branch	ブランチの名前を変更
+str		The conversations and versions on this branch are not affected.	このブランチの会話とバージョンには影響しません。
+str		The project changed before the branch was renamed, so its name stayed.	名前を変更する前にプロジェクトが変わったため、ブランチの名前はそのままです。
+str		Couldn't rename the branch: {why}	ブランチの名前を変更できませんでした: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	ブランチの名前が {name} に変更されたかどうか Archforge では判断できませんでした。確かめるには、もう一度 {name} に変更してください。
+str		Delete…	削除…
+str		Delete {branch}?	{branch} を削除しますか？
+str		Goes with the branch:	ブランチと一緒に削除されるもの：
+str		Counting what goes with it…	一緒に削除されるものを数えています…
+str		What goes with it couldn't be read: {why}	一緒に削除されるものを読み取れませんでした: {why}
+str		the host stopped without an answer	ホストが応答せずに停止しました
+plural		{n} version only on this branch	このブランチだけのバージョン {n} 件
+plural		{n} conversation	会話 {n} 件
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · 保存されていない変更
+str		It leaves the project's list.	プロジェクトの一覧から消えます。
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	削除された会話がプロジェクトの保存済み履歴に残るように、その内容はプロジェクトフォルダーのストレージに残ることがあります。
+str		There is no Undo for deleting a branch.	ブランチの削除は元に戻せません。
+str		Delete branch	ブランチを削除
+str		Couldn't delete {branch}	{branch} を削除できませんでした
+str		The project changed before the branch was deleted, so it stays.	ブランチが削除される前にプロジェクトが変わったため、ブランチは残ります。
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	ブランチが削除されたかどうかを Archforge は判断できませんでした。確かめるには、もう一度削除してください。
+str		The branch stays: {why}	ブランチは残ります: {why}
 str		At most {n} characters.	{n} 文字以内。
 str		Enter a name.	名前を入力してください。
 str		A name has to be one line.	名前は 1 行にしてください。
+str		A name can't be empty.	名前は空にできません。
+str		There is {what} named {name} already.	{name} という名前の{what}はすでにあります。
+str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
+str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str		The text can't be empty.	テキストは空にできません。
+str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
+str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。
+str		It can't start or end with a space.	先頭や末尾に空白は使えません。
+str	refusal	a class	クラス
+str	refusal	an association class	関連クラス
+str	refusal	an interface	インターフェース
+str	refusal	an enumeration	列挙
+str	refusal	a data type	データ型
+str	refusal	a primitive type	プリミティブ型
+str	refusal	a package	パッケージ
+str	refusal	a profile	プロファイル
+str	refusal	a stereotype	ステレオタイプ
+str	refusal	an element	要素
+str	refusal	a schema	スキーマ
+str	refusal	an attribute	属性
+str	refusal	an operation	操作
+str	refusal	a literal	リテラル
+str	refusal	a qualifier	限定子
+str	refusal	a template parameter	テンプレートパラメーター
+str	refusal	a generalization set	汎化セット
+str	refusal	a table	テーブル
+str	refusal	a column	列
+str	refusal	a relationship	リレーションシップ
+str	refusal	a domain	ドメイン
+str	refusal	an enum type	列挙型
+str	refusal	a sequence	シーケンス
+str	refusal	a view	ビュー
+str	refusal	a skill	スキル
+str	refusal	an association end	関連端
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
 str		Working changes	作業中の変更
 str		History	履歴
 str		Retry	再試行
 str		No changes since the last version.	前のバージョンから変更はありません。
+str		What you're typing isn't kept yet	入力中のテキストはまだ保持されていません
 str		No versions yet.	バージョンはまだありません。
+str		Shared with main up to here	ここまで main と共通
 str		No versions yet. Save version records your first one.	バージョンはまだありません。「バージョンを保存」で最初のバージョンを記録します。
 str		Loading	読み込み中
 str		Save version…	バージョンを保存…
@@ -529,6 +618,7 @@ str		{what} changed.	{what}が変更されました。
 str		These changes become a new version of {name}.	これらの変更は{name}の新しいバージョンになります。
 str		The model changed while this was open. The summary is up to date again.	開いている間にモデルが変更されました。概要は最新の状態に戻りました。
 str		One line, at most 200 characters. It stays in the history.	1行、200文字以内。履歴に残ります。
+plural		{n} difference	{n} 件の相違
 plural		{n} model element	{n} 件のモデル要素
 str		Filter changes…	変更を絞り込む…
 str		Filter versions…	バージョンを絞り込む…
@@ -565,9 +655,11 @@ str		Attributes	属性
 str		Operations	操作
 str		Literals	リテラル
 str		Members	メンバー
+str		Relationships	関連
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	所有関係
 str		Not available on this side	この側では利用できません
-str		Relationships aren't listed on these cards yet.	関連はまだこれらのカードには一覧表示されません。
+str		Each difference is marked on the cards below.	各違いは下のカードに示されています。
 plural		Related change	関連する変更
 str		{name} was added in this comparison.	{name} はこの比較で追加されました。
 str		{name} was changed in this comparison.	{name} はこの比較で変更されました。
@@ -578,7 +670,8 @@ str		The cards show the same on both sides.	カードの内容は両側で同じ
 str		The owner changed	所有者が変更されました
 str		The owner changed.	所有者が変更されました。
 plural		{n} member changed	{n} 件のメンバーが変更されました
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} 件の関連が変更されました
+str		{these} · {those}	{these} · {those}
 str		This element was added	この要素は追加されました
 str		It is only on the After side, so there is nothing to compare.	変更後の側にのみ存在するため、比較するものはありません。
 str		This element was removed	この要素は削除されました
@@ -594,6 +687,30 @@ plural		{n} more value changed.	ほかに {n} 件の値が変更されました�
 str		Yes	はい
 str		Not set	未設定
 str		Nothing here yet	まだ何もありません
+str		Layout	レイアウト
+str		{first}, {then}	{first}、{then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} 件の要素が追加されました
+plural		{n} element changed	{n} 件の要素が変更されました
+plural		{n} element removed	{n} 件の要素が削除されました
+plural		{n} box placed	{n} 個のボックスが配置されました
+plural		{n} box moved	{n} 個のボックスが移動しました
+plural		{n} box changed	{n} 個のボックスが変更されました
+plural		{n} box taken off	{n} 個のボックスが外されました
+plural		{n} line drawn	{n} 本の線が引かれました
+plural		{n} line changed	{n} 本の線が変更されました
+plural		{n} line taken off	{n} 本の線が外されました
+str		The model didn't change	モデルは変更されていません
+str		Only the layout changed.	レイアウトだけが変更されました。
+str		The layout didn't change	レイアウトは変更されていません
+str		Only the model changed.	モデルだけが変更されました。
+str		The diagram's own details changed	図そのものの情報が変更されました
+str		Such as its name, or the order its boxes are drawn in.	名前や、ボックスを描く順序などです。
+str		This diagram was added	この図が追加されました
+str		It has no boxes or lines yet.	まだボックスも線もありません。
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	ドラッグ、スクロール、または矢印キーで両側を移動します。+ と − で拡大・縮小し、0 で再び全体を収めます。
+str		This diagram was removed	この図が削除されました
+str		It had no boxes or lines.	ボックスも線もありませんでした。
 str		Version of {when}	{when} のバージョン
 str		Last version	最新のバージョン
 str		No description	説明なし
@@ -603,6 +720,7 @@ str		This version couldn't be read.	このバージョンを読み込めませ�
 str		{from} can't be shown. Skipped to {to}.	{from} は表示できません。{to} に移動しました。
 str		It isn't a version of this branch.	このブランチのバージョンではありません。
 str		Made with a newer Archforge.	より新しい Archforge で作成されました。
+str		Its model is larger than Archforge reads.	モデルが Archforge で読める大きさを超えています。
 str		Why?	理由
 str		Date not known	日付不明
 plural		Versions · {n} change	バージョン · {n} 件の変更
@@ -804,7 +922,8 @@ plural		+ {n} more column	+ 他 {n} 列
 str		Minimap	ミニマップ
 str		Hide minimap	ミニマップを隠す
 str		Show minimap	ミニマップを表示
-str		Widen the canvas to show the minimap	ミニマップを表示するにはキャンバスを広げてください
+str		The minimap is showing	ミニマップは表示中です
+str		Make the canvas larger to show the minimap	ミニマップを表示するにはキャンバスを大きくしてください
 str		Whole diagram	図全体
 str		Zoom in	拡大
 str		Zoom out	縮小
@@ -836,6 +955,8 @@ str		Selection · this diagram	選択 · この図
 str		{kind} · this diagram	{kind} · この図
 plural		{n} item	{n} 個の項目
 str		The model could not be opened	モデルを開けませんでした
+str		Not kept on {name}: {why}	{name} には反映されませんでした: {why}
+str		Not kept on the element selected before: {why}	前に選択していた要素には反映されませんでした: {why}
 str		The host gives no ids for the model's elements	ホストがモデル要素の ID を提供していません
 str		Collapse panel	パネルを折りたたむ
 str		Not available yet	まだ利用できません
@@ -1116,6 +1237,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»
 str		{first} and {second}	{first} と {second}
+str		{first}, {second} and {third}	{first}、{second}、{third}
 plural		Show the use	{n} 件の使用箇所を表示
 str		A stereotype is shown on its profile's diagram	ステレオタイプはそのプロファイルの図に表示されます
 str		Place stereotype	ステレオタイプを配置
@@ -1320,6 +1442,10 @@ str		Clear	クリア
 str		Client	クライアント
 str		Composite	コンポジット
 str		Composition	コンポジション
+str		The other end has an aggregation already: only the part's end has one.	もう一方の端にはすでに集約があります。集約を持てるのは部分側の端だけです。
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	コンポジションの全体側は最大 1 つしか許しません。先にもう一方の端の多重度を 1 または 0..1 にしてください。
+str		This end is a composition's whole, which allows one at most.	この端はコンポジションの全体側で、最大 1 つしか許しません。
+str		The whole's end of an aggregation or composition is not navigable.	集約やコンポジションの全体側の端はナビゲーション可能にできません。
 str		Dependency	依存
 str		Dependency · model	依存 · モデル
 str		Directed association	有向関連
@@ -1363,6 +1489,9 @@ str		Type a name: a template parameter without one stands for nothing.	名前を
 str		{template} already has a template parameter named {name}. Pick another name.	{template} には {name} という名前のテンプレートパラメーターがすでにあります。別の名前を選んでください。
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} は {name} に合いません。その引数になりうる既定値を選んでください。
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} は {name} -> {actual} とバインドしており、合わなくなります。先にそのバインディングを変更または削除してください。
+str		A template has at most {max} parameters.	テンプレートが持てるパラメーターは最大 {max} 個です。
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} は {template} をバインドしていますが {name} に引数を与えていないため、{name} には既定値が必要です。
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	その組み込み型が置かれる {types} パッケージに、{name} という名前の{what}があります。組み込み型を使うには {name} の名前を変更してください。
 str		template parameter	テンプレートパラメーター
 str		template	テンプレート
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · テンプレート、パラメーター {n} 個 · モデル、すべての図
@@ -1391,6 +1520,8 @@ str		{name} needs an argument: pick an interface.	{name} には引数が必要�
 str		{name} needs an argument: pick a data type.	{name} には引数が必要です。データ型を選んでください。
 str		{name} needs an argument: pick an enumeration.	{name} には引数が必要です。列挙型を選んでください。
 str		{name} needs an argument: pick a primitive type.	{name} には引数が必要です。プリミティブ型を選んでください。
+str		{name} ({kind})	{name}（{kind}）
+str		{names} have no default, so each needs an argument.	{names} には既定値がないため、それぞれに引数が必要です。
 plural		{names} can keep its default.	{names} は既定値のままにできます。
 str		New template binding	新しいテンプレートバインディング
 str		Drawing · not in the model until you apply	描画中 · 適用するまでモデルには入りません
@@ -1414,6 +1545,7 @@ str		Click a class for the new end	新しい端のクラスをクリックして
 str		Esc cancels	Esc でキャンセル
 str		An n-ary association joins classes and interfaces	多項関連はクラスとインターフェースを結びます
 str		An association takes at most {n} ends	関連の端は最大 {n} 個です
+str		An n-ary association needs three ends or more.	多項関連には 3 つ以上の端が必要です。
 str		An n-ary association needs three ends or more: click another class	多項関連には 3 つ以上の端が必要です。別のクラスをクリックしてください
 str		Add n-ary association	多項関連を追加
 str		New n-ary association	新しい多項関連
@@ -1431,6 +1563,7 @@ str		Reconnect end	端をつなぎ直す
 str		Drag a leg end	脚の端をドラッグ
 str		Open a class diagram to pick the new end's class	新しい端のクラスを選ぶには、クラス図を開いてください
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	多項関連の端は集約ではないため、集約は表示されません。ロールが異なる場合は、2 つの端に同じ型を使えます。
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	多項関連の端は集約になりません。全体と部分を持つのは二項関連だけです。
 str		Another end has the role {role} already. Pick another role.	別の端がすでにロール {role} を持っています。別のロールを選んでください。
 str		Set association end	関連の端を設定
 str		End {role} removed	端 {role} を削除しました
@@ -1452,6 +1585,8 @@ str		Interface realization	インターフェース実現
 str		Interface realization · model	インターフェース実現 · モデル
 # 汎化セット (AR-129)
 str		A set groups generalizations of one class.	セットは 1 つのクラスへの汎化をまとめます。
+str		A set groups at least one generalization.	セットには少なくとも 1 つの汎化が必要です。
+plural		A set groups at most {n} generalization.	セットにまとめられる汎化は最大 {n} 個です。
 str		Add member	メンバーを追加
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	メンバーを追加は {general} への汎化だけを示します。編集でその汎化を開きます。
 str		Add to a generalization set	汎化セットに追加

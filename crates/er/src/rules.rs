@@ -3,6 +3,8 @@
 
 use std::collections::BTreeSet;
 
+use archforge_core::skills::Problem;
+use archforge_engine::Reason;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
@@ -24,37 +26,42 @@ pub const MAX_TEXT: usize = 4096;
 pub const MAX_KEY_COLUMNS: usize = 32;
 
 /// Why a text is not acceptable, or none: an empty text is nothing and always fine.
-pub fn text_problem(text: &str, max: usize) -> Option<String> {
+pub fn text_problem(text: &str, max: usize) -> Option<Problem> {
     if text.is_empty() {
         return None;
     }
     if text.chars().count() > max {
-        return Some(format!("is longer than {max} characters"));
+        return Some(Problem::too_long(max));
     }
     if text.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
-        return Some("holds a control character".into());
+        return Some(control_character());
     }
     if text.trim() != text {
-        return Some("starts or ends with a space".into());
+        return Some(Problem::edge_space());
     }
     None
 }
 
 /// Why a name is not acceptable, as the end of the sentence "the name ...".
-pub fn name_problem(name: &str, max: usize) -> Option<String> {
+pub fn name_problem(name: &str, max: usize) -> Option<Problem> {
     if name.is_empty() {
-        return Some("is empty".into());
+        return Some(Problem::new(Reason::NameEmpty, "is empty"));
     }
     if name.chars().count() > max {
-        return Some(format!("is longer than {max} characters"));
+        return Some(Problem::too_long(max));
     }
     if name.chars().any(char::is_control) {
-        return Some("holds a control character".into());
+        return Some(control_character());
     }
     if name.trim() != name {
-        return Some("starts or ends with a space".into());
+        return Some(Problem::edge_space());
     }
     None
+}
+
+/// Holds a control character.
+fn control_character() -> Problem {
+    Problem::new(Reason::ControlCharacter, "holds a control character")
 }
 
 /// Whether two names are the same name, ignoring case.

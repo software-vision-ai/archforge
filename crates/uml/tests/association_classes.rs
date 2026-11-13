@@ -191,10 +191,10 @@ fn only_classes_are_at_its_ends_and_a_refusal_names_the_id_and_the_accepted_kind
 fn its_name_is_kept_apart_from_its_package_s_classifiers_and_it_renames_and_moves() {
     let mut s = session();
     let (pkg, _, c, _) = shop(&mut s);
-    refused(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "product" }), &["name", "a class named product"]);
+    refused(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "product" }), &["name", "a class named Product"]);
     let ac = run(&mut s, "uml.association-class.add", json!({ "from": c[0], "to": c[1], "name": "Review" }));
-    refused(&mut s, "uml.class.add", json!({ "package": pkg, "name": "REVIEW" }), &["an association class named REVIEW"]);
-    refused(&mut s, "uml.interface.rename", json!({ "interface": c[3], "name": "review" }), &["an association class named review"]);
+    refused(&mut s, "uml.class.add", json!({ "package": pkg, "name": "REVIEW" }), &["an association class named Review"]);
+    refused(&mut s, "uml.interface.rename", json!({ "interface": c[3], "name": "review" }), &["an association class named Review"]);
     refused(&mut s, "uml.association-class.rename", json!({ "association_class": ac, "name": "Store" }), &["a class named Store"]);
     round_trip(&mut s, "uml.association-class.rename", json!({ "association_class": ac, "name": "Rating" }));
     assert_eq!(archforge_core::name_of(s.doc(), obj(&s, &ac)), "Rating");
@@ -239,7 +239,7 @@ fn its_ends_take_the_association_commands_and_its_members_the_class_commands() {
     let names: Vec<&str> = read["attributes"].as_array().unwrap().iter().filter_map(|a| a["name"].as_str()).collect();
     assert_eq!(names, ["text", "rating"], "its attributes, never its ends");
     assert_eq!(read["operations"][0]["id"], publish.as_str());
-    refused(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "Text" }), &["the association class has an attribute named Text already"]);
+    refused(&mut s, "uml.attribute.add", json!({ "class": ac, "name": "Text" }), &["the association class has an attribute named text already"]);
     // Its card lists them; an end is no attribute to remove alone.
     let card = archforge_uml::figures::card(s.doc(), obj(&s, &ac), obj(&s, &ac)).unwrap();
     assert_eq!(card.compartments.iter().map(Vec::len).collect::<Vec<_>>(), [2, 1]);

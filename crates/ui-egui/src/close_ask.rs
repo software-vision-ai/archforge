@@ -33,6 +33,8 @@ pub enum Ask {
     /// Restoring a version over the work of `path`, as session `generation` holds it, is confirmed,
     /// or how that restore ended.
     Restore { path: std::path::PathBuf, generation: u64, confirm: crate::restore_ask::Confirm },
+    /// A branch of `path` is being named, over the work session `generation` holds.
+    Branch { path: std::path::PathBuf, generation: u64, naming: crate::branch_ask::Naming },
 }
 
 impl Ask {
@@ -45,7 +47,8 @@ impl Ask {
             | Ask::HoldFailed { path, .. }
             | Ask::StopChat { path, .. }
             | Ask::Switch { path, .. }
-            | Ask::Restore { path, .. } => path,
+            | Ask::Restore { path, .. }
+            | Ask::Branch { path, .. } => path,
         }
     }
 }
@@ -94,7 +97,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         return;
     };
     // Chat's question is about the session it was asked over; another showing now takes it along.
-    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Switch { generation, .. } | Ask::Restore { generation, .. } if generation != shell.session_generation())
+    if matches!(ask, Ask::StopChat { generation, .. } | Ask::Switch { generation, .. } | Ask::Restore { generation, .. } | Ask::Branch { generation, .. } if generation != shell.session_generation())
     {
         shell.ask = None;
         return;
@@ -104,6 +107,7 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     let (title, lines, buttons): (String, Vec<String>, Vec<(&str, String, Answer, bool)>) = match &ask {
         Ask::Switch { confirm, .. } => return crate::switch_ask::show(shell, ui, confirm.clone()),
         Ask::Restore { confirm, .. } => return crate::restore_ask::show(shell, ui, confirm.clone()),
+        Ask::Branch { naming, .. } => return crate::branch_ask::show(shell, ui, naming.clone()),
         Ask::Unsaved { .. } => (
             fmt(&tr("Save the changes to {name}?"), &[("name", &name)]),
             vec![tr("If you don't save, the changes since the last save are lost.")],

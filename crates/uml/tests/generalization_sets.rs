@@ -239,7 +239,7 @@ fn a_mixed_selection_and_the_other_wrong_sets_are_refused_changing_nothing() {
         ),
         ("uml.generalization-set.add", json!({ "generalizations": [], "name": "x" }), "generalizations", "at least one"),
         ("uml.generalization-set.add", json!({ "generalizations": [shop.card, shop.card], "name": "x" }), "generalizations", "named twice"),
-        ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": "Method" }), "name", "named Method already"),
+        ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": "Method" }), "name", "named method already"),
         ("uml.generalization-set.add", json!({ "generalizations": [shop.bank], "name": " " }), "name", "needs a name"),
         ("uml.generalization-set.set", json!({ "set": set, "add": [shop.voucher] }), "add", "specialize different classifiers"),
         ("uml.generalization-set.set", json!({ "set": set, "remove": [shop.bank] }), "remove", "is not in the set"),
@@ -258,6 +258,51 @@ fn a_mixed_selection_and_the_other_wrong_sets_are_refused_changing_nothing() {
         assert!(e.contains(key) && e.contains(why), "{cmd} {p}: {e}");
     }
     assert_eq!(s.undo_label().map(str::to_string), undo, "the history is untouched");
+}
+
+/// Every grouping rule a set breaks carries its reason typed beside the unchanged English, for an
+/// interface to say in its own words: no member, too many, and generalizations to different
+/// classifiers, each named by its specific and its general classifier, a set given members to
+/// another classifier than its own among them (AR-442).
+#[test]
+fn every_grouping_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let shop = shop(&mut s);
+    let set = run(&mut s, "uml.generalization-set.add", json!({ "generalizations": [shop.card], "name": "method" }));
+    let mut many = Vec::new();
+    for i in 0..=sets::MAX_MEMBERS {
+        let c = run(&mut s, "uml.class.add", json!({ "package": shop.pay, "name": format!("Kind{i}") }));
+        many.push(run(&mut s, "uml.generalization.add", json!({ "specific": c, "general": shop.payment })));
+    }
+    let full = run(&mut s, "uml.generalization-set.add", json!({ "generalizations": many[1..], "name": "full" }));
+    let pair = |a: &str, b: &str, c: &str, d: &str| Reason::ParentsDiffer(Box::new([(a.into(), b.into()), (c.into(), d.into())]));
+    let most = Reason::TooMany { kind: "generalization", max: sets::MAX_MEMBERS };
+    let (add, edit) = ("uml.generalization-set.add", "uml.generalization-set.set");
+    for (cmd, p, reason, english) in [
+        (add, json!({ "generalizations": [], "name": "x" }), Reason::TooFew { kind: "generalization", min: 1 }, "at least one"),
+        (add, json!({ "generalizations": many, "name": "x" }), most.clone(), "at most 256 generalizations; 257 were given"),
+        (edit, json!({ "set": full, "add": [many[0]] }), most, "at most 256 generalizations"),
+        (
+            add,
+            json!({ "generalizations": [shop.card, shop.bank, shop.voucher], "name": "x" }),
+            pair("CardPayment", "Payment", "Voucher", "Product"),
+            "specialize different classifiers",
+        ),
+        (edit, json!({ "set": set, "add": [shop.voucher] }), pair("CardPayment", "Payment", "Voucher", "Product"), "different classifiers"),
+        (
+            edit,
+            json!({ "set": set, "remove": [shop.card], "add": [shop.voucher] }),
+            pair("CardPayment", "Payment", "Voucher", "Product"),
+            "the set groups the specializations of Payment; Product is another classifier",
+        ),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    }
 }
 
 /// A generalization may be in two sets, each membership explicit; both list it, and it lists both.

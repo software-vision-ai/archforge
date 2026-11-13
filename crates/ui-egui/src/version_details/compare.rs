@@ -1,7 +1,8 @@
 //! The Compare page in the centre, in place of a version's details (frames V3.1 and V3.2 of page 09
 //! of the design and section 6 of `docs/design/versioning.md`): Before and After in a band, in the
-//! direction Swap reverses. Each select opens a list of the versions already read, under the band;
-//! AR-280 draws what the pair compares, so nothing is under the band yet.
+//! direction Swap reverses. Each select opens a list of the versions already read and the other
+//! branches, under the band; under it [`results`] says what the two sides differ by: a version and
+//! current work, or two versions, another branch's latest version being one.
 
 use egui::accesskit::Role;
 use egui::{Rect, Stroke, StrokeKind, pos2, vec2};
@@ -13,8 +14,10 @@ use crate::i18n::tr;
 use crate::settings::{Look, button, control, focus_ring};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, icons, types};
-use crate::versions::{dated, described, read_more, when};
-use crate::{Shell, VersionEntry, widgets};
+use crate::versions::{dated, read_more, told, when};
+use crate::{BranchEntry, Shell, VersionEntry, widgets};
+
+pub(crate) mod results;
 
 /// The band's height, a select's size at its widest and its narrowest.
 const STRIP: f32 = 56.0;
@@ -34,11 +37,25 @@ const ROW: f32 = 30.0;
 const MOST_ROWS: usize = 10;
 const LIST_ID: &str = "workspace.version-compare.list";
 
-/// One side of a comparison.
-#[derive(Clone, PartialEq)]
+/// One side of a comparison: another branch stands for its latest version, as listed.
+#[derive(Clone)]
 enum Side {
     Version(VersionEntry),
     CurrentWork,
+    Branch(BranchEntry),
+}
+
+impl PartialEq for Side {
+    /// A version is the same side by its hash and a branch by its stored name, whatever else a later
+    /// read says of it, such as unsaved work: two branches may share their latest version. Which
+    /// version a side reads is [`Side::version`].
+    fn eq(&self, other: &Side) -> bool {
+        match (self, other) {
+            (Side::Version(a), Side::Version(b)) => a.hash == b.hash,
+            (Side::Branch(a), Side::Branch(b)) => a.name == b.name,
+            (a, b) => matches!((a, b), (Side::CurrentWork, Side::CurrentWork)),
+        }
+    }
 }
 
 impl Side {
@@ -47,6 +64,16 @@ impl Side {
         match self {
             Side::Version(entry) => dated(entry, clock),
             Side::CurrentWork => tr("Current work"),
+            Side::Branch(b) => crate::i18n::fmt(&tr("Latest on {branch}"), &[("branch", &b.shown)]),
+        }
+    }
+
+    /// The version this side reads, none for current work.
+    fn version(&self) -> Option<&String> {
+        match self {
+            Side::Version(v) => Some(&v.hash),
+            Side::Branch(b) => b.latest_version.as_ref(),
+            Side::CurrentWork => None,
         }
     }
 }
@@ -59,12 +86,13 @@ pub(super) struct Pair {
     dropdown: Option<Dropdown>,
 }
 
-/// A select's list while it is open: which side it is for, the row the keys are on, and how far it
-/// has scrolled.
+/// A select's list while it is open: which side it is for, the option the keys are on, kept as
+/// itself so a page of versions read meanwhile does not move it to another row, and how far it has
+/// scrolled.
 #[derive(Clone)]
 struct Dropdown {
     after: bool,
-    highlight: usize,
+    highlight: Side,
     scroll: TreeScroll,
 }
 
@@ -79,7 +107,7 @@ pub(super) fn open(shell: &mut Shell) {
 
 /// Draws the page in the centre `r`: the way back, the band and what was said since it opened, as
 /// this covers the canvas that says it. The details go with the page, so whatever ends them ends it.
-pub(super) fn draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let Some(pair) = shell.versions.details.as_ref().and_then(|d| d.compare.clone()) else { return };
     if breadcrumb(shell, ui, p, r, "workspace.version-compare.close", &tr("Compare")).0 {
         shell.versions.details = None;
@@ -118,7 +146,8 @@ pub(super) fn draw(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         let shown = ux::text_mid(&paint, right - width(&direction), mid, &direction, types::SMALL, p.text_muted, None);
         let _ = control(shell, ui, "workspace.version-compare.direction", "status", shown, false).accessible_name(&direction);
     }
-    crate::canvas::notice(shell, ui, p, pos2(left, band.bottom() + 6.0), (right - left).max(0.0));
+    let said = crate::canvas::notice(shell, ui, p, pos2(left, band.bottom() + 6.0), (right - left).max(0.0));
+    results::draw(shell, ui, p, Rect::from_min_max(pos2(r.left(), band.bottom() + 22.0 + (said - types::CAPTION.line).max(0.0)), r.max));
     if let Some(d) = dropdown_of(shell).cloned() {
         let (field, held) = if d.after { (second, &pair.after) } else { (first, &pair.before) };
         list(shell, ui, p, field, held, d);
@@ -140,9 +169,32 @@ fn listed(shell: &Shell) -> &[VersionEntry] {
     shell.versions.page.as_ref().map_or(&[], |page| &page.versions)
 }
 
+/// The other branches with a version to compare, as the Branches section last read them.
+fn others(shell: &Shell) -> Vec<BranchEntry> {
+    let branches = shell.versions.branches.iter().flatten();
+    branches.filter(|b| !b.current && b.latest_version.is_some()).cloned().collect()
+}
+
+/// A list's rows: current work, the versions read, then, when there are any, the heading Another
+/// branch and the other branches. Gives the rows and the heading's row.
+fn rows_of(versions: &[VersionEntry], branches: &[BranchEntry]) -> (usize, Option<usize>) {
+    let heading = (!branches.is_empty()).then_some(versions.len() + 1);
+    (heading.map_or(versions.len() + 1, |at| at + 1 + branches.len()), heading)
+}
+
 /// The row the keys are on in a select's open list; any list open holds the window's keys.
 pub(crate) fn highlight(shell: &Shell) -> Option<usize> {
-    Some(dropdown_of(shell)?.highlight)
+    Some(row_of(&dropdown_of(shell)?.highlight, listed(shell), &others(shell)))
+}
+
+/// The row of `side` in a list ([`rows_of`]); the first, current work, for an option no longer listed.
+fn row_of(side: &Side, versions: &[VersionEntry], branches: &[BranchEntry]) -> usize {
+    let found = match side {
+        Side::CurrentWork => None,
+        Side::Version(held) => versions.iter().position(|v| v.hash == held.hash).map(|at| at + 1),
+        Side::Branch(held) => branches.iter().position(|b| b.name == held.name).map(|at| versions.len() + 2 + at),
+    };
+    found.unwrap_or(0)
 }
 
 /// Once a frame, before any key is read and on Home too: a list closes when the project or the
@@ -157,24 +209,26 @@ pub(crate) fn keep(shell: &mut Shell) {
 
 /// Opens the list of a side on the row it holds, or closes the list already open on that side.
 fn toggle(shell: &mut Shell, after: bool) {
-    let versions = listed(shell).to_vec();
+    let (versions, branches) = (listed(shell).to_vec(), others(shell));
     let Some(pair) = pair_mut(shell) else { return };
-    let highlight = match if after { &pair.after } else { &pair.before } {
-        Side::CurrentWork => 0,
-        Side::Version(held) => versions.iter().position(|v| v.hash == held.hash).map_or(0, |at| at + 1),
-    };
+    let held = if after { &pair.after } else { &pair.before };
+    let highlight = side_at(&versions, &branches, row_of(held, &versions, &branches)).unwrap_or(Side::CurrentWork);
     let same = pair.dropdown.as_ref().is_some_and(|d| d.after == after);
     pair.dropdown = (!same).then(|| Dropdown { after, highlight, scroll: TreeScroll::default() });
 }
 
-/// Row `n` of the list: current work first, then the versions read.
-fn side_at(versions: &[VersionEntry], n: usize) -> Option<Side> {
-    if n == 0 { Some(Side::CurrentWork) } else { versions.get(n - 1).cloned().map(Side::Version) }
+/// Row `n` of the list ([`rows_of`]); none for the heading.
+fn side_at(versions: &[VersionEntry], branches: &[BranchEntry], n: usize) -> Option<Side> {
+    match n.checked_sub(1) {
+        None => Some(Side::CurrentWork),
+        Some(at) if at < versions.len() => versions.get(at).cloned().map(Side::Version),
+        Some(at) => branches.get(at.checked_sub(versions.len() + 1)?).cloned().map(Side::Branch),
+    }
 }
 
 /// Puts row `n` on the side the list was opened for and closes it.
 fn pick(shell: &mut Shell, n: usize) {
-    let side = side_at(listed(shell), n);
+    let side = side_at(listed(shell), &others(shell), n);
     if let (Some(pair), Some(side)) = (pair_mut(shell), side)
         && let Some(d) = pair.dropdown.take()
     {
@@ -186,7 +240,8 @@ fn pick(shell: &mut Shell, n: usize) {
 /// or Space picks, and Esc or Tab closes it. Gives whether a list was open, keys or none.
 pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
     use egui::Key::{ArrowDown, ArrowUp, Enter, Escape, Space, Tab};
-    let last = listed(shell).len();
+    let (versions, branches) = (listed(shell).to_vec(), others(shell));
+    let (rows, heading) = rows_of(&versions, &branches);
     let press = |key, repeats| crate::menu_bar::press(ctx, key, repeats);
     let Some(pair) = pair_mut(shell).filter(|pair| pair.dropdown.is_some()) else { return false };
     if press(Escape, false) | press(Tab, false) {
@@ -195,8 +250,11 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
     }
     let Some(d) = pair.dropdown.as_mut() else { return false };
     let (down, up) = (press(ArrowDown, true), press(ArrowUp, true));
-    d.highlight = (d.highlight + usize::from(down)).min(last).saturating_sub(usize::from(up));
-    let at = d.highlight;
+    let moved = |at: usize| (at + usize::from(down)).min(rows - 1).saturating_sub(usize::from(up));
+    // The heading is no row to pick: the keys pass over it, the way they were going.
+    let was = row_of(&d.highlight, &versions, &branches);
+    let at = Some(moved(was)).filter(|at| Some(*at) != heading).unwrap_or_else(|| moved(moved(was)));
+    d.highlight = side_at(&versions, &branches, at).unwrap_or(Side::CurrentWork);
     if press(Enter, false) | press(Space, false) {
         pick(shell, at);
     }
@@ -204,10 +262,11 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) -> bool {
 }
 
 /// The open list under the select `field`: This branch, current work and the versions read,
-/// reading on as its end comes into view, and what could not be read. `held` is the row marked.
+/// reading on as its end comes into view, what could not be read, and Another branch with each
+/// other branch. `held` is the row marked.
 fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side, mut d: Dropdown) {
-    let (versions, clock) = (listed(shell).to_vec(), crate::chat_panel::clock(shell));
-    let (rows, failed) = (versions.len() + 1, shell.versions.more_failed.clone());
+    let (versions, branches, clock) = (listed(shell).to_vec(), others(shell), crate::chat_panel::clock(shell));
+    let ((rows, heading), failed) = (rows_of(&versions, &branches), shell.versions.more_failed.clone());
     let footer = if failed.is_some() { ROW } else { 0.0 };
     let (window, top) = (ui.ctx().content_rect(), field.bottom() + 8.0);
     let wanted = HEADING + rows.min(MOST_ROWS) as f32 * ROW + footer + 4.0;
@@ -224,21 +283,28 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
         let (first, bottom) = (r.top() + HEADING, r.bottom() - 4.0 - footer);
         let tree = Rect::from_min_max(pos2(r.left(), first), pos2(r.right() - 1.0, bottom + 8.0));
         // The highlight's place stands for its row: scroll_tree follows a row when its id changes.
-        let follow = Some((d.highlight, archforge_mof::Uuid((d.highlight as u128).to_be_bytes())));
+        let lit = row_of(&d.highlight, &versions, &branches);
+        let follow = Some((lit, archforge_mof::Uuid((lit as u128).to_be_bytes())));
         let offset = scroll_tree(ui, p, tree, first, rows, ROW, 0.0, true, follow, &mut d.scroll);
         let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
         clip.set_clip_rect(Rect::from_min_max(pos2(r.left(), first), pos2(r.right(), bottom)));
         let mut picked = None;
         for n in 0..rows {
             let y = first + n as f32 * ROW - offset;
-            let Some(side) = side_at(&versions, n).filter(|_| y + ROW > first && y < bottom) else { continue };
+            if Some(n) == heading {
+                let words = tr("Another branch").to_uppercase();
+                ux::text_mid(clip.painter(), r.left() + 14.0, y + ROW / 2.0 + 4.0, &words, types::EYEBROW_SMALL, p.text_secondary, None);
+                clip.painter().rect_filled(Rect::from_min_size(pos2(r.left() + 14.0, y + 4.0), vec2(LIST - 28.0, 1.0)), 0.0, p.border);
+                cut_note(shell, &clip, p, Rect::from_min_size(pos2(r.left() + 140.0, y + 4.0), vec2(LIST - 154.0, ROW - 4.0)));
+            }
+            let Some(side) = side_at(&versions, &branches, n).filter(|_| y + ROW > first && y < bottom) else { continue };
             let at = Rect::from_min_size(pos2(r.left() + 4.0, y), vec2(LIST - 8.0, ROW));
             let (name, beside) = match &side {
                 Side::CurrentWork => (tr("Current work"), if shell.shown_unsaved() { tr("Unsaved changes") } else { tr("No unsaved changes") }),
-                Side::Version(v) => (
-                    when(&v.date, clock),
-                    described(v).map(str::to_string).or_else(|| v.by_agent.then(|| tr("Saved by an agent"))).unwrap_or_default(),
-                ),
+                Side::Version(v) => {
+                    (when(&v.date, clock), told(v, clock).or_else(|| v.by_agent.then(|| tr("Saved by an agent"))).unwrap_or_default())
+                }
+                Side::Branch(b) => (b.shown.clone(), tr("Latest version")),
             };
             let id = format!("{LIST_ID}.row.{n}");
             let resp = control(shell, &clip, &id, "option", at, true);
@@ -247,7 +313,7 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
                 node.set_label(format!("{name}, {beside}"));
                 node.set_selected(side == *held);
             });
-            if n == d.highlight || resp.hovered() {
+            if n == lit || resp.hovered() {
                 clip.painter().rect_filled(at, 6.0, p.accent_tint);
             }
             let shown = ux::text_mid(clip.painter(), at.left() + 10.0, at.center().y, &name, types::SMALL, p.text, Some(LIST * 0.45));
@@ -273,6 +339,18 @@ fn list(shell: &mut Shell, ui: &egui::Ui, p: &Palette, field: Rect, held: &Side,
     if let Some(n) = picked {
         pick(shell, n);
     }
+}
+
+/// Beside the Another branch heading, in `r`, that the branches listed are only the first ones,
+/// as the Branches section says under its own; read whole on hover and by a screen reader where it
+/// is cut.
+fn cut_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
+    let Some(listed) = shell.versions.branches.as_ref().filter(|_| shell.versions.branches_cut) else { return };
+    let words = crate::i18n::fmt(&tr("Only the first {n} branches are listed."), &[("n", &listed.len().to_string())]);
+    let g = ux::galley(ui.painter(), &words, types::CAPTION, p.text_muted, Some(r.width()));
+    let at = pos2(r.right() - g.size().x.min(r.width()), r.center().y - g.size().y / 2.0);
+    ui.painter().galley(at, g, p.text_muted);
+    let _ = control(shell, ui, &format!("{LIST_ID}.cut"), "status", r, false).on_hover_text(&words).accessible_name(words.as_str());
 }
 
 /// Under the rows: that the next versions could not be read, why on hover, and Retry.

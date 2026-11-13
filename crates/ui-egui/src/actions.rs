@@ -8,7 +8,7 @@ use crate::i18n::tr;
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
-use crate::{Shell, edit_menu, model_menu};
+use crate::{Shell, edit_menu, model_menu, view_menu};
 
 pub const ABOUT: &str = "app.about";
 pub const SETTINGS: &str = "app.settings";
@@ -18,10 +18,12 @@ pub const SAVE: &str = "file.save";
 pub const NEW: &str = "file.new";
 pub const OPEN: &str = "file.open";
 pub const CLOSE: &str = "file.close";
+pub const FIND: &str = "view.find";
 pub const VERSIONS: &str = "versions.list";
 pub const OLDER: &str = "versions.older";
 pub const NEWER: &str = "versions.newer";
 pub const BRANCHES: &str = "versions.branches";
+pub const NEW_BRANCH: &str = "versions.new-branch";
 pub const SAVE_VERSION: &str = "versions.save";
 pub const COMPARE: &str = "versions.compare";
 pub const BACK: &str = "versions.back";
@@ -33,7 +35,7 @@ pub const PASTE: &str = "edit.paste";
 pub const SELECT_ALL: &str = "edit.select-all";
 
 /// The Versions menu's rows by section, on every system (`docs/design/versioning.md`, section 11).
-pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[BRANCHES], &[OLDER, NEWER, BACK]];
+pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[NEW_BRANCH, BRANCHES], &[OLDER, NEWER, BACK]];
 
 /// One application action.
 pub struct Action {
@@ -126,6 +128,16 @@ pub static ACTIONS: &[Action] = &[
         search: None,
     },
     Action {
+        id: FIND,
+        label: |_| tr("Find…"),
+        // A field with the keyboard keeps the keys: in a skill's text they make a link. A bar with
+        // no room for the search's field has nowhere to show the list.
+        available: |s| free(s) && !edit_menu::on_field(s) && !s.home_search.cramped,
+        run: |s| s.home_search.asked = true,
+        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::K }),
+        search: None,
+    },
+    Action {
         id: "home.pin-folder",
         label: |_| tr("Pin a folder"),
         available: |s| s.services.pick_folder.is_some() && s.state.pinned.len() < crate::state::MAX_PINNED,
@@ -206,6 +218,15 @@ pub static ACTIONS: &[Action] = &[
         search: None,
     },
     Action {
+        id: NEW_BRANCH,
+        label: |_| tr("New branch…"),
+        // As the Branches header's + is: the host keeps branches, and nothing holds the project.
+        available: |s| free(s) && crate::branch_ask::offered(s),
+        run: crate::branch_ask::open,
+        keys: None,
+        search: None,
+    },
+    Action {
         id: BRANCHES,
         label: |_| tr("Switch branch"),
         // While the list can open and there are branches to switch between.
@@ -253,7 +274,7 @@ pub static ACTIONS: &[Action] = &[
 
 /// The action `id`.
 fn find(id: &str) -> Option<&'static Action> {
-    ACTIONS.iter().chain(model_menu::rows()).find(|a| a.id == id)
+    ACTIONS.iter().chain(model_menu::rows()).chain(view_menu::ROWS).find(|a| a.id == id)
 }
 
 /// The name of the action `id`; empty when the table has none.
@@ -348,10 +369,10 @@ pub(crate) mod tests {
     const APPEARANCE: &str = "home.appearance";
     const VIEW: &str = "home.recent-view";
     const SORT: &str = "home.recent-sort";
-    const ALL: [&str; 12] = [ABOUT, SETTINGS, QUIT, GENERATE, SAVE, NEW, OPEN, CLOSE, PIN, APPEARANCE, VIEW, SORT];
+    const ALL: [&str; 13] = [ABOUT, SETTINGS, QUIT, GENERATE, SAVE, NEW, OPEN, CLOSE, FIND, PIN, APPEARANCE, VIEW, SORT];
     const IN_SEARCH: [&str; 6] = [NEW, OPEN, PIN, APPEARANCE, VIEW, SORT];
     /// What a dialog or a question over the window turns off.
-    const BEHIND_A_DIALOG: [&str; 6] = [SETTINGS, GENERATE, SAVE, NEW, OPEN, CLOSE];
+    const BEHIND_A_DIALOG: [&str; 7] = [SETTINGS, GENERATE, SAVE, NEW, OPEN, CLOSE, FIND];
 
     /// A host that counts the saves asked of it; the saves never finish.
     #[derive(Default)]
@@ -399,6 +420,14 @@ pub(crate) mod tests {
         (shell, host, picks)
     }
 
+    /// `shell` with unsaved work, which Save makes a version of: with none it asks for nothing.
+    fn unsaved(shell: &mut Shell) -> &mut Shell {
+        if let Some(s) = shell.session.as_mut() {
+            s.mark_unsaved();
+        }
+        shell
+    }
+
     /// A question about the open project, which keeps everything behind it off.
     fn question() -> crate::close_ask::Ask {
         crate::close_ask::Ask::Unsaved { path: "/shop.archforge".into() }
@@ -426,7 +455,7 @@ pub(crate) mod tests {
         type Setup = fn(&mut Shell);
         let states: [(&str, Setup, &[&str]); 18] = [
             ("a project", |_| {}, &[]),
-            ("saving", |s| s.save(), &[SAVE]),
+            ("saving", |s| unsaved(s).save(), &[SAVE]),
             ("held", |s| s.begin_hold().unwrap(), &[SAVE]),
             ("viewing a version", |s| s.show_version(session(), "c1".to_string()), &[SAVE]),
             ("About open", crate::support::open, &BEHIND_A_DIALOG),
@@ -486,6 +515,7 @@ pub(crate) mod tests {
             (SETTINGS, shell.settings.is_some()),
             (CLOSE, shell.project.is_none()),
             (OPEN, picks.load(Ordering::SeqCst) == 1),
+            (FIND, shell.home_search.asked),
             (PIN, !shell.state.pinned.is_empty()),
             (APPEARANCE, shell.state.theme != fresh.theme),
             (VIEW, shell.state.recent_view != fresh.recent_view),
@@ -505,6 +535,9 @@ pub(crate) mod tests {
         );
         for id in ALL {
             let (mut shell, saves, picks) = shell();
+            if id == SAVE {
+                unsaved(&mut shell);
+            }
             run(&mut shell, id);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
@@ -537,6 +570,7 @@ pub(crate) mod tests {
             "New project…",
             "Open…",
             "Close project",
+            "Find…",
             "Pin a folder",
             "Switch to the dark appearance",
             "Show recent projects as a gallery",
@@ -570,10 +604,13 @@ pub(crate) mod tests {
         ];
         for (id, modifiers, key) in pressed {
             let (mut shell, saves, picks) = shell();
+            unsaved(&mut shell);
             press(&mut shell, modifiers, key);
             assert_eq!(effects(&shell, &saves, &picks), [id]);
         }
         let (mut shell, saves, picks) = shell();
+        // Unsaved, so a key that reached Save would show.
+        unsaved(&mut shell);
         shell.ask = Some(question());
         press(&mut shell, shift_cmd, Key::G);
         press(&mut shell, Modifiers::COMMAND, Key::O);

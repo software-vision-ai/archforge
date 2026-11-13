@@ -171,12 +171,12 @@ fn names_clash_only_among_the_classifiers_an_owner_holds() {
     let [sales, order, customer, ..] = shop(&mut s);
     let priority = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "enumeration", "name": "Priority" }));
     let why = refused(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "priority" }));
-    assert!(why.contains("an enumeration named priority already"), "{why}");
+    assert!(why.contains("an enumeration named Priority already"), "{why}");
     // Customer is a package member: a nested Customer is told apart by its owner.
     run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Customer" }));
     run(&mut s, "uml.nested.add", json!({ "owner": customer, "kind": "enumeration", "name": "Priority" }));
     let line = run(&mut s, "uml.nested.add", json!({ "owner": order, "kind": "class", "name": "Line" }));
-    assert!(refused(&mut s, "uml.class.rename", json!({ "class": line, "name": "PRIORITY" })).contains("an enumeration named PRIORITY already"));
+    assert!(refused(&mut s, "uml.class.rename", json!({ "class": line, "name": "PRIORITY" })).contains("an enumeration named Priority already"));
     let loose = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "LINE" }));
     assert!(refused(&mut s, "uml.classifier.set-owner", json!({ "classifier": loose, "owner": order })).contains("a class named Line already"));
     one_step(&mut s, "uml.enumeration.rename", json!({ "enumeration": priority, "name": "Urgency" }));

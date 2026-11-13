@@ -56,7 +56,7 @@ pub struct State {
 
 /// The New diagram dialog's fields: the step it is at, the name, the kind, the element the
 /// diagram is of (a schema, a package; none for a new one named like the diagram), the select that
-/// is open, the engine's refusal.
+/// is open, a refusal in plain words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewDiagram {
     pub step: Step,
@@ -341,9 +341,10 @@ pub fn trail(store: &Store, project: &str, of: Obj) -> String {
     head.into_iter().chain(names).collect::<Vec<_>>().join(" / ")
 }
 
+/// Runs a command on the open project's session; a refusal comes back in Properties' plain words
+/// ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 /// The kind the dialog makes a diagram of.
@@ -499,7 +500,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         footer_lines(shell, &paint, p, r);
     }
     if let Some(notice) = shell.diagrams.notice.clone() {
-        ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        let area = ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.diagrams.notice", area, &notice);
     }
 }
 
@@ -824,7 +826,7 @@ fn continue_to_details(shell: &mut Shell) {
 }
 
 /// The second step: the kind's name for a new diagram as the title, the name, what it is of, the
-/// engine's refusal; Back returns to the kinds with all of it kept, Cancel (or Escape) closes with
+/// refusal in plain words; Back returns to the kinds with all of it kept, Cancel (or Escape) closes with
 /// nothing made, Create (or Enter) makes it.
 fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui::Painter, window: Rect) {
     let Some(kind) = shell.diagrams.new.as_ref().and_then(|n| kind_named(shell, n.kind)) else { return };
@@ -885,6 +887,7 @@ fn details_step(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, paint: &egui:
         let r = Rect::from_min_size(at(20.0, 190.0), vec2(inner_w, 24.0));
         paint.rect_filled(r, 6.0, p.amber_tint);
         ux::text_mid(paint, r.left() + 10.0, r.center().y, refused, types::CAPTION, p.amber, Some((inner_w - 20.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.new-diagram.notice", r, refused);
     }
     // Back at the left; Cancel and Create at the right.
     let back = Rect::from_min_size(pos2(dialog.left() + 20.0, dialog.bottom() - 48.0), vec2(70.0, 28.0));

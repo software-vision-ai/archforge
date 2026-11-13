@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -296,11 +296,12 @@ fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
+/// `diagram.note`: a note with a text that says something, in a diagram.
 fn diagram_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let text = str_of(p, "text");
     if text.is_empty() {
-        return Err(refuse("text", "the text is empty"));
+        return Err(refuse("text", "the text is empty").because(Reason::TextEmpty));
     }
     check("text", rules::text_problem(text, MAX_TEXT), "text")?;
     let parent = parent_in(ctx.doc, p, d)?;
@@ -309,6 +310,7 @@ fn diagram_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
+/// `diagram.set-text`: a note's text, which has to say something.
 fn diagram_set_text<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let n = one_of(ctx.doc, p, "node", NODE, "a node")?;
     if element_of(ctx.doc, n, node::ELEMENT).is_some() {
@@ -316,7 +318,7 @@ fn diagram_set_text<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     }
     let text = str_of(p, "text");
     if text.is_empty() {
-        return Err(refuse("text", "the text is empty"));
+        return Err(refuse("text", "the text is empty").because(Reason::TextEmpty));
     }
     check("text", rules::text_problem(text, MAX_TEXT), "text")?;
     set_text(ctx.doc, n, node::TEXT, text)?;

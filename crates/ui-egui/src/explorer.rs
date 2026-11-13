@@ -131,7 +131,7 @@ pub struct ContextMenu {
 }
 
 /// A name being typed in place: the element, the text so far, whether the element was just made
-/// (its default name is then selected, so typing replaces it), and the engine's refusal, if any.
+/// (its default name is then selected, so typing replaces it), and a refusal in plain words, if any.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rename {
     pub target: Uuid,
@@ -310,10 +310,10 @@ fn offers(uis: &[&'static dyn NotationUi], store: &Store, selection: Option<Obj>
     }
 }
 
-/// Runs a command on the open project's session, keeping the engine's refusal as text.
+/// Runs a command on the open project's session; a refusal comes back in Properties' plain words
+/// ([`crate::panels::refusal`]), never with the command's id or the engine's own wording.
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(crate::i18n::tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 fn selected(shell: &Shell) -> Option<Obj> {
@@ -658,7 +658,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
         );
     }
     if let Some(notice) = shell.explorer.notice.clone() {
-        ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        let area = ux::text(&paint, pos2(r.left() + 16.0, r.bottom() - 40.0), &notice, types::CAPTION, p.amber, Some((r.width() - 32.0).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.explorer.notice", area, &notice);
     }
     let no_widget_has_keys = ui.memory(|m| m.focused().is_none());
     let tree_keys =
@@ -821,7 +822,8 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
 }
 
 /// The name typed in place: a bordered field with the text selected when the element is new;
-/// Enter commits, Escape closes, a refusal stays under it in the engine's words.
+/// Enter commits, Escape closes, a refusal stays under it in the engine's words and the field keeps
+/// the keyboard (AR-426).
 fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) {
     let paint = ui.painter().clone();
     paint.rect_filled(field, 5.0, p.surface);
@@ -843,7 +845,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let _ = (*out.response).clone().accessible_name(tr("Name"));
     if r.opened {
         // The first frame takes the keyboard once; a new element's default name is selected whole,
-        // so typing replaces it. Nothing asks for the keyboard again: a click elsewhere commits.
+        // so typing replaces it. Only a refused Enter asks for the keyboard again: a click
+        // elsewhere commits and leaves it where it went.
         out.response.request_focus();
         if fresh {
             let range = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(r.text.chars().count()));
@@ -855,7 +858,8 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         r.fresh = false;
     }
     if let Some(why) = &r.refused {
-        ux::text(&paint, pos2(field.left(), field.bottom() + 4.0), why, types::CAPTION, p.amber, Some(field.width()));
+        let area = ux::text(&paint, pos2(field.left(), field.bottom() + 4.0), why, types::CAPTION, p.amber, Some(field.width()));
+        widgets::announce(ui, &mut shell.registry, "workspace.explorer.rename.notice", area, why);
     }
     let has_keys = out.response.has_focus() || out.response.lost_focus();
     let enter = has_keys && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -864,6 +868,11 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
         shell.explorer.rename = None;
     } else if enter || crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), out.response.has_focus()) {
         commit_rename(shell);
+        // The one-line field let go of the keyboard on Enter; refused, it takes it back with the
+        // name as typed, so the name can be corrected or Escape can close it without a click.
+        if enter && shell.explorer.rename.is_some() {
+            out.response.request_focus();
+        }
     }
 }
 

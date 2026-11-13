@@ -108,9 +108,10 @@ fn area(r: Rect) -> f32 {
     if r.is_positive() { r.width() * r.height() } else { 0.0 }
 }
 
+/// Runs a command on the open project's session; a refusal comes back in Properties' plain words
+/// ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 /// The diagram `package` leads to, made when it has none.
@@ -525,8 +526,8 @@ pub(crate) fn drop_moves(shell: &mut Shell, view: crate::canvas::View, canvas: R
 
 /// Moves `package` into `to` with what it holds and its own diagram, and places it on the diagram
 /// of `to` (made when it has none), right of what that shows: one undo step, with a toast offering
-/// Undo, as a canvas drop, Properties' Parent package and a drop in Models all do (AR-102); the
-/// engine's refusal (into itself or a package it holds) is given back for the caller to say.
+/// Undo, as a canvas drop, Properties' Parent package and a drop in Models all do (AR-102); a
+/// refusal (into itself or a package it holds) is given back in plain words for the caller to say.
 pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
     let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
@@ -554,13 +555,13 @@ pub(crate) fn move_and_place(shell: &mut Shell, package: Obj, to: Obj) -> Result
             shell.canvas.toast = Some(crate::connect::Toast { text, until: shell.frames.saturating_add(300), undo_label: Some(label) });
             Ok(())
         }
-        Err(e) => Err(e.to_string()),
+        Err(e) => Err(crate::panels::refusal(&e)),
     }
 }
 
 /// A package moved by Properties or Models into `to`: shown on a diagram, it goes onto its new
-/// home's diagram too ([`move_and_place`]); shown nowhere, it only moves. The engine's refusal is
-/// given back.
+/// home's diagram too ([`move_and_place`]); shown nowhere, it only moves. A refusal comes back
+/// in plain words ([`crate::panels::refusal`]).
 pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(), String> {
     let Some(store) = shell.session.as_ref().map(|s| s.doc()) else { return Ok(()) };
     if archforge_uml::commands::package_of(store, package) == Some(to) {
@@ -571,5 +572,8 @@ pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(
     }
     let (Ok(package_id), Ok(to_id)) = (store.uuid(package), store.uuid(to)) else { return Ok(()) };
     let Some(session) = shell.session.as_mut() else { return Ok(()) };
-    session.execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() })).map(|_| ()).map_err(|e| e.to_string())
+    session
+        .execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))
+        .map(|_| ())
+        .map_err(|e| crate::panels::refusal(&e))
 }

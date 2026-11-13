@@ -3,6 +3,7 @@
 str		Quit Archforge	Quit Archforge
 str		File	File
 str		Help	Help
+str	menu	View	View
 str		Ctrl	Ctrl
 str		Shift	Shift
 str		The project is busy	The project is busy
@@ -11,7 +12,11 @@ str		Show a diagram first	Show a diagram first
 str		Current work is showing	Current work is showing
 str		Back to current work first	Back to current work first
 str		This project has one branch	This project has one branch
+str		Leave the text field first	Leave the text field first
+str		Widen the window to search	Widen the window to search
+str		Already showing	Already showing
 str		Open…	Open…
+str		Find…	Find…
 str		Save	Save
 # Generate
 str		Generate…	Generate…
@@ -454,12 +459,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	The project is held still while it is being replaced, so this request was not run. Try again when that has finished.
 str		This version is the same as your current work.	This version is the same as your current work.
+str		These two versions are the same.	These two versions are the same.
+str		Too large to compare	Too large to compare
+str		The comparison was stopped.	The comparison was stopped.
+str		Both sides are your current work.	Both sides are your current work.
+str		Choose another pair above.	Choose another pair above.
 str		Restore this version…	Restore this version…
 str		Restore this version?	Restore this version?
 str		The version of {what}	The version of {what}
 str		A new version with that content is added on top of the history, called "{name}".	A new version with that content is added on top of the history, called "{name}".
 str		Nothing is rewound or removed, and later versions stay in History.	Nothing is rewound or removed, and later versions stay in History.
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Your unsaved changes are saved first, as a version called "Before restoring" and the time.
+str		Your unsaved changes are saved first, as a version called "{name}".	Your unsaved changes are saved first, as a version called "{name}".
 str		You can reach them again from History.	You can reach them again from History.
 str		Undo starts fresh after a Restore.	Undo starts fresh after a Restore.
 str		Restore	Restore
@@ -504,19 +514,98 @@ str		Models	Models
 str		Versions	Versions
 str		Branches	Branches
 str		This branch	This branch
+str		Another branch	Another branch
+str		Latest version	Latest version
+str		Latest on {branch}	Latest on {branch}
 str	branch	Current	Current
 str		Branches can't be merged yet.	Branches can't be merged yet.
 str		Only the first {n} branches are listed.	Only the first {n} branches are listed.
 str		The branches couldn't be read.	The branches couldn't be read.
+str		New branch…	New branch…
+str		New branch	New branch
+str		A branch keeps its own versions, unsaved work and conversations.	A branch keeps its own versions, unsaved work and conversations.
+str		It starts from current work on {branch}.	It starts from current work on {branch}.
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.
+str		Start a branch here	Start a branch here
+str		Start a branch here…	Start a branch here…
+str		It starts from the version of {version}.	It starts from the version of {version}.
+str		Viewing ends on the new branch.	Viewing ends on the new branch.
+str		Your unsaved changes stay on {branch}.	Your unsaved changes stay on {branch}.
+str		That name is already in use.	That name is already in use.
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	The last new branch is not cleaned up yet. Opening the project again removes it.
+str		The project changed before the branch was made, so none was made.	The project changed before the branch was made, so none was made.
+str		Couldn't make the branch: {why}	Couldn't make the branch: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge could not tell whether the branch was made. Look at Branches before trying again.
+str		Rename…	Rename…
+str		Rename branch	Rename branch
+str		The conversations and versions on this branch are not affected.	The conversations and versions on this branch are not affected.
+str		The project changed before the branch was renamed, so its name stayed.	The project changed before the branch was renamed, so its name stayed.
+str		Couldn't rename the branch: {why}	Couldn't rename the branch: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.
+str		Delete…	Delete…
+str		Delete {branch}?	Delete {branch}?
+str		Goes with the branch:	Goes with the branch:
+str		Counting what goes with it…	Counting what goes with it…
+str		What goes with it couldn't be read: {why}	What goes with it couldn't be read: {why}
+str		the host stopped without an answer	the host stopped without an answer
+plural		{n} version only on this branch	{n} version only on this branch|{n} versions only on this branch
+plural		{n} conversation	{n} conversation|{n} conversations
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · unsaved changes
+str		It leaves the project's list.	It leaves the project's list.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.
+str		There is no Undo for deleting a branch.	There is no Undo for deleting a branch.
+str		Delete branch	Delete branch
+str		Couldn't delete {branch}	Couldn't delete {branch}
+str		The project changed before the branch was deleted, so it stays.	The project changed before the branch was deleted, so it stays.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge could not tell whether the branch was deleted. Delete it again to find out.
+str		The branch stays: {why}	The branch stays: {why}
 str		At most {n} characters.	At most {n} characters.
 str		Enter a name.	Enter a name.
 str		A name has to be one line.	A name has to be one line.
+str		A name can't be empty.	A name can't be empty.
+str		There is {what} named {name} already.	There is {what} named {name} already.
+str		{what} cannot depend on itself.	{what} cannot depend on itself.
+str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
+str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
+str		The text can't be empty.	The text can't be empty.
+str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
+str		It can't hold a control or hidden character.	It can't hold a control or hidden character.
+str		It can't start or end with a space.	It can't start or end with a space.
+str	refusal	a class	a class
+str	refusal	an association class	an association class
+str	refusal	an interface	an interface
+str	refusal	an enumeration	an enumeration
+str	refusal	a data type	a data type
+str	refusal	a primitive type	a primitive type
+str	refusal	a package	a package
+str	refusal	a profile	a profile
+str	refusal	a stereotype	a stereotype
+str	refusal	an element	an element
+str	refusal	a schema	a schema
+str	refusal	an attribute	an attribute
+str	refusal	an operation	an operation
+str	refusal	a literal	a literal
+str	refusal	a qualifier	a qualifier
+str	refusal	a template parameter	a template parameter
+str	refusal	a generalization set	a generalization set
+str	refusal	a table	a table
+str	refusal	a column	a column
+str	refusal	a relationship	a relationship
+str	refusal	a domain	a domain
+str	refusal	an enum type	an enum type
+str	refusal	a sequence	a sequence
+str	refusal	a view	a view
+str	refusal	a skill	a skill
+str	refusal	an association end	an association end
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
 str		Retry	Retry
 str		No changes since the last version.	No changes since the last version.
+str		What you're typing isn't kept yet	What you're typing isn't kept yet
 str		No versions yet.	No versions yet.
+str		Shared with main up to here	Shared with main up to here
 str		No versions yet. Save version records your first one.	No versions yet. Save version records your first one.
 str		Loading	Loading
 str		Save version…	Save version…
@@ -528,6 +617,7 @@ str		{what} changed.	{what} changed.
 str		These changes become a new version of {name}.	These changes become a new version of {name}.
 str		The model changed while this was open. The summary is up to date again.	The model changed while this was open. The summary is up to date again.
 str		One line, at most 200 characters. It stays in the history.	One line, at most 200 characters. It stays in the history.
+plural		{n} difference	{n} difference|{n} differences
 plural		{n} model element	{n} model element|{n} model elements
 str		Filter changes…	Filter changes…
 str		Filter versions…	Filter versions…
@@ -564,9 +654,11 @@ str		Attributes	Attributes
 str		Operations	Operations
 str		Literals	Literals
 str		Members	Members
+str		Relationships	Relationships
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Ownership
 str		Not available on this side	Not available on this side
-str		Relationships aren't listed on these cards yet.	Relationships aren't listed on these cards yet.
+str		Each difference is marked on the cards below.	Each difference is marked on the cards below.
 plural		Related change	Related change|Related changes
 str		{name} was added in this comparison.	{name} was added in this comparison.
 str		{name} was changed in this comparison.	{name} was changed in this comparison.
@@ -577,7 +669,8 @@ str		The cards show the same on both sides.	The cards show the same on both side
 str		The owner changed	The owner changed
 str		The owner changed.	The owner changed.
 plural		{n} member changed	{n} member changed|{n} members changed
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} relationship changed|{n} relationships changed
+str		{these} · {those}	{these} · {those}
 str		This element was added	This element was added
 str		It is only on the After side, so there is nothing to compare.	It is only on the After side, so there is nothing to compare.
 str		This element was removed	This element was removed
@@ -593,6 +686,30 @@ plural		{n} more value changed.	{n} more value changed.|{n} more values changed.
 str		Yes	Yes
 str		Not set	Not set
 str		Nothing here yet	Nothing here yet
+str		Layout	Layout
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} element added|{n} elements added
+plural		{n} element changed	{n} element changed|{n} elements changed
+plural		{n} element removed	{n} element removed|{n} elements removed
+plural		{n} box placed	{n} box placed|{n} boxes placed
+plural		{n} box moved	{n} box moved|{n} boxes moved
+plural		{n} box changed	{n} box changed|{n} boxes changed
+plural		{n} box taken off	{n} box taken off|{n} boxes taken off
+plural		{n} line drawn	{n} line drawn|{n} lines drawn
+plural		{n} line changed	{n} line changed|{n} lines changed
+plural		{n} line taken off	{n} line taken off|{n} lines taken off
+str		The model didn't change	The model didn't change
+str		Only the layout changed.	Only the layout changed.
+str		The layout didn't change	The layout didn't change
+str		Only the model changed.	Only the model changed.
+str		The diagram's own details changed	The diagram's own details changed
+str		Such as its name, or the order its boxes are drawn in.	Such as its name, or the order its boxes are drawn in.
+str		This diagram was added	This diagram was added
+str		It has no boxes or lines yet.	It has no boxes or lines yet.
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.
+str		This diagram was removed	This diagram was removed
+str		It had no boxes or lines.	It had no boxes or lines.
 str		Version of {when}	Version of {when}
 str		Last version	Last version
 str		No description	No description
@@ -602,6 +719,7 @@ str		This version couldn't be read.	This version couldn't be read.
 str		{from} can't be shown. Skipped to {to}.	{from} can't be shown. Skipped to {to}.
 str		It isn't a version of this branch.	It isn't a version of this branch.
 str		Made with a newer Archforge.	Made with a newer Archforge.
+str		Its model is larger than Archforge reads.	Its model is larger than Archforge reads.
 str		Why?	Why?
 str		Date not known	Date not known
 plural		Versions · {n} change	Versions · {n} change|Versions · {n} changes
@@ -803,7 +921,8 @@ plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap
-str		Widen the canvas to show the minimap	Widen the canvas to show the minimap
+str		The minimap is showing	The minimap is showing
+str		Make the canvas larger to show the minimap	Make the canvas larger to show the minimap
 str		Whole diagram	Whole diagram
 str		Zoom in	Zoom in
 str		Zoom out	Zoom out
@@ -835,6 +954,8 @@ str		Selection · this diagram	Selection · this diagram
 str		{kind} · this diagram	{kind} · this diagram
 plural		{n} item	{n} item|{n} items
 str		The model could not be opened	The model could not be opened
+str		Not kept on {name}: {why}	Not kept on {name}: {why}
+str		Not kept on the element selected before: {why}	Not kept on the element selected before: {why}
 str		The host gives no ids for the model's elements	The host gives no ids for the model's elements
 str		Collapse panel	Collapse panel
 str		Not available yet	Not available yet
@@ -1115,6 +1236,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
 str		«{stereotype}» on {elements}	«{stereotype}» on {elements}
 str		{first} and {second}	{first} and {second}
+str		{first}, {second} and {third}	{first}, {second} and {third}
 plural		Show the use	Show the use|Show the {n} uses
 str		A stereotype is shown on its profile's diagram	A stereotype is shown on its profile's diagram
 str		Place stereotype	Place stereotype
@@ -1319,6 +1441,10 @@ str		Clear	Clear
 str		Client	Client
 str		Composite	Composite
 str		Composition	Composition
+str		The other end has an aggregation already: only the part's end has one.	The other end has an aggregation already: only the part's end has one.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.
+str		This end is a composition's whole, which allows one at most.	This end is a composition's whole, which allows one at most.
+str		The whole's end of an aggregation or composition is not navigable.	The whole's end of an aggregation or composition is not navigable.
 str		Dependency	Dependency
 str		Dependency · model	Dependency · model
 str		Directed association	Directed association
@@ -1362,6 +1488,9 @@ str		Type a name: a template parameter without one stands for nothing.	Type a na
 str		{template} already has a template parameter named {name}. Pick another name.	{template} already has a template parameter named {name}. Pick another name.
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} does not fit {name}: pick a default its arguments could be.
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.
+str		A template has at most {max} parameters.	A template has at most {max} parameters.
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} binds {template} and gives {name} no argument, so {name} needs a default.
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.
 str		template parameter	template parameter
 str		template	template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · template, {n} parameter · model, in every diagram|{kind} · template, {n} parameters · model, in every diagram
@@ -1390,6 +1519,8 @@ str		{name} needs an argument: pick an interface.	{name} needs an argument: pick
 str		{name} needs an argument: pick a data type.	{name} needs an argument: pick a data type.
 str		{name} needs an argument: pick an enumeration.	{name} needs an argument: pick an enumeration.
 str		{name} needs an argument: pick a primitive type.	{name} needs an argument: pick a primitive type.
+str		{name} ({kind})	{name} ({kind})
+str		{names} have no default, so each needs an argument.	{names} have no default, so each needs an argument.
 plural		{names} can keep its default.	{names} can keep its default.|{names} can keep their defaults.
 str		New template binding	New template binding
 str		Drawing · not in the model until you apply	Drawing · not in the model until you apply
@@ -1413,6 +1544,7 @@ str		Click a class for the new end	Click a class for the new end
 str		Esc cancels	Esc cancels
 str		An n-ary association joins classes and interfaces	An n-ary association joins classes and interfaces
 str		An association takes at most {n} ends	An association takes at most {n} ends
+str		An n-ary association needs three ends or more.	An n-ary association needs three ends or more.
 str		An n-ary association needs three ends or more: click another class	An n-ary association needs three ends or more: click another class
 str		Add n-ary association	Add n-ary association
 str		New n-ary association	New n-ary association
@@ -1430,6 +1562,7 @@ str		Reconnect end	Reconnect end
 str		Drag a leg end	Drag a leg end
 str		Open a class diagram to pick the new end's class	Open a class diagram to pick the new end's class
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	An n-ary association's ends are not aggregations: only a binary association has a whole and a part.
 str		Another end has the role {role} already. Pick another role.	Another end has the role {role} already. Pick another role.
 str		Set association end	Set association end
 str		End {role} removed	End {role} removed
@@ -1451,6 +1584,8 @@ str		Interface realization	Interface realization
 str		Interface realization · model	Interface realization · model
 # Generalization sets (AR-129)
 str		A set groups generalizations of one class.	A set groups generalizations of one class.
+str		A set groups at least one generalization.	A set groups at least one generalization.
+plural		A set groups at most {n} generalization.	A set groups at most {n} generalization.|A set groups at most {n} generalizations.
 str		Add member	Add member
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Add member offers only generalizations to {general}. Edit opens that generalization.
 str		Add to a generalization set	Add to a generalization set

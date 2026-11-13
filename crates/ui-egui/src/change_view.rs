@@ -6,10 +6,11 @@ mod diagram;
 mod related;
 mod summary;
 
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use archforge_mof::{Uuid, rows::snapshot};
+use archforge_mof::Uuid;
 use archforge_notations::differences::{Area, ChangeKind, DiagramSides, Difference, ElementSides, diagram_sides, element_sides};
 use egui::{Rect, pos2, vec2};
 
@@ -19,8 +20,8 @@ use crate::i18n::{fmt, tr};
 use crate::settings::{Look, button, control};
 use crate::state::Explorer;
 use crate::ux::{self, Palette, types};
-use crate::version_details::{BAND, MARGIN, breadcrumb};
-use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, when, working_key};
+use crate::version_details::{BAND, MARGIN, about, breadcrumb};
+use crate::versions::{Compared, State, base_held, kind_look, last_known, last_version, path_words, when, working_key};
 
 /// The two sides the centre shows: an element's cards, or a diagram's drawings.
 #[derive(Clone)]
@@ -30,33 +31,57 @@ pub(crate) enum Sides {
     Diagram(Arc<Mutex<DiagramSides>>),
 }
 
-/// The changed element the centre shows: its row, which speaks for it until its sides are known, and what was last read of them.
+/// The changed element the centre shows, in the project and session it was opened in: its row, which
+/// speaks for it until its sides are known, and what was last read of them.
 pub(crate) struct OpenedElement {
+    about: Option<(PathBuf, u64)>,
     pub(crate) row: Difference,
     read_of: Option<Compared>,
     found: Option<Result<Sides, String>>,
     scroll: TreeScroll,
+    /// The zoom and pan a diagram's two sides are drawn with once the person has moved either; none while they fit.
+    nav: Option<(f32, egui::Vec2)>,
 }
 
-/// The one read of an element's two sides under way, and what it is about.
+/// The one read of an element's two sides under way, and what it is about, in which project and session.
 pub(crate) struct ElementReading {
+    pub(crate) about: Option<(PathBuf, u64)>,
     pub(crate) id: Uuid,
     pub(crate) key: Compared,
     pub(crate) answer: Receiver<Result<Option<Sides>, String>>,
 }
 
 /// Opens the change `row` in place of a version's details and ends what was said of earlier work.
+/// Opening the one shown again keeps what was read of it, and fits a diagram's two sides again.
 pub(crate) fn open(shell: &mut Shell, row: Difference) {
     (shell.versions.details, shell.versions.selected, shell.canvas.notice) = (None, None, None);
+    let about = about(shell);
     let v = &mut shell.versions;
-    if v.element.as_ref().is_none_or(|o| o.row.id != row.id) {
-        v.element = Some(OpenedElement { row, read_of: None, found: None, scroll: TreeScroll::default() });
+    match v.element.as_mut() {
+        Some(o) if o.row.id == row.id => o.nav = None,
+        _ => v.element = Some(OpenedElement { about, row, read_of: None, found: None, scroll: TreeScroll::default(), nav: None }),
     }
 }
 
-/// Once a frame: takes the answer, closes an element the list no longer holds, starts the next read
-/// and wakes the window while one is awaited. A failed list says nothing of the element: that closes nothing.
+/// Lets go of the open element, its sides with it, and of the read of them with its answer still to
+/// come, once the project or session shown is another, or none is. Also once a frame before
+/// drawing, as Home and a project closed draw no rail to call [`keep`].
+pub(crate) fn let_go(shell: &mut Shell) {
+    let about = about(shell);
+    let v = &mut shell.versions;
+    if v.element.as_ref().is_some_and(|o| o.about != about) {
+        v.element = None;
+    }
+    if v.element_reading.as_ref().is_some_and(|r| r.about != about) {
+        v.element_reading = None;
+    }
+}
+
+/// Once a frame: lets go of what belongs to another project or session, takes the answer, closes an
+/// element the list no longer holds, starts the next read and wakes the window while one is
+/// awaited. A failed list says nothing of the element: that closes nothing.
 pub(crate) fn keep(shell: &mut Shell, ctx: &egui::Context) {
+    let_go(shell);
     take_answer(shell);
     let v = &mut shell.versions;
     if v.compare_failed.is_none() && v.element.as_ref().is_some_and(|o| !v.changes.iter().any(|d| d.id == o.row.id)) {
@@ -108,22 +133,24 @@ fn start_read(shell: &mut Shell) {
     let (id, area) = (o.row.id, o.row.area);
     let (Some(before), Some(session)) = (base_held(v, &key.0), shell.session.as_ref()) else { return };
     let (tables, junctions) = archforge_notations::storage();
+    let about = about(shell);
     let v = &mut shell.versions;
-    let after = match snapshot(session.doc(), &tables, &junctions) {
-        Ok(rows) => rows,
-        Err(e) => return land(v, key, Err(e.to_string())),
-    };
+    // The frame only copies the objects; their rows are built with the sides.
+    let frozen = session.doc().freeze();
     let (tx, rx) = channel();
     let read = move || {
         let repair = crate::editing::fit_tables;
-        let sides = match area {
-            Area::Model => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
-            Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
-        };
-        drop(tx.send(sides.map_err(|e| e.to_string())));
+        let sides = frozen.rows(&tables, &junctions).map_err(|e| e.to_string()).and_then(|after| {
+            match area {
+                Area::Model | Area::Skill => element_sides(&before, &after, id, repair).map(|s| s.map(Sides::Element)),
+                Area::Diagram => diagram_sides(&before, &after, id, repair).map(|s| s.map(|s| Sides::Diagram(Arc::new(Mutex::new(s))))),
+            }
+            .map_err(|e| e.to_string())
+        });
+        let _ = tx.send(sides);
     };
     match std::thread::Builder::new().name("archforge-element-sides".into()).spawn(read) {
-        Ok(_) => v.element_reading = Some(ElementReading { id, key, answer: rx }),
+        Ok(_) => v.element_reading = Some(ElementReading { about, id, key, answer: rx }),
         Err(e) => land(v, key, Err(e.to_string())),
     }
 }
@@ -158,7 +185,7 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -
     let said = crate::canvas::notice(shell, ui, p, pos2(left, r.top() + BAND + 6.0), width);
     let (name, path, kind) = heading(&row, found.as_ref().and_then(|f| f.as_ref().ok()));
     let name = name.filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
-    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &path.join(" / ")), kind);
+    let y = title(shell, ui, p, (r, r.top() + BAND + 20.0 + (said - types::CAPTION.line).max(0.0)), (&name, &path), kind);
     match found {
         Some(Err(why)) => {
             let words = failed_words(row.area);
@@ -191,9 +218,9 @@ fn failed_words(area: Area) -> String {
     if area == Area::Diagram { tr("This diagram couldn't be compared.") } else { tr("This element couldn't be compared.") }
 }
 
-/// The name, path and change the header says: of `sides` once known, of `row` until then. The change
+/// The name, path words and change the header says: of `sides` once known, of `row` until then. The change
 /// comes from the sides, as a change of table is one change, not the two rows the list has for it.
-fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, Vec<String>, Option<ChangeKind>) {
+fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, String, Option<ChangeKind>) {
     let kind = |before: bool, after: bool| match (before, after) {
         (false, _) => ChangeKind::Added,
         (true, true) => ChangeKind::Changed,
@@ -202,13 +229,13 @@ fn heading(row: &Difference, sides: Option<&Sides>) -> (Option<String>, Vec<Stri
     match sides {
         Some(Sides::Element(s)) => {
             let card = s.after.as_ref().or(s.before.as_ref());
-            (card.map_or(row.name.clone(), |c| c.name.clone()), row.path.clone(), Some(kind(s.before.is_some(), s.after.is_some())))
+            (card.map_or(row.name.clone(), |c| c.name.clone()), path_words(row), Some(kind(s.before.is_some(), s.after.is_some())))
         }
         Some(Sides::Diagram(d)) => {
             let d = d.lock().unwrap_or_else(PoisonError::into_inner);
-            (d.name.clone(), d.path.clone(), Some(kind(d.before.is_some(), d.after.is_some())))
+            (d.name.clone(), d.path.join(" / "), Some(kind(d.before.is_some(), d.after.is_some())))
         }
-        None => (row.name.clone(), row.path.clone(), None),
+        None => (row.name.clone(), path_words(row), None),
     }
 }
 

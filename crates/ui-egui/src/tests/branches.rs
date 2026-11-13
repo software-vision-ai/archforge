@@ -3,6 +3,7 @@
 use egui_kittest::kittest::Queryable;
 
 use super::*;
+use crate::close_ask::Ask;
 
 const MAIN: &str = "workspace.versions.branch.row.main";
 const OTHER: &str = "workspace.versions.branch.row.try-cancellations";
@@ -12,13 +13,14 @@ const MENU: &str = "workspace.versions.branch.menu.try-cancellations.0";
 /// `main`, in use and with a version, and when `other`, a branch with unsaved work and a version
 /// of its own; `main` is marked unsaved, which only its session may decide.
 fn listed(other: bool) -> Vec<crate::BranchEntry> {
-    let main =
-        crate::BranchEntry { name: "main".into(), shown: "main".into(), current: true, unsaved: true, latest: Some("2026-11-08T14:02:00Z".into()) };
+    let (latest, latest_version) = (Some("2026-11-08T14:02:00Z".into()), Some("m1".into()));
+    let main = crate::BranchEntry { name: "main".into(), shown: "main".into(), current: true, unsaved: true, latest, latest_version };
     let try_it = crate::BranchEntry {
         name: "try-cancellations".into(),
         shown: "Try cancellations".into(),
         current: false,
         latest: Some("2026-11-09T15:30:00Z".into()),
+        latest_version: Some("t1".into()),
         ..main.clone()
     };
     if other { vec![main, try_it] } else { vec![main] }
@@ -27,7 +29,14 @@ fn listed(other: bool) -> Vec<crate::BranchEntry> {
 /// `listed(true)` with `names`, each another branch with nothing unsaved and no version, in order.
 fn with(names: impl IntoIterator<Item = String>) -> Vec<crate::BranchEntry> {
     let mut all = listed(true);
-    all.extend(names.into_iter().map(|n| crate::BranchEntry { shown: n.clone(), name: n, current: false, unsaved: false, latest: None }));
+    all.extend(names.into_iter().map(|n| crate::BranchEntry {
+        shown: n.clone(),
+        name: n,
+        current: false,
+        unsaved: false,
+        latest: None,
+        latest_version: None,
+    }));
     all.sort_by(|a, b| a.name.cmp(&b.name));
     all
 }
@@ -108,8 +117,8 @@ fn a_row_says_what_its_branch_holds() {
     });
 }
 
-/// A click, Enter or the menu's Switch on another branch asks to switch to it; the branch in use
-/// has no menu, and a click on it does nothing; ↑ and ↓ move between rows, out of view too.
+/// A click, Enter or the menu's Switch on another branch asks to switch to it; `main` in use has
+/// no menu, and a click on it does nothing; ↑ and ↓ move between rows, out of view too.
 #[test]
 fn a_row_switches_to_its_branch() {
     in_both_appearances(|theme| {
@@ -143,6 +152,38 @@ fn a_row_switches_to_its_branch() {
         key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(switched(&mut h, &host), ["b11"], "{theme:?}: the arrow keys reach a row out of view");
+    });
+}
+
+/// While a row's menu is open the arrows are the menu's, with the row focused too, by the pointer
+/// and by the keys: ↓ and Enter pick its Switch, and the focus stays on the row.
+#[test]
+fn a_row_s_open_menu_keeps_the_arrows() {
+    let (row, more) = ("workspace.versions.branch.row.b00", "workspace.versions.branch.more.b00");
+    in_both_appearances(|theme| {
+        let switched = |h: &mut Harness<'static, Shell>, host: &SavingHost| {
+            h.run_steps(4);
+            host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>()
+        };
+        let focus = |h: &mut Harness<'static, Shell>, id: &str| {
+            h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(id)));
+            h.run_steps(1);
+        };
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        click_id(&mut h, more);
+        focus(&mut h, row);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(row))), "{theme:?}: the row kept the focus");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(switched(&mut h, &host), ["b00"], "{theme:?}: by the pointer, the menu's Switch");
+
+        let (mut h, host) = branches_read(theme, Ok(with((0..20).map(|i| format!("b{i:02}")))));
+        focus(&mut h, more);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert!(h.state().panels.menu.is_some(), "{theme:?}: Enter opened the menu");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(switched(&mut h, &host), ["b00"], "{theme:?}: by the keys, the menu's Switch");
     });
 }
 
@@ -503,5 +544,505 @@ fn chat_shows_only_the_conversations_of_the_branch_shown() {
         click_id(&mut h, "workspace.chat.toast.undo");
         h.run_steps(3);
         assert!(!painted_has(&h, NONE) && painted_has(&h, "Ask about Commerce platform"), "{theme:?}: back: {:?}", painted(&h));
+    });
+}
+
+const NEW: &str = "workspace.versions.branches.new";
+const NAME: &str = "branch-ask.name";
+
+/// New branch… from the Branches header over `listed(true)`, with `typed` in its name field.
+fn naming(theme: ThemeKind, typed: &str) -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>) {
+    let (mut h, host) = branches_read(theme, Ok(listed(true)));
+    click_id(&mut h, NEW);
+    h.run_steps(2);
+    h.event(egui::Event::Text(typed.into()));
+    h.run_steps(2);
+    (h, host)
+}
+
+/// How many branches the host was asked to make once Create is clicked: one more only when it is on.
+fn create(h: &mut Harness<'static, Shell>, host: &SavingHost) -> usize {
+    click_id(h, "branch-ask.create");
+    h.run_steps(2);
+    host.branch_makes.lock().unwrap().len()
+}
+
+/// The header's + is offered while only `main` folds the section. The dialog says where the branch
+/// starts, and that unsaved work comes along; a name taken in another case or emptied says why
+/// under the field with Create off. Create asks the host for the name as stored; while it works
+/// nothing closes the dialog; made, the dialog closes, the branches are read again and the switch
+/// to the new branch starts.
+#[test]
+fn new_branch_names_makes_and_switches_to_the_branch() {
+    in_both_appearances(|theme| {
+        let (h, _host) = branches_read(theme, Ok(listed(false)));
+        assert!(has_id(&h, NEW) && !has_id(&h, MAIN), "{theme:?}: offered while folded");
+        let (mut h, host) = naming(theme, "TRY Cancellations");
+        let starts = ["New branch", "A branch keeps its own versions, unsaved work and conversations.", "It starts from current work on main."];
+        assert!(starts.iter().all(|t| painted_has(&h, t)) && !painted_has(&h, "come along"), "{theme:?}: {:?}", painted(&h));
+        assert!(painted_has(&h, "That name is already in use.") && create(&mut h, &host) == 0, "{theme:?}: taken in another case");
+        let at = rect_of(&h, NAME).center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::A, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        assert!(painted_has(&h, "Enter a name.") && create(&mut h, &host) == 0, "{theme:?}: emptied");
+        type_into(&mut h, NAME, "Fresh idea");
+        assert!(painted_has(&h, "At most 60 characters.") && create(&mut h, &host) == 1, "{theme:?}");
+        assert_eq!(host.branch_makes.lock().unwrap().iter().map(|m| m.0.clone()).collect::<Vec<_>>(), ["fresh-idea"], "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        click_id(&mut h, "branch-ask.cancel");
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && create(&mut h, &host) == 1, "{theme:?}: up while the host works");
+        assert!(!has_id(&h, NEW), "{theme:?}: one at a time");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        assert_eq!(host.switches.lock().unwrap().iter().map(|s| s.branch.clone()).collect::<Vec<_>>(), ["fresh-idea"], "{theme:?}");
+
+        let (mut h, _host) = naming(theme, "");
+        add_schema(&mut h, "crm");
+        let unsaved = "It starts from current work on main. Your unsaved changes come along, and main keeps them too.";
+        assert!(painted_has(&h, unsaved) && painted_has(&h, "At most 60 characters."), "{theme:?}: nothing said of a name not typed yet");
+    });
+}
+
+/// Enter makes the branch too. Each refusal is said under the field in its own words and the
+/// dialog stays, Create on again; changing the name ends it. A lost answer may have made the
+/// branch. Nothing switches.
+#[test]
+fn a_refused_branch_says_why_and_the_dialog_stays() {
+    let cases = [
+        (Some(crate::BranchRefused::Taken), "That name is already in use."),
+        (Some(crate::BranchRefused::NotCleanedUp), "The last new branch is not cleaned up yet. Opening the project again removes it."),
+        (Some(crate::BranchRefused::Moved), "The project changed before the branch was made, so none was made."),
+        (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't make the branch: disk full"),
+        (None, "Archforge could not tell whether the branch was made. Look at Branches before trying again."),
+    ];
+    in_both_appearances(|theme| {
+        for (i, (answer, words)) in cases.clone().into_iter().enumerate() {
+            let (mut h, host) = naming(theme, "Fresh");
+            // Enter keeps the field's keyboard; a click on Create takes it, and a refusal gives it back.
+            if i == 0 {
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE)
+            } else {
+                _ = create(&mut h, &host)
+            }
+            let (_, reply) = host.branch_makes.lock().unwrap().remove(0);
+            match answer {
+                Some(refused) => reply.send(Err(refused)).unwrap(),
+                None => drop(reply),
+            }
+            h.run_steps(3);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
+            assert!(host.switches.lock().unwrap().is_empty(), "{theme:?}: {words}");
+            h.event(egui::Event::Text("er".into()));
+            h.run_steps(2);
+            assert!(!painted_has(&h, words), "{theme:?}: {words}: a new name ends it");
+            assert_eq!(create(&mut h, &host), 1, "{theme:?}: {words}: Create is on again");
+        }
+    });
+}
+
+/// With the keyboard off the field nothing behind the dialog takes a key; a branch made after the
+/// dialog went with its session switches to nothing; a held project offers no new branch.
+#[test]
+fn new_branch_keeps_the_keys_and_its_answer_to_itself() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[0].id)).center();
+        click(&mut h, at);
+        h.state_mut().explorer.focused = true;
+        crate::branch_ask::open(h.state_mut());
+        h.run_steps(2);
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.ctx.memory_mut(|m| m.focused().into_iter().for_each(|id| m.surrender_focus(id)));
+        key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+        let kept = h.state().session.as_ref().unwrap().revision() == revision;
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && kept, "{theme:?}: Delete didn't reach the selected row");
+        let (mut h, host) = naming(theme, "Fresh");
+        create(&mut h, &host);
+        h.state_mut().session_replaced();
+        h.run_steps(2);
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && h.state().versions.making.is_none() && host.switches.lock().unwrap().is_empty(), "{theme:?}");
+        h.state_mut().begin_hold().unwrap();
+        h.run_steps(1);
+        assert!(!has_id(&h, NEW), "{theme:?}: not while the project is held");
+    });
+}
+
+/// Create keeps the skill text still being typed first, as a switch does, so the branch holds it;
+/// text the store refuses stops it, the reason under the field.
+#[test]
+fn new_branch_keeps_the_skill_text_being_typed_first() {
+    in_both_appearances(|theme| {
+        for (typed, kept) in [("Plain.".to_string(), true), ("x".repeat(16_001), false)] {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+            let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+            crate::skill_tab::open(h.state_mut(), skill);
+            // Typed just now, so only a forced keep takes it.
+            let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+            (doc.text, doc.changed_at) = (typed.clone(), f64::MAX);
+            click_id(&mut h, NEW);
+            h.event(egui::Event::Text("Fresh".into()));
+            h.run_steps(2);
+            let asked = create(&mut h, &host);
+            let saved = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.saved == typed);
+            assert_eq!((asked, saved), (usize::from(kept), kept), "{theme:?}");
+            assert_eq!(painted_has(&h, &crate::skill_tab::unkept_reason()), !kept, "{theme:?}");
+        }
+    });
+}
+
+const NEW_ROW: &str = "workspace.header.version.new-branch";
+
+/// The Versions menu's New branch… opens the dialog while the host keeps branches, `main` alone
+/// too; off, it says why: behind the dialog while a branch is made, and a held project. The chip's
+/// list ends in New branch…, reached by a click or by ↓ past the last row and Enter; ↑ leaves it.
+#[test]
+fn the_versions_menu_and_the_chip_s_list_open_new_branch() {
+    use crate::actions::{NEW_BRANCH, available};
+    let why = |h: &Harness<'static, Shell>| crate::menu_bar::why_off(h.state(), NEW_BRANCH);
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        h.state_mut().in_window_menu = true;
+        h.run();
+        assert!(available(h.state(), NEW_BRANCH), "{theme:?}: one branch is enough");
+        click_menu(&mut h, "strip.menu.versions");
+        click_id(&mut h, &format!("strip.menu.row.{NEW_BRANCH}"));
+        h.run_steps(2);
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, "New branch"), "{theme:?}: the dialog");
+        assert!(!available(h.state(), NEW_BRANCH), "{theme:?}: not behind it");
+        h.event(egui::Event::Text("Fresh".into()));
+        h.run_steps(2);
+        assert_eq!(create(&mut h, &host), 1, "{theme:?}");
+        assert_eq!(why(&h), "Wait for the change under way to finish.", "{theme:?}: a branch on its way");
+        host.branch_makes.lock().unwrap().remove(0).1.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && h.state().versions.making.is_none(), "{theme:?}: made");
+
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        click_id(&mut h, NEW_ROW);
+        h.run_steps(2);
+        let opened = |h: &Harness<'static, Shell>| matches!(h.state().ask, Some(Ask::Branch { .. })) && !has_id(h, NEW_ROW);
+        assert!(opened(&h), "{theme:?}: a click opens it and the list closes");
+        click_id(&mut h, "branch-ask.cancel");
+        chip_list(&mut h, &host, false);
+        // Past the last row, however many versions the list has read by now, and more stay there.
+        (0..12).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert!(opened(&h), "{theme:?}: Enter opens it");
+        click_id(&mut h, "branch-ask.cancel");
+        h.state_mut().begin_hold().unwrap();
+        assert!(!available(h.state(), NEW_BRANCH) && why(&h) == "The project is busy", "{theme:?}: held");
+        h.state_mut().end_hold();
+        *host.branch_now.lock().unwrap() = None;
+        chip_list(&mut h, &host, false);
+        assert!(!available(h.state(), NEW_BRANCH) && !has_id(&h, NEW_ROW), "{theme:?}: a host that keeps no branches");
+
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        (0..3).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        let shown = h.state().version_in_view().map(str::to_string);
+        assert!(h.state().ask.is_none() && shown.as_deref() == Some("bb"), "{theme:?}: ↑ went back to the last version, {shown:?}");
+    });
+}
+
+/// ↑ from New branch… goes to the list's last row as it is now: a page of history that came while
+/// the row was highlighted moves the last row on, and Enter views that one.
+#[test]
+fn up_from_new_branch_goes_to_the_last_row_read() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(false)));
+        chip_list(&mut h, &host, false);
+        (0..3).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        let reads: Vec<_> = host.version_reads.lock().unwrap().drain(..).collect();
+        assert_eq!(reads.len(), 1, "{theme:?}: the end in view reads on");
+        let next: Vec<crate::VersionEntry> =
+            ["cc", "dd"].map(|hash| crate::VersionEntry { hash: hash.into(), ..two_versions().versions[1].clone() }).into();
+        reads.into_iter().for_each(|read| drop(read.send(Ok(crate::VersionsPage { versions: next.clone(), more: false }))));
+        h.run_steps(2);
+        assert!(has_id(&h, "workspace.header.version.row.4"), "{theme:?}: the page came while on New branch…");
+        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run_steps(2);
+        let shown = h.state().version_in_view().map(str::to_string);
+        assert!(h.state().ask.is_none() && shown.as_deref() == Some("dd"), "{theme:?}: the last row now, {shown:?}");
+    });
+}
+
+const RENAME: &str = "branch-ask.rename";
+
+/// Rename… from `branch`'s menu, its `at`th entry, with the field's name replaced by `typed`.
+fn renaming(h: &mut Harness<'static, Shell>, (branch, at): (&str, usize), typed: &str) {
+    click_id(h, &format!("workspace.versions.branch.more.{branch}"));
+    h.run_steps(1);
+    click_id(h, &format!("workspace.versions.branch.menu.{branch}.{at}"));
+    h.run_steps(2);
+    retype(h, typed);
+}
+
+/// The dialog's name field holding `typed` in place of what it held.
+fn retype(h: &mut Harness<'static, Shell>, typed: &str) {
+    let at = rect_of(h, NAME).center();
+    click(h, at);
+    key(h, egui::Key::A, egui::Modifiers::COMMAND);
+    h.event(egui::Event::Text(typed.into()));
+    h.run_steps(2);
+}
+
+/// The renames the host was asked for once Rename is clicked, from and to as stored.
+fn renamed(h: &mut Harness<'static, Shell>, host: &SavingHost) -> Vec<(String, String)> {
+    click_id(h, RENAME);
+    h.run_steps(2);
+    host.branch_renames.lock().unwrap().iter().map(|r| (r.0.clone(), r.1.clone())).collect()
+}
+
+/// Another branch's menu has Switch, Rename… and Delete…, the branch in use only Rename…, and
+/// `main` no Rename…. The dialog holds the name; unchanged, Rename is off; a name taken says so; Rename asks
+/// the host for the names as stored, and done, the dialog closes and the branches are read again.
+#[test]
+fn a_branch_row_menu_renames_any_branch_but_main() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        assert!(!has_id(&h, "workspace.versions.branch.more.main"), "{theme:?}: main in use has no menu");
+        renaming(&mut h, ("try-cancellations", 1), "Try cancellations");
+        let words = ["Rename branch", "The conversations and versions on this branch are not affected."];
+        assert!(words.iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "starts from"), "{theme:?}: {:?}", painted(&h));
+        assert!(renamed(&mut h, &host).is_empty() && painted_has(&h, "At most 60 characters."), "{theme:?}: unchanged");
+        retype(&mut h, "x");
+        retype(&mut h, "Try cancellations");
+        assert!(!painted_has(&h, "already in use") && renamed(&mut h, &host).is_empty(), "{theme:?}: typed again, its own name");
+        retype(&mut h, "Main");
+        assert!(painted_has(&h, "That name is already in use.") && renamed(&mut h, &host).is_empty(), "{theme:?}: taken");
+        retype(&mut h, "Later idea");
+        assert_eq!(renamed(&mut h, &host), [("try-cancellations".into(), "later-idea".into())], "{theme:?}");
+        assert!(host.branch_makes.lock().unwrap().is_empty(), "{theme:?}: nothing made");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_renames.lock().unwrap().remove(0).2.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        assert!(host.switches.lock().unwrap().is_empty(), "{theme:?}: a rename switches to nothing");
+
+        *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
+        h.run_steps(2);
+        click_id(&mut h, "workspace.versions.branch.more.main");
+        h.run_steps(1);
+        let main = ["workspace.versions.branch.menu.main.0", "workspace.versions.branch.menu.main.1"];
+        assert!(has_id(&h, main[0]) && !has_id(&h, main[1]), "{theme:?}: main only switches");
+        click_id(&mut h, "workspace.versions.branch.more.main");
+        let path = h.state().project.as_ref().unwrap().path.clone();
+        h.state_mut().state.keep_branch(&path, Some("try-cancellations".into()));
+        assert_eq!(h.state().state.branch_of(&path), Some("try-cancellations"), "{theme:?}: kept before");
+        renaming(&mut h, ("try-cancellations", 0), "Later idea");
+        assert_eq!(renamed(&mut h, &host), [("try-cancellations".into(), "later-idea".into())], "{theme:?}: the branch in use");
+        host.branch_renames.lock().unwrap().remove(0).2.send(Ok(())).unwrap();
+        h.run_steps(4);
+        assert_eq!(h.state().state.branch_of(&path), Some("later-idea"), "{theme:?}: it reopens under the new name");
+        click_id(&mut h, "workspace.versions.branch.more.try-cancellations");
+        h.run_steps(1);
+        assert!(has_id(&h, "workspace.versions.branch.menu.try-cancellations.0"), "{theme:?}: open");
+        h.state_mut().begin_hold().unwrap();
+        h.run_steps(2);
+        h.state_mut().end_hold();
+        h.run_steps(2);
+        assert!(h.state().panels.menu.is_none(), "{theme:?}: a menu left empty by a hold doesn't come back after it");
+    });
+}
+
+/// A refused rename says why in its own words and the dialog stays. A lost answer may have renamed
+/// it, and only asking for the same rename again settles that, though the list now shows the new
+/// name: another name is refused, naming the one to ask for.
+#[test]
+fn a_refused_rename_says_why_and_a_lost_one_can_be_asked_again() {
+    let cases = [
+        (Some(crate::BranchRefused::Moved), "The project changed before the branch was renamed, so its name stayed."),
+        (Some(crate::BranchRefused::Failed("disk full".into())), "Couldn't rename the branch: disk full"),
+        (None, "Archforge could not tell whether the branch was renamed to later. Rename it to later again to find out."),
+    ];
+    in_both_appearances(|theme| {
+        for (answer, words) in cases.clone() {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            renaming(&mut h, ("try-cancellations", 1), "Later");
+            assert_eq!(renamed(&mut h, &host).len(), 1, "{theme:?}");
+            let (.., reply) = host.branch_renames.lock().unwrap().pop().unwrap();
+            assert!(renamed(&mut h, &host).is_empty(), "{theme:?}: one at a time");
+            let lost = answer.is_none();
+            match answer {
+                Some(refused) => reply.send(Err(refused)).unwrap(),
+                None => drop(reply),
+            }
+            *host.branch_list.lock().unwrap() = Some(Ok(with(["later".to_string()])));
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && painted_has(&h, words), "{theme:?}: {words}");
+            if lost {
+                retype(&mut h, "Other");
+                assert!(painted_has(&h, words) && renamed(&mut h, &host).is_empty(), "{theme:?}: only the unsettled name");
+                retype(&mut h, "Later");
+            }
+            let again = renamed(&mut h, &host).len();
+            assert_eq!(again, usize::from(lost), "{theme:?}: {words}: the listed name counts as taken but after a lost answer");
+        }
+    });
+}
+
+/// A rename of the branch in use keeps the skill text still being typed first, as a switch does,
+/// and text the store refuses stops it, the reason under the field; another branch's rename leaves
+/// the text where it is.
+#[test]
+fn renaming_the_branch_in_use_keeps_the_text_being_typed_first() {
+    in_both_appearances(|theme| {
+        let huge = "x".repeat(16_001);
+        for (on, typed, asked, saved) in
+            [("main", &*huge, 1, false), ("try-cancellations", "Plain.", 1, true), ("try-cancellations", &*huge, 0, false)]
+        {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            *host.branch_now.lock().unwrap() = Some(on.into());
+            let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+            let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+            crate::skill_tab::open(h.state_mut(), skill);
+            // Typed just now, so only a forced keep takes it.
+            let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+            (doc.text, doc.changed_at) = (typed.to_string(), f64::MAX);
+            h.run_steps(2);
+            renaming(&mut h, ("try-cancellations", usize::from(on == "main")), "Later");
+            assert_eq!(renamed(&mut h, &host).len(), asked, "{theme:?}: on {on}");
+            assert_eq!(h.state().canvas.skills.iter().any(|d| d.skill == skill && d.saved == typed), saved, "{theme:?}: on {on}");
+            let refused = painted_has(&h, &crate::skill_tab::unkept_reason());
+            assert_eq!(refused, asked == 0, "{theme:?}: on {on}: only the branch in use waits for the text");
+        }
+    });
+}
+
+const DELETE: &str = "branch-ask.delete";
+
+/// Delete… from `branch`'s menu, its `at`th entry; gives the count the host was asked for.
+fn deleting(
+    h: &mut Harness<'static, Shell>,
+    host: &SavingHost,
+    (branch, at): (&str, usize),
+) -> std::sync::mpsc::Sender<Result<crate::BranchCounts, String>> {
+    click_id(h, &format!("workspace.versions.branch.more.{branch}"));
+    h.run_steps(1);
+    click_id(h, &format!("workspace.versions.branch.menu.{branch}.{at}"));
+    h.run_steps(2);
+    let (asked, counts) = host.branch_counts.lock().unwrap().pop().unwrap();
+    assert_eq!(asked, branch);
+    counts
+}
+
+/// How many deletes the host was asked for once Delete branch is clicked.
+fn deleted(h: &mut Harness<'static, Shell>, host: &SavingHost) -> usize {
+    click_id(h, DELETE);
+    h.run_steps(2);
+    host.branch_deletes.lock().unwrap().len()
+}
+
+/// Delete… is on another branch's menu, never on `main` or the branch in use. The dialog names the
+/// branch, what goes with it once counted, that it may remain in the project folder and that there
+/// is no Undo; Delete branch waits for the count. While the host works nothing closes it; deleted,
+/// it closes and the branches are read again.
+#[test]
+fn a_branch_row_menu_deletes_another_branch_after_saying_what_goes() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = branches_read(theme, Ok(listed(true)));
+        let counts = deleting(&mut h, &host, ("try-cancellations", 2));
+        let says = ["Delete Try cancellations?", "Goes with the branch:", "Counting what goes with it…", "may remain in the project folder's"];
+        assert!(says.iter().all(|t| painted_has(&h, t)), "{theme:?}: {:?}", painted(&h));
+        let no_undo = "There is no Undo for deleting a branch.";
+        assert!(painted_has(&h, no_undo) && h.query_by_label(no_undo).is_some(), "{theme:?}: a status node reads it");
+        assert_eq!(deleted(&mut h, &host), 0, "{theme:?}: not before the count");
+        counts.send(Ok(crate::BranchCounts { versions_only_here: 2, conversations: 1, unsaved: true })).unwrap();
+        h.run_steps(2);
+        let line = "2 versions only on this branch · 1 conversation · unsaved changes";
+        assert!(painted_has(&h, line) && h.query_by_label(line).is_some(), "{theme:?}: {:?}", painted(&h));
+        assert_eq!(deleted(&mut h, &host), 1, "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        click_id(&mut h, "branch-ask.cancel");
+        assert!(matches!(h.state().ask, Some(Ask::Branch { .. })) && deleted(&mut h, &host) == 1, "{theme:?}: up while the host works");
+        let reads = *host.branch_reads.lock().unwrap();
+        host.branch_deletes.lock().unwrap().remove(0).send(Ok(Vec::new())).unwrap();
+        h.run_steps(4);
+        assert!(h.state().ask.is_none() && *host.branch_reads.lock().unwrap() > reads, "{theme:?}: closed, read again");
+        let others = [host.branch_makes.lock().unwrap().len(), host.branch_renames.lock().unwrap().len(), host.switches.lock().unwrap().len()];
+        assert_eq!(others, [0; 3], "{theme:?}: nothing made, renamed or switched to");
+        *host.branch_now.lock().unwrap() = Some("try-cancellations".into());
+        h.run_steps(2);
+        click_id(&mut h, MORE);
+        h.run_steps(1);
+        assert!(has_id(&h, MENU) && !has_id(&h, "workspace.versions.branch.menu.try-cancellations.1"), "{theme:?}: in use, only Rename…");
+    });
+}
+
+/// A refused delete says why the branch stays in the dialog, which stays with Delete branch on;
+/// a lost answer may have deleted it, and asking again finds out. A count that can't be read says
+/// so and lets the delete go ahead.
+#[test]
+fn a_refused_delete_says_why_the_branch_stays() {
+    let unclear = "Archforge could not tell whether the branch was deleted. Delete it again to find out.";
+    let cases = [
+        (Some(crate::BranchNotDeleted::Moved), "The project changed before the branch was deleted, so it stays."),
+        (Some(crate::BranchNotDeleted::Failed("disk full".into())), "The branch stays: disk full"),
+        (Some(crate::BranchNotDeleted::Unclear("lost".into())), unclear),
+        (None, unclear),
+    ];
+    in_both_appearances(|theme| {
+        for (answer, words) in cases.clone() {
+            let (mut h, host) = branches_read(theme, Ok(listed(true)));
+            deleting(&mut h, &host, ("try-cancellations", 2)).send(Err("unreadable".into())).unwrap();
+            h.run_steps(2);
+            assert!(painted_has(&h, "What goes with it couldn't be read: unreadable"), "{theme:?}");
+            assert_eq!(deleted(&mut h, &host), 1, "{theme:?}: {words}");
+            let reply = host.branch_deletes.lock().unwrap().remove(0);
+            match answer {
+                Some(not) => reply.send(Err(not)).unwrap(),
+                None => drop(reply),
+            }
+            h.run_steps(4);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })), "{theme:?}: {words}");
+            assert!(painted_has(&h, "Couldn't delete Try cancellations") && h.query_by_label(words).is_some(), "{theme:?}: {words}");
+            assert_eq!(deleted(&mut h, &host), 1, "{theme:?}: {words}: Delete branch is on again");
+        }
+    });
+}
+
+/// With the delete dialog up and the keyboard off it, Delete doesn't reach the explorer's selected
+/// row; with no dialog the same key removes it.
+#[test]
+fn delete_branch_keeps_the_keys_to_itself() {
+    in_both_appearances(|theme| {
+        for up in [true, false] {
+            let (mut h, host) = saving_harness(Some(commerce()), None);
+            (h.state_mut().state.theme, *host.branch_now.lock().unwrap()) = (theme, Some("main".into()));
+            crate::explorer::add(h.state_mut(), "schema");
+            h.run();
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+            let at = rect_of(&h, &format!("workspace.explorer.row.{}", rows[0].id)).center();
+            click(&mut h, at);
+            h.state_mut().explorer.focused = true;
+            if up {
+                crate::branch_ask::open_delete(h.state_mut(), &listed(true)[1]);
+                h.run_steps(2);
+                assert!(has_id(&h, DELETE), "{theme:?}: up");
+            }
+            let revision = h.state().session.as_ref().unwrap().revision();
+            h.ctx.memory_mut(|m| m.focused().into_iter().for_each(|id| m.surrender_focus(id)));
+            key(&mut h, egui::Key::Delete, egui::Modifiers::NONE);
+            let changed = h.state().session.as_ref().unwrap().revision() != revision;
+            assert_eq!(changed, !up, "{theme:?}: with the dialog up: {up}");
+        }
     });
 }

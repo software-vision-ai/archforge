@@ -21,5 +21,5 @@ pub use id::Uuid;
 pub use meta::{
     Builder, Class, ClassId, ClassInfo, DataId, DataKind, DataType, MetaError, Metamodel, PropId, Property, PropertySpec, TypeRef, Universe,
 };
-pub use store::{CompositeSlabs, Delta, Invalid, NameKind, Obj, Op, Problem, Reflect, Slabs, Store};
+pub use store::{CompositeSlabs, Delta, Frozen, Invalid, NameKind, Obj, Op, Problem, Reflect, Slabs, Store};
 pub use value::{MAX_STRING, Value};

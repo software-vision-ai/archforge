@@ -20,7 +20,7 @@ use serde_json::json;
 use crate::Shell;
 use crate::home::control;
 use crate::i18n::{fmt, tr, trn};
-use crate::panels::{FIELD, Menu, PAD, ROW, Subject, menu, run, section, text_field};
+use crate::panels::{FIELD, FieldOut, Menu, PAD, ROW, Subject, edit_field, menu, run, section};
 use crate::ux::{self, Palette, icons, types};
 
 /// The automation ids the design gives.
@@ -62,18 +62,14 @@ pub(crate) fn grouping(store: &Store, elements: &[Obj]) -> Grouping {
     match sets::shared_general(store, elements) {
         Ok(general) => Grouping::Shared { general, gens: elements.to_vec() },
         Err(sets::Grouping::ParentsDiffer(gens)) => {
-            let said: Vec<String> = gens
+            let ends: Vec<(String, String)> = gens
                 .iter()
                 .map(|g| {
                     let (s, p) = (sets::specific(store, *g), sets::general(store, *g));
-                    fmt(
-                        &tr("{specific} specialises {general}"),
-                        &[("specific", &s.map(|o| name(store, o)).unwrap_or_default()), ("general", &p.map(|o| name(store, o)).unwrap_or_default())],
-                    )
+                    (s.map(|o| name(store, o)).unwrap_or_default(), p.map(|o| name(store, o)).unwrap_or_default())
                 })
                 .collect();
-            let why = format!("{}. {}", and_list(&said), tr("A set groups generalizations of one class."));
-            Grouping::Refused { short: tr("parents differ"), short_add: tr("no shared parent"), why }
+            Grouping::Refused { short: tr("parents differ"), short_add: tr("no shared parent"), why: parents_differ(&ends) }
         }
         Err(sets::Grouping::NotAGeneralization(o)) => {
             let what = archforge_core::name_of(store, o);
@@ -89,8 +85,16 @@ pub(crate) fn grouping(store: &Store, elements: &[Obj]) -> Grouping {
     }
 }
 
+/// Why generalizations to different classifiers form no set, each given by its specific and its
+/// general classifier's names: `A specialises B and C specialises D. A set groups ...`.
+pub(crate) fn parents_differ(ends: &[(String, String)]) -> String {
+    let said: Vec<String> =
+        ends.iter().map(|(s, g)| fmt(&tr("{specific} specialises {general}"), &[("specific", s.as_str()), ("general", g.as_str())])).collect();
+    format!("{}. {}", and_list(&said), tr("A set groups generalizations of one class."))
+}
+
 /// `a`, `a and b`, `a, b and c`.
-fn and_list(items: &[String]) -> String {
+pub(crate) fn and_list(items: &[String]) -> String {
     match items.split_last() {
         Some((last, rest)) if !rest.is_empty() => fmt(&tr("{names} and {last}"), &[("names", &rest.join(", ")), ("last", last)]),
         _ => items.join(", "),
@@ -422,7 +426,7 @@ fn remove_lines(shell: &mut Shell, d: Obj, elements: &[Obj]) {
         Ok(())
     });
     if let Err(e) = out {
-        shell.canvas.notice = Some(e.to_string());
+        shell.canvas.notice = Some(crate::panels::refusal(&e));
     }
 }
 
@@ -569,14 +573,15 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
     let candidate_names: Vec<String> = candidates.iter().map(|g| sets::generalization_name(store, *g)).collect();
     let member_rows: Vec<(Obj, Uuid, String)> =
         members.iter().filter_map(|g| Some((*g, store.uuid(*g).ok()?, sets::generalization_name(store, *g)))).collect();
-    // Name, written on Enter or leaving the field; the name field takes the keyboard when the set
-    // was just made.
+    // Name, written on Enter or leaving the field, given up on Escape, never sent empty; the name
+    // field takes the keyboard when the set was just made.
     let focus = shell.panels.set_name_focus.take() == Some(id);
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let committed = text_field(
+    let set = "uml.generalization-set.set";
+    let out = edit_field(
         shell,
         ui,
         p,
@@ -589,10 +594,12 @@ pub(crate) fn set_body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rec
         focus,
         true,
     );
-    if committed {
+    if out == FieldOut::Cancel {
         shell.panels.name = None;
-        if text.trim() != subject.name {
-            match run(shell, "uml.generalization-set.set", json!({ "set": id.to_string(), "name": text.trim() })) {
+    } else if out == FieldOut::Commit {
+        shell.panels.name = None;
+        if text.trim() != subject.name && !crate::panels::refuse_empty_name(shell, set, &text) {
+            match run(shell, set, json!({ "set": id.to_string(), "name": text.trim() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
             }

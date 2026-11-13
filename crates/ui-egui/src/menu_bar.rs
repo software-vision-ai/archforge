@@ -8,11 +8,11 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
-    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEWER, OPEN, PASTE, QUIT, REDO, SAVE, SAVE_VERSION, SELECT_ALL,
-    SETTINGS, UNDO, VERSIONS,
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, QUIT, REDO, SAVE, SAVE_VERSION,
+    SELECT_ALL, SETTINGS, UNDO, VERSIONS,
 };
 use crate::home::{control, off_words};
-use crate::i18n::tr;
+use crate::i18n::{tr, tr_ctx};
 use crate::ux::{self, Palette, types};
 use crate::widgets;
 
@@ -29,6 +29,7 @@ struct Group {
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
     Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
+    Group { id: "view", title: || tr_ctx("menu", "View"), sections: |_| crate::view_menu::VIEW_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
     Group { id: "versions", title: || tr("Versions"), sections: |_| actions::VERSIONS_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
@@ -312,7 +313,7 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
 }
 
 /// Why the row of the action `id` is off, in words: the first thing that keeps it off.
-fn why_off(shell: &Shell, id: &str) -> String {
+pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
     let no_project = shell.session.is_none() || shell.active.is_none();
     match id {
         NEW | OPEN if shell.tabs.len() >= crate::MAX_TABS => tr("Close a project to open another"),
@@ -325,6 +326,7 @@ fn why_off(shell: &Shell, id: &str) -> String {
         _ if id.starts_with("versions.") => versions_off(shell, id),
         // Off only for want of a field or of selected text, held or viewing a version as well.
         CUT | COPY | PASTE => tr("Nothing to act on here"),
+        _ if id.starts_with("view.") => crate::view_menu::why_off(shell, id),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
         _ if id.starts_with("edit.") && (id == SELECT_ALL || !shell.looking_only()) => tr("Nothing to act on here"),
         _ => off_words(shell),
@@ -345,6 +347,7 @@ fn versions_off(shell: &Shell, id: &str) -> String {
     match id {
         BACK if shell.version_in_view().is_none() => tr("Current work is showing"),
         _ if shell.is_held() => tr("The project is busy"),
+        NEW_BRANCH if shell.versions.making.is_some() => tr("Wait for the change under way to finish."),
         VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
         COMPARE if !listed => tr("No versions yet."),
         COMPARE => tr("Loading"),
@@ -413,7 +416,15 @@ mod tests {
         let (mut s, ..) = shell();
         let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK, NEWER].map(|id| why_off(s, id));
         assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing", "No newer version"]);
-        let entry = crate::VersionEntry { hash: "c1".into(), description: None, author: None, by_agent: false, date: String::new(), previous: None };
+        let entry = crate::VersionEntry {
+            hash: "c1".into(),
+            description: None,
+            author: None,
+            by_agent: false,
+            date: String::new(),
+            previous: None,
+            shared: false,
+        };
         (s.versions.page, s.versions.stale) = (Some(crate::VersionsPage { versions: vec![entry], more: false }), true);
         assert_eq!(why_off(&s, COMPARE), "Loading", "listed, but perhaps not the newest");
         s.begin_hold().unwrap();

@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::{ProjectView, diagram, node};
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -156,8 +156,14 @@ pub fn shared_general(store: &Store, gens: &[Obj]) -> Result<Obj, Grouping> {
 
 /// A generalization as a refusal names it: `CardPayment → Payment`.
 pub fn generalization_name(store: &Store, g: Obj) -> String {
+    let (specific, general) = generalization_ends(store, g);
+    format!("{specific} → {general}")
+}
+
+/// The names of a generalization's specific and general classifiers, each empty when it has none.
+pub fn generalization_ends(store: &Store, g: Obj) -> (String, String) {
     let n = |o: Option<Obj>| o.map(|o| name_of(store, o)).unwrap_or_default();
-    format!("{} → {}", n(specific(store, g)), n(general(store, g)))
+    (n(specific(store, g)), n(general(store, g)))
 }
 
 /// Why generalization `g` may not be reconnected, when it may not: it is in a set, which groups
@@ -297,7 +303,8 @@ fn generalizations_param(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj
     let Some(items) = p.get(key) else { return Ok(Vec::new()) };
     let items = items.as_array().ok_or_else(|| refuse(key, "give the generalizations as an array of ids"))?;
     if items.len() > MAX_MEMBERS {
-        return Err(refuse(key, format!("a set groups at most {MAX_MEMBERS} generalizations; {} were given", items.len())));
+        let message = format!("a set groups at most {MAX_MEMBERS} generalizations; {} were given", items.len());
+        return Err(refuse(key, message).because(Reason::TooMany { kind: "generalization", max: MAX_MEMBERS }));
     }
     let mut out: Vec<Obj> = Vec::with_capacity(items.len());
     for item in items {
@@ -317,13 +324,14 @@ fn generalizations_param(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj
 /// Why `gens` may not be grouped, as a refusal under `key` says it.
 fn grouping_refusal(store: &Store, key: &str, problem: Grouping) -> CommandError {
     match problem {
-        Grouping::Empty => refuse(key, "a set groups at least one generalization"),
+        Grouping::Empty => refuse(key, "a set groups at least one generalization").because(Reason::TooFew { kind: "generalization", min: 1 }),
         Grouping::NotAGeneralization(o) => {
             refuse(key, format!("{} is not a generalization of two classifiers", uuid_of(store, o).unwrap_or_default()))
         }
         Grouping::ParentsDiffer(gens) => {
             let said: Vec<String> = gens.iter().map(|g| generalization_name(store, *g)).collect();
-            refuse(key, format!("{} specialize different classifiers; a set groups generalizations of one general classifier", said.join(" and ")))
+            let message = format!("{} specialize different classifiers; a set groups generalizations of one general classifier", said.join(" and "));
+            refuse(key, message).because(Reason::ParentsDiffer(gens.iter().map(|g| generalization_ends(store, *g)).collect()))
         }
     }
 }
@@ -334,11 +342,13 @@ fn check_set_name(store: &Store, name: &str, package: Obj, except: Option<Obj>) 
         return Err(refuse("name", "a generalization set needs a name"));
     }
     if let Some(why) = archforge_core::skills::name_problem(name, crate::commands::MAX_NAME) {
-        return Err(refuse("name", format!("the name {why}")));
+        return Err(refuse("name", format!("the name {why}")).because(why.reason));
     }
     // Sets are a kind of their own among the package's elements (`crate::names`).
-    if crate::names::clash(store, package, GENERALIZATION_SET, name, except).is_some() {
-        return Err(refuse("name", format!("there is a generalization set named {name} already")));
+    if let Some(other) = crate::names::clash(store, package, GENERALIZATION_SET, name, except) {
+        let existing = name_of(store, other);
+        let message = format!("there is a generalization set named {existing} already");
+        return Err(refuse("name", message).because(Reason::NameTaken { kind: "generalization set", name: existing }));
     }
     Ok(())
 }
@@ -389,12 +399,15 @@ fn set_set(ctx: &mut C<'_>, p: &Params) -> R {
     let adding: Vec<Obj> = add.into_iter().filter(|g| !now.contains(g)).collect();
     let after: Vec<Obj> = now.iter().copied().filter(|g| !remove.contains(g)).chain(adding.iter().copied()).collect();
     if after.len() > MAX_MEMBERS {
-        return Err(refuse("add", format!("a set groups at most {MAX_MEMBERS} generalizations")));
+        let most = Reason::TooMany { kind: "generalization", max: MAX_MEMBERS };
+        return Err(refuse("add", format!("a set groups at most {MAX_MEMBERS} generalizations")).because(most));
     }
     if !after.is_empty() {
         let next = shared_general(ctx.doc, &after).map_err(|e| grouping_refusal(ctx.doc, "add", e))?;
         // A set keeps its general classifier, whose package holds it and tells its name apart.
         if let Some(now) = general_of(ctx.doc, s).filter(|now| *now != next) {
+            // Typed as the set's first member, to `now`, beside the first of those it would hold.
+            let pair = members(ctx.doc, s).first().into_iter().chain(after.first()).map(|g| generalization_ends(ctx.doc, *g)).collect();
             return Err(refuse(
                 "add",
                 format!(
@@ -402,7 +415,8 @@ fn set_set(ctx: &mut C<'_>, p: &Params) -> R {
                     name_of(ctx.doc, now),
                     name_of(ctx.doc, next)
                 ),
-            ));
+            )
+            .because(Reason::ParentsDiffer(pair)));
         }
     }
     let pkg = crate::commands::package_of(ctx.doc, s);

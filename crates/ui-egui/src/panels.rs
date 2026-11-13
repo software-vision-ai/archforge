@@ -2,7 +2,8 @@
 //! Properties shows the selection as the ER design does — a schema's name; a table's name and
 //! kind, its columns with the in-place column editor, its keys — and Skills shows the skills on
 //! the selection and the ones it inherits, each opening in its tab. Every change goes through the
-//! engine's commands, so undo covers it; a refusal stays with the field in the engine's words.
+//! engine's commands, so undo covers it; a refusal shows at the panel's foot as the engine's
+//! reason, without the command's id, until the selection moves on.
 //! Agent and Appearance say what is true until their slices.
 //!
 //! The geometry is the design's: a section is 16 px in from the panel's edges with a full-width
@@ -14,7 +15,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, tr_ctx};
 use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
@@ -51,8 +52,10 @@ pub struct State {
     pub highlight: Option<usize>,
     /// The Appearance panel's colour picker, while it is open.
     pub picker: Option<crate::appearance::Picker>,
-    /// The last refusal of a change, shown at the panel's foot until the next change.
+    /// The last refusal of a change, shown at the panel's foot until the next change or another
+    /// selection, and the selection it was given under.
     pub notice: Option<String>,
+    pub notice_for: Option<Uuid>,
     /// The classifier No subclasses (final) was refused on, while something specializes it: the
     /// refusal shows under the check box, naming those classifiers (AR-137).
     pub final_refused: Option<Uuid>,
@@ -391,9 +394,200 @@ impl Subject {
     }
 }
 
+/// Runs a command on the open project's session; a refusal comes back as the panel says it
+/// ([`refusal`]).
 pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    session.execute(id, &params).map(|o| o.value).map_err(|e| refusal(&e))
+}
+
+/// An engine's refusal as the panel says it: the reason alone, without the command's id or the
+/// parameter it is about, as a sentence; a typed reason and read-only are said in the user's
+/// language, any other in the engine's English.
+pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
+    let reason = match e {
+        archforge_engine::EngineError::Failed { error, .. } => match error.reason.as_ref().and_then(said) {
+            Some(words) => return words,
+            None => error.message.clone(),
+        },
+        archforge_engine::EngineError::Disabled { reason, .. } => (*reason).to_string(),
+        archforge_engine::EngineError::ReadOnly => return tr("The model cannot be changed at the moment; nothing was changed."),
+        other => other.to_string(),
+    };
+    let mut chars = reason.chars();
+    let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();
+    format!("{first}{}{}", chars.as_str(), if reason.ends_with(['.', '!', '?']) { "" } else { "." })
+}
+
+/// A typed refusal in the user's words; none for a kind of element the catalogues don't name, which
+/// the engine's sentence then says.
+pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    let (template, kind, name) = match reason {
+        Reason::NameTaken { kind, name } => (tr("There is {what} named {name} already."), *kind, name.as_str()),
+        Reason::DependsOnItself { kind } => (tr("{what} cannot depend on itself."), *kind, ""),
+        Reason::PackageIntoItself => return Some(tr("A package cannot go into itself or a package it holds.")),
+        Reason::NameEmpty => return Some(tr("A name can't be empty.")),
+        Reason::TextEmpty => return Some(tr("The text can't be empty.")),
+        Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
+        Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
+        Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
+        other => return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other)),
+    };
+    let what = a_kind(kind)?;
+    // A sentence that starts with the kind starts with a capital, as "A class cannot ...".
+    let what =
+        if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
+    Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A relationship's rule broken, in the words the canvas says it with; none for a reason or a kind
+/// the catalogues don't say.
+fn relationship_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    Some(match reason {
+        Reason::SpecializesOnlyItsKind { kind } => match *kind {
+            "interface" => tr("An interface specializes only an interface"),
+            "enumeration" => tr("An enumeration specializes only an enumeration"),
+            "data type" => tr("A data type specializes only a data type"),
+            "primitive type" => tr("A primitive type specializes only a primitive type"),
+            _ => return None,
+        },
+        Reason::OnlyItsKindSpecializes { kind } => match *kind {
+            "enumeration" => tr("Only an enumeration specializes an enumeration"),
+            "data type" => tr("Only a data type specializes a data type"),
+            "primitive type" => tr("Only a primitive type specializes a primitive type"),
+            _ => return None,
+        },
+        Reason::CannotSpecialize { kind: "class" | "association class", general: "interface" } => tr("A class cannot specialize an interface"),
+        Reason::SpecializesNothing { kind: "built-in type" } => tr("A built-in type specializes nothing"),
+        Reason::NothingSpecializes { kind: "association class" } => tr("Nothing specializes an association class"),
+        Reason::Final { name } => {
+            fmt(&tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."), &[("name", name)])
+        }
+        Reason::Itself { relationship: "generalization", .. } => tr("A classifier cannot specialize itself"),
+        Reason::Itself { relationship: "association class", .. } => tr("An association class does not join itself"),
+        Reason::Again { relationship: "generalization" } => tr("This one specializes that one already"),
+        Reason::Again { relationship: "realization" } => tr("This class realizes that interface already"),
+        Reason::Cycle { relationship: "generalization" } => tr("That one specializes this one already, which would make a cycle"),
+        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Source, .. } => {
+            tr("Only a class, an interface or a data type binds a template")
+        }
+        Reason::WrongEnd { relationship: "binding", end: archforge_engine::End::Target, .. } => {
+            tr("A binding ends at a template: a class, an interface or a data type with template parameters")
+        }
+        Reason::KindsDiffer { relationship: "binding" } => tr("A template is bound by a classifier of its own kind"),
+        Reason::Itself { relationship: "binding", .. } => tr("A template does not bind itself"),
+        Reason::Again { relationship: "binding" } => tr("This one binds that template already"),
+        Reason::Cycle { relationship: "binding" } => tr("That template binds this one already, which would make a cycle"),
+        Reason::WrongEnd { relationship: "association", kind, .. } => match *kind {
+            "enumeration" => tr("An enumeration is a data type and joins no association"),
+            "data type" => tr("A data type joins no association"),
+            "primitive type" => tr("A primitive type joins no association"),
+            _ => return None,
+        },
+        Reason::WrongEnd { relationship: "association class", .. } => tr("An association class joins only classes"),
+        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Source, .. } => tr("Only a class implements an interface"),
+        Reason::WrongEnd { relationship: "realization", end: archforge_engine::End::Target, .. } => tr("A class realizes only an interface"),
+        _ => return None,
+    })
+}
+
+/// A template rule broken, in the words the template and binding editors say it with; none for a
+/// reason or a kind the catalogues don't say.
+fn template_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    use archforge_uml::templates::Kind;
+    let kind = |noun: &str| Kind::ALL.into_iter().find(|k| k.noun() == noun);
+    Some(match reason {
+        Reason::KindNotSupported { kind: k } => {
+            fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &crate::uml_templates::kind_word(kind(k)?))])
+        }
+        Reason::TooMany { kind: "template parameter", max } => fmt(&tr("A template has at most {max} parameters."), &[("max", &max.to_string())]),
+        Reason::NeedsArgument(params) => {
+            crate::uml_bindings::lacking(&params.iter().map(|p| Some((p.name.as_str(), kind(p.kind)?))).collect::<Option<Vec<_>>>()?)?
+        }
+        Reason::Misfit(p) => crate::uml_templates::must(&p.name, kind(p.kind)?, p.constraint.as_deref()),
+        Reason::DefaultMisfit(p) => {
+            fmt(&tr("{default} does not fit {name}: pick a default its arguments could be."), &[("default", &p.argument), ("name", &p.name)])
+        }
+        Reason::NeedsDefault(p) => fmt(
+            &tr("{bound} binds {template} and gives {name} no argument, so {name} needs a default."),
+            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
+        ),
+        Reason::WouldNotFit(p) => fmt(
+            &tr("{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first."),
+            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
+        ),
+        Reason::ParameterInUse(p) => fmt(
+            &tr("{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}."),
+            &[("bound", &p.bound), ("name", &p.name), ("actual", &p.argument)],
+        ),
+        Reason::LastParameter(p) => fmt(
+            &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}."),
+            &[("bound", &p.bound), ("template", &p.template), ("name", &p.name)],
+        ),
+        Reason::BuiltInTaken { kind, name } => fmt(
+            &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type."),
+            &[("what", &a_kind(kind)?), ("name", name), ("types", archforge_uml::members::TYPES)],
+        ),
+        _ => return None,
+    })
+}
+
+/// A generalization set's or an association end's rule broken, in the words the set menu and the
+/// end editor say it with; none for a reason or a kind the catalogues don't say.
+fn set_and_end_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    Some(match reason {
+        Reason::TooFew { kind: "generalization", min: 1 } => tr("A set groups at least one generalization."),
+        Reason::TooMany { kind: "generalization", max } => {
+            crate::i18n::trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", u64::try_from(*max).ok()?)
+        }
+        Reason::ParentsDiffer(ends) => crate::uml_sets::parents_differ(ends),
+        Reason::TooFew { kind: "association end", min: 3 } => tr("An n-ary association needs three ends or more."),
+        Reason::TooMany { kind: "association end", max } => fmt(&tr("An association takes at most {n} ends"), &[("n", &max.to_string())]),
+        Reason::OtherEndAggregates => tr("The other end has an aggregation already: only the part's end has one."),
+        Reason::WholeAllowsMany => tr("A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first."),
+        Reason::WholeAllowsOne => tr("This end is a composition's whole, which allows one at most."),
+        Reason::WholeNavigable => tr("The whole's end of an aggregation or composition is not navigable."),
+        Reason::NaryAggregates => tr("An n-ary association's ends are not aggregations: only a binary association has a whole and a part."),
+        _ => return None,
+    })
+}
+
+/// A kind of element as a refusal names it, with its article where the language has one; none for
+/// a kind the catalogues don't name.
+fn a_kind(kind: &str) -> Option<String> {
+    Some(match kind {
+        "class" => tr_ctx("refusal", "a class"),
+        "association class" => tr_ctx("refusal", "an association class"),
+        "interface" => tr_ctx("refusal", "an interface"),
+        "enumeration" => tr_ctx("refusal", "an enumeration"),
+        "data type" => tr_ctx("refusal", "a data type"),
+        "primitive type" => tr_ctx("refusal", "a primitive type"),
+        "package" => tr_ctx("refusal", "a package"),
+        "profile" => tr_ctx("refusal", "a profile"),
+        "stereotype" => tr_ctx("refusal", "a stereotype"),
+        "element" => tr_ctx("refusal", "an element"),
+        "schema" => tr_ctx("refusal", "a schema"),
+        "attribute" => tr_ctx("refusal", "an attribute"),
+        "operation" => tr_ctx("refusal", "an operation"),
+        "literal" => tr_ctx("refusal", "a literal"),
+        "qualifier" => tr_ctx("refusal", "a qualifier"),
+        "template parameter" => tr_ctx("refusal", "a template parameter"),
+        "generalization set" => tr_ctx("refusal", "a generalization set"),
+        "table" => tr_ctx("refusal", "a table"),
+        "column" => tr_ctx("refusal", "a column"),
+        "relationship" => tr_ctx("refusal", "a relationship"),
+        "domain" => tr_ctx("refusal", "a domain"),
+        "enum type" => tr_ctx("refusal", "an enum type"),
+        "sequence" => tr_ctx("refusal", "a sequence"),
+        "view" => tr_ctx("refusal", "a view"),
+        "skill" => tr_ctx("refusal", "a skill"),
+        "association end" => tr_ctx("refusal", "an association end"),
+        _ => return None,
+    })
 }
 
 fn string_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
@@ -467,8 +661,18 @@ pub(crate) fn section(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y:
     Some(y + 50.0)
 }
 
-/// A label over a filled text field that commits on Enter or when it loses the keyboard; gives
-/// the text as typed and whether it was committed this frame.
+/// What a text field that writes when it is left asked for this frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FieldOut {
+    Idle,
+    /// The text as typed is to be written: Enter, or the field left another way.
+    Commit,
+    /// Escape: the edit is given up and the value as last written comes back; nothing is written.
+    Cancel,
+}
+
+/// A label over a filled text field that commits on Enter, and when it loses the keyboard if
+/// `commit_on_blur`; gives whether it was committed this frame ([`edit_field`] says more).
 pub(crate) fn text_field(
     shell: &mut Shell,
     ui: &mut egui::Ui,
@@ -482,6 +686,49 @@ pub(crate) fn text_field(
     take_focus: bool,
     commit_on_blur: bool,
 ) -> bool {
+    edit_field(shell, ui, p, at, width, id, label, text, limit, take_focus, commit_on_blur) == FieldOut::Commit
+}
+
+/// Records which widget held the keyboard as each frame begins, before the toolkit takes it away
+/// on Escape from a field that does not keep Escape (AR-417).
+struct KeysAtStart;
+
+impl egui::Plugin for KeysAtStart {
+    /// The recorder's name, for the toolkit's profiling.
+    fn debug_name(&self) -> &'static str {
+        "archforge.keys-at-start"
+    }
+
+    /// Runs before the frame's input reaches the toolkit's focus: the keyboard is still where it was.
+    fn input_hook(&mut self, ctx: &egui::Context, _input: &mut egui::RawInput) {
+        let held = ctx.memory(|m| m.focused());
+        ctx.data_mut(|d| d.insert_temp(widgets::egui_id("archforge.keys-at-start"), held));
+    }
+}
+
+/// The widget that held the keyboard as this frame began, so Escape goes to what the person was
+/// in even when the toolkit has already let go of it; none when nothing held it. The recorder is
+/// registered on first use (later calls are ignored) and answers from the next frame on.
+pub(crate) fn keys_at_start(ui: &egui::Ui) -> Option<egui::Id> {
+    ui.ctx().add_plugin(KeysAtStart);
+    ui.data(|d| d.get_temp::<Option<egui::Id>>(widgets::egui_id("archforge.keys-at-start"))).flatten()
+}
+
+/// [`text_field`], saying what it asked for. One that commits on blur is written in place, as in
+/// Models: Enter or leaving it commits, Escape gives the edit up (AR-417); others leave Escape be.
+pub(crate) fn edit_field(
+    shell: &mut Shell,
+    ui: &mut egui::Ui,
+    p: &Palette,
+    at: egui::Pos2,
+    width: f32,
+    id: &str,
+    label: &str,
+    text: &mut String,
+    limit: usize,
+    take_focus: bool,
+    commit_on_blur: bool,
+) -> FieldOut {
     let paint = ui.painter().clone();
     ux::text(&paint, at, label, types::CAPTION, p.text_secondary, Some(width.max(0.0)));
     let field = Rect::from_min_size(at + vec2(0.0, 17.0), vec2(width.max(0.0), FIELD));
@@ -489,6 +736,15 @@ pub(crate) fn text_field(
     widgets::record_visible(ui, &mut shell.registry, id, "field", field);
     let inner = field_inner(ui, field);
     let eid = widgets::egui_id(id);
+    // Escape stays with a field that commits on blur and cancels there (checklist 118).
+    let cancel = commit_on_blur && ui.memory(|m| m.has_focus(eid)) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    // The toolkit still reports the field as left on the frame after, which is no commit.
+    let just_cancelled = ui.data_mut(|d| d.remove_temp::<bool>(eid.with("cancelled"))).unwrap_or(false);
+    if cancel {
+        ui.memory_mut(|m| m.surrender_focus(eid));
+        ui.data_mut(|d| d.insert_temp(eid.with("cancelled"), true));
+    }
+    let filter = egui::EventFilter { escape: commit_on_blur, horizontal_arrows: true, vertical_arrows: true, tab: false };
     let edit = egui::TextEdit::singleline(text)
         .id(eid)
         .frame(egui::Frame::NONE)
@@ -496,6 +752,7 @@ pub(crate) fn text_field(
         .font(types::SMALL.font())
         .text_color(p.text)
         .char_limit(limit)
+        .event_filter(filter)
         .desired_width(inner.width());
     let out = edit.show(&mut ui.new_child(egui::UiBuilder::new().max_rect(inner)));
     let _ = (*out.response).clone().accessible_name(label);
@@ -507,7 +764,13 @@ pub(crate) fn text_field(
     }
     // A one-line field gives up the keyboard on Enter in the same frame.
     let enter = (out.response.has_focus() || out.response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
-    enter || (commit_on_blur && out.response.lost_focus())
+    if cancel {
+        FieldOut::Cancel
+    } else if enter || (commit_on_blur && out.response.lost_focus() && !just_cancelled) {
+        FieldOut::Commit
+    } else {
+        FieldOut::Idle
+    }
 }
 
 /// Where a field's one line of text goes: 8 points in from the sides, its row centred on the
@@ -1128,17 +1391,33 @@ fn properties(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, mut y:
     }
 }
 
-/// The name field of a schema or table, committed through its rename command.
+/// The rename commands whose name may be emptied, which leaves the element unnamed.
+const MAY_BE_UNNAMED: [&str; 3] = ["diagram.rename", "er.relationship.rename", "uml.relationship.rename"];
+
+/// Refuses a name of nothing but spaces for an element that needs one, before anything is sent:
+/// the panel says so in plain words, and the name as written stays. Gives whether it refused.
+pub(crate) fn refuse_empty_name(shell: &mut Shell, cmd: &str, name: &str) -> bool {
+    let refused = name.trim().is_empty() && !MAY_BE_UNNAMED.contains(&cmd);
+    if refused {
+        shell.panels.notice = Some(tr("A name can't be empty."));
+    }
+    refused
+}
+
+/// The name field of an element, committed through its rename command on Enter or when it is
+/// left; Escape brings the name back, and an empty name is refused before it is sent.
 pub(crate) fn name_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject, cmd: &str, key: &str) {
     let Some(id) = subject.id else { return };
     let mut text = match &shell.panels.name {
         Some(n) if n.target == id => n.text.clone(),
         _ => subject.name.clone(),
     };
-    let committed = text_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
-    if committed {
+    let out = edit_field(shell, ui, p, at, width, "workspace.properties.name", &tr("Name"), &mut text, MAX_NAME, false, true);
+    if out == FieldOut::Cancel {
         shell.panels.name = None;
-        if text.trim() != subject.name {
+    } else if out == FieldOut::Commit {
+        shell.panels.name = None;
+        if text.trim() != subject.name && !refuse_empty_name(shell, cmd, &text) {
             match run(shell, cmd, json!({ key: id.to_string(), "name": text.trim() })) {
                 Ok(_) => shell.panels.notice = None,
                 Err(e) => shell.panels.notice = Some(e),
@@ -1172,8 +1451,21 @@ fn write_description(shell: &mut Shell, target: Uuid, text: String) {
         }
         Err(e) => {
             shell.panels.description = Some(DescriptionDraft { target, text, refused: true });
-            shell.panels.notice = Some(e);
+            shell.panels.notice = Some(refused_on(shell, target, e));
         }
+    }
+}
+
+/// A refusal `why` of what was typed on `target`, as the panel's notice: when `target` is not the
+/// element selected, as when its draft is written because the selection moved on, it names the
+/// element, so it is not read as about the one shown (AR-417).
+pub(crate) fn refused_on(shell: &Shell, target: Uuid, why: String) -> String {
+    let Some(s) = shell.session.as_ref() else { return why };
+    let store = s.doc();
+    let Some(o) = store.by_uuid(target).filter(|o| s.view().selection.first() != Some(o)) else { return why };
+    match archforge_core::name_of(store, o) {
+        name if name.is_empty() => fmt(&tr("Not kept on the element selected before: {why}"), &[("why", &why)]),
+        name => fmt(&tr("Not kept on {name}: {why}"), &[("name", &name), ("why", &why)]),
     }
 }
 
@@ -1211,7 +1503,8 @@ pub(crate) fn description_pending(panels: &State) -> bool {
 }
 
 /// The description under the heading: typed in place, committed through `element.describe` on Enter
-/// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]). It
+/// or when the keyboard leaves it, and when the selection moves on ([`flush_description`]); Escape
+/// gives the typing up, a refused draft too, and the description as written comes back. It
 /// shows what the element's notation keeps: an ER element's description, a UML element's
 /// description Comment (AR-186).
 fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui::Pos2, width: f32, subject: &Subject) {
@@ -1221,7 +1514,7 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
         Some(d) if d.target == id => d.text.clone(),
         _ => current.clone(),
     };
-    let committed = text_field(
+    let out = edit_field(
         shell,
         ui,
         p,
@@ -1234,7 +1527,9 @@ fn description_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, at: egui
         false,
         true,
     );
-    if committed {
+    if out == FieldOut::Cancel {
+        shell.panels.description = None;
+    } else if out == FieldOut::Commit {
         write_description(shell, id, text);
     } else if text != current {
         // The refused mark stays while the text does; a change makes it a draft to write again.
@@ -2066,7 +2361,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                 json!({ "attribute": id, "primary_key": edit.primary_key, "nullable": nullable, "unique": edit.unique }),
             ));
             if steps.len() == 1 {
-                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| e.to_string())
+                session.execute(steps[0].0, &steps[0].1).map(|_| ()).map_err(|e| refusal(&e))
             } else {
                 session
                     .batch(&tr("Edit column"), |b| {
@@ -2076,7 +2371,7 @@ fn commit_column(shell: &mut Shell, edit: &ColumnEdit) {
                         Ok(())
                     })
                     .map(|_| ())
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| refusal(&e))
             }
         }
     };
@@ -2249,6 +2544,13 @@ pub(crate) fn texts() -> impl Iterator<Item = &'static str> {
 pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, panel: Panel, project: &str) {
     let paint = ui.painter().clone();
     let s = subject(shell, project);
+    // A refusal is about what was selected: it goes with another selection. The drafts left on the
+    // element selected before are written after, so a refusal of theirs shows, naming that element
+    // ([`refused_on`]), until the selection moves on again.
+    if shell.panels.notice_for != s.id {
+        shell.panels.notice_for = s.id;
+        shell.panels.notice = None;
+    }
     // A description typed on the element selected before goes to it first.
     flush_description(shell, s.id);
     crate::uml_relate::finish_ends(shell, s.id);
@@ -2339,6 +2641,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         paint.rect_filled(thumb, 2.0, p.scroll_thumb);
     }
     if let Some(notice) = shell.panels.notice.clone() {
-        ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));
+        let area =
+            ux::text(&paint, pos2(r.left() + PAD, r.bottom() - 36.0), &notice, types::CAPTION, p.amber, Some((r.width() - 2.0 * PAD).max(0.0)));
+        widgets::announce(ui, &mut shell.registry, "workspace.properties.notice", area, &notice);
     }
 }

@@ -302,7 +302,7 @@ fn inspect(shell: &Shell) -> Value {
         "project": shell.project.as_ref().map(|p| json!({ "name": p.name, "path": p.path.display().to_string() })),
         "branch": shell.project.as_ref().and_then(|p| shell.services.projects.as_ref()?.current_branch(&p.path)),
         "revision": session.revision(),
-        "unsaved": session.is_dirty() || crate::panels::description_pending(&shell.panels),
+        "unsaved": session.is_dirty() || shell.typing_unkept(),
         "saving": shell.is_saving(),
         "save_error": shell.save_error,
         "undo": session.undo_label(),
@@ -337,7 +337,6 @@ fn save(shell: &mut Shell, params: &Value, agent: Option<Option<&str>>) -> Resul
         return Err(crate::i18n::tr("A save is under way, so this description was not used. Try again when it has finished."));
     }
     if !shell.is_saving() {
-        let revision = shell.session.as_ref().map(|s| s.revision());
         let by = match agent {
             Some(origin) => crate::SavedBy::Agent(origin.map(str::to_string)),
             None => crate::SavedBy::Person(shell.state.user_name.clone()),
@@ -348,9 +347,6 @@ fn save(shell: &mut Shell, params: &Value, agent: Option<Option<&str>>) -> Resul
             if crate::panels::refused_description(&shell.panels) {
                 let why = shell.panels.notice.clone().unwrap_or_default();
                 return Err(format!("the description being typed in Properties was refused, so nothing was saved: {why}"));
-            }
-            if revision.is_some() && shell.refused == revision {
-                return Err(shell.save_error.clone().unwrap_or_else(|| "the model could not be written, so it cannot be saved".into()));
             }
             if shell.session.as_ref().is_some_and(|s| !s.is_dirty()) {
                 return Ok(json!({ "saving": false, "saved": true, "unsaved": false }));

@@ -24,6 +24,8 @@ mod prefs;
 mod projects;
 mod services;
 #[cfg(test)]
+mod test_host;
+#[cfg(test)]
 mod winres;
 
 use std::cell::RefCell;
@@ -208,6 +210,8 @@ fn run() -> i32 {
             Box::new(move |cc| {
                 let stored = cell.borrow_mut().take().ok_or("the application was already started")?;
                 let projects = std::sync::Arc::new(projects::Projects::new(&settings, build_info::version_line()));
+                // What a crashed or killed Archforge left running stops, on a thread of its own.
+                let _ = projects.stop_orphans();
                 let agents = std::sync::Arc::new(agents::Agents::new(&settings, window.clone()));
                 let mut shell = Shell::new(services::native(projects.clone(), agents.clone()));
                 prefs::apply(&stored, &mut shell);

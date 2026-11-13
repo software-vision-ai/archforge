@@ -24,7 +24,8 @@ fn answer_versions(host: &SavingHost) {
         by_agent,
         ..Default::default()
     };
-    let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, None, false)];
+    // The oldest is an earlier Archforge's name for a restore's kept work.
+    let versions = vec![v(3, Some("Add status"), false), v(2, None, true), v(1, Some("Before restoring 2026-11-08T14:01:00Z"), false)];
     host.version_reads
         .lock()
         .unwrap()
@@ -64,7 +65,8 @@ fn the_chip_names_what_shows_and_the_list_says_what_each_version_is() {
         assert_eq!(*host.version_limits.lock().unwrap().last().unwrap(), 50, "the design's page");
         host.version_reads.lock().unwrap().remove(0);
         opened_list(&mut h, &host);
-        assert!(["No unsaved changes", "Same as current work", "Saved by an agent"].iter().all(|w| painted_has(&h, w)));
+        let said = ["No unsaved changes", "Same as current work", "Saved by an agent", "Before restoring 8 Nov 14:01"];
+        assert!(said.iter().all(|w| painted_has(&h, w)) && !painted_has(&h, "T14:01"), "{:?}", painted(&h));
         assert!(!painted_has(&h, "Add status"));
         add_schema(&mut h, "shop");
         assert!(painted_has(&h, "Unsaved changes") && painted_has(&h, "Add status") && h.query_by_label("Current work · unsaved changes").is_some());
@@ -107,6 +109,8 @@ fn the_keys_move_view_and_close() {
         assert!(h.query_by_label("Viewing a version").is_some(), "no other version's date");
         h.state_mut().back_to_current_work();
         opened_list(&mut h, &host);
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Err(crate::SaveError::Failed("no".into()))).unwrap();
         h.run_steps(3);
@@ -245,6 +249,8 @@ fn a_step_waiting_for_its_read() {
         h.run_steps(3);
         shown(&mut h, &host, "h2");
         h.state_mut().back_to_current_work();
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);
@@ -273,10 +279,10 @@ fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
         in_both(|mut h, host| {
             press(&mut h, egui::Key::OpenBracket);
             answer_versions(&host);
-            h.run_steps(3);
+            h.steps(3);
             shown(&mut h, &host, "h2");
             job(&mut h, &host).0.send(if failed { Err(WorkSaved("no".into())) } else { Ok(()) }).unwrap();
-            h.run_steps(8);
+            h.steps(8);
             assert!(!h.state().is_held() && h.state().viewing().is_none(), "over, and back on the work");
             press(&mut h, egui::Key::OpenBracket);
             assert!(host.reads.lock().unwrap().is_empty(), "no step through what was read before");
@@ -666,7 +672,7 @@ fn leaving_closes_a_colour_picker_and_a_refusal_keeps_it() {
         let read = start_replacing(&mut h, None);
         h.state_mut().panels.picker = picker();
         read.send(Ok(earlier)).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         assert!(!h.state().is_held() && h.state().panels.picker.is_none(), "the replacement closes it");
     });
 }
@@ -707,6 +713,7 @@ fn an_end_typed_on_the_selected_association_stops_leaving() {
             written_modifiers: [modifiers(), modifiers()],
             modifier_refused: [None, None],
             modifiers_open: [false, false],
+            modifiers_last: None,
         }
     }
     type Change = fn(&mut EndsEdit);
@@ -762,7 +769,7 @@ fn a_moved_selection_ends_an_associations_draft_before_a_replacement() {
         assert!(h.state().panels.ends.is_none() && revision(&h) == before, "a refused or unreadable value is dropped, not written");
         let read = start_replacing(&mut h, None);
         read.send(Ok(earlier)).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         assert!(!h.state().is_held() && h.state().session.as_ref().unwrap().doc().by_uuid(paid).is_none(), "replaced without it");
         assert!(h.state().panels.ends.is_none() && h.state().panels.notice.is_none());
     });
@@ -2073,6 +2080,8 @@ fn a_first_read_that_fails_says_so_and_its_words_end() {
         press(&mut h, egui::Key::OpenBracket);
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &failure_words(true));
+        // Unsaved work, which Save makes a version of (with none it asks for nothing).
+        h.state_mut().session.as_mut().unwrap().mark_unsaved();
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);

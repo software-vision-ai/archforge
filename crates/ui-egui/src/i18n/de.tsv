@@ -4,6 +4,7 @@
 str		Quit Archforge	Archforge beenden
 str		File	Ablage
 str		Help	Hilfe
+str	menu	View	Ansicht
 str		Ctrl	Strg
 str		Shift	Umschalt
 str		The project is busy	Das Projekt ist beschäftigt
@@ -12,7 +13,11 @@ str		Show a diagram first	Zeigen Sie zuerst ein Diagramm an
 str		Current work is showing	Die aktuelle Arbeit wird angezeigt
 str		Back to current work first	Kehren Sie zuerst zur aktuellen Arbeit zurück
 str		This project has one branch	Dieses Projekt hat einen Zweig
+str		Leave the text field first	Verlassen Sie zuerst das Textfeld
+str		Widen the window to search	Vergrößern Sie das Fenster, um zu suchen
+str		Already showing	Wird bereits angezeigt
 str		Open…	Öffnen …
+str		Find…	Suchen …
 str		Save	Sichern
 # Generieren
 str		Generate…	Generieren …
@@ -455,12 +460,17 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Das angezeigte Projekt hat sich geändert, nachdem diese Anfrage gesendet wurde, daher wurde sie nicht ausgeführt. Prüfen Sie, was jetzt angezeigt wird, und senden Sie sie erneut.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Das Projekt wird angehalten, während es ersetzt wird, daher wurde diese Anfrage nicht ausgeführt. Versuchen Sie es erneut, wenn das abgeschlossen ist.
 str		This version is the same as your current work.	Diese Version entspricht Ihrer aktuellen Arbeit.
+str		These two versions are the same.	Diese beiden Versionen sind gleich.
+str		Too large to compare	Zu groß zum Vergleichen
+str		The comparison was stopped.	Der Vergleich wurde gestoppt.
+str		Both sides are your current work.	Beide Seiten sind Ihre aktuelle Arbeit.
+str		Choose another pair above.	Wählen Sie oben ein anderes Paar.
 str		Restore this version…	Diese Version wiederherstellen…
 str		Restore this version?	Diese Version wiederherstellen?
 str		The version of {what}	Die Version vom {what}
 str		A new version with that content is added on top of the history, called "{name}".	Eine neue Version mit diesem Inhalt wird oben in der Historie hinzugefügt und heißt „{name}“.
 str		Nothing is rewound or removed, and later versions stay in History.	Nichts wird zurückgespult oder entfernt, und spätere Versionen bleiben in der Historie.
-str		Your unsaved changes are saved first, as a version called "Before restoring" and the time.	Ihre nicht gespeicherten Änderungen werden zuerst als Version „Before restoring“ mit der Uhrzeit gespeichert.
+str		Your unsaved changes are saved first, as a version called "{name}".	Ihre nicht gespeicherten Änderungen werden zuerst als Version „{name}“ gespeichert.
 str		You can reach them again from History.	Sie finden sie danach in der Historie wieder.
 str		Undo starts fresh after a Restore.	Nach einer Wiederherstellung beginnt Rückgängig neu.
 str		Restore	Wiederherstellen
@@ -505,19 +515,98 @@ str		Models	Modelle
 str		Versions	Versionen
 str		Branches	Zweige
 str		This branch	Dieser Zweig
+str		Another branch	Anderer Zweig
+str		Latest version	Neueste Version
+str		Latest on {branch}	Neueste auf {branch}
 str	branch	Current	Aktuell
 str		Branches can't be merged yet.	Zweige können noch nicht zusammengeführt werden.
 str		Only the first {n} branches are listed.	Nur die ersten {n} Zweige sind aufgeführt.
 str		The branches couldn't be read.	Die Zweige konnten nicht gelesen werden.
+str		New branch…	Neuer Zweig…
+str		New branch	Neuer Zweig
+str		A branch keeps its own versions, unsaved work and conversations.	Ein Zweig hat eigene Versionen, eigene ungespeicherte Arbeit und eigene Unterhaltungen.
+str		It starts from current work on {branch}.	Er beginnt mit der aktuellen Arbeit auf {branch}.
+str		It starts from current work on {branch}. Your unsaved changes come along, and {branch} keeps them too.	Er beginnt mit der aktuellen Arbeit auf {branch}. Ihre ungespeicherten Änderungen kommen mit, und {branch} behält sie ebenfalls.
+str		Start a branch here	Hier einen Zweig beginnen
+str		Start a branch here…	Hier einen Zweig beginnen…
+str		It starts from the version of {version}.	Er beginnt mit der Version vom {version}.
+str		Viewing ends on the new branch.	Die Ansicht endet auf dem neuen Zweig.
+str		Your unsaved changes stay on {branch}.	Ihre nicht gespeicherten Änderungen bleiben auf {branch}.
+str		That name is already in use.	Dieser Name wird bereits verwendet.
+str		The last new branch is not cleaned up yet. Opening the project again removes it.	Der letzte neue Zweig ist noch nicht bereinigt. Erneutes Öffnen des Projekts entfernt ihn.
+str		The project changed before the branch was made, so none was made.	Das Projekt hat sich geändert, bevor der Zweig erstellt wurde, daher wurde keiner erstellt.
+str		Couldn't make the branch: {why}	Der Zweig konnte nicht erstellt werden: {why}
+str		Archforge could not tell whether the branch was made. Look at Branches before trying again.	Archforge konnte nicht feststellen, ob der Zweig erstellt wurde. Sehen Sie unter „Zweige“ nach, bevor Sie es erneut versuchen.
+str		Rename…	Umbenennen…
+str		Rename branch	Zweig umbenennen
+str		The conversations and versions on this branch are not affected.	Die Unterhaltungen und Versionen dieses Zweigs bleiben unverändert.
+str		The project changed before the branch was renamed, so its name stayed.	Das Projekt hat sich geändert, bevor der Zweig umbenannt wurde, daher blieb sein Name.
+str		Couldn't rename the branch: {why}	Der Zweig konnte nicht umbenannt werden: {why}
+str		Archforge could not tell whether the branch was renamed to {name}. Rename it to {name} again to find out.	Archforge konnte nicht feststellen, ob der Zweig in {name} umbenannt wurde. Benennen Sie ihn noch einmal in {name} um, um es herauszufinden.
+str		Delete…	Löschen…
+str		Delete {branch}?	{branch} löschen?
+str		Goes with the branch:	Mit dem Zweig geht:
+str		Counting what goes with it…	Es wird gezählt, was mitgeht…
+str		What goes with it couldn't be read: {why}	Was mitgeht, konnte nicht gelesen werden: {why}
+str		the host stopped without an answer	der Host hat ohne Antwort aufgehört
+plural		{n} version only on this branch	{n} Version nur auf diesem Zweig|{n} Versionen nur auf diesem Zweig
+plural		{n} conversation	{n} Unterhaltung|{n} Unterhaltungen
+str		{versions} · {conversations}	{versions} · {conversations}
+str		{versions} · {conversations} · unsaved changes	{versions} · {conversations} · ungespeicherte Änderungen
+str		It leaves the project's list.	Er verschwindet aus der Liste des Projekts.
+str		Its contents may remain in the project folder's storage, as a deleted conversation does in the project's saved history.	Sein Inhalt kann im Speicher des Projektordners bleiben, wie eine gelöschte Unterhaltung im gespeicherten Verlauf des Projekts.
+str		There is no Undo for deleting a branch.	Das Löschen eines Zweigs lässt sich nicht rückgängig machen.
+str		Delete branch	Zweig löschen
+str		Couldn't delete {branch}	{branch} konnte nicht gelöscht werden
+str		The project changed before the branch was deleted, so it stays.	Das Projekt hat sich geändert, bevor der Zweig gelöscht wurde, daher bleibt er.
+str		Archforge could not tell whether the branch was deleted. Delete it again to find out.	Archforge konnte nicht feststellen, ob der Zweig gelöscht wurde. Löschen Sie ihn erneut, um es herauszufinden.
+str		The branch stays: {why}	Der Zweig bleibt: {why}
 str		At most {n} characters.	Höchstens {n} Zeichen.
 str		Enter a name.	Geben Sie einen Namen ein.
 str		A name has to be one line.	Ein Name muss aus einer Zeile bestehen.
+str		A name can't be empty.	Ein Name darf nicht leer sein.
+str		There is {what} named {name} already.	Den Namen {name} trägt bereits {what}.
+str		{what} cannot depend on itself.	{what} kann nicht von sich selbst abhängen.
+str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
+str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
+str		The text can't be empty.	Der Text darf nicht leer sein.
+str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.
+str		It can't hold a control or hidden character.	Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.
+str		It can't start or end with a space.	Am Anfang und am Ende darf kein Leerzeichen stehen.
+str	refusal	a class	eine Klasse
+str	refusal	an association class	eine Assoziationsklasse
+str	refusal	an interface	eine Schnittstelle
+str	refusal	an enumeration	eine Aufzählung
+str	refusal	a data type	ein Datentyp
+str	refusal	a primitive type	ein primitiver Typ
+str	refusal	a package	ein Paket
+str	refusal	a profile	ein Profil
+str	refusal	a stereotype	ein Stereotyp
+str	refusal	an element	ein Element
+str	refusal	a schema	ein Schema
+str	refusal	an attribute	ein Attribut
+str	refusal	an operation	eine Operation
+str	refusal	a literal	ein Literal
+str	refusal	a qualifier	ein Qualifizierer
+str	refusal	a template parameter	ein Template-Parameter
+str	refusal	a generalization set	eine Generalisierungsmenge
+str	refusal	a table	eine Tabelle
+str	refusal	a column	eine Spalte
+str	refusal	a relationship	eine Beziehung
+str	refusal	a domain	eine Domäne
+str	refusal	an enum type	ein Aufzählungstyp
+str	refusal	a sequence	eine Sequenz
+str	refusal	a view	eine Sicht
+str	refusal	a skill	ein Skill
+str	refusal	an association end	ein Assoziationsende
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
 str		Retry	Erneut versuchen
 str		No changes since the last version.	Keine Änderungen seit der letzten Version.
+str		What you're typing isn't kept yet	Was Sie gerade eingeben, ist noch nicht gesichert
 str		No versions yet.	Noch keine Versionen.
+str		Shared with main up to here	Bis hier mit main gemeinsam
 str		No versions yet. Save version records your first one.	Noch keine Versionen. „Version speichern“ legt die erste an.
 str		Loading	Wird geladen
 str		Save version…	Version speichern…
@@ -529,6 +618,7 @@ str		{what} changed.	{what} geändert.
 str		These changes become a new version of {name}.	Diese Änderungen werden zu einer neuen Version von {name}.
 str		The model changed while this was open. The summary is up to date again.	Das Modell wurde geändert, während dies geöffnet war. Die Zusammenfassung ist wieder aktuell.
 str		One line, at most 200 characters. It stays in the history.	Eine Zeile, höchstens 200 Zeichen. Sie bleibt im Verlauf.
+plural		{n} difference	{n} Unterschied|{n} Unterschiede
 plural		{n} model element	{n} Modellelement|{n} Modellelemente
 str		Filter changes…	Änderungen filtern…
 str		Filter versions…	Versionen filtern…
@@ -565,9 +655,11 @@ str		Attributes	Attribute
 str		Operations	Operationen
 str		Literals	Literale
 str		Members	Elemente
+str		Relationships	Beziehungen
+str		{name} → {to}{note}	{name} → {to}{note}
 str		Ownership	Besitz
 str		Not available on this side	Auf dieser Seite nicht verfügbar
-str		Relationships aren't listed on these cards yet.	Beziehungen werden auf diesen Karten noch nicht aufgeführt.
+str		Each difference is marked on the cards below.	Jeder Unterschied ist auf den Karten unten markiert.
 plural		Related change	Zugehörige Änderung|Zugehörige Änderungen
 str		{name} was added in this comparison.	{name} wurde in diesem Vergleich hinzugefügt.
 str		{name} was changed in this comparison.	{name} wurde in diesem Vergleich geändert.
@@ -578,7 +670,8 @@ str		The cards show the same on both sides.	Die Karten zeigen auf beiden Seiten 
 str		The owner changed	Der Besitzer hat sich geändert
 str		The owner changed.	Der Besitzer hat sich geändert.
 plural		{n} member changed	{n} Element geändert|{n} Elemente geändert
-str		{values} · {members}	{values} · {members}
+plural		{n} relationship changed	{n} Beziehung geändert|{n} Beziehungen geändert
+str		{these} · {those}	{these} · {those}
 str		This element was added	Dieses Element wurde hinzugefügt
 str		It is only on the After side, so there is nothing to compare.	Es ist nur auf der Seite Nachher vorhanden, daher gibt es nichts zu vergleichen.
 str		This element was removed	Dieses Element wurde entfernt
@@ -594,6 +687,30 @@ plural		{n} more value changed.	{n} weiterer Wert hat sich geändert.|{n} weiter
 str		Yes	Ja
 str		Not set	Nicht gesetzt
 str		Nothing here yet	Noch nichts vorhanden
+str		Layout	Layout
+str		{first}, {then}	{first}, {then}
+str		{first} · {then}	{first} · {then}
+plural		{n} element added	{n} Element hinzugefügt|{n} Elemente hinzugefügt
+plural		{n} element changed	{n} Element geändert|{n} Elemente geändert
+plural		{n} element removed	{n} Element entfernt|{n} Elemente entfernt
+plural		{n} box placed	{n} Kasten platziert|{n} Kästen platziert
+plural		{n} box moved	{n} Kasten verschoben|{n} Kästen verschoben
+plural		{n} box changed	{n} Kasten geändert|{n} Kästen geändert
+plural		{n} box taken off	{n} Kasten entfernt|{n} Kästen entfernt
+plural		{n} line drawn	{n} Linie gezogen|{n} Linien gezogen
+plural		{n} line changed	{n} Linie geändert|{n} Linien geändert
+plural		{n} line taken off	{n} Linie entfernt|{n} Linien entfernt
+str		The model didn't change	Das Modell hat sich nicht geändert
+str		Only the layout changed.	Nur das Layout hat sich geändert.
+str		The layout didn't change	Das Layout hat sich nicht geändert
+str		Only the model changed.	Nur das Modell hat sich geändert.
+str		The diagram's own details changed	Die eigenen Angaben des Diagramms haben sich geändert
+str		Such as its name, or the order its boxes are drawn in.	Etwa sein Name oder die Reihenfolge, in der seine Kästen gezeichnet werden.
+str		This diagram was added	Dieses Diagramm wurde hinzugefügt
+str		It has no boxes or lines yet.	Es hat noch keine Kästen oder Linien.
+str		Drag, scroll or use the arrow keys to move both sides; + and − zoom them, and 0 fits them again.	Ziehen, scrollen oder die Pfeiltasten verwenden, um beide Seiten zu verschieben; + und − zoomen sie, und 0 passt sie wieder ein.
+str		This diagram was removed	Dieses Diagramm wurde entfernt
+str		It had no boxes or lines.	Es hatte keine Kästen oder Linien.
 str		Version of {when}	Version vom {when}
 str		Last version	Letzte Version
 str		No description	Keine Beschreibung
@@ -603,6 +720,7 @@ str		This version couldn't be read.	Diese Version konnte nicht gelesen werden.
 str		{from} can't be shown. Skipped to {to}.	{from} kann nicht angezeigt werden. Weiter zu {to}.
 str		It isn't a version of this branch.	Das ist keine Version dieses Zweigs.
 str		Made with a newer Archforge.	Mit einer neueren Archforge-Version erstellt.
+str		Its model is larger than Archforge reads.	Ihr Modell ist größer, als Archforge lesen kann.
 str		Why?	Warum?
 str		Date not known	Datum unbekannt
 plural		Versions · {n} change	Versionen · {n} Änderung|Versionen · {n} Änderungen
@@ -804,7 +922,8 @@ plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden
 str		Show minimap	Minimap einblenden
-str		Widen the canvas to show the minimap	Verbreitern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
+str		The minimap is showing	Die Minimap wird angezeigt
+str		Make the canvas larger to show the minimap	Vergrößern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
 str		Whole diagram	Ganzes Diagramm
 str		Zoom in	Vergrößern
 str		Zoom out	Verkleinern
@@ -836,6 +955,8 @@ str		Selection · this diagram	Auswahl · dieses Diagramm
 str		{kind} · this diagram	{kind} · dieses Diagramm
 plural		{n} item	{n} Element|{n} Elemente
 str		The model could not be opened	Das Modell konnte nicht geöffnet werden
+str		Not kept on {name}: {why}	Nicht übernommen bei {name}: {why}
+str		Not kept on the element selected before: {why}	Beim zuvor ausgewählten Element nicht übernommen: {why}
 str		The host gives no ids for the model's elements	Der Host liefert keine Ids für die Elemente des Modells
 str		Collapse panel	Leiste einklappen
 str		Not available yet	Noch nicht verfügbar
@@ -1116,6 +1237,7 @@ str		{name} holds the profile {profile}, which is in use: {uses}. Remove those f
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
 str		{first} and {second}	{first} und {second}
+str		{first}, {second} and {third}	{first}, {second} und {third}
 plural		Show the use	Die Verwendung zeigen|Die {n} Verwendungen zeigen
 str		A stereotype is shown on its profile's diagram	Ein Stereotyp erscheint im Diagramm seines Profils
 str		Place stereotype	Stereotyp platzieren
@@ -1320,6 +1442,10 @@ str		Clear	Leeren
 str		Client	Client
 str		Composite	Komposition
 str		Composition	Komposition
+str		The other end has an aggregation already: only the part's end has one.	Das andere Ende hat bereits eine Aggregation: Nur das Ende des Teils hat eine.
+str		A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.	Das Ganze einer Komposition lässt höchstens eins zu: Setzen Sie zuerst die Multiplizität des anderen Endes auf 1 oder 0..1.
+str		This end is a composition's whole, which allows one at most.	Dieses Ende ist das Ganze einer Komposition, das höchstens eins zulässt.
+str		The whole's end of an aggregation or composition is not navigable.	Das Ende des Ganzen einer Aggregation oder Komposition ist nicht navigierbar.
 str		Dependency	Abhängigkeit
 str		Dependency · model	Abhängigkeit · Modell
 str		Directed association	Gerichtete Assoziation
@@ -1363,6 +1489,9 @@ str		Type a name: a template parameter without one stands for nothing.	Geben Sie
 str		{template} already has a template parameter named {name}. Pick another name.	{template} hat bereits einen Template-Parameter namens {name}. Wählen Sie einen anderen Namen.
 str		{default} does not fit {name}: pick a default its arguments could be.	{default} passt nicht zu {name}: Wählen Sie einen Standardwert, der eines seiner Argumente sein könnte.
 str		{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.	{bound} bindet {name} -> {actual}, was nicht mehr passen würde. Ändern oder entfernen Sie zuerst diese Bindung.
+str		A template has at most {max} parameters.	Ein Template hat höchstens {max} Parameter.
+str		{bound} binds {template} and gives {name} no argument, so {name} needs a default.	{bound} bindet {template} und gibt {name} kein Argument, daher braucht {name} einen Standardwert.
+str		The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.	Im Paket {types}, in dem dieser eingebaute Typ liegt, trägt bereits {what} den Namen {name}: Benennen Sie {name} um, um den eingebauten Typ zu verwenden.
 str		template parameter	Template-Parameter
 str		template	Template
 plural		{kind} · template, {n} parameter · model, in every diagram	{kind} · Template, {n} Parameter · Modell, in jedem Diagramm|{kind} · Template, {n} Parameter · Modell, in jedem Diagramm
@@ -1391,6 +1520,8 @@ str		{name} needs an argument: pick an interface.	{name} braucht ein Argument: W
 str		{name} needs an argument: pick a data type.	{name} braucht ein Argument: Wählen Sie einen Datentyp.
 str		{name} needs an argument: pick an enumeration.	{name} braucht ein Argument: Wählen Sie eine Aufzählung.
 str		{name} needs an argument: pick a primitive type.	{name} braucht ein Argument: Wählen Sie einen primitiven Typ.
+str		{name} ({kind})	{name} ({kind})
+str		{names} have no default, so each needs an argument.	{names} haben keinen Standardwert, daher braucht jeder ein Argument.
 plural		{names} can keep its default.	{names} kann seinen Standardwert behalten.|{names} können ihre Standardwerte behalten.
 str		New template binding	Neue Template-Bindung
 str		Drawing · not in the model until you apply	Wird gezeichnet · erst nach Übernehmen im Modell
@@ -1414,6 +1545,7 @@ str		Click a class for the new end	Klicken Sie auf eine Klasse für das neue End
 str		Esc cancels	Esc bricht ab
 str		An n-ary association joins classes and interfaces	Eine n-äre Assoziation verbindet Klassen und Schnittstellen
 str		An association takes at most {n} ends	Eine Assoziation hat höchstens {n} Enden
+str		An n-ary association needs three ends or more.	Eine n-äre Assoziation braucht drei Enden oder mehr.
 str		An n-ary association needs three ends or more: click another class	Eine n-äre Assoziation braucht drei Enden oder mehr: Klicken Sie auf eine weitere Klasse
 str		Add n-ary association	N-äre Assoziation hinzufügen
 str		New n-ary association	Neue n-äre Assoziation
@@ -1431,6 +1563,7 @@ str		Reconnect end	Ende neu verbinden
 str		Drag a leg end	Ein Schenkelende ziehen
 str		Open a class diagram to pick the new end's class	Öffnen Sie ein Klassendiagramm, um die Klasse des neuen Endes zu wählen
 str		Ends of an n-ary association are not aggregations, so Aggregation is not offered. Repeat a type for two ends when the roles differ.	Enden einer n-ären Assoziation sind keine Aggregationen, daher wird Aggregation nicht angeboten. Wiederholen Sie einen Typ für zwei Enden, wenn sich die Rollen unterscheiden.
+str		An n-ary association's ends are not aggregations: only a binary association has a whole and a part.	Die Enden einer n-ären Assoziation sind keine Aggregationen: Nur eine binäre Assoziation hat ein Ganzes und ein Teil.
 str		Another end has the role {role} already. Pick another role.	Ein anderes Ende hat bereits die Rolle {role}. Wählen Sie eine andere Rolle.
 str		Set association end	Assoziationsende festlegen
 str		End {role} removed	Ende {role} entfernt
@@ -1452,6 +1585,8 @@ str		Interface realization	Schnittstellenrealisierung
 str		Interface realization · model	Schnittstellenrealisierung · Modell
 # Generalisierungsmengen (AR-129)
 str		A set groups generalizations of one class.	Eine Menge fasst Generalisierungen einer Klasse zusammen.
+str		A set groups at least one generalization.	Eine Menge fasst mindestens eine Generalisierung zusammen.
+plural		A set groups at most {n} generalization.	Eine Menge fasst höchstens {n} Generalisierung zusammen.|Eine Menge fasst höchstens {n} Generalisierungen zusammen.
 str		Add member	Mitglied hinzufügen
 str		Add member offers only generalizations to {general}. Edit opens that generalization.	Mitglied hinzufügen bietet nur Generalisierungen zu {general} an. Bearbeiten öffnet diese Generalisierung.
 str		Add to a generalization set	Zu einer Generalisierungsmenge hinzufügen

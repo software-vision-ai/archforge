@@ -25,6 +25,9 @@ const PAGE: usize = 50;
 const HEADER: f32 = 40.0;
 const ROW: f32 = 48.0;
 const PITCH: f32 = 50.0;
+/// The divider where the versions shared with `main` start, and the room it takes in the list.
+const SHARED: f32 = 16.0;
+const SHARED_PITCH: f32 = 18.0;
 /// A branch's row and the distance between rows.
 const BRANCH: f32 = 36.0;
 const BRANCH_PITCH: f32 = 42.0;
@@ -61,7 +64,7 @@ pub struct State {
     pub(crate) branches_cut: bool,
     branches_reading: Option<Receiver<Result<(Vec<BranchEntry>, bool), String>>>,
     branches_failed: Option<String>,
-    branches_asked: bool,
+    pub(crate) branches_asked: bool,
     /// Whether Branches was opened or folded by hand; until then it is open with two or more.
     branches_open: Option<bool>,
     /// Why the last read failed; what was shown stays.
@@ -70,6 +73,10 @@ pub struct State {
     pub(crate) stale: bool,
     /// A branch switch started from the question, until it arrives or says why not.
     pub(crate) switching: Option<crate::switch_ask::Switching>,
+    /// A branch asked for in New branch…, until the host answers.
+    pub(crate) making: Option<crate::branch_ask::Making>,
+    /// What goes with a branch asked to be deleted, while it is read.
+    pub(crate) counting: Option<crate::branch_ask::Counting>,
     /// A read begun for that has yet to succeed, so the first row may not be the last version.
     last_unsure: bool,
     /// The working changes counted, which the rail's badge shows; AR-269 keeps it.
@@ -106,6 +113,8 @@ pub struct State {
     pub(crate) details_comparing: Option<crate::version_details::Running<Arc<Vec<Difference>>>>,
     /// The one read of the version before the link has under way.
     pub(crate) details_reading: Option<crate::version_details::Running<VersionsPage>>,
+    /// What the Compare page has read and found, and its one read and comparison under way.
+    pub(crate) compare_results: crate::version_details::compare::results::Results,
     /// The changed element the centre shows, and the one read of its two sides under way.
     pub(crate) element: Option<crate::change_view::OpenedElement>,
     pub(crate) element_reading: Option<crate::change_view::ElementReading>,
@@ -218,14 +227,14 @@ fn keep_changes(shell: &mut Shell) {
         }
         return;
     };
-    let after = match archforge_mof::rows::snapshot(session.doc(), &tables, &junctions) {
-        Ok(rows) => rows,
-        Err(e) => return settle_changes(shell, key, Err(e.to_string())),
-    };
+    // The frame only copies the objects; their rows are built with the comparison.
+    let frozen = session.doc().freeze();
     let (tx, rx) = std::sync::mpsc::channel();
     let compare = move || {
-        let found = archforge_notations::differences::classified(&before, &after, crate::editing::fit_tables);
-        let _ = tx.send(found.map_err(|e| e.to_string()));
+        let after = frozen.rows(&tables, &junctions).map_err(|e| e.to_string());
+        let found = after
+            .and_then(|after| archforge_notations::differences::classified(&before, &after, crate::editing::fit_tables).map_err(|e| e.to_string()));
+        let _ = tx.send(found);
     };
     match std::thread::Builder::new().name("archforge-working-changes".into()).spawn(compare) {
         Ok(_) => v.comparing = Some((key, rx)),
@@ -386,11 +395,12 @@ pub(crate) fn settled(shell: &Shell) -> bool {
 }
 
 /// What Working changes says, when what is known allows it. "No changes" is what Save would find:
-/// no difference in the model and diagrams, and none in what only a save writes (`settings` and
-/// `model_tables`, which leave the session marked unsaved with nothing to list).
+/// no difference in the model and diagrams, none in what only a save writes (`settings` and
+/// `model_tables`, which leave the session marked unsaved with nothing to list), and no text typed
+/// that waits to be written (`crate::typing_unkept`).
 fn working_words(shell: &Shell) -> Option<String> {
     let page = shell.versions.page.as_ref()?;
-    let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !crate::panels::description_pending(&shell.panels);
+    let untouched = shell.session.as_ref().is_some_and(|s| !s.is_dirty()) && !shell.typing_unkept();
     if page.versions.is_empty() {
         Some(tr("No versions yet. Save version records your first one."))
     } else if !settled(shell) {
@@ -456,6 +466,15 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     if header(shell, ui, p, r, y, ("branches", &tr("Branches"), Some(open), count)) {
         shell.versions.branches_open = Some(!open);
     }
+    if crate::branch_ask::offered(shell) {
+        let plus = Rect::from_center_size(pos2(r.right() - 48.0, y + HEADER / 2.0), Vec2::splat(24.0));
+        let resp = control(shell, ui, "workspace.versions.branches.new", "button", plus, true).on_hover_text(tr("New branch…"));
+        focus_ring(ui.painter(), p, plus, 6.0, &resp);
+        ux::icon_in(ui.painter(), Rect::from_center_size(plus.center(), Vec2::splat(14.0)), &icons::PLUS, p.text_secondary);
+        if resp.accessible_name(tr("New branch…")).clicked() {
+            crate::branch_ask::open(shell);
+        }
+    }
     let y = y + HEADER;
     if !open {
         return y;
@@ -474,10 +493,11 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let height = (above + rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(least));
     let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
     // The row the keys moved to comes whole into view, under the banner too.
+    let ids = listed.iter().map(|b| widgets::egui_id(&format!("workspace.versions.branch.row.{}", b.name))).collect::<Vec<_>>();
     let scroll = &mut shell.versions.branches_scroll;
-    if let Some(i) = key_branches(ui, &listed) {
+    if let Some(i) = key_rows(&shell.panels, ui, &ids, Some(widgets::egui_id("workspace.versions.branches.retry"))) {
         let top = above + i as f32 * BRANCH_PITCH;
-        scroll.offset = scroll.offset.min(top).max(top + BRANCH - height);
+        bring(scroll, (top, top + BRANCH), height);
     }
     let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, above + tail, true, None, scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
@@ -498,35 +518,49 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     tree.bottom() + 8.0
 }
 
-/// ↑ and ↓ on a focused branch row, the current one included, move the focus to the next or
-/// previous row, and ↓ on a failed read's Retry to the first; gives the row moved to.
-fn key_branches(ui: &egui::Ui, listed: &[BranchEntry]) -> Option<usize> {
-    let row = |i: usize| widgets::egui_id(&format!("workspace.versions.branch.row.{}", listed[i].name));
-    let retry = widgets::egui_id("workspace.versions.branches.retry");
-    let on_retry = ui.memory(|m| m.has_focus(retry));
-    let at = (0..listed.len()).find(|&i| ui.memory(|m| m.has_focus(row(i))));
+/// ↑ and ↓ on a focused row of a list, `rows` in order, move the focus to the next or previous
+/// one, out of view too, and ↓ on `entry` to the first; gives the row moved to, which the caller
+/// scrolls into view. While a menu is open the arrows are its own, and the row keeps its focus.
+fn key_rows(panels: &crate::panels::State, ui: &egui::Ui, rows: &[egui::Id], entry: Option<egui::Id>) -> Option<usize> {
+    let on_entry = entry.filter(|&id| ui.memory(|m| m.has_focus(id)));
+    let at = rows.iter().position(|&id| ui.memory(|m| m.has_focus(id)));
     let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
     let next = match at {
-        _ if on_retry && pressed(egui::Key::ArrowDown) => (!listed.is_empty()).then_some(0),
-        Some(at) if pressed(egui::Key::ArrowDown) => (at + 1 < listed.len()).then_some(at + 1),
+        _ if panels.menu.is_some() => None,
+        _ if on_entry.is_some() && pressed(egui::Key::ArrowDown) => (!rows.is_empty()).then_some(0),
+        Some(at) if pressed(egui::Key::ArrowDown) => (at + 1 < rows.len()).then_some(at + 1),
         Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1),
         _ => None,
     };
     if let Some(i) = next {
-        ui.memory_mut(|m| m.request_focus(row(i)));
+        ui.memory_mut(|m| m.request_focus(rows[i]));
     }
     // The keys are the list's, not egui's to move focus by place; only what has focus takes this.
     let arrows = egui::EventFilter { vertical_arrows: true, ..Default::default() };
-    let held = next.or(at).map(row).or(on_retry.then_some(retry));
-    if let Some(id) = held {
+    if let Some(id) = next.or(at).map(|i| rows[i]).or(on_entry) {
         ui.memory_mut(|m| m.set_focus_lock_filter(id, arrows));
     }
     next
 }
 
+/// Scrolls `scroll` so that what spans `from` to `to` in a list's content comes whole into a view
+/// `view` tall, its top first where it can't.
+fn bring(scroll: &mut TreeScroll, (from, to): (f32, f32), view: f32) {
+    scroll.offset = scroll.offset.max(to - view).min(from);
+}
+
+/// An entry of a branch row's menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    Switch,
+    Rename,
+    Delete,
+}
+
 /// One branch in `area`, the `i`th: its name, Current on the branch in use, a dot when it holds
 /// unsaved changes to the model, and when its latest version was saved. A click or Enter on
-/// another branch switches to it, as its menu's Switch does.
+/// another branch switches to it, as its menu's Switch does; the menu renames any branch but
+/// `main`, the one in use too, and deletes any but `main` and the one in use.
 fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, usize), b: &BranchEntry) {
     // The branch in use shows its session's state as it changes; another's waits for a switch.
     let unsaved = if b.current { shell.shown_unsaved() } else { b.unsaved };
@@ -544,6 +578,11 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     };
     let _ = resp.clone().accessible_name(said.into_iter().flatten().collect::<Vec<_>>().join(", "));
     let menu = crate::panels::Menu::Branch(i);
+    let renames = !b.name.eq_ignore_ascii_case("main") && crate::branch_ask::offered(shell);
+    let entries = [(Entry::Switch, !b.current), (Entry::Rename, renames), (Entry::Delete, renames && !b.current)]
+        .into_iter()
+        .filter_map(|(e, on)| on.then_some(e))
+        .collect::<Vec<_>>();
     let paint = ui.painter();
     if b.current {
         paint.rect_filled(area, 8.0, p.accent_tint);
@@ -552,7 +591,7 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     let mid = area.center().y;
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 16.0, mid), Vec2::splat(14.0)), &icons::BRANCH, p.text_secondary);
     // From the right: the menu, the date and the dot, then the name with what room is left.
-    let mut right = area.right() - if b.current { 10.0 } else { 36.0 };
+    let mut right = area.right() - if entries.is_empty() { 10.0 } else { 36.0 };
     if let Some(date) = &date {
         let g = ux::galley(paint, date, types::CAPTION, p.text_muted, None);
         right -= g.size().x;
@@ -571,7 +610,11 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     } else if resp.clicked() {
         switch_to(shell, b.name.clone());
     }
-    if b.current {
+    if entries.is_empty() {
+        // A menu open when its last entry went is closed, so it doesn't come back by itself.
+        if shell.panels.menu == Some(menu) {
+            shell.panels.menu = None;
+        }
         return;
     }
     let more = Rect::from_center_size(pos2(area.right() - 18.0, mid), Vec2::splat(28.0));
@@ -584,10 +627,21 @@ fn branch_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, (area, i): (Rect, u
     if more_resp.clicked() {
         shell.panels.menu = if open { None } else { Some(menu) };
     }
-    // Rename and Delete join Switch with AR-292.
     let anchor = Rect::from_min_max(pos2(more.right() - 180.0, more.top()), more.max);
-    if shell.panels.menu == Some(menu) && crate::panels::menu(shell, ui, p, anchor, &id("menu"), &[tr("Switch")]) == Some(0) {
-        switch_to(shell, b.name.clone());
+    let items = entries
+        .iter()
+        .map(|e| match e {
+            Entry::Switch => tr("Switch"),
+            Entry::Rename => tr("Rename…"),
+            Entry::Delete => tr("Delete…"),
+        })
+        .collect::<Vec<_>>();
+    let chosen = if shell.panels.menu == Some(menu) { crate::panels::menu(shell, ui, p, anchor, &id("menu"), &items) } else { None };
+    match chosen.and_then(|at| entries.get(at)) {
+        Some(Entry::Switch) => _ = switch_to(shell, b.name.clone()),
+        Some(Entry::Rename) => crate::branch_ask::open_rename(shell, b),
+        Some(Entry::Delete) => crate::branch_ask::open_delete(shell, b),
+        None => {}
     }
 }
 
@@ -640,7 +694,7 @@ fn working(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     next + h + 21.0
 }
 
-/// The changes from `y`, model first and then diagrams, with a filter when they are many, or why
+/// The changes from `y`, model first, then diagrams, then skills, with a filter when they are many, or why
 /// they could not be told. Gives where the next section starts.
 fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     if let Some(why) = shell.versions.compare_failed.clone() {
@@ -664,10 +718,24 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     let needle = if shell.versions.changes.len() > FILTER_FROM { shell.versions.filter.to_lowercase() } else { String::new() };
     let holds = |d: &&Difference| needle.is_empty() || d.name.as_deref().unwrap_or("").to_lowercase().contains(&needle);
     let group = |area: Area| shell.versions.changes.iter().filter(|d| d.area == area).filter(holds).cloned().collect::<Vec<_>>();
-    let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram))];
+    let groups = [(tr("Model elements"), group(Area::Model)), (tr("Diagrams"), group(Area::Diagram)), (tr("Skills"), group(Area::Skill))];
     let content: f32 = groups.iter().filter(|(_, g)| !g.is_empty()).map(|(_, g)| GROUP + g.len() as f32 * CHANGE_PITCH).sum();
     let height = (content + 8.0).min(r.height() * MOST_OF_COLUMN).min((r.bottom() - top - UNDER_CHANGES).max(0.0));
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
+    // Each row's id and where it spans in the content; a group's first brings its heading along.
+    let mut spans = Vec::new();
+    let mut below = 0.0;
+    for (_, group) in groups.iter().filter(|(_, g)| !g.is_empty()) {
+        for (n, d) in group.iter().enumerate() {
+            let from = below + GROUP + n as f32 * CHANGE_PITCH;
+            spans.push((change_id(d), if n == 0 { below } else { from }, from + CHANGE));
+        }
+        below += GROUP + group.len() as f32 * CHANGE_PITCH;
+    }
+    let ids = spans.iter().map(|(id, _, _)| widgets::egui_id(id)).collect::<Vec<_>>();
+    if let Some((_, from, to)) = key_rows(&shell.panels, ui, &ids, None).and_then(|i| spans.get(i)) {
+        bring(&mut shell.versions.changes_scroll, (*from, *to), height - 8.0);
+    }
     let offset = scroll_tree(ui, p, tree, top, content as usize, 1.0, 0.0, true, None, &mut shell.versions.changes_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
@@ -679,12 +747,16 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         at += GROUP;
         for d in group {
             let area = Rect::from_min_max(pos2(r.left() + 8.0, at), pos2(r.right() - 8.0, at + CHANGE));
-            // By class too: an element that changes table has two rows.
-            change_row(shell, &clip, p, area, &format!("workspace.versions.change.{}.{}", d.id, d.class.0), d, true);
+            change_row(shell, &clip, p, area, &change_id(d), d, true);
             at += CHANGE_PITCH;
         }
     }
     tree.bottom() + 8.0
+}
+
+/// A working change's row id, by class too: an element that changes table has two rows.
+fn change_id(d: &Difference) -> String {
+    format!("workspace.versions.change.{}.{}", d.id, d.class.0)
 }
 
 /// The field that narrows a long list by name.
@@ -718,6 +790,12 @@ pub(crate) fn kind_look(kind: ChangeKind, p: &Palette) -> (String, Color32, Colo
     }
 }
 
+/// Where a change is, as its row and the centre say it: a skill is in Skills, as the explorer
+/// lists it, rather than under the model that holds it.
+pub(crate) fn path_words(d: &Difference) -> String {
+    if d.area == Area::Skill { tr("Skills") } else { d.path.join(" / ") }
+}
+
 /// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
 /// to it; `live` makes it open the element in the centre and marks the open one as selected.
 /// Nothing out of sight is drawn or registered.
@@ -727,7 +805,7 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     }
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
     let (what, ink, tint) = kind_look(d.kind, p);
-    let path = d.path.join(" / ");
+    let path = path_words(d);
     let selected = live && shell.versions.element.as_ref().is_some_and(|o| o.row.id == d.id);
     let words = format!("{name}, {path}, {what}");
     let resp = control(shell, ui, id, "row", area, live);
@@ -741,7 +819,11 @@ pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Re
     }
     focus_ring(paint, p, area, 8.0, &resp);
     let room = (area.width() - 76.0).max(0.0);
-    let icon = if d.area == Area::Diagram { &icons::DIAGRAM } else { &icons::CUBE };
+    let icon = match d.area {
+        Area::Model => &icons::CUBE,
+        Area::Diagram => &icons::DIAGRAM,
+        Area::Skill => &icons::SKILL,
+    };
     ux::icon_in(paint, Rect::from_center_size(pos2(area.left() + 20.0, area.center().y), Vec2::splat(16.0)), icon, p.text_secondary);
     let mid = area.center().y;
     ux::text(paint, pos2(area.left() + 38.0, mid - 17.0), &name, types::UI, if selected { p.accent } else { p.text }, Some(room));
@@ -840,7 +922,8 @@ fn skeleton(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
 }
 
 /// The versions, newest first, scrolling under the headers: a long list has the filter over it
-/// and Show more, or why the next page could not be read, under it.
+/// and Show more, or why the next page could not be read, under it. Over the first version `main`
+/// has too, a divider says the line is shared from there; until a page holds one, there is none.
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, rows: &[VersionEntry]) {
     let more = shell.versions.page.as_ref().is_some_and(|page| page.more);
     let mut top = top;
@@ -857,13 +940,25 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
     let described_only = shell.versions.described_only;
     let shown: Vec<&VersionEntry> = rows.iter().filter(|v| !described_only || described(v).is_some()).collect();
     let footer = if more || shell.versions.more_failed.is_some() { 52.0 } else { 8.0 };
+    let split = shown.iter().position(|v| v.shared);
+    let divider = if split.is_some() { SHARED_PITCH } else { 0.0 };
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom()));
-    let offset = scroll_tree(ui, p, tree, top, shown.len(), PITCH, footer, true, None, &mut shell.versions.scroll);
+    // The rows from the split on sit under the divider.
+    let below = |i: usize| i as f32 * PITCH + if split.is_some_and(|s| i >= s) { SHARED_PITCH } else { 0.0 };
+    let ids = shown.iter().map(|v| widgets::egui_id(&format!("workspace.versions.row.{}", v.hash))).collect::<Vec<_>>();
+    if let Some(i) = key_rows(&shell.panels, ui, &ids, None) {
+        bring(&mut shell.versions.scroll, (below(i), below(i) + ROW), tree.height() - 8.0);
+    }
+    let offset = scroll_tree(ui, p, tree, top, shown.len(), PITCH, footer + divider, true, None, &mut shell.versions.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     let clock = crate::chat_panel::clock(shell);
+    let at = |i: usize| top + below(i) - offset;
+    if let Some(s) = split {
+        shared_divider(shell, &clip, p, r, at(s) - SHARED_PITCH);
+    }
     for (i, v) in shown.iter().enumerate() {
-        let y = top + i as f32 * PITCH - offset;
+        let y = at(i);
         if y + ROW >= tree.top() && y <= tree.bottom() {
             row(shell, &clip, p, (r, y), v, clock);
         }
@@ -872,8 +967,25 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
         let words = tr("None of these versions has a description.");
         ux::text(clip.painter(), pos2(r.left() + 20.0, top + 6.0), &words, types::SMALL, p.text_muted, Some((r.width() - 40.0).max(0.0)));
     }
-    let y = top + shown.len().max(1) as f32 * PITCH - offset;
+    let y = top + shown.len().max(1) as f32 * PITCH + divider - offset;
     footer_row(shell, &clip, p, r, y, more);
+}
+
+/// The divider at `y`: its words, then a line to the column's edge. It claims no more than what is
+/// shared, as Dolt does not record which branch a branch was made from.
+fn shared_divider(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32) {
+    if y + SHARED < ui.clip_rect().top() || y > ui.clip_rect().bottom() {
+        return;
+    }
+    let words = tr("Shared with main up to here");
+    let at = pos2(r.left() + 20.0, y + 1.5);
+    let text = ux::text(ui.painter(), at, &words, types::CAPTION, p.text_muted, Some((r.width() - 48.0).max(0.0)));
+    let area = Rect::from_min_max(pos2(at.x, y), pos2(r.right() - 20.0, y + SHARED));
+    let _ = control(shell, ui, "workspace.versions.shared", "status", area, false).accessible_name(words.as_str());
+    if text.right() + 8.0 < area.right() {
+        let line = Rect::from_min_max(pos2(text.right() + 8.0, y + SHARED / 2.0 - 0.5), pos2(area.right(), y + SHARED / 2.0 + 0.5));
+        ui.painter().rect_filled(line, 0.0, p.border);
+    }
 }
 
 /// Under the list: why the next page could not be read, with Retry for that page; or Show more.
@@ -909,10 +1021,19 @@ pub(crate) fn described(v: &VersionEntry) -> Option<&str> {
     v.description.as_deref().filter(|d| !d.trim().is_empty())
 }
 
+/// What a version was described as, as it is shown: the name an earlier Archforge gave a
+/// restore's kept work, `Before restoring` and a stored time, gets that time as the list says it.
+/// The stored text is never changed.
+pub(crate) fn told(v: &VersionEntry, clock: Clock) -> Option<String> {
+    let d = described(v)?;
+    let stored = d.strip_prefix("Before restoring ").filter(|at| seconds_of(at).is_some());
+    Some(stored.map_or_else(|| d.to_string(), |at| format!("Before restoring {}", when(at, clock))))
+}
+
 /// A version as a select or a link names it: its date, then what it was described as when it was.
 pub(crate) fn dated(v: &VersionEntry, clock: Clock) -> String {
     let date = when(&v.date, clock);
-    described(v).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", d)]))
+    told(v, clock).map_or(date.clone(), |d| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &d)]))
 }
 
 /// A version's two lines: its description and when and by whom, or without a description its date
@@ -920,8 +1041,8 @@ pub(crate) fn dated(v: &VersionEntry, clock: Clock) -> String {
 pub(crate) fn lines(v: &VersionEntry, clock: Clock) -> (String, String) {
     let date = when(&v.date, clock);
     let who = if v.by_agent { Some(tr("Saved by an agent")) } else { v.author.clone().filter(|a| !a.is_empty()) };
-    match described(v) {
-        Some(d) => (d.to_string(), who.map_or(date.clone(), |w| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &w)]))),
+    match told(v, clock) {
+        Some(d) => (d, who.map_or(date.clone(), |w| fmt(&tr("{when} · {who}"), &[("when", &date), ("who", &w)]))),
         None if v.by_agent => (date, tr("Saved by an agent")),
         None => (date, tr("No description")),
     }

@@ -183,12 +183,12 @@ fn a_primitive_type_is_added_renamed_moved_and_removed_each_one_step_its_name_fr
     assert_eq!(archforge_core::name_of(s.doc(), obj(s.doc(), &sku)), "ProductCode");
     // Every classifier of a package shares its names, whatever the case.
     for (cmd, p, key, why) in [
-        ("uml.primitive-type.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named order already"),
-        ("uml.primitive-type.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named PAYABLE already"),
-        ("uml.primitive-type.add", json!({ "package": sales, "name": "orderstatus" }), "name", "there is an enumeration named orderstatus already"),
-        ("uml.primitive-type.add", json!({ "package": sales, "name": "MONEY" }), "name", "there is a data type named MONEY already"),
-        ("uml.class.add", json!({ "package": sales, "name": "productcode" }), "name", "there is a primitive type named productcode already"),
-        ("uml.data-type.add", json!({ "package": sales, "name": "PRODUCTCODE" }), "name", "there is a primitive type named PRODUCTCODE already"),
+        ("uml.primitive-type.add", json!({ "package": sales, "name": "order" }), "name", "there is a class named Order already"),
+        ("uml.primitive-type.add", json!({ "package": sales, "name": "PAYABLE" }), "name", "there is an interface named Payable already"),
+        ("uml.primitive-type.add", json!({ "package": sales, "name": "orderstatus" }), "name", "there is an enumeration named OrderStatus already"),
+        ("uml.primitive-type.add", json!({ "package": sales, "name": "MONEY" }), "name", "there is a data type named Money already"),
+        ("uml.class.add", json!({ "package": sales, "name": "productcode" }), "name", "there is a primitive type named ProductCode already"),
+        ("uml.data-type.add", json!({ "package": sales, "name": "PRODUCTCODE" }), "name", "there is a primitive type named ProductCode already"),
         ("uml.interface.rename", json!({ "interface": payable, "name": "ProductCode" }), "name", "primitive type named ProductCode"),
         ("uml.primitive-type.rename", json!({ "primitive_type": sku, "name": "Order" }), "name", "class named Order"),
         ("uml.primitive-type.add", json!({ "package": sales, "name": "" }), "name", "name"),
@@ -203,7 +203,10 @@ fn a_primitive_type_is_added_renamed_moved_and_removed_each_one_step_its_name_fr
     }
     // Moved to a package whose class has its name: refused; to another: one step.
     let clash = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "productCode" }));
-    assert!(refused(&mut s, "uml.primitive-type.move", json!({ "primitive_type": sku, "package": billing })).contains("class named ProductCode"));
+    assert!(
+        refused(&mut s, "uml.primitive-type.move", json!({ "primitive_type": sku, "package": billing })).contains("class named productCode"),
+        "it names the class there"
+    );
     run(&mut s, "uml.class.rename", json!({ "class": clash, "name": "Invoice" }));
     one_step(&mut s, "uml.primitive-type.move", json!({ "primitive_type": sku, "package": billing }));
     let st = s.doc();

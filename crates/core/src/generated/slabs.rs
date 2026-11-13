@@ -6,7 +6,7 @@ use super::classes::*;
 use super::meta::*;
 
 /// One typed slab per concrete metaclass.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CoreSlabs {
     pub models: Vec<ModelObj>,
     pub folders: Vec<FolderObj>,
@@ -72,5 +72,9 @@ impl Slabs for CoreSlabs {
             .saturating_add(self.tags.capacity().saturating_mul(size_of::<TagObj>()))
             .saturating_add(self.links.capacity().saturating_mul(size_of::<LinkObj>()))
             .saturating_add(self.skills.capacity().saturating_mul(size_of::<SkillObj>()))
+    }
+    /// Every slab copied, the objects' text shared.
+    fn duplicate(&self) -> Box<dyn Slabs> {
+        Box::new(self.clone())
     }
 }

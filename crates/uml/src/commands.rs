@@ -12,7 +12,7 @@
 //! parent (owner decision, for every notation).
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -290,10 +290,12 @@ pub fn package_of(store: &Store, class: Obj) -> Option<Obj> {
 /// names what has it already. No owner, no clash.
 pub(crate) fn check_name(store: &Store, owner: Option<Obj>, class: ClassId, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     if let Some(p) = archforge_core::skills::name_problem(name, MAX_NAME) {
-        return Err(refuse("name", format!("the name {p}")));
+        return Err(refuse("name", format!("the name {p}")).because(p.reason));
     }
     if let Some(s) = owner.and_then(|o| crate::names::clash(store, o, class, name, except)) {
-        return Err(refuse("name", format!("there is {} named {name} already", a_what(store, s))));
+        let existing = name_of(store, s);
+        let message = format!("there is {} named {existing} already", a_what(store, s));
+        return Err(refuse("name", message).because(Reason::NameTaken { kind: what(store, s), name: existing }));
     }
     Ok(())
 }
@@ -406,7 +408,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     let to = parent_param(ctx.doc, p, "to")?;
     if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
-        return Err(refuse("to", "a package cannot go into itself or a package it holds"));
+        return Err(refuse("to", "a package cannot go into itself or a package it holds").because(Reason::PackageIntoItself));
     }
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
@@ -699,8 +701,10 @@ pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there with one of its kind
 /// ([`crate::names`]), a built-in type's name would land in the package Types, or a package handed
-/// up would become a second Types or a Types holding such a name.
-fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
+/// up would become a second Types or a Types holding such a name. A clash is typed, naming the
+/// element of `parent` that has the name.
+fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandError> {
+    let up = |why: String| refuse("ids", format!("its contents cannot move up: {why}"));
     for o in held(store, pkg) {
         let n = name_of(store, o);
         let Ok(class) = store.class_of(o) else { continue };
@@ -708,19 +712,21 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Option<String> {
         if crate::is_classifier(class)
             && let Some(why) = crate::members::reserved_problem(store, parent, &n)
         {
-            return Some(why);
+            return Err(up(why));
         }
         if class == PACKAGE
             && let Some(why) = crate::members::types_problem(store, o, &n, Some(parent))
         {
-            return Some(why);
+            return Err(up(why));
         }
         // The package itself goes, so its own name is free for what it hands up.
         if let Some(s) = crate::names::clash(store, parent, class, &n, Some(pkg)) {
-            return Some(format!("{} has {} named {n} already", name_of(store, parent), a_what(store, s)));
+            let existing = name_of(store, s);
+            let why = format!("{} has {} named {existing} already", name_of(store, parent), a_what(store, s));
+            return Err(up(why).because(Reason::NameTaken { kind: what(store, s), name: existing }));
         }
     }
-    None
+    Ok(())
 }
 
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
@@ -769,8 +775,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // last while a binding names its signature (AR-130). A template going too takes its parameters
     // and the bindings to it along, so its own are not asked.
     let params = removed_parameters(store, objs);
-    if let Some(why) = crate::templates::removals_problem(store, &params) {
-        return Err(refuse("ids", why));
+    if let Some(refused) = crate::templates::removals_problem(store, &params) {
+        return Err(refused);
     }
     for o in objs.iter().filter(|o| store.is_alive(**o)) {
         // A template parameter's classifier is its parameter's: the parameter is what goes (AR-130).
@@ -807,9 +813,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
-            && let Some(why) = hand_up_problem(store, *o, parent)
         {
-            return Err(refuse("ids", format!("its contents cannot move up: {why}")));
+            hand_up_problem(store, *o, parent)?;
         }
     }
     // A surviving template parameter's default, or a binding's argument, that would no longer

@@ -83,8 +83,8 @@ pub fn sections(shell: &Shell) -> Vec<Vec<&'static str>> {
     own.iter().copied().chain([SHARED]).map(|section| section.iter().map(|a| a.id).collect()).collect()
 }
 
-/// Whether a version's details or a changed element covers the canvas, as they do under Versions.
-pub(crate) fn centre_covered(shell: &Shell) -> bool {
+/// Whether a version's details or a changed element covers the canvas.
+pub(crate) fn covered(shell: &Shell) -> bool {
     shell.state.explorer == Explorer::SourceControl && (shell.versions.details.is_some() || shell.versions.element.is_some())
 }
 
@@ -92,7 +92,7 @@ pub(crate) fn centre_covered(shell: &Shell) -> bool {
 /// that can change, with no version's details or changed element over it and nothing over the window.
 fn can_pick(shell: &Shell, kind: Option<&str>) -> bool {
     let shown = shell.active.is_some() && active_kind(shell).is_some_and(|k| kind.is_none_or(|wanted| k.kind() == wanted));
-    shown && !centre_covered(shell) && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
+    shown && !covered(shell) && free(shell) && shell.session.as_ref().is_some_and(|s| !s.read_only())
 }
 
 /// Arms a tool through `set`, closing the toolbar's popover. Asks again: a chosen row runs a frame later.

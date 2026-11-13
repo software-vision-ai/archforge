@@ -13,6 +13,9 @@ use std::time::{Duration, Instant};
 
 use archforge_ui_egui::{Folder, Services, Shell};
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
+
+use crate::test_host::Sandbox;
 
 type H = Harness<'static, Shell>;
 
@@ -55,20 +58,43 @@ fn type_text(h: &mut H, text: &str) {
     h.run();
 }
 
+/// The longest run of frames the window may ask for at once, each right after the last, before
+/// the test calls it a window that never stops drawing. One answer from the host asks for one or
+/// two such frames.
+const AT_ONCE: usize = 30;
+
+/// The delay the window asked for before its next frame; `Duration::MAX` when it asked for none.
+fn asked(h: &H) -> Duration {
+    h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay)
+}
+
 /// Waits until `done` holds, the host answering on its own threads, drawing only the frames the
 /// window asks for, as the real window does: the next one once the delay it asked for has passed,
 /// never one it did not ask for. A window that asks for no frame while `done` does not hold yet
-/// would wait for the pointer to move, so the test fails there, naming the step. Past a minute it
-/// fails too.
-fn wait(h: &mut H, what: &str, done: impl Fn(&Shell) -> bool) {
+/// would wait for the pointer to move, so the test fails there, naming the step. It draws one frame
+/// at a time, not a harness `run`, whose few steps a chain of the host's answers can outlast on a
+/// loaded machine; a window that asks for more than `AT_ONCE` frames in a row at once never stops
+/// drawing and fails the test. Past a minute it fails too.
+fn wait(h: &mut H, what: &str, done: impl Fn(&H) -> bool) {
     let started = Instant::now();
-    while !done(h.state()) {
+    let mut at_once = 0;
+    while !done(h) {
         assert!(started.elapsed() < Duration::from_secs(60), "{what} did not happen in time");
-        let delay = h.output().viewport_output.get(&egui::ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
+        let delay = asked(h);
         assert!(delay != Duration::MAX, "{what}: the window asked for no frame and would wait for the pointer to move");
+        at_once = if delay.is_zero() { at_once + 1 } else { 0 };
+        assert!(at_once <= AT_ONCE, "{what}: the window asks for a frame at once on every frame and never stops drawing");
         std::thread::sleep(delay);
-        h.run();
+        h.step();
     }
+}
+
+/// Draws the frames the window asks for until it asks for none, so the reads it starts on its own
+/// after an opening or a save (the versions, then the branches) have answered before the next
+/// click. An answer that lands among a click's frames asks for frames of its own, and on a loaded
+/// machine took a click past the harness's step limit.
+fn settle(h: &mut H, what: &str) {
+    wait(h, what, |h| asked(h) == Duration::MAX);
 }
 
 /// The open model's rows, as saving writes them: every element and every diagram's layout.
@@ -107,17 +133,15 @@ fn edges(h: &H) -> usize {
 }
 
 /// The real shell over the real project host, in a folder of its own named after `journey`, on
-/// Home: the harness, the host and the folder to remove after.
-fn start(journey: &str) -> (H, std::sync::Arc<crate::projects::Projects>, std::path::PathBuf) {
+/// Home: the harness, and the host's guard, which stops the host and removes the folder when the
+/// test ends, failed or not.
+fn start(journey: &str) -> (H, Sandbox) {
     archforge_ui_egui::i18n::set_language("en");
-    let base = std::env::temp_dir().join(format!("af-acceptance-{journey}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&base).unwrap();
-    let host = std::sync::Arc::new(crate::projects::Projects::new(&base.join("settings"), "Archforge acceptance".into()));
-    let folder = base.join("Documents/Archforge");
+    let sandbox = Sandbox::named(&format!("acceptance-{journey}"), None);
+    let folder = sandbox.base.join("Documents/Archforge");
     std::fs::create_dir_all(&folder).unwrap();
     let services = Services {
-        projects: Some(host.clone()),
+        projects: Some(sandbox.host.clone()),
         ids: Some(std::sync::Arc::new(crate::services::fresh_id)),
         projects_folder: Some(Folder { path: folder.clone(), label: "Documents / Archforge".into() }),
         ..Services::default()
@@ -130,7 +154,7 @@ fn start(journey: &str) -> (H, std::sync::Arc<crate::projects::Projects>, std::p
         Shell::new(services),
     );
     h.run();
-    (h, host, base)
+    (h, sandbox)
 }
 
 /// A new project named `name`, made from Home's start card, open and its model ready.
@@ -139,29 +163,31 @@ fn new_project(h: &mut H, name: &str) {
     h.state_mut().new_project.as_mut().expect("the dialog opens").name = name.into();
     h.run();
     click_on(h, "new-project.create");
-    wait(h, "the project opening", |s| s.session.is_some());
+    wait(h, "the project opening", |h| h.state().session.is_some());
+    settle(h, "the opened project's reads");
 }
 
 /// Save, close (nothing asks, since nothing is unsaved), and open the project again from Home's
 /// recent list; gives the rows saved, to compare with what comes back.
 fn save_close_reopen(h: &mut H) -> archforge_mof::rows::Rows {
     key(h, egui::Key::S, egui::Modifiers::COMMAND);
-    wait(h, "the save", |s| s.session.as_ref().is_some_and(|x| !x.is_dirty()) && !s.is_saving());
+    wait(h, "the save", |h| h.state().session.as_ref().is_some_and(|x| !x.is_dirty()) && !h.state().is_saving());
+    settle(h, "the saved project's reads");
     let saved = rows(h);
     click_on(h, "workspace.header.project.0.close");
     assert!(h.state().ask.is_none(), "a saved project closes without asking");
-    wait(h, "the closing", |s| s.tabs.is_empty());
+    wait(h, "the closing", |h| h.state().tabs.is_empty());
     click_on(h, "home.recent.0");
-    wait(h, "the opening's answer", |s| !s.is_opening());
+    wait(h, "the opening's answer", |h| !h.state().is_opening());
     assert!(h.state().session_error.is_none(), "{:?}", h.state().session_error);
-    wait(h, "the opening again", |s| s.session.is_some());
+    wait(h, "the opening again", |h| h.state().session.is_some());
     saved
 }
 
 /// A user models a class diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
-    let (mut h, host, base) = start("uml");
+    let (mut h, _sandbox) = start("uml");
 
     // 1. A new project from Home.
     new_project(&mut h, "Shop");
@@ -241,9 +267,6 @@ fn a_user_models_a_class_diagram_saves_it_closes_it_and_opens_it_again_as_it_was
     assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
     assert!(!h.state().session.as_ref().unwrap().is_dirty());
     assert_eq!(h.state().title(), "Shop — Archforge");
-
-    host.shutdown();
-    let _ = std::fs::remove_dir_all(&base);
 }
 
 /// The objects of class `class` in the open model.
@@ -266,9 +289,10 @@ fn add_column(h: &mut H, name: &str, ty: &str, primary_key: bool) {
     assert!(h.state().panels.column.is_none(), "{name}: Apply writes the column and closes the editor: {:?}", h.state().panels.notice);
 }
 
+/// A user models an ER diagram through the real shell, saves, closes and reopens it unchanged.
 #[test]
 fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was() {
-    let (mut h, host, base) = start("er");
+    let (mut h, _sandbox) = start("er");
 
     // 1. A new project from Home.
     new_project(&mut h, "Library");
@@ -335,9 +359,147 @@ fn a_user_models_an_er_diagram_saves_it_closes_it_and_opens_it_again_as_it_was()
     assert_eq!(sorted(rows(&h)), sorted(saved), "the model and its diagram come back exactly");
     assert!(!h.state().session.as_ref().unwrap().is_dirty());
     assert_eq!(h.state().title(), "Library — Archforge");
+}
 
-    host.shutdown();
-    let _ = std::fs::remove_dir_all(&base);
+/// A model the writer can't turn into rows is a write that failed, never lost silently: an agent's
+/// save says why, and closing with Save asks before closing without writing. No command makes
+/// such a model, so the test sets one in place.
+#[test]
+fn a_model_that_cannot_be_turned_into_rows_is_neither_saved_nor_closed_away() {
+    use archforge_ui_egui::{ProjectHost, close_ask::Ask, control::answer};
+    let (mut h, sandbox) = start("unbuildable");
+    let host = &sandbox.host;
+    new_project(&mut h, "Shop");
+    let path = h.state().tabs[0].path.clone();
+    let too_large = |st: &mut archforge_mof::Store| {
+        let u = st.universe().clone();
+        let class = u.classes().find(|c| u.class_name(*c) == "LiteralUnlimitedNatural").unwrap();
+        let value = u.info(class).unwrap().stored.iter().copied().find(|p| u.prop(*p).is_some_and(|x| &*x.name == "value")).unwrap();
+        let o = st.create(class).unwrap();
+        st.set(o, value, archforge_mof::Value::Unlimited(Some(u64::MAX))).unwrap();
+    };
+    let mut session = archforge_notations::session_from_rows_repaired(&rows(&h), Box::new(crate::services::fresh_id), too_large).unwrap();
+    session.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    h.state_mut().session = Some(session);
+    h.step();
+    wait(&mut h, "the write that fails", |_| host.writing(&path).error.is_some());
+    let ticket = answer(h.state_mut(), "app.save", &serde_json::json!({})).unwrap()["ticket"].clone();
+    h.step();
+    wait(&mut h, "the save", |h| !h.state().is_saving());
+    let failed = answer(h.state_mut(), "app.saved", &serde_json::json!({ "ticket": ticket })).unwrap_err();
+    assert!(failed.contains("too large to store"), "{failed}");
+    settle(&mut h, "the failed save's reads");
+
+    click_on(&mut h, "workspace.header.project.0.close");
+    assert!(matches!(h.state().ask, Some(Ask::Unsaved { .. })), "{:?}", h.state().ask);
+    // Pressed without a harness run: the save's answer and the reads after it would outlast one.
+    let at = rect_of(&h, "close-ask.save").center();
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE });
+    }
+    h.step();
+    wait(&mut h, "the question after the save", |h| matches!(&h.state().ask, Some(Ask::CannotWrite { why, .. }) if why.contains("too large")));
+    assert_eq!(h.state().tabs.len(), 1, "still open");
+}
+
+/// The rows of History, top first.
+fn version_rows(s: &Shell) -> Vec<String> {
+    let mut rows: Vec<_> = s.widgets().iter().filter(|w| w.id.starts_with("workspace.versions.row.") && w.id.matches('.').count() == 3).collect();
+    rows.sort_by(|a, b| a.rect[1].total_cmp(&b.rect[1]));
+    rows.into_iter().map(|w| w.id.clone()).collect()
+}
+
+/// Opens the details of the version `row` and Compare… there, and waits for what it finds: the
+/// cards of the differences.
+fn compared(h: &mut H, row: &str) -> usize {
+    wait(h, "the version listed", |h| h.state().widgets().iter().any(|w| w.id == row));
+    click_on(h, row);
+    wait(h, "the details", |h| h.state().widgets().iter().any(|w| w.id == "workspace.version-details.compare"));
+    click_on(h, "workspace.version-details.compare");
+    wait(h, "the differences counted", |h| h.state().widgets().iter().any(|w| w.id == "workspace.version-compare.count"));
+    h.state().widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count()
+}
+
+/// A user saves two versions, then compares the older with current work, an unsaved change on top,
+/// first from current work and then while the newer version is shown: the work set aside is what
+/// it is compared with, not the version in view. Then the older with the newer, both read at their
+/// revisions.
+#[test]
+fn a_user_compares_a_version_with_current_work_also_while_another_is_shown() {
+    let (mut h, _sandbox) = start("compare");
+    new_project(&mut h, "Shop");
+    for schema in ["sales", "billing", "returns"] {
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": schema })).unwrap();
+        h.run();
+        if schema != "returns" {
+            key(&mut h, egui::Key::S, egui::Modifiers::COMMAND);
+            wait(&mut h, "the version saved", |h| !h.state().is_saving() && h.state().session.as_ref().is_some_and(|x| !x.is_dirty()));
+        }
+    }
+    click_on(&mut h, "workspace.explorers.source-control");
+    wait(&mut h, "both versions listed", |h| version_rows(h.state()).len() == 2);
+    let [newer, older] = <[String; 2]>::try_from(version_rows(h.state())).unwrap();
+    assert_eq!(compared(&mut h, &older), 2, "billing and returns");
+    click_on(&mut h, "workspace.version-compare.close");
+    click_on(&mut h, &newer);
+    click_on(&mut h, "workspace.version-details.view");
+    wait(&mut h, "the newer version shown", |h| h.state().viewing().is_some());
+    assert_eq!(compared(&mut h, &older), 2, "against the version in view, only billing");
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.1");
+    let changes = |h: &Shell| h.widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count();
+    wait(&mut h, "the newer version compared", |h| changes(h.state()) == 1);
+}
+
+/// Adds the schema `name` and saves it as a version.
+fn saved_schema(h: &mut H, name: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": name })).unwrap();
+    h.run();
+    key(h, egui::Key::S, egui::Modifiers::COMMAND);
+    wait(h, "the version saved", |h| !h.state().is_saving() && h.state().session.as_ref().is_some_and(|x| !x.is_dirty()));
+    settle(h, "the saved project's reads");
+}
+
+/// A user saves a version on `main`, makes a branch, saves another there and goes back to `main`;
+/// Compare then tells `main`'s version from the other branch's latest, which `main`'s line does not
+/// hold.
+#[test]
+fn a_user_compares_a_version_with_another_branchs_latest() {
+    let (mut h, sandbox) = start("compare-branch");
+    new_project(&mut h, "Shop");
+    saved_schema(&mut h, "sales");
+    click_on(&mut h, "workspace.explorers.source-control");
+    settle(&mut h, "the versions and branches read");
+    click_on(&mut h, "workspace.versions.branches.new");
+    type_text(&mut h, "side");
+    click_on(&mut h, "branch-ask.create");
+    wait(&mut h, "on the new branch", |h| {
+        h.state().ask.is_none() && h.state().widgets().iter().any(|w| w.id == "workspace.versions.branch.row.side")
+    });
+    settle(&mut h, "the switch's reads");
+    saved_schema(&mut h, "billing");
+    click_on(&mut h, "workspace.versions.branch.row.main");
+    wait(&mut h, "back on main", |h| !h.state().is_held() && version_rows(h.state()).len() == 1);
+    settle(&mut h, "main's reads");
+    let [sales] = <[String; 1]>::try_from(version_rows(h.state())).unwrap();
+    h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "returns" })).unwrap();
+    assert_eq!(compared(&mut h, &sales), 1, "returns, unsaved on main");
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.3");
+    let changes = |h: &Shell| h.widgets().iter().filter(|w| w.id.starts_with("workspace.version-compare.change.")).count();
+    // The one difference is billing, which only the other branch holds: not returns, unsaved on main.
+    let billing = |h: &H| h.query_by_label_contains("billing, ").is_some();
+    wait(&mut h, "the other branch's latest compared", |h| changes(h.state()) == 1 && billing(h));
+    // Deleted behind the list, which still offers it: the page says it can't be shown, translated.
+    click_on(&mut h, "workspace.version-compare.close");
+    let path = h.state().project.as_ref().unwrap().path.clone();
+    archforge_ui_egui::ProjectHost::delete_branch(&*sandbox.host, &path, "side").recv_timeout(Duration::from_secs(60)).unwrap().unwrap();
+    assert_eq!(compared(&mut h, &sales), 1);
+    click_on(&mut h, "workspace.version-compare.after");
+    click_on(&mut h, "workspace.version-compare.list.row.3");
+    let said = |h: &H| h.query_by_label_contains("This version can't be shown It isn't a version of this branch.").is_some();
+    wait(&mut h, "the deleted branch said", said);
 }
 
 /// The place of a built-in type in the type menu of a project with no types of its own: None

@@ -108,6 +108,8 @@ pub struct State {
     /// Where diagram unit (0, 0) is, in logical pixels from the canvas's top left.
     pub pan: Vec2,
     pub zoom: f32,
+    /// The canvas's size as last drawn, which the View menu's zooms keep their centre in.
+    pub size: Vec2,
     /// True until the diagram just opened has been fitted into the canvas once.
     pub fit_pending: bool,
     /// A node the next frame brings to the canvas's centre (what the search found).
@@ -213,6 +215,7 @@ impl Default for State {
             tool: Tool::Select,
             pan: Vec2::ZERO,
             zoom: 1.0,
+            size: Vec2::ZERO,
             fit_pending: false,
             centre_on: None,
             reopen_pending: false,
@@ -249,9 +252,9 @@ impl Default for State {
     }
 }
 
+/// Runs a command for the canvas; a refusal comes back in plain words ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 fn select(shell: &mut Shell, ids: Vec<Uuid>) {
@@ -512,7 +515,7 @@ pub(crate) fn notice(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: Pos2, wi
     let g = ux::galley_rows(ui.painter(), &notice, types::CAPTION, p.amber, Some(width), 8);
     let area = Rect::from_min_size(at, g.size());
     ui.painter().galley(at, g, p.amber);
-    announce_notice(shell, ui, area, &notice);
+    widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", area, &notice);
     area.height()
 }
 
@@ -538,17 +541,7 @@ fn refused_toast(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     let at = pos2(card.left() + REFUSED_TOAST_TEXT, card.center().y - text.size().y / 2.0);
     paint.circle_filled(pos2(card.left() + 17.0, at.y + types::SMALL.line / 2.0), 3.0, p.amber);
     paint.galley(at, text, p.text);
-    announce_notice(shell, ui, card, &words);
-}
-
-/// Records `area` as the notice for automation and has a screen reader say `words` as a status.
-fn announce_notice(shell: &mut Shell, ui: &egui::Ui, area: Rect, words: &str) {
-    widgets::record_visible(ui, &mut shell.registry, "workspace.canvas.notice", "status", area);
-    ui.ctx().accesskit_node_builder(widgets::egui_id("workspace.canvas.notice"), |node| {
-        node.set_role(egui::accesskit::Role::Status);
-        node.set_live(egui::accesskit::Live::Polite);
-        node.set_label(words);
-    });
+    widgets::announce(ui, &mut shell.registry, "workspace.canvas.notice", card, &words);
 }
 
 /// The tab strip: the new-diagram `+` at the left, then a tab per open diagram or skill.
@@ -635,6 +628,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let Some(d) = active_diagram(shell) else {
         return 0.0;
     };
+    shell.canvas.size = r.size();
     widgets::record_visible(ui, &mut shell.registry, "workspace.canvas", "canvas", r);
     let bounds = shell.session.as_ref().map(|s| diagram_bounds(s.doc(), d)).unwrap_or_default();
     if shell.canvas.fit_pending {
@@ -763,14 +757,14 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         minimap(shell, ui, p, r, bounds, &view);
     } else if r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + 28.0 + MINIMAP_GAP.x {
         // Its button, where the toolbar leaves room for it: live when the user folded the minimap,
-        // not available when the canvas is too narrow for it.
+        // not available when the canvas is too small for it.
         let b = Rect::from_min_size(pos2(r.right() - MINIMAP_GAP.x - 28.0, r.bottom() - MINIMAP_GAP.y - 26.0), vec2(28.0, 26.0));
         let folded = !shell.canvas.minimap_open;
         paint.rect_filled(b, 7.0, p.surface);
         paint.rect_stroke(b, 7.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
         ux::icon_in(&paint, Rect::from_center_size(b.center(), Vec2::splat(14.0)), &icons::MAP, if folded { p.text_secondary } else { p.text_muted });
         let resp = control(shell, ui, "workspace.minimap.toggle", "button", b, true);
-        let hint = if folded { tr("Show minimap") } else { tr("Widen the canvas to show the minimap") };
+        let hint = if folded { tr("Show minimap") } else { tr("Make the canvas larger to show the minimap") };
         if resp.on_hover_text(hint).clicked() && folded {
             shell.canvas.minimap_open = true;
         }
@@ -2828,8 +2822,14 @@ fn layout(kind: Option<&'static dyn crate::kinds::DiagramKind>) -> Layout {
 /// Whether the minimap is drawn open: when the user has it open and the canvas has room for it
 /// beside the toolbar; otherwise its button stands in, so the tools are never hidden.
 fn minimap_shown(shell: &Shell, r: Rect) -> bool {
-    let width = layout(crate::kinds::active_kind(shell)).width;
-    shell.canvas.minimap_open && r.width() >= 16.0 + width + 16.0 + MINIMAP.x + MINIMAP_GAP.x
+    shell.canvas.minimap_open && minimap_room(shell, r)
+}
+
+/// Whether the canvas `r` has room for the minimap, open or folded: wide enough beside the toolbar
+/// and tall enough for its box above the margin.
+pub(crate) fn minimap_room(shell: &Shell, r: Rect) -> bool {
+    let wide = r.width() >= 16.0 + layout(crate::kinds::active_kind(shell)).width + 16.0 + MINIMAP.x + MINIMAP_GAP.x;
+    wide && r.height() >= MINIMAP.y + MINIMAP_GAP.y
 }
 
 /// The minimap's box on the canvas `r` while it shows, for what must keep clear of it (the
@@ -3007,7 +3007,7 @@ fn toolbar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
     {
         match session.execute("diagram.arrange", &json!({ "diagram": d.to_string() })) {
             Ok(_) => shell.canvas.fit_pending = true,
-            Err(e) => shell.canvas.notice = Some(e.to_string()),
+            Err(e) => shell.canvas.notice = Some(crate::panels::refusal(&e)),
         }
     }
     if let (Some(kind), Some((key, chevron))) = (kind, open_at) {

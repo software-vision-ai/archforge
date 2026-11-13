@@ -69,7 +69,9 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   first failure and prints a table of steps.
 - The test step needs dolt 2.6 or later on the PATH or in `ARCHFORGE_DOLT`; without it the
   server and project tests fail and say so. A test that starts a server stops it on every path,
-  so a failed run leaves no server behind.
+  so a failed run leaves no server behind: in the app, every test over the real project host
+  takes it from `test_host::Sandbox` (`apps/archforge/src/test_host.rs`), whose drop stops the
+  host as the application does at exit and removes the test's folder, also when the test panics.
 - The portable step needs the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
   and a cargo from rustup on `PATH`; the deny step needs cargo-deny at the version `xtask/src/main.rs`
   names; both the update and deny steps need the network.

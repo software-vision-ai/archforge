@@ -15,6 +15,7 @@ mod switch_ask;
 mod version_chip;
 mod version_details;
 mod versions_menu;
+mod view_menu;
 
 fn click(h: &mut Harness<'static, Shell>, at: egui::Pos2) {
     h.event(egui::Event::PointerMoved(at));
@@ -202,6 +203,14 @@ impl crate::ProjectHost for FakeHost {
     }
 }
 
+/// A host that keeps no branches refuses a read on another branch's line by a typed reason, which
+/// the page says in translated words, never words of the host's own.
+#[test]
+fn a_host_without_branches_refuses_a_branch_version_by_its_reason() {
+    let read = crate::ProjectHost::read_branch_version(&FakeHost::default(), std::path::Path::new("/p"), "side", "c1".into());
+    assert!(matches!(read.recv(), Ok(Err(crate::VersionReadError::Unavailable))));
+}
+
 /// The real shell with a fake host and the usual folder, the dialog open and a name typed.
 fn creating_harness() -> (Harness<'static, Shell>, std::sync::Arc<FakeHost>) {
     crate::i18n::set_language("en");
@@ -351,6 +360,8 @@ struct SavingHost {
     version_limits: std::sync::Mutex<Vec<usize>>,
     written: std::sync::Mutex<Vec<(std::path::PathBuf, archforge_mof::rows::Rows)>>,
     saves: std::sync::Mutex<Vec<SaveAnswer>>,
+    /// Why the last write failed, as the test sets it; none by default.
+    write_error: std::sync::Mutex<Option<String>>,
     descriptions: std::sync::Mutex<Vec<Option<String>>>,
     saved_by: std::sync::Mutex<Vec<crate::SavedBy>>,
     opens: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::mpsc::Sender<Result<crate::Opened, crate::CreateError>>)>>,
@@ -365,8 +376,18 @@ struct SavingHost {
     unwritten: std::sync::Mutex<Vec<std::path::PathBuf>>,
     /// Each branch delete's answer, sent by the test.
     branch_deletes: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<Vec<archforge_mof::Uuid>, crate::BranchNotDeleted>>>>,
+    /// Each branch made, by its stored name, and where the test answers it.
+    branch_makes: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// The version each branch made starts at, in the same order; none for current work.
+    branch_starts: std::sync::Mutex<Vec<Option<String>>>,
+    /// Each branch rename, from and to as stored, and where the test answers it.
+    branch_renames: std::sync::Mutex<Vec<(String, String, std::sync::mpsc::Sender<Result<(), crate::BranchRefused>>)>>,
+    /// Each count of what goes with a branch, by its stored name, and where the test answers it.
+    branch_counts: std::sync::Mutex<Vec<(String, std::sync::mpsc::Sender<Result<crate::BranchCounts, String>>)>>,
     /// Each read of a version waiting for the answer the test sends.
     reads: std::sync::Mutex<Vec<(String, ReadAnswer)>>,
+    /// The branch each read of another branch's version was asked on, by its stored name.
+    branch_version_reads: std::sync::Mutex<Vec<(String, String)>>,
     /// Each read of the versions waiting for the answer the test sends.
     version_reads: std::sync::Mutex<Vec<std::sync::mpsc::Sender<Result<crate::VersionsPage, String>>>>,
     /// The version each read of the versions started after.
@@ -381,8 +402,8 @@ struct SavingHost {
     branch_reads: std::sync::Mutex<usize>,
     /// Where the answers of each restore's job go, sent by the test.
     restores: std::sync::Mutex<Vec<RestoreEnds>>,
-    /// When each version restored was saved, as its job was told.
-    restore_dates: std::sync::Mutex<Vec<String>>,
+    /// When each version restored was saved and when its restore was asked for, as its job was told.
+    restore_dates: std::sync::Mutex<Vec<(String, String)>>,
     /// Each branch switch asked for, and what the next one is refused with.
     switches: std::sync::Mutex<Vec<SwitchEnds>>,
     switch_refused: std::sync::Mutex<Option<String>>,
@@ -408,13 +429,13 @@ impl crate::ProjectHost for SavingHost {
         &self,
         _project: &std::path::Path,
         _commit: String,
-        saved_at: String,
+        (saved_at, before_at): (String, String),
         _by: crate::SavedBy,
         _repair: fn(&mut archforge_mof::Store),
     ) -> crate::replace::Job {
         let (answer, answers) = std::sync::mpsc::channel();
         let (reading, readings) = std::sync::mpsc::channel();
-        self.restore_dates.lock().unwrap().push(saved_at);
+        self.restore_dates.lock().unwrap().push((saved_at, before_at));
         self.restores.lock().unwrap().push((answer, reading));
         crate::replace::Job { run: Box::new(move || answers), read_back: Box::new(move || readings) }
     }
@@ -457,6 +478,12 @@ impl crate::ProjectHost for SavingHost {
         rx
     }
 
+    /// A read of a version, answered as [`SavingHost::read_version`]'s are, and kept with its branch.
+    fn read_branch_version(&self, project: &std::path::Path, branch: &str, commit: String) -> std::sync::mpsc::Receiver<crate::VersionRead> {
+        self.branch_version_reads.lock().unwrap().push((branch.to_string(), commit.clone()));
+        self.read_version(project, commit)
+    }
+
     fn create(&self, _folder: &std::path::Path, _name: &str) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         std::sync::mpsc::channel().1
     }
@@ -486,6 +513,33 @@ impl crate::ProjectHost for SavingHost {
         rx
     }
 
+    /// Stored in lower case with hyphens, which no listed name shares by accident; empty is refused.
+    fn branch_name(&self, typed: &str) -> Result<String, String> {
+        Some(typed.trim().to_lowercase().replace(' ', "-")).filter(|s| !s.is_empty()).ok_or_else(|| crate::i18n::tr("Enter a name."))
+    }
+
+    /// Keeps the answer for the test to send.
+    fn create_branch(&self, _path: &std::path::Path, name: &str, start: Option<&str>) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_starts.lock().unwrap().push(start.map(str::to_string));
+        self.branch_makes.lock().unwrap().push((name.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn branch_counts(&self, _path: &std::path::Path, branch: &str) -> std::sync::mpsc::Receiver<Result<crate::BranchCounts, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_counts.lock().unwrap().push((branch.to_string(), tx));
+        rx
+    }
+
+    /// Keeps the answer for the test to send.
+    fn rename_branch(&self, _path: &std::path::Path, from: &str, to: &str) -> std::sync::mpsc::Receiver<Result<(), crate::BranchRefused>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.branch_renames.lock().unwrap().push((from.to_string(), to.to_string(), tx));
+        rx
+    }
+
     fn open(&self, path: &std::path::Path) -> std::sync::mpsc::Receiver<Result<crate::Opened, crate::CreateError>> {
         let (tx, rx) = std::sync::mpsc::channel();
         self.opens.lock().unwrap().push((path.to_path_buf(), tx));
@@ -500,6 +554,18 @@ impl crate::ProjectHost for SavingHost {
 
     fn write(&self, project: &std::path::Path, rows: archforge_mof::rows::Rows) {
         self.written.lock().unwrap().push((project.to_path_buf(), rows));
+    }
+
+    /// Builds the rows on a thread of its own, as the app's writer does, then records them.
+    fn write_model(&self, project: &std::path::Path, model: archforge_mof::Frozen) {
+        let (tables, junctions) = archforge_notations::storage();
+        let rows = std::thread::spawn(move || model.rows(&tables, &junctions)).join().unwrap().unwrap();
+        self.write(project, rows);
+    }
+
+    /// Nothing waits; the write failed when the test says so.
+    fn writing(&self, _project: &std::path::Path) -> crate::Writing {
+        crate::Writing { pending: false, error: self.write_error.lock().unwrap().clone() }
     }
 
     fn close(&self, project: &std::path::Path) -> std::sync::mpsc::Receiver<Result<(), String>> {
@@ -760,6 +826,120 @@ fn closing_with_a_description_being_typed_keeps_it_or_asks() {
     }
 }
 
+/// The name of the element `id`, as the model has it.
+fn name_on(h: &Harness<'static, Shell>, id: archforge_mof::Uuid) -> String {
+    let st = h.state().session.as_ref().unwrap().doc();
+    archforge_core::name_of(st, st.by_uuid(id).unwrap())
+}
+
+/// Selects `id` and replaces what its Properties field `field` holds with `text`, without Enter.
+fn retype_on(h: &mut Harness<'static, Shell>, id: archforge_mof::Uuid, field: &str, text: &str) {
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id.to_string()] })).unwrap();
+    h.run();
+    retype(h, field, text);
+}
+
+/// Escape in a Properties field gives the edit up: an emptied name and a typed description come
+/// back as the model has them, nothing is sent and no step is added. In light and dark (AR-417).
+#[test]
+fn escape_gives_up_a_properties_edit_and_sends_nothing() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        let before = h.state().session.as_ref().unwrap().undo_label().map(str::to_string);
+        retype_on(&mut h, class, "workspace.properties.name", "");
+        assert!(h.state().panels.name.as_ref().is_some_and(|n| n.text.is_empty()), "{theme:?}: emptied, not yet written");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        retype_on(&mut h, class, "workspace.properties.description", "Draft.");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+        assert_eq!(description_on(&h, class), "", "{theme:?}");
+        assert!(h.state().panels.name.is_none() && h.state().panels.description.is_none(), "{theme:?}: the drafts are gone");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: nothing was refused");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label().map(str::to_string), before, "{theme:?}: no step");
+    }
+}
+
+/// Enter on an empty name, or one of spaces, sends nothing and says so in plain words, read out as
+/// a status; another refusal is the engine's reason without its command's id; the notice, and its
+/// status, go with another selection. In light and dark (AR-417, AR-420).
+#[test]
+fn an_empty_name_is_refused_in_plain_words_until_the_selection_moves_on() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        for empty in ["", "   "] {
+            retype_on(&mut h, class, "workspace.properties.name", empty);
+            // A session that refuses every change in its own words shows whether anything reached it.
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            assert_eq!(name_on(&h, class), "Order", "{theme:?}");
+            assert_eq!(h.state().panels.notice.as_deref(), Some("A name can't be empty."), "{theme:?}");
+            assert!(painted(&h).iter().any(|t| t == "A name can't be empty."), "{theme:?}: said at the panel's foot");
+            let status = h.get_by_label("A name can't be empty.").accesskit_node();
+            assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
+            assert!(h.state().panels.name.is_none() && !dirty(&h), "{theme:?}: the old name stays, nothing sent");
+        }
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [table.to_string()] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label("A name can't be empty.").is_none(), "{theme:?}: and no longer read out");
+        let s = h.state_mut().session.as_mut().unwrap();
+        let schema = s.doc().alive().find(|o| s.doc().class_of(*o).ok() == Some(archforge_er::SCHEMA)).and_then(|o| s.doc().uuid(o).ok()).unwrap();
+        s.execute("er.entity.add", &serde_json::json!({ "schema": schema.to_string(), "name": "order" })).unwrap();
+        retype_on(&mut h, table, "workspace.properties.name", "order");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with(char::is_uppercase) && notice.contains("order") && !notice.contains("rename"), "{theme:?}: {notice}");
+    }
+}
+
+/// A draft left on the element selected before and refused when the selection moves on names
+/// that element at the panel's foot, so it is not read as about the one shown, until the selection
+/// moves again; a description's draft stays on its element. An association's ends too, which have
+/// no name. In light and dark (AR-417).
+#[test]
+fn a_draft_refused_as_the_selection_moves_on_names_its_element() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, table) = described_project(theme);
+        let select = |h: &mut Harness<'static, Shell>, id: String| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [id] })).unwrap();
+            h.run();
+        };
+        select(&mut h, class.to_string());
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: class, text: "a\u{7}b".into(), refused: false });
+        select(&mut h, table.to_string());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on Order: ") && notice.contains("control"), "{theme:?}: {notice}");
+        assert!(painted(&h).contains(&notice), "{theme:?}: at the panel's foot");
+        assert!(h.state().panels.description.as_ref().is_some_and(|d| d.target == class && d.refused), "{theme:?}: the draft stays");
+        select(&mut h, class.to_string());
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the next selection");
+        let (mut h, made) = modifiers_sample(theme);
+        select(&mut h, made["holds"].clone());
+        h.state_mut().panels.ends.as_mut().unwrap().role[1] = "a\u{7}b".into();
+        select(&mut h, made["Order"].clone());
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(notice.starts_with("Not kept on the element selected before: "), "{theme:?}: {notice}");
+    }
+}
+
+/// Enter with a new name still renames, and a click elsewhere still writes what was typed. In
+/// light and dark (AR-417).
+#[test]
+fn enter_and_a_click_elsewhere_still_rename_in_properties() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _host, class, _) = described_project(theme);
+        retype_on(&mut h, class, "workspace.properties.name", "Purchase");
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        assert_eq!(name_on(&h, class), "Purchase", "{theme:?}");
+        retype_on(&mut h, class, "workspace.properties.name", "Sale");
+        let at = rect_of(&h, "workspace.properties.description").center();
+        click(&mut h, at);
+        assert_eq!(name_on(&h, class), "Sale", "{theme:?}: written when left");
+    }
+}
+
 #[test]
 fn an_agents_save_is_followed_by_its_ticket_whichever_tab_is_shown() {
     use crate::control::answer;
@@ -856,6 +1036,7 @@ fn while_held_edits_undo_and_save_are_refused() {
     h.state_mut().end_hold();
     assert!(h.state().can_save());
     h.state_mut().session.as_mut().unwrap().undo().unwrap();
+    h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.state_mut().save();
     assert_eq!(host.saves.lock().unwrap().len(), 1, "Save works again");
 }
@@ -1192,6 +1373,26 @@ fn start_replacing(h: &mut Harness<'static, Shell>, job: Option<crate::replace::
     read
 }
 
+/// Frames that wait out a replacement's comparison on another thread.
+trait Steps {
+    /// `n` frames, not counting those a replacement spends waiting for its comparison.
+    fn steps(&mut self, n: usize);
+}
+
+impl Steps for Harness<'static, Shell> {
+    /// Gives up past a generous bound, so a comparison that never answers fails the test.
+    fn steps(&mut self, n: usize) {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        let mut left = n;
+        while left > 0 {
+            assert!(std::time::Instant::now() < until, "still comparing");
+            let waiting = self.state_mut().comparing();
+            self.run_steps(1);
+            left -= usize::from(!waiting);
+        }
+    }
+}
+
 /// A project with unsaved work, and the rows it held before that work: the earlier version.
 fn work_and_earlier() -> (Harness<'static, Shell>, std::sync::Arc<SavingHost>, std::sync::Arc<archforge_mof::rows::Rows>) {
     let (mut h, host) = saving_harness(Some(commerce()), None);
@@ -1239,7 +1440,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     let selection = s.view().selection.clone();
     let generation = h.state().session_generation();
     let shell = h.state_mut();
-    (shell.save_error, shell.refused) = (Some("kept".into()), Some(u64::MAX));
+    shell.save_error = Some("kept".into());
     (shell.explorer.filter, shell.diagrams.filter) = ("in tree".into(), "in list".into());
     shell.panels.menu_scroll = Some(("menu".into(), 9.0));
 
@@ -1265,7 +1466,7 @@ fn a_version_shows_read_only_and_going_back_restores_the_work() {
     assert_eq!(h.state().session.as_ref().unwrap().view().selection, selection);
     assert!(h.state().session.as_ref().unwrap().is_dirty());
     let shell = h.state();
-    assert_eq!((shell.save_error.as_deref(), shell.refused), (Some("kept"), Some(u64::MAX)));
+    assert_eq!(shell.save_error.as_deref(), Some("kept"));
     assert_eq!((shell.explorer.filter.as_str(), shell.diagrams.filter.as_str()), ("in tree", "in list"));
     assert_eq!(shell.panels.menu_scroll, Some(("menu".into(), 9.0)));
     let s = h.state_mut().session.as_mut().unwrap();
@@ -1510,20 +1711,39 @@ fn a_tab_named_during_the_read_is_the_one_acted_on() {
     }
 }
 
-/// Closing without asking answers for the work: its refused write stops it, not the version's.
+/// Closing without asking answers for the work: the host closes the work's project, and a write of
+/// it that failed keeps it open, said on its tab.
 #[test]
 fn closing_without_asking_stops_on_the_works_refused_write() {
     let (mut h, host, earlier) = work_and_earlier();
-    let shell = h.state_mut();
-    shell.refused = Some(shell.session.as_ref().unwrap().revision());
-    shell.save_error = Some("could not write".into());
     start_viewing(&mut h, "c1");
     answer_read(&mut h, &host, Ok(earlier));
     h.state_mut().close_tab_now(0);
     h.run_steps(2);
     assert_eq!(h.state().viewing(), None);
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
+    host.closings.lock().unwrap().remove(0).send(Err("could not write".into())).unwrap();
+    h.run_steps(2);
     assert_eq!(h.state().tabs[0].close_error.as_deref(), Some("could not write"));
-    assert!(host.closed.lock().unwrap().is_empty());
+}
+
+/// A tab closed while another shows hands its last edit over before the host closes it, the rows
+/// built off the interface thread.
+#[test]
+fn closing_a_parked_tab_hands_its_last_edit_over_off_the_frame() {
+    let (mut h, host) = saving_harness(Some(commerce()), None);
+    h.state_mut().open_project(crate::Opened { name: "Other".into(), path: "/tmp/Other.archforge".into(), ..Default::default() });
+    h.run_steps(2);
+    let parked = h.state_mut().tabs[0].parked.as_mut().and_then(|p| p.session.as_mut()).unwrap();
+    parked.execute("er.schema.add", &serde_json::json!({ "name": "shop" })).unwrap();
+    let built = archforge_mof::rows::built_here();
+    h.state_mut().close_tab_now(0);
+    assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame");
+    let (tables, junctions) = archforge_notations::storage();
+    let session = h.state().tabs[0].parked.as_ref().and_then(|p| p.session.as_ref()).unwrap();
+    let edit = archforge_mof::rows::snapshot(session.doc(), &tables, &junctions).unwrap();
+    assert_eq!(host.written.lock().unwrap().last(), Some(&(std::path::PathBuf::from(COMMERCE), edit)), "the edit was handed over");
+    assert_eq!(host.closed.lock().unwrap().as_slice(), [std::path::PathBuf::from(COMMERCE)]);
 }
 
 /// What a refusal while a version is in view starts with, whatever language the sentence is in.
@@ -1821,7 +2041,7 @@ fn a_refused_change_shows_as_refused_on_the_turns_rows() {
 /// Starts restoring a version holding `rows`, and has it built and handed to its job.
 fn restore_under_way(h: &mut Harness<'static, Shell>, host: &SavingHost, rows: std::sync::Arc<archforge_mof::rows::Rows>) -> RestoreEnds {
     h.state_mut().restore_version("c1", "2026-11-08T14:02:11Z").unwrap();
-    h.run_steps(3);
+    h.steps(3);
     answer_read(h, host, Ok(rows));
     host.restores.lock().unwrap().remove(0)
 }
@@ -1846,7 +2066,7 @@ fn a_finished_restore_installs_the_version_and_undo_starts_fresh() {
         assert!(h.state().is_held(), "held while the job runs");
         let written = host.written.lock().unwrap().len();
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(4);
+        h.steps(4);
         the_version_is_installed(&h);
         assert_eq!(host.written.lock().unwrap().len(), written);
     }
@@ -1924,13 +2144,13 @@ fn an_unclear_restore_installs_only_when_read_back_as_finished() {
         let (mut h, host, earlier) = work_and_earlier();
         let (answer, reading) = restore_under_way(&mut h, &host, earlier);
         answer.send(Err(JobFailure::Unclear)).unwrap();
-        h.run_steps(2);
+        h.steps(2);
         let finished = read == Some(Ok(true));
         match read {
             Some(said) => reading.send(said).unwrap(),
             None => drop(reading),
         }
-        h.run_steps(4);
+        h.steps(4);
         if finished {
             the_version_is_installed(&h);
         } else {
@@ -1950,7 +2170,7 @@ fn switch_asked(h: &mut Harness<'static, Shell>, host: &SavingHost) -> SwitchEnd
 /// Answers a switch's check with `rows`, reaching its move.
 fn switch_checked(h: &mut Harness<'static, Shell>, ends: &SwitchEnds, rows: std::sync::Arc<archforge_mof::rows::Rows>) {
     ends.check.send(Ok(rows)).unwrap();
-    h.run_steps(4);
+    h.steps(4);
 }
 
 /// Runs `test` on what `fixture` makes, once in each appearance.
@@ -1965,7 +2185,7 @@ fn in_both<A, B>(fixture: impl Fn() -> (Harness<'static, Shell>, A, B), test: im
 /// Answers a switch's move as finished.
 fn switch_moved(h: &mut Harness<'static, Shell>, ends: &SwitchEnds) {
     ends.moved.0.send(Ok(())).unwrap();
-    h.run_steps(8);
+    h.steps(8);
 }
 
 /// The status bar's reason, and that the work is as it was and no longer held.
@@ -2096,7 +2316,7 @@ fn a_request_from_before_any_change_of_session_is_refused_by_its_word() {
         }),
         ("Restore", ready, |h, host, earlier| {
             restore_under_way(h, host, earlier).0.send(Ok(())).unwrap();
-            h.run_steps(8);
+            h.steps(8);
         }),
         (
             "another tab",
@@ -2109,11 +2329,11 @@ fn a_request_from_before_any_change_of_session_is_refused_by_its_word() {
     for (what, first, moving) in ways {
         in_both(work_and_earlier, |mut h, host, earlier| {
             first(&mut h, &host, earlier.clone());
-            h.run_steps(3);
+            h.steps(3);
             let inspect = |h: &Harness<'static, Shell>| accepted(h, "document.inspect", serde_json::json!({}), false);
             let stale = inspect(&h);
             moving(&mut h, &host, earlier);
-            h.run_steps(3);
+            h.steps(3);
             let refused = crate::control::answer_request(h.state_mut(), &stale).unwrap_err();
             assert!(refused.starts_with(&format!("{}: ", crate::control::CHANGED)), "{what}: {refused}");
             let fresh = inspect(&h);
@@ -2189,9 +2409,9 @@ fn a_move_with_no_clear_answer_is_read_back() {
             let ends = switch_asked(&mut h, &host);
             switch_checked(&mut h, &ends, earlier);
             ends.moved.0.send(Err(crate::replace::JobFailure::Unclear)).unwrap();
-            h.run_steps(3);
+            h.steps(3);
             ends.moved.1.send(answer.clone()).unwrap();
-            h.run_steps(6);
+            h.steps(6);
             then(&h);
         });
     }
@@ -2297,10 +2517,10 @@ fn closing_or_quitting_during_a_restore_waits_for_it() {
         let (mut h, host, earlier) = work_and_earlier();
         let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
         route(h.state_mut());
-        h.run_steps(3);
+        h.steps(3);
         assert!(!h.state().quit_confirmed() && host.closings.lock().unwrap().is_empty() && h.state().is_held(), "it waits");
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(6);
+        h.steps(6);
         assert!(if n == 0 { !host.closings.lock().unwrap().is_empty() } else { h.state().quit_confirmed() }, "then goes ahead");
     }
 }
@@ -2329,13 +2549,117 @@ fn a_repair_made_while_building_is_unsaved_and_written_but_row_order_is_not_one(
             rows.junctions.iter_mut().for_each(|j| j.reverse());
             assert!(rows.junctions.iter().any(|j| j.len() > 1), "a list to read in another order");
         }
-        h.run_steps(2);
+        h.steps(2);
         let (answer, _reading) = restore_under_way(&mut h, &host, std::sync::Arc::new(rows));
         let written = host.written.lock().unwrap().len();
         answer.send(Ok::<(), JobFailure>(())).unwrap();
-        h.run_steps(5);
+        h.steps(5);
         assert_eq!((dirty(&h), host.written.lock().unwrap().len()), (!reordered, written + usize::from(!reordered)));
     }
+}
+
+/// A restore and a switch compare what they built with what they read off the interface thread:
+/// the frame builds no rows for it, and the version still takes the session's place, saved.
+#[test]
+fn a_restore_or_a_switch_builds_no_rows_on_the_frame() {
+    use crate::replace::JobFailure;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.steps(2);
+        let built = archforge_mof::rows::built_here();
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.steps(5);
+        the_version_is_installed(&h);
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame for a restore");
+    });
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.steps(2);
+        let built = archforge_mof::rows::built_here();
+        let ends = switch_asked(&mut h, &host);
+        switch_checked(&mut h, &ends, earlier);
+        switch_moved(&mut h, &ends);
+        the_version_is_installed(&h);
+        assert_eq!(archforge_mof::rows::built_here(), built, "no rows were built on the frame for a switch");
+    });
+}
+
+/// A comparison whose thread ends without an answer counts as a repair: the restored version reads
+/// as unsaved and its rows are written again.
+#[test]
+fn a_comparison_that_ends_without_an_answer_counts_as_a_repair() {
+    use crate::replace::JobFailure;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        h.run_steps(2);
+        crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(std::sync::mpsc::channel().1));
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        let written = host.written.lock().unwrap().len();
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.steps(5);
+        assert!(!h.state().is_held() && dirty(&h), "installed, unsaved");
+        assert_eq!(host.written.lock().unwrap().len(), written + 1, "its rows are written again");
+    });
+}
+
+/// A comparison with no answer holds the replacement back until its limit, counted from when it
+/// started; then it counts as a repair.
+#[test]
+fn a_comparison_past_its_limit_counts_as_a_repair() {
+    use crate::replace::{COMPARE_LIMIT, JobFailure};
+    use std::sync::atomic::Ordering::Relaxed;
+    in_both(work_and_earlier, |mut h, host, earlier| {
+        let now = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1_000));
+        let clock = now.clone();
+        h.state_mut().services.clock = Some(std::sync::Arc::new(move || crate::chat_words::Clock { now: clock.load(Relaxed), offset: None }));
+        h.run_steps(2);
+        let (_silent, answer_of_comparison) = std::sync::mpsc::channel();
+        crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(answer_of_comparison));
+        let (answer, _reading) = restore_under_way(&mut h, &host, earlier);
+        // The comparison started with the build; the job's time counts towards its limit.
+        now.fetch_add(COMPARE_LIMIT - 1, Relaxed);
+        answer.send(Ok::<(), JobFailure>(())).unwrap();
+        h.run_steps(5);
+        assert!(h.state().is_held(), "waiting for the comparison");
+        let written = host.written.lock().unwrap().len();
+        now.fetch_add(1, Relaxed);
+        h.run_steps(3);
+        assert!(!h.state().is_held() && dirty(&h), "installed, unsaved");
+        assert_eq!(host.written.lock().unwrap().len(), written + 1, "its rows are written again");
+    });
+}
+
+/// A Chat write that starts while a comparison holds the replacement gets the whole settle time
+/// from when it is seen, however long the comparison took.
+#[test]
+fn a_chat_write_after_a_long_comparison_gets_its_whole_settle_time() {
+    use crate::hold::CHAT_SETTLE_LIMIT;
+    use std::sync::atomic::Ordering::{Relaxed, SeqCst};
+    in_both(
+        || chat_history(ThemeKind::Light),
+        |mut h, rig, chats| {
+            h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
+            h.run_steps(2);
+            let rows = rows_now(&h);
+            let (comparison, answer_of_comparison) = std::sync::mpsc::channel();
+            crate::replace::COMPARED.with(|c| *c.borrow_mut() = Some(answer_of_comparison));
+            let read = start_replacing(&mut h, None);
+            read.send(Ok(rows)).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(crate::replace::COMPARE_LIMIT - 1, Relaxed);
+            h.run_steps(2);
+            assert!(h.state().is_held(), "the comparison holds it");
+            rig.store.hold.store(true, SeqCst);
+            crate::chat_delete::ask(h.state_mut(), chats[2], 2);
+            crate::chat_delete::confirm(h.state_mut());
+            comparison.send(false).unwrap();
+            h.run_steps(3);
+            rig.now.fetch_add(CHAT_SETTLE_LIMIT - 1, Relaxed);
+            h.run_steps(3);
+            assert!(h.state().is_held() && h.state().save_error.is_none(), "Chat still has time: {:?}", h.state().save_error);
+            rig.store.release();
+            h.run_steps(4);
+            assert!(!h.state().is_held() && h.state().save_error.is_none(), "then it goes on");
+        },
+    );
 }
 
 /// A refused view starts no read: the hold comes before the first step.
@@ -2367,10 +2691,10 @@ fn a_replacement_waits_for_a_save_then_takes_the_sessions_place() {
     let read = start_replacing(&mut h, None);
     let handed = host.written.lock().unwrap().len();
     read.send(Ok(saved_rows)).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(h.state().is_held() && schema_names(&h).len() == 2, "the save has not answered: {:?}", schema_names(&h));
     host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
-    h.run_steps(4);
+    h.steps(4);
     assert!(!h.state().is_held());
     assert_eq!(schema_names(&h), ["shop"]);
     assert!(!h.state().session.as_ref().unwrap().can_undo(), "undo starts fresh");
@@ -2439,19 +2763,19 @@ fn a_job_runs_after_the_build_and_decides_by_its_answer() {
     let read = start_replacing(&mut h, Some(job));
     assert!(!started.load(SeqCst), "nothing is written before the replacement is built");
     read.send(Ok(empty.clone())).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(started.load(SeqCst) && h.state().is_held() && schema_names(&h) == ["shop"]);
     answer.send(Ok(())).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(!h.state().is_held() && schema_names(&h).is_empty(), "{:?}", schema_names(&h));
     // A job that says it failed leaves the session as it was, and nothing is read back.
     add_schema(&mut h, "shop");
     let (job, _, answer, _reading) = test_job();
     let read = start_replacing(&mut h, Some(job));
     read.send(Ok(empty)).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     answer.send(Err(Failed("the disk is full".into()))).unwrap();
-    h.run_steps(3);
+    h.steps(3);
     assert!(!h.state().is_held() && schema_names(&h) == ["shop"]);
     assert_eq!(h.state().save_error.as_deref(), Some("the disk is full"));
 }
@@ -2466,12 +2790,12 @@ fn a_lost_reply_is_read_back_and_that_decides() {
         let (job, _, answer, reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         read.send(Ok(empty)).unwrap();
-        h.run_steps(3);
+        h.steps(3);
         drop(answer);
-        h.run_steps(3);
+        h.steps(3);
         assert!(h.state().is_held(), "waiting for the reading back");
         reading.send(Ok(finished)).unwrap();
-        h.run_steps(3);
+        h.steps(3);
         assert!(!h.state().is_held());
         assert_eq!(schema_names(&h).is_empty(), finished, "finished {finished}");
     }
@@ -2687,39 +3011,39 @@ fn a_chat_write_started_after_settling_holds_the_replacement_back() {
     let deleting = |wrote_first: bool, release: bool| {
         let (mut h, rig, chats) = chat_history(ThemeKind::Light);
         h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
-        h.run_steps(2);
+        h.steps(2);
         let rows = rows_now(&h);
         let (job, started, answer, _reading) = test_job();
         let read = start_replacing(&mut h, Some(job));
         if wrote_first {
             read.send(Ok(rows.clone())).unwrap();
-            h.run_steps(3);
+            h.steps(3);
         }
         rig.store.hold.store(true, SeqCst);
         crate::chat_delete::ask(h.state_mut(), chats[2], 2);
         crate::chat_delete::confirm(h.state_mut());
-        h.run_steps(2);
+        h.steps(2);
         if wrote_first {
             answer.send(Ok(())).unwrap();
         } else {
             read.send(Ok(rows)).unwrap();
         }
-        h.run_steps(3);
+        h.steps(3);
         assert_eq!(started.load(SeqCst), wrote_first, "no job starts while Chat is writing");
         let generation = h.state().session_generation();
         assert!(h.state().is_held());
         if release {
             rig.store.release();
-            h.run_steps(3);
+            h.steps(3);
             if !wrote_first {
                 assert!(started.load(SeqCst));
                 answer.send(Ok(())).unwrap();
-                h.run_steps(3);
+                h.steps(3);
             }
             assert!(!h.state().is_held() && h.state().session_generation() > generation, "then it goes on");
         } else {
             rig.now.fetch_add(crate::hold::CHAT_SETTLE_LIMIT, Relaxed);
-            h.run_steps(3);
+            h.steps(3);
         }
         h
     };
@@ -3719,7 +4043,11 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         h.state_mut().in_window_menu = true;
         h.run();
         let (file, help, mid) = (rect_of(&h, "strip.menu.file"), rect_of(&h, "strip.menu.help"), rect_of(&h, "strip.theme").center().y);
-        assert_eq!(menu_ids(&h), ["strip.menu.file", "strip.menu.edit", "strip.menu.model", "strip.menu.versions", "strip.menu.help"], "{theme:?}");
+        assert_eq!(
+            menu_ids(&h),
+            ["strip.menu.file", "strip.menu.edit", "strip.menu.view", "strip.menu.model", "strip.menu.versions", "strip.menu.help"],
+            "{theme:?}"
+        );
         assert!(
             file.left() >= rect_of(&h, "strip.open-project").right() && file.height() == 24.0 && help.left() > file.right() && file.center().y == mid,
             "{theme:?}"
@@ -3727,7 +4055,7 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
         click_menu(&mut h, "strip.menu.file");
         let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
             .map(|id| format!("strip.menu.row.{id}"));
-        assert_eq!(menu_ids(&h)[5..], want, "{theme:?}");
+        assert_eq!(menu_ids(&h)[6..], want, "{theme:?}");
         let rows = want.each_ref().map(|id| rect_of(&h, id));
         assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
         assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
@@ -3773,7 +4101,7 @@ fn a_click_moves_the_menu_or_closes_it() {
         let mut h = menu_harness(theme, true);
         click_menu(&mut h, "strip.menu.file");
         click_menu(&mut h, "strip.menu.help");
-        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[5..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
+        assert_eq!((h.state().menu_bar.open, &menu_ids(&h)[6..]), (Some("help"), &["strip.menu.row.app.about".to_string()][..]), "{theme:?}");
         click_menu(&mut h, "strip.menu.help");
         assert_eq!(h.state().menu_bar.open, None, "{theme:?}");
     }
@@ -3907,14 +4235,16 @@ fn up_and_down_walk_the_live_rows_and_wrap() {
 /// Left and Right go between the groups, wrapping, each on its first live row.
 #[test]
 fn left_and_right_move_between_the_groups_and_wrap() {
-    use crate::actions::{ABOUT, SETTINGS};
+    use crate::actions::{ABOUT, FIND, SETTINGS};
     use egui::Key::{ArrowLeft, ArrowRight, F10};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
         let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", None), ("model", None), ("help", Some(ABOUT)));
-        let (versions, r, l) = (("versions", None), ArrowRight, ArrowLeft);
-        for (key, at) in [(r, edit), (r, model), (r, versions), (r, help), (r, file), (l, help), (l, versions), (l, model), (l, edit), (l, file)] {
+        let (versions, view, r, l) = (("versions", None), ("view", Some(FIND)), ArrowRight, ArrowLeft);
+        let rights = [(r, edit), (r, view), (r, model), (r, versions), (r, help), (r, file)];
+        let lefts = [(l, help), (l, versions), (l, model), (l, view), (l, edit), (l, file)];
+        for (key, at) in rights.into_iter().chain(lefts) {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some(at.0), at.1), "{theme:?}: {key:?}");
         }
@@ -4262,6 +4592,480 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
     assert_eq!(schema_names(&h), ["Shop"]);
 }
 
+/// A name refused in place by Enter keeps the keyboard with the name as typed: Escape then closes
+/// it, the old name staying and the tree taking its keys again, and a valid name typed after it is
+/// applied by Enter, with no click in between. A click elsewhere still takes the keyboard away from
+/// it. The refusal says it in Properties' words, under the field and read out, never the engine's
+/// (AR-427). In light and dark (AR-426).
+#[test]
+fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for then in ["escape", "correct", "click"] {
+            let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+            crate::explorer::add(h.state_mut(), "schema");
+            h.run();
+            // The default name is selected whole: Backspace empties it, and Enter is refused.
+            key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+            key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+            let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("{theme:?}: the refused name stays open"));
+            let said = crate::i18n::tr("A name can't be empty.");
+            assert!(rename.text.is_empty() && rename.refused.as_deref() == Some(said.as_str()), "{theme:?}: {rename:?}");
+            read_out(&h, &said, "workspace.explorer.rename.notice");
+            assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("workspace.explorer.rename"))), "{theme:?}: the field kept the keyboard");
+            if then == "correct" {
+                h.event(egui::Event::Text("Shop".into()));
+                h.run();
+                key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+                assert!(h.state().explorer.rename.is_none(), "{theme:?}: {:?}", h.state().explorer.rename);
+                assert_eq!(schema_names(&h), ["Shop"], "{theme:?}: the corrected name is applied");
+            } else if then == "click" {
+                let filter = rect_of(&h, "workspace.explorer.filter").center();
+                click(&mut h, filter);
+                h.event(egui::Event::Text("x".into()));
+                h.run();
+                assert_eq!(h.state().explorer.filter, "x", "{theme:?}: the filter has the keyboard, the refused name does not take it back");
+            } else {
+                key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+                assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes it: {:?}", h.state().explorer.rename);
+                assert_eq!(schema_names(&h), ["Schema 1"], "{theme:?}: the old name stays");
+                // The tree has its keys again: F2 opens the selected schema's name.
+                key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+                assert_eq!(h.state().explorer.rename.as_ref().map(|r| r.text.as_str()), Some("Schema 1"), "{theme:?}: F2 reaches the tree");
+            }
+        }
+    }
+}
+
+/// A name refused in place in Models is said in the chosen language, as Properties says it: the
+/// explorer's own wrapper goes through the shared refusal wording. In light and dark (AR-427).
+#[test]
+fn a_name_refused_in_place_is_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let said = crate::i18n::tr("A name can't be empty.");
+        assert_ne!(said, "A name can't be empty.", "{theme:?}: the catalogue has it in German");
+        let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone());
+        assert_eq!(refused.as_deref(), Some(said.as_str()), "{theme:?}");
+        read_out(&h, &said, "workspace.explorer.rename.notice");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A relationship rule broken is said in the chosen language in the canvas's words, never in the
+/// engine's English: a generalization's kinds, a final general one by its name, a repeat and a
+/// cycle, a realization's ends, an association's and an n-ary one's end at an enumeration or a
+/// primitive type, an association class's end at an interface and at itself, and a role another
+/// end has. In light and dark (AR-436).
+#[test]
+fn a_relationship_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, tr_ctx};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [order, invoice] = ["Order", "Invoice"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let priced = id("uml.interface.add", json!({ "package": sales, "name": "Priced" }));
+        let tier = id("uml.enumeration.add", json!({ "package": sales, "name": "Tier" }));
+        let sku = id("uml.primitive-type.add", json!({ "package": sales, "name": "Sku" }));
+        let sealed = id("uml.class.add", json!({ "package": sales, "name": "Sealed" }));
+        id("uml.classifier.set", json!({ "classifier": sealed, "final": true }));
+        id("uml.generalization.add", json!({ "specific": invoice, "general": order }));
+        let quote = id("uml.association-class.add", json!({ "from": order, "to": invoice, "name": "Quote" }));
+        let line = id("uml.association.add", json!({ "from": order, "to": invoice }));
+        id("uml.association.set-end", json!({ "association": line, "end": 0, "role": "buyer" }));
+        let named = |key: &str, name: &str| fmt(&tr("There is {what} named {name} already."), &[("what", &tr_ctx("refusal", key)), ("name", name)]);
+        let final_words =
+            fmt(&tr("{name} is final: nothing may specialise it. Clear \"No subclasses\" in its Properties first."), &[("name", "Sealed")]);
+        for (cmd, params, said) in [
+            ("uml.generalization.add", json!({ "specific": priced, "general": order }), tr("An interface specializes only an interface")),
+            ("uml.generalization.add", json!({ "specific": order, "general": tier }), tr("Only an enumeration specializes an enumeration")),
+            ("uml.generalization.add", json!({ "specific": order, "general": priced }), tr("A class cannot specialize an interface")),
+            ("uml.generalization.add", json!({ "specific": order, "general": sealed }), final_words),
+            ("uml.generalization.add", json!({ "specific": invoice, "general": order }), tr("This one specializes that one already")),
+            (
+                "uml.generalization.add",
+                json!({ "specific": order, "general": invoice }),
+                tr("That one specializes this one already, which would make a cycle"),
+            ),
+            ("uml.realization.add", json!({ "class": priced, "interface": priced }), tr("Only a class implements an interface")),
+            ("uml.realization.add", json!({ "class": order, "interface": invoice }), tr("A class realizes only an interface")),
+            ("uml.association.add", json!({ "from": order, "to": tier }), tr("An enumeration is a data type and joins no association")),
+            ("uml.association.add-nary", json!({ "classes": [order, invoice, sku] }), tr("A primitive type joins no association")),
+            ("uml.association-class.add", json!({ "from": priced, "to": order }), tr("An association class joins only classes")),
+            (
+                "uml.relationship.reconnect",
+                json!({ "relationship": quote, "end": "target", "class": quote }),
+                tr("An association class does not join itself"),
+            ),
+            ("uml.association.set-end", json!({ "association": line, "end": 1, "role": "BUYER" }), named("an association end", "buyer")),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?} {cmd}: in German");
+            assert!(!refused.is_empty() && !refused.contains(" only ") && !refused.contains(" already"), "{theme:?} {cmd}: not English: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A template binding rule broken is said in the chosen language in the canvas's words, never in
+/// the engine's English: an enumeration binding, a class with no parameter as the template, a data
+/// type binding a class template, a template binding itself, a second binding and a cycle; on the
+/// canvas in the same words. In light and dark (AR-436).
+#[test]
+fn a_binding_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::tr;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, order, entity] = ["Repository", "Order", "Entity"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let status = id("uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+        let money = id("uml.data-type.add", json!({ "package": sales, "name": "Money" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-parameter.add", json!({ "classifier": order, "name": "U" }));
+        let bind = |bound: &str, template: &str| json!({ "bound": bound, "template": template, "arguments": { "T": entity } });
+        id("uml.template-binding.add", bind(&order, &repository));
+        for (params, said) in [
+            (bind(&status, &repository), tr("Only a class, an interface or a data type binds a template")),
+            (bind(&entity, &money), tr("A binding ends at a template: a class, an interface or a data type with template parameters")),
+            (bind(&money, &repository), tr("A template is bound by a classifier of its own kind")),
+            (bind(&repository, &repository), tr("A template does not bind itself")),
+            (bind(&order, &repository), tr("This one binds that template already")),
+            (bind(&repository, &order), tr("That template binds this one already, which would make a cycle")),
+        ] {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let at = |key: &str| st.by_uuid(archforge_mof::Uuid::parse(params[key].as_str().unwrap()).unwrap()).unwrap();
+            let drawn = crate::uml_bindings::refusal(st, at("bound"), at("template"), None);
+            assert_eq!(drawn.as_ref(), Some(&said), "{theme:?}: the canvas says it as the engine's refusal is said");
+            let refused = crate::panels::run(h.state_mut(), "uml.template-binding.add", params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+            assert!(!refused.is_empty() && !refused.contains(" template") && !refused.contains(" already"), "{theme:?}: not English: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A template parameter rule broken is said in the chosen language in the template editor's words,
+/// never in the engine's English: a kind not supported, a parameter too many, a constraint and a
+/// default of another kind, a parameter a binding gives no argument, a kind a binding's argument
+/// would not fit, and a parameter a binding substitutes or a template's last. In light and dark
+/// (AR-442).
+#[test]
+fn a_template_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, order, entity, big] =
+            ["Repository", "Order", "Entity", "Big"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let status = id("uml.enumeration.add", json!({ "package": sales, "name": "Status" }));
+        let [money, price] = ["Money", "Price"].map(|n| id("uml.data-type.add", json!({ "package": sales, "name": n })));
+        let t = id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-binding.add", json!({ "bound": order, "template": repository, "arguments": { "T": entity } }));
+        let m = id("uml.template-parameter.add", json!({ "classifier": money, "name": "M", "kind": "data-type", "default": status }));
+        id("uml.template-binding.add", json!({ "bound": price, "template": money }));
+        for i in 0..archforge_uml::templates::MAX_PARAMETERS {
+            id("uml.template-parameter.add", json!({ "classifier": big, "name": format!("P{i}") }));
+        }
+        let on = |mut p: serde_json::Value| {
+            p["classifier"] = json!(repository);
+            p
+        };
+        let (add, remove) = ("uml.template-parameter.add", "element.remove");
+        let not_yet = fmt(&tr("{kind} template parameters are not supported yet."), &[("kind", &tr("Value"))]);
+        let most = fmt(&tr("A template has at most {max} parameters."), &[("max", "32")]);
+        let must = fmt(&tr("Arguments for {name} must be classes."), &[("name", "C")]);
+        let misfit = &tr("{default} does not fit {name}: pick a default its arguments could be.");
+        let gives = &tr("{bound} binds {template} and gives {name} no argument, so {name} needs a default.");
+        let unfit = &tr("{bound} binds {name} -> {actual}, which would no longer fit. Change or remove that binding first.");
+        let in_use = &tr("{bound} binds {name} -> {actual}. Change or remove that binding first, then remove {name}.");
+        let last = &tr("{bound} binds {template}, and {name} is its last parameter. Remove that binding first, then remove {name}.");
+        let order_t = [("bound", "Order"), ("name", "T"), ("actual", "Entity")];
+        for (cmd, params, said) in [
+            (add, on(json!({ "name": "V", "kind": "value" })), not_yet),
+            (add, json!({ "classifier": big, "name": "Q" }), most),
+            (add, on(json!({ "name": "C", "constraint": money })), must),
+            (add, on(json!({ "name": "D", "default": status })), fmt(misfit, &[("default", "Status"), ("name", "D")])),
+            (add, on(json!({ "name": "U" })), fmt(gives, &[("bound", "Order"), ("template", "Repository"), ("name", "U")])),
+            ("uml.template-parameter.set", json!({ "parameter": t, "kind": "interface" }), fmt(unfit, &order_t)),
+            (remove, json!({ "ids": [t] }), fmt(in_use, &order_t)),
+            (remove, json!({ "ids": [m] }), fmt(last, &[("bound", "Price"), ("template", "Money"), ("name", "M")])),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+        }
+        assert_ne!(tr("A template has at most {max} parameters."), "A template has at most {max} parameters.", "{theme:?}: the language is German");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A binding argument rule broken is said in the chosen language in the binding editor's words,
+/// never in the engine's English: an argument that does not fit, one missing and two missing, both
+/// named with their kinds; and, as said, a constrained parameter's misfit and a built-in type's
+/// name taken. In light and dark (AR-442).
+#[test]
+fn an_argument_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, tr_ctx};
+    use archforge_engine::{Parameter, Reason};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", json!({ "name": "Sales" }));
+        let [repository, entity] = ["Repository", "Entity"].map(|n| id("uml.class.add", json!({ "package": sales, "name": n })));
+        let money = id("uml.data-type.add", json!({ "package": sales, "name": "Money" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "T" }));
+        id("uml.template-parameter.add", json!({ "classifier": repository, "name": "K", "kind": "data-type" }));
+        let bind = |arguments: serde_json::Value| json!({ "bound": entity, "template": repository, "arguments": arguments });
+        let named = |name: &str, kind: &str| fmt(&tr("{name} ({kind})"), &[("name", name), ("kind", &tr(kind))]);
+        let both = fmt(&tr("{names} and {last}"), &[("names", &named("T", "class")), ("last", &named("K", "data type"))]);
+        let each = "{names} have no default, so each needs an argument.";
+        assert_ne!(tr(each), each, "{theme:?}: the two missing are said in German");
+        for (params, said) in [
+            (bind(json!({ "T": money, "K": money })), fmt(&tr("Arguments for {name} must be classes."), &[("name", "T")])),
+            (bind(json!({ "K": money })), fmt(&tr("{name} needs an argument: pick a class."), &[("name", "T")])),
+            (bind(json!({})), fmt(&tr(each), &[("names", &both)])),
+        ] {
+            let refused = crate::panels::run(h.state_mut(), "uml.template-binding.add", params).err().unwrap_or_default();
+            assert_eq!(refused, said, "{theme:?}: in German");
+        }
+        let taken = Reason::BuiltInTaken { kind: "class", name: "Integer".into() };
+        let words = &tr("The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
+        assert_ne!(words, "The package {types} holds {what} named {name}, where that built-in type is kept: rename it to use the built-in type.");
+        let what = tr_ctx("refusal", "a class");
+        assert_eq!(crate::panels::said(&taken), Some(fmt(words, &[("types", "Types"), ("what", &what), ("name", "Integer")])), "{theme:?}");
+        let constrained = Parameter { name: "T".into(), kind: "class", constraint: Some("Entity".into()), ..Parameter::default() };
+        let words = fmt(&tr("Arguments for {name} must be {constraint} or specialise it."), &[("name", "T"), ("constraint", "Entity")]);
+        assert_eq!(crate::panels::said(&Reason::Misfit(Box::new(constrained))), Some(words), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A generalization set's grouping rule, an association end's aggregation rule and an n-ary
+/// association's count of ends broken are said in the chosen language, never in the engine's
+/// English: a set of no member, of too many, of generalizations to different classes, an end
+/// aggregating beside one that does, a composition's whole allowing more than one or made
+/// navigable, an n-ary end aggregating, and too few or too many ends. In light and dark (AR-442).
+#[test]
+fn a_set_or_an_association_end_rule_broken_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, trn};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let sales = id(&mut h, "uml.package.add", json!({ "name": "Sales" }));
+        let [payment, card, product, voucher, order, line] =
+            ["Payment", "Card", "Product", "Voucher", "Order", "Line"].map(|n| id(&mut h, "uml.class.add", json!({ "package": sales, "name": n })));
+        let to_payment = id(&mut h, "uml.generalization.add", json!({ "specific": card, "general": payment }));
+        let to_product = id(&mut h, "uml.generalization.add", json!({ "specific": voucher, "general": product }));
+        let binary = id(&mut h, "uml.association.add", json!({ "from": order, "to": line }));
+        let nary = id(&mut h, "uml.association.add-nary", json!({ "classes": [order, line, card] }));
+        let end = |e: u8, field: &str, value: serde_json::Value| json!({ "association": binary, "end": e, field: value });
+        let set_end = "uml.association.set-end";
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let set = |gens: Vec<&String>| json!({ "generalizations": gens, "name": "Kinds" });
+        assert_eq!(refused(&mut h, "uml.generalization-set.add", set(vec![])), tr("A set groups at least one generalization."));
+        let pair = |specific: &str, general: &str| fmt(&tr("{specific} specialises {general}"), &[("specific", specific), ("general", general)]);
+        let both = fmt(&tr("{names} and {last}"), &[("names", &pair("Card", "Payment")), ("last", &pair("Voucher", "Product"))]);
+        let differ = format!("{both}. {}", tr("A set groups generalizations of one class."));
+        let said = refused(&mut h, "uml.generalization-set.add", set(vec![&to_payment, &to_product]));
+        assert_eq!(said, differ, "{theme:?}: in German");
+        id(&mut h, set_end, end(0, "multiplicity", json!("*")));
+        let whole_many = tr("A composition's whole allows one at most: set the other end's multiplicity to 1 or 0..1 first.");
+        assert_eq!(refused(&mut h, set_end, end(1, "aggregation", json!("composite"))), whole_many);
+        id(&mut h, set_end, end(0, "multiplicity", json!("1")));
+        id(&mut h, set_end, end(1, "aggregation", json!("composite")));
+        for (cmd, p, said) in [
+            (set_end, end(0, "aggregation", json!("shared")), tr("The other end has an aggregation already: only the part's end has one.")),
+            (set_end, end(0, "multiplicity", json!("*")), tr("This end is a composition's whole, which allows one at most.")),
+            (set_end, end(0, "navigable", json!(true)), tr("The whole's end of an aggregation or composition is not navigable.")),
+            (
+                set_end,
+                json!({ "association": nary, "end": 0, "aggregation": "shared" }),
+                tr("An n-ary association's ends are not aggregations: only a binary association has a whole and a part."),
+            ),
+            ("uml.association.add-nary", json!({ "classes": [order, line] }), tr("An n-ary association needs three ends or more.")),
+            ("uml.association.add-nary", json!({ "classes": vec![&order; 33] }), fmt(&tr("An association takes at most {n} ends"), &[("n", "32")])),
+            ("uml.association.remove-end", json!({ "association": nary, "end": 0 }), tr("An n-ary association needs three ends or more.")),
+        ] {
+            assert_eq!(refused(&mut h, cmd, p), said, "{theme:?}: in German");
+        }
+        // A set's most members, said with the plural form its count takes: one and many differ.
+        let most = |max: usize| crate::panels::said(&Reason::TooMany { kind: "generalization", max });
+        let form = |n| trn("A set groups at most {n} generalization.", "A set groups at most {n} generalizations.", n);
+        assert_eq!((most(256), most(1)), (Some(form(256)), Some(form(1))), "{theme:?}");
+        assert_ne!(form(1), form(256).replace("256", "1"), "{theme:?}: German has a singular");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A name another element has, whatever the case, is said in the chosen language with that
+/// element's kind and name, never in the engine's English: an attribute of a class, a column of a
+/// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
+#[test]
+fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let sales = id("uml.package.add", serde_json::json!({ "name": "Sales" }));
+        let order = id("uml.class.add", serde_json::json!({ "package": sales, "name": "Order" }));
+        id("uml.attribute.add", serde_json::json!({ "class": order, "name": "status" }));
+        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
+        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Kunde" }));
+        id("er.attribute.add", serde_json::json!({ "entity": table, "name": "id", "type": "BIGINT" }));
+        id("skill.add", serde_json::json!({ "subject": sales, "name": "Naming" }));
+        let style = id("skill.add", serde_json::json!({ "subject": sales, "name": "Style" }));
+        for (cmd, params, kind, name) in [
+            ("uml.attribute.add", serde_json::json!({ "class": order, "name": "STATUS" }), "an attribute", "status"),
+            ("er.attribute.add", serde_json::json!({ "entity": table, "name": "ID", "type": "TEXT" }), "a column", "id"),
+            ("skill.rename", serde_json::json!({ "skill": style, "name": "naming" }), "a skill", "Naming"),
+            ("skill.add", serde_json::json!({ "subject": sales, "name": "NAMING" }), "a skill", "Naming"),
+        ] {
+            let what = crate::i18n::tr_ctx("refusal", kind);
+            assert_ne!(what, kind, "{theme:?}: the catalogue has the kind in German");
+            let said = crate::i18n::fmt(&crate::i18n::tr("There is {what} named {name} already."), &[("what", &what), ("name", name)]);
+            let refused = crate::panels::run(h.state_mut(), cmd, params).err().unwrap_or_default();
+            assert_eq!(refused.to_lowercase(), said.to_lowercase(), "{theme:?} {cmd}: the kind and the other's name in German");
+            assert!(refused.starts_with(char::is_uppercase) && refused.contains(name), "{theme:?} {cmd}: a sentence naming {name}: {refused}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
+/// The engine's name and text rules are said in the chosen language, never in the engine's
+/// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
+/// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).
+#[test]
+fn the_engines_name_rules_are_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |v: Result<serde_json::Value, String>| v.unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id(crate::panels::run(h.state_mut(), "er.schema.add", serde_json::json!({ "name": "Shop" })));
+        let diagram = id(crate::panels::run(h.state_mut(), "diagram.add", serde_json::json!({ "kind": "er", "element": schema, "name": "Shop" })));
+        h.run();
+        let max = archforge_er::rules::MAX_NAME;
+        let too_long = crate::i18n::fmt(&crate::i18n::tr("It can't be longer than {max} characters."), &[("max", &max.to_string())]);
+        for (cmd, params, said) in [
+            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "n".repeat(max + 1) }), too_long),
+            (
+                "er.entity.add",
+                serde_json::json!({ "schema": schema, "name": "Auf\u{7}trag" }),
+                crate::i18n::tr("It can't hold a control or hidden character."),
+            ),
+            ("er.entity.add", serde_json::json!({ "schema": schema, "name": "Auftrag " }), crate::i18n::tr("It can't start or end with a space.")),
+            ("diagram.note", serde_json::json!({ "diagram": diagram, "text": "", "x": 0, "y": 0 }), crate::i18n::tr("The text can't be empty.")),
+        ] {
+            assert!(
+                !said.contains("character") && !said.contains("space") && !said.contains("text"),
+                "{theme:?}: the catalogue has it in German: {said}"
+            );
+            assert_eq!(crate::panels::run(h.state_mut(), cmd, params).err(), Some(said), "{theme:?}: {cmd}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// The engine's typed refusals are said in the chosen language, never in the engine's English: a
+/// name another schema has, a package moved into one it holds, a class depending on itself, and a
+/// model that can't be changed at the moment. In light and dark (AR-429).
+#[test]
+fn the_engines_refusals_are_said_in_the_chosen_language() {
+    let renamed = |h: &mut Harness<'static, Shell>, name: &str| {
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(h, egui::Key::Backspace, egui::Modifiers::NONE);
+        h.event(egui::Event::Text(name.into()));
+        h.run();
+        key(h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone())
+    };
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        // A name another schema has, whatever the case: the kind and the other's name in German.
+        assert_eq!(renamed(&mut h, "Shop"), None, "{theme:?}: the first takes the name");
+        let refused = renamed(&mut h, "shop").unwrap_or_default();
+        let schema = crate::i18n::tr_ctx("refusal", "a schema");
+        assert_ne!(schema, "a schema", "{theme:?}: the catalogue has the kind in German");
+        assert!(refused.to_lowercase().contains(&schema.to_lowercase()) && refused.contains("Shop"), "{theme:?}: {refused}");
+        assert!(!refused.contains("named"), "{theme:?}: not the engine's English: {refused}");
+        // The model can't be changed at the moment.
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        h.event(egui::Event::Text("Lager".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let said = crate::i18n::tr("The model cannot be changed at the moment; nothing was changed.");
+        assert_ne!(said, "The model cannot be changed at the moment; nothing was changed.", "{theme:?}: the catalogue has it in German");
+        assert_eq!(h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()), Some(said), "{theme:?}");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // A package dropped onto a package it holds, in Models.
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (root, sales, lines, order) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let lines = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Lines", "parent": sales.to_string() })).unwrap().value);
+            let order = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Order" })).unwrap().value);
+            let st = s.doc();
+            (st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap(), sales, lines, order)
+        };
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.extend([root, sales]);
+        h.run();
+        let (from, target) =
+            (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{lines}")).center());
+        drag(&mut h, from, target);
+        let said = crate::i18n::tr("A package cannot go into itself or a package it holds.");
+        assert_ne!(said, "A package cannot go into itself or a package it holds.", "{theme:?}: the catalogue has it in German");
+        assert_eq!(h.state().explorer.notice.as_deref(), Some(said.as_str()), "{theme:?}");
+        // A class that would depend on itself: the reason a canvas or a panel shows.
+        let refused = crate::panels::run(
+            h.state_mut(),
+            "uml.dependency.add",
+            serde_json::json!({ "client": order.to_string(), "supplier": order.to_string() }),
+        );
+        let refused = refused.err().unwrap_or_default();
+        let class = crate::i18n::tr_ctx("refusal", "a class");
+        assert_ne!(class, "a class", "{theme:?}: the catalogue has the kind in German");
+        assert!(refused.to_lowercase().starts_with(&class.to_lowercase()), "{theme:?}: {refused}");
+        assert!(refused.starts_with(char::is_uppercase) && !refused.contains("depend"), "{theme:?}: a sentence, not the engine's English: {refused}");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn with_a_schema_selected_the_plus_adds_a_table_and_delete_asks_before_the_schema_goes() {
     let mut h = workspace_harness(ThemeKind::Light, egui::vec2(1600.0, 1120.0));
@@ -4563,6 +5367,31 @@ fn properties_lists_a_tables_columns_and_the_editor_changes_them_through_the_eng
     assert_eq!(st.get(customer_obj, archforge_er::entity::KIND).unwrap(), archforge_mof::Value::Enum(archforge_er::EntityKind::Regular.index()));
 }
 
+/// A column's editor refused by the engine says why in plain words under the card, never with the
+/// command's id or the parameter it is about: a column renamed, or a new one added. In light and
+/// dark (AR-428).
+#[test]
+fn a_column_refused_in_properties_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for new in [false, true] {
+            let (mut h, _customer) = table_harness();
+            h.state_mut().state.theme = theme;
+            h.run();
+            let rows: Vec<String> = ids(&h).into_iter().filter(|i| i.starts_with("workspace.properties.column.0") && !i.ends_with(".edit")).collect();
+            let opener = if new { "workspace.properties.columns.add".to_string() } else { format!("{}.edit", rows[1]) };
+            let at = rect_of(&h, &opener).center();
+            click(&mut h, at);
+            h.state_mut().panels.column.as_mut().unwrap_or_else(|| panic!("{theme:?}: the editor opened")).name = "customer_id".into();
+            h.run();
+            let at = rect_of(&h, "workspace.properties.column.apply").center();
+            click(&mut h, at);
+            let refused = h.state().panels.column.as_ref().and_then(|c| c.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+            let plain = refused.starts_with("There is a column named") && !refused.contains("er.") && !refused.contains("name:");
+            assert!(plain, "{theme:?}, new {new}: {refused}");
+        }
+    }
+}
+
 #[test]
 fn apply_closes_a_new_columns_editor_after_a_type_is_picked_from_the_list() {
     let (mut h, customer) = table_harness();
@@ -4753,6 +5582,42 @@ fn the_skills_plus_makes_a_skill_and_opens_it_with_the_name_ready() {
     assert!(!h.state().canvas.tabs.contains(&second));
 }
 
+/// A skill's name refused in its tab says why in plain words and in the chosen language, never
+/// with the command's id, the parameter it is about or the engine's English: the name another skill
+/// on the same table has. In English and German, in light and dark (AR-431).
+#[test]
+fn a_skill_name_refused_in_its_tab_says_why_in_plain_words() {
+    for (language, theme) in [("en", ThemeKind::Light), ("en", ThemeKind::Dark), ("de", ThemeKind::Light), ("de", ThemeKind::Dark)] {
+        let (mut h, customer) = table_harness();
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = language.into();
+        h.run();
+        {
+            let s = h.state_mut().session.as_mut().unwrap();
+            s.execute("skill.add", &serde_json::json!({ "subject": customer, "name": "Customer naming" })).unwrap();
+            s.execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        }
+        let at = rect_of(&h, "workspace.panels.skills").center();
+        click(&mut h, at);
+        let at = rect_of(&h, "workspace.skills.add").center();
+        click(&mut h, at);
+        h.run();
+        h.event(egui::Event::Text("Customer naming".into()));
+        h.run();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        h.run();
+        let doc = h.state().canvas.skills.iter().find(|d| Some(d.skill) == h.state().canvas.active).unwrap();
+        let refused = doc.settings_refused.clone().unwrap_or_else(|| panic!("{language} {theme:?}: refused"));
+        let what = crate::i18n::tr_ctx("refusal", "a skill");
+        if language == "de" {
+            assert_ne!(what, "a skill", "{theme:?}: the catalogue has the kind in German");
+        }
+        let said = crate::i18n::fmt(&crate::i18n::tr("There is {what} named {name} already."), &[("what", &what), ("name", "Customer naming")]);
+        assert_eq!(refused, said, "{language} {theme:?}: the kind and the other skill's name, in the chosen language");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn a_skill_opens_in_its_own_tab_and_keeps_its_markdown() {
     let (mut h, customer) = table_harness();
@@ -4868,6 +5733,141 @@ fn look(h: &Harness<'static, Shell>, o: archforge_mof::Obj) -> crate::canvas::Lo
     let st = h.state().session.as_ref().unwrap().doc();
     let prop = if st.class_of(o).ok() == Some(archforge_diagram::NODE) { archforge_diagram::node::STYLE } else { archforge_diagram::edge::STYLE };
     crate::canvas::look_of(st, o, prop)
+}
+
+/// A refused change in Appearance is said under Use diagram defaults and read out as a status
+/// until the selection moves on. In light and dark (AR-420).
+#[test]
+fn a_refused_appearance_change_is_read_out_as_a_status() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer, _) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        let at = rect_of(&h, "workspace.panels.appearance").center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+        h.run();
+        // A session that refuses every change makes the panel say why.
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, "workspace.appearance.fill.2").center();
+        click(&mut h, at);
+        h.run();
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_default();
+        assert!(!notice.is_empty(), "{theme:?}: refused");
+        let status = h.get_by_label(&notice).accesskit_node();
+        assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{theme:?}: read out");
+        assert!(rect_of(&h, "workspace.appearance.notice").top() > rect_of(&h, "workspace.appearance.defaults").bottom(), "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: gone with the selection");
+        assert!(h.query_by_label(&notice).is_none(), "{theme:?}: and no longer read out");
+    }
+}
+
+/// A change in Appearance refused says why in plain words, as a sentence, never as the engine words
+/// it: a fill picked, and Use diagram defaults, while the model can't be changed. In light and dark
+/// (AR-431).
+#[test]
+fn a_refused_appearance_change_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for control in ["workspace.appearance.fill.2", "workspace.appearance.defaults"] {
+            let (mut h, customer, _) = diagram_harness();
+            h.state_mut().state.theme = theme;
+            let at = rect_of(&h, "workspace.panels.appearance").center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [customer] })).unwrap();
+            h.run();
+            h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+            let at = rect_of(&h, control).center();
+            click(&mut h, at);
+            h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+            let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}, {control}: refused"));
+            assert_eq!(notice, crate::i18n::tr("The model cannot be changed at the moment; nothing was changed."), "{theme:?}, {control}");
+        }
+    }
+}
+
+/// Asserts that `words` are read out as a polite live status, inside the area recorded as `id`.
+fn read_out(h: &Harness<'static, Shell>, words: &str, id: &str) {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let status = h.get_by_label(words).accesskit_node();
+    assert_eq!((status.role(), status.live()), (egui::accesskit::Role::Status, egui::accesskit::Live::Polite), "{words}: read out");
+    assert!(ids(h).iter().any(|i| i == id), "{words}: recorded as {id}");
+}
+
+/// Delete refused in Models is read out as a status under the tree, and goes with the next
+/// Delete; a name refused in place is read out under its field until Escape closes it. In light
+/// and dark (AR-425).
+#[test]
+fn the_explorer_s_refusals_are_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        select_named(&mut h, archforge_uml::PACKAGE, "Types");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        let said = "Types keeps the built-in types, so it stays while it holds them";
+        read_out(&h, said, "workspace.explorer.notice");
+        select_named(&mut h, archforge_uml::CLASS, "Customer");
+        crate::explorer::remove_selection(h.state_mut());
+        h.run();
+        assert_eq!(h.state().explorer.notice, None, "{theme:?}: gone with the next Delete");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+        h.state_mut().explorer.delete = None;
+        h.state_mut().explorer.focused = true;
+        key(&mut h, egui::Key::F2, egui::Modifiers::NONE);
+        h.state_mut().explorer.rename.as_mut().expect("F2 opens the name").text = String::new();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("an empty name is refused");
+        assert_eq!(refused, crate::i18n::tr("A name can't be empty."), "{theme:?}: in Properties' words (AR-427)");
+        read_out(&h, &refused, "workspace.explorer.rename.notice");
+        // The refused field kept the keyboard, so Escape reaches it with no click (AR-426).
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().explorer.rename.is_none(), "{theme:?}: Escape closes the name");
+        assert!(h.query_by_label(&refused).is_none(), "{theme:?}: and its refusal is no longer read out");
+    }
+}
+
+/// A new diagram whose new schema is refused says why in plain words, as Properties says a
+/// refusal: no command id, no engine wording. In light and dark (AR-427).
+#[test]
+fn a_new_diagram_refused_by_its_schema_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().session.as_mut().unwrap().execute("er.schema.add", &serde_json::json!({ "name": "Shop" })).unwrap();
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        let step = crate::diagrams::Step::Details;
+        let new = crate::diagrams::NewDiagram { step, name: "Shop".into(), kind: "er", schema: None, menu: None, refused: None, opened: false };
+        h.state_mut().diagrams.new = Some(new);
+        h.run();
+        let at = rect_of(&h, "workspace.new-diagram.create").center();
+        click(&mut h, at);
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("a second schema named Shop is refused");
+        assert!(refused.starts_with("There is a schema named Shop") && !refused.contains("er."), "{theme:?}: {refused}");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
+    }
+}
+
+/// The Diagrams panel's notice is read out as a status under its tree until a diagram is opened
+/// from it. In light and dark (AR-425).
+#[test]
+fn the_diagrams_panel_s_notice_is_read_out_as_a_status() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.show_explorer(crate::state::Explorer::Diagrams);
+        // Nothing in the panel refuses yet, so the notice is set as a refusal would set it.
+        let said = "The diagram could not be opened";
+        h.state_mut().diagrams.notice = Some(said.into());
+        h.run();
+        read_out(&h, said, "workspace.diagrams.notice");
+        let row = ids(&h).into_iter().find(|i| i.starts_with("workspace.diagrams.row.")).expect("a diagram is listed");
+        let at = rect_of(&h, &row).center();
+        click(&mut h, at);
+        assert_eq!(h.state().diagrams.notice, None, "{theme:?}: gone once a diagram is opened");
+        assert!(h.query_by_label(said).is_none(), "{theme:?}: and no longer read out");
+    }
 }
 
 #[test]
@@ -5375,11 +6375,13 @@ fn new_diagram_asks_the_kind_first_then_its_details_and_back_keeps_what_was_type
         h.state_mut().diagrams.new.as_mut().unwrap().name = "  ".into();
         let at = rect_of(&h, "workspace.new-diagram.create").center();
         click(&mut h, at);
-        assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_some()), "{theme:?}: the empty name is refused");
+        let refused = h.state().diagrams.new.as_ref().and_then(|n| n.refused.clone()).expect("the empty name is refused");
+        read_out(&h, &refused, "workspace.new-diagram.notice");
         assert_eq!(elements(&h), before, "{theme:?}: a refusal makes nothing, no schema either");
         let at = rect_of(&h, "workspace.new-diagram.back").center();
         click(&mut h, at);
         assert!(h.state().diagrams.new.as_ref().is_some_and(|n| n.refused.is_none()));
+        assert!(egui_kittest::kittest::Queryable::query_by_label(&h, &refused).is_none(), "{theme:?}: no longer read out");
         // A double click on a card goes straight on; Create opens the diagram in its group.
         let at = rect_of(&h, "workspace.new-diagram.type.uml.class").center();
         // Past egui's double-click window, so the clicks before don't count with these two.
@@ -5675,7 +6677,8 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
         let notice = h.state().explorer.notice.clone().unwrap_or_default();
-        assert!(notice.contains("cannot go into itself"), "{theme:?}: {notice}");
+        // In plain words, as Properties says it: no command id, no engine wording (AR-427).
+        assert!(notice.starts_with("A package cannot go into itself") && !notice.contains("uml."), "{theme:?}: {notice}");
         // Onto Billing's row: shown on a diagram, it goes onto Billing's diagram too.
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{billing}")).center());
@@ -6663,6 +7666,29 @@ fn the_marquee_selects_what_it_crosses_and_a_middle_drag_only_pans() {
     assert!((node_bounds(&h, &id).y - a0.y).abs() < 0.01, "one undo takes both nudges back");
 }
 
+/// A table's name refused on the canvas says why as Properties says it, in the chosen language,
+/// never with the command's id or the parameter it is about. In light and dark (AR-428).
+#[test]
+fn a_name_refused_on_the_canvas_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _customer, _diagram) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let nodes = node_ids(&h);
+        let customer = nodes.iter().min_by(|a, b| rect_of(&h, a).left().total_cmp(&rect_of(&h, b).left())).unwrap().clone();
+        let at = rect_of(&h, &customer).left_top() + egui::vec2(60.0, 30.0);
+        double_click(&mut h, at);
+        h.state_mut().canvas.rename.as_mut().unwrap_or_else(|| panic!("{theme:?}: the name opened")).text = String::new();
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let said = crate::i18n::tr("A name can't be empty.");
+        assert_ne!(said, "A name can't be empty.", "{theme:?}: the catalogue has it in German");
+        let refused = h.state().canvas.rename.as_ref().and_then(|r| r.refused.clone());
+        assert_eq!(refused.as_deref(), Some(said.as_str()), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 #[test]
 fn double_clicks_rename_and_open_columns_and_a_refused_name_stays_open() {
     let (mut h, customer, _diagram) = diagram_harness();
@@ -6825,6 +7851,34 @@ fn the_relationship_tool_draws_a_line_with_its_foreign_key_as_one_step_and_delet
     drag(&mut h, from, from + egui::vec2(30.0, 0.0));
     assert!(h.state().canvas.toast.is_none(), "the toast went with the move");
     assert!(!ids(&h).iter().any(|i| i == "workspace.toast.undo"));
+}
+
+/// A mapping table refused for its name says why in plain words on the offer, never with the
+/// command's id or the parameter it is about. In light and dark (AR-428).
+#[test]
+fn a_mapping_table_refused_for_its_name_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, customer, order) = two_tables_harness();
+        h.state_mut().state.theme = theme;
+        let line = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let rel = s.execute(
+                "er.relationship.add",
+                &serde_json::json!({ "from": customer, "to": order, "from_end": "zero-or-more", "to_end": "zero-or-more" }),
+            );
+            rel.unwrap().value["id"].as_str().unwrap().to_string()
+        };
+        let relationship = archforge_mof::Uuid::parse(&line).unwrap();
+        h.state_mut().canvas.mapping = Some(crate::connect::MappingOffer { relationship, name: "Customer".into(), refused: None });
+        h.run();
+        let at = rect_of(&h, "workspace.mapping.add").center();
+        click(&mut h, at);
+        let refused = h.state().canvas.mapping.as_ref().and_then(|o| o.refused.clone()).unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert!(
+            refused.starts_with("There is a table named Customer") && !refused.contains("er.") && !refused.contains("name:"),
+            "{theme:?}: {refused}"
+        );
+    }
 }
 
 /// ER's cardinality popover sets a new line's ends, and a many-to-many line offers its mapping table.
@@ -8479,8 +9533,15 @@ fn versions_answer(h: &mut Harness<'static, Shell>, host: &SavingHost, answer: R
 /// Two versions, the older without a description.
 fn two_versions() -> crate::VersionsPage {
     let date = "2026-11-08T15:30:00Z".to_string();
-    let aa =
-        crate::VersionEntry { hash: "aa".into(), description: Some("Add order status".into()), author: None, by_agent: false, date, previous: None };
+    let aa = crate::VersionEntry {
+        hash: "aa".into(),
+        description: Some("Add order status".into()),
+        author: None,
+        by_agent: false,
+        date,
+        previous: None,
+        shared: false,
+    };
     let bb = crate::VersionEntry { hash: "bb".into(), description: None, ..aa.clone() };
     crate::VersionsPage { versions: vec![aa, bb], more: false }
 }
@@ -8510,6 +9571,39 @@ fn the_versions_panel_says_it_is_loading_failed_or_empty() {
         assert!(texts.iter().any(|t| t == "No versions yet."), "{texts:?}");
         assert!(texts.iter().any(|t| t == "No versions yet. Save version records your first one."), "{texts:?}");
         assert!(!has_id(&h, "workspace.versions.failed"), "{theme:?}");
+    });
+}
+
+/// ⌘S and File ▸ Save on an untouched new project make no version: the host is never asked, and
+/// History still says there are none; a save with a description, or after a failed save or write,
+/// still asks it (AR-413).
+#[test]
+fn saving_an_untouched_new_project_makes_no_version() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage::default()));
+        assert!(!dirty(&h) && !h.state().shown_unsaved(), "{theme:?}: the status bar says Saved");
+        h.event(egui::Event::Key { key: egui::Key::S, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        h.run_steps(2);
+        h.state_mut().save();
+        h.run_steps(2);
+        assert!(host.saves.lock().unwrap().is_empty() && !h.state().is_saving(), "{theme:?}: no version was asked for");
+        assert!(host.version_reads.lock().unwrap().is_empty(), "{theme:?}: History has nothing new to read");
+        assert!(painted(&h).iter().any(|t| t == "No versions yet. Save version records your first one."), "{theme:?}: {:?}", painted(&h));
+        // A save under a description, an agent's, is still the host's to decide.
+        h.state_mut().save_as(crate::SavedBy::Agent(None), Some("Start".into()));
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: a described save goes to the host");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        // A failed save or write is not Saved: Save tries again, as before.
+        h.state_mut().save_error = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed save");
+        host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+        h.run_steps(2);
+        *host.write_error.lock().unwrap() = Some("the disk is full".into());
+        h.state_mut().save();
+        assert_eq!(host.saves.lock().unwrap().len(), 1, "{theme:?}: after a failed write");
     });
 }
 
@@ -8598,7 +9692,7 @@ fn versions_listed(theme: ThemeKind, versions: Vec<crate::VersionEntry>) -> (Har
 /// A version with the things a row says.
 fn version_row(hash: &str, description: Option<&str>, by: (Option<&str>, bool), date: &str) -> crate::VersionEntry {
     let (description, author) = (description.map(str::to_string), by.0.map(str::to_string));
-    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None }
+    crate::VersionEntry { hash: hash.into(), description, author, by_agent: by.1, date: date.into(), previous: None, shared: false }
 }
 
 /// A row's two lines, its date local and never as stored: with and without a description, by a
@@ -8648,6 +9742,59 @@ fn a_versions_row_says_what_it_holds_and_when() {
         assert!(german.starts_with("6.") && painted(&h).contains(&german), "{german}: {:?}", painted(&h));
         h.state_mut().state.language = "en".to_string();
         h.run_steps(2);
+    });
+}
+
+/// A restore's kept work named by an earlier Archforge, `Before restoring` and a stored time, shows
+/// that time as the list says it; the stored name is left as it is, and other names show as stored,
+/// a time not in the stored form or a day its month lacks among them.
+#[test]
+fn an_earlier_restores_kept_work_shows_its_time_as_the_list_says_it() {
+    let earlier = "Before restoring 2026-11-07T16:15:00Z";
+    let named = |hash, d| version_row(hash, Some(d), (None, false), "2026-11-07T16:15:00Z");
+    in_both_appearances(|theme| {
+        let kept = [
+            "Before restoring 9 Nov 12:59",
+            "Before restoring 2026-11-07",
+            "Before restoring 2026/11/07 16:15:00X",
+            "Before restoring 2026-02-31T10:00:00Z",
+        ];
+        let listed = [named("a", earlier)].into_iter().chain(kept.iter().zip(["b", "c", "d", "e"]).map(|(d, hash)| named(hash, d))).collect();
+        let (h, _host) = versions_listed(theme, listed);
+        let texts = painted(&h);
+        for t in ["Before restoring 7 Nov 17:15"].iter().chain(&kept) {
+            assert!(texts.iter().any(|x| x == t), "{theme:?}: {t}: {texts:?}");
+        }
+        assert!(!texts.iter().any(|t| t == earlier), "{theme:?}: {texts:?}");
+        assert_eq!(h.state().versions.page.as_ref().unwrap().versions[0].description.as_deref(), Some(earlier), "{theme:?}: as stored");
+    });
+}
+
+/// Over the first version `main` has too, and only there, History draws a divider a screen reader
+/// reads; none while no page read holds one, and one at the top when the branch has no version of
+/// its own yet.
+#[test]
+fn history_marks_where_a_branch_shares_its_versions_with_main() {
+    use egui_kittest::kittest::Queryable;
+    let words = "Shared with main up to here";
+    let row = |hash: &str, shared| crate::VersionEntry { shared, ..version_row(hash, Some(hash), (None, false), "2026-11-08T15:30:00Z") };
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_listed(theme, vec![row("a", false), row("b", false)]);
+        assert!(!has_id(&h, "workspace.versions.shared") && !painted(&h).iter().any(|t| t == words), "{theme:?}: not on this page");
+        h.state_mut().versions.page.as_mut().unwrap().more = true;
+        h.run_steps(2);
+        let at = rect_of(&h, "workspace.versions.more").center();
+        click(&mut h, at);
+        versions_answer(&mut h, &host, Ok(crate::VersionsPage { versions: vec![row("c", true), row("d", true)], more: false }));
+        let [b, c, d, divider] = ["row.b", "row.c", "row.d", "shared"].map(|id| rect_of(&h, &format!("workspace.versions.{id}")));
+        assert!(b.bottom() < divider.top() && divider.bottom() < c.top(), "{theme:?}: {b:?} {divider:?} {c:?}");
+        assert_eq!((c.top() - b.top(), d.top() - c.top()), (68.0, 50.0), "{theme:?}: only the rows under it move");
+        assert_eq!(painted(&h).iter().filter(|t| *t == words).count(), 1, "{theme:?}");
+        assert_eq!(h.query_all_by_label(words).count(), 1, "{theme:?}: read out whole");
+
+        let (h, _host) = versions_listed(theme, vec![row("e", true)]);
+        let (divider, e) = (rect_of(&h, "workspace.versions.shared"), rect_of(&h, "workspace.versions.row.e"));
+        assert!(divider.bottom() < e.top(), "{theme:?}: over the newest");
     });
 }
 
@@ -8807,6 +9954,115 @@ fn working_changes_list_what_a_save_would_write() {
     });
 }
 
+/// A skill's text typed but not yet kept is a change, as a description is: Working changes never
+/// says there are none, Save version… says why it is off, and the status bar and the chip call the
+/// work unsaved; once the typing pauses the text is kept and listed.
+#[test]
+fn skill_text_waiting_to_be_kept_is_no_no_changes() {
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        versions_answer(
+            &mut h,
+            &host,
+            Ok(crate::VersionsPage { versions: vec![version_row("c1", None, (None, false), "2026-11-08T15:30:00Z")], more: false }),
+        );
+        h.run_steps(2);
+        let rows = rows_now(&h);
+        answer_read(&mut h, &host, Ok(rows));
+        crate::skill_tab::open(h.state_mut(), skill);
+        compared(&mut h);
+        let unsaved = |h: &Harness<'static, Shell>| painted(h).iter().any(|t| t.starts_with("Unsaved changes"));
+        let off = |h: &Harness<'static, Shell>| crate::save_version::off_because(h.state());
+        let none = Some("No changes since the last version.".to_string());
+        assert!(no_changes_said(&h) && off(&h) == none && !unsaved(&h) && !h.state().shown_unsaved(), "{theme:?}: {:?}", painted(&h));
+        // Typed just now: kept only once the typing pauses.
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert!(crate::skill_tab::waiting(h.state()) && h.state().versions.working == 0, "{theme:?}: still waiting");
+        assert!(!no_changes_said(&h), "{theme:?}: {:?}", painted(&h));
+        assert!(off(&h).is_some() && off(&h) != none && off(&h).as_deref() != Some("Loading"), "{theme:?}: {:?}", off(&h));
+        assert!(unsaved(&h), "{theme:?}: the status bar: {:?}", painted(&h));
+        assert!(h.state().shown_unsaved(), "{theme:?}: the chip and the close question");
+        h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap().changed_at = 0.0;
+        compared(&mut h);
+        assert!(!crate::skill_tab::waiting(h.state()) && h.state().versions.working == 1 && off(&h).is_none(), "{theme:?}: kept and listed");
+    });
+}
+
+/// A skill's text the store refused is unsaved work, in the tab shown and in a parked one, though
+/// the model has nothing unsaved: Save still asks the host, and quitting asks about it instead of
+/// closing the window.
+#[test]
+fn a_refused_skill_text_is_unsaved_shown_or_parked() {
+    for parked in [false, true] {
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let first = h.state().active.unwrap();
+        assert!(!h.state().tab_unsaved(first), "{parked}: nothing unsaved yet");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let doc = h.state().canvas.skills.iter().find(|d| d.skill == skill).unwrap();
+        assert!(doc.refused.is_some() && !h.state().session.as_ref().unwrap().is_dirty(), "{parked}: refused, the model untouched");
+        if parked {
+            h.state_mut().open_project(crate::Opened { name: "Library".into(), path: "/tmp/Library.archforge".into(), ..Default::default() });
+            h.run_steps(3);
+            assert!(h.state().active != Some(first) && h.state().tabs[first].parked.is_some(), "parked");
+        }
+        assert!(h.state().tab_unsaved(first), "{parked}: the refused text is unsaved");
+        if !parked {
+            // Something to save, as the status bar says, so Save still goes to the host (AR-413).
+            h.state_mut().save();
+            assert_eq!(host.saves.lock().unwrap().len(), 1, "Save asks the host");
+            host.saves.lock().unwrap().pop().unwrap().send(Ok(false)).unwrap();
+            h.run_steps(2);
+        }
+        h.state_mut().request_quit();
+        h.run_steps(3);
+        assert!(!h.state().quit_confirmed(), "{parked}: the window stays");
+        assert_eq!(h.state().ask, asked_unsaved(COMMERCE), "{parked}: quitting asks about it");
+    }
+}
+
+/// The window title marks typed text the work doesn't have yet as its tab does, though the model
+/// has nothing unsaved: a description being typed, a skill's text before its typing pauses, and one
+/// the store refused.
+#[test]
+fn the_title_marks_text_typed_and_not_yet_kept() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        let made = crate::panels::run(h.state_mut(), "skill.add", serde_json::json!({ "name": "DDL", "body": "Old." })).unwrap();
+        let skill = made["id"].as_str().and_then(archforge_mof::Uuid::parse).unwrap();
+        crate::skill_tab::open(h.state_mut(), skill);
+        h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
+        h.run_steps(2);
+        let (clean, marked) = ("Commerce platform — Archforge", "• Commerce platform — Archforge");
+        assert_eq!(h.state().title(), clean, "{theme:?}: nothing unsaved");
+        h.state_mut().panels.description = Some(crate::panels::DescriptionDraft { target: skill, text: "Typing".into(), refused: false });
+        assert_eq!(h.state().title(), marked, "{theme:?}: a description being typed");
+        h.state_mut().panels.description = None;
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("New.".to_string(), f64::MAX);
+        h.run_steps(2);
+        assert_eq!(h.state().title(), marked, "{theme:?}: a skill's text before the pause");
+        let doc = h.state_mut().canvas.skills.iter_mut().find(|d| d.skill == skill).unwrap();
+        (doc.text, doc.changed_at) = ("x".repeat(16_001), f64::MIN);
+        h.run_steps(2);
+        let refused = h.state().canvas.skills.iter().any(|d| d.skill == skill && d.refused.is_some());
+        assert!(refused && !h.state().session.as_ref().unwrap().is_dirty(), "{theme:?}: refused, the model untouched");
+        assert_eq!(h.state().title(), marked, "{theme:?}: a refused skill text");
+    });
+}
+
 /// Past a dozen changes a filter narrows the list by name and the count stays that of them all.
 #[test]
 fn working_changes_filter_a_long_list() {
@@ -8846,6 +10102,121 @@ fn working_changes_filter_a_long_list() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(h.state().versions.filter.is_empty(), "{theme:?}");
+    });
+}
+
+/// A skill changed since the version is a group of its own, at the path Skills, and the Save dialog
+/// counts it as a skill after model elements and diagrams, in one, two or three parts.
+#[test]
+fn a_skill_is_listed_and_counted_on_its_own() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    use egui_kittest::kittest::Queryable;
+    let summary = |h: &Harness<'static, Shell>| painted(h).into_iter().find(|t| t.contains("changed since")).unwrap_or_default();
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        h.state_mut().session.as_mut().unwrap().execute("skill.add", &serde_json::json!({ "name": "Naming", "body": "Singular." })).unwrap();
+        compared(&mut h);
+        let areas: Vec<_> = h.state().versions.changes.iter().map(|d| (d.class, d.area)).collect();
+        assert_eq!(areas, [(archforge_core::SKILL, Area::Skill)], "{theme:?}");
+        let texts = painted(&h);
+        assert!(texts.iter().any(|t| t == "SKILLS") && !texts.iter().any(|t| t == "MODEL ELEMENTS"), "{theme:?}: {texts:?}");
+        assert!(h.query_by_label("Naming, Skills, Added").is_some(), "{theme:?}: the row's path is Skills");
+        let row = h.state().versions.changes[0].clone();
+        click_id(&mut h, &format!("workspace.versions.change.{}.{}", row.id, row.class.0));
+        // Its card is read as an element's, and the centre says Skills too.
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while !painted(&h).iter().any(|t| t == "Singular.") {
+            assert!(h.state().versions.element.is_some() && std::time::Instant::now() < until, "{theme:?}: the card: {:?}", painted(&h));
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            h.run_steps(1);
+        }
+        let said = ["Naming, Skills, Added, selected", "Naming, Skills, Added"].map(|l| h.query_all_by_label(l).count());
+        assert_eq!(said, [1, 1], "{theme:?}: the row, selected, and the centre's title");
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        add_schema(&mut h, "crm");
+        compared(&mut h);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("1 model element and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+        click_id(&mut h, "workspace.versions.dialog.cancel");
+        let item = |n: u8, area| Difference {
+            id: archforge_mof::Uuid([n; 16]),
+            class: archforge_core::SKILL,
+            area,
+            kind: ChangeKind::Changed,
+            name: Some(format!("item{n}")),
+            path: vec![],
+        };
+        let found = [Area::Skill, Area::Model, Area::Diagram, Area::Model, Area::Model].into_iter().zip(1..).map(|(a, n)| item(n, a)).collect();
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok(found));
+        h.run_steps(2);
+        click_id(&mut h, "workspace.versions.save");
+        assert!(summary(&h).starts_with("3 model elements, 1 diagram and 1 skill changed since"), "{theme:?}: {}", summary(&h));
+    });
+}
+
+/// Presses `key` and looks at every frame from the press on until `done`, at most 200; fails
+/// saying `what` when it never is, however late another thread answers meanwhile. The frame the key
+/// goes down in is looked at on its own: what the press starts there (an opened element's read) can
+/// answer by the next frame, the key's release, so a look after both is late on a loaded machine.
+fn pressed_until(h: &mut Harness<'static, Shell>, key: egui::Key, done: impl Fn(&Harness<'static, Shell>) -> bool, what: &str) {
+    h.key_down(key);
+    h.step();
+    let pressed = done(h);
+    h.key_up(key);
+    for _ in 0..200 {
+        h.run_steps(1);
+        if pressed || done(h) {
+            return;
+        }
+    }
+    panic!("{what}: not within 200 frames");
+}
+
+/// ↑ and ↓ on a focused change move between the rows of all three groups, out of view too, each whole
+/// in the list as it comes, the first bringing its group's heading back; Enter opens the one reached.
+#[test]
+fn the_keys_reach_every_working_change() {
+    use archforge_notations::differences::{Area, ChangeKind, Difference};
+    let item = |n: u8| Difference {
+        id: archforge_mof::Uuid([n; 16]),
+        class: archforge_core::SKILL,
+        area: [Area::Model, Area::Diagram, Area::Skill][usize::from(n / 7)],
+        kind: ChangeKind::Changed,
+        name: Some(format!("item{n}")),
+        path: vec![],
+    };
+    let id = |n: u8| format!("workspace.versions.change.{}.{}", item(n).id, item(n).class.0);
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        let key_now = h.state().versions.compared.clone().expect("compared");
+        crate::versions::settle_changes(h.state_mut(), key_now, Ok((0..20).map(item).collect()));
+        h.run_steps(2);
+        assert!(!has_id(&h, &id(19)), "{theme:?}: the last change starts out of view");
+        let (field, history) = (rect_of(&h, "workspace.versions.filter").bottom(), rect_of(&h, "workspace.versions.history").top());
+        let whole = |h: &Harness<'static, Shell>, n: u8| {
+            let row = rect_of(h, &id(n));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&id(n)))) && row.top() >= field && row.bottom() <= history - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&id(0))));
+        h.run_steps(1);
+        for n in 1..20 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↓ reached change {n}");
+        }
+        for n in (0..19).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, n), "{theme:?}: ↑ reached change {n}");
+        }
+        let heading = text_boxes(&h).into_iter().find(|(t, _)| t == "MODEL ELEMENTS").map(|(_, b)| b.top());
+        assert!(heading.is_some_and(|top| top >= field), "{theme:?}: the heading came back with the first row: {heading:?}");
+        (0..16).for_each(|_| key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE));
+        // The element's own read finds nothing of these made-up rows and closes it again, so each
+        // frame from the press on is looked at, not the state some frames later.
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.element.as_ref().map(|o| o.row.id) == Some(item(16).id);
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the skill reached"));
     });
 }
 
@@ -9164,6 +10535,56 @@ fn a_next_page_belongs_to_the_list_it_was_asked_for() {
         h.state_mut().session_replaced();
         h.run_steps(2);
         assert!(next.send(Ok(long_page(60, 61, false))).is_err(), "{theme:?}: with no host to read again too");
+    });
+}
+
+/// ↑ and ↓ on a focused version move between the rows, out of view too and past the divider over
+/// what is shared, each whole in the list as it comes; Enter opens the one reached. Behind a dialog
+/// the keys stay the dialog's.
+#[test]
+fn the_keys_reach_every_history_row() {
+    let row = |i: usize| format!("workspace.versions.row.v{i}");
+    in_both_appearances(|theme| {
+        let (mut h, host) = versions_panel(theme);
+        let mut page = long_page(0, 50, true);
+        page.versions.iter_mut().skip(20).for_each(|v| v.shared = true);
+        versions_answer(&mut h, &host, Ok(page));
+        assert!(!has_id(&h, &row(30)), "{theme:?}: out of view");
+        let (top, bottom) = (rect_of(&h, "workspace.versions.all").bottom(), rect_of(&h, "workspace.explorer.resize").bottom());
+        let whole = |h: &Harness<'static, Shell>, i: usize| {
+            let at = rect_of(h, &row(i));
+            h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(i)))) && at.top() >= top && at.bottom() <= bottom - 8.0
+        };
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(0))));
+        h.run_steps(1);
+        for i in 1..=30 {
+            key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↓ reached v{i}");
+        }
+        assert!(rect_of(&h, "workspace.versions.shared").bottom() <= rect_of(&h, &row(20)).top(), "{theme:?}: a divider over v20");
+        // Behind About, ↓ on the last row in view would scroll the list; egui lets go of a focus under
+        // a modal layer, and the shell holds the keys back too.
+        let before = rect_of(&h, &row(30));
+        crate::support::open(h.state_mut());
+        h.run_steps(1);
+        assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(&row(30)))), "{theme:?}: the row has the focus behind About");
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(has_id(&h, &row(30)) && rect_of(&h, &row(30)) == before, "{theme:?}: behind About the keys are the dialog's");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.run_steps(2);
+        assert!(h.state().about.is_none() && rect_of(&h, &row(30)) == before, "{theme:?}: About closed");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(30))));
+        h.run_steps(1);
+        for i in (5..30).rev() {
+            key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
+            assert!(whole(&h, i), "{theme:?}: ↑ reached v{i}");
+        }
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&row(5))));
+        h.run_steps(1);
+        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
+        assert!(whole(&h, 6), "{theme:?}: and with it gone they move again");
+        let opened = |h: &Harness<'static, Shell>| h.state().versions.selected.as_deref() == Some("v6");
+        pressed_until(&mut h, egui::Key::Enter, opened, &format!("{theme:?}: Enter opened the one reached"));
     });
 }
 
@@ -14374,7 +15795,7 @@ fn interfaces_are_listed_under_their_package_added_with_the_plus_found_and_dragg
     // A name a class of the package has is refused, in place.
     let refused =
         crate::explorer::run(h.state_mut(), "uml.interface.rename", serde_json::json!({ "interface": payable.to_string(), "name": "order" }));
-    assert!(refused.is_err_and(|e| e.contains("class named order")));
+    assert!(refused.is_err_and(|e| e.contains("class named Order")), "it names the class that has the name");
     // The search finds it as an interface of Commerce.
     let index = crate::project_search::index(h.state().kinds, h.state().notation_uis, h.state().session.as_ref().unwrap().doc());
     let hit = crate::project_search::hits(&index, "payable").1.into_iter().find(|e| e.label == "Payable").map(|e| e.detail.clone());
@@ -16185,6 +17606,40 @@ fn the_relationship_tool_joins_no_association_to_an_enumeration_and_specializes_
         assert_eq!(h.state().canvas.notice.as_deref(), Some("An enumeration specializes only an enumeration"));
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "nothing changed");
     }
+}
+
+/// A line the engine refuses on a class diagram is said at the canvas's top in plain words and in
+/// the chosen language, never with the command's id, the parameter it is about or the engine's
+/// English: a class drawn depending on itself, in English and German. Nothing changes. In light and
+/// dark (AR-431).
+#[test]
+fn a_relationship_refused_on_a_class_diagram_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        for language in ["en", "de"] {
+            let (mut h, nodes, _) = enumeration_sample(theme);
+            h.state_mut().state.language = language.into();
+            h.run();
+            let node = archforge_mof::Uuid::parse(&nodes["OrderLine"]).unwrap();
+            let d = h.state().canvas.active.unwrap();
+            let d = h.state().session.as_ref().unwrap().doc().by_uuid(d).unwrap();
+            let revision = h.state().session.as_ref().unwrap().revision();
+            h.state_mut().canvas.uml_relation = crate::uml_relate::Relate::Dependency;
+            crate::uml_relate::connect(h.state_mut(), d, node, node);
+            h.run();
+            // The sentence as the catalogue words it: the kind, with a capital, in its template.
+            let class = crate::i18n::tr_ctx("refusal", "a class");
+            let class: String = class.chars().take(1).flat_map(char::to_uppercase).chain(class.chars().skip(1)).collect();
+            let said = crate::i18n::fmt(&crate::i18n::tr("{what} cannot depend on itself."), &[("what", &class)]);
+            if language == "de" {
+                assert_ne!(said, "A class cannot depend on itself.", "{theme:?}: the catalogue has it in German");
+            }
+            let notice = h.state().canvas.notice.clone().unwrap_or_else(|| panic!("{theme:?}, {language}: the refusal is said"));
+            assert_eq!(notice, said, "{theme:?}, {language}");
+            assert!(painted(&h).contains(&notice), "{theme:?}, {language}: shown at the canvas's top");
+            assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}, {language}: nothing changed");
+        }
+    }
+    crate::i18n::set_language("en");
 }
 
 /// The sample class model in `theme` with two data types, Amount and Price, placed in its empty
@@ -18444,12 +19899,13 @@ fn a_selected_associations_ends_are_set_in_properties_its_end_drags_to_another_c
     h.state_mut().session.as_mut().unwrap().redo().unwrap();
     h.run();
     assert!(!ids(&h).contains(&"workspace.properties.end.0.navigable".to_string()));
-    // Shared on the Order end too is refused, and said.
+    // Shared on the Order end too is refused, and said in the interface's words (AR-442).
     let at = rect_of(&h, "workspace.properties.end.0.aggregation").center();
     click(&mut h, at);
     let at = rect_of(&h, "workspace.properties.end.0.aggregation.1").center();
     click(&mut h, at);
-    assert!(h.state().panels.notice.as_ref().is_some_and(|n| n.contains("aggregates already")), "{:?}", h.state().panels.notice);
+    let said = crate::i18n::tr("The other end has an aggregation already: only the part's end has one.");
+    assert_eq!(h.state().panels.notice.as_ref(), Some(&said));
     assert_eq!(ends(&mut h)[0]["aggregation"], "none");
     // The line's target end, at Payment, dragged onto Product: the association and its line move.
     let handle = rect_of(&h, "workspace.canvas.line-end.target").center();
@@ -19769,6 +21225,76 @@ fn an_association_end_s_modifiers_are_written_by_their_apply_and_its_line_says_t
         h.run();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         assert_eq!(line(&h), (Some("/goods".into()), Some("* = few {ordered, subsets lines}".into())));
+    }
+}
+
+/// An association with both ends' Modifiers open, Read only changed on each end in `changed`.
+fn both_modifiers_open(theme: ThemeKind, changed: &[usize]) -> Harness<'static, Shell> {
+    let (mut h, made) = modifiers_sample(theme);
+    h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [made["holds"]] })).unwrap();
+    h.run();
+    for i in [0, 1] {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.modifiers")).center();
+        click(&mut h, at);
+    }
+    for i in changed {
+        let at = rect_of(&h, &format!("workspace.properties.end.{i}.read-only")).center();
+        click(&mut h, at);
+    }
+    h
+}
+
+/// Escape in one end's Role gives up that role alone, and the other end's Modifiers keep their
+/// change. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_role_leaves_the_other_end_s_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[0]);
+        let (ends, before) = (|h: &Harness<'static, Shell>| h.state().panels.ends.clone().unwrap(), revision(&h));
+        retype(&mut h, "workspace.properties.end.1.role", "goods");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(ends(&h).role[1], "items", "{theme:?}: the role is given up");
+        assert!(ends(&h).modifiers[0].read_only && ends(&h).modifiers_open[0], "{theme:?}: end 0's Modifiers keep their change");
+        assert_eq!(revision(&h), before, "{theme:?}: nothing written");
+    }
+}
+
+/// Escape in one end's Default field, which the toolkit lets go of as the frame begins, goes to
+/// that end's Modifiers, not to the other end's changed last. In light and dark (AR-417).
+#[test]
+fn escape_in_an_end_s_default_goes_to_its_own_modifiers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = both_modifiers_open(theme, &[1]);
+        let changed = |h: &Harness<'static, Shell>| h.state().panels.ends.as_ref().unwrap().modifiers.clone().map(|m| m.read_only);
+        let at = rect_of(&h, "workspace.properties.end.0.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, true], "{theme:?}: end 1's change stays");
+        let at = rect_of(&h, "workspace.properties.end.1.default").center();
+        click(&mut h, at);
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(changed(&h), [false, false], "{theme:?}: its own Default gives it up");
+    }
+}
+
+/// With no field holding the keyboard, Escape goes to the Modifiers changed last (end 1); once
+/// they are given up, cancelled or applied, the next goes on to end 0's. In light and dark (AR-417).
+#[test]
+fn escape_with_no_field_goes_on_to_the_other_end_once_the_last_is_resolved() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let pending = |h: &Harness<'static, Shell>| h.state().panels.ends.clone().map(|e| [0, 1].map(|i| e.modifiers[i] != e.written_modifiers[i]));
+        for way in ["escape", "cancel", "apply"] {
+            let mut h = both_modifiers_open(theme, &[0, 1]);
+            h.state_mut().panels.scroll = 10_000.0;
+            h.run();
+            match rect_of(&h, &format!("workspace.properties.end.1.{way}").replace(".escape", ".cancel")).center() {
+                _ if way == "escape" => key(&mut h, egui::Key::Escape, egui::Modifiers::NONE),
+                at => click(&mut h, at),
+            }
+            assert_eq!(pending(&h), Some([true, false]), "{theme:?} {way}: end 1 resolved, end 0 kept");
+            key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+            assert_eq!(pending(&h), Some([false, false]), "{theme:?} {way}: Escape reached end 0");
+        }
     }
 }
 
@@ -22482,6 +24008,28 @@ fn stereotypes_are_applied_and_their_values_edited_in_properties() {
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Unapply stereotype"));
         h.run();
         assert!(painted_has(&h, "Stereotypes · 0"));
+    }
+}
+
+/// Show stereotype values refused says why under Properties in plain words, as a sentence, never as
+/// the engine words it: a model that can't be changed at the moment. Nothing changes. In light and
+/// dark (AR-431).
+#[test]
+fn show_stereotype_values_refused_says_why_in_plain_words() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1100.0));
+        crate::uml_profiles::put_profiles(h.state_mut(), false).unwrap();
+        select_named(&mut h, archforge_uml::CLASS, "Order");
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        h.state_mut().session.as_mut().unwrap().set_read_only(true).unwrap();
+        let at = rect_of(&h, crate::uml_stereotypes::SHOW_ID).center();
+        click(&mut h, at);
+        h.state_mut().session.as_mut().unwrap().set_read_only(false).unwrap();
+        let notice = h.state().panels.notice.clone().unwrap_or_else(|| panic!("{theme:?}: refused"));
+        assert_eq!(notice, crate::i18n::tr("The model cannot be changed at the moment; nothing was changed."), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing changed");
     }
 }
 

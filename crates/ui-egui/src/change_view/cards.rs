@@ -164,7 +164,7 @@ fn lists(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &Universe, (
                     mark(&paint, p, row, before);
                 }
                 let x = body.left() + INSET + if item.change.is_some() { MARK } else { 0.0 };
-                let words = row_words(universe, item);
+                let words = row_words(universe, list.kind, item);
                 ux::text_mid(&paint, x, row.center().y, &words, types::UI, p.text, Some((row.right() - 8.0 - x).max(0.0)));
                 let said = item.change.map_or_else(|| format!("{heading}, {words}"), |c| format!("{heading}, {words}, {}", kind_look(c, p).0));
                 let id = format!("workspace.change-view.{side}.list.{l}.{i}");
@@ -183,18 +183,31 @@ fn heading(kind: ListKind) -> String {
         ListKind::Operations => tr("Operations"),
         ListKind::Literals => tr("Literals"),
         ListKind::Members => tr("Members"),
+        ListKind::Relationships => tr("Relationships"),
         ListKind::Ownership => tr("Ownership"),
     }
 }
 
-/// What a row of a list says in the language shown: one with no name goes by its kind, and what
-/// isn't there is said to be missing, in words.
-fn row_words(universe: &Universe, row: &ListRow) -> String {
-    match &row.name {
-        Named::Said(words) | Named::Made(words) if !words.is_empty() => words.clone(),
-        Named::Said(_) | Named::Made(_) | Named::Unnamed => kind_label(universe, row.class),
-        Named::Nothing => tr("None"),
-        Named::Unavailable => tr("Not available on this side"),
+/// What a row of a list of `kind` says in the language shown: one with no name goes by its kind, a
+/// relationship by what it joins to as well, and what isn't there is said to be missing, in words.
+fn row_words(universe: &Universe, kind: ListKind, row: &ListRow) -> String {
+    let name = said(&row.name).unwrap_or_else(|| kind_label(universe, row.class));
+    match &row.to {
+        Some((_, to)) if kind == ListKind::Relationships => {
+            let to = said(to).unwrap_or_else(|| tr("Unnamed"));
+            fmt(&tr("{name} → {to}{note}"), &[("name", &name), ("to", &to), ("note", &row.note)])
+        }
+        _ => name,
+    }
+}
+
+/// `name` in the language shown; none when it is empty, for the caller to word.
+fn said(name: &Named) -> Option<String> {
+    match name {
+        Named::Said(words) | Named::Made(words) if !words.is_empty() => Some(words.clone()),
+        Named::Said(_) | Named::Made(_) | Named::Unnamed => None,
+        Named::Nothing => Some(tr("None")),
+        Named::Unavailable => Some(tr("Not available on this side")),
     }
 }
 

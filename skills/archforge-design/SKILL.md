@@ -67,7 +67,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
   and Home's search rows share each action's availability. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
-  `Shell::in_window_menu`): the groups of its own table (File, Edit, Model, Versions and Help for now, others join by a
+  `Shell::in_window_menu`): the groups of its own table (File, Edit, View, Model, Versions and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, the rows lower down to a line of text where a
   long menu would leave the window, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes, and while a menu is
@@ -75,6 +75,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   opens the first menu on its first live row and closes it again (Shift+F10 stays with the row
   menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
   Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
+- The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
+  field has the keyboard, so a skill's text keeps ⌘K for a link, and while the bar has no room for the
+  field, which then closes an open list), Zoom in, Zoom out and Whole diagram (the
+  minimap's own steps, about the canvas's centre as last drawn), Show minimap (on while folded and the canvas, as last drawn, has room for it), then a row
+  per explorer and panel that opens it, off while it already shows. Only Find… is on at Home.
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
   nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group
   stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the
@@ -82,9 +87,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History (⇧⌘H, the
   chip's list), Compare… (the version whose details show, else the newest once the list is current,
   against current work; off while it may be behind a save),
-  Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
+  New branch…, Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
   even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
-  row off. New branch… joins once creating a branch has its dialog. Every shortcut is matched
+  row off. New branch… (AR-407) opens the Branches header's dialog, on while the host keeps branches and
+  nothing holds the project; the chip's list ends in the same row, pinned under its rows and reached by ↓
+  past the last one. Every shortcut is matched
   exactly, so ⇧⌘S never saves.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
@@ -167,7 +174,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   every row (Expand all), or folds them all (Collapse all) once everything is open; a filter opens
   what it shows, and the button rests while one is typed. An element selected on the canvas or in
   Properties opens its schema and table once, so its row shows; folding them again sticks.
-- The + adds what fits the selection, named in place: Enter confirms, Esc cancels.
+- The + adds what fits the selection, named in place: Enter confirms, Esc cancels. A name refused
+  in place keeps the keyboard with the name as typed, for a correction or Esc (AR-426).
 - Dragging an element from Models onto the canvas places it; one already there is refused with a
   toast.
 - Deleting from the explorer asks first when the element is on diagrams or takes other elements
@@ -238,11 +246,19 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   Skills is a tab of its own.
 - The panel opens with the selection's name, its kind and a Description field, pinned while the
   body scrolls. Enter, leaving the field or selecting something else keeps the description on the
-  element it was typed on, an empty field removes it; a UML
+  element it was typed on, an empty field removes it, Escape gives the typing up; a UML
   element's is a comment it owns (AR-186), recognised by its shape: an owned comment annotating its
   owner alone, so such a comment from a file counts as the description (the first one; setting
   removes any others, clearing removes them all). An association's end takes none. A box's element and its members (a table and its columns, a class and its
   attributes) share one page, so moving between them keeps the scroll.
+- A text field written in place (a name, a description, a role) keeps on Enter or when left, and
+  Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
+  sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
+  reason as a sentence, without the command's id, and goes when the selection changes; a draft left
+  on the element selected before and refused then names that element ("Not kept on {name}: …").
+  Escape goes only to the field or editor that held the keyboard as the frame began
+  (`panels::keys_at_start`, as the toolkit lets go of some fields on Escape first); with none
+  holding it, an association end's Modifiers changed last that still hold a change are given up.
 - Sections are divided by full-width lines, each headed by a regular title with its count
   ("Columns · 3") and an icon action such as +. Fields are filled and borderless with small muted
   labels above them. The panel carries no help or footer texts.
@@ -295,7 +311,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   to three, then back to text. Cmd B, Cmd I and Cmd K work while writing.
 - The text is kept a moment after typing pauses, when the tab closes, on Save and on quitting,
   each time one undo step. A text the model refuses keeps its tab, and its project, open, saying
-  why.
+  why. Text waiting to be kept, or refused, is unsaved work, as a description being typed is
+  (`typing_unkept` in `crates/ui-egui/src/lib.rs`): nothing says "Saved" or "No changes"
+  meanwhile, and closing or quitting asks, for a parked project too.
 - A link in Preview opens only after a confirmation that names its site and shows the whole
   address, and only when it is a web or mail address. Pictures in a skill are never loaded. A
   text too long or nested too deeply is shown plain in Write and not rendered in Preview.
