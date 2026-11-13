@@ -341,9 +341,10 @@ pub fn trail(store: &Store, project: &str, of: Obj) -> String {
     head.into_iter().chain(names).collect::<Vec<_>>().join(" / ")
 }
 
+/// Runs a command on the open project's session; a refusal comes back in Properties' plain words
+/// ([`crate::panels::refusal`]).
 fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_json::Value, String> {
-    let Some(session) = shell.session.as_mut() else { return Err(tr("The model could not be opened")) };
-    session.execute(id, &params).map(|o| o.value).map_err(|e| e.to_string())
+    crate::panels::run(shell, id, params)
 }
 
 /// The kind the dialog makes a diagram of.

@@ -4448,7 +4448,8 @@ fn the_plus_adds_a_schema_named_in_place_and_enter_renames_it() {
 /// A name refused in place by Enter keeps the keyboard with the name as typed: Escape then closes
 /// it, the old name staying and the tree taking its keys again, and a valid name typed after it is
 /// applied by Enter, with no click in between. A click elsewhere still takes the keyboard away from
-/// it. In light and dark (AR-426).
+/// it. The refusal says it in Properties' words, under the field and read out, never the engine's
+/// (AR-427). In light and dark (AR-426).
 #[test]
 fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -4460,7 +4461,9 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
             key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
             key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
             let rename = h.state().explorer.rename.clone().unwrap_or_else(|| panic!("{theme:?}: the refused name stays open"));
-            assert!(rename.text.is_empty() && rename.refused.is_some(), "{theme:?}: {rename:?}");
+            let said = crate::i18n::tr("A name can't be empty.");
+            assert!(rename.text.is_empty() && rename.refused.as_deref() == Some(said.as_str()), "{theme:?}: {rename:?}");
+            read_out(&h, &said, "workspace.explorer.rename.notice");
             assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id("workspace.explorer.rename"))), "{theme:?}: the field kept the keyboard");
             if then == "correct" {
                 h.event(egui::Event::Text("Shop".into()));
@@ -4484,6 +4487,27 @@ fn a_name_refused_in_place_keeps_the_keyboard_for_escape_or_a_correction() {
             }
         }
     }
+}
+
+/// A name refused in place in Models is said in the chosen language, as Properties says it: the
+/// explorer's own wrapper goes through the shared refusal wording. In light and dark (AR-427).
+#[test]
+fn a_name_refused_in_place_is_said_in_the_chosen_language() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Backspace, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+        let said = crate::i18n::tr("A name can't be empty.");
+        assert_ne!(said, "A name can't be empty.", "{theme:?}: the catalogue has it in German");
+        let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone());
+        assert_eq!(refused.as_deref(), Some(said.as_str()), "{theme:?}");
+        read_out(&h, &said, "workspace.explorer.rename.notice");
+    }
+    crate::i18n::set_language("en");
 }
 
 #[test]
@@ -5156,6 +5180,7 @@ fn the_explorer_s_refusals_are_read_out_as_a_status() {
         h.state_mut().explorer.rename.as_mut().expect("F2 opens the name").text = String::new();
         key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         let refused = h.state().explorer.rename.as_ref().and_then(|r| r.refused.clone()).expect("an empty name is refused");
+        assert_eq!(refused, crate::i18n::tr("A name can't be empty."), "{theme:?}: in Properties' words (AR-427)");
         read_out(&h, &refused, "workspace.explorer.rename.notice");
         // The refused field kept the keyboard, so Escape reaches it with no click (AR-426).
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
