@@ -1628,6 +1628,36 @@ fn a_version_is_compared_with_current_work_and_read_once() {
     });
 }
 
+/// Two versions are both read at their revisions, Before first and one at a time, then compared.
+/// They never move, so an edit to current work reads and compares nothing again; Swap reverses what
+/// is found from the rows held, reading nothing.
+#[test]
+fn two_versions_are_read_one_at_a_time_and_compared() {
+    in_both(|h, host| {
+        let generation = h.state().session_generation();
+        let before = page_reading(h, host);
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(2));
+        h.run_steps(3);
+        assert_eq!(asked(host), ["c3"], "one read at a time");
+        answer(host, "c3", Ok(before));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(rows_now(h)));
+        found_many(h, 1);
+        let added = Some(Ok(vec![("shop".to_string(), ChangeKind::Added)]));
+        assert_eq!(found(h), added);
+        let key = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.as_ref().map(|(key, ..)| key.clone());
+        let landed = key(h);
+        add_schema(h, "more");
+        h.run_steps(4);
+        let r = &h.state().versions.compare_results;
+        assert!(key(h) == landed && found(h) == added && r.comparing.is_none() && asked(host).is_empty(), "{:?}", asked(host));
+        tap(h, SWAP);
+        frames_until(h, |h| found(h) == Some(Ok(vec![("shop".to_string(), ChangeKind::Removed)])));
+        assert!(asked(host).is_empty() && h.state().session_generation() == generation, "{:?}", asked(host));
+    });
+}
+
 /// Differences found in id order are grouped by area, model elements first, each area keeping that
 /// order: a diagram made between two schemas lists after both, its unnamed part after it.
 #[test]
@@ -1657,10 +1687,10 @@ fn landing(h: &mut Harness<'static, Shell>, sides: (&str, bool), revision: u64, 
     let (waiting, read) = std::sync::mpsc::channel();
     let (tx, comparison) = std::sync::mpsc::channel();
     tx.send(answer).unwrap();
-    let key = Key { sides: (sides.0.to_string(), sides.1), revision };
+    let key = Key { sides: if sides.1 { (None, Some(sides.0.to_string())) } else { (Some(sides.0.to_string()), None) }, revision };
     let project = (h.state().project.as_ref().unwrap().path.clone(), h.state().session_generation());
     let r = &mut h.state_mut().versions.compare_results;
-    (r.held, r.found, r.reading, r.comparing) = (None, None, Some((project, "c3".to_string(), read)), Some((key, comparison)));
+    (r.held, r.found, r.reading, r.comparing) = (Vec::new(), None, Some((project, "c3".to_string(), read)), Some((key, comparison)));
     h.run_steps(1);
     drop(waiting);
 }
@@ -1685,9 +1715,9 @@ fn a_comparison_runs_alone_and_lands_only_on_its_sides() {
         landing(h, ("c2", false), now, none());
         assert_eq!(found(h), None, "another version");
         let (_waiting, pending) = std::sync::mpsc::channel();
-        let key = Key { sides: ("c3".to_string(), false), revision: now - 1 };
+        let key = Key { sides: (Some("c3".to_string()), None), revision: now - 1 };
         let r = &mut h.state_mut().versions.compare_results;
-        (r.held, r.reading, r.comparing) = (Some(Held { version: "c3".into(), rows: before, keep: true }), None, Some((key.clone(), pending)));
+        (r.held, r.reading, r.comparing) = (vec![Held { version: "c3".into(), rows: before, keep: true }], None, Some((key.clone(), pending)));
         h.run_steps(4);
         assert!(h.ctx.has_requested_repaint() && h.state().versions.compare_results.comparing.as_ref().is_some_and(|c| c.0 == key));
     });
@@ -1761,9 +1791,9 @@ fn a_failed_comparison_of_rows_let_go_reads_again_on_an_edit() {
         let now = h.state().session.as_ref().unwrap().revision();
         let (tx, failed) = std::sync::mpsc::channel();
         tx.send(Err("Failed".to_string())).unwrap();
-        let key = Key { sides: ("c3".to_string(), false), revision: now };
+        let key = Key { sides: (Some("c3".to_string()), None), revision: now };
         let r = &mut h.state_mut().versions.compare_results;
-        (r.held, r.reading, r.comparing) = (None, None, Some((key, failed)));
+        (r.held, r.reading, r.comparing) = (Vec::new(), None, Some((key, failed)));
         h.run_steps(3);
         assert!(found(h) == Some(Err("Failed".to_string())) && asked(host).is_empty(), "{:?}", asked(host));
         add_schema(h, "more");
@@ -1797,7 +1827,8 @@ fn another_version_is_read_and_a_late_answer_dropped() {
         frames_until(h, |_| asked(host) == ["c1"]);
         let nothing = Rows { tables: vec![Vec::new(); before.tables.len()], junctions: vec![Vec::new(); before.junctions.len()] };
         answer(host, "c1", Ok(Arc::new(nothing)));
-        let of_c1 = |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, ..)| key.sides.0 == "c1");
+        let of_c1 =
+            |h: &Harness<'static, Shell>| h.state().versions.compare_results.found.clone().filter(|(key, ..)| key.sides.0.as_deref() == Some("c1"));
         frames_until(h, |h| of_c1(h).is_some());
         let items = of_c1(h).unwrap().1.unwrap();
         assert!(!items.is_empty() && items.iter().all(|d| d.class != archforge_core::MODEL), "the model's root is no change of its own");
@@ -1814,17 +1845,17 @@ fn what_is_held_goes_when_too_large_or_left() {
         answer(host, "c3", Ok(before));
         found_many(h, 1);
         h.state_mut().versions.compare_results.found.as_mut().unwrap().1 = Err("Failed".into());
-        h.state_mut().versions.compare_results.held.as_mut().unwrap().keep = false;
+        h.state_mut().versions.compare_results.held[0].keep = false;
         add_schema(h, "more");
         found_many(h, 2);
-        assert!(h.state().versions.compare_results.held.is_none() && asked(host).is_empty());
+        assert!(h.state().versions.compare_results.held.is_empty() && asked(host).is_empty());
         add_schema(h, "third");
         frames_until(h, |_| asked(host) == ["c3"]);
         answer(host, "c3", Ok(rows_now(h)));
-        frames_until(h, |h| h.state().versions.compare_results.held.is_some());
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
         tap(h, COMPARE_CLOSE);
         h.run_steps(1);
-        assert!(h.state().versions.compare_results.held.is_none() && found(h).is_none());
+        assert!(h.state().versions.compare_results.held.is_empty() && found(h).is_none());
     });
     in_both(|h, host| {
         let before = page_reading(h, host);
@@ -1833,7 +1864,7 @@ fn what_is_held_goes_when_too_large_or_left() {
         answer(host, "c3", Ok(before));
         h.run_steps(2);
         let r = &h.state().versions.compare_results;
-        assert!(r.reading.is_none() && r.held.is_none() && asked(host).is_empty(), "{:?}", asked(host));
+        assert!(r.reading.is_none() && r.held.is_empty() && asked(host).is_empty(), "{:?}", asked(host));
     });
 }
 
@@ -1851,7 +1882,7 @@ fn a_page_gone_leaves_its_read_to_end_and_frees_its_answer() {
         answer(host, "c3", Ok(before.clone()));
         h.run_steps(1);
         let r = &h.state().versions.compare_results;
-        assert!(r.reading.is_none() && r.held.is_none() && r.found.is_none());
+        assert!(r.reading.is_none() && r.held.is_empty() && r.found.is_none());
         assert_eq!(Arc::strong_count(&before), 1, "its rows freed");
     });
 }
@@ -1866,7 +1897,7 @@ fn a_read_of_another_project_lands_nowhere() {
         let generation = h.state().session_generation();
         h.state_mut().versions.compare_results.reading = Some((("/other".into(), generation), "c3".to_string(), read));
         h.run_steps(1);
-        assert!(h.state().versions.compare_results.held.is_none());
+        assert!(h.state().versions.compare_results.held.is_empty());
     });
 }
 
@@ -1956,7 +1987,7 @@ fn a_page_gone_rests_and_a_page_back_takes_its_comparison() {
     in_both(|h, host| {
         let _ = page_reading(h, host);
         let (tx, pending) = std::sync::mpsc::channel();
-        let key = Key { sides: ("c3".to_string(), false), revision: h.state().session.as_ref().unwrap().revision() };
+        let key = Key { sides: (Some("c3".to_string()), None), revision: h.state().session.as_ref().unwrap().revision() };
         h.state_mut().versions.compare_results.comparing = Some((key, pending));
         tap(h, COMPARE_CLOSE);
         h.run_steps(4);
@@ -1991,7 +2022,7 @@ fn leaving_the_project_lets_the_page_go() {
             host.closings.lock().unwrap().drain(..).for_each(|c| drop(c.send(Ok(()))));
             h.run_steps(2);
             let r = &h.state().versions.compare_results;
-            assert!(h.state().project.is_none() && r.held.is_none() && r.found.is_none() && r.reading.is_some());
+            assert!(h.state().project.is_none() && r.held.is_empty() && r.found.is_none() && r.reading.is_some());
             tx.send(Ok(before.clone())).unwrap();
             h.run_steps(1);
             assert!(h.state().versions.compare_results.reading.is_none() && Arc::strong_count(&before) == 1, "dropped, rows and all");
@@ -2126,7 +2157,7 @@ fn an_edit_under_way_holds_the_comparison() {
         let before = page_reading(h, host);
         h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
         answer(host, "c3", Ok(before));
-        frames_until(h, |h| h.state().versions.compare_results.held.is_some());
+        frames_until(h, |h| !h.state().versions.compare_results.held.is_empty());
         h.run_steps(2);
         assert!(found(h).is_none() && h.state().versions.compare_results.comparing.is_none());
         h.state_mut().session.as_mut().unwrap().cancel().unwrap();
@@ -2271,18 +2302,30 @@ fn skills_are_listed_on_their_own() {
     });
 }
 
-/// Nothing to list is said in words, and two saved versions are not compared yet.
+/// Nothing to list is said in words: for a version and current work, for one version on both sides,
+/// which reads nothing, and for two versions alike.
 #[test]
-fn an_empty_result_and_two_versions_are_said() {
+fn an_empty_result_and_two_versions_alike_are_said() {
     in_both(|h, host| {
         let _ = page_reading(h, host);
-        answer(host, "c3", Ok(rows_now(h)));
+        let now = rows_now(h);
+        answer(host, "c3", Ok(now.clone()));
         frames_until(h, |h| has_id(h, "workspace.version-compare.said"));
         assert!(painted_has(h, "This version is the same as your current work.") && !painted_has(h, "0 differences"), "{:?}", painted(h));
+        let alike = "These two versions are the same.";
+        tap(h, SELECT_AFTER);
+        tap(h, &row_id(1));
+        h.run_steps(1);
+        assert!(painted_has(h, alike) && asked(host).is_empty(), "{:?}", painted(h));
         tap(h, SELECT_AFTER);
         tap(h, &row_id(2));
+        frames_until(h, |_| asked(host) == ["c3"]);
+        answer(host, "c3", Ok(now.clone()));
+        frames_until(h, |_| asked(host) == ["c2"]);
+        answer(host, "c2", Ok(now));
+        frames_until(h, |h| found(h) == Some(Ok(Vec::new())));
         h.run_steps(1);
-        assert!(painted_has(h, "Not available yet") && asked(host).is_empty(), "{:?}", painted(h));
+        assert!(painted_has(h, alike) && !painted_has(h, "0 differences"), "{:?}", painted(h));
         tap(h, SELECT_AFTER);
         tap(h, &row_id(0));
         tap(h, SELECT_BEFORE);

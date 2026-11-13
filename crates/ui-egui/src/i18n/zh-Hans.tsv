@@ -455,6 +455,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	发送此请求后，显示的项目已更改，因此未运行。请查看当前显示的内容，然后重新发送。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	项目在被替换期间保持不变，因此未运行此请求。请在完成后重试。
 str		This version is the same as your current work.	此版本与您当前的工作相同。
+str		These two versions are the same.	这两个版本相同。
 str		Both sides are your current work.	两侧都是您当前的工作。
 str		Choose another pair above.	请在上方选择另一组。
 str		Restore this version…	恢复此版本…

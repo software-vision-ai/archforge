@@ -455,6 +455,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	このリクエストの送信後に表示中のプロジェクトが変わったため、実行しませんでした。現在の表示を確認して、もう一度送信してください。
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	プロジェクトは置き換えの間保持されているため、このリクエストは実行しませんでした。完了してからもう一度お試しください。
 str		This version is the same as your current work.	このバージョンは現在の作業と同じです。
+str		These two versions are the same.	この2つのバージョンは同じです。
 str		Both sides are your current work.	両側とも現在の作業です。
 str		Choose another pair above.	上で別の組み合わせを選んでください。
 str		Restore this version…	このバージョンを復元…

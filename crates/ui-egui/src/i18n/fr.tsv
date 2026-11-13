@@ -455,6 +455,7 @@ str		Archforge could not tell whether the last change finished. Nothing more was
 str		The project shown changed after this request was sent, so it was not run. Look at what is shown now and send it again.	Le projet affiché a changé après l'envoi de cette requête ; elle n'a donc pas été exécutée. Vérifiez ce qui est affiché et renvoyez-la.
 str		The project is held still while it is being replaced, so this request was not run. Try again when that has finished.	Le projet est figé pendant son remplacement ; cette requête n'a donc pas été exécutée. Réessayez une fois l'opération terminée.
 str		This version is the same as your current work.	Cette version est identique à votre travail en cours.
+str		These two versions are the same.	Ces deux versions sont identiques.
 str		Both sides are your current work.	Les deux côtés sont votre travail en cours.
 str		Choose another pair above.	Choisissez une autre paire ci-dessus.
 str		Restore this version…	Restaurer cette version…
