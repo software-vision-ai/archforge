@@ -469,7 +469,8 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 .or_else(|| template_said(other))
                 .or_else(|| set_and_end_said(other))
                 .or_else(|| profile_said(other))
-                .or_else(|| constraint_said(other));
+                .or_else(|| constraint_said(other))
+                .or_else(|| target_said(other));
         }
     };
     let what = a_kind(kind)?;
@@ -495,6 +496,23 @@ fn constraint_said(reason: &archforge_engine::Reason) -> Option<String> {
             &tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first."),
             &[("max", &max.to_string())],
         ),
+        _ => return None,
+    })
+}
+
+/// A rule broken by the properties a property subsets or redefines, as a list of ids; none for
+/// another reason.
+fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    const SUBSETTED: &str = "subsetted property";
+    const REDEFINED: &str = "redefined property";
+    Some(match reason {
+        Reason::TooMany { kind: SUBSETTED, max } => fmt(&tr("A property subsets at most {max} properties."), &[("max", &max.to_string())]),
+        Reason::TooMany { kind: REDEFINED, max } => fmt(&tr("A property redefines at most {max} properties."), &[("max", &max.to_string())]),
+        Reason::NamedTwice { kind: SUBSETTED | REDEFINED, .. } => tr("An element is named twice. Name each element once."),
+        Reason::IdsExpected { kind: SUBSETTED | REDEFINED } => tr("Give the properties as a list of ids."),
+        Reason::NotAnItemKey { key } => fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", key)]),
+        Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
         _ => return None,
     })
 }

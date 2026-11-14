@@ -1395,6 +1395,11 @@ str		No property to subset	サブセットにできるプロパティはあり�
 str		No property to redefine	再定義できるプロパティはありません
 str		The default value {value} does not fit {type}; change or clear it first.	既定値 {value} は {type} に合いません。先に変更するか消去してください。
 str		A property chosen here is gone; choose again.	ここで選んだプロパティはもうありません。選び直してください。
+str		A property subsets at most {max} properties.	プロパティがサブセット元にできるプロパティは最大 {max} 個です。
+str		A property redefines at most {max} properties.	プロパティが再定義できるプロパティは最大 {max} 個です。
+str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
+str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
+str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} は数値ではありません（Real の既定値は 2.5 のような数値です）。

@@ -523,6 +523,37 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
     refused(&mut s, "uml.attribute.set", json!({ "attribute": all, "subsets": [{ "id": parts, "kind": "x" }] }), "subsets", &["kind", "id and name"]);
 }
 
+/// The lists of properties a property subsets and redefines, refused, carry their reason typed
+/// beside the unchanged English, with the list's kind: too many ids, an object with another key,
+/// an item that is no id, no such element, and a property named twice (AR-466).
+#[test]
+fn a_target_list_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let (_, _, item, order, _) = shop(&mut s);
+    let all = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "all", "type": item, "multiplicity": "*" }));
+    let lines = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
+    for (key, kind) in [("subsets", "subsetted property"), ("redefines", "redefined property")] {
+        let check = |s: &mut S, list: Json, reason: Reason, english: &str| {
+            let p = json!({ "attribute": lines, key: list });
+            let e = refused(s, "uml.attribute.set", p.clone(), key, &[english]);
+            let Err(EngineError::Failed { error, .. }) = s.execute("uml.attribute.set", &p) else { panic!("{p} is refused") };
+            assert_eq!(error.reason, Some(reason), "{e}");
+        };
+        check(&mut s, json!(vec![&all; 33]), Reason::TooMany { kind, max: 32 }, "33 ids; a property names at most 32 here");
+        let key_of = |k: &str| Reason::NotAnItemKey { key: k.into() };
+        check(&mut s, json!([{ "id": all, "kind": "x" }]), key_of("kind"), "kind is not a key of a property here; an object holds id and name");
+        check(&mut s, json!([{ "id": all, "k".repeat(50): 1 }]), key_of(&"k".repeat(40)), "is not a key of a property here");
+        check(&mut s, json!([7]), Reason::IdsExpected { kind }, "7 is not a property's id; the list holds ids as text");
+        check(&mut s, json!([{ "name": "all" }]), Reason::IdsExpected { kind }, "is not a property's id");
+        check(&mut s, json!(["nope"]), Reason::NoElement { id: "nope".into() }, "there is no element nope; the list holds ids of attributes");
+        check(&mut s, json!([all, all]), Reason::NamedTwice { kind, name: all.clone() }, "is named twice; name each property once");
+    }
+    // At the most, the list is read on, to the rules.
+    let e = refused(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": vec![&all; 32] }), "subsets", &["named twice"]);
+    assert!(!e.contains("at most"), "{e}");
+}
+
 /// A type change that breaks a kept Subsets target is refused, naming it; so is an aggregation
 /// change that breaks a kept Redefines target on an end.
 #[test]

@@ -1395,6 +1395,11 @@ str		No property to subset	Aucune propriété dont être un sous-ensemble
 str		No property to redefine	Aucune propriété à redéfinir
 str		The default value {value} does not fit {type}; change or clear it first.	La valeur par défaut {value} ne convient pas à {type} ; modifiez-la ou effacez-la d’abord.
 str		A property chosen here is gone; choose again.	Une propriété choisie ici n’existe plus ; choisissez à nouveau.
+str		A property subsets at most {max} properties.	Une propriété est un sous-ensemble d’au plus {max} propriétés.
+str		A property redefines at most {max} properties.	Une propriété redéfinit au plus {max} propriétés.
+str		Give the properties as a list of ids.	Indiquez les propriétés sous forme de liste d’identifiants.
+str		{key} is not a key here. An item holds an id and a name.	{key} n’est pas une clé ici. Une entrée contient un identifiant et un nom.
+str		There is no element with the id {id}.	Il n’existe aucun élément ayant l’identifiant {id}.
 str		A default value is at most {n} characters.	Une valeur par défaut compte au plus {n} caractères.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} n’est pas un nombre entier, ce qu’est la valeur par défaut d’un Integer, comme 42.
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} n’est pas un nombre, ce qu’est la valeur par défaut d’un Real, comme 2.5.

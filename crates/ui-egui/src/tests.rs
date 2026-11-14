@@ -5393,6 +5393,44 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The lists of properties a property subsets and redefines, refused by the engine, are said in
+/// the chosen language: too many for each list, an object with another key, an item that is no id,
+/// no such element and a property named twice, with nothing written. In light and dark (AR-466).
+#[test]
+fn a_target_list_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let package = id(&mut h, "uml.package.add", json!({ "name": "Shop" }));
+        let [item, order] = ["Item", "Order"].map(|n| id(&mut h, "uml.class.add", json!({ "package": package, "name": n })));
+        let all = id(&mut h, "uml.attribute.add", json!({ "class": item, "name": "all", "type": item, "multiplicity": "*" }));
+        let lines = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let mut refused = |key: &str, list: serde_json::Value| {
+            crate::panels::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, key: list })).err().unwrap_or_default()
+        };
+        let most = |template: &str| fmt(&tr(template), &[("max", "32")]);
+        let subsets_most = most("A property subsets at most {max} properties.");
+        assert_eq!(subsets_most, "Eine Eigenschaft ist Teilmenge von höchstens 32 Eigenschaften.", "{theme:?}: the language is German");
+        assert_eq!(refused("subsets", json!(vec![&all; 33])), subsets_most, "{theme:?}");
+        assert_eq!(refused("redefines", json!(vec![&all; 33])), most("A property redefines at most {max} properties."), "{theme:?}");
+        let key = fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", "kind")]);
+        assert_eq!(refused("subsets", json!([{ "id": all, "kind": "x" }])), key, "{theme:?}");
+        assert_eq!(refused("redefines", json!([7])), tr("Give the properties as a list of ids."), "{theme:?}");
+        let none = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
+        assert_eq!(refused("subsets", json!(["nope"])), none, "{theme:?}");
+        assert_eq!(refused("redefines", json!([all, all])), tr("An element is named twice. Name each element once."), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A move that would take used stereotypes out of the packages that apply their profiles is said in
 /// the chosen language, the uses named: a class and a package dropped on another package in Models,
 /// and a class given another owner. So are a list of metaclasses that holds no names and a

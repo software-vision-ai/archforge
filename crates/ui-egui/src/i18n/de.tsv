@@ -1395,6 +1395,11 @@ str		No property to subset	Keine Eigenschaft für eine Teilmenge
 str		No property to redefine	Keine Eigenschaft zum Redefinieren
 str		The default value {value} does not fit {type}; change or clear it first.	Der Standardwert {value} passt nicht zu {type}; ändern oder leeren Sie ihn zuerst.
 str		A property chosen here is gone; choose again.	Eine hier gewählte Eigenschaft gibt es nicht mehr; wählen Sie erneut.
+str		A property subsets at most {max} properties.	Eine Eigenschaft ist Teilmenge von höchstens {max} Eigenschaften.
+str		A property redefines at most {max} properties.	Eine Eigenschaft redefiniert höchstens {max} Eigenschaften.
+str		Give the properties as a list of ids.	Geben Sie die Eigenschaften als Liste von IDs an.
+str		{key} is not a key here. An item holds an id and a name.	{key} ist hier kein Schlüssel. Ein Eintrag enthält eine ID und einen Namen.
+str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
 str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} ist keine Zahl, wie sie der Standardwert eines Real ist, etwa 2.5.
