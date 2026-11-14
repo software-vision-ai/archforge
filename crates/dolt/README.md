@@ -13,28 +13,26 @@ that program and everything it started ended. A watchdog starts with no other st
 under way, so none of them inherits its pipe; no start waits for another longer than half a second,
 so a stalled start never holds up a stop or a recovery of another project.
 
-A start that fails once its server runs stops that server before it returns: every check that
-needs no server comes before the server's start, and what follows (the record, the wait until it
-is ready) owns the server through a value whose drop stops it.
+Every start writes its server's record, without the server's process id, before it probes a port,
+writes the server's configuration or starts the server, and completes the record with the process
+id once the server runs, holding the record's lock from before the record is written until it is
+complete. A start that finds another start's record there gives way then. One that fails before its
+server runs removes its record; one that fails after its server runs and before the record is
+complete stops the server and then removes the record, all still holding the lock (a record that
+cannot be removed stays, which the log says, for the next opening of its project). From the
+server's start on, a value whose drop stops the server owns it, so a start that fails later (the
+wait until the server is ready) stops that server before it returns too.
 
 A server that would not stop then (hardly possible on unix, where a kill follows the polite
-signal) may still run, without a watchdog. Its run folder stays, and so does its record if it had one: the project is
-refused as open elsewhere, naming that server, until the server has ended or that Archforge has,
-and recovery or the start-up sweep then clears both, stopping the server first if it still runs.
-Without a record (its write failed, or another start's record was there) the folder stays for a
-server nothing finds, as in the moment that follows.
+signal) may still run, without a watchdog. Its run folder stays, and the start leaves its record,
+complete or not: the project is refused as open elsewhere, naming that server, until the server has ended
+or that Archforge has, and recovery (for a complete record, the start-up sweep too) then clears
+both, stopping the server first if it still runs.
 
-One moment stays open: an Archforge
-killed between a server's start and its record, which needs the server's process id and so cannot
-come first. That is the record's write to disk, measured at 5 to 10 ms on macOS. A server left so
-has neither record nor watchdog, so no sweep finds it, and its run folder stays. Recovery treats
-it as any server it did not record: once it holds the project's lock, and if its program's file is
-named `dolt`, the project is refused as open elsewhere, naming the server's process id, until that
-process is stopped.
-
-A record may also name no process id: the record a start writes before its server runs, which
-AR-457's second part makes every start write, holding the record's lock until the record is
-complete. The opening of its project settles such a record before anything else:
+An Archforge killed after its server started and before its record is complete (the record's
+completion: a write to disk) leaves a server without a watchdog and a record without a process
+id. A record without a process id is that of a start under way, or of one that ended before it
+completed its record. The opening of its project settles such a record before anything else:
 
 - While the record's lock cannot be had, its start is under way: the project is refused as open
   elsewhere, naming that Archforge.
@@ -72,11 +70,14 @@ still the one read; write one only if none is there) sees no other change in bet
 Archforge or another of a build that has this lock. A record is never moved from its name to be
 compared, so no start finds a name free that is not. Reading takes no lock: a record appears and
 goes whole. The lock goes with its holder, so an Archforge killed in a change leaves the lock file
-and no lock; the lock files stay, one empty file for each record name ever used.
+and no lock; the lock files stay, one empty file for each record name ever used. An Archforge
+killed while it writes a record, before the record's temporary file has been renamed or removed,
+leaves that file (`.record-` and a random name, a few hundred bytes) in the records folder too,
+and nothing removes it.
 
-A start takes the lock before it starts its server and holds it until the record is written: a
-wait for the lock, or a start that cannot have it, comes before there is a server, and the moment
-named above is no longer than it was. A change waits at most two seconds for the lock: behind a
+A start takes the lock before it writes its record, and so before its server, and holds it until
+the record is complete: a wait for the lock, or a start that cannot have it, comes before there is
+a record or a server. A change waits at most two seconds for the lock: behind a
 holder that has stalled it fails and changes nothing. A start fails, having started no server; a
 removal leaves the record to the next recovery or sweep, and says so in the log; a damaged record
 stays where it is, which fails the opening of its project and leaves it out of a sweep. The lock

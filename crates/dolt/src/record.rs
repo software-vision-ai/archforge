@@ -1,6 +1,7 @@
 //! A record per running server, in the user's settings: which process serves which project, in
 //! which run folder, started by which Archforge. Recovery recognises a leftover server by it. A
-//! record without the server's process id is one a start wrote before its server ran.
+//! start writes it before its server starts, without the server's process id, and completes it
+//! once the server runs, holding the record's lock from before the one to after the other.
 //!
 //! Every change of a record (writing, removing, setting a damaged one aside) holds that record's
 //! lock, an operating-system lock on a file of its own beside the record, so a change that looks
@@ -83,8 +84,8 @@ enum Found {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Record {
     pub data_dir: String,
-    /// The server's process id; none in the record of a start written before its server ran (no
-    /// start writes one yet: AR-457). A record of the earlier format always has one.
+    /// The server's process id; none while its start is under way, and in the record of a start
+    /// that ended before it completed it. A record of the earlier format always has one.
     pub server_pid: Option<u32>,
     /// The checked run root the run folder was made in, and the run folder.
     pub run_root: String,
@@ -188,30 +189,64 @@ fn set_aside(file: &Path, why: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// The records folder of `held`, if it is the lock of `r`'s own record.
+fn own_folder<'a>(held: &'a Held, r: &Record) -> Result<&'a Path, Error> {
+    let file = &held.record;
+    let own = file.parent().filter(|d| path(d, &r.data_dir) == *file);
+    own.ok_or_else(|| Error::io("cannot write", file, std::io::Error::other("the lock held is another record's")))
+}
+
+/// Writes `r` in full under a new temporary name in `records` and synchronises it. Returns that
+/// name. The name is made exclusively, so nothing under it, a link included, is written through.
+fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
+    use std::io::Write;
+    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
+    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", &tmp, std::io::Error::other(e)))?;
+    // A name that is taken is another file's: only one this call made is removed again.
+    let mut f = std::fs::File::create_new(&tmp).map_err(|e| Error::io("cannot write", &tmp, e))?;
+    match f.write_all(&bytes).and_then(|()| f.sync_all()) {
+        Ok(()) => Ok(tmp),
+        Err(e) => {
+            remove(&tmp);
+            Err(Error::io("cannot write", &tmp, e))
+        }
+    }
+}
+
 /// Writes a project's record unless one is there already, atomically and exclusively: the record
 /// is written in full under a temporary name, then linked to its own name, which fails if another
 /// start got there first. The caller holds the record's lock, `held`, taken before the server
 /// the record is about was started. Returns whether it was written.
 pub(crate) fn write_new(held: &Held, r: &Record) -> Result<bool, Error> {
-    use std::io::Write;
     let file = &held.record;
-    let own = file.parent().filter(|d| path(d, &r.data_dir) == *file);
-    let records = own.ok_or_else(|| Error::io("cannot write", file, std::io::Error::other("the lock held is another record's")))?;
-    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", file, std::io::Error::other(e)))?;
-    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
-    let written = std::fs::File::create_new(&tmp).and_then(|mut f| {
-        f.write_all(&bytes)?;
-        f.sync_all()
-    });
+    let tmp = write_tmp(own_folder(held, r)?, r)?;
     #[cfg(test)]
     tests::in_change(file);
-    let linked = written.and_then(|()| std::fs::hard_link(&tmp, file));
-    let _ = std::fs::remove_file(&tmp);
+    let linked = std::fs::hard_link(&tmp, file);
+    remove(&tmp);
     match linked {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(Error::io("cannot write", file, e)),
     }
+}
+
+/// Completes the record `pending`, which a start wrote before its server ran, with the server's
+/// process id `server_pid`, under the lock `held` the start has held since. Only while the name
+/// still holds `pending`, read in place: the complete record is written in full under a temporary
+/// name and renamed over it, so a reader finds the one or the other whole, and no link under the
+/// name is written through. Anything else under the name fails the completion and stays.
+pub(crate) fn complete(held: &Held, pending: &Record, server_pid: u32) -> Result<(), Error> {
+    let file = &held.record;
+    if !matches!(load(file, Some(&pending.data_dir))?, Found::Good(r) if r == *pending) {
+        return Err(Error::io("cannot complete", file, std::io::Error::other("it is no longer this start's record")));
+    }
+    let done = Record { server_pid: Some(server_pid), ..pending.clone() };
+    let tmp = write_tmp(own_folder(held, &done)?, &done)?;
+    std::fs::rename(&tmp, file).map_err(|e| {
+        remove(&tmp);
+        Error::io("cannot write", file, e)
+    })
 }
 
 /// The record under the lock `held`, as it is: read only, nothing set aside. A file that holds no
@@ -236,7 +271,25 @@ pub(crate) fn remove_if(records: &Path, data_dir: &str, server_pid: u32) -> bool
 /// looked at stays, which the log says. Returns whether the name is free afterwards: not with
 /// another record or a damaged file under it, nor when that could not be found out.
 pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) -> bool {
-    let gone = locked(file, LOCK_WAIT, || match load(file, None)? {
+    let gone = locked(file, LOCK_WAIT, || remove_looked(file, &is_it));
+    gone.and_then(|looked| looked).unwrap_or_else(|e| {
+        log::warn!("the server record {} stays: {e}", file.display());
+        false
+    })
+}
+
+/// As [`remove_while`], for the record under the lock `held`, which the caller holds already: a
+/// second take of that lock would wait for the caller itself.
+pub(crate) fn remove_held(held: &Held, is_it: impl Fn(&Record) -> bool) -> bool {
+    remove_looked(&held.record, &is_it).unwrap_or_else(|e| {
+        log::warn!("the server record {} stays: {e}", held.record.display());
+        false
+    })
+}
+
+/// The look and the removal of [`remove_while`], for a caller that holds the lock.
+fn remove_looked(file: &Path, is_it: &impl Fn(&Record) -> bool) -> Result<bool, Error> {
+    match load(file, None)? {
         Found::Good(r) if is_it(&r) => {
             #[cfg(test)]
             tests::in_change(file);
@@ -244,11 +297,7 @@ pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) -> bool
             Ok(!file.exists())
         }
         found => Ok(matches!(found, Found::Absent)),
-    });
-    gone.and_then(|looked| looked).unwrap_or_else(|e| {
-        log::warn!("the server record {} stays: {e}", file.display());
-        false
-    })
+    }
 }
 
 pub(crate) fn remove(file: &Path) {
@@ -427,6 +476,27 @@ pub(crate) mod tests {
         assert!(!remove_if(&dir.0, "/p/a", 7), "the damaged file still holds the name");
         std::fs::create_dir(path(&dir.0, "/p/b")).unwrap();
         assert!(!remove_if(&dir.0, "/p/b", 7));
+    }
+
+    /// A start's record names no process until it is completed under the lock held since, and
+    /// completing puts a new file under the name: a second name for the first file still reads as
+    /// the first record. A name that no longer holds that record is not completed, and a removal
+    /// under the lock held takes only the record meant. No temporary file is left.
+    #[test]
+    fn a_record_is_completed_by_a_new_file_and_only_its_own() {
+        let dir = crate::home::tests::Scratch::new("complete");
+        let pending = Record { server_pid: None, ..rec("/p/a") };
+        let held = hold(&path(&dir.0, "/p/a"), LOCK_WAIT).unwrap();
+        assert!(super::write_new(&held, &pending).unwrap());
+        std::fs::hard_link(path(&dir.0, "/p/a"), dir.0.join("first")).unwrap();
+        complete(&held, &pending, 7).unwrap();
+        assert_eq!((look(&held, "/p/a").unwrap(), read_file(&dir.0.join("first"), None).unwrap()), (Some(rec("/p/a")), Some(pending.clone())));
+        let again = complete(&held, &pending, 9);
+        assert!(matches!(&again, Err(Error::Io { what, .. }) if what == "cannot complete"), "{again:?}");
+        assert!(!remove_held(&held, |r| *r == pending), "the name holds another record");
+        assert_eq!(look(&held, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert!(remove_held(&held, |r| *r == rec("/p/a")) && look(&held, "/p/a").unwrap().is_none());
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the lock and the second name: no temporary file");
     }
 
     /// A record of the earlier format, with a process id always, reads as a complete record; one
