@@ -508,7 +508,7 @@ fn segmented(
         }
         x = b.right();
     }
-    if focused && ui.input(|i| i.key_pressed(egui::Key::ArrowLeft) || i.key_pressed(egui::Key::ArrowRight)) {
+    if focused && ui.input(|i| [egui::Key::ArrowLeft, egui::Key::ArrowRight].into_iter().any(|key| crate::actions::plain_press(i, key))) {
         out = Some(!first);
     }
     out

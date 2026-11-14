@@ -39,10 +39,13 @@ pub struct NativeMenu {
     failing: bool,
 }
 
-/// The keys of `keys` as the menu bar writes them; `None` for a key it has no word for.
+/// The keys of `keys` as the menu bar writes them, by the key's symbol or, for a key such as an
+/// arrow whose symbol the menu bar has no word for, by its name; `None` when it has neither.
 fn accelerator(keys: &Keys) -> Option<Accelerator> {
+    let alt = if keys.modifiers.alt { "Alt+" } else { "" };
     let shift = if keys.modifiers.shift { "Shift+" } else { "" };
-    Accelerator::from_str(&format!("CmdOrCtrl+{shift}{}", keys.key.symbol_or_name())).ok()
+    let with = |key: &str| Accelerator::from_str(&format!("CmdOrCtrl+{alt}{shift}{key}")).ok();
+    with(keys.key.symbol_or_name()).or_else(|| with(keys.key.name()))
 }
 
 /// The table's item for action `id`, off until the first frame asks; recorded in `items`.
@@ -245,8 +248,8 @@ mod tests {
             (SAVE_VERSION, Some("CmdOrCtrl+Shift+S")),
             (VERSIONS, Some("CmdOrCtrl+Shift+H")),
             (BRANCHES, Some("CmdOrCtrl+Shift+B")),
-            (OLDER, Some("CmdOrCtrl+BracketLeft")),
-            (NEWER, Some("CmdOrCtrl+BracketRight")),
+            (OLDER, Some("CmdOrCtrl+Alt+ArrowLeft")),
+            (NEWER, Some("CmdOrCtrl+Alt+ArrowRight")),
             (BACK, Some("CmdOrCtrl+Shift+H")),
             (FIND, Some("CmdOrCtrl+K")),
             (COMPARE, None),

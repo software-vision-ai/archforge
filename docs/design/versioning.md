@@ -150,7 +150,7 @@ What `read_model` (`model.rs:318-394`) must change to read history:
 | Discrete versions | Implies a continuum | Exact by construction | Good |
 | Long histories | About 40 usable stops in 200 px | Paged list; step or jump | Needs its own scrolling and row |
 | Cost per stop | Each stop is a full model read and a session build, so scrubbing is the worst case | One read per deliberate step | One read per step |
-| Keyboard | Arrows only; no jump to a known version | ↑/↓, type to filter, ⌘[ ⌘] | Arrows only |
+| Keyboard | Arrows only; no jump to a known version | ↑/↓, type to filter, ⌥⌘← ⌥⌘→ | Arrows only |
 | Narrow windows (minimum 640, `apps/archforge/src/main.rs:256`) | No room | One icon | A whole row |
 | Says what you are looking at | Needs a label anyway | The chip is the label | Needs a label |
 
@@ -174,8 +174,9 @@ Narrowing order: the branch name truncates, then the label goes, then search hid
 px the chip
 is one 32 px icon, with the full label in its tooltip and accessible name.
 
-Keys: ⇧⌘H opens the list; ↑/↓ moves, Enter views, Esc closes it; while viewing ⌘[ is older, ⌘]
-newer, ⇧⌘H returns;
+Keys: ⇧⌘H opens the list; ↑/↓ moves, Enter views, Esc closes it; while viewing ⌥⌘← is older, ⌥⌘→
+newer (Ctrl+Alt with the arrows on Windows and Linux; the arrows, since a bracket's key follows the
+keyboard layout), ⇧⌘H returns;
 ⇧⌘B opens the branch list. Esc does not return, so a stray Esc cannot drop your place. That ⇧⌘H both
 opens the list and, while viewing, returns is intended. AR-154's shortcut audit confirms it and checks
 all of these for clashes.
@@ -722,7 +723,7 @@ app was run on, so the Windows and Linux bar was never seen in a real window); *
 | No chord runs two actions | code, harness | Fine: only History and Back to current work share one, never on together (`only_history_and_back_share_their_keys`, `the_rows_follow_viewing_a_version`) |
 | A chord matches its modifiers exactly | harness | Fixed here for Redo's second key, which Shift also ran: `with_no_field_the_keys_step_the_model`. The table's own: `every_shortcut_runs_its_action`, and every row in both key shapes, a Mac's Control included: `every_chord_is_matched_exactly_in_both_shapes` |
 | A text field keeps the chords it needs | harness, code | Edit's keys and ⌘K fine (`on_a_field_the_rows_and_the_keys_change_the_field_and_not_the_model`, `the_rows_find_zoom_and_fit`). Defects, own tickets: on Windows and Linux the toolkit's field reads Ctrl+K, Ctrl+H, Ctrl+U and Ctrl+W as deletions, so Find…'s chord, off in a field, wipes to the end of the line; a skill's text takes ⌘B, ⌘I and ⌘K with Shift too |
-| Chords the system keeps | app, code | ⌘H, ⌘Q and ⌘, are the system's own uses; reading found no other chord of ours that the system keeps. Defect, own ticket: ⌘[ and ⌘] follow the keyboard layout (on a German one the native bar shows ⌘Ö and ⌘Ä; the in-window bar writes Ctrl+[) |
+| Chords the system keeps | app, code | ⌘H, ⌘Q and ⌘, are the system's own uses; reading found no other chord of ours that the system keeps. Fixed by AR-462: Older version and Newer version were ⌘[ and ⌘], which follow the keyboard layout (on a German one the native bar showed ⌘Ö and ⌘Ä; the in-window bar wrote Ctrl+[), and are now ⌥⌘← and ⌥⌘→ (Ctrl+Alt+← and Ctrl+Alt+→). macOS keeps neither for itself; on Windows and Linux some graphics drivers turn the screen and some desktops change the workspace on Ctrl+Alt with an arrow, and where one takes the press, the window never sees it. While its row is off the press stays in the input, and no reader of a plain arrow takes a step's chord for its own: the canvas does not nudge and the tree does not fold or move (`a_version_chord_is_never_a_plain_arrow`), a pair of choices does not flip (`generalization_sets_are_made_from_the_menu_the_shortcut_and_properties`), and a text field only moves its caret by a word (`a_version_chord_in_a_field_steps_or_moves_the_caret`) |
 | macOS and the in-window bar hold the same rows with the same keys | app, harness | Fine: `the_menus_are_the_tables_with_the_designs_keys`, `the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes`. macOS has no Window or Help menu, no Hide Others or Show All and no ⌘W; File's order differs between the two: decisions, own ticket |
 | Behind a dialog only About, Hide and Quit stay on | app | Fine on macOS, seen with About open; the in-window bar closes instead (harness) |
 | Every label goes through the catalogues, with its ellipsis kept in all seven | code | Fine, by a scan of the catalogues and `every_action_keeps_its_name`; labels fit the menu in English, German, Spanish, French and Portuguese (harness, probed by hand on an ER project; Japanese and Chinese are not drawn there, a class diagram's Model rows were not measured) |

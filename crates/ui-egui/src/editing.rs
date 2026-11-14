@@ -2090,8 +2090,8 @@ pub(crate) fn canvas_busy(shell: &Shell) -> bool {
 }
 
 /// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
-/// from the diagram (with Shift, asks before deleting from the model), the arrows nudge, ⌘↩ opens
-/// a new row on a card that takes one.
+/// from the diagram (with Shift, asks before deleting from the model), the arrows nudge (plain or
+/// with Shift, never as part of a chord), ⌘↩ opens a new row on a card that takes one.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
@@ -2121,10 +2121,10 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
             i.modifiers.shift,
             !menu && i.modifiers.command && i.key_pressed(egui::Key::Enter),
-            !menu && i.key_pressed(egui::Key::ArrowLeft),
-            !menu && i.key_pressed(egui::Key::ArrowRight),
-            !menu && i.key_pressed(egui::Key::ArrowUp),
-            !menu && i.key_pressed(egui::Key::ArrowDown),
+            !menu && crate::actions::plain_press(i, egui::Key::ArrowLeft),
+            !menu && crate::actions::plain_press(i, egui::Key::ArrowRight),
+            !menu && crate::actions::plain_press(i, egui::Key::ArrowUp),
+            !menu && crate::actions::plain_press(i, egui::Key::ArrowDown),
         )
     });
     if shell.looking_only() && !escape {

@@ -877,14 +877,15 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 }
 
 /// The keys when the tree has them: up and down move the selection, left folds or goes to the
-/// parent, right unfolds, Enter and F2 rename, Delete removes.
+/// parent, right unfolds (the arrows plain or with Shift, never as part of a chord), Enter and F2
+/// rename, Delete removes.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option<Obj>) {
     let (up, down, left, right, rename, delete) = ui.input(|i| {
         (
-            i.key_pressed(egui::Key::ArrowUp),
-            i.key_pressed(egui::Key::ArrowDown),
-            i.key_pressed(egui::Key::ArrowLeft),
-            i.key_pressed(egui::Key::ArrowRight),
+            crate::actions::plain_press(i, egui::Key::ArrowUp),
+            crate::actions::plain_press(i, egui::Key::ArrowDown),
+            crate::actions::plain_press(i, egui::Key::ArrowLeft),
+            crate::actions::plain_press(i, egui::Key::ArrowRight),
             i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::F2),
             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
         )

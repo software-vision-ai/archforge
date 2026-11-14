@@ -16528,6 +16528,17 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
         let at = rect_of(&h, "workspace.properties.generalizationSet.disjoint").center();
         click(&mut h, at);
         assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), (true, true));
+        // The arrows flip the pair with the keyboard; Newer version's chord, off here, is no arrow.
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.properties.generalizationSet.disjoint")));
+        h.run();
+        for (held, flags) in
+            [(egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND | egui::Modifiers::ALT, (true, true)), (egui::Modifiers::NONE, (true, false))]
+        {
+            key(&mut h, egui::Key::ArrowRight, held);
+            assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), flags, "{held:?}");
+        }
+        key(&mut h, egui::Key::ArrowLeft, egui::Modifiers::NONE);
+        assert_eq!(sets::flags(h.state().session.as_ref().unwrap().doc(), set), (true, true));
         assert!(painted(&h).iter().any(|t| t == "{complete, disjoint}"));
         assert!(painted(&h).iter().any(|t| t == "Shown beside the lines as {complete, disjoint}: every Payment is exactly one of these kinds."));
         h.state_mut().session.as_mut().unwrap().undo().unwrap();

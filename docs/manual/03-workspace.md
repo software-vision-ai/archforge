@@ -69,7 +69,7 @@ classifier tool, **Package**, and every kind of the Relationship tool. While no 
 the diagram can't be changed, the rows are greyed out.
 
 **Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
-of versions, **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and
+of versions, **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌥⌘←, `Ctrl+Alt+←`), **Newer version** (⌥⌘→, `Ctrl+Alt+→`) and
 **Back to current work**. Compare… sets the version whose details show, or else the newest, against
 your current work; New branch… opens the dialog the Branches header's **+** opens; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
 History gives way to Back to current work, which takes the same keys; Switch branch needs a second
@@ -150,7 +150,8 @@ border width, and for lines their colour, width and routing (straight, right-ang
   canvas selects every box and line the diagram draws, also while you look at a saved version.
   In current work, Delete then takes the boxes off the diagram and deletes nothing from the model.
   A saved version is read only, so there Delete does nothing.
-- Drag selected boxes to move them; the arrow keys nudge them.
+- Drag selected boxes to move them; the arrow keys nudge them, further with Shift. An arrow pressed
+  with ⌘, Ctrl or Alt is a shortcut's and nudges nothing.
 - Double-click a box's name to rename it in place.
 - The tools float at the bottom of the diagram: **Select**, **Pan**, the diagram's own tools,
   **Note** and **Link note**, view toggles, and **Arrange diagram**, which lays the whole diagram

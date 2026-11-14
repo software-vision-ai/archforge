@@ -223,13 +223,22 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     }
 }
 
-/// The keys of `keys` written for Windows and Linux, such as "Ctrl+Shift+G", in the catalogue's words.
+/// The keys of `keys` written for Windows and Linux, such as "Ctrl+Shift+G" or "Ctrl+Alt+←", in the
+/// catalogue's words; an arrow key is drawn as its arrow.
 pub(crate) fn chord(keys: &Keys) -> String {
     let mut parts = vec![tr("Ctrl")];
+    if keys.modifiers.alt {
+        parts.push(tr_ctx("key", "Alt"));
+    }
     if keys.modifiers.shift {
         parts.push(tr("Shift"));
     }
-    parts.push(keys.key.symbol_or_name().to_string());
+    let key = match keys.key {
+        egui::Key::ArrowLeft => "←",
+        egui::Key::ArrowRight => "→",
+        key => key.symbol_or_name(),
+    };
+    parts.push(key.to_string());
     parts.join("+")
 }
 
