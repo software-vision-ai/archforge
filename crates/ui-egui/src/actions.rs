@@ -29,6 +29,10 @@ pub const COMPARE: &str = "versions.compare";
 pub const BACK: &str = "versions.back";
 pub const UNDO: &str = "edit.undo";
 pub const REDO: &str = "edit.redo";
+pub const CUT: &str = "edit.cut";
+pub const COPY: &str = "edit.copy";
+pub const PASTE: &str = "edit.paste";
+pub const SELECT_ALL: &str = "edit.select-all";
 
 /// The Versions menu's rows by section, on every system (`docs/design/versioning.md`, section 11).
 pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[NEW_BRANCH, BRANCHES], &[OLDER, NEWER, BACK]];
@@ -50,6 +54,11 @@ pub struct Action {
 pub struct Keys {
     pub modifiers: Modifiers,
     pub key: Key,
+}
+
+/// The shortcut of the command key and `key`.
+const fn command(key: Key) -> Option<Keys> {
+    Some(Keys { modifiers: Modifiers::COMMAND, key })
 }
 
 /// How an action shows in Home's search.
@@ -250,6 +259,17 @@ pub static ACTIONS: &[Action] = &[
         keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::SHIFT), key: Key::Z }),
         search: None,
     },
+    Action { id: CUT, label: |_| tr("Cut"), available: edit_menu::on_field, run: edit_menu::cut, keys: command(Key::X), search: None },
+    Action { id: COPY, label: |_| tr("Copy"), available: edit_menu::can_copy, run: edit_menu::copy, keys: command(Key::C), search: None },
+    Action { id: PASTE, label: |_| tr("Paste"), available: edit_menu::on_field, run: edit_menu::paste, keys: command(Key::V), search: None },
+    Action {
+        id: SELECT_ALL,
+        label: |_| tr("Select all"),
+        available: edit_menu::can_select_all,
+        run: edit_menu::select_all,
+        keys: command(Key::A),
+        search: None,
+    },
 ];
 
 /// The action `id`.
@@ -300,8 +320,8 @@ fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {
 }
 
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
-/// available. A field reads Undo's and Redo's keys itself, so they stay in the input while it has
-/// the keyboard. ⌘Y (Ctrl Y) is Redo's second key.
+/// available. A field reads the Edit menu's keys itself, so they stay in the input while it has the
+/// keyboard. ⌘Y (Ctrl Y) is Redo's second key.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {

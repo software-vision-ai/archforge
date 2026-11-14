@@ -41,7 +41,10 @@ it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the m
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
-ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was.
+ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name, a
+note's text or a class's member you are typing in place stays open for the **Edit** menu's rows to
+act on; it is finished before another menu's row runs, and by a click elsewhere, as it would be with
+no menu.
 
 **View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
 out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you
@@ -135,7 +138,10 @@ border width, and for lines their colour, width and routing (straight, right-ang
 ## Selecting and the canvas
 
 - Click a box or a line to select it; Shift-click adds to the selection; drag on empty canvas to
-  select everything in a rectangle.
+  select everything in a rectangle. **Edit ▸ Select all** (⌘A, or Ctrl A) after a click on the
+  canvas selects every box and line the diagram draws, also while you look at a saved version.
+  In current work, Delete then takes the boxes off the diagram and deletes nothing from the model.
+  A saved version is read only, so there Delete does nothing.
 - Drag selected boxes to move them; the arrow keys nudge them.
 - Double-click a box's name to rename it in place.
 - The tools float at the bottom of the diagram: **Select**, **Pan**, the diagram's own tools,
@@ -157,7 +163,11 @@ select it, show its row in Models and bring it to the centre of a diagram that s
 Every change is one step you can undo with ⌘Z (Ctrl Z) and redo with ⇧⌘Z (Ctrl Shift Z or Ctrl Y), however it was
 made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arrange diagram are each
 one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
-act on that field's text instead of the model. Undo is not the same as going back to a saved version:
+act on that field's text instead of the model. **Cut**, **Copy** and **Paste** work on the text of
+the field you are typing in, as their keys do; Copy also copies text you have selected in a skill's
+preview, with its keys or with **Edit ▸ Copy**: the words stay selected while you open the menu,
+with the pointer or with F10, and a click anywhere else ends the selection. Undo is not the same
+as going back to a saved version:
 [Versions](09-versions.md#autosave-a-saved-version-and-undo) says how they differ.
 
 ## Removing from a diagram versus deleting from the model

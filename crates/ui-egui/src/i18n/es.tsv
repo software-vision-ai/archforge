@@ -913,6 +913,10 @@ str		Relationship removed	Relación eliminada
 str		{name} removed	{name} eliminada
 str		Undo	Deshacer
 str		Redo	Rehacer
+str		Cut	Cortar
+str		Copy	Copiar
+str		Paste	Pegar
+str		Select all	Seleccionar todo
 str		Nothing to act on here	Aquí no hay nada sobre lo que actuar
 plural		+ {n} more column	+ {n} columna más|+ {n} columnas más
 str		Minimap	Minimapa

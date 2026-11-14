@@ -174,6 +174,34 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
     }
 }
 
+/// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
+/// nested in others included, and each generalization set a line here belongs to, whose label is
+/// drawn whether a node holds it or not (AR-129); or the diagram itself when it draws nothing.
+pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
+    use archforge_uml::generalization_sets as sets;
+    let Some(session) = shell.session.as_ref() else { return };
+    let store = session.doc();
+    let mut ids: Vec<Uuid> = Vec::new();
+    let boxes = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| element_of(store, n).unwrap_or(n));
+    let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, e)).collect();
+    let labels: Vec<Obj> = lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect();
+    for id in boxes.chain(lines).chain(labels).filter_map(|o| uuid(store, o)) {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    if ids.is_empty() {
+        ids.extend(uuid(store, d));
+    }
+    select(shell, ids);
+}
+
+/// What a click on line `e` selects: the element it draws, a leg of an n-ary association its
+/// association (AR-128), and a note link itself.
+fn line_target(store: &Store, e: Obj) -> Obj {
+    crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
+}
+
 fn uuid(store: &Store, o: Obj) -> Option<Uuid> {
     store.uuid(o).ok()
 }
@@ -654,10 +682,7 @@ fn decide(
                 };
                 let target = match (on_top(shell, store, grid, card, pos), hit) {
                     (Some(n), _) => element_of(store, n).unwrap_or(n),
-                    // A leg of an n-ary association selects the association (AR-128).
-                    (None, Some(Hit::Edge(e))) => {
-                        crate::uml_nary::selectable(store, store.get(e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).unwrap_or(e))
-                    }
+                    (None, Some(Hit::Edge(e))) => line_target(store, e),
                     (None, _) => d,
                 };
                 let Some(id) = uuid(store, target) else { return Action::Nothing };
@@ -1039,7 +1064,8 @@ fn commit_note(shell: &mut Shell) {
 }
 
 /// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter or the keyboard
-/// leaving commits, Escape closes, a refusal stays under it.
+/// leaving commits, though not for the in-window Edit menu, whose rows act on it; Escape closes, a
+/// refusal stays under it.
 fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
     let paint = ui.painter().clone();
     let field = rect.shrink(6.0 * z);
@@ -1068,7 +1094,7 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
     let nothing_focused = ui.memory(|m| m.focused().is_none());
     if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
         shell.canvas.note_edit = None;
-    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+    } else if (has_focus && enter) || (!fresh && crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), has_focus)) {
         commit_note(shell);
     }
 }
@@ -1941,7 +1967,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z
     let nothing_focused = ui.memory(|m| m.focused().is_none());
     if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
         shell.canvas.rename = None;
-    } else if (has_focus && enter) || (!fresh && out.response.lost_focus()) {
+    } else if (has_focus && enter) || (!fresh && crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), has_focus)) {
         commit_rename(shell);
     }
 }
@@ -2050,6 +2076,19 @@ fn entity_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, menu: &En
     }
 }
 
+/// Whether something open on the canvas holds its keys: an editor, a menu or the Stereotypes
+/// picker, which takes typing, Backspace, the arrows and Enter (AR-135).
+pub(crate) fn canvas_busy(shell: &Shell) -> bool {
+    let c = &shell.canvas;
+    c.rename.is_some()
+        || c.inline.is_some()
+        || c.note_edit.is_some()
+        || c.menu.is_some()
+        || c.line_menu.is_some()
+        || c.nary_menu.is_some()
+        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
+}
+
 /// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
 /// from the diagram (with Shift, asks before deleting from the model), the arrows nudge, ⌘↩ opens
 /// a new row on a card that takes one.
@@ -2057,19 +2096,12 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
         || shell.about.is_some()
-        || shell.canvas.rename.is_some()
-        || shell.canvas.inline.is_some()
-        || shell.canvas.note_edit.is_some()
-        || shell.canvas.menu.is_some()
-        || shell.canvas.line_menu.is_some()
-        || shell.canvas.nary_menu.is_some()
+        || canvas_busy(shell)
         || shell.explorer.delete.is_some()
         || shell.diagrams.new.is_some()
         // A Chat history row's menu or the confirmation of a deletion takes the keys (AR-217).
         || shell.chat_panel.row_menu.is_some()
         || shell.chat_panel.ask.is_some()
-        // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
-        || shell.panels.menu == Some(crate::panels::Menu::StereotypePick)
     {
         return;
     }
@@ -2115,16 +2147,6 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         shell.canvas.mapping = None;
         return;
     }
-    // A selected generalization set goes from the model, its generalizations kept (AR-129).
-    if delete && crate::uml_sets::remove_selected_set(shell) {
-        return;
-    }
-    if delete
-        && !shift
-        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || crate::connect::remove_selected_line(shell))
-    {
-        return;
-    }
     let kind = shell.session.as_ref().and_then(|s| crate::kinds::kind_of(shell, s.doc(), d));
     let selected: Vec<(Uuid, Option<Uuid>)> = match shell.session.as_ref() {
         Some(s) => {
@@ -2138,6 +2160,22 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         }
         None => Vec::new(),
     };
+    // A selection that holds boxes, such as Select all's, takes the boxes off below: a set or a
+    // line selected beside them is never deleted from the model on its own.
+    // A selected generalization set goes from the model, its generalizations kept (AR-129). Its
+    // label's node never counts as a box here: `selected` holds the diagram's own nodes alone, and
+    // a label's node is always nested in a classifier's, so a set selected by its label, moved or
+    // not, leaves `selected` empty (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
+    if delete && selected.is_empty() && crate::uml_sets::remove_selected_set(shell) {
+        return;
+    }
+    if delete
+        && !shift
+        && selected.is_empty()
+        && (remove_selected_link(shell) || crate::connect::remove_selected_relationship(shell) || crate::connect::remove_selected_line(shell))
+    {
+        return;
+    }
     if selected.is_empty() {
         // A line whose element has its card on another diagram only, or on none (an association
         // class's, drawn here with its classes): Delete takes the line from this diagram, and

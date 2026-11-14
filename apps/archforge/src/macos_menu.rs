@@ -11,7 +11,9 @@ use muda::accelerator::Accelerator;
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{self, ABOUT, CLOSE, GENERATE, Keys, NEW, OPEN, QUIT, REDO, SAVE, SETTINGS, UNDO, VERSIONS_MENU};
+use archforge_ui_egui::actions::{
+    self, ABOUT, CLOSE, COPY, CUT, GENERATE, Keys, NEW, OPEN, PASTE, QUIT, REDO, SAVE, SELECT_ALL, SETTINGS, UNDO, VERSIONS_MENU,
+};
 use archforge_ui_egui::i18n::{tr, tr_ctx};
 use archforge_ui_egui::model_menu;
 use archforge_ui_egui::view_menu::VIEW_MENU;
@@ -23,7 +25,7 @@ type Items = Vec<(&'static str, MenuItem)>;
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
-const EDIT: [Group; 1] = [&[UNDO, REDO]];
+const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 
 pub struct NativeMenu {
     _menu: Menu,
@@ -157,7 +159,7 @@ mod tests {
     use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, FIND, NEW_BRANCH, NEWER, OLDER, SAVE_VERSION, VERSIONS};
     use archforge_ui_egui::view_menu::{APPEARANCE, CHAT, DIAGRAMS, MINIMAP, MODELS, PROPERTIES, SKILLS, WHOLE, ZOOM_IN, ZOOM_OUT};
 
-    const ITEMS: [&str; 10] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO];
+    const ITEMS: [&str; 14] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, CUT, COPY, PASTE, SELECT_ALL];
     /// The Versions menu's items, after the rest.
     const VERSION_ITEMS: [&str; 8] = [SAVE_VERSION, VERSIONS, COMPARE, NEW_BRANCH, BRANCHES, OLDER, NEWER, BACK];
     /// The View menu's items.
@@ -236,6 +238,10 @@ mod tests {
             (GENERATE, Some("CmdOrCtrl+Shift+G")),
             (UNDO, Some("CmdOrCtrl+Z")),
             (REDO, Some("CmdOrCtrl+Shift+Z")),
+            (CUT, Some("CmdOrCtrl+X")),
+            (COPY, Some("CmdOrCtrl+C")),
+            (PASTE, Some("CmdOrCtrl+V")),
+            (SELECT_ALL, Some("CmdOrCtrl+A")),
             (SAVE_VERSION, Some("CmdOrCtrl+Shift+S")),
             (VERSIONS, Some("CmdOrCtrl+Shift+H")),
             (BRANCHES, Some("CmdOrCtrl+Shift+B")),

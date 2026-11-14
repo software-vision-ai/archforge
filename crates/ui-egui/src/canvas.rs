@@ -325,7 +325,7 @@ pub fn retain_valid(state: &mut State, store: &Store) {
 }
 
 /// The active diagram, when the store still has it.
-fn active_diagram(shell: &Shell) -> Option<Obj> {
+pub(crate) fn active_diagram(shell: &Shell) -> Option<Obj> {
     let store = shell.session.as_ref()?.doc();
     let d = store.by_uuid(shell.canvas.active?)?;
     (store.is_alive(d) && store.class_of(d).ok() == Some(DIAGRAM)).then_some(d)

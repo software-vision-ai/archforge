@@ -866,7 +866,7 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
     let escape = has_keys && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if escape {
         shell.explorer.rename = None;
-    } else if enter || out.response.lost_focus() {
+    } else if enter || crate::menu_bar::ends(shell, ui.ctx(), id, out.response.lost_focus(), out.response.has_focus()) {
         commit_rename(shell);
         // The one-line field let go of the keyboard on Enter; refused, it takes it back with the
         // name as typed, so the name can be corrected or Escape can close it without a click.

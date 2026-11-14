@@ -3,12 +3,13 @@
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
 //! F10 reaches the bar from the keys: the arrows walk groups and live rows, wrapping, Enter or Space runs the row.
 
+use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
-    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, QUIT, REDO, SAVE, SAVE_VERSION, SETTINGS, UNDO,
-    VERSIONS,
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, QUIT, REDO, SAVE, SAVE_VERSION,
+    SELECT_ALL, SETTINGS, UNDO, VERSIONS,
 };
 use crate::home::{control, off_words};
 use crate::i18n::{tr, tr_ctx};
@@ -27,7 +28,7 @@ struct Group {
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
-    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO]] },
+    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
     Group { id: "view", title: || tr_ctx("menu", "View"), sections: |_| crate::view_menu::VIEW_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
     Group { id: "versions", title: || tr("Versions"), sections: |_| actions::VERSIONS_MENU.iter().map(|s| s.to_vec()).collect() },
@@ -51,23 +52,71 @@ pub(crate) struct Bar {
     pub(crate) row: Option<&'static str>,
     /// What had the keyboard focus before the menu opened: egui drops the focus on Esc, so it comes back here.
     pub(crate) back: Option<egui::Id>,
+    /// The text `back` had selected, when it is a field: a field that loses the focus drops it.
+    pub(crate) selected: Option<egui::text::CCursorRange>,
+    /// Where the bar was drawn last.
+    rect: Option<Rect>,
+    /// Whether a press of this frame landed on the bar or on its open menu.
+    pub(crate) pressed: bool,
+    /// The inline editor the bar keeps open after taking its keyboard, until the menu closes.
+    pub(crate) held: Option<egui::Id>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
 pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
+    shell.menu_bar.pressed = false;
     if let Some(id) = shell.menu_bar.chosen.take() {
-        // A pointer's click on the row took the keyboard from the field the menu was opened on.
-        if id.starts_with("edit.")
-            && let Some(back) = shell.menu_bar.back
-        {
-            ctx.memory_mut(|m| m.request_focus(back));
+        // A pointer's click on the row took the keyboard, and its selection, from the field the
+        // menu was opened on.
+        if id.starts_with("edit.") && shell.menu_bar.back.is_some() {
+            give_back(shell, ctx);
             crate::edit_menu::note(shell, ctx);
         }
         actions::run(shell, id);
     }
+    // A menu closed by its own title, with no row chosen, leaves the name typed in place as it was;
+    // once, so a name that went meanwhile takes no keyboard later.
+    if shell.menu_bar.open.is_none() && !on_bar(shell, ctx) && shell.menu_bar.held.take().is_some() {
+        give_back(shell, ctx);
+    }
     if shell.menu_bar.open.is_some() && !(shell.in_window_menu && actions::free(shell)) {
         shell.menu_bar.open = None;
     }
+}
+
+/// Gives the field the menu was opened on the keyboard back, with the text it had selected.
+fn give_back(shell: &Shell, ctx: &egui::Context) {
+    let Some(back) = shell.menu_bar.back else { return };
+    if let (Some(range), Some(mut field)) = (shell.menu_bar.selected, TextEditState::load(ctx, back)) {
+        field.cursor.set_char_range(Some(range));
+        field.store(ctx, back);
+    }
+    ctx.memory_mut(|m| m.request_focus(back));
+}
+
+/// Whether the pointer is down on the bar, or let go on it this frame.
+fn on_bar(shell: &Shell, ctx: &egui::Context) -> bool {
+    ctx.input(|i| {
+        (i.pointer.any_down() || i.pointer.any_released())
+            && shell.menu_bar.rect.zip(i.pointer.interact_pos()).is_some_and(|(bar, at)| bar.contains(at))
+    })
+}
+
+/// Whether the inline editor `id`, which commits when it loses the keyboard, commits now: on `lost`,
+/// unless the bar holds it, having taken the keyboard for the Edit menu, for an Edit row chosen, or
+/// for a press on the bar before its menu opens. A held editor commits in the first frame another
+/// menu is open, or a row of another menu is chosen, so that row finds it committed when it runs
+/// the frame after, as with no menu; an Edit row or a press that opens nothing gives it the
+/// keyboard back instead.
+pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: bool, focused: bool) -> bool {
+    let bar = &shell.menu_bar;
+    let edit = bar.open == Some("edit") || bar.chosen.is_some_and(|r| r.starts_with("edit.")) || (bar.open.is_none() && on_bar(shell, ctx));
+    if bar.back == Some(id) && edit {
+        shell.menu_bar.held = Some(id);
+        return false;
+    }
+    let held = shell.menu_bar.held.take_if(|h| *h == id).is_some();
+    lost || (held && !focused)
 }
 
 /// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.
@@ -100,6 +149,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Enter, Escape, F10, Space};
     let Some(at) = GROUPS.iter().position(|g| shell.menu_bar.open == Some(g.id)) else {
         shell.menu_bar.back = ctx.memory(egui::Memory::focused);
+        shell.menu_bar.selected = shell.menu_bar.back.and_then(|id| TextEditState::load(ctx, id)?.cursor.char_range());
         if shell.in_window_menu && actions::free(shell) && press(ctx, F10, false) {
             shell.menu_bar.open = Some(GROUPS[0].id);
             shell.menu_bar.row = step(shell, &GROUPS[0], None, true);
@@ -118,9 +168,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     };
     if press(ctx, Escape, false) || press(ctx, F10, false) {
         shell.menu_bar.open = None;
-        if let Some(id) = shell.menu_bar.back {
-            ctx.memory_mut(|m| m.request_focus(id));
-        }
+        give_back(shell, ctx);
     } else if across > 0 {
         let group = &GROUPS[(at + across) % GROUPS.len()];
         shell.menu_bar.open = Some(group.id);
@@ -134,6 +182,12 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     {
         shell.menu_bar.chosen = Some(id);
         shell.menu_bar.open = None;
+        // Another menu's row finds a field committed, a name typed in place too, as after a click.
+        if !id.starts_with("edit.")
+            && let Some(back) = shell.menu_bar.back
+        {
+            ctx.memory_mut(|m| m.surrender_focus(back));
+        }
     }
 }
 
@@ -177,9 +231,13 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         bar = bar.union(button);
         x = button.right() + GROUP_GAP;
     }
+    shell.menu_bar.rect = Some(bar);
+    let press = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()));
+    shell.menu_bar.pressed = press.flatten().is_some_and(|at| bar.contains(at));
     let Some((group, button)) = shown else { return };
     let (menu, picked) = popup(shell, ui, p, group, pos2(button.left(), strip.bottom()));
-    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|at| menu.contains(at) || bar.contains(at)));
+    shell.menu_bar.pressed |= press.flatten().is_some_and(|at| menu.contains(at));
+    let outside = press.is_some() && !shell.menu_bar.pressed;
     if let Some(id) = picked {
         shell.menu_bar.chosen = Some(id);
         shell.menu_bar.open = None;
@@ -275,9 +333,11 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
         CLOSE if shell.active.and_then(|i| shell.tabs.get(i)).is_some_and(|t| t.closing.is_some()) => tr("The project is busy"),
         _ if id.starts_with("model.") => crate::model_menu::why_off(shell),
         _ if id.starts_with("versions.") => versions_off(shell, id),
+        // Off only for want of a field or of selected text, held or viewing a version as well.
+        CUT | COPY | PASTE => tr("Nothing to act on here"),
         _ if id.starts_with("view.") => crate::view_menu::why_off(shell, id),
         _ if id.starts_with("edit.") && shell.is_held() => tr("The project is busy"),
-        _ if id.starts_with("edit.") && !shell.looking_only() => tr("Nothing to act on here"),
+        _ if id.starts_with("edit.") && (id == SELECT_ALL || !shell.looking_only()) => tr("Nothing to act on here"),
         _ => off_words(shell),
     }
 }
@@ -342,10 +402,20 @@ mod tests {
         s.tabs = (0..crate::MAX_TABS).map(|_| tab()).collect();
         assert_eq!(why_off(&s, NEW), "Close a project to open another");
         let (mut s, ..) = shell();
-        assert_eq!(why_off(&s, UNDO), "Nothing to act on here");
+        let no = "Nothing to act on here".to_string();
+        assert_eq!(why_off(&s, UNDO), no);
         assert_eq!(why_off(&s, "model.note"), "Show a diagram first");
+        let (mut viewing, ..) = shell();
+        viewing.show_version(crate::actions::tests::session(), "v".into());
+        assert_eq!((why_off(&viewing, SELECT_ALL), why_off(&viewing, CUT)), (no.clone(), no.clone()), "viewing a version keeps neither off");
+        assert_eq!(why_off(&viewing, UNDO), "Read only while viewing a version");
         s.begin_hold().unwrap();
         assert_eq!(why_off(&s, UNDO), "The project is busy");
+        assert_eq!(
+            (why_off(&s, SELECT_ALL), why_off(&s, PASTE)),
+            ("The project is busy".to_string(), no),
+            "Paste is off for want of a field, not for the hold"
+        );
     }
 
     /// A Versions row off says first that there is no project, then its own reason, then the hold.

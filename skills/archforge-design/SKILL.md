@@ -199,9 +199,14 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - A line tool's button is double width, and its icon shows the two ends its next line will get;
   its chevron opens the kinds and ends it draws, and the choice stays for the next line.
 - A placing or drawing tool hands back to Select after it has made one thing.
-- Selecting is by click, Shift-click and marquee. A selected box shows handles and buttons beside
-  it: connect, and the notation's add (for ER, add column). Dragging moves the whole selection as
-  one undo step; arrow keys nudge. Two or more selected boxes show an arrange bar under them.
+- Selecting is by click, Shift-click and marquee; Edit ▸ Select all (⌘A) with the canvas holding the
+  keyboard takes every box and line the open diagram draws, as a click on each would, nested boxes
+  included, while viewing a version as well, never while the project is held; Delete on a selection
+  that holds boxes takes the boxes off in current work (a viewed version is read only, so there it
+  does nothing), never a selected line's or set's element. A selected box
+  shows handles and buttons beside it: connect, and the notation's add (for ER, add column).
+  Dragging moves the whole selection as one undo step; arrow keys nudge. Two or more selected boxes
+  show an arrange bar under them.
 - Delete removes a box from the diagram only; Shift+Delete deletes its element from the model after
   a dialog that names what goes with it.
 - Double-clicking a box's name renames it in place; double-clicking a member (a column, an
