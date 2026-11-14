@@ -420,7 +420,7 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(to) = to {
         let uses = crate::profiles::moving_uses(ctx.doc, pkg, to);
         if !uses.is_empty() {
-            return Err(refuse("to", crate::profiles::stranding(ctx.doc, pkg, &uses)));
+            return Err(crate::profiles::stranding(ctx.doc, "to", pkg, &uses));
         }
     }
     detach(ctx.doc, pkg)?;
@@ -464,7 +464,7 @@ fn classifier_move(ctx: &mut C<'_>, p: &Params, kind: ClassId, key: &str, what: 
     // (AR-134).
     let uses = crate::profiles::moving_uses(ctx.doc, c, to);
     if !uses.is_empty() {
-        return Err(refuse("package", crate::profiles::stranding(ctx.doc, c, &uses)));
+        return Err(crate::profiles::stranding(ctx.doc, "package", c, &uses));
     }
     detach(ctx.doc, c)?;
     ctx.doc.push(to, package::PACKAGED_ELEMENT, Value::Ref(c)).map_err(fail)?;

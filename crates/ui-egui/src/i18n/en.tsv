@@ -1217,6 +1217,8 @@ str		A stereotype extends at most {max} metaclasses.	A stereotype extends at mos
 str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.
 str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.
 str		{name} is named twice. Name each metaclass once.	{name} is named twice. Name each metaclass once.
+str		Give the metaclasses as a list of names.	Give the metaclasses as a list of names.
+str		This stereotype is in no profile.	This stereotype is in no profile.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.
 plural		{name} has values on {n} element. Remove those first.	{name} has values on {n} element. Remove those first.|{name} has values on {n} elements. Remove those first.
 str		Stereotypes · {n}	Stereotypes · {n}
@@ -1245,6 +1247,7 @@ str		Unapply profile	Unapply profile
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} is in use in {package}: {uses}. Remove those first.
 str		{name} is in use: {uses}. Remove those first.	{name} is in use: {uses}. Remove those first.
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} applies the profiles its elements use: {uses}. Remove those first.
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} holds the profile {profile}, which is in use: {uses}. Remove those first.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.
 str		«{stereotype}» on {elements}	«{stereotype}» on {elements}

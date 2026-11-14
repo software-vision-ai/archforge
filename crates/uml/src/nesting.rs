@@ -324,7 +324,7 @@ fn set_owner(ctx: &mut C<'_>, p: &Params) -> R {
         // (AR-134).
         let uses = crate::profiles::moving_uses(ctx.doc, c, owner);
         if !uses.is_empty() {
-            return Err(refuse("owner", crate::profiles::stranding(ctx.doc, c, &uses)));
+            return Err(crate::profiles::stranding(ctx.doc, "owner", c, &uses));
         }
         if let Some((from, prop)) = ctx.doc.container(c).map_err(fail)? {
             ctx.doc.remove_value(from, prop, &Value::Ref(c)).map_err(fail)?;

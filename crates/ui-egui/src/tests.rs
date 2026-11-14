@@ -5349,6 +5349,75 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A move that would take used stereotypes out of the packages that apply their profiles is said in
+/// the chosen language, the uses named: a class and a package dropped on another package in Models,
+/// and a class given another owner. So are a list of metaclasses that holds no names and a
+/// stereotype in no profile. Nothing moves. In light and dark (AR-449).
+#[test]
+fn a_move_that_strands_stereotypes_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let [commerce, other] = ["Commerce", "Other"].map(|n| id(&mut h, "uml.package.add", json!({ "name": n })));
+        let billing = id(&mut h, "uml.package.add", json!({ "name": "Billing", "parent": commerce }));
+        let order = id(&mut h, "uml.class.add", json!({ "package": commerce, "name": "Order" }));
+        let invoice = id(&mut h, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
+        let holder = id(&mut h, "uml.class.add", json!({ "package": other, "name": "Holder" }));
+        let persistence = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        for class in [&order, &invoice] {
+            id(&mut h, "uml.stereotype.apply", json!({ "element": class, "stereotype": entity }));
+        }
+        let away = |moved: &str, on: &str| {
+            let uses = fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", "Entity"), ("elements", on)]);
+            let said =
+                tr("Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.");
+            fmt(&said, &[("name", moved), ("uses", &uses)])
+        };
+        let german = "Order dorthin zu verschieben nimmt Stereotypen aus den Paketen, die ihre Profile anwenden: «Entity» auf Order. \
+                      Das Profil zuerst dort anwenden.";
+        assert_eq!(away("Order", "Order"), german, "{theme:?}: the language is German");
+        let home = |h: &egui_kittest::Harness<'_, crate::Shell>, element: &str| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = archforge_uml::commands::package_of(st, st.by_uuid(archforge_mof::Uuid::parse(element).unwrap()).unwrap());
+            package.map(|p| archforge_core::name_of(st, p))
+        };
+        // Dropped on Other in Models: the class, then the package that holds a used one.
+        let root = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap()
+        };
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.extend([root, archforge_mof::Uuid::parse(&commerce).unwrap()]);
+        h.run();
+        for (dragged, said) in [(&order, away("Order", "Order")), (&billing, away("Billing", "Invoice"))] {
+            h.state_mut().explorer.notice = None;
+            let [from, to] = [dragged, &other].map(|id| rect_of(&h, &format!("workspace.explorer.row.{id}")).center());
+            drag(&mut h, from, to);
+            assert_eq!(h.state().explorer.notice.as_deref(), Some(said.as_str()), "{theme:?}");
+            assert_eq!(home(&h, dragged).as_deref(), Some("Commerce"), "{theme:?}: it stays where it was");
+        }
+        // Given another owner, as the Owner menu does.
+        let owner = json!({ "classifier": order, "owner": holder });
+        assert_eq!(crate::panels::run(h.state_mut(), "uml.classifier.set-owner", owner).err(), Some(german.to_string()), "{theme:?}");
+        // A list of metaclasses that holds a number, and a stereotype in no profile.
+        let extends = json!({ "stereotype": entity, "extends": [7] });
+        let names = crate::panels::run(h.state_mut(), "uml.stereotype.set", extends).err();
+        assert_eq!(names.as_deref(), Some("Die Metaklassen als Liste von Namen angeben."), "{theme:?}");
+        assert_eq!(names, crate::panels::said(&Reason::NamesExpected { kind: "metaclass" }), "{theme:?}");
+        assert_eq!(crate::panels::said(&Reason::InNoProfile).as_deref(), Some("Dieser Stereotyp liegt in keinem Profil."), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

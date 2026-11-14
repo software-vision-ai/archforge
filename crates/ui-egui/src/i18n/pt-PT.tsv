@@ -1218,6 +1218,8 @@ str		A stereotype extends at most {max} metaclasses.	Um estereótipo estende no 
 str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} é uma metaclasse da UML que o Archforge ainda não desenha. Um estereótipo estende {metaclasses}.
 str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} não é uma metaclasse que o Archforge desenhe. Um estereótipo estende {metaclasses}.
 str		{name} is named twice. Name each metaclass once.	{name} é indicada duas vezes. Indique cada metaclasse uma só vez.
+str		Give the metaclasses as a list of names.	Indique as metaclasses como uma lista de nomes.
+str		This stereotype is in no profile.	Este estereótipo não está em nenhum perfil.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} é a extremidade de extensão de um estereótipo. Em vez disso, retire a metaclasse daquilo que o estereótipo estende.
 plural		{name} has values on {n} element. Remove those first.	{name} tem valores em {n} elemento. Retire-os primeiro.|{name} tem valores em {n} elementos. Retire-os primeiro.
 str		Stereotypes · {n}	Estereótipos · {n}
@@ -1246,6 +1248,7 @@ str		Unapply profile	Deixar de aplicar o perfil
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} está em uso em {package}: {uses}. Retire-os primeiro.
 str		{name} is in use: {uses}. Remove those first.	{name} está em uso: {uses}. Retire-os primeiro.
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} aplica os perfis que os seus elementos usam: {uses}. Retire-os primeiro.
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	Mover {name} para aí tira estereótipos dos pacotes que aplicam os seus perfis: {uses}. Aplique primeiro o perfil aí.
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} contém o perfil {profile}, que está em uso: {uses}. Retire-os primeiro.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» em {metaclass} está em uso: {uses}. Retire-os primeiro.
 str		«{stereotype}» on {elements}	«{stereotype}» em {elements}

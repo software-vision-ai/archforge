@@ -207,6 +207,10 @@ pub enum Reason {
     ExtensionEnd { name: String },
     /// The stereotype property `name` has values set on this many elements, so it stays.
     ValuesSet { name: String, elements: usize },
+    /// The stereotype sits in no profile, so nothing about it changes.
+    InNoProfile,
+    /// A list that takes names of `kind`, each as text, is no list or holds something else.
+    NamesExpected { kind: &'static str },
     /// The element is a stereotype application, which takes no stereotype itself.
     IsApplication,
     /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
@@ -265,6 +269,9 @@ pub enum Used {
     Element(String),
     /// A stereotype, which would move to another profile.
     Moved(String),
+    /// A package or a classifier, which would move and take the uses inside it out of the packages
+    /// that apply their profiles.
+    MovedAway(String),
     /// A profile a package would no longer apply.
     ProfileIn { profile: String, package: String },
     /// A stereotype's extension of a metaclass, which would be dropped.
