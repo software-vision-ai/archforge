@@ -79,8 +79,8 @@ choose **Versions ▸ Save version…** and cancel; choose **Older version**, th
 click the canvas and press ⌘K.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
-**New project…**, **Open project…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
-while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
+**New project…**, **Open project…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), with a divider after
+Close project and after Save and none at the end, each enabled while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
 save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog
 is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (⇧⌘Z). While a field has the
 keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the

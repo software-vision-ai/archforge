@@ -11,9 +11,7 @@ use muda::accelerator::Accelerator;
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
-use archforge_ui_egui::actions::{
-    self, ABOUT, CLOSE, COPY, CUT, GENERATE, Keys, NEW, OPEN, PASTE, QUIT, REDO, SAVE, SELECT_ALL, SETTINGS, UNDO, VERSIONS_MENU,
-};
+use archforge_ui_egui::actions::{self, ABOUT, COPY, CUT, Keys, PASTE, QUIT, REDO, SELECT_ALL, SETTINGS, UNDO, VERSIONS_MENU};
 use archforge_ui_egui::i18n::{tr, tr_ctx};
 use archforge_ui_egui::model_menu;
 use archforge_ui_egui::view_menu::VIEW_MENU;
@@ -28,7 +26,6 @@ struct Items {
 }
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
-const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
 const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 
 pub struct NativeMenu {
@@ -91,7 +88,7 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let quit = item(shell, QUIT, &mut items);
     app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
     let file = Submenu::new(actions::file_title(shell), true);
-    append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
+    append_groups(shell, &file, &actions::file_menu(shell), &mut items).map_err(err)?;
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
     let view = Submenu::new(tr_ctx("menu", "View"), true);
@@ -178,7 +175,9 @@ mod tests {
     use archforge_ui_egui::{CreateError, Opened, ProjectHost, SaveError, Saved, SavedBy, Services};
     use muda::MenuId;
 
-    use archforge_ui_egui::actions::{BACK, BRANCHES, COMPARE, FIND, NEW_BRANCH, NEWER, OLDER, SAVE_VERSION, VERSIONS};
+    use archforge_ui_egui::actions::{
+        BACK, BRANCHES, CLOSE, COMPARE, FIND, GENERATE, NEW, NEW_BRANCH, NEWER, OLDER, OPEN, SAVE, SAVE_VERSION, VERSIONS,
+    };
     use archforge_ui_egui::view_menu::{APPEARANCE, CHAT, DIAGRAMS, MINIMAP, MODELS, PROPERTIES, SKILLS, WHOLE, ZOOM_IN, ZOOM_OUT};
 
     const ITEMS: [&str; 14] = [ABOUT, SETTINGS, QUIT, NEW, OPEN, CLOSE, SAVE, GENERATE, UNDO, REDO, CUT, COPY, PASTE, SELECT_ALL];
@@ -246,7 +245,9 @@ mod tests {
     #[test]
     fn the_menus_are_the_tables_with_the_designs_keys() {
         let (shell, ..) = shell_with_project();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &FILE[..], &EDIT[..], &VIEW_MENU[..], &VERSIONS_MENU[..]].concat().concat();
+        let file = actions::file_menu(&shell);
+        let file: Vec<&[&str]> = file.iter().map(Vec::as_slice).collect();
+        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &file[..], &EDIT[..], &VIEW_MENU[..], &VERSIONS_MENU[..]].concat().concat();
         let mut sorted_items = [&ITEMS[..], &VERSION_ITEMS[..], &VIEW_ITEMS[..]].concat();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
