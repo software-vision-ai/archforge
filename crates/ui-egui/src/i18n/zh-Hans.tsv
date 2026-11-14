@@ -1225,6 +1225,8 @@ str		Give the metaclasses as a list of names.	请以名称列表的形式给出�
 str		This stereotype is in no profile.	此构造型不在任何配置文件中。
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} 是构造型的扩展端。请改为从该构造型扩展的内容中去掉这个元类。
 plural		{name} has values on {n} element. Remove those first.	{name} 在 {n} 个元素上设有值。请先移除这些值。
+plural		Values on {n} element don't fit {name} [{bounds}].	{n} 个元素上的值不符合 {name} [{bounds}]。
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	字面量 {literal} 是 {element} 上 «{stereotype}» 中 {property} 的值。请先在那里设置另一个值。
 str		Stereotypes · {n}	构造型 · {n}
 str		Add stereotype	添加构造型
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。
@@ -1302,6 +1304,7 @@ str		true or false.	true 或 false。
 str		A whole number of 0 or more, or *.	0 或更大的整数，或 *。
 str		Any text.	任意文本。
 str		One of {literals}.	{literals} 之一。
+str		The enumeration {name} has no literals yet.	枚举 {name} 尚无字面量。
 str		{name} holds at most {n} values.	{name} 最多包含 {n} 个值。
 str		{name} holds each value once, and {value} is there twice.	{name} 每个值只能出现一次，而 {value} 出现了两次。
 str		A value is empty. Clear the field to show the default.	有一个值为空。清空该字段即可显示默认值。

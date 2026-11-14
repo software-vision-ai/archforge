@@ -1225,6 +1225,8 @@ str		Give the metaclasses as a list of names.	Die Metaklassen als Liste von Name
 str		This stereotype is in no profile.	Dieser Stereotyp liegt in keinem Profil.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} ist das Erweiterungsende eines Stereotyps. Stattdessen die Metaklasse aus dem entfernen, was der Stereotyp erweitert.
 plural		{name} has values on {n} element. Remove those first.	{name} hat Werte an {n} Element. Diese zuerst entfernen.|{name} hat Werte an {n} Elementen. Diese zuerst entfernen.
+plural		Values on {n} element don't fit {name} [{bounds}].	Die Werte an {n} Element passen nicht zu {name} [{bounds}].|Die Werte an {n} Elementen passen nicht zu {name} [{bounds}].
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	Das Literal {literal} ist der Wert von {property} in «{stereotype}» an {element}. Setzen Sie dort zuerst einen anderen Wert.
 str		Stereotypes · {n}	Stereotypen · {n}
 str		Add stereotype	Stereotyp hinzufügen
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.
@@ -1302,6 +1304,7 @@ str		true or false.	true oder false.
 str		A whole number of 0 or more, or *.	Eine ganze Zahl ab 0 oder *.
 str		Any text.	Beliebiger Text.
 str		One of {literals}.	Eines von {literals}.
+str		The enumeration {name} has no literals yet.	Die Aufzählung {name} hat noch keine Literale.
 str		{name} holds at most {n} values.	{name} fasst höchstens {n} Werte.
 str		{name} holds each value once, and {value} is there twice.	{name} fasst jeden Wert einmal, und {value} steht zweimal da.
 str		A value is empty. Clear the field to show the default.	Ein Wert ist leer. Leeren Sie das Feld, um den Standardwert zu zeigen.

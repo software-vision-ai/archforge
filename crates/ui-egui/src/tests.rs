@@ -5714,6 +5714,99 @@ fn a_move_that_strands_stereotypes_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// Values that do not fit their stereotype property, a property reshaped so the values set would
+/// not fit, and a literal a value names removed, refused by the engine, are said in the chosen
+/// language, the values in their field's own words. In light and dark (AR-458).
+#[test]
+fn a_value_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, trn};
+    use archforge_engine::{Accepted, Reason, ValueMisfit, Values};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let commerce = id(&mut h, "uml.package.add", json!({ "name": "Commerce" }));
+        let order = id(&mut h, "uml.class.add", json!({ "package": commerce, "name": "Order" }));
+        let status = id(&mut h, "uml.enumeration.add", json!({ "package": commerce, "name": "Status" }));
+        let open = id(&mut h, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+        id(&mut h, "uml.literal.add", json!({ "enumeration": status, "name": "shut" }));
+        let persistence = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+        let tags = id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "0..2" }));
+        id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "state", "type": status }));
+        let phase = id(&mut h, "uml.enumeration.add", json!({ "package": commerce, "name": "Phase" }));
+        id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "phase", "type": phase }));
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        id(&mut h, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+        let set = |property: &str, values: serde_json::Value| {
+            ("uml.stereotype.set-value", json!({ "element": order, "stereotype": entity, "property": property, "values": values }))
+        };
+        let (cmd, p) = set("tags", json!(["a", "a"]));
+        let twice = fmt(&tr("{name} holds each value once, and {value} is there twice."), &[("name", "tags"), ("value", "a")]);
+        assert_eq!(twice, "tags fasst jeden Wert einmal, und a steht zweimal da.", "{theme:?}: the language is German");
+        assert_eq!(refused(&mut h, cmd, p), twice, "{theme:?}");
+        let (cmd, p) = set("tags", json!(["a", "b", "c"]));
+        let count = fmt(
+            &trn("{name} holds [{bounds}] values; {n} is given.", "{name} holds [{bounds}] values; {n} are given.", 3),
+            &[("name", "tags"), ("bounds", "0..2")],
+        );
+        assert_eq!(refused(&mut h, cmd, p), count, "{theme:?}");
+        let (cmd, p) = set("tags", json!([" "]));
+        assert_eq!(refused(&mut h, cmd, p), tr("A value is empty. Clear the field to show the default."), "{theme:?}");
+        let (cmd, p) = set("tags", json!(["x".repeat(1001)]));
+        assert_eq!(refused(&mut h, cmd, p), fmt(&tr("A value is longer than {n} characters."), &[("n", "1000")]), "{theme:?}");
+        let (cmd, p) = set("state", json!(["closed"]));
+        let unread = fmt(
+            &tr("{value} is no value of {name}. {accepted}"),
+            &[("value", "closed"), ("name", "state"), ("accepted", &fmt(&tr("One of {literals}."), &[("literals", "open, shut")]))],
+        );
+        assert_eq!(refused(&mut h, cmd, p), unread, "{theme:?}");
+        let (cmd, p) = set("phase", json!(["x"]));
+        assert_eq!(refused(&mut h, cmd, p), "x ist kein Wert von phase. Die Aufzählung Phase hat noch keine Literale.", "{theme:?}");
+        // What each type reads, said from its reason.
+        let types = [
+            (Accepted::Integer, tr("A whole number, such as 42 or -7.")),
+            (Accepted::Real, tr("A number, such as 2.5 or -1e3.")),
+            (Accepted::Boolean, tr("true or false.")),
+            (Accepted::UnlimitedNatural, tr("A whole number of 0 or more, or *.")),
+            (Accepted::Text, tr("Any text.")),
+        ];
+        for (accepted, words) in types {
+            let misfit = ValueMisfit::Unread { value: "x".into(), accepted };
+            let said = crate::panels::said(&Reason::Values(Box::new(Values { property: "n".into(), misfit })));
+            let unread = fmt(&tr("{value} is no value of {name}. {accepted}"), &[("value", "x"), ("name", "n"), ("accepted", &words)]);
+            assert_eq!(said, Some(unread), "{theme:?}");
+        }
+        let most = Reason::Values(Box::new(Values { property: "tags".into(), misfit: ValueMisfit::TooMany { max: 256 } }));
+        assert_eq!(crate::panels::said(&most), Some(fmt(&tr("{name} holds at most {n} values."), &[("name", "tags"), ("n", "256")])), "{theme:?}");
+        // A property reshaped so the values set would not fit, and a literal a value names.
+        for (property, values) in [("tags", json!(["a", "b"])), ("state", json!(["open"]))] {
+            let (cmd, p) = set(property, values);
+            crate::panels::run(h.state_mut(), cmd, p).unwrap();
+        }
+        let retyped = fmt(
+            &trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", 1),
+            &[("name", "tags")],
+        );
+        assert_eq!(refused(&mut h, "uml.attribute.set", json!({ "attribute": tags, "type": "Integer" })), retyped, "{theme:?}");
+        let narrower = fmt(
+            &trn("Values on {n} element don't fit {name} [{bounds}].", "Values on {n} elements don't fit {name} [{bounds}].", 1),
+            &[("name", "tags"), ("bounds", "0..1")],
+        );
+        assert_eq!(refused(&mut h, "uml.attribute.set", json!({ "attribute": tags, "multiplicity": "0..1" })), narrower, "{theme:?}");
+        let valued = refused(&mut h, "element.remove", json!({ "ids": [open] }));
+        assert_eq!(valued, "Das Literal open ist der Wert von state in «Entity» an Order. Setzen Sie dort zuerst einen anderen Wert.", "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
