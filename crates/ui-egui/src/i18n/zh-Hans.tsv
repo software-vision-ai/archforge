@@ -1332,6 +1332,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} 已拥有名为 {name} 的成员。
 str		The package {owner} keeps the name {name} for a built-in type.	包 {owner} 将名称 {name} 保留给内置类型。
 str		{name} is a built-in type and stays in Types.	{name} 是内置类型，留在 Types 中。
+str		{name} is a built-in type, which is never made leaf.	{name} 是内置类型，永远不会设为 leaf。
 str		Constraints · {n}	约束 · {n}
 str		Add constraint	添加约束
 str		Edit constraint	编辑约束
@@ -1397,6 +1398,11 @@ str		No property to subset	没有可作为子集来源的属性
 str		No property to redefine	没有可重定义的属性
 str		The default value {value} does not fit {type}; change or clear it first.	默认值 {value} 不符合 {type}；请先修改或清除它。
 str		A property chosen here is gone; choose again.	此处选择的属性已不存在；请重新选择。
+str		A property subsets at most {max} properties.	一个属性最多可作为 {max} 个属性的子集。
+str		A property redefines at most {max} properties.	一个属性最多重定义 {max} 个属性。
+str		Give the properties as a list of ids.	请以 ID 列表的形式给出属性。
+str		{key} is not a key here. An item holds an id and a name.	{key} 在此处不是有效的键。每一项包含一个 ID 和一个名称。
+str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} 不是数字；Real 的默认值是数字，例如 2.5。
