@@ -62,6 +62,11 @@ the first time to a small model you can build on, and shows how an agent joins i
 Shortcuts are written for macOS, with Windows and Linux in brackets: ⌘K (Ctrl K) means the command
 key and K on a Mac, the control key and K elsewhere.
 
+On Windows and Linux the control key with H, K, U or W never deletes text in a field: the chord does
+its action's work where that action is on (Ctrl K is Find…, Ctrl Shift H is History), and nothing
+otherwise. A Mac's control key keeps the system's text keys in a field, such as ⌃K, which deletes
+to the end of the line.
+
 ## Pictures
 
 The pictures are drawn by Archforge itself, from the same code as the window, so they always show

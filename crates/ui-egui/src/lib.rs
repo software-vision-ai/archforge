@@ -31,6 +31,7 @@ pub mod editing;
 mod er_kind;
 mod er_ui;
 pub mod explorer;
+mod field_keys;
 pub mod fonts;
 pub mod generate;
 pub mod hold;
@@ -2038,6 +2039,7 @@ impl Shell {
     /// dialog over either while it is open.
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.registry.begin_frame();
+        field_keys::install(ui.ctx());
         // Escape closes About before the window behind it is drawn, so no editor there reads it.
         support::dismiss_key(self, ui.ctx());
         let menu_was_open = self.menu_bar.open.is_some();
