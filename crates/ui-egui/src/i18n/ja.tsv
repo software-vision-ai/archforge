@@ -1219,6 +1219,8 @@ str		A stereotype extends at most {max} metaclasses.	ステレオタイプが拡
 str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} は Archforge がまだ描画しない UML のメタクラスです。ステレオタイプが拡張できるのは {metaclasses} です。
 str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} は Archforge が描画するメタクラスではありません。ステレオタイプが拡張できるのは {metaclasses} です。
 str		{name} is named twice. Name each metaclass once.	{name} が 2 回指定されています。メタクラスはそれぞれ 1 回だけ指定してください。
+str		Give the metaclasses as a list of names.	メタクラスは名前のリストで指定してください。
+str		This stereotype is in no profile.	このステレオタイプはどのプロファイルにも入っていません。
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} はステレオタイプの拡張端です。代わりに、ステレオタイプが拡張するものからそのメタクラスを外してください。
 plural		{name} has values on {n} element. Remove those first.	{name} には {n} 個の要素で値が設定されています。先にそれらを外してください。
 str		Stereotypes · {n}	ステレオタイプ · {n}
@@ -1247,6 +1249,7 @@ str		Unapply profile	プロファイルの適用を解除
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} は {package} で使われています: {uses}。先にそれらを外してください。
 str		{name} is in use: {uses}. Remove those first.	{name} は使われています: {uses}。先にそれらを外してください。
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} は要素が使うプロファイルを適用しています: {uses}。先にそれらを外してください。
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	{name} をそこへ移動すると、ステレオタイプがそのプロファイルを適用しているパッケージの外に出ます: {uses}。先に移動先でプロファイルを適用してください。
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} には使われているプロファイル {profile} があります: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} への «{stereotype}» は使われています: {uses}。先にそれらを外してください。
 str		«{stereotype}» on {elements}	{elements} に «{stereotype}»

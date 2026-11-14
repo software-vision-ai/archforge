@@ -493,6 +493,8 @@ fn profile_said(reason: &archforge_engine::Reason) -> Option<String> {
             fmt(&tr("{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}."), &[("name", name), ("metaclasses", &offered())])
         }
         Reason::NamedTwice { kind: "metaclass", name } => fmt(&tr("{name} is named twice. Name each metaclass once."), &[("name", name)]),
+        Reason::NamesExpected { kind: "metaclass" } => tr("Give the metaclasses as a list of names."),
+        Reason::InNoProfile => tr("This stereotype is in no profile."),
         Reason::ExtensionEnd { name } => {
             fmt(&tr("{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead."), &[("name", name)])
         }

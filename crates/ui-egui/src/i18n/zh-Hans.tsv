@@ -1219,6 +1219,8 @@ str		A stereotype extends at most {max} metaclasses.	一个构造型最多扩展
 str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} 是 Archforge 尚未绘制的 UML 元类。构造型可扩展 {metaclasses}。
 str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} 不是 Archforge 绘制的元类。构造型可扩展 {metaclasses}。
 str		{name} is named twice. Name each metaclass once.	{name} 被指定了两次。每个元类只指定一次。
+str		Give the metaclasses as a list of names.	请以名称列表的形式给出元类。
+str		This stereotype is in no profile.	此构造型不在任何配置文件中。
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} 是构造型的扩展端。请改为从该构造型扩展的内容中去掉这个元类。
 plural		{name} has values on {n} element. Remove those first.	{name} 在 {n} 个元素上设有值。请先移除这些值。
 str		Stereotypes · {n}	构造型 · {n}
@@ -1247,6 +1249,7 @@ str		Unapply profile	取消应用配置文件
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} 在 {package} 中正在使用：{uses}。请先移除这些使用。
 str		{name} is in use: {uses}. Remove those first.	{name} 正在使用：{uses}。请先移除这些使用。
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} 应用了其元素所使用的配置文件：{uses}。请先移除这些使用。
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	将 {name} 移到那里会使构造型脱离应用其配置文件的包：{uses}。请先在那里应用该配置文件。
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} 包含正在使用的配置文件 {profile}：{uses}。请先移除这些使用。
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	{metaclass} 上的 «{stereotype}» 正在使用：{uses}。请先移除这些使用。
 str		«{stereotype}» on {elements}	{elements} 上的 «{stereotype}»

@@ -101,6 +101,11 @@ pub(crate) fn in_use(used: &InUse) -> String {
             (tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first."), profile, package)
         }
         Used::AppliedProfiles { package } => (tr("{name} applies the profiles its elements use: {uses}. Remove those first."), package, package),
+        Used::MovedAway(name) => (
+            tr("Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first."),
+            name,
+            name,
+        ),
     };
     fmt(&template, &[("profile", first), ("stereotype", first), ("name", second), ("package", second), ("metaclass", second), ("uses", &uses)])
 }

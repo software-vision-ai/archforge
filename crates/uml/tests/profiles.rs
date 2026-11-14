@@ -696,6 +696,67 @@ fn every_application_refused_carries_its_reason_typed() {
     check(&mut s, &order, &over, "stereotype", Some(most), "Order carries 32 stereotypes, the most one element carries");
 }
 
+/// A move that would take used stereotypes out of the packages that apply their profiles carries
+/// its reason typed beside the unchanged English, under the parameter each command names: a
+/// classifier moved to another package or under another owner, and a package moved. So do a list
+/// of metaclasses that holds something other than a name, and a stereotype in no profile (AR-449).
+#[test]
+fn a_stranding_move_and_the_last_profile_refusals_carry_their_reasons_typed() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, _, _, persistence, entity, ..] = applied_shop(&mut s);
+    let other = run(&mut s, "uml.package.add", json!({ "name": "Other" }));
+    let holder = run(&mut s, "uml.class.add", json!({ "package": other, "name": "Holder" }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing", "parent": commerce }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": billing, "name": "Invoice" }));
+    let mut s = with_applications(&s, &[(&entity, &order), (&entity, &invoice)]);
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert_eq!((error.message.as_str(), error.key.as_deref()), (english, Some(key)), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    };
+    let away = |moved: &str, on: &str| {
+        let reason = Reason::InUse(Box::new(InUse { what: Used::MovedAway(moved.into()), uses: vec![("Entity".into(), vec![on.into()], 1)] }));
+        let english = format!(
+            "moving {moved} there takes stereotypes out of the packages that apply their profiles: «Entity» on {on}; apply the profile there first"
+        );
+        (reason, english)
+    };
+    let (reason, english) = away("Order", "Order");
+    check(&mut s, "uml.class.move", json!({ "class": order, "package": other }), "package", reason.clone(), &english);
+    check(&mut s, "uml.classifier.set-owner", json!({ "classifier": order, "owner": holder }), "owner", reason, &english);
+    let (reason, english) = away("Billing", "Invoice");
+    check(&mut s, "uml.package.move", json!({ "package": billing, "to": other }), "to", reason, &english);
+    // A use that is refused for another reason still ends as it did.
+    let unapplied = refused(&mut s, "uml.profile.unapply", json!({ "package": commerce, "profile": persistence }));
+    assert!(unapplied.ends_with("«Entity» on Order and Invoice. Remove those first."), "{unapplied}");
+    // A list of metaclasses holds names: a number among them is refused, made or changed.
+    let names = || Reason::NamesExpected { kind: "metaclass" };
+    let made = json!({ "profile": persistence, "name": "Fresh", "extends": ["Class", 7] });
+    check(&mut s, "uml.stereotype.add", made, "extends", names(), "a list of metaclass names");
+    check(&mut s, "uml.stereotype.set", json!({ "stereotype": entity, "extends": [null] }), "extends", names(), "a list of metaclass names");
+    // A stereotype a file holds outside any profile, here in Commerce, takes no change.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 46);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    let stereotype = obj(&st, &entity);
+    let (profile, held) = st.container(stereotype).unwrap().unwrap();
+    st.remove_value(profile, held, &Value::Ref(stereotype)).unwrap();
+    st.push(obj(&st, &commerce), held, Value::Ref(stereotype)).unwrap();
+    let mut loose = session_over(st);
+    check(
+        &mut loose,
+        "uml.stereotype.set",
+        json!({ "stereotype": entity, "name": "Thing" }),
+        "stereotype",
+        Reason::InNoProfile,
+        "it is in no profile",
+    );
+}
+
 /// The session `s` with the package `package` moved to the model's top level, as a project made
 /// before the root package keeps one: removed, it takes what it holds along.
 fn at_top(s: &S, package: &str) -> S {

@@ -312,9 +312,14 @@ pub fn metaclasses_of(store: &Store, profile: Obj) -> Vec<Obj> {
     out
 }
 
+/// The refusal of a change to a stereotype that sits in no profile, its reason typed.
+fn no_profile() -> CommandError {
+    refuse("stereotype", "it is in no profile").because(Reason::InNoProfile)
+}
+
 /// Adds the extension of `stereotype` to the metaclass `name`, the Extension in its profile.
 fn extend(store: &mut Store, stereotype: Obj, name: &str) -> Result<(), CommandError> {
-    let profile = profile_of(store, stereotype).ok_or_else(|| refuse("stereotype", "it is in no profile"))?;
+    let profile = profile_of(store, stereotype).ok_or_else(no_profile)?;
     let metaclass = ensure_metaclass(store, name)?;
     let ext = store.create(EXTENSION).map_err(fail)?;
     store.push(profile, package::PACKAGED_ELEMENT, Value::Ref(ext)).map_err(fail)?;
@@ -684,7 +689,7 @@ pub fn uses_text(store: &Store, uses: &Uses) -> String {
 }
 
 /// A refusal that names what is in use and the uses, as `{what} is in use{where}: {uses}. Remove
-/// those first.`, its reason typed.
+/// those first.`, or, for a move, what [`stranding`] says; its reason typed.
 fn in_use(store: &Store, key: &str, what: Used, uses: &Uses) -> CommandError {
     let said = match &what {
         Used::Element(name) => format!("{name} is in use"),
@@ -693,18 +698,18 @@ fn in_use(store: &Store, key: &str, what: Used, uses: &Uses) -> CommandError {
         Used::Extension { stereotype, metaclass } => format!("«{stereotype}» on {metaclass} is in use"),
         Used::HeldProfile { package, profile } => format!("{package} holds the profile {profile}, which is in use"),
         Used::AppliedProfiles { package } => format!("{package} applies the profiles its elements use"),
+        Used::MovedAway(name) => format!("moving {name} there takes stereotypes out of the packages that apply their profiles"),
     };
+    let then = if matches!(what, Used::MovedAway(_)) { "; apply the profile there first" } else { ". Remove those first." };
     let reason = Reason::InUse(Box::new(InUse { what, uses: uses_named(store, uses) }));
-    refuse(key, format!("{said}: {}. Remove those first.", uses_text(store, uses))).because(reason)
+    refuse(key, format!("{said}: {}{then}", uses_text(store, uses))).because(reason)
 }
 
-/// The refusal of a move of `moved` that would strand `uses`, naming them.
-pub fn stranding(store: &Store, moved: Obj, uses: &Uses) -> String {
-    format!(
-        "moving {} there takes stereotypes out of the packages that apply their profiles: {}; apply the profile there first",
-        name_of(store, moved),
-        uses_text(store, uses)
-    )
+/// The refusal, under `key`, of a move of `moved` that would strand `uses`, naming them: `moving
+/// {moved} there takes stereotypes out of the packages that apply their profiles: {uses}; apply the
+/// profile there first`, its reason typed as the others in use are.
+pub fn stranding(store: &Store, key: &str, moved: Obj, uses: &Uses) -> CommandError {
+    in_use(store, key, Used::MovedAway(name_of(store, moved)), uses)
 }
 
 /// Why `objs` may not be removed for their uses, when that is so: a profile or a stereotype whose
@@ -796,14 +801,15 @@ fn package_param(store: &mut Store, p: &Params, key: &str) -> Result<Obj, Comman
 /// The metaclass names under `key`, each once, each one Archforge draws.
 fn metaclass_names(p: &Params, key: &str) -> Result<Option<Vec<String>>, CommandError> {
     let Some(v) = p.get(key) else { return Ok(None) };
-    let items = v.as_array().ok_or_else(|| refuse(key, "a list of metaclass names"))?;
+    let names = || refuse(key, "a list of metaclass names").because(Reason::NamesExpected { kind: "metaclass" });
+    let items = v.as_array().ok_or_else(names)?;
     if items.len() > METACLASSES.len() {
         let most = Reason::TooMany { kind: "metaclass", max: METACLASSES.len() };
         return Err(refuse(key, format!("at most {} metaclasses", METACLASSES.len())).because(most));
     }
     let mut out: Vec<String> = Vec::new();
     for item in items {
-        let name = item.as_str().ok_or_else(|| refuse(key, "a list of metaclass names"))?;
+        let name = item.as_str().ok_or_else(names)?;
         if let Some(refused) = metaclass_refusal(key, name) {
             return Err(refused);
         }
@@ -876,7 +882,7 @@ fn stereotype_add(ctx: &mut C<'_>, p: &Params) -> R {
 /// uses: the applications would lose their definition or their scope.
 fn stereotype_set(ctx: &mut C<'_>, p: &Params) -> R {
     let s = element(ctx.doc, p, "stereotype", STEREOTYPE, "a stereotype")?;
-    let from = profile_of(ctx.doc, s).ok_or_else(|| refuse("stereotype", "it is in no profile"))?;
+    let from = profile_of(ctx.doc, s).ok_or_else(no_profile)?;
     let to = match p.str("profile") {
         Some(_) => element(ctx.doc, p, "profile", PROFILE, "a profile")?,
         None => from,

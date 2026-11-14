@@ -1219,6 +1219,8 @@ str		A stereotype extends at most {max} metaclasses.	Ein Stereotyp erweitert hö
 str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} ist eine UML-Metaklasse, die Archforge noch nicht zeichnet. Ein Stereotyp erweitert {metaclasses}.
 str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} ist keine Metaklasse, die Archforge zeichnet. Ein Stereotyp erweitert {metaclasses}.
 str		{name} is named twice. Name each metaclass once.	{name} ist zweimal genannt. Jede Metaklasse nur einmal nennen.
+str		Give the metaclasses as a list of names.	Die Metaklassen als Liste von Namen angeben.
+str		This stereotype is in no profile.	Dieser Stereotyp liegt in keinem Profil.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} ist das Erweiterungsende eines Stereotyps. Stattdessen die Metaklasse aus dem entfernen, was der Stereotyp erweitert.
 plural		{name} has values on {n} element. Remove those first.	{name} hat Werte an {n} Element. Diese zuerst entfernen.|{name} hat Werte an {n} Elementen. Diese zuerst entfernen.
 str		Stereotypes · {n}	Stereotypen · {n}
@@ -1247,6 +1249,7 @@ str		Unapply profile	Profil nicht mehr anwenden
 str		{profile} is in use in {package}: {uses}. Remove those first.	{profile} wird in {package} verwendet: {uses}. Diese zuerst entfernen.
 str		{name} is in use: {uses}. Remove those first.	{name} wird verwendet: {uses}. Diese zuerst entfernen.
 str		{name} applies the profiles its elements use: {uses}. Remove those first.	{name} wendet die Profile an, die seine Elemente verwenden: {uses}. Diese zuerst entfernen.
+str		Moving {name} there takes stereotypes out of the packages that apply their profiles: {uses}. Apply the profile there first.	{name} dorthin zu verschieben nimmt Stereotypen aus den Paketen, die ihre Profile anwenden: {uses}. Das Profil zuerst dort anwenden.
 str		{name} holds the profile {profile}, which is in use: {uses}. Remove those first.	{name} enthält das Profil {profile}, das verwendet wird: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.	«{stereotype}» auf {metaclass} wird verwendet: {uses}. Diese zuerst entfernen.
 str		«{stereotype}» on {elements}	«{stereotype}» auf {elements}
