@@ -576,10 +576,9 @@ pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rec
     }
 }
 
-/// Whether ⌘ (Ctrl on other systems) is held and nothing else. `matches_exact` alone lets macOS's
-/// Control with ⌘ through: it checks that `command` is set, never that `ctrl` is not.
+/// Whether ⌘ (Ctrl on other systems) is held and nothing else, as the actions' keys are matched.
 fn command_alone(held: egui::Modifiers) -> bool {
-    held.matches_exact(egui::Modifiers::COMMAND) && !(held.ctrl && held.mac_cmd)
+    crate::actions::held_exactly(held, egui::Modifiers::COMMAND)
 }
 
 /// Takes this frame's first press of ⌘B, ⌘I or ⌘K (Ctrl on other systems) and gives its format.

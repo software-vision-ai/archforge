@@ -315,16 +315,39 @@ pub(crate) fn free(shell: &Shell) -> bool {
 /// Redo's second key, ⌘Y (Ctrl Y), which no menu shows.
 const REDO_TOO: Keys = Keys { modifiers: Modifiers::COMMAND, key: Key::Y };
 
-/// Whether `keys` were pressed in this frame, and takes them. Matched exactly: `consume_key` lets an
-/// extra Shift through, which would make ⇧⌘S save with Save version… off, and ⇧⌘Z undo with Redo off.
+/// Whether exactly `wanted` is `held`, for a chord of the command key (⌘, Ctrl on other systems).
+/// `matches_exact` is exact about Shift and Alt only: on macOS it lets Control with ⌘ through,
+/// since it checks that `command` is set and never that `ctrl` is not. Windows and Linux set
+/// `ctrl` and `command` together for their one key, and never `mac_cmd`.
+pub(crate) fn held_exactly(held: Modifiers, wanted: Modifiers) -> bool {
+    held.matches_exact(wanted) && !(held.ctrl && held.mac_cmd)
+}
+
+/// Whether `keys` were pressed in `input`, and takes that press. Matched exactly: an extra Shift
+/// or Alt is another chord's press and stays, so ⇧⌘S never saves with Save version… off. macOS's
+/// Control with the chord is nobody's: that press is taken too and counts for nothing, so a field
+/// drawn later never reads it as one of Control's text keys.
+fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
+    let mut hit = false;
+    input.events.retain(|e| match e {
+        egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers) => {
+            hit |= held_exactly(*modifiers, keys.modifiers);
+            false
+        }
+        _ => true,
+    });
+    hit
+}
+
+/// Whether `keys` were pressed in this frame, exactly; takes the press as `take` does.
 fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {
-    let exact = |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers));
-    ctx.input_mut(|i| i.events.iter().any(exact) && i.consume_key(keys.modifiers, keys.key))
+    ctx.input_mut(|i| take(i, keys))
 }
 
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
 /// available. A field reads the Edit menu's keys itself, so they stay in the input while it has the
-/// keyboard. ⌘Y (Ctrl Y) is Redo's second key, matched as exactly as the table's.
+/// keyboard. ⌘Y (Ctrl Y) is Redo's second key, matched as exactly as the table's. Keys are asked for
+/// only while their action is available, so an action that is off leaves every press where it was.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
@@ -604,39 +627,103 @@ pub(crate) mod tests {
 
     /// Presses `key` with `modifiers`, the only input of a frame.
     fn press(shell: &mut Shell, modifiers: Modifiers, key: Key) {
-        let event = egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
-        let input = egui::RawInput { events: vec![event], ..Default::default() };
+        let input = egui::RawInput { events: vec![down(modifiers, key)], ..Default::default() };
         let mut output = egui::Context::default().run_ui(input, |ui| run_shortcuts(shell, ui.ctx()));
         output.textures_delta.clear();
     }
 
-    /// A shortcut pressed runs its own action, and a key left alone runs nothing.
+    /// A press of `key` with `modifiers`.
+    fn down(modifiers: Modifiers, key: Key) -> egui::Event {
+        egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }
+    }
+
+    /// The command key as a keyboard reports it: a Mac's ⌘, and the Ctrl of Windows and Linux,
+    /// which sets `ctrl` with `command`. `Modifiers::COMMAND` alone is a shape no keyboard sends.
+    const SHAPES: [(&str, Modifiers); 2] =
+        [("macOS", Modifiers::MAC_CMD.plus(Modifiers::COMMAND)), ("Windows and Linux", Modifiers::CTRL.plus(Modifiers::COMMAND))];
+
+    /// What is left of an input holding only `events` once `keys` are asked for, and whether they
+    /// counted as pressed.
+    fn taken(keys: &Keys, events: &[egui::Event]) -> (bool, Vec<egui::Event>) {
+        let mut input = egui::InputState::default();
+        input.events = events.to_vec();
+        (take(&mut input, keys), input.events)
+    }
+
+    /// Every chord of the table, and Redo's second key, in both shapes: its own press counts and is
+    /// taken. With Shift or Alt more, or one less, it is another chord's press: it counts for nothing
+    /// and stays. A Mac's Control with it counts for nothing and is taken.
+    #[test]
+    fn every_chord_is_matched_exactly_in_both_shapes() {
+        let chords: Vec<(&str, &Keys)> = ACTIONS.iter().filter_map(|a| Some((a.id, a.keys.as_ref()?))).chain([("⌘Y", &REDO_TOO)]).collect();
+        assert_eq!(chords.len(), 19, "every row with keys, and Redo's second key");
+        for (id, keys) in chords {
+            let own = keys.modifiers;
+            assert!(own.command && !own.ctrl && !own.mac_cmd, "{id}: a chord of the command key, which both shapes hold");
+            let others =
+                [Modifiers { shift: !own.shift, ..own }, Modifiers { alt: !own.alt, ..own }, Modifiers { shift: !own.shift, alt: !own.alt, ..own }];
+            for (system, shape) in SHAPES {
+                assert_eq!(taken(keys, &[down(own | shape, keys.key)]), (true, vec![]), "{id} on {system}");
+                for other in others.map(|other| down(other | shape, keys.key)) {
+                    assert_eq!(taken(keys, std::slice::from_ref(&other)), (false, vec![other.clone()]), "{id} on {system}: {other:?}");
+                }
+            }
+            let control = down(own | SHAPES[0].1 | Modifiers::CTRL, keys.key);
+            assert_eq!(taken(keys, std::slice::from_ref(&control)), (false, vec![]), "{id}: a Mac's Control with the chord");
+            assert_eq!(taken(keys, &[down(own | SHAPES[0].1, keys.key), control]), (true, vec![]), "{id}: and after the chord itself");
+        }
+    }
+
+    /// A chord takes its own press only: another chord's press on the same key in the same frame
+    /// stays for its own row, and so do the key's release and a press with no command key.
+    #[test]
+    fn a_chord_leaves_the_other_presses_of_its_key() {
+        let (save, version) = (keys(SAVE).unwrap(), keys(SAVE_VERSION).unwrap());
+        for (system, shape) in SHAPES {
+            let release = egui::Event::Key { key: Key::S, physical_key: None, pressed: false, repeat: false, modifiers: shape };
+            let rest = [down(shape | Modifiers::SHIFT, Key::S), release, down(Modifiers::NONE, Key::S), down(shape, Key::O)];
+            let all: Vec<egui::Event> = [down(shape, Key::S)].into_iter().chain(rest.clone()).collect();
+            assert_eq!(taken(save, &all), (true, rest.to_vec()), "{system}");
+            assert_eq!(taken(version, &all), (true, [&all[..1], &all[2..]].concat()), "{system}");
+        }
+    }
+
+    /// A shortcut pressed runs its own action, in both shapes, and a key left alone runs nothing.
     #[test]
     fn every_shortcut_runs_its_action() {
-        let shift_cmd = Modifiers::COMMAND | Modifiers::SHIFT;
-        let pressed = [
-            (GENERATE, shift_cmd, Key::G),
-            (SAVE, Modifiers::COMMAND, Key::S),
-            (OPEN, Modifiers::COMMAND, Key::O),
-            (SETTINGS, Modifiers::COMMAND, Key::Comma),
-        ];
-        for (id, modifiers, key) in pressed {
+        let shift = Modifiers::SHIFT;
+        for (system, cmd) in SHAPES {
+            let pressed = [(GENERATE, cmd | shift, Key::G), (SAVE, cmd, Key::S), (OPEN, cmd, Key::O), (SETTINGS, cmd, Key::Comma)];
+            for (id, modifiers, key) in pressed {
+                let (mut shell, saves, picks) = shell();
+                unsaved(&mut shell);
+                press(&mut shell, modifiers, key);
+                assert_eq!(effects(&shell, &saves, &picks), [id], "{system}");
+            }
             let (mut shell, saves, picks) = shell();
+            // Unsaved, so a key that reached Save would show.
             unsaved(&mut shell);
-            press(&mut shell, modifiers, key);
-            assert_eq!(effects(&shell, &saves, &picks), [id]);
+            shell.ask = Some(question());
+            press(&mut shell, cmd | shift, Key::G);
+            press(&mut shell, cmd, Key::O);
+            shell.ask = None;
+            press(&mut shell, cmd, Key::G);
+            press(&mut shell, Modifiers::NONE, Key::S);
+            assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "{system}: not behind a question, nor with the wrong modifiers");
+            press(&mut shell, cmd | shift, Key::S);
+            assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "{system}: ⇧⌘S is Save version…'s, never Save's");
+            for more in [Modifiers::ALT, shift | Modifiers::ALT] {
+                press(&mut shell, cmd | more, Key::S);
+                press(&mut shell, cmd | more, Key::O);
+                assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "{system}: {more:?} more makes it nobody's chord");
+            }
         }
         let (mut shell, saves, picks) = shell();
-        // Unsaved, so a key that reached Save would show.
         unsaved(&mut shell);
-        shell.ask = Some(question());
-        press(&mut shell, shift_cmd, Key::G);
-        press(&mut shell, Modifiers::COMMAND, Key::O);
-        shell.ask = None;
-        press(&mut shell, Modifiers::COMMAND, Key::G);
-        press(&mut shell, Modifiers::NONE, Key::S);
-        assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "not behind a question, nor with the wrong modifiers");
-        press(&mut shell, shift_cmd, Key::S);
-        assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "⇧⌘S is Save version…'s, never Save's");
+        let control = SHAPES[0].1 | Modifiers::CTRL;
+        for (modifiers, key) in [(control, Key::S), (control, Key::O), (control, Key::Comma), (control | shift, Key::G)] {
+            press(&mut shell, modifiers, key);
+            assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "a Mac's Control with ⌘ and {key:?} is nobody's chord");
+        }
     }
 }
