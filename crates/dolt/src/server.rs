@@ -383,7 +383,8 @@ fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u
 /// recorded run folder, a folder of this user's made for that start under a random name, which
 /// makes the line that start's alone; each process listed is proven again before anything is done
 /// about it. One whose Archforge still runs refuses the project, naming the server, and nothing
-/// goes; one whose Archforge is gone is stopped, its configuration removed first: where a child
+/// goes; one whose Archforge is gone is stopped, its configuration removed first (a removal that
+/// fails fails the opening, and nothing more goes): where a child
 /// cut between its fork and its exec does not keep the lock (a lock a file system emulates per
 /// process), it then finds no configuration once it runs dolt, and a dolt started without its
 /// configuration exits at once (measured with dolt 2.7.3). Only then do the run folder and the
@@ -408,12 +409,13 @@ fn settle_pending(file: &Path, data_text: &str, seen: &Record, opts: &ServerOpti
         record::remove_while(file, |found| *found == r);
         return Ok(None);
     }
-    // A link under that name goes itself, never what it points to.
+    // A link under that name goes itself, never what it points to. A configuration that stays
+    // could still start a server nothing lists yet: the opening fails, and the record stays.
     if !owner
         && let Err(e) = std::fs::remove_file(&yaml)
         && e.kind() != std::io::ErrorKind::NotFound
     {
-        log::warn!("the configuration {} stays: {e}", yaml.display());
+        return Err(Error::io("cannot remove", &yaml, e));
     }
     #[cfg(test)]
     tests::before_list(run);
@@ -967,6 +969,39 @@ mod tests {
         }
         drop(decoy.stdin.take());
         assert_eq!(decoy.wait().unwrap().signal(), None, "the decoy got no signal");
+    }
+
+    /// The configuration of a start whose Archforge is gone cannot be removed (its run folder may
+    /// not be written): the opening fails before anything is looked for, and the record, the
+    /// folder and its configuration stay, with the server running on unsignalled. A configuration
+    /// gone already fails nothing.
+    #[cfg(unix)]
+    #[test]
+    fn a_configuration_that_cannot_be_removed_fails_the_opening() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::process::ExitStatusExt;
+        let dir = crate::home::tests::Scratch::new("kept-config");
+        let (opts, data, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())], false).unwrap();
+        let mut server = stand_in(&r.command);
+        let run = Path::new(&r.run_dir);
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o500)).unwrap();
+        // A user who may write anyway (root) removes it: the case cannot be made then.
+        let writable = std::fs::File::create(run.join("probe")).is_ok();
+        CONFIG_AT_LIST.set(None);
+        let opened = if writable { Ok(()) } else { recover_only(&data, &opts) };
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o700)).unwrap();
+        drop(server.stdin.take());
+        assert_eq!(server.wait().unwrap().signal(), None, "nothing was signalled");
+        if !writable {
+            assert!(matches!(&opened, Err(Error::Io { what, .. }) if what == "cannot remove"), "{opened:?}");
+            assert_eq!(CONFIG_AT_LIST.get(), None, "nothing was looked for");
+            assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
+            assert!(run.join("server.yaml").is_file());
+        }
+        // One that is gone already is no failure: the next opening settles the record.
+        std::fs::remove_file(run.join("server.yaml")).unwrap();
+        recover_only(&data, &opts).unwrap();
+        assert_eq!((record::read(&opts.records, &r.data_dir).unwrap(), run.exists()), (None, false));
     }
 
     /// A start that completed its record while the opening waited for its lock: the opening goes

@@ -56,8 +56,9 @@ complete. The opening of its project settles such a record before anything else:
   again before each signal; only then do the run folder and the record go. A running server
   whose run folder is removed runs on, keeping the project's lock and its port (measured with
   dolt 2.7.3), which is why it is stopped first.
-- Where the list or a proof fails, or a server would not stop, the opening fails and nothing more
-  goes, until the list works again.
+- Where the configuration cannot be removed (but for one already gone), the list or a proof
+  fails, or a server would not stop, the opening fails and nothing more goes: the record and the
+  run folder stay for the next opening.
 
 The start-up sweep leaves a record without a process id alone for now (AR-459), so a server of a
 start its Archforge did not finish runs on until its project is opened. A record of the earlier
