@@ -630,6 +630,72 @@ fn every_profile_rule_refused_carries_its_reason_typed() {
     check(&mut s, "uml.stereotype.set", json!({ "stereotype": reference, "profile": full }), most(), "a profile holds at most 256 stereotypes");
 }
 
+/// An element that takes no stereotype, and a stereotype that may not be applied to one, refused,
+/// carry their reason typed beside the unchanged English, under the parameter each is about; a
+/// template parameter's classifier is refused with its sentence alone (AR-446).
+#[test]
+fn every_application_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason, Unextended};
+    let mut s = session();
+    let [commerce, order, customer, _, persistence, entity, id, _] = applied_shop(&mut s);
+    let check = |s: &mut S, element: &str, stereotype: &str, key: &str, reason: Option<Reason>, english: &str| {
+        let p = json!({ "element": element, "stereotype": stereotype });
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute("uml.stereotype.apply", &p) else { panic!("{p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (reason, Some(key)), "{p}: {}", error.message);
+        assert!(error.message.contains(english), "{p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{p} changed nothing");
+    };
+    // What takes none: an application, the model itself, a profile's own, a literal, a metaclass, a parameter's classifier.
+    let instance = run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    check(&mut s, &instance, &entity, "element", Some(Reason::IsApplication), "is a stereotype application; stereotypes apply");
+    let model = {
+        let st = s.doc();
+        st.uuid(st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap()).unwrap().to_string()
+    };
+    check(&mut s, &model, &entity, "element", Some(Reason::NotInModel), "is no element of the model");
+    let own = Reason::InProfile { name: "Entity".into() };
+    check(&mut s, &entity, &entity, "element", Some(own), "Entity belongs to a profile, which defines stereotypes and takes none");
+    let status = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Status" }));
+    let open = run(&mut s, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+    let none = Reason::TakesNoStereotype { name: "open".into() };
+    check(&mut s, &open, &entity, "element", Some(none), "open takes no stereotype: stereotypes extend Class, Interface,");
+    let (class, t) = {
+        run(&mut s, "uml.template-parameter.add", json!({ "classifier": customer, "name": "T" }));
+        let st = s.doc();
+        let parameter = archforge_uml::templates::parameters(st, obj(st, &customer))[0];
+        let t = archforge_uml::templates::element_of(st, parameter).unwrap();
+        (st.uuid(profiles::metaclass(st, "Class").unwrap()).unwrap().to_string(), st.uuid(t).unwrap().to_string())
+    };
+    check(&mut s, &class, &entity, "element", Some(Reason::UmlOwn { metaclass: Some("Class".into()) }), "UML metaclass Class");
+    check(&mut s, &t, &entity, "element", None, "is the template parameter T of Customer");
+    // What may not be applied: applied already, extending another metaclass or none, out of scope.
+    let applied = Reason::StereotypeApplied { stereotype: "Entity".into(), element: "Order".into() };
+    check(&mut s, &order, &entity, "stereotype", Some(applied), "«Entity» is applied to Order already");
+    let unextended = |stereotype: &str, extends: &[&str]| {
+        let extends = extends.iter().map(|m| m.to_string()).collect();
+        Some(Reason::Unextended(Box::new(Unextended { stereotype: stereotype.into(), metaclass: "Class", extends })))
+    };
+    check(&mut s, &order, &id, "stereotype", unextended("Id", &["Property"]), "«Id» extends Property, and Order is a class");
+    // An association class is a Class to a stereotype, whatever else it is.
+    let line = run(&mut s, "uml.association-class.add", json!({ "from": order, "to": customer, "name": "Line" }));
+    check(&mut s, &line, &id, "stereotype", unextended("Id", &["Property"]), "«Id» extends Property, and Line is an association class");
+    let bare = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Bare" }));
+    check(&mut s, &order, &bare, "stereotype", unextended("Bare", &[]), "«Bare» extends no metaclass yet");
+    let logging = run(&mut s, "uml.profile.add", json!({ "name": "Logging" }));
+    let tracked = run(&mut s, "uml.stereotype.add", json!({ "profile": logging, "name": "Tracked", "extends": ["Class"] }));
+    let out = Reason::ProfileOutOfScope { profile: "Logging".into(), package: "Commerce".into() };
+    check(&mut s, &order, &tracked, "stereotype", Some(out), "which no package around Order applies; apply it to Commerce");
+    // An element that carries the most takes no stereotype more.
+    for n in 1..applications::MAX_APPLIED {
+        let more = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": format!("S{n}"), "extends": ["Class"] }));
+        run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": more }));
+    }
+    let over = run(&mut s, "uml.stereotype.add", json!({ "profile": persistence, "name": "Over", "extends": ["Class"] }));
+    let most = Reason::TooMany { kind: "applied stereotype", max: 32 };
+    check(&mut s, &order, &over, "stereotype", Some(most), "Order carries 32 stereotypes, the most one element carries");
+}
+
 /// The session `s` with the package `package` moved to the model's top level, as a project made
 /// before the root package keeps one: removed, it takes what it holds along.
 fn at_top(s: &S, package: &str) -> S {

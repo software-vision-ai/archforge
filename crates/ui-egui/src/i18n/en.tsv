@@ -1280,6 +1280,12 @@ str		{profile} not applied	{profile} not applied
 str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.
 str		«{stereotype}» extends no metaclass yet.	«{stereotype}» extends no metaclass yet.
 str		Its profile {profile} is not applied to {package} or a package around it.	Its profile {profile} is not applied to {package} or a package around it.
+str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	A stereotype application takes no stereotype. Stereotypes apply to the model's elements.
+str		This is no element of the model, so no stereotype applies to it.	This is no element of the model, so no stereotype applies to it.
+str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} belongs to a profile, which defines stereotypes and takes none.
+str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} takes no stereotype. A stereotype extends {metaclasses}.
+str		«{stereotype}» is applied to {name} already.	«{stereotype}» is applied to {name} already.
+str		An element carries at most {max} stereotypes.	An element carries at most {max} stereotypes.
 str		{value} is no value of {name}. {accepted}	{value} is no value of {name}. {accepted}
 str		A whole number, such as 42 or -7.	A whole number, such as 42 or -7.
 str		A number, such as 2.5 or -1e3.	A number, such as 2.5 or -1e3.

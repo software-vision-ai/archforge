@@ -5081,6 +5081,67 @@ fn a_profile_rule_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// An element that takes no stereotype, and a stereotype that may not be applied to one, refused by
+/// the engine, are said in the chosen language, in the picker's own words where it has them. In
+/// light and dark (AR-446).
+#[test]
+fn an_application_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, element: &str, stereotype: &str| {
+            crate::panels::run(h.state_mut(), "uml.stereotype.apply", json!({ "element": element, "stereotype": stereotype }))
+                .err()
+                .unwrap_or_default()
+        };
+        let commerce = id(&mut h, "uml.package.add", json!({ "name": "Commerce" }));
+        let order = id(&mut h, "uml.class.add", json!({ "package": commerce, "name": "Order" }));
+        let status = id(&mut h, "uml.enumeration.add", json!({ "package": commerce, "name": "Status" }));
+        let open = id(&mut h, "uml.literal.add", json!({ "enumeration": status, "name": "open" }));
+        let [persistence, logging] = ["Persistence", "Logging"].map(|n| id(&mut h, "uml.profile.add", json!({ "name": n })));
+        let made = |h: &mut egui_kittest::Harness<'_, crate::Shell>, profile: &str, name: &str, extends: &[&str]| {
+            id(h, "uml.stereotype.add", json!({ "profile": profile, "name": name, "extends": extends }))
+        };
+        let entity = made(&mut h, &persistence, "Entity", &["Class"]);
+        let key = made(&mut h, &persistence, "Id", &["Property", "Operation"]);
+        let bare = made(&mut h, &persistence, "Bare", &[]);
+        let tracked = made(&mut h, &logging, "Tracked", &["Class"]);
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        let instance = id(&mut h, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+        let already = fmt(&tr("«{stereotype}» is applied to {name} already."), &[("stereotype", "Entity"), ("name", "Order")]);
+        assert_eq!(already, "«Entity» ist bereits auf Order angewendet.", "{theme:?}: the language is German");
+        assert_eq!(refused(&mut h, &order, &entity), already, "{theme:?}");
+        let other = tr("«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.");
+        let other = fmt(&other, &[("stereotype", "Id"), ("metaclass", "Class"), ("metaclasses", "Property, Operation")]);
+        assert_eq!(refused(&mut h, &order, &key), other, "{theme:?}");
+        assert_eq!(refused(&mut h, &order, &bare), fmt(&tr("«{stereotype}» extends no metaclass yet."), &[("stereotype", "Bare")]), "{theme:?}");
+        let out = tr("Its profile {profile} is not applied to {package} or a package around it.");
+        assert_eq!(refused(&mut h, &order, &tracked), fmt(&out, &[("profile", "Logging"), ("package", "Commerce")]), "{theme:?}");
+        // What takes none: a profile's own element, a literal and an application.
+        let own = fmt(&tr("{name} belongs to a profile, which defines stereotypes and takes none."), &[("name", "Entity")]);
+        assert_eq!(refused(&mut h, &entity, &entity), own, "{theme:?}");
+        let offered = "Class, Interface, Enumeration, DataType, Property, Operation, Association, Generalization, Package";
+        let none = fmt(&tr("{name} takes no stereotype. A stereotype extends {metaclasses}."), &[("name", "open"), ("metaclasses", offered)]);
+        assert_eq!(refused(&mut h, &open, &entity), none, "{theme:?}");
+        let application = tr("A stereotype application takes no stereotype. Stereotypes apply to the model's elements.");
+        assert_eq!(refused(&mut h, &instance, &entity), application, "{theme:?}");
+        // The model itself, and an element that carries the most, are said from their reasons.
+        let outside = crate::panels::said(&Reason::NotInModel);
+        assert_eq!(outside, Some(tr("This is no element of the model, so no stereotype applies to it.")), "{theme:?}");
+        let most = crate::panels::said(&Reason::TooMany { kind: "applied stereotype", max: 32 });
+        assert_eq!(most, Some(fmt(&tr("An element carries at most {max} stereotypes."), &[("max", "32")])), "{theme:?}");
+        assert_eq!(most.as_deref(), Some("Ein Element trägt höchstens 32 Stereotypen."), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

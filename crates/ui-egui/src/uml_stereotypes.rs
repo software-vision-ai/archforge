@@ -115,16 +115,6 @@ pub(crate) fn takes(store: &Store, element: Obj) -> bool {
     applications::element_problem(store, element).is_none()
 }
 
-/// The UML metaclass a picker row says the element is: the one Archforge draws it as, by UML's name.
-fn metaclass_word(store: &Store, element: Obj) -> &'static str {
-    let Ok(class) = store.class_of(element) else { return "" };
-    profiles::METACLASSES
-        .iter()
-        .find(|(_, k)| *k == class)
-        .or_else(|| profiles::METACLASSES.iter().find(|(_, k)| store.universe().conforms(class, archforge_mof::TypeRef::Class(*k))))
-        .map_or("", |(n, _)| n)
-}
-
 /// A row of the picker: the stereotype, its label, the detail at its right (its profile, or the
 /// short reason), whether it may be picked, whether it is applied, and the whole reason.
 struct Pick {
@@ -163,25 +153,55 @@ fn picks(store: &Store, element: Obj, filter: &str) -> Vec<Pick> {
                     ),
                     many => fmt(&tr("{kinds} only"), &[("kinds", &many.iter().map(|m| kind_words(m)).collect::<Vec<_>>().join(", "))]),
                 };
-                let why = fmt(
-                    &tr("«{stereotype}» does not extend {metaclass}: it extends {metaclasses}."),
-                    &[("stereotype", &label), ("metaclass", metaclass_word(store, element)), ("metaclasses", &metaclasses.join(", "))],
-                );
-                let why =
-                    if metaclasses.is_empty() { fmt(&tr("«{stereotype}» extends no metaclass yet."), &[("stereotype", &label)]) } else { why };
+                let why = unextended(&label, profiles::metaclass_name(store, element), &metaclasses);
                 shut.push(pick(false, false, short, Some(why)));
             }
             Offer::OutOfScope => {
                 let home = profiles::home_of(store, element).map(|p| name(store, p)).unwrap_or_default();
-                let why = fmt(
-                    &tr("Its profile {profile} is not applied to {package} or a package around it."),
-                    &[("profile", &profile), ("package", &home)],
-                );
+                let why = out_of_scope(&profile, &home);
                 shut.push(pick(false, false, fmt(&tr("{profile} not applied"), &[("profile", &profile)]), Some(why)));
             }
         }
     }
     open.into_iter().chain(shut).collect()
+}
+
+/// Why a stereotype that extends `extends`, or nothing yet, does not apply to an element of `metaclass`.
+fn unextended(stereotype: &str, metaclass: &str, extends: &[String]) -> String {
+    if extends.is_empty() {
+        return fmt(&tr("«{stereotype}» extends no metaclass yet."), &[("stereotype", stereotype)]);
+    }
+    let template = tr("«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.");
+    fmt(&template, &[("stereotype", stereotype), ("metaclass", metaclass), ("metaclasses", &extends.join(", "))])
+}
+
+/// Why a stereotype of `profile` does not apply to an element in `package`: nothing around it applies the profile.
+fn out_of_scope(profile: &str, package: &str) -> String {
+    fmt(&tr("Its profile {profile} is not applied to {package} or a package around it."), &[("profile", profile), ("package", package)])
+}
+
+/// An engine's refusal to apply a stereotype in the user's words, the picker's own where it has
+/// them; none for any other reason.
+pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    let offered = || profiles::METACLASSES.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
+    Some(match reason {
+        Reason::IsApplication => tr("A stereotype application takes no stereotype. Stereotypes apply to the model's elements."),
+        Reason::NotInModel => tr("This is no element of the model, so no stereotype applies to it."),
+        Reason::InProfile { name } => fmt(&tr("{name} belongs to a profile, which defines stereotypes and takes none."), &[("name", name)]),
+        Reason::TakesNoStereotype { name } => {
+            fmt(&tr("{name} takes no stereotype. A stereotype extends {metaclasses}."), &[("name", name), ("metaclasses", &offered())])
+        }
+        Reason::StereotypeApplied { stereotype, element } => {
+            fmt(&tr("«{stereotype}» is applied to {name} already."), &[("stereotype", stereotype), ("name", element)])
+        }
+        Reason::TooMany { kind: "applied stereotype", max } => {
+            fmt(&tr("An element carries at most {max} stereotypes."), &[("max", &max.to_string())])
+        }
+        Reason::Unextended(u) => unextended(&u.stereotype, u.metaclass, &u.extends),
+        Reason::ProfileOutOfScope { profile, package } => out_of_scope(profile, package),
+        _ => return None,
+    })
 }
 
 /// The Stereotypes section of `element` at `y` (F3): its title with the count and the picker's

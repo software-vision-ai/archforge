@@ -465,6 +465,13 @@ pub fn extends_kind(store: &Store, metaclass: Obj, element: Obj) -> bool {
     store.universe().conforms(class, archforge_mof::TypeRef::Class(kind))
 }
 
+/// The UML metaclass `element` is, by UML's name: the first of [`METACLASSES`] it is or specializes,
+/// so an association class is a Class; empty when no stereotype may extend it.
+pub fn metaclass_name(store: &Store, element: Obj) -> &'static str {
+    let Ok(class) = store.class_of(element) else { return "" };
+    METACLASSES.iter().find(|(_, k)| store.universe().conforms(class, archforge_mof::TypeRef::Class(*k))).map_or("", |(n, _)| n)
+}
+
 // Applications and uses.
 
 /// A stereotype application: the InstanceSpecification classified by the stereotype, and the
