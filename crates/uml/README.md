@@ -158,7 +158,7 @@ the diamond's place; `figures::member_ends` gives a binary association's two end
 subsets_candidates, redefines_candidates, redefines_leaf, subsets_problem, redefines_problem}` (AR-126: a
 property's default value read by its type, derived, read only, ordered, unique, and the properties
 it subsets and redefines, set by `uml.attribute.add`/`set` and `uml.association.set-end`, checked
-against UML's rules before anything changes; the card's and the line's notation, `figures::end_role`
+against UML's rules before anything changes, every default and target refused typed for an interface to say (AR-466, AR-475); the card's and the line's notation, `figures::end_role`
 and `figures::end_text`), `RELATIONSHIPS`, `is_relationship` and `is_association`, and the card's `WORDS` and `PLURALS` for the shell's catalogue. Where an association's two
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
@@ -197,7 +197,7 @@ diagrams; removing one of three ends kept or made binary; Remove from this diagr
 card's legs gone and back; a binary association still a line; rows read back identical; the sweep. `tests/modifiers.rs` (AR-126):
 each modifier set and cleared on an attribute and an end, one undo step each; defaults for every
 built-in type, an enumeration and opaque text, and the type-change refusal; Subsets and Redefines
-valid and refused; the card's and the line's notation; rows read back identical; the sweep.
+valid and refused; each refusal's typed reason; the card's and the line's notation; rows read back identical; the sweep.
 
 **Known lacks.** No derived getters yet (`Classifier::general`, `MultiplicityElement::lower`, …
 read as Derived until a notation writes them). No hand-written rules beyond the core's. No
