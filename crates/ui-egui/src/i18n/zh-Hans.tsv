@@ -1281,6 +1281,12 @@ str		{profile} not applied	{profile} 未应用
 str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» 不扩展 {metaclass}：它扩展 {metaclasses}。
 str		«{stereotype}» extends no metaclass yet.	«{stereotype}» 尚未扩展任何元类。
 str		Its profile {profile} is not applied to {package} or a package around it.	其配置文件 {profile} 未应用于 {package} 或其外层包。
+str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	构造型应用不能再带构造型。构造型应用于模型的元素。
+str		This is no element of the model, so no stereotype applies to it.	这不是模型的元素，因此不能对它应用构造型。
+str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} 属于某个配置文件；配置文件用来定义构造型，本身不带构造型。
+str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} 不能带构造型。构造型扩展 {metaclasses}。
+str		«{stereotype}» is applied to {name} already.	«{stereotype}» 已应用于 {name}。
+str		An element carries at most {max} stereotypes.	一个元素最多带 {max} 个构造型。
 str		{value} is no value of {name}. {accepted}	{value} 不是 {name} 的值。{accepted}
 str		A whole number, such as 42 or -7.	整数，例如 42 或 -7。
 str		A number, such as 2.5 or -1e3.	数字，例如 2.5 或 -1e3。

@@ -207,6 +207,32 @@ pub enum Reason {
     ExtensionEnd { name: String },
     /// The stereotype property `name` has values set on this many elements, so it stays.
     ValuesSet { name: String, elements: usize },
+    /// The element is a stereotype application, which takes no stereotype itself.
+    IsApplication,
+    /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
+    NotInModel,
+    /// The element `name` belongs to a profile, which defines stereotypes and takes none.
+    InProfile { name: String },
+    /// The element `name` is of a metaclass no stereotype may extend.
+    TakesNoStereotype { name: String },
+    /// The stereotype is applied to the element already.
+    StereotypeApplied { stereotype: Box<str>, element: Box<str> },
+    /// The stereotype does not extend the element's metaclass.
+    Unextended(Box<Unextended>),
+    /// No package around the element applies the stereotype's `profile`; `package` is the one the
+    /// element sits in.
+    ProfileOutOfScope { profile: Box<str>, package: Box<str> },
+}
+
+/// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unextended {
+    /// The stereotype's name.
+    pub stereotype: String,
+    /// The element's metaclass by UML's name, as `"Class"`; empty when it has none a stereotype extends.
+    pub metaclass: &'static str,
+    /// The metaclasses the stereotype extends, by UML's names; none when it extends nothing yet.
+    pub extends: Vec<String>,
 }
 
 /// What a [`Reason::InUse`] names; boxed in the reason, so the error stays small.

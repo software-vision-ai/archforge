@@ -1281,6 +1281,12 @@ str		{profile} not applied	{profile} no aplicado
 str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» no extiende {metaclass}: extiende {metaclasses}.
 str		«{stereotype}» extends no metaclass yet.	«{stereotype}» aún no extiende ninguna metaclase.
 str		Its profile {profile} is not applied to {package} or a package around it.	Su perfil {profile} no está aplicado a {package} ni a un paquete que lo rodea.
+str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	Una aplicación de estereotipo no lleva ningún estereotipo. Los estereotipos se aplican a los elementos del modelo.
+str		This is no element of the model, so no stereotype applies to it.	Esto no es un elemento del modelo, así que ningún estereotipo se le aplica.
+str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} pertenece a un perfil, que define estereotipos y no lleva ninguno.
+str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} no lleva ningún estereotipo. Un estereotipo extiende {metaclasses}.
+str		«{stereotype}» is applied to {name} already.	«{stereotype}» ya está aplicado a {name}.
+str		An element carries at most {max} stereotypes.	Un elemento lleva como máximo {max} estereotipos.
 str		{value} is no value of {name}. {accepted}	{value} no es un valor de {name}. {accepted}
 str		A whole number, such as 42 or -7.	Un número entero, como 42 o -7.
 str		A number, such as 2.5 or -1e3.	Un número, como 2.5 o -1e3.

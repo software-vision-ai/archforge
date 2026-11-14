@@ -1281,6 +1281,12 @@ str		{profile} not applied	{profile} は未適用
 str		«{stereotype}» does not extend {metaclass}: it extends {metaclasses}.	«{stereotype}» は {metaclass} を拡張しません。拡張するのは {metaclasses} です。
 str		«{stereotype}» extends no metaclass yet.	«{stereotype}» はまだどのメタクラスも拡張していません。
 str		Its profile {profile} is not applied to {package} or a package around it.	プロファイル {profile} は {package} にもそれを囲むパッケージにも適用されていません。
+str		A stereotype application takes no stereotype. Stereotypes apply to the model's elements.	ステレオタイプの適用にはステレオタイプを付けられません。ステレオタイプはモデルの要素に適用します。
+str		This is no element of the model, so no stereotype applies to it.	これはモデルの要素ではないため、ステレオタイプを適用できません。
+str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} はプロファイルに属しています。プロファイルはステレオタイプを定義するもので、ステレオタイプは付けられません。
+str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} にはステレオタイプを付けられません。ステレオタイプが拡張するのは {metaclasses} です。
+str		«{stereotype}» is applied to {name} already.	«{stereotype}» はすでに {name} に適用されています。
+str		An element carries at most {max} stereotypes.	1 つの要素に付けられるステレオタイプは最大 {max} 個です。
 str		{value} is no value of {name}. {accepted}	{value} は {name} の値ではありません。{accepted}
 str		A whole number, such as 42 or -7.	42 や -7 のような整数です。
 str		A number, such as 2.5 or -1e3.	2.5 や -1e3 のような数値です。

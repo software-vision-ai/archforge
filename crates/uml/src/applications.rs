@@ -32,7 +32,7 @@
 //! core leaves any tag; the tag, left on nothing, is the one the next diagram turned on reuses.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, Unextended, always, cmd};
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -43,6 +43,8 @@ use crate::{INSTANCE_SPECIFICATION, INSTANCE_VALUE, SLOT, instance_specification
 
 type C<'a> = Ctx<'a, Store, ProjectView>;
 type R = Result<Json, CommandError>;
+/// Why something may not be: the English sentence, and the reason typed where it has one.
+type Why = (String, Option<Reason>);
 
 /// The most stereotypes one element carries.
 pub const MAX_APPLIED: usize = 32;
@@ -125,39 +127,54 @@ pub fn prefix(store: &Store, element: Obj) -> String {
 /// own elements, a stereotype application, a template parameter's classifier, and any element whose
 /// metaclass no stereotype may extend.
 pub fn element_problem(store: &Store, element: Obj) -> Option<String> {
-    if !store.is_alive(element) {
-        return Some("it is gone".into());
+    element_why(store, element).map(|(said, _)| said)
+}
+
+/// A refusal under `key` that says `why`, with its reason typed when it has one.
+fn refusal(key: &str, (said, reason): Why) -> CommandError {
+    let refused = refuse(key, said);
+    match reason {
+        Some(reason) => refused.because(reason),
+        None => refused,
     }
-    if let Some(why) = profiles::library_problem(store, element) {
-        return Some(why);
+}
+
+/// [`element_problem`] with its reason typed for an interface to say; a template parameter's
+/// classifier, an element gone and one without a metaclass have only their sentence.
+fn element_why(store: &Store, element: Obj) -> Option<Why> {
+    if !store.is_alive(element) {
+        return Some(("it is gone".into(), None));
+    }
+    if let Some(refused) = profiles::library_refusal(store, "element", element) {
+        return Some((refused.message, refused.reason));
     }
     if let Some(why) = crate::templates::parameter_element_problem(store, element) {
-        return Some(why);
+        return Some((why, None));
     }
     if is_application(store, element) {
-        return Some(format!(
-            "{} is a stereotype application; stereotypes apply to the model's elements",
-            uuid_of(store, element).unwrap_or_default()
-        ));
+        let id = uuid_of(store, element).unwrap_or_default();
+        return Some((format!("{id} is a stereotype application; stereotypes apply to the model's elements"), Some(Reason::IsApplication)));
     }
     // A profile, a stereotype, an extension and what they hold define stereotypes: none is applied to them.
     let mut at = Some(element);
     for _ in 0..256 {
         let Some(o) = at else { break };
         if store.class_of(o).is_ok_and(|c| c == crate::PROFILE || c == crate::STEREOTYPE || c == crate::EXTENSION) {
-            return Some(format!("{} belongs to a profile, which defines stereotypes and takes none", name_or_id(store, element)));
+            let name = name_or_id(store, element);
+            return Some((format!("{name} belongs to a profile, which defines stereotypes and takes none"), Some(Reason::InProfile { name })));
         }
         at = store.container(o).ok().flatten().map(|(c, _)| c);
     }
     if !in_model(store, element) {
-        return Some(format!("{} is no element of the model", uuid_of(store, element).unwrap_or_default()));
+        return Some((format!("{} is no element of the model", uuid_of(store, element).unwrap_or_default()), Some(Reason::NotInModel)));
     }
-    let Ok(class) = store.class_of(element) else { return Some("it has no metaclass".into()) };
+    let Ok(class) = store.class_of(element) else { return Some(("it has no metaclass".into(), None)) };
     if METACLASSES.iter().any(|(_, kind)| store.universe().conforms(class, TypeRef::Class(*kind))) {
         return None;
     }
     let offered: Vec<&str> = METACLASSES.iter().map(|(n, _)| *n).collect();
-    Some(format!("{} takes no stereotype: stereotypes extend {}", name_or_id(store, element), offered.join(", ")))
+    let name = name_or_id(store, element);
+    Some((format!("{name} takes no stereotype: stereotypes extend {}", offered.join(", ")), Some(Reason::TakesNoStereotype { name })))
 }
 
 /// Whether `o` lies inside the project's Model.
@@ -209,31 +226,46 @@ pub fn choices(store: &Store, element: Obj) -> Vec<(Obj, Offer)> {
 
 /// Why `stereotype` may not be applied to `element`, as a refusal says it; none when it may.
 pub fn apply_problem(store: &Store, stereotype: Obj, element: Obj) -> Option<String> {
-    if let Some(why) = element_problem(store, element) {
+    apply_why(store, stereotype, element).map(|(said, _)| said)
+}
+
+/// [`apply_problem`] with its reason typed for an interface to say.
+fn apply_why(store: &Store, stereotype: Obj, element: Obj) -> Option<Why> {
+    if let Some(why) = element_why(store, element) {
         return Some(why);
     }
     let (s, e) = (name_of(store, stereotype), name_or_id(store, element));
-    match offer(store, stereotype, element) {
-        Offer::Open if applied_to(store, element).len() >= MAX_APPLIED => {
-            Some(format!("{e} carries {MAX_APPLIED} stereotypes, the most one element carries"))
+    let unextended = |extends: &[String]| {
+        let metaclass = profiles::metaclass_name(store, element);
+        Reason::Unextended(Box::new(Unextended { stereotype: s.clone(), metaclass, extends: extends.to_vec() }))
+    };
+    let (said, reason) = match offer(store, stereotype, element) {
+        Offer::Open if applied_to(store, element).len() >= MAX_APPLIED => (
+            format!("{e} carries {MAX_APPLIED} stereotypes, the most one element carries"),
+            Reason::TooMany { kind: "applied stereotype", max: MAX_APPLIED },
+        ),
+        Offer::Open => return None,
+        Offer::Applied => {
+            (format!("«{s}» is applied to {e} already"), Reason::StereotypeApplied { stereotype: s.as_str().into(), element: e.as_str().into() })
         }
-        Offer::Open => None,
-        Offer::Applied => Some(format!("«{s}» is applied to {e} already")),
-        Offer::Extends(m) if m.is_empty() => Some(format!("«{s}» extends no metaclass yet; add one to what it extends first")),
-        Offer::Extends(m) => Some(format!("«{s}» extends {}, and {e} is {}", m.join(", "), crate::commands::a_what(store, element))),
+        Offer::Extends(m) if m.is_empty() => (format!("«{s}» extends no metaclass yet; add one to what it extends first"), unextended(&m)),
+        Offer::Extends(m) => (format!("«{s}» extends {}, and {e} is {}", m.join(", "), crate::commands::a_what(store, element)), unextended(&m)),
         Offer::OutOfScope => {
             let profile = profiles::profile_of(store, stereotype).map(|p| name_of(store, p)).unwrap_or_default();
             let home = profiles::home_of(store, element).map(|p| name_of(store, p)).unwrap_or_default();
-            Some(format!("«{s}» is of the profile {profile}, which no package around {e} applies; apply it to {home} or a package around it first"))
+            let said =
+                format!("«{s}» is of the profile {profile}, which no package around {e} applies; apply it to {home} or a package around it first");
+            (said, Reason::ProfileOutOfScope { profile: profile.as_str().into(), package: home.as_str().into() })
         }
-    }
+    };
+    Some((said, Some(reason)))
 }
 
 /// Applies `stereotype` to `element`: a new InstanceSpecification classified by it at the
 /// project's top level, and the core Link from it to the element. Checked first.
 pub fn apply(store: &mut Store, stereotype: Obj, element: Obj) -> Result<Obj, CommandError> {
-    if let Some(why) = apply_problem(store, stereotype, element) {
-        return Err(refuse("stereotype", why));
+    if let Some(why) = apply_why(store, stereotype, element) {
+        return Err(refusal("stereotype", why));
     }
     let model = crate::commands::model(store)?;
     let instance = store.create(INSTANCE_SPECIFICATION).map_err(fail)?;
@@ -549,12 +581,8 @@ fn application_param(store: &Store, p: &Params) -> Result<(Obj, Obj, Obj), Comma
 fn apply_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let element = element_param(ctx.doc, p, "element")?;
     let stereotype = stereotype_param(ctx.doc, p, "stereotype")?;
-    // UML's own library and its metaclasses take none: said with the reason typed (AR-444).
-    if let Some(refused) = profiles::library_refusal(ctx.doc, "element", element) {
-        return Err(refused);
-    }
-    if let Some(why) = element_problem(ctx.doc, element) {
-        return Err(refuse("element", why));
+    if let Some(why) = element_why(ctx.doc, element) {
+        return Err(refusal("element", why));
     }
     let instance = apply(ctx.doc, stereotype, element)?;
     Ok(json!({ "id": uuid_of(ctx.doc, instance)?, "element": uuid_of(ctx.doc, element)? }))

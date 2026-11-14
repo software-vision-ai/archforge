@@ -477,7 +477,7 @@ fn profile_said(reason: &archforge_engine::Reason) -> Option<String> {
             let set = trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", n);
             fmt(&set, &[("name", name)])
         }
-        _ => return None,
+        other => return crate::uml_stereotypes::said(other),
     })
 }
 
