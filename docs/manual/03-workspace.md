@@ -39,7 +39,10 @@ On Windows and Linux the strip at the very top, on Home as well, also holds the 
 opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
-A click on the open menu's name closes it too, and like Esc puts the keyboard back where it was.
+A click elsewhere only closes the menu: it does not also press, select or drag what is under it, so
+click again to act there. A click on the open menu's name closes it too, and like Esc puts the
+keyboard back where it was. The menu also closes when the window stops being the active one, again
+as Esc closes it.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
 the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
 ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name, a

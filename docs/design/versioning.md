@@ -710,8 +710,8 @@ app was run on, so the Windows and Linux bar was never seen in a real window); *
 | Check | In | Result |
 |---|---|---|
 | Esc, F10, the open title, a press elsewhere, a row and a dialog close the menu | harness | Fine: `an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it`, `only_bare_f10_opens_the_bar`, `a_click_moves_the_menu_or_closes_it`, `a_row_runs_its_action_and_a_row_off_takes_no_click` |
-| A press elsewhere only closes | harness | Defect, own ticket: the press also acts on what it lands on (with Note armed it places a note) |
-| The window losing the focus closes the menu | harness | Defect, own ticket: the menu stays open |
+| A press elsewhere only closes | harness | Fixed by AR-452 (it also acted on what it landed on; with Note armed it placed a note): the press and its release reach nothing behind the menu, a name the Edit menu held open is committed as by any press away, and the next press acts: `a_press_outside_an_open_menu_only_closes_it`, `a_press_outside_the_edit_menu_commits_the_held_name_and_nothing_else` |
+| The window losing the focus closes the menu | harness | Fixed by AR-452 (the menu stayed open): it closes as Esc closes it, the keyboard going back and a name typed in place staying open: `the_window_losing_the_focus_closes_the_menu_as_esc_does` |
 | The keyboard returns after Esc and F10, to a field with its selection | harness | Fine: `the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus`, `rows_chosen_by_the_pointer_act_on_the_fields_selection` |
 | The keyboard returns after a click on the open title | harness | Fixed here: `a_menu_closed_by_its_title_gives_the_keyboard_back` |
 | The canvas keeps its selection and its keys (Delete) after a menu | harness | Fine, probed by hand; the keys held meanwhile: `the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus` |

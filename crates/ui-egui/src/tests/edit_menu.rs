@@ -434,6 +434,19 @@ fn copy_takes_text_selected_on_a_label() {
         assert!(!selected(&h) && !actions::available(h.state(), COPY), "{theme:?}: nothing selected, Copy is off");
         click(&mut h, row);
         assert!(!(0..4).any(|_| (h.step(), copied(&h, words)).1) && h.state().menu_bar.open == Some("edit"), "{theme:?}: the row off copies nothing");
+        // A press away from an open menu, which only closes it, ends a selection as any press elsewhere.
+        key(&mut h, Key::Escape, Modifiers::NONE);
+        for (x, pressed) in [(301.0, true), (460.0, false)] {
+            h.event(Event::PointerMoved(egui::pos2(x, 157.0)));
+            h.run();
+            h.event(Event::PointerButton { pos: egui::pos2(x, 157.0), button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+            h.run();
+        }
+        let help = rect_of(&h, "strip.menu.help").center();
+        click(&mut h, help);
+        assert!(selected(&h) && h.state().menu_bar.open == Some("help"), "{theme:?}: selected again, under Help");
+        click(&mut h, egui::pos2(600.0, 700.0));
+        assert!(!selected(&h) && h.state().menu_bar.open.is_none(), "{theme:?}: the press away ended it and closed the menu");
     }
 }
 
@@ -888,5 +901,179 @@ fn select_all_takes_a_generalization_set_whether_its_label_was_moved_or_not() {
         assert!(h.state().canvas.set_labels.iter().all(|l| l.node.is_some()), "{theme:?}: a node holds the label now");
         key(&mut h, Key::A, Modifiers::COMMAND);
         assert_eq!(selection(&h), unmoved, "{theme:?}: the same selection with the label moved");
+    }
+}
+
+/// One pointer event at `at`, a frame of its own: a press, or a release.
+fn button(h: &mut Harness<'static, Shell>, at: egui::Pos2, pressed: bool) {
+    h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+    h.step();
+}
+
+/// The window losing the focus closes the open menu, as a native one closes, and as Esc does it
+/// leaves a name typed in place open, with the keyboard and what was typed.
+#[test]
+fn the_window_losing_the_focus_closes_the_menu_as_esc_does() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = renaming_a_saved_project(theme, false);
+        key(&mut h, Key::F10, Modifiers::NONE);
+        assert_eq!(h.state().menu_bar.open, Some("file"), "{theme:?}");
+        h.event(Event::WindowFocused(true));
+        h.run();
+        assert_eq!(h.state().menu_bar.open, Some("file"), "{theme:?}: gaining the focus closes nothing");
+        h.event(Event::WindowFocused(false));
+        h.run();
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: the menu the keys opened");
+        // Edit, opened by the pointer, has taken the keyboard from the name and holds it open.
+        let at = rect_of(&h, "strip.menu.edit").center();
+        click(&mut h, at);
+        assert!(h.state().menu_bar.open == Some("edit") && !h.ctx.text_edit_focused(), "{theme:?}");
+        h.event(Event::WindowFocused(false));
+        h.run();
+        let typed = |h: &Harness<'static, Shell>| h.state().explorer.rename.as_ref().map(|r| r.text.clone());
+        assert_eq!((h.state().menu_bar.open, typed(&h).as_deref()), (None, Some("Item")), "{theme:?}: closed, the name still open");
+        assert!(h.ctx.text_edit_focused(), "{theme:?}: and the keyboard is back on it");
+        h.event(Event::Text("s".into()));
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(typed(&h).as_deref(), Some("Items"), "{theme:?}: typing goes on where it was");
+        assert!(!st.alive().any(|o| archforge_core::name_of(st, o).starts_with("Item")), "{theme:?}: nothing was committed");
+        // A field of a panel, which no menu holds: another menu's click took its keyboard, and it comes back.
+        let mut h = project(theme);
+        h.state_mut().in_window_menu = true;
+        h.run();
+        for id in ["workspace.properties.columns.add", "workspace.properties.column.name", "strip.menu.view"] {
+            let at = rect_of(&h, id).center();
+            click(&mut h, at);
+        }
+        assert!(h.state().menu_bar.open == Some("view") && !h.ctx.text_edit_focused(), "{theme:?}");
+        h.event(Event::WindowFocused(false));
+        h.run();
+        assert!(h.state().menu_bar.open.is_none() && h.ctx.text_edit_focused(), "{theme:?}: closed, the field has the keyboard again");
+    }
+}
+
+/// A press outside an open menu closes it and does nothing else: with the Note tool armed it places
+/// no note, with Select it neither selects nor drags the box under it, and its release, frames
+/// later, acts on nothing either. The next press acts.
+#[test]
+fn a_press_outside_an_open_menu_only_closes_it() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = drawn(theme);
+        h.state_mut().in_window_menu = true;
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let address = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Address").unwrap()).unwrap();
+        let node = format!("workspace.canvas.node.{}", node_of(&h, address));
+        let (on_box, empty) = (rect_of(&h, &node).center(), rect_of(&h, "workspace.canvas").center() + egui::vec2(0.0, 150.0));
+        // Select: a press on a box, a drag and a release, each a frame of its own.
+        let pull = |h: &mut Harness<'static, Shell>| {
+            h.event(Event::PointerMoved(on_box));
+            h.step();
+            button(h, on_box, true);
+            let open = h.state().menu_bar.open;
+            for dx in [40.0, 80.0] {
+                h.event(Event::PointerMoved(on_box + egui::vec2(dx, 0.0)));
+                h.step();
+                assert!(h.state().canvas.gesture.is_none() || open.is_none(), "{theme:?}: no drag begins under the menu");
+            }
+            button(h, on_box + egui::vec2(80.0, 0.0), false);
+            h.run();
+            open
+        };
+        let at = rect_of(&h, "strip.menu.help").center();
+        click(&mut h, at);
+        assert_eq!(pull(&mut h), None, "{theme:?}: the press closed the menu");
+        assert_eq!((selection(&h), rect_of(&h, &node).center()), (vec![], on_box), "{theme:?}: nothing selected, nothing moved");
+        assert!(h.state().canvas.gesture.is_none(), "{theme:?}: and no gesture left behind");
+        pull(&mut h);
+        assert_eq!(selection(&h), [address.to_string()], "{theme:?}: the next press selects");
+        assert_ne!(rect_of(&h, &node).center(), on_box, "{theme:?}: and drags");
+        // The Note tool: the press and its release place nothing and leave the tool armed.
+        let (tool, before) = (rect_of(&h, "workspace.tools.note").center(), node_ids(&h).len());
+        click(&mut h, tool);
+        let at = rect_of(&h, "strip.menu.help").center();
+        click(&mut h, at);
+        assert_eq!((h.state().menu_bar.open, h.state().canvas.tool), (Some("help"), crate::canvas::Tool::Note), "{theme:?}");
+        h.event(Event::PointerMoved(empty));
+        h.step();
+        button(&mut h, empty, true);
+        assert_eq!(h.state().menu_bar.open, None, "{theme:?}: closed on the press");
+        button(&mut h, empty, false);
+        h.run();
+        assert_eq!((node_ids(&h).len(), h.state().canvas.tool), (before, crate::canvas::Tool::Note), "{theme:?}: no note, the tool still armed");
+        click(&mut h, empty);
+        assert_eq!(node_ids(&h).len(), before + 1, "{theme:?}: the next press places it");
+    }
+}
+
+/// A press outside the Edit menu ends the name it held open as a press away does, committing it,
+/// and still acts on nothing: pressed on a tool, it arms none.
+#[test]
+fn a_press_outside_the_edit_menu_commits_the_held_name_and_nothing_else() {
+    for (theme, on_canvas) in [(ThemeKind::Light, false), (ThemeKind::Dark, true)] {
+        let mut h = renaming_a_saved_project(theme, on_canvas);
+        let at = rect_of(&h, "strip.menu.edit").center();
+        click(&mut h, at);
+        assert!(h.state().menu_bar.open == Some("edit") && h.state().menu_bar.held.is_some(), "{theme:?}: held");
+        let at = rect_of(&h, "workspace.tools.note").center();
+        click(&mut h, at);
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(h.state().menu_bar.open.is_none() && st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}: committed");
+        assert!(h.state().canvas.rename.is_none() && h.state().explorer.rename.is_none(), "{theme:?}: the name is closed");
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "{theme:?}: the tool under the press was not armed");
+    }
+}
+
+/// The strip's own controls are behind the menu too: a press on Home, even at its edge where the
+/// bar's row begins, and one on the theme switch only close the menu. The next press acts.
+#[test]
+fn a_press_on_the_strip_beside_the_bar_only_closes_the_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, true);
+        let home = rect_of(&h, "strip.home");
+        for at in [home.center_top() + egui::vec2(0.0, 2.0), rect_of(&h, "strip.theme").center()] {
+            click_menu(&mut h, "strip.menu.help");
+            assert_eq!(h.state().menu_bar.open, Some("help"), "{theme:?}");
+            click(&mut h, at);
+            assert_eq!(h.state().menu_bar.open, None, "{theme:?}: closed by the press at {at:?}");
+            assert!(h.state().project.is_some() && h.state().state.theme == theme, "{theme:?}: and nothing at {at:?} was pressed");
+        }
+        click(&mut h, home.center_top() + egui::vec2(0.0, 2.0));
+        assert!(h.state().project.is_none(), "{theme:?}: the next press goes Home");
+    }
+}
+
+/// A control that lies across the bar's row, in no single part of the layer around the bar, is
+/// behind the menu as well: a press on it just above the row only closes the menu.
+#[test]
+fn a_press_on_a_control_across_the_bars_row_only_closes_the_menu() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        crate::i18n::set_language("en");
+        let mut shell = Shell::new(Services::default());
+        (shell.state.theme, shell.in_window_menu) = (theme, true);
+        let clicks = std::rc::Rc::new(std::cell::Cell::new(0));
+        let counted = clicks.clone();
+        let across = egui::Rect::from_min_max(egui::pos2(900.0, 0.0), egui::pos2(1000.0, 60.0));
+        let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
+            move |ui, shell: &mut Shell| {
+                shell.logic(ui.ctx());
+                shell.ui(ui);
+                if ui.interact(across, crate::widgets::egui_id("test.across"), egui::Sense::click()).clicked() {
+                    counted.set(counted.get() + 1);
+                }
+            },
+            shell,
+        );
+        h.run();
+        let bar = rect_of(&h, "strip.menu.help");
+        let at = egui::pos2(950.0, bar.top() - 2.0);
+        assert!(bar.right() < across.left() && across.contains(at), "{theme:?}: beside the bar, above its row");
+        click_menu(&mut h, "strip.menu.help");
+        click(&mut h, at);
+        assert_eq!((h.state().menu_bar.open, clicks.get()), (None, 0), "{theme:?}: closed, the control not clicked");
+        click(&mut h, at);
+        assert_eq!(clicks.get(), 1, "{theme:?}: the next press clicks it");
     }
 }
