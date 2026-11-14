@@ -136,11 +136,16 @@ pub(crate) fn open(shell: &mut Shell, entry: VersionEntry) {
 /// one); none while the Compare page is already open.
 pub(crate) fn to_compare(shell: &Shell) -> Option<VersionEntry> {
     let v = &shell.versions;
-    if v.details.as_ref().is_some_and(|d| d.compare.is_some()) {
+    if compare_open(shell) {
         return None;
     }
     let newest = || v.page.as_ref().filter(|_| crate::versions::last_known(v))?.versions.first().cloned();
     v.details.as_ref().map(|d| d.entry.clone()).or_else(newest)
+}
+
+/// Whether the Compare page is open over a version's details.
+pub(crate) fn compare_open(shell: &Shell) -> bool {
+    shell.versions.details.as_ref().is_some_and(|d| d.compare.is_some())
 }
 
 /// Whether Compare… can act: a version to compare, a host to read it, nothing held and nothing over the window.

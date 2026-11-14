@@ -60,6 +60,9 @@ pub(crate) struct Bar {
     pub(crate) pressed: bool,
     /// The inline editor the bar keeps open after taking its keyboard, until the menu closes.
     pub(crate) held: Option<egui::Id>,
+    /// Whether a click on the open menu's own title closed it: the keyboard goes back, as after Esc,
+    /// once that click is over, since a field gives up a focus handed to it during a click elsewhere.
+    closed_by_title: bool,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
@@ -74,10 +77,13 @@ pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
         }
         actions::run(shell, id);
     }
-    // A menu closed by its own title, with no row chosen, leaves the name typed in place as it was;
-    // once, so a name that went meanwhile takes no keyboard later.
-    if shell.menu_bar.open.is_none() && !on_bar(shell, ctx) && shell.menu_bar.held.take().is_some() {
-        give_back(shell, ctx);
+    // A menu closed by its own title, with no row chosen, gives the keyboard back and leaves the name
+    // typed in place as it was; once, so a name that went meanwhile takes no keyboard later.
+    if shell.menu_bar.open.is_none() && !on_bar(shell, ctx) {
+        let by_title = std::mem::take(&mut shell.menu_bar.closed_by_title);
+        if shell.menu_bar.held.take().is_some() || by_title {
+            give_back(shell, ctx);
+        }
     }
     if shell.menu_bar.open.is_some() && !(shell.in_window_menu && actions::free(shell)) {
         shell.menu_bar.open = None;
@@ -201,7 +207,8 @@ pub(crate) fn chord(keys: &Keys) -> String {
     parts.join("+")
 }
 
-/// Draws the bar in `strip` from `start` and the open group's menu; a press elsewhere closes it.
+/// Draws the bar in `strip` from `start` and the open group's menu; a press elsewhere closes it, and
+/// so does a click on the open menu's own title, which gives the keyboard back.
 pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, start: f32) {
     if !shell.in_window_menu {
         return;
@@ -215,6 +222,10 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         let size = vec2(text.size().x + 2.0 * GROUP_PAD, GROUP_HEIGHT);
         let button = Rect::from_center_size(pos2(x + size.x / 2.0, mid), size);
         let resp = control(shell, ui, &format!("strip.menu.{}", group.id), "menu", button, true).accessible_name(title.as_str());
+        ui.ctx().accesskit_node_builder(resp.id, |node| {
+            node.set_role(egui::accesskit::Role::MenuItem);
+            node.set_expanded(was_open);
+        });
         if was_open {
             paint.rect_filled(button, 5.0, p.surface);
         } else if resp.hovered() {
@@ -224,6 +235,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         if resp.clicked() {
             shell.menu_bar.open = if was_open { None } else { Some(group.id) };
             shell.menu_bar.row = None;
+            shell.menu_bar.closed_by_title = was_open;
         }
         if shell.menu_bar.open == Some(group.id) {
             shown = Some((group, button));
@@ -286,8 +298,8 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
     (m, picked)
 }
 
-/// One row, its name and keys, highlighted under the keys or else the pointer; off, it says why on
-/// hover and takes no click. True when clicked.
+/// One row, a menu item with its name and keys, highlighted under the keys or else the pointer; off,
+/// it says why on hover and takes no click. True when clicked.
 fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) -> bool {
     let paint = ui.painter();
     let label = actions::label(shell, id);
@@ -299,16 +311,18 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
         widgets::record_visible(ui, &mut shell.registry, &auto, "menu-item", row);
         let why = why_off(shell, id);
         let resp = ui.interact(row, widgets::egui_id(&auto), Sense::hover());
-        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| {
-            node.set_role(egui::accesskit::Role::MenuItem);
-            node.set_disabled();
-        });
+        // Before the reason: the toolkit describes only a row a screen reader already knows.
+        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| node.set_disabled());
         resp.on_hover_text(why).accessible_name(label.as_str())
     };
     let keyed = live && shell.menu_bar.row == Some(id);
-    if keyed {
-        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| node.set_selected(true));
-    }
+    // A menu item to a screen reader whether it can act or not, as the row menus' rows are.
+    ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| {
+        node.set_role(egui::accesskit::Role::MenuItem);
+        if keyed {
+            node.set_selected(true);
+        }
+    });
     if keyed || (live && shell.menu_bar.row.is_none() && resp.hovered()) {
         paint.rect_filled(row, 5.0, p.accent_tint);
     }
@@ -343,6 +357,8 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
 }
 
 /// Why the Versions menu's row `id` is off: no project, then the row's own reason, then a hold.
+/// Compare… says Loading until the list is read, No versions yet only of a list read empty, and
+/// that the list couldn't be read when it couldn't.
 fn versions_off(shell: &Shell, id: &str) -> String {
     if shell.session.is_none() || shell.project.is_none() || shell.active.is_none() {
         return tr("Open or go back to a project first");
@@ -352,13 +368,15 @@ fn versions_off(shell: &Shell, id: &str) -> String {
     {
         return why;
     }
-    let listed = shell.versions.page.as_ref().is_some_and(|p| !p.versions.is_empty());
+    let page = shell.versions.page.as_ref();
     match id {
         BACK if shell.version_in_view().is_none() => tr("Current work is showing"),
         _ if shell.is_held() => tr("The project is busy"),
         NEW_BRANCH if shell.versions.making.is_some() => tr("Wait for the change under way to finish."),
         VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
-        COMPARE if !listed => tr("No versions yet."),
+        COMPARE if crate::version_details::compare_open(shell) => tr("Already showing"),
+        COMPARE if shell.versions.failed.is_some() => tr("The versions couldn't be read."),
+        COMPARE if page.is_some_and(|p| p.versions.is_empty()) => tr("No versions yet."),
         COMPARE => tr("Loading"),
         NEWER if shell.stepping_from().is_none() => tr("No newer version"),
         BRANCHES => tr("This project has one branch"),
@@ -424,7 +442,12 @@ mod tests {
         crate::i18n::set_language("en");
         let (mut s, ..) = shell();
         let words = |s: &Shell| [SAVE_VERSION, COMPARE, BRANCHES, BACK, NEWER].map(|id| why_off(s, id));
-        assert_eq!(words(&s), ["Loading", "No versions yet.", "This project has one branch", "Current work is showing", "No newer version"]);
+        assert_eq!(words(&s), ["Loading", "Loading", "This project has one branch", "Current work is showing", "No newer version"]);
+        s.versions.page = Some(crate::VersionsPage { versions: Vec::new(), more: false });
+        assert_eq!(why_off(&s, COMPARE), "No versions yet.", "only of a list read and found empty");
+        s.versions.failed = Some("no server".into());
+        assert_eq!(why_off(&s, COMPARE), "The versions couldn't be read.");
+        s.versions.failed = None;
         let entry = crate::VersionEntry {
             hash: "c1".into(),
             description: None,

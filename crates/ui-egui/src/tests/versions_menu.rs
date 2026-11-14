@@ -60,6 +60,7 @@ fn compare_opens_the_newest_version_against_current_work() {
         h.state_mut().state.show_explorer(crate::state::Explorer::Models);
         h.state_mut().versions.stale = true;
         assert!(!available(h.state(), COMPARE), "{theme:?}: a save may have made a newer one than the list holds");
+        assert_eq!(crate::menu_bar::why_off(h.state(), COMPARE), "Loading", "{theme:?}");
         h.state_mut().versions.stale = false;
         assert_eq!(crate::version_details::to_compare(h.state()).map(|e| e.hash).as_deref(), Some("c2"), "{theme:?}: the newest");
         run(h.state_mut(), COMPARE);
@@ -67,5 +68,6 @@ fn compare_opens_the_newest_version_against_current_work() {
         assert_eq!(h.state().state.explorer, crate::state::Explorer::SourceControl, "{theme:?}");
         assert!(has_id(&h, "workspace.version-compare.close"), "{theme:?}: the Compare page shows");
         assert!(!available(h.state(), COMPARE), "{theme:?}: already open");
+        assert_eq!(crate::menu_bar::why_off(h.state(), COMPARE), "Already showing", "{theme:?}: and the row says so");
     });
 }

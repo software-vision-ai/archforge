@@ -702,6 +702,32 @@ of the existing relationship and classifier lists. **Versions** also holds Histo
 Switch branch, Back to current work, and older and newer. New project, Close project, the zooms and the
 tool picks show no shortcut, as none exists today.
 
+Menu audit (AR-307), every menu in Home, an open project, a text field, a canvas selection and
+viewing a version. Checked in: **app**, the running macOS build (the native bar, on Home and with
+About open only); **harness**, the in-window bar in the test harness (macOS is the only system the
+app was run on, so the Windows and Linux bar was never seen in a real window); **code**, by reading.
+
+| Check | In | Result |
+|---|---|---|
+| Esc, F10, the open title, a press elsewhere, a row and a dialog close the menu | harness | Fine: `an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it`, `only_bare_f10_opens_the_bar`, `a_click_moves_the_menu_or_closes_it`, `a_row_runs_its_action_and_a_row_off_takes_no_click` |
+| A press elsewhere only closes | harness | Defect, own ticket: the press also acts on what it lands on (with Note armed it places a note) |
+| The window losing the focus closes the menu | harness | Defect, own ticket: the menu stays open |
+| The keyboard returns after Esc and F10, to a field with its selection | harness | Fine: `the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus`, `rows_chosen_by_the_pointer_act_on_the_fields_selection` |
+| The keyboard returns after a click on the open title | harness | Fixed here: `a_menu_closed_by_its_title_gives_the_keyboard_back` |
+| The canvas keeps its selection and its keys (Delete) after a menu | harness | Fine, probed by hand; the keys held meanwhile: `the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus` |
+| A name, note or member typed in place survives Edit and ends for another menu | harness | Fine: the `edit_menu` tests of AR-378 |
+| Titles and rows are named menu items, the open title marked, a row off disabled with its reason | harness | Fixed here (titles and rows that can act had no role): `rows_are_named_and_a_row_off_says_why_when_pointed_at` |
+| The bar and its menu are containers a screen reader knows, and its focus follows the keys | harness, code | Defect, own ticket: no menu-bar or menu node; the keys' row is only marked selected; a row off is skipped by the arrows, so its reason needs the pointer |
+| Each row off says the first true reason, in all five states | harness | Fixed here for Compare…, which said No versions yet before the list was read or when it couldn't be, and Loading with its page open: `a_versions_row_off_says_why`, `compare_opens_the_newest_version_against_current_work`. The rest fine: `a_row_off_says_why`, `every_row_is_off_where_its_tool_cannot_be_used`, the `view_menu` tests |
+| No chord runs two actions | code, harness | Fine: only History and Back to current work share one, never on together (`only_history_and_back_share_their_keys`, `the_rows_follow_viewing_a_version`) |
+| A chord matches its modifiers exactly | harness | Fixed here for Redo's second key, which Shift also ran: `with_no_field_the_keys_step_the_model`. The table's own: `every_shortcut_runs_its_action` |
+| A text field keeps the chords it needs | harness, code | Edit's keys and ⌘K fine (`on_a_field_the_rows_and_the_keys_change_the_field_and_not_the_model`, `the_rows_find_zoom_and_fit`). Defects, own tickets: on Windows and Linux the toolkit's field reads Ctrl+K, Ctrl+H, Ctrl+U and Ctrl+W as deletions, so Find…'s chord, off in a field, wipes to the end of the line; a skill's text takes ⌘B, ⌘I and ⌘K with Shift too |
+| Chords the system keeps | app, code | ⌘H, ⌘Q and ⌘, are the system's own uses; reading found no other chord of ours that the system keeps. Defect, own ticket: ⌘[ and ⌘] follow the keyboard layout (on a German one the native bar shows ⌘Ö and ⌘Ä; the in-window bar writes Ctrl+[) |
+| macOS and the in-window bar hold the same rows with the same keys | app, harness | Fine: `the_menus_are_the_tables_with_the_designs_keys`, `the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes`. macOS has no Window or Help menu, no Hide Others or Show All and no ⌘W; File's order differs between the two: decisions, own ticket |
+| Behind a dialog only About, Hide and Quit stay on | app | Fine on macOS, seen with About open; the in-window bar closes instead (harness) |
+| Every label goes through the catalogues, with its ellipsis kept in all seven | code | Fine, by a scan of the catalogues and `every_action_keeps_its_name`; labels fit the menu in English, German, Spanish, French and Portuguese (harness, probed by hand on an ER project; Japanese and Chinese are not drawn there, a class diagram's Model rows were not measured) |
+| An ellipsis on every row that asks for more, one verb per action | code | Naming decisions, own ticket: History and Switch branch open a list without one; View's panel rows are bare nouns beside Show minimap; Open… beside the strip's Open project; Quit and German Ablage on Windows and Linux |
+
 Journeys to draw in `ArchforgeUx.figcraft`, from page 02's components, in light and dark, with real
 content:
 

@@ -68,7 +68,7 @@ pub struct State {
     /// Whether Branches was opened or folded by hand; until then it is open with two or more.
     branches_open: Option<bool>,
     /// Why the last read failed; what was shown stays.
-    failed: Option<String>,
+    pub(crate) failed: Option<String>,
     /// A save or a restore may have made a version since the read.
     pub(crate) stale: bool,
     /// A branch switch started from the question, until it arrives or says why not.
