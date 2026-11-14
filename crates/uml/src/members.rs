@@ -713,9 +713,9 @@ fn set_operation(store: &mut Store, owner: Obj, op: Obj, p: &Params) -> Result<(
     let leaf = p.bool("leaf").unwrap_or(false);
     if leaf
         && !crate::relations::is_leaf(store, op)
-        && let Some(why) = crate::relations::leaf_problem(store, op)
+        && let Some(refused) = crate::relations::leaf_problem(store, op)
     {
-        return Err(refuse("leaf", why));
+        return Err(refused);
     }
     let vis = visibility(store, owner, p, "visibility")?;
     set_name(store, op, name)?;

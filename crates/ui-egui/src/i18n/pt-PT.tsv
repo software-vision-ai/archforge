@@ -1335,6 +1335,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} já possui um membro chamado {name}.
 str		The package {owner} keeps the name {name} for a built-in type.	O pacote {owner} reserva o nome {name} para um tipo integrado.
 str		{name} is a built-in type and stays in Types.	{name} é um tipo integrado e fica em Types.
+str		{name} is a built-in type, which is never made leaf.	{name} é um tipo integrado e nunca é marcado como leaf.
 str		Constraints · {n}	Restrições · {n}
 str		Add constraint	Adicionar restrição
 str		Edit constraint	Editar restrição
@@ -1400,6 +1401,11 @@ str		No property to subset	Nenhuma propriedade de que ser subconjunto
 str		No property to redefine	Nenhuma propriedade a redefinir
 str		The default value {value} does not fit {type}; change or clear it first.	O valor predefinido {value} não se ajusta a {type}; altere-o ou limpe-o primeiro.
 str		A property chosen here is gone; choose again.	Uma propriedade escolhida aqui já não existe; escolha de novo.
+str		A property subsets at most {max} properties.	Uma propriedade é subconjunto de no máximo {max} propriedades.
+str		A property redefines at most {max} properties.	Uma propriedade redefine no máximo {max} propriedades.
+str		Give the properties as a list of ids.	Indique as propriedades como uma lista de identificadores.
+str		{key} is not a key here. An item holds an id and a name.	{key} não é uma chave aqui. Uma entrada contém um identificador e um nome.
+str		There is no element with the id {id}.	Não existe nenhum elemento com o identificador {id}.
 str		A default value is at most {n} characters.	Um valor predefinido tem no máximo {n} caracteres.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} não é um número inteiro, que é o que o valor predefinido de um Integer é, como 42.
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} não é um número, que é o que o valor predefinido de um Real é, como 2.5.

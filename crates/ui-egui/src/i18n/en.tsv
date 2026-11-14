@@ -1334,6 +1334,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} already owns a member named {name}.
 str		The package {owner} keeps the name {name} for a built-in type.	The package {owner} keeps the name {name} for a built-in type.
 str		{name} is a built-in type and stays in Types.	{name} is a built-in type and stays in Types.
+str		{name} is a built-in type, which is never made leaf.	{name} is a built-in type, which is never made leaf.
 str		Constraints · {n}	Constraints · {n}
 str		Add constraint	Add constraint
 str		Edit constraint	Edit constraint
@@ -1399,6 +1400,11 @@ str		No property to subset	No property to subset
 str		No property to redefine	No property to redefine
 str		The default value {value} does not fit {type}; change or clear it first.	The default value {value} does not fit {type}; change or clear it first.
 str		A property chosen here is gone; choose again.	A property chosen here is gone; choose again.
+str		A property subsets at most {max} properties.	A property subsets at most {max} properties.
+str		A property redefines at most {max} properties.	A property redefines at most {max} properties.
+str		Give the properties as a list of ids.	Give the properties as a list of ids.
+str		{key} is not a key here. An item holds an id and a name.	{key} is not a key here. An item holds an id and a name.
+str		There is no element with the id {id}.	There is no element with the id {id}.
 str		A default value is at most {n} characters.	A default value is at most {n} characters.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} is not a whole number, which an Integer's default is, such as 42.
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} is not a number, which a Real's default is, such as 2.5.

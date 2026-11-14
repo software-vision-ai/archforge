@@ -31,7 +31,7 @@ use crate::{
     OPAQUE_EXPRESSION, PROPERTY, association, instance_value, literal_boolean, literal_integer, literal_real, literal_string,
     literal_unlimited_natural, multiplicity_element, opaque_expression, property, structural_feature, typed_element,
 };
-use archforge_engine::{CommandError, Params};
+use archforge_engine::{CommandError, Params, Reason};
 
 /// The longest default value, in characters.
 pub const MAX_DEFAULT: usize = 1000;
@@ -722,32 +722,33 @@ pub struct Modifiers {
     pub redefines: Vec<Obj>,
 }
 
-/// The properties under `key`, at most [`MAX_TARGETS`], each a live element named once: each item
-/// an id as text, or an object with its `id`, as the reads give them (`{id, name}`).
+/// The properties under `key`, `"subsets"` or `"redefines"`, at most [`MAX_TARGETS`], each a live
+/// element named once: each item an id as text, or an object with its `id`, as the reads give them
+/// (`{id, name}`). A refusal carries its reason typed, the list's kind of property in it.
 fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, CommandError> {
+    let kind = if key == "redefines" { "redefined property" } else { "subsetted property" };
     if items.len() > MAX_TARGETS {
-        return Err(refuse(key, format!("{} ids; a property names at most {MAX_TARGETS} here", items.len())));
+        let most = Reason::TooMany { kind, max: MAX_TARGETS };
+        return Err(refuse(key, format!("{} ids; a property names at most {MAX_TARGETS} here", items.len())).because(most));
     }
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         if let Some(extra) = item.as_object().and_then(|o| o.keys().find(|k| *k != "id" && *k != "name")) {
-            return Err(refuse(key, format!("{} is not a key of a property here; an object holds id and name", short(extra))));
+            let said = format!("{} is not a key of a property here; an object holds id and name", short(extra));
+            return Err(refuse(key, said).because(Reason::NotAnItemKey { key: short(extra) }));
         }
         let Some(id) = item.as_str().or_else(|| item.get("id").and_then(Json::as_str)) else {
-            return Err(refuse(
-                key,
-                format!(
-                    "{} is not a property's id; the list holds ids as text, or objects with an id as the reads give them",
-                    short(&item.to_string())
-                ),
-            ));
+            let item = short(&item.to_string());
+            let said = format!("{item} is not a property's id; the list holds ids as text, or objects with an id as the reads give them");
+            return Err(refuse(key, said).because(Reason::IdsExpected { kind }));
         };
-        let o = Uuid::parse(id)
-            .and_then(|u| store.by_uuid(u))
-            .filter(|o| store.is_alive(*o))
-            .ok_or_else(|| refuse(key, format!("there is no element {}; the list holds ids of attributes or association ends", short(id))))?;
+        let Some(o) = Uuid::parse(id).and_then(|u| store.by_uuid(u)).filter(|o| store.is_alive(*o)) else {
+            let said = format!("there is no element {}; the list holds ids of attributes or association ends", short(id));
+            return Err(refuse(key, said).because(Reason::NoElement { id: short(id) }));
+        };
         if out.contains(&o) {
-            return Err(refuse(key, format!("{id} is named twice; name each property once")));
+            let twice = Reason::NamedTwice { kind, name: short(id) };
+            return Err(refuse(key, format!("{id} is named twice; name each property once")).because(twice));
         }
         out.push(o);
     }
@@ -822,9 +823,9 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
     let leaf = p.bool("leaf").unwrap_or(was_leaf);
     if leaf
         && !was_leaf
-        && let Some(why) = current.and_then(|c| crate::relations::leaf_problem(store, c))
+        && let Some(refused) = current.and_then(|c| crate::relations::leaf_problem(store, c))
     {
-        return Err(refuse("leaf", why));
+        return Err(refused);
     }
     let (derived, read_only, ordered, unique) = current.map(|c| flags(store, c)).unwrap_or((false, false, false, true));
     Ok(Modifiers {

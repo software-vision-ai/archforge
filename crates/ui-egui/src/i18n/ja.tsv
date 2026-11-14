@@ -1335,6 +1335,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} にはすでに {name} という名前のメンバーがあります。
 str		The package {owner} keeps the name {name} for a built-in type.	パッケージ {owner} は名前 {name} を組み込み型用に予約しています。
 str		{name} is a built-in type and stays in Types.	{name} は組み込み型で、Types に留まります。
+str		{name} is a built-in type, which is never made leaf.	{name} は組み込み型のため、leaf にはできません。
 str		Constraints · {n}	制約 · {n}
 str		Add constraint	制約を追加
 str		Edit constraint	制約を編集
@@ -1400,6 +1401,11 @@ str		No property to subset	サブセットにできるプロパティはあり�
 str		No property to redefine	再定義できるプロパティはありません
 str		The default value {value} does not fit {type}; change or clear it first.	既定値 {value} は {type} に合いません。先に変更するか消去してください。
 str		A property chosen here is gone; choose again.	ここで選んだプロパティはもうありません。選び直してください。
+str		A property subsets at most {max} properties.	プロパティがサブセット元にできるプロパティは最大 {max} 個です。
+str		A property redefines at most {max} properties.	プロパティが再定義できるプロパティは最大 {max} 個です。
+str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
+str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
+str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。
 str		{value} is not a number, which a Real's default is, such as 2.5.	{value} は数値ではありません（Real の既定値は 2.5 のような数値です）。

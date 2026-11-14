@@ -5,7 +5,7 @@
 
 use archforge_diagram::ProjectView;
 use archforge_engine::testing::sweep_with;
-use archforge_engine::{Options, Session};
+use archforge_engine::{EngineError, Options, Reason, Session};
 use archforge_mof::{CompositeSlabs, Store, Uuid, Value};
 use archforge_uml::{ALONE, registry};
 use serde_json::{Value as Json, json};
@@ -100,6 +100,12 @@ fn marks(s: &S, id: &str) -> [archforge_diagram::figure::EndMark; 2] {
 }
 
 /// `cmd` is refused with a message naming `key`, and the model is as it was.
+/// The typed reason `cmd` is refused with, if it has one.
+fn reason(s: &mut S, cmd: &str, p: Json) -> Option<Reason> {
+    let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+    error.reason
+}
+
 fn refused(s: &mut S, cmd: &str, p: Json, key: &str) {
     let before = snapshot(s);
     let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} is refused"));
@@ -432,7 +438,7 @@ fn a_realization_reconnects_with_its_rules_kept_and_goes_alone_or_with_either_en
 /// its reason typed as that end's (AR-442).
 #[test]
 fn a_realization_whose_staying_end_is_not_a_class_says_so_when_its_other_end_moves() {
-    use archforge_engine::{End, EngineError, Reason};
+    use archforge_engine::End;
     let mut st = store(0);
     st.create(archforge_core::MODEL).unwrap();
     let actor = st.create(archforge_uml::ACTOR).unwrap();
@@ -627,6 +633,8 @@ fn a_classifier_of_every_kind_is_made_leaf_apart_from_final_and_comes_back_leaf(
     run(&mut s, "uml.attribute.add", json!({ "class": c[1], "name": "count", "type": "Integer" }));
     let integer = s.execute("uml.class.get", &json!({ "class": c[1] })).unwrap().value["attributes"][0]["type"]["id"].as_str().unwrap().to_string();
     refused(&mut s, "uml.classifier.set", json!({ "classifier": integer, "leaf": true }), "built-in type Integer");
+    let integer_leaf = json!({ "classifier": integer, "leaf": true });
+    assert_eq!(reason(&mut s, "uml.classifier.set", integer_leaf), Some(Reason::BuiltInNotLeaf { name: "Integer".into() }));
 }
 
 /// An operation is made leaf and cleared again (AR-138), one undo step each, its row ending in
@@ -680,6 +688,10 @@ fn an_operation_is_made_leaf_and_one_redefined_is_refused_naming_what_redefines_
     assert!(e.contains("leaf") && e.contains("CardPayment::authorise()") && e.contains(&card_authorise), "{e}");
     let e = s.execute("uml.classifier.set", &json!({ "classifier": c[0], "leaf": true })).unwrap_err().to_string();
     assert!(e.contains("leaf") && e.contains("CardPayment"), "{e}");
+    // Each typed with the names of what redefines it, as the interface lists them.
+    let by = |names: &[&str]| Some(Reason::Redefined(names.iter().map(|n| n.to_string()).collect()));
+    assert_eq!(reason(&mut s, "uml.operation.set", set(true)), by(&["CardPayment::authorise()"]));
+    assert_eq!(reason(&mut s, "uml.classifier.set", json!({ "classifier": c[0], "leaf": true })), by(&["CardPayment"]));
     assert_eq!(snapshot(&s), before, "nothing changed");
     // The one nothing redefines is made leaf.
     round_trip(&mut s, "uml.operation.set", json!({ "operation": card_authorise, "name": "authorise", "returns": "Boolean", "leaf": true }));
@@ -691,7 +703,7 @@ fn an_operation_is_made_leaf_and_one_redefined_is_refused_naming_what_redefines_
 /// interface to say in its own words; a role another end has names that end's role (AR-436).
 #[test]
 fn every_relationship_rule_broken_carries_its_reason_typed() {
-    use archforge_engine::{End, EngineError, Reason};
+    use archforge_engine::End;
     let mut s = session();
     let (pkg, _, c, _) = classes(&mut s, &["Order", "Invoice", "Line"], 0);
     let add = |s: &mut S, cmd: &str, name: &str| run(s, cmd, json!({ "package": pkg, "name": name }));
@@ -780,7 +792,6 @@ fn every_relationship_rule_broken_carries_its_reason_typed() {
 /// say in its own words (AR-442).
 #[test]
 fn every_aggregation_and_end_count_rule_broken_carries_its_reason_typed() {
-    use archforge_engine::{EngineError, Reason};
     let mut s = session();
     let (_, _, c, _) = classes(&mut s, &["Order", "Line", "Invoice"], 0);
     let binary = run(&mut s, "uml.association.add", json!({ "from": c[0], "to": c[1] }));

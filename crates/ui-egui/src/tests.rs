@@ -4056,17 +4056,15 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
             "{theme:?}"
         );
         click_menu(&mut h, "strip.menu.file");
-        let want = ["file.new", "file.open", "file.save", "file.generate", "app.settings", "file.close", "app.quit"]
+        // File's groups, as on every system, and then Settings… and Exit, each set apart.
+        let want = ["file.new", "file.open", "file.close", "file.save", "file.generate", "app.settings", "app.quit"]
             .map(|id| format!("strip.menu.row.{id}"));
         assert_eq!(menu_ids(&h)[6..], want, "{theme:?}");
         let rows = want.each_ref().map(|id| rect_of(&h, id));
         assert!(rows.iter().all(|r| r.width() == 292.0 && r.height() == 30.0 && r.left() == file.left() + 4.0), "{theme:?}");
         assert_eq!(rows[0].top(), mid + 16.0 + 4.0, "{theme:?}: under the strip, inside the padding");
-        assert_eq!(
-            (rows[3].top() - rows[2].bottom(), rows[4].top() - rows[3].bottom(), rows[6].top() - rows[5].bottom()),
-            (0.0, 9.0, 9.0),
-            "{theme:?}"
-        );
+        let gaps: Vec<f32> = rows.windows(2).map(|pair| pair[1].top() - pair[0].bottom()).collect();
+        assert_eq!(gaps, [0.0, 0.0, 9.0, 9.0, 9.0, 9.0], "{theme:?}: one divider between groups");
     }
 }
 
@@ -4227,24 +4225,35 @@ fn up_and_down_walk_every_row_and_wrap() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
-        for (key, row) in [(ArrowDown, CLOSE), (ArrowDown, QUIT), (ArrowDown, NEW), (ArrowUp, QUIT), (ArrowUp, CLOSE), (ArrowUp, SETTINGS)] {
+        let walk = [(ArrowDown, QUIT), (ArrowDown, NEW), (ArrowUp, QUIT), (ArrowUp, SETTINGS), (ArrowUp, GENERATE), (ArrowDown, SETTINGS)];
+        for (key, row) in walk {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some("file"), Some(row)), "{theme:?}: {key:?}");
         }
         let selected = |h: &Harness<'static, Shell>, name: &str| h.get_by_label(name).accesskit_node().data().is_selected() == Some(true);
         assert!(selected(&h, "Settings…") && !selected(&h, "Exit"), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
-        assert_eq!(menu_at(&h).1, Some(CLOSE), "{theme:?}");
+        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
-        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}: a held arrow goes on");
+        assert_eq!(menu_at(&h).1, Some(NEW), "{theme:?}: a held arrow goes on");
         h.event(egui::Event::Key { key: ArrowDown, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
         menu_tap(&mut h, ArrowDown, egui::Modifiers::SHIFT);
-        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}: only the bare arrow moves");
+        assert_eq!(menu_at(&h).1, Some(NEW), "{theme:?}: only the bare arrow moves");
         // On a project the menu opens past its rows off, and Up reaches them.
         let mut h = menu_harness(theme, true);
         menu_press(&mut h, F10);
-        assert_eq!(menu_at(&h).1, Some(SAVE), "{theme:?}");
-        for (key, row) in [(ArrowDown, GENERATE), (ArrowUp, SAVE), (ArrowUp, OPEN), (ArrowUp, NEW), (ArrowUp, QUIT), (ArrowDown, NEW)] {
+        assert_eq!(menu_at(&h).1, Some(CLOSE), "{theme:?}");
+        let walk = [
+            (ArrowDown, SAVE),
+            (ArrowDown, GENERATE),
+            (ArrowUp, SAVE),
+            (ArrowUp, CLOSE),
+            (ArrowUp, OPEN),
+            (ArrowUp, NEW),
+            (ArrowUp, QUIT),
+            (ArrowDown, NEW),
+        ];
+        for (key, row) in walk {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h).1, Some(row), "{theme:?}: {key:?} on a project");
         }
@@ -4449,7 +4458,7 @@ fn the_bar_is_a_menu_bar_and_the_open_menu_a_menu_of_its_rows_alone() {
 /// highlight takes that focus away, and a closed menu leaves it where the keyboard is.
 #[test]
 fn a_screen_readers_focus_follows_the_keys_and_the_keyboard_stays_put() {
-    use egui::Key::{ArrowDown, ArrowRight, Escape, F10, K};
+    use egui::Key::{ArrowDown, ArrowRight, ArrowUp, Escape, F10, K};
     use egui_kittest::kittest::{NodeT, Queryable, by};
     let on = |h: &Harness<'static, Shell>, names: [&str; 2]| names.map(|name| h.get_by_label(name).accesskit_node().is_focused());
     for (theme, field) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
@@ -4460,9 +4469,9 @@ fn a_screen_readers_focus_follows_the_keys_and_the_keyboard_stays_put() {
         let held = h.ctx.memory(egui::Memory::focused);
         assert_eq!((held.is_some(), h.root().accesskit_node().is_focused()), (field, !field), "{theme:?}: before the menu");
         menu_press(&mut h, F10);
-        assert_eq!(on(&h, ["Settings…", "Close project"]), [true, false], "{theme:?} {field}: the row the menu opens on");
-        menu_press(&mut h, ArrowDown);
-        assert_eq!(on(&h, ["Settings…", "Close project"]), [false, true], "{theme:?} {field}: a row off");
+        assert_eq!(on(&h, ["Settings…", "Generate…"]), [true, false], "{theme:?} {field}: the row the menu opens on");
+        menu_press(&mut h, ArrowUp);
+        assert_eq!(on(&h, ["Settings…", "Generate…"]), [false, true], "{theme:?} {field}: a row off");
         menu_press(&mut h, ArrowRight);
         assert_eq!(on(&h, ["Undo", "Redo"]), [true, false], "{theme:?} {field}: every row off");
         assert_eq!(h.ctx.memory(egui::Memory::focused), held, "{theme:?} {field}: the keyboard never moved");
@@ -4485,7 +4494,7 @@ fn a_screen_readers_focus_follows_the_keys_and_the_keyboard_stays_put() {
         h.event(egui::Event::Key { key: F10, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
         h.step();
         let made_up = h.query_all(by().predicate(|node| node.locate().0 == unseen.accesskit_id())).count();
-        assert_eq!((on(&h, ["Settings…", "Close project"]), made_up), ([true, false], 0), "{theme:?} {field}: nothing drawn has the keyboard");
+        assert_eq!((on(&h, ["Settings…", "Generate…"]), made_up), ([true, false], 0), "{theme:?} {field}: nothing drawn has the keyboard");
     }
 }
 
@@ -4500,24 +4509,24 @@ fn a_row_off_is_reached_by_the_keys_says_why_and_runs_nothing() {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
         assert!(h.query_by_label(why).is_none(), "{theme:?}: no reason on a row that can act");
-        menu_press(&mut h, ArrowDown);
-        assert_eq!(menu_at(&h), (Some("file"), Some(crate::actions::CLOSE)), "{theme:?}");
-        let row = h.get_by_label("Close project").accesskit_node().data().clone();
+        menu_press(&mut h, ArrowUp);
+        assert_eq!(menu_at(&h), (Some("file"), Some(crate::actions::GENERATE)), "{theme:?}");
+        let row = h.get_by_label("Generate…").accesskit_node().data().clone();
         assert_eq!((row.is_disabled(), row.is_selected(), row.description()), (true, Some(true), Some(why)), "{theme:?}");
         assert!(h.query_by_label(why).is_some(), "{theme:?}: shown without the pointer");
         for key in [Enter, Space] {
             menu_press(&mut h, key);
-            assert_eq!((menu_at(&h), h.state().menu_bar.chosen), ((Some("file"), Some(crate::actions::CLOSE)), None), "{theme:?}: {key:?}");
+            assert_eq!((menu_at(&h), h.state().menu_bar.chosen), ((Some("file"), Some(crate::actions::GENERATE)), None), "{theme:?}: {key:?}");
         }
-        menu_press(&mut h, ArrowUp);
+        menu_press(&mut h, ArrowDown);
         assert!(h.query_by_label(why).is_none(), "{theme:?}: the reason left with the keys");
-        let row = h.get_by_label("Close project").accesskit_node().data().clone();
+        let row = h.get_by_label("Generate…").accesskit_node().data().clone();
         assert_eq!((row.is_selected(), row.description()), (None, Some(why)), "{theme:?}: still said to a screen reader");
         // A pointer arriving on the row leaves it under the keys, and brings no second reason.
-        menu_press(&mut h, ArrowDown);
-        h.event(egui::Event::PointerMoved(rect_of(&h, "strip.menu.row.file.close").center()));
+        menu_press(&mut h, ArrowUp);
+        h.event(egui::Event::PointerMoved(rect_of(&h, "strip.menu.row.file.generate").center()));
         h.run();
-        assert_eq!((menu_at(&h).1, h.query_all_by_label(why).count()), (Some(crate::actions::CLOSE), 1), "{theme:?}");
+        assert_eq!((menu_at(&h).1, h.query_all_by_label(why).count()), (Some(crate::actions::GENERATE), 1), "{theme:?}");
     }
 }
 
@@ -5405,6 +5414,58 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         click(&mut h, at);
         assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// The lists of properties a property subsets and redefines, refused by the engine, are said in
+/// the chosen language: too many for each list, an object with another key, an item that is no id,
+/// no such element and a property named twice, with nothing written; so is leaf refused for a
+/// built-in type and for a property something redefines. In light and dark (AR-466).
+#[test]
+fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let package = id(&mut h, "uml.package.add", json!({ "name": "Shop" }));
+        let [item, order] = ["Item", "Order"].map(|n| id(&mut h, "uml.class.add", json!({ "package": package, "name": n })));
+        let all = id(&mut h, "uml.attribute.add", json!({ "class": item, "name": "all", "type": item, "multiplicity": "*" }));
+        let lines = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "lines", "type": item, "multiplicity": "*" }));
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let mut refused = |key: &str, list: serde_json::Value| {
+            crate::panels::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, key: list })).err().unwrap_or_default()
+        };
+        let most = |said: String| fmt(&said, &[("max", "32")]);
+        let subsets_most = most(tr("A property subsets at most {max} properties."));
+        assert_eq!(subsets_most, "Eine Eigenschaft ist Teilmenge von höchstens 32 Eigenschaften.", "{theme:?}: the language is German");
+        assert_eq!(refused("subsets", json!(vec![&all; 33])), subsets_most, "{theme:?}");
+        assert_eq!(refused("redefines", json!(vec![&all; 33])), most(tr("A property redefines at most {max} properties.")), "{theme:?}");
+        let key = fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", "kind")]);
+        assert_eq!(refused("subsets", json!([{ "id": all, "kind": "x" }])), key, "{theme:?}");
+        assert_eq!(refused("redefines", json!([7])), tr("Give the properties as a list of ids."), "{theme:?}");
+        let none = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
+        assert_eq!(refused("subsets", json!(["nope"])), none, "{theme:?}");
+        assert_eq!(refused("redefines", json!([all, all])), tr("An element is named twice. Name each element once."), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // Made leaf: refused for a built-in type, and for a property something redefines.
+        id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+        id(&mut h, "uml.generalization.add", json!({ "specific": order, "general": item }));
+        crate::panels::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, "redefines": [all] })).unwrap();
+        let integer = named(&h, archforge_uml::PRIMITIVE_TYPE, "Integer").to_string();
+        let leaf = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let built_in = fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", "Integer")]);
+        assert_eq!(leaf(&mut h, "uml.classifier.set", json!({ "classifier": integer, "leaf": true })), built_in, "{theme:?}");
+        let redefined = crate::uml_panel::leaf_refusal(&["Order::lines".to_string()]);
+        assert!(redefined.starts_with("Order::lines redefiniert"), "{theme:?}: {redefined}");
+        assert_eq!(leaf(&mut h, "uml.attribute.set", json!({ "attribute": all, "leaf": true })), redefined, "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
