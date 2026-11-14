@@ -514,26 +514,48 @@ pub(crate) mod tests {
         assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the lock and the second name: no temporary file");
     }
 
-    /// The writer and the reader take the same sizes. A record that takes exactly the most a record
-    /// may take once it names the largest process id there is gets written, completed and read
-    /// back. One a byte longer is refused before anything is written.
+    /// The writer and the reader take the same sizes. The record of a real canonical project
+    /// folder, as long as this platform lets a test make one, takes exactly the most a record may
+    /// take once it names the largest process id there is. It is written without a process id,
+    /// read, completed with the largest valid one, read again and removed under the lock. One a
+    /// byte longer is refused before anything is written. Linux makes a folder that long; macOS
+    /// stops near 1,024 bytes (its PATH_MAX), so there another field makes up the rest.
     #[test]
-    fn a_record_is_written_only_if_it_reads_back_whatever_process_it_names() {
-        let dir = crate::home::tests::Scratch::new("size");
-        let at = |extra: usize| {
-            let r = Record { server_pid: None, ..rec("/p/a") };
-            let len = serde_json::to_vec_pretty(&Record { server_pid: Some(u32::MAX), ..r.clone() }).unwrap().len();
-            Record { data_dir: format!("/p/a{}", "x".repeat(usize::try_from(CAP).unwrap() - len + extra)), ..r }
-        };
-        let (edge, over, largest) = (at(0), at(1), u32::try_from(i32::MAX).unwrap());
-        let held = hold(&path(&dir.0, &edge.data_dir), LOCK_WAIT).unwrap();
+    fn a_record_at_the_limit_is_written_completed_read_and_removed_and_a_byte_more_is_refused() {
+        let (dir, deep) = (crate::home::tests::Scratch::new("size"), crate::home::tests::Scratch::new("deep"));
+        let largest = |r: &Record| serde_json::to_vec_pretty(&Record { server_pid: Some(u32::MAX), ..r.clone() }).unwrap().len();
+        let pending = Record { data_dir: String::new(), server_pid: None, ..rec("") };
+        let most = usize::try_from(CAP).unwrap() - largest(&pending);
+        // The deepest canonical folder that can be made, up to `most` bytes as text.
+        let (mut project, mut name) = (deep.0.canonicalize().unwrap(), 255);
+        while name > 0 {
+            let next = project.join("d".repeat(name));
+            let made = next.as_os_str().len() <= most && std::fs::create_dir(&next).is_ok();
+            if made && next.canonicalize().is_ok_and(|c| c == next) {
+                project = next;
+            } else {
+                if made {
+                    let _ = std::fs::remove_dir(&next);
+                }
+                name -= 1;
+            }
+        }
+        let data_dir = project.display().to_string();
+        let at =
+            |extra: usize| Record { owner_started: "x".repeat(1 + most - data_dir.len() + extra), data_dir: data_dir.clone(), ..pending.clone() };
+        let (edge, pid) = (at(0), u32::try_from(i32::MAX).unwrap());
+        assert_eq!(largest(&edge), 4096, "{} bytes of the path are a real folder's", data_dir.len());
+        let (file, done) = (path(&dir.0, &data_dir), Record { server_pid: Some(pid), ..edge.clone() });
+        let held = hold(&file, LOCK_WAIT).unwrap();
         assert!(super::write_new(&held, &edge).unwrap());
-        complete(&held, &edge, largest).unwrap();
-        assert_eq!(std::fs::metadata(path(&dir.0, &edge.data_dir)).unwrap().len(), CAP);
-        assert_eq!(read(&dir.0, &edge.data_dir).unwrap(), Some(Record { server_pid: Some(largest), ..edge }));
-        let refused = super::write_new(&hold(&path(&dir.0, &over.data_dir), LOCK_WAIT).unwrap(), &over);
+        assert_eq!(look(&held, &data_dir).unwrap(), Some(edge.clone()));
+        complete(&held, &edge, pid).unwrap();
+        assert_eq!((std::fs::metadata(&file).unwrap().len(), look(&held, &data_dir).unwrap()), (CAP, Some(done.clone())));
+        assert_eq!(read(&dir.0, &data_dir).unwrap(), Some(done.clone()));
+        assert!(remove_held(&held, |r| *r == done) && !file.exists(), "the record at the limit is removed");
+        let refused = super::write_new(&held, &at(1));
         assert!(matches!(&refused, Err(Error::RecordTooLarge { len, max: CAP, .. }) if *len == 4097), "{refused:?}");
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 3, "the first record and two locks: nothing of the second");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1, "the lock alone: nothing of the longer record");
     }
 
     /// A record of the earlier format, with a process id always, reads as a complete record; one
