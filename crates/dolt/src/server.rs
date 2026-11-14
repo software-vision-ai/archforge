@@ -255,7 +255,8 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // What neither covers: an Archforge killed between a server's start and its record. The record
 // holds the server's process id, so it cannot come first; a start that fails there stops its
 // server (`Started`), but a kill runs no code. That moment is the record's write to disk, measured
-// at 5 to 10 ms on macOS. A server left so has no record for a sweep to find, and its run folder
+// at 5 to 10 ms on macOS, and behind another change of a record the wait for the records' lock,
+// two seconds at most. A server left so has no record for a sweep to find, and its run folder
 // stays. Recovery treats it as any server it did not record: once it holds the project's lock, and
 // if its program's file is named `dolt`, the project is refused as open elsewhere, naming the
 // server's process id, until that process is stopped.
@@ -505,11 +506,10 @@ fn launch(
             Err(e) => {
                 let pid = child.id();
                 // A server that would not stop keeps its record, so recovery can still find it.
-                if child.stop() {
-                    record::remove_if(&opts.records, data_text, pid);
-                }
+                let cleared = child.stop() && record::remove_if(&opts.records, data_text, pid);
                 let lost_port = matches!(e, Error::StartFailed { .. }) && TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err();
-                if lost_port && attempt < PORT_RETRIES {
+                // With its record still there another try would only be refused by it.
+                if lost_port && cleared && attempt < PORT_RETRIES {
                     attempt += 1;
                     continue;
                 }
