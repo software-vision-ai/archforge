@@ -94,14 +94,20 @@ pub(crate) fn spawn(c: &mut Command, alone: bool) -> std::io::Result<Child> {
 
 /// Runs `program` with `args` and waits at most `budget`; a helper still running then is killed.
 pub(crate) fn run(program: &Path, args: &[&OsStr], env: &[(OsString, OsString)], budget: Duration) -> Result<Output, Error> {
+    run_capped(program, args, env, budget, CAP)
+}
+
+/// As [`run`], keeping `cap` bytes of each stream: for a helper whose answer is long by nature,
+/// such as a list of processes.
+pub(crate) fn run_capped(program: &Path, args: &[&OsStr], env: &[(OsString, OsString)], budget: Duration, cap: u64) -> Result<Output, Error> {
     let name = program.display().to_string();
     let mut c = command(program, env);
     c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
     // The wait for a turn to start counts against the budget.
     let started = Instant::now();
     let mut child = spawn(&mut c, false).map_err(|e| Error::io("cannot run", program, e))?;
-    let out = child.stdout.take().map(|s| std::thread::spawn(move || drain(s)));
-    let err = child.stderr.take().map(|s| std::thread::spawn(move || drain(s)));
+    let out = child.stdout.take().map(|s| std::thread::spawn(move || drain(s, cap)));
+    let err = child.stderr.take().map(|s| std::thread::spawn(move || drain(s, cap)));
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -118,15 +124,15 @@ pub(crate) fn run(program: &Path, args: &[&OsStr], env: &[(OsString, OsString)],
     Ok(Output { code: status.code(), success: status.success(), stdout: join(out), stderr: join(err) })
 }
 
-/// Reads a stream to its end, keeping its first [`CAP`] bytes, so a talkative helper never blocks
+/// Reads a stream to its end, keeping its first `cap` bytes, so a talkative helper never blocks
 /// on a full pipe.
-fn drain(stream: impl Read) -> String {
+fn drain(stream: impl Read, cap: u64) -> String {
     let mut kept = Vec::new();
-    let mut limited = stream.take(CAP);
+    let mut limited = stream.take(cap);
     let _ = limited.read_to_end(&mut kept);
     let dropped = std::io::copy(&mut limited.into_inner(), &mut std::io::sink()).unwrap_or(0);
     if dropped > 0 {
-        log::warn!("a helper wrote {dropped} bytes past the {CAP} kept of its output");
+        log::warn!("a helper wrote {dropped} bytes past the {cap} kept of its output");
     }
     String::from_utf8_lossy(&kept).into_owned()
 }
@@ -164,6 +170,8 @@ mod tests {
         assert_eq!((out.code, out.success, out.stdout.as_str(), out.stderr.trim()), (Some(3), false, "hi\n", "oops"));
         let big = run(sh, &[OsStr::new("-c"), OsStr::new("head -c 200000 /dev/zero")], &base_env(), HELPER_BUDGET).unwrap();
         assert_eq!(big.stdout.len(), 64 * 1024);
+        let whole = run_capped(sh, &[OsStr::new("-c"), OsStr::new("head -c 200000 /dev/zero")], &base_env(), HELPER_BUDGET, 200_001).unwrap();
+        assert_eq!(whole.stdout.len(), 200_000, "a larger cap keeps a longer answer whole");
         let slow = run(sh, &[OsStr::new("-c"), OsStr::new("sleep 5")], &base_env(), Duration::from_millis(200));
         assert!(matches!(slow, Err(Error::HelperTimedOut { .. })));
         // The environment is cleared but for the kept variables.
