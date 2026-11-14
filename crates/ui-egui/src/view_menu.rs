@@ -87,29 +87,42 @@ pub(crate) static ROWS: &[Action] = &[
     show_row!(SKILLS, tr("Skills"), rail_panel, Panel::Skills),
 ];
 
+/// Whether a project's workspace shows, a dialog over the window or not.
+fn workspace_shows(shell: &Shell) -> bool {
+    shell.project.is_some() && shell.active.is_some()
+}
+
 /// Whether a project's workspace shows, with nothing over the window.
 fn open_here(shell: &Shell) -> bool {
-    free(shell) && shell.project.is_some() && shell.active.is_some()
+    free(shell) && workspace_shows(shell)
 }
 
-/// Whether a diagram shows on the canvas, with no version's details or changed element over it.
+/// Whether a diagram shows on the canvas, with no version's details or changed element over it,
+/// a dialog over the window or not.
+fn diagram_shows(shell: &Shell) -> bool {
+    workspace_shows(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
+}
+
+/// Whether a diagram shows on the canvas and nothing is over the window, so the canvas's rows can act.
 fn drawn(shell: &Shell) -> bool {
-    open_here(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
+    free(shell) && diagram_shows(shell)
 }
 
-/// Whether a diagram shows on a canvas, as last drawn, large enough for the minimap.
+/// Whether a diagram shows on a canvas, as last drawn, large enough for the minimap, with nothing
+/// over the window.
 fn minimap_fits(shell: &Shell) -> bool {
     drawn(shell) && has_room(shell)
 }
 
-/// Whether the row `id` is ticked: its minimap, explorer or panel shows now. `None` for a row with
-/// no tick, which only acts.
+/// Whether the row `id` is ticked: its minimap, explorer or panel shows now. A dialog over the
+/// window turns the rows off but leaves the ticks, since what they tick still shows behind it.
+/// `None` for a row with no tick, which only acts.
 pub fn ticked(shell: &Shell, id: &str) -> Option<bool> {
-    let (state, here) = (&shell.state, open_here(shell));
+    let (state, here) = (&shell.state, workspace_shows(shell));
     let explorer = |which| here && state.explorer == which && !state.explorer_collapsed;
     let panel = |which| here && state.panel == which && !state.panel_collapsed;
     Some(match id {
-        MINIMAP => shell.canvas.minimap_open && minimap_fits(shell),
+        MINIMAP => shell.canvas.minimap_open && diagram_shows(shell) && has_room(shell),
         DIAGRAMS => explorer(Explorer::Diagrams),
         MODELS => explorer(Explorer::Models),
         VERSIONS => explorer(Explorer::SourceControl),

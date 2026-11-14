@@ -115,6 +115,28 @@ fn the_rows_show_and_hide_the_minimap_explorers_and_panels() {
     });
 }
 
+/// A dialog over the window turns the rows off but leaves their ticks: the explorer, the panel and
+/// the minimap still show behind it. Closed again, the rows are on and still ticked.
+#[test]
+fn a_dialog_turns_the_rows_off_and_leaves_their_ticks() {
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.state_mut().state.show_explorer(Explorer::Models);
+        h.state_mut().state.show_panel(Panel::Properties);
+        h.run();
+        let rows = [MINIMAP, MODELS, PROPERTIES];
+        let state = |h: &Harness<'static, Shell>| rows.map(|id| (available(h.state(), id), ticked(h.state(), id)));
+        assert_eq!(state(&h), [(true, Some(true)); 3], "{theme:?}: with no dialog");
+        crate::support::open(h.state_mut());
+        h.run();
+        assert!(has_id(&h, "workspace.minimap") && has_id(&h, "workspace.panels.properties"), "{theme:?}: still drawn behind About");
+        assert_eq!(state(&h), [(false, Some(true)); 3], "{theme:?}: off, and ticked");
+        h.state_mut().about = None;
+        h.run();
+        assert_eq!(state(&h), [(true, Some(true)); 3], "{theme:?}: on again");
+    });
+}
+
 /// In the bar's menu a row that shows and hides is a check box to a screen reader, checked while
 /// its thing shows, and wears a tick only then; choosing it hides the thing and unticks the row. A
 /// row that only acts stays a plain menu item with no checked state.
