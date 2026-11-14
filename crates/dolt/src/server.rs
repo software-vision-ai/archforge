@@ -60,7 +60,7 @@ impl Connector {
 /// A running server for one project folder. Dropping it stops the server too.
 #[derive(Debug)]
 pub struct Server {
-    child: Child,
+    child: Started,
     data_dir: PathBuf,
     run_root: PathBuf,
     run_dir: PathBuf,
@@ -70,8 +70,6 @@ pub struct Server {
     socket: Option<PathBuf>,
     password: Secret,
     uid: Option<u32>,
-    stop_budget: Duration,
-    stopped: bool,
     /// Dropped, and so ended, after the attempt to stop the server.
     _watchdog: Watchdog,
 }
@@ -128,16 +126,17 @@ impl Server {
 
     /// Stops the server and removes its record and run folder.
     pub fn stop(mut self) -> Result<(), Error> {
-        let budget = self.stop_budget;
+        let budget = self.child.stop_budget;
         self.shutdown(budget)
     }
 
+    /// Stops the server within `budget`, once: a later call does nothing. A stopped server's
+    /// record and run folder go; one that would not stop keeps them, for recovery.
     fn shutdown(&mut self, budget: Duration) -> Result<(), Error> {
-        if self.stopped {
+        if self.child.tried {
             return Ok(());
         }
-        self.stopped = true;
-        let result = stop_child(&mut self.child, budget);
+        let result = self.child.stop_within(budget);
         if result.is_ok() {
             record::remove_if(&self.records, &self.data_text, self.child.id());
             run_dir::remove(&self.run_root, &self.run_dir, self.uid);
@@ -150,6 +149,51 @@ impl Drop for Server {
     fn drop(&mut self) {
         if let Err(e) = self.shutdown(Duration::from_secs(1)) {
             log::warn!("the project's database server did not stop cleanly: {e}");
+        }
+    }
+}
+
+/// A server this process started, from the moment it runs. Dropping it stops and reaps the server
+/// unless that was tried before: whatever fails between a server's start and its [`Server`], and
+/// however the start returns, no server is left without its record, its watchdog and an owner to
+/// stop it. A server is asked to stop once; one that would not is left to recovery.
+#[derive(Debug)]
+struct Started {
+    child: Child,
+    stop_budget: Duration,
+    /// Whether a stop was tried.
+    tried: bool,
+}
+
+impl Started {
+    /// The server's process id.
+    fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// Stops the server: a polite signal on unix, then a kill after `budget`.
+    fn stop_within(&mut self, budget: Duration) -> Result<(), Error> {
+        self.tried = true;
+        stop_child(&mut self.child, budget)
+    }
+
+    /// Stops the server, saying so in the log when it would not stop; returns whether it is gone.
+    fn stop(&mut self) -> bool {
+        match self.stop_within(self.stop_budget) {
+            Ok(()) => true,
+            Err(e) => {
+                log::warn!("a database server that was to stop did not: {e}");
+                false
+            }
+        }
+    }
+}
+
+impl Drop for Started {
+    /// Stops the server unless a stop was tried, as it was after [`Server::stop`].
+    fn drop(&mut self) {
+        if !self.tried {
+            self.stop();
         }
     }
 }
@@ -208,6 +252,13 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // start. Linux's parent-death signal would not do instead: it follows the thread that started the
 // server, and servers start on worker threads that end once a project is open. Windows' job objects
 // kill without a polite stop and need unsafe calls. So this sweep stays the backstop everywhere.
+// What neither covers: an Archforge killed between a server's start and its record. The record
+// holds the server's process id, so it cannot come first; a start that fails there stops its
+// server (`Started`), but a kill runs no code. That moment is the record's write to disk, measured
+// at 5 to 10 ms on macOS. A server left so has no record for a sweep to find, and its run folder
+// stays. Recovery treats it as any server it did not record: once it holds the project's lock, and
+// if its program's file is named `dolt`, the project is refused as open elsewhere, naming the
+// server's process id, until that process is stopped.
 /// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
 /// forgets the records of servers that are gone: for a start-up, so a project never opened again
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
@@ -350,7 +401,9 @@ fn stop_child(child: &mut Child, budget: Duration) -> Result<(), Error> {
 }
 
 /// Writes the configuration, starts the server, records it, and waits until it is ready; a lost
-/// race for the port starts it again.
+/// race for the port starts it again. Every step that can fail without the server comes before
+/// its start; what can fail after it (the record, the wait) returns through [`Started`], whose
+/// drop stops the server.
 fn launch(
     dolt: &Dolt,
     data_dir: &Path,
@@ -384,16 +437,13 @@ fn launch(
         paths::text("configuration", &yaml_path)?.to_string(),
     ];
     let run_root_text = paths::text("run folder location", run_root)?.to_string();
+    let run_text = paths::text("run folder", run)?.to_string();
+    let (cfg_text, no_files_text) = (paths::text("run folder", &cfg_dir)?, paths::text("run folder", &no_files)?);
     let mut attempt = 0;
     loop {
         let port = free_port()?;
-        let yaml = config::server_yaml(&config::Settings {
-            port,
-            socket: socket_text,
-            data_dir: data_text,
-            cfg_dir: paths::text("run folder", &cfg_dir)?,
-            no_files: paths::text("run folder", &no_files)?,
-        });
+        let yaml =
+            config::server_yaml(&config::Settings { port, socket: socket_text, data_dir: data_text, cfg_dir: cfg_text, no_files: no_files_text });
         std::fs::write(&yaml_path, yaml).map_err(|e| Error::io("cannot write", &yaml_path, e))?;
         let log = std::fs::File::create(&log_path).map_err(|e| Error::io("cannot create", &log_path, e))?;
         let log_err = log.try_clone().map_err(|e| Error::io("cannot open", &log_path, e))?;
@@ -402,12 +452,16 @@ fn launch(
         env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
         let mut c = runner::command(dolt.path(), &env);
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
-        let mut child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+        let child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+        // From here to the `Server`, no return leaves the server running: see `Started`.
+        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false };
+        #[cfg(all(test, unix))]
+        tests::after_spawn(child.id())?;
         let rec = Record {
             data_dir: data_text.to_string(),
             server_pid: child.id(),
             run_root: run_root_text.clone(),
-            run_dir: paths::text("run folder", run)?.to_string(),
+            run_dir: run_text.clone(),
             command: command.clone(),
             owner_pid: std::process::id(),
             owner_started: owner_started.to_string(),
@@ -420,21 +474,19 @@ fn launch(
             #[cfg(not(all(test, unix)))]
             Ok(true) => {}
             Ok(false) => {
-                stop_quietly(&mut child, opts.stop_budget);
+                child.stop();
                 let pid = record::read(&opts.records, data_text).ok().flatten().map_or(0, |r| r.server_pid);
                 return Err(Error::OpenElsewhere { pid });
             }
-            Err(e) => {
-                stop_quietly(&mut child, opts.stop_budget);
-                return Err(e);
-            }
+            // Dropping `child` stops the server.
+            Err(e) => return Err(e),
         }
         // The record comes first: the watchdog may wait for its turn to start, and a server of an
         // Archforge killed meanwhile is one the start-up sweep finds by its record. From here on a
         // killed Archforge takes this server with it. The watchdog ends with this turn of the loop
         // or with the `Server`, in both after the attempt to stop the server.
         let watchdog = Watchdog::tie(child.id(), &command);
-        match wait_ready(&mut child, data_dir, socket.as_deref(), port, &password, &log_path, opts.ready_budget) {
+        match wait_ready(&mut child.child, data_dir, socket.as_deref(), port, &password, &log_path, opts.ready_budget) {
             Ok(()) => {
                 return Ok(Server {
                     child,
@@ -447,14 +499,13 @@ fn launch(
                     socket,
                     password,
                     uid,
-                    stop_budget: opts.stop_budget,
-                    stopped: false,
                     _watchdog: watchdog,
                 });
             }
             Err(e) => {
                 let pid = child.id();
-                if stop_quietly(&mut child, opts.stop_budget) {
+                // A server that would not stop keeps its record, so recovery can still find it.
+                if child.stop() {
                     record::remove_if(&opts.records, data_text, pid);
                 }
                 let lost_port = matches!(e, Error::StartFailed { .. }) && TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err();
@@ -464,18 +515,6 @@ fn launch(
                 }
                 return Err(e);
             }
-        }
-    }
-}
-
-/// Stops a child that failed to start, saying so in the log when it would not stop; returns
-/// whether it is gone (its record stays otherwise, so recovery can still find it).
-fn stop_quietly(child: &mut Child, budget: Duration) -> bool {
-    match stop_child(child, budget) {
-        Ok(()) => true,
-        Err(e) => {
-            log::warn!("a database server that failed to start did not stop: {e}");
-            false
         }
     }
 }
@@ -569,6 +608,22 @@ mod tests {
         pub(super) static WATCHED_AT_RECORD: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
     }
 
+    #[cfg(unix)]
+    thread_local! {
+        /// Whether this thread's next start fails right after its server has started, and the
+        /// process id of the server this thread last started.
+        static FAIL_AFTER_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        static SPAWNED: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// Notes the server just started and, once when a test asked for it, fails in the place of
+    /// whatever step may fail between a server's start and its `Server`.
+    #[cfg(unix)]
+    pub(super) fn after_spawn(server: u32) -> Result<(), Error> {
+        SPAWNED.set(Some(server));
+        if FAIL_AFTER_SPAWN.take() { Err(Error::BadPath { what: "test", path: String::new() }) } else { Ok(()) }
+    }
+
     /// Whether the watchdog of the server `server` runs.
     #[cfg(unix)]
     pub(super) fn watched(server: u32) -> bool {
@@ -589,6 +644,29 @@ mod tests {
         assert!(watched(server.pid()), "the watchdog runs once the server has started");
         server.stop().unwrap();
         assert_eq!(WATCHED_AT_RECORD.get(), Some(false));
+    }
+
+    /// The failure is put there by the test, since a test cannot make the record's write fail
+    /// from outside. The server is stopped and reaped before the start returns, and the folder
+    /// opens again. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_that_fails_once_its_server_runs_stops_the_server() {
+        let dir = crate::home::tests::Scratch::new("failed-start");
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts = ServerOptions { ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        FAIL_AFTER_SPAWN.set(true);
+        let failed = Server::start(&dolt, &dir.0.join("data"), &opts);
+        assert!(matches!(failed, Err(Error::BadPath { what: "test", .. })), "{failed:?}");
+        let pid = SPAWNED.get().unwrap();
+        let left = identity(pid).ok().flatten().is_some_and(|i| i.is_dolt_server());
+        if left {
+            let _ = std::process::Command::new("/bin/kill").args(["-KILL", &pid.to_string()]).status();
+        }
+        assert!(!left, "the server {pid} ran on after its start had failed");
+        assert!(!watched(pid), "and no watchdog is left for it");
+        Server::start(&dolt, &dir.0.join("data"), &opts).unwrap().stop().unwrap();
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
