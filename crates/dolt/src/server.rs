@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::identity::identity;
+use crate::identity::{self, identity};
 use crate::record::{self, Record};
 use crate::recovery::{self, Action, Lock, Proc};
 use crate::watchdog::Watchdog;
@@ -252,14 +252,18 @@ fn private_records(records: &Path) -> Result<(), Error> {
     crate::home::private_folder(records).map_err(|why| Error::RecordsUnsafe { path: records.to_path_buf(), why })
 }
 
+/// Whether the Archforge that wrote `r` still runs: its process id, started when the record says.
+fn owner_alive(r: &Record) -> Result<bool, Error> {
+    Ok(identity(r.owner_pid)?.is_some_and(|o| o.started == r.owner_started))
+}
+
 /// What the process `pid` is, judged against `record`.
 fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
     let Some(id) = identity(pid)? else { return Ok(Proc::Gone) };
     if let Some(r) = record
         && id.is(&r.command)
     {
-        let alive = identity(r.owner_pid)?.is_some_and(|o| o.started == r.owner_started);
-        return Ok(if alive { Proc::OursOwnerAlive } else { Proc::OursOwnerDead });
+        return Ok(if owner_alive(r)? { Proc::OursOwnerAlive } else { Proc::OursOwnerDead });
     }
     Ok(if id.is_dolt_server() { Proc::OtherDoltServer } else { Proc::Other })
 }
@@ -281,8 +285,9 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
 /// left alone, and a process is signalled only while its command line, checked before each signal,
 /// is exactly the recorded one, whose configuration lies in a run folder with a random name made
-/// for that start: a process id another program took gets no signal. Returns how many servers
-/// were stopped.
+/// for that start: a process id another program took gets no signal. A record without a process
+/// id is left to its project's opening for now (AR-459), so a server of a start its Archforge did
+/// not finish runs on until then. Returns how many servers were stopped.
 pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     private_records(&opts.records)?;
     let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
@@ -302,16 +307,17 @@ fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Du
     };
     let mut stopped = 0;
     for (file, r) in all.into_iter().filter(|(_, r)| except != Some(r.data_dir.as_str())) {
-        match (classify(r.server_pid, Some(&r)), stop) {
+        let Some(server) = r.server_pid else { continue };
+        match (classify(server, Some(&r)), stop) {
             (Ok(Proc::Gone | Proc::Other | Proc::OtherDoltServer), _) => forget(&file, &r, uid),
             (Ok(Proc::OursOwnerDead), Some(budget)) => {
-                log::info!("stopping the database server {} that a closed Archforge left running for {}", r.server_pid, r.data_dir);
-                match stop_foreign(r.server_pid, &r.command, budget) {
+                log::info!("stopping the database server {server} that a closed Archforge left running for {}", r.data_dir);
+                match stop_foreign(server, &r.command, budget) {
                     Ok(()) => {
                         forget(&file, &r, uid);
                         stopped += 1;
                     }
-                    Err(e) => log::warn!("the database server {} left running for {} stays: {e}", r.server_pid, r.data_dir),
+                    Err(e) => log::warn!("the database server {server} left running for {} stays: {e}", r.data_dir),
                 }
             }
             (Ok(_), _) => {}
@@ -331,19 +337,23 @@ fn forget(file: &Path, r: &Record, uid: Option<u32>) {
     record::remove_while(file, |found| found == r);
 }
 
-/// Recovery for this project: gathers the facts, decides, acts.
+/// Recovery for this project: settles a record without a process id, gathers the facts, decides,
+/// acts.
 fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u32>) -> Result<(), Error> {
-    let record = record::read(&opts.records, data_text)?;
+    let file = record::path(&opts.records, data_text);
+    let mut record = record::read(&opts.records, data_text)?;
+    if let Some(seen) = record.clone().filter(|r| r.server_pid.is_none()) {
+        record = settle_pending(&file, data_text, &seen, opts, uid)?;
+    }
     let lock = recovery::read_lock(data_dir)?;
     let holder = match lock {
         Lock::Pid(pid) => classify(pid, record.as_ref())?,
         _ => Proc::Gone,
     };
-    let recorded = match &record {
-        Some(r) => Some((r.server_pid, classify(r.server_pid, Some(r))?)),
+    let recorded = match record.as_ref().and_then(|r| r.server_pid.map(|pid| (r, pid))) {
+        Some((r, pid)) => Some((pid, classify(pid, Some(r))?)),
         None => None,
     };
-    let file = record::path(&opts.records, data_text);
     match recovery::decide(&lock, holder, recorded) {
         Action::Proceed => Ok(()),
         Action::Clean => {
@@ -363,6 +373,68 @@ fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u
         Action::OpenElsewhere(pid) => Err(Error::OpenElsewhere { pid }),
         Action::DamagedLock => Err(Error::DamagedLock { path: data_dir.join(".dolt").join("sql-server.info") }),
     }
+}
+
+/// Settles the record `seen`, which names no process: the record of a start under way, or of one
+/// that ended before it completed its record. A start holds the record's lock until its record is
+/// complete, so while the lock cannot be had the start is under way and the project is refused,
+/// naming its Archforge; once it can, that start will never go on. Its server is then looked for
+/// by the exact command line recorded, but only where that line names the configuration in the
+/// recorded run folder, a folder of this user's made for that start under a random name, which
+/// makes the line that start's alone; each process listed is proven again before anything is done
+/// about it. One whose Archforge still runs refuses the project, naming the server, and nothing
+/// goes; one whose Archforge is gone is stopped, its configuration removed first (a removal that
+/// fails fails the opening, and nothing more goes): where a child
+/// cut between its fork and its exec does not keep the lock (a lock a file system emulates per
+/// process), it then finds no configuration once it runs dolt, and a dolt started without its
+/// configuration exits at once (measured with dolt 2.7.3). Only then do the run folder and the
+/// record go. Returns the record there now, if it is a complete one.
+fn settle_pending(file: &Path, data_text: &str, seen: &Record, opts: &ServerOptions, uid: Option<u32>) -> Result<Option<Record>, Error> {
+    let held = match record::hold(file, record::LOCK_WAIT) {
+        Ok(held) => held,
+        Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::TimedOut => return Err(Error::OpenElsewhere { pid: seen.owner_pid }),
+        Err(e) => return Err(e),
+    };
+    let now = record::look(&held, data_text)?;
+    drop(held);
+    let Some(r) = now.clone().filter(|r| r.server_pid.is_none()) else { return Ok(now) };
+    let owner = owner_alive(&r)?;
+    let (root, run) = (Path::new(&r.run_root), Path::new(&r.run_dir));
+    let yaml = run.join("server.yaml");
+    let tied = run_dir::is_own(root, run, uid) && r.command.iter().rev().take(2).eq([yaml.to_str(), Some("--config")].into_iter().flatten());
+    if !tied {
+        // A line that is not that start's alone could be any server's, and the folder anyone's:
+        // nothing is signalled and no file but the record goes.
+        log::warn!("the server record {} names no run folder of its start's; only the record goes", file.display());
+        record::remove_while(file, |found| *found == r);
+        return Ok(None);
+    }
+    // A link under that name goes itself, never what it points to. A configuration that stays
+    // could still start a server nothing lists yet: the opening fails, and the record stays.
+    if !owner
+        && let Err(e) = std::fs::remove_file(&yaml)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(Error::io("cannot remove", &yaml, e));
+    }
+    #[cfg(test)]
+    tests::before_list(run);
+    #[cfg(test)]
+    let listed = tests::listed(identity::running(&r.command)?);
+    #[cfg(not(test))]
+    let listed = identity::running(&r.command)?;
+    for pid in listed {
+        if !identity(pid)?.is_some_and(|i| i.is(&r.command)) {
+            continue;
+        }
+        if owner {
+            return Err(Error::OpenElsewhere { pid });
+        }
+        log::info!("stopping the database server {pid} that a start a closed Archforge did not finish left running for {data_text}");
+        stop_foreign(pid, &r.command, opts.stop_budget)?;
+    }
+    forget(file, &r, uid);
+    Ok(None)
 }
 
 /// Stops a server that is not this process's child, checking before every signal that it is still
@@ -482,7 +554,7 @@ fn launch(
         tests::after_spawn(child.id())?;
         let rec = Record {
             data_dir: data_text.to_string(),
-            server_pid: child.id(),
+            server_pid: Some(child.id()),
             run_root: run_root_text.clone(),
             run_dir: run_text.clone(),
             command: command.clone(),
@@ -500,7 +572,7 @@ fn launch(
             Ok(true) => {}
             Ok(false) => {
                 child.stop();
-                let pid = record::read(&opts.records, data_text).ok().flatten().map_or(0, |r| r.server_pid);
+                let pid = record::read(&opts.records, data_text).ok().flatten().map_or(0, |r| r.server_pid.unwrap_or(r.owner_pid));
                 return Err(Error::OpenElsewhere { pid });
             }
             // Dropping `child` stops the server.
@@ -634,6 +706,26 @@ mod tests {
     thread_local! {
         /// Whether the watchdog of the server this thread last started ran when its record was written.
         pub(super) static WATCHED_AT_RECORD: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+        /// Whether the run folder still held its configuration when a pending record's server was
+        /// last looked for on this thread.
+        static CONFIG_AT_LIST: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    }
+
+    thread_local! {
+        /// A process a test adds to the next list of processes, as one a list may propose that is
+        /// not, or no longer, the server looked for.
+        static DECOY: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// The list `pids`, with the process a test added to it.
+    pub(super) fn listed(mut pids: Vec<u32>) -> Vec<u32> {
+        pids.extend(DECOY.take());
+        pids
+    }
+
+    /// Notes whether the run folder `run` still holds its configuration.
+    pub(super) fn before_list(run: &Path) {
+        CONFIG_AT_LIST.set(Some(run.join("server.yaml").exists()));
     }
 
     #[cfg(unix)]
@@ -778,10 +870,196 @@ mod tests {
         end(pid);
         assert!(matches!(failed, Err(Error::BadPath { what: "test", .. })), "{failed:?}");
         assert!(kept.len() == 1 && kept[0].join("server.yaml").is_file(), "its run folder stays as it was: {kept:?}");
-        assert_eq!(recorded.iter().map(|(_, r)| (r.server_pid, PathBuf::from(&r.run_dir))).collect::<Vec<_>>(), [(pid, kept[0].clone())]);
+        assert_eq!(recorded.iter().map(|(_, r)| (r.server_pid, PathBuf::from(&r.run_dir))).collect::<Vec<_>>(), [(Some(pid), kept[0].clone())]);
         assert!(matches!(again, Err(Error::OpenElsewhere { pid: open }) if open == pid), "{again:?}");
         assert!(matches!(start(), Err(Error::BadPath { what: "test", .. })));
         assert_eq!((run_folders(), records()), (Vec::new(), Vec::new()), "no folder and no record are left");
+    }
+
+    /// A project folder, its records, a run folder with a configuration under `dir`, and the
+    /// record a start leaves before its server runs, for a server run as `program` followed by
+    /// `--config` and that configuration: of this process as the Archforge (`alive`), or of one
+    /// that is gone.
+    fn left(dir: &Path, program: &[&str], alive: bool) -> Result<(ServerOptions, PathBuf, Record), Error> {
+        let data = dir.join("data");
+        std::fs::create_dir_all(&data).map_err(|e| Error::io("cannot create", &data, e))?;
+        let data = data.canonicalize().map_err(|e| Error::io("cannot read", &data, e))?;
+        let opts = ServerOptions { run_root: Some(dir.to_path_buf()), ..ServerOptions::new(dir.join("records")) };
+        private_records(&opts.records)?;
+        let (root, uid) = run_dir::checked_root(dir)?;
+        let run = run_dir::create(&root, uid)?;
+        std::fs::write(run.join("server.yaml"), "").map_err(|e| Error::io("cannot write", &run, e))?;
+        let me = identity(std::process::id())?.map(|i| i.started).unwrap_or_default();
+        let config = [String::from("--config"), run.join("server.yaml").display().to_string()];
+        let r = Record {
+            data_dir: data.display().to_string(),
+            server_pid: None,
+            run_root: root.display().to_string(),
+            run_dir: run.display().to_string(),
+            command: program.iter().map(|a| a.to_string()).chain(config).collect(),
+            owner_pid: std::process::id(),
+            owner_started: if alive { me } else { "long ago".into() },
+        };
+        record::tests::write_new(&opts.records, &r)?;
+        Ok((opts, data, r))
+    }
+
+    /// A stand-in for a server, waiting on its input, run as `line`: started, and seen by its own
+    /// command line once it has one.
+    #[cfg(unix)]
+    fn stand_in(line: &[String]) -> std::process::Child {
+        let child = std::process::Command::new(&line[0]).args(&line[1..]).stdin(Stdio::piped()).spawn().unwrap();
+        // Between fork and exec the child still shows this test's command line.
+        let until = Instant::now() + Duration::from_secs(5);
+        while !identity(child.id()).unwrap().is_some_and(|i| i.is(line)) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        child
+    }
+
+    /// While its start is under way, which holds the record's lock, a record without a process id
+    /// refuses the project, naming that Archforge. The start-up sweep leaves it alone.
+    #[test]
+    fn a_start_under_way_refuses_its_project() {
+        let dir = crate::home::tests::Scratch::new("under-way");
+        let (opts, data, r) = left(&dir.0, &["dolt"], true).unwrap();
+        let held = record::hold(&record::path(&opts.records, &r.data_dir), record::LOCK_WAIT).unwrap();
+        let refused = recover_only(&data, &opts);
+        drop(held);
+        assert!(matches!(refused, Err(Error::OpenElsewhere { pid }) if pid == std::process::id()), "{refused:?}");
+        assert_eq!(stop_orphans(&opts).unwrap(), 0);
+        assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
+        assert!(Path::new(&r.run_dir).join("server.yaml").exists());
+    }
+
+    /// A start that ended before it completed its record: its server, found by the exact command
+    /// line recorded and proven, is stopped politely once its Archforge is gone, after its
+    /// configuration was removed; while its Archforge runs it refuses the project, naming the
+    /// server, and is left alone. A process whose command line differs in one character gets no
+    /// signal. Then the record and the run folder go.
+    #[cfg(unix)]
+    #[test]
+    fn the_server_of_an_unfinished_start_is_found_by_its_command_line() {
+        use std::os::unix::process::ExitStatusExt;
+        let unique = format!("é ü {}", crate::secret::random_name(12).unwrap());
+        // A process a list proposed that is not the server: proven not to be, it is passed over.
+        let mut decoy = stand_in(&["/bin/sh", "-c", "read x", "decoy"].map(String::from));
+        for (alive, other, signal) in [(false, false, Some(15)), (false, true, None), (true, false, None)] {
+            let dir = crate::home::tests::Scratch::new("unfinished");
+            let (opts, data, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &unique], alive).unwrap();
+            let runs: Vec<String> = r.command.iter().map(|a| if other && *a == unique { a.replace('ü', "u") } else { a.clone() }).collect();
+            let mut server = stand_in(&runs);
+            CONFIG_AT_LIST.set(None);
+            DECOY.set(Some(decoy.id()));
+            let opened = recover_only(&data, &opts);
+            let (record_then, folder_then) = (record::read(&opts.records, &r.data_dir).unwrap(), Path::new(&r.run_dir).exists());
+            // Its input closes here, so it ends by itself unless a signal ended it before.
+            drop(server.stdin.take());
+            assert_eq!(server.wait().unwrap().signal(), signal, "{runs:?}");
+            if alive {
+                assert!(matches!(opened, Err(Error::OpenElsewhere { pid }) if pid == server.id()), "{opened:?}");
+                assert_eq!((record_then, folder_then, CONFIG_AT_LIST.get()), (Some(r.clone()), true, Some(true)), "nothing went");
+                DECOY.set(Some(decoy.id()));
+                recover_only(&data, &opts).unwrap();
+            } else {
+                opened.unwrap();
+                assert_eq!(CONFIG_AT_LIST.get(), Some(false), "the configuration went before the server was looked for");
+            }
+            assert_eq!((record::read(&opts.records, &r.data_dir).unwrap(), Path::new(&r.run_dir).exists()), (None, false));
+        }
+        drop(decoy.stdin.take());
+        assert_eq!(decoy.wait().unwrap().signal(), None, "the decoy got no signal");
+    }
+
+    /// The configuration of a start whose Archforge is gone cannot be removed (its run folder may
+    /// not be written): the opening fails before anything is looked for, and the record, the
+    /// folder and its configuration stay, with the server running on unsignalled. A configuration
+    /// gone already fails nothing.
+    #[cfg(unix)]
+    #[test]
+    fn a_configuration_that_cannot_be_removed_fails_the_opening() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::process::ExitStatusExt;
+        let dir = crate::home::tests::Scratch::new("kept-config");
+        let (opts, data, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())], false).unwrap();
+        let mut server = stand_in(&r.command);
+        let run = Path::new(&r.run_dir);
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o500)).unwrap();
+        // A user who may write anyway (root) removes it: the case cannot be made then.
+        let writable = std::fs::File::create(run.join("probe")).is_ok();
+        CONFIG_AT_LIST.set(None);
+        let opened = if writable { Ok(()) } else { recover_only(&data, &opts) };
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o700)).unwrap();
+        drop(server.stdin.take());
+        assert_eq!(server.wait().unwrap().signal(), None, "nothing was signalled");
+        if !writable {
+            assert!(matches!(&opened, Err(Error::Io { what, .. }) if what == "cannot remove"), "{opened:?}");
+            assert_eq!(CONFIG_AT_LIST.get(), None, "nothing was looked for");
+            assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
+            assert!(run.join("server.yaml").is_file());
+        }
+        // One that is gone already is no failure: the next opening settles the record.
+        std::fs::remove_file(run.join("server.yaml")).unwrap();
+        recover_only(&data, &opts).unwrap();
+        assert_eq!((record::read(&opts.records, &r.data_dir).unwrap(), run.exists()), (None, false));
+    }
+
+    /// A start that completed its record while the opening waited for its lock: the opening goes
+    /// by the record under the lock, not by the one it read before.
+    #[cfg(unix)]
+    #[test]
+    fn the_record_settled_is_the_one_under_the_lock() {
+        let dir = crate::home::tests::Scratch::new("settled");
+        let line = ["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())].map(String::from).to_vec();
+        let mut server = stand_in(&line);
+        let (opts, data, r) = left(&dir.0, &["nothing runs this"], true).unwrap();
+        let file = record::path(&opts.records, &r.data_dir);
+        let held = record::hold(&file, record::LOCK_WAIT).unwrap();
+        let done = serde_json::to_vec(&Record { server_pid: Some(server.id()), command: line, ..r }).unwrap();
+        record::tests::WAITING.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move || {
+                let _ = std::fs::write(&file, done);
+                drop(held);
+            }))
+        });
+        let opened = recover_only(&data, &opts);
+        drop(server.stdin.take());
+        let _ = server.wait();
+        assert!(matches!(opened, Err(Error::OpenElsewhere { pid }) if pid == server.id()), "{opened:?}");
+    }
+
+    /// A record whose server line is not tied to a run folder of this user's, made for that start:
+    /// nothing is signalled and no file goes but the record. Here the run
+    /// folder is a folder this crate did not make, a link under a run folder's name, or the line
+    /// names another configuration.
+    #[cfg(unix)]
+    #[test]
+    fn a_record_not_tied_to_its_run_folder_signals_nothing() {
+        use std::os::unix::process::ExitStatusExt;
+        let dir = crate::home::tests::Scratch::new("untied");
+        let (opts, data, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())], false).unwrap();
+        let mine = dir.0.join("mine");
+        std::fs::create_dir(&mine).unwrap();
+        std::fs::write(mine.join("server.yaml"), "").unwrap();
+        let link = Path::new(&r.run_root).join("af-linkedto");
+        std::os::unix::fs::symlink(&mine, &link).unwrap();
+        let config = |run: &Path| [String::from("--config"), run.join("server.yaml").display().to_string()];
+        let head = r.command[..4].to_vec();
+        let untied = [
+            Record { run_dir: mine.display().to_string(), command: head.iter().cloned().chain(config(&mine)).collect(), ..r.clone() },
+            Record { run_dir: link.display().to_string(), command: head.iter().cloned().chain(config(&link)).collect(), ..r.clone() },
+            Record { command: head.iter().cloned().chain(config(&mine)).collect(), ..r.clone() },
+        ];
+        for named in untied {
+            let mut server = stand_in(&named.command);
+            std::fs::write(record::path(&opts.records, &r.data_dir), serde_json::to_vec(&named).unwrap()).unwrap();
+            let opened = recover_only(&data, &opts);
+            drop(server.stdin.take());
+            assert_eq!(server.wait().unwrap().signal(), None, "{:?}", named.command);
+            opened.unwrap();
+            assert!(mine.join("server.yaml").exists() && Path::new(&r.run_dir).join("server.yaml").exists());
+            assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), None);
+        }
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
@@ -789,7 +1067,7 @@ mod tests {
     fn forgetting_keeps_a_record_written_since_it_was_read() {
         let dir = crate::home::tests::Scratch::new("forget");
         let read = record::tests::rec("/p/a");
-        let newer = Record { server_pid: 9, ..read.clone() };
+        let newer = Record { server_pid: Some(9), ..read.clone() };
         assert!(record::tests::write_new(&dir.0, &newer).unwrap());
         let file = record::path(&dir.0, "/p/a");
         forget(&file, &read, None);

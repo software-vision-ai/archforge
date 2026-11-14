@@ -2,7 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # Menu de l’application
 str		Quit Archforge	Quitter Archforge
+str		Exit	Quitter
 str		File	Fichier
+str	macOS	File	Fichier
 str		Help	Aide
 str	menu	View	Affichage
 str		Ctrl	Ctrl
@@ -17,7 +19,7 @@ str		This project has one branch	Ce projet a une seule branche
 str		Leave the text field first	Quittez d'abord le champ de texte
 str		Widen the window to search	Agrandissez la fenêtre pour rechercher
 str		Already showing	Déjà affiché
-str		Open…	Ouvrir…
+str		Open project…	Ouvrir un projet…
 str		Find…	Rechercher…
 str		Save	Enregistrer
 # Générer
@@ -53,7 +55,6 @@ str		Copy request	Copier la demande
 str		{name} — Archforge	{name} — Archforge
 # Accueil
 str		Recent projects	Projets récents
-str		Open project	Ouvrir un projet
 str		Close project	Fermer le projet
 str		Close	Fermer
 str		Home	Accueil
@@ -484,7 +485,7 @@ str		The project stayed on its branch because it changed or was busy.	Le projet 
 str		Your latest changes could not be written, so the project stayed on its branch.	Vos dernières modifications n'ont pas pu être écrites ; le projet est donc resté sur sa branche.
 str		The project stayed on its branch: {why}	Le projet est resté sur sa branche : {why}
 str		Switch to {branch}?	Passer à {branch} ?
-str		Switch branch	Changer de branche
+str		Switch branch…	Changer de branche…
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} a des modifications non enregistrées. Elles restent sur {branch} et seront là à votre retour. Vous ne pourrez pas annuler les étapes précédentes.
 str		Save version and switch	Enregistrer la version et changer
 str		Switch	Changer
@@ -605,6 +606,7 @@ str	refusal	an association end	une extrémité d’association
 str		A name can't start or end with a space.	Un nom ne peut ni commencer ni finir par une espace.
 str		Working changes	Modifications en cours
 str		History	Historique
+str		History…	Historique…
 str		Retry	Réessayer
 str		No changes since the last version.	Aucune modification depuis la dernière version.
 str		What you're typing isn't kept yet	Ce que vous saisissez n’est pas encore conservé
@@ -920,12 +922,12 @@ str		Cut	Couper
 str		Copy	Copier
 str		Paste	Coller
 str		Select all	Tout sélectionner
+str		Select All	Tout sélectionner
 str		Nothing to act on here	Rien à faire ici
 plural		+ {n} more column	+ {n} colonne de plus|+ {n} colonnes de plus
 str		Minimap	Minimap
 str		Hide minimap	Masquer la minimap
 str		Show minimap	Afficher la minimap
-str		The minimap is showing	La minimap est affichée
 str		Make the canvas larger to show the minimap	Agrandissez le canevas pour afficher la mini-carte
 str		Whole diagram	Diagramme entier
 str		Zoom in	Zoom avant

@@ -1,6 +1,6 @@
-//! The View menu: Find…, the canvas's zooms, Whole diagram and Show minimap, as the minimap's own
-//! controls do them, then a row for each explorer and panel, which opens it. Rows answer as the
-//! table of actions does.
+//! The View menu: Find…, the canvas's zooms, Whole diagram and Minimap, as the minimap's own
+//! controls do them, then a row for each explorer and panel. Minimap and those rows are ticked
+//! while theirs shows, and choosing one shows it or hides it. Rows answer as the table of actions does.
 
 use egui::{Rect, pos2};
 
@@ -45,16 +45,17 @@ macro_rules! canvas_row {
     };
 }
 
-/// A row that opens the explorer or panel `$which` while a project shows and it is not open already.
+/// A row for the explorer or panel `$which`: it shows it, or folds it away while it shows, as a
+/// click on its rail icon `$rail` does, while a project shows.
 macro_rules! show_row {
-    ($id:expr, $word:expr, $field:ident, $folded:ident, $show:ident, $which:expr) => {
+    ($id:expr, $word:expr, $rail:ident, $which:expr) => {
         Action {
             id: $id,
             label: |_| $word,
-            available: |s| open_here(s) && !(s.state.$field == $which && !s.state.$folded),
+            available: open_here,
             run: |s| {
                 if open_here(s) {
-                    s.state.$show($which)
+                    s.state.$rail($which)
                 }
             },
             keys: None,
@@ -71,34 +72,66 @@ pub(crate) static ROWS: &[Action] = &[
     canvas_row!(WHOLE, tr("Whole diagram"), |s: &mut Shell| s.canvas.fit_pending = true),
     Action {
         id: MINIMAP,
-        label: |_| tr("Show minimap"),
-        available: can_show_minimap,
-        run: |s| s.canvas.minimap_open |= can_show_minimap(s),
+        label: |_| tr("Minimap"),
+        available: minimap_fits,
+        run: |s| s.canvas.minimap_open ^= minimap_fits(s),
         keys: None,
         search: None,
     },
-    show_row!(DIAGRAMS, tr("Diagrams"), explorer, explorer_collapsed, show_explorer, Explorer::Diagrams),
-    show_row!(MODELS, tr("Models"), explorer, explorer_collapsed, show_explorer, Explorer::Models),
-    show_row!(VERSIONS, tr("Versions"), explorer, explorer_collapsed, show_explorer, Explorer::SourceControl),
-    show_row!(CHAT, tr("Chat"), panel, panel_collapsed, show_panel, Panel::Agent),
-    show_row!(APPEARANCE, tr("Appearance"), panel, panel_collapsed, show_panel, Panel::Appearance),
-    show_row!(PROPERTIES, tr("Properties"), panel, panel_collapsed, show_panel, Panel::Properties),
-    show_row!(SKILLS, tr("Skills"), panel, panel_collapsed, show_panel, Panel::Skills),
+    show_row!(DIAGRAMS, tr("Diagrams"), rail_explorer, Explorer::Diagrams),
+    show_row!(MODELS, tr("Models"), rail_explorer, Explorer::Models),
+    show_row!(VERSIONS, tr("Versions"), rail_explorer, Explorer::SourceControl),
+    show_row!(CHAT, tr("Chat"), rail_panel, Panel::Agent),
+    show_row!(APPEARANCE, tr("Appearance"), rail_panel, Panel::Appearance),
+    show_row!(PROPERTIES, tr("Properties"), rail_panel, Panel::Properties),
+    show_row!(SKILLS, tr("Skills"), rail_panel, Panel::Skills),
 ];
+
+/// Whether a project's workspace shows, a dialog over the window or not.
+fn workspace_shows(shell: &Shell) -> bool {
+    shell.project.is_some() && shell.active.is_some()
+}
 
 /// Whether a project's workspace shows, with nothing over the window.
 fn open_here(shell: &Shell) -> bool {
-    free(shell) && shell.project.is_some() && shell.active.is_some()
+    free(shell) && workspace_shows(shell)
 }
 
-/// Whether a diagram shows on the canvas, with no version's details or changed element over it.
+/// Whether a diagram shows on the canvas, with no version's details or changed element over it,
+/// a dialog over the window or not.
+fn diagram_shows(shell: &Shell) -> bool {
+    workspace_shows(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
+}
+
+/// Whether a diagram shows on the canvas and nothing is over the window, so the canvas's rows can act.
 fn drawn(shell: &Shell) -> bool {
-    open_here(shell) && active_kind(shell).is_some() && !crate::model_menu::covered(shell)
+    free(shell) && diagram_shows(shell)
 }
 
-/// Whether the minimap is folded on a canvas, as last drawn, large enough to show it.
-fn can_show_minimap(shell: &Shell) -> bool {
-    drawn(shell) && !shell.canvas.minimap_open && has_room(shell)
+/// Whether a diagram shows on a canvas, as last drawn, large enough for the minimap, with nothing
+/// over the window.
+fn minimap_fits(shell: &Shell) -> bool {
+    drawn(shell) && has_room(shell)
+}
+
+/// Whether the row `id` is ticked: its minimap, explorer or panel shows now. A dialog over the
+/// window turns the rows off but leaves the ticks, since what they tick still shows behind it.
+/// `None` for a row with no tick, which only acts.
+pub fn ticked(shell: &Shell, id: &str) -> Option<bool> {
+    let (state, here) = (&shell.state, workspace_shows(shell));
+    let explorer = |which| here && state.explorer == which && !state.explorer_collapsed;
+    let panel = |which| here && state.panel == which && !state.panel_collapsed;
+    Some(match id {
+        MINIMAP => shell.canvas.minimap_open && diagram_shows(shell) && has_room(shell),
+        DIAGRAMS => explorer(Explorer::Diagrams),
+        MODELS => explorer(Explorer::Models),
+        VERSIONS => explorer(Explorer::SourceControl),
+        CHAT => panel(Panel::Agent),
+        APPEARANCE => panel(Panel::Appearance),
+        PROPERTIES => panel(Panel::Properties),
+        SKILLS => panel(Panel::Skills),
+        _ => return None,
+    })
 }
 
 /// Whether the canvas, as last drawn, has room for the minimap: wide and tall enough.
@@ -112,7 +145,8 @@ fn zoom(shell: &mut Shell, factor: f32) {
     canvas::zoom_by(&mut shell.canvas, factor, centre);
 }
 
-/// Why the row `id` is off, in words: the first thing that keeps it off.
+/// Why the row `id` is off, in words: the first thing that keeps it off. With a diagram showing
+/// only Minimap is ever off, for want of room.
 pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
     let on_canvas = [ZOOM_IN, ZOOM_OUT, WHOLE, MINIMAP].contains(&id);
     if id == FIND && shell.home_search.cramped {
@@ -123,11 +157,7 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
         tr("Open or go back to a project first")
     } else if on_canvas && !drawn(shell) {
         tr("Show a diagram first")
-    } else if id == MINIMAP && !has_room(shell) {
-        tr("Make the canvas larger to show the minimap")
-    } else if id == MINIMAP {
-        tr("The minimap is showing")
     } else {
-        tr("Already showing")
+        tr("Make the canvas larger to show the minimap")
     }
 }

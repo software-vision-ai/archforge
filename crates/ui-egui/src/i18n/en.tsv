@@ -1,7 +1,9 @@
 # English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 # Application menu
 str		Quit Archforge	Quit Archforge
+str		Exit	Exit
 str		File	File
+str	macOS	File	File
 str		Help	Help
 str	menu	View	View
 str		Ctrl	Ctrl
@@ -16,7 +18,7 @@ str		This project has one branch	This project has one branch
 str		Leave the text field first	Leave the text field first
 str		Widen the window to search	Widen the window to search
 str		Already showing	Already showing
-str		Open…	Open…
+str		Open project…	Open project…
 str		Find…	Find…
 str		Save	Save
 # Generate
@@ -52,7 +54,6 @@ str		Copy request	Copy request
 str		{name} — Archforge	{name} — Archforge
 # Home
 str		Recent projects	Recent projects
-str		Open project	Open project
 str		Close project	Close project
 str		Close	Close
 str		Home	Home
@@ -483,7 +484,7 @@ str		The project stayed on its branch because it changed or was busy.	The projec
 str		Your latest changes could not be written, so the project stayed on its branch.	Your latest changes could not be written, so the project stayed on its branch.
 str		The project stayed on its branch: {why}	The project stayed on its branch: {why}
 str		Switch to {branch}?	Switch to {branch}?
-str		Switch branch	Switch branch
+str		Switch branch…	Switch branch…
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.
 str		Save version and switch	Save version and switch
 str		Switch	Switch
@@ -604,6 +605,7 @@ str	refusal	an association end	an association end
 str		A name can't start or end with a space.	A name can't start or end with a space.
 str		Working changes	Working changes
 str		History	History
+str		History…	History…
 str		Retry	Retry
 str		No changes since the last version.	No changes since the last version.
 str		What you're typing isn't kept yet	What you're typing isn't kept yet
@@ -919,12 +921,12 @@ str		Cut	Cut
 str		Copy	Copy
 str		Paste	Paste
 str		Select all	Select all
+str		Select All	Select All
 str		Nothing to act on here	Nothing to act on here
 plural		+ {n} more column	+ {n} more column|+ {n} more columns
 str		Minimap	Minimap
 str		Hide minimap	Hide minimap
 str		Show minimap	Show minimap
-str		The minimap is showing	The minimap is showing
 str		Make the canvas larger to show the minimap	Make the canvas larger to show the minimap
 str		Whole diagram	Whole diagram
 str		Zoom in	Zoom in

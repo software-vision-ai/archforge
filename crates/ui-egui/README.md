@@ -71,6 +71,8 @@ or explorer with nothing to show says so in one line, never with a help text.
 | `Shell::top_inset` | `pub top_inset: f32`, a field: the logical pixels at the top the host draws over (the macOS title bar) |
 | `Shell::in_window_menu` | `pub in_window_menu: bool`, a field: whether the window draws its own menu bar in the title strip, set by the application everywhere but macOS |
 | `actions::VERSIONS_MENU` | `[&[&str]; 4]`: the Versions menu's rows by section, on every system; `actions::{label, available, run}` answer for them |
+| `actions::file_title` | `fn(&Shell) -> String`: the File menu's title on this system, the native bar's own word where a language has one (German Ablage, Datei in the window's bar) |
+| `actions::ticked` | `fn(&Shell, &str) -> Option<bool>`: whether a row that shows and hides something is ticked now (`view_menu::ticked`: the minimap, an explorer or a panel shows); `None` for a row with no tick |
 | `view_menu::VIEW_MENU` | `[&[&str]; 4]`: the View menu's rows by section, on every system, with their ids beside it; `actions::{label, available, run}` answer for them |
 | `model_menu::sections` | `fn(&Shell) -> Vec<Vec<&'static str>>`: the ids of the Model menu's rows now, by section, what the open diagram's notation offers; `actions::{label, available, run}` answer for them |
 | `Services` | host functions: the installed fonts, the account's name, the folder new projects go in, the projects host, the id source for a model's elements, the AI Agents and Chat host (`agents`), the project's kept conversations (`chats`) and the time with the local offset Chat shows times in (`clock`) |

@@ -1,13 +1,15 @@
 //! The View menu: its rows in the design's order, Find… and its keys, the zooms and Whole diagram
-//! as the minimap's controls do them, Show minimap, and the rows that open an explorer or a panel.
+//! as the minimap's controls do them, and Minimap and the rows of the explorers and panels, which
+//! show and hide theirs and are ticked while it shows.
 
 use egui::{Key, Modifiers};
 
 use super::*;
+use crate::actions::ticked;
 use crate::actions::{FIND, available, run};
 use crate::menu_bar::why_off;
 use crate::state::{Explorer, Panel};
-use crate::view_menu::{CHAT, DIAGRAMS, MINIMAP, MODELS, VIEW_MENU, WHOLE, ZOOM_IN, ZOOM_OUT};
+use crate::view_menu::{CHAT, DIAGRAMS, MINIMAP, MODELS, PROPERTIES, VIEW_MENU, WHOLE, ZOOM_IN, ZOOM_OUT};
 
 /// The diagram harness in `theme`, with the bar drawn in the window.
 fn view_harness(theme: ThemeKind) -> Harness<'static, Shell> {
@@ -62,41 +64,45 @@ fn the_rows_find_zoom_and_fit() {
     });
 }
 
-/// Show minimap is on only while it is folded; a row opens its explorer or panel, and is off while
-/// that shows. Without a diagram, or under a version's details, the canvas's rows are off, and on
-/// Home only Find… is on.
+/// Minimap shows and hides the minimap, and each explorer's or panel's row shows it, or folds it
+/// away while it shows, as its rail icon does; another's row changes to that one. Each is ticked
+/// only while its own shows. Without a diagram, or under a version's details, the canvas's rows are
+/// off, and on Home only Find… is on and nothing is ticked.
 #[test]
-fn the_rows_show_the_minimap_explorers_and_panels() {
+fn the_rows_show_and_hide_the_minimap_explorers_and_panels() {
     in_both_appearances(|theme| {
         let mut h = view_harness(theme);
-        assert!(!available(h.state(), MINIMAP), "{theme:?}");
-        assert_eq!(why_off(h.state(), MINIMAP), "The minimap is showing");
-        h.state_mut().canvas.size = egui::vec2(400.0, 300.0);
-        assert_eq!(why_off(h.state(), MINIMAP), "Make the canvas larger to show the minimap");
-        h.run();
-        h.state_mut().canvas.minimap_open = false;
+        assert_eq!((available(h.state(), MINIMAP), ticked(h.state(), MINIMAP)), (true, Some(true)), "{theme:?}: showing");
         run(h.state_mut(), MINIMAP);
-        assert!(h.state().canvas.minimap_open, "{theme:?}");
+        assert_eq!((h.state().canvas.minimap_open, ticked(h.state(), MINIMAP)), (false, Some(false)), "{theme:?}: hidden");
+        run(h.state_mut(), MINIMAP);
+        assert_eq!((h.state().canvas.minimap_open, ticked(h.state(), MINIMAP)), (true, Some(true)), "{theme:?}: shown again");
         // A version's details over the canvas leave its rows nothing to act on.
         h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
         h.state_mut().state.show_explorer(Explorer::SourceControl);
         crate::version_details::open(h.state_mut(), version_row("c1", None, (None, false), "2026-11-08T15:30:00Z"));
-        assert!(!available(h.state(), ZOOM_IN) && !available(h.state(), WHOLE), "{theme:?}: covered");
-        assert_eq!(why_off(h.state(), ZOOM_OUT), "Show a diagram first");
+        assert!(!available(h.state(), ZOOM_IN) && !available(h.state(), WHOLE) && !available(h.state(), MINIMAP), "{theme:?}: covered");
+        assert_eq!((why_off(h.state(), ZOOM_OUT), ticked(h.state(), MINIMAP)), ("Show a diagram first".to_string(), Some(false)));
         h.state_mut().versions.details = None;
         h.state_mut().state.show_explorer(Explorer::Models);
-        assert!(!available(h.state(), MODELS) && available(h.state(), DIAGRAMS), "{theme:?}");
-        assert_eq!(why_off(h.state(), MODELS), "Already showing");
+        let explorers = |h: &Harness<'static, Shell>| [DIAGRAMS, MODELS].map(|id| ticked(h.state(), id));
+        assert_eq!(explorers(&h), [Some(false), Some(true)], "{theme:?}");
+        assert!(available(h.state(), MODELS) && available(h.state(), DIAGRAMS), "{theme:?}: a row showing can hide");
         run(h.state_mut(), DIAGRAMS);
-        assert_eq!(h.state().state.explorer, Explorer::Diagrams, "{theme:?}");
-        h.state_mut().state.explorer_collapsed = true;
+        assert_eq!((h.state().state.explorer, explorers(&h)), (Explorer::Diagrams, [Some(true), Some(false)]), "{theme:?}");
         run(h.state_mut(), DIAGRAMS);
-        assert!(!h.state().state.explorer_collapsed, "{theme:?}: a folded explorer opens again");
+        assert_eq!((h.state().state.explorer_collapsed, explorers(&h)), (true, [Some(false); 2]), "{theme:?}: its own row folds it");
+        run(h.state_mut(), DIAGRAMS);
+        assert_eq!((h.state().state.explorer_collapsed, explorers(&h)), (false, [Some(true), Some(false)]), "{theme:?}: and opens it again");
         h.state_mut().state.show_panel(Panel::Properties);
+        assert_eq!([CHAT, PROPERTIES].map(|id| ticked(h.state(), id)), [Some(false), Some(true)], "{theme:?}");
         run(h.state_mut(), CHAT);
         h.run();
-        assert_eq!(h.state().state.panel, Panel::Agent, "{theme:?}");
+        assert_eq!((h.state().state.panel, ticked(h.state(), CHAT)), (Panel::Agent, Some(true)), "{theme:?}");
         assert!(has_id(&h, "workspace.panels.agent"), "{theme:?}");
+        run(h.state_mut(), CHAT);
+        assert_eq!((h.state().state.panel_collapsed, ticked(h.state(), CHAT)), (true, Some(false)), "{theme:?}: folded");
+        assert_eq!([FIND, ZOOM_IN, WHOLE].map(|id| ticked(h.state(), id)), [None; 3], "{theme:?}: rows that only act have no tick");
         h.state_mut().canvas.active = None;
         assert!(!available(h.state(), ZOOM_IN) && !available(h.state(), MINIMAP), "{theme:?}");
         assert_eq!(why_off(h.state(), WHOLE), "Show a diagram first");
@@ -104,7 +110,64 @@ fn the_rows_show_the_minimap_explorers_and_panels() {
         h.run();
         let on: Vec<&str> = VIEW_MENU.concat().into_iter().filter(|id| available(h.state(), id)).collect();
         assert_eq!(on, [FIND], "{theme:?}: on Home");
+        assert!(VIEW_MENU.concat().into_iter().all(|id| ticked(h.state(), id) != Some(true)), "{theme:?}: nothing shows on Home");
         assert_eq!(why_off(h.state(), DIAGRAMS), "Open or go back to a project first");
+    });
+}
+
+/// A dialog over the window turns the rows off but leaves their ticks: the explorer, the panel and
+/// the minimap still show behind it. Closed again, the rows are on and still ticked.
+#[test]
+fn a_dialog_turns_the_rows_off_and_leaves_their_ticks() {
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.state_mut().state.show_explorer(Explorer::Models);
+        h.state_mut().state.show_panel(Panel::Properties);
+        h.run();
+        let rows = [MINIMAP, MODELS, PROPERTIES];
+        let state = |h: &Harness<'static, Shell>| rows.map(|id| (available(h.state(), id), ticked(h.state(), id)));
+        assert_eq!(state(&h), [(true, Some(true)); 3], "{theme:?}: with no dialog");
+        crate::support::open(h.state_mut());
+        h.run();
+        assert!(has_id(&h, "workspace.minimap") && has_id(&h, "workspace.panels.properties"), "{theme:?}: still drawn behind About");
+        assert_eq!(state(&h), [(false, Some(true)); 3], "{theme:?}: off, and ticked");
+        h.state_mut().about = None;
+        h.run();
+        assert_eq!(state(&h), [(true, Some(true)); 3], "{theme:?}: on again");
+    });
+}
+
+/// In the bar's menu a row that shows and hides is a check box to a screen reader, checked while
+/// its thing shows, and wears a tick only then; choosing it hides the thing and unticks the row. A
+/// row that only acts stays a plain menu item with no checked state.
+#[test]
+fn a_row_with_a_tick_is_a_check_box_checked_while_its_thing_shows() {
+    use egui::accesskit::{Role, Toggled};
+    use egui_kittest::kittest::{NodeT, Queryable};
+    in_both_appearances(|theme| {
+        let mut h = view_harness(theme);
+        h.state_mut().state.show_panel(Panel::Properties);
+        let accent = crate::ux::palette(theme.is_dark()).accent;
+        // The row alone: a panel's name is its rail icon's and its header's too.
+        let said = |h: &Harness<'static, Shell>, name: &str| {
+            let rows: Vec<_> = h.get_all_by_label(name).map(|n| n.accesskit_node().data().clone()).filter(|d| d.role() != Role::Unknown).collect();
+            assert_eq!(rows.len(), 1, "{name}");
+            (rows[0].role(), rows[0].toggled())
+        };
+        let drawn = |h: &Harness<'static, Shell>, id: &str| {
+            let row = rect_of(h, &format!("strip.menu.row.{id}"));
+            icon_boxes(h, accent).iter().filter(|icon| row.contains_rect(**icon)).count()
+        };
+        click_menu(&mut h, "strip.menu.view");
+        assert_eq!(said(&h, "Minimap"), (Role::MenuItemCheckBox, Some(Toggled::True)), "{theme:?}");
+        assert_eq!(said(&h, "Chat"), (Role::MenuItemCheckBox, Some(Toggled::False)), "{theme:?}: Properties shows");
+        assert_eq!(said(&h, "Zoom in"), (Role::MenuItem, None), "{theme:?}: a row that only acts");
+        assert_eq!([MINIMAP, CHAT, ZOOM_IN].map(|id| drawn(&h, id)), [1, 0, 0], "{theme:?}: a tick on the row that shows, alone");
+        click_menu(&mut h, "strip.menu.row.view.minimap");
+        h.run();
+        assert!(!h.state().canvas.minimap_open, "{theme:?}: chosen while ticked, it hides");
+        click_menu(&mut h, "strip.menu.view");
+        assert_eq!((said(&h, "Minimap"), drawn(&h, MINIMAP)), ((Role::MenuItemCheckBox, Some(Toggled::False)), 0), "{theme:?}");
     });
 }
 
@@ -131,10 +194,10 @@ fn find_waits_for_room_for_the_search() {
     });
 }
 
-/// On a canvas too narrow for it, a folded minimap can't be shown: the row is off, says why, and
-/// leaves it folded.
+/// On a canvas too narrow for it, a folded minimap can't be shown: the row is off and unticked,
+/// says why, and leaves it folded.
 #[test]
-fn show_minimap_waits_for_a_wide_enough_canvas() {
+fn minimap_waits_for_a_wide_enough_canvas() {
     in_both_appearances(|theme| {
         let mut h = view_harness(theme);
         h.state_mut().canvas.minimap_open = false;
@@ -150,10 +213,10 @@ fn show_minimap_waits_for_a_wide_enough_canvas() {
     });
 }
 
-/// On a canvas wide enough but too short for the minimap's box, Show minimap is off and says why,
-/// and an open minimap gives way to its button rather than to nothing.
+/// On a canvas wide enough but too short for the minimap's box, Minimap is off and says why, and
+/// an open minimap gives way to its button rather than to nothing: not shown, so not ticked.
 #[test]
-fn show_minimap_waits_for_a_tall_enough_canvas() {
+fn minimap_waits_for_a_tall_enough_canvas() {
     in_both_appearances(|theme| {
         let mut h = view_harness(theme);
         h.state_mut().canvas.minimap_open = false;
@@ -168,5 +231,6 @@ fn show_minimap_waits_for_a_tall_enough_canvas() {
         h.state_mut().canvas.minimap_open = true;
         h.run();
         assert!(!has_id(&h, "workspace.minimap") && has_id(&h, "workspace.minimap.toggle"), "{theme:?}: its button stands in");
+        assert_eq!((available(h.state(), MINIMAP), ticked(h.state(), MINIMAP)), (false, Some(false)), "{theme:?}: open, with no room to show");
     });
 }

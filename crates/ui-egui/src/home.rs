@@ -203,7 +203,7 @@ pub(crate) fn title_strip(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect
     // Open project, a ghost button beside it: the plus and its label on the same line.
     let ghost = home.right() + 6.0;
     ux::icon_mid(paint, pos2(ghost + 13.0, mid), &icons::PLUS, p.text_secondary);
-    let label = ux::text_mid(paint, ghost + 24.0, mid, &tr("Open project"), types::UI, p.text, None);
+    let label = ux::text_mid(paint, ghost + 24.0, mid, &tr("Open project…"), types::UI, p.text, None);
     let ghost_rect = Rect::from_min_max(pos2(ghost, mid - 12.0), pos2(label.right() + 8.0, mid + 12.0));
     let live = can_open(shell);
     if control(shell, ui, "strip.open-project", "button", ghost_rect, live).clicked() && live {
