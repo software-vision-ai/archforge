@@ -260,6 +260,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   owner alone, so such a comment from a file counts as the description (the first one; setting
   removes any others, clearing removes them all). An association's end takes none. A box's element and its members (a table and its columns, a class and its
   attributes) share one page, so moving between them keeps the scroll.
+- The body follows the keyboard (AR-470): a control of the body that Tab or Shift+Tab lands on is
+  scrolled into view (a click moves nothing), and while one of its controls has the keyboard, no
+  text field is being typed in and no menu is open, Page Up, Page Down, Home and End scroll it.
+  The arrow keys stay with the canvas and the menus.
 - A text field written in place (a name, a description, a role) keeps on Enter or when left, and
   Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
   sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
