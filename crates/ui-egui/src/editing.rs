@@ -175,14 +175,17 @@ fn select(shell: &mut Shell, ids: Vec<Uuid>) {
 }
 
 /// Selects what each box and line drawn on diagram `d` stands for, as a click on it would, boxes
-/// nested in others included, or the diagram itself when it draws nothing.
+/// nested in others included, and each generalization set a line here belongs to, whose label is
+/// drawn whether a node holds it or not (AR-129); or the diagram itself when it draws nothing.
 pub(crate) fn select_all(shell: &mut Shell, d: Obj) {
+    use archforge_uml::generalization_sets as sets;
     let Some(session) = shell.session.as_ref() else { return };
     let store = session.doc();
     let mut ids: Vec<Uuid> = Vec::new();
     let boxes = nodes_of(store, d).into_iter().flat_map(|top| archforge_diagram::node_tree(store, top)).map(|n| element_of(store, n).unwrap_or(n));
     let lines: Vec<Obj> = Grid::build(store, d).lines().map(|(e, _)| line_target(store, e)).collect();
-    for id in boxes.chain(lines).filter_map(|o| uuid(store, o)) {
+    let labels: Vec<Obj> = lines.iter().filter(|g| sets::is_generalization(store, **g)).flat_map(|g| sets::sets_of(store, *g)).collect();
+    for id in boxes.chain(lines).chain(labels).filter_map(|o| uuid(store, o)) {
         if !ids.contains(&id) {
             ids.push(id);
         }

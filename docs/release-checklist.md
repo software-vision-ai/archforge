@@ -70,7 +70,8 @@ place two classes on it and draw a line from one to the other. Click the canvas 
 make a change, press ⌘Z and then ⇧⌘Z, then press ⌘A and look at **Edit**. With the field active again,
 press ⌘A, ⌘C, ⌘X and ⌘V, then choose **Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and
 **Edit ▸ Paste** in turn. Select a few words in a skill's preview, look at **Edit** and press ⌘C; paste
-them into a name field. With the class diagram showing, look through **Model**, choose
+them into a name field. Select a few other words in the preview, choose **Edit ▸ Copy** and paste them
+into the name field. With the class diagram showing, look through **Model**, choose
 **Model ▸ Interface** and click the canvas; open an ER diagram and look through **Model** again; go to
 Home and look once more. Open a project with a version and a change since; look through **Versions**,
 choose **Versions ▸ Save version…** and cancel; choose **Older version**, then press ⇧⌘H. Look through
@@ -87,7 +88,8 @@ change back and bring it again, and are disabled when there is no step to take. 
 (⌘X), **Copy** (⌘C), **Paste** (⌘V) and **Select all** (⌘A). On the canvas Cut, Copy and Paste are
 disabled, and Select all selects every box and line the diagram draws. On the field all four are enabled, and
 the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
-Copy is enabled and Cut and Paste are not, and the words paste into the field. Model on a class
+Copy is enabled and Cut and Paste are not, and the words paste into the field, those copied with ⌘C and
+those copied with **Edit ▸ Copy** alike. Model on a class
 diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
 and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
 (⇧⌘H), **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
