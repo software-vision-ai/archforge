@@ -5470,6 +5470,78 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A property's default and the properties it subsets and redefines, refused by the engine, are
+/// said in the chosen language: a default each type's default does not read, one too long, one a
+/// new type does not fit, typed anew or left out, and a target for the rule it breaks, with nothing
+/// written. In light and dark (AR-475).
+#[test]
+fn a_default_or_target_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::{DefaultKind, Reason};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let package = id(&mut h, "uml.package.add", json!({ "name": "Shop" }));
+        let [item, order] = ["Item", "Order"].map(|n| id(&mut h, "uml.class.add", json!({ "package": package, "name": n })));
+        let status = id(&mut h, "uml.enumeration.add", json!({ "package": package, "name": "Status" }));
+        id(&mut h, "uml.generalization.add", json!({ "specific": order, "general": item }));
+        let attribute = |h: &mut egui_kittest::Harness<'_, crate::Shell>, class: &str, name: &str, ty: &str, more: serde_json::Value| {
+            let mut p = json!({ "class": class, "name": name, "type": ty, "multiplicity": "*" });
+            p.as_object_mut().unwrap().extend(more.as_object().cloned().unwrap_or_default());
+            id(h, "uml.attribute.add", p)
+        };
+        let label = attribute(&mut h, &item, "label", "String", json!({}));
+        let kept = attribute(&mut h, &item, "kept", &item, json!({ "leaf": true }));
+        let one = attribute(&mut h, &item, "one", &item, json!({ "multiplicity": "1" }));
+        let all = attribute(&mut h, &order, "all", &item, json!({}));
+        let size = attribute(&mut h, &order, "size", "Integer", json!({ "multiplicity": "1", "default": "3" }));
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let unread = fmt(&tr("{value} is not a whole number, which an Integer's default is, such as 42."), &[("value", "1.5")]);
+        assert_eq!(unread, "1.5 ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.", "{theme:?}: the language is German");
+        let add = |ty: &str, default: &str| json!({ "class": order, "name": "x", "type": ty, "default": default });
+        assert_eq!(refused("uml.attribute.add", add("Integer", "1.5")), unread, "{theme:?}");
+        let value = |said: String, v: &str| fmt(&said, &[("value", v)]);
+        for (ty, v, said) in [
+            ("Real", "inf", tr("{value} is not a number, which a Real's default is, such as 2.5.")),
+            ("Boolean", "yes", tr("{value} is neither true nor false, which a Boolean's default is.")),
+            ("UnlimitedNatural", "-1", tr("{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is.")),
+        ] {
+            assert_eq!(refused("uml.attribute.add", add(ty, v)), value(said, v), "{theme:?}: {ty}");
+        }
+        let literal = fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", "Shipped"), ("enumeration", "Status")]);
+        assert_eq!(refused("uml.attribute.add", add(&status, "Shipped")), literal, "{theme:?}");
+        let most = fmt(&tr("A default value is at most {n} characters."), &[("n", "1000")]);
+        assert_eq!(refused("uml.attribute.add", add("String", &"x".repeat(1001))), most, "{theme:?}");
+        let unfit = |ty: &str| fmt(&tr("The default value {value} does not fit {type}; change or clear it first."), &[("value", "3"), ("type", ty)]);
+        assert_eq!(refused("uml.attribute.set", json!({ "attribute": size, "type": "Boolean", "default": "3" })), unfit("Boolean"), "{theme:?}");
+        assert_eq!(refused("uml.attribute.set", json!({ "attribute": size, "type": "Boolean" })), unfit("Boolean"), "{theme:?}");
+        // A target, for the rule it breaks, in the list it is in.
+        let target = |said: String, name: &str| fmt(&said, &[("name", name)]);
+        for (key, t, name, said) in [
+            ("subsets", &order, "Order", tr("{name} is not a property this one can subset.")),
+            ("redefines", &all, "all", tr("{name} is not a property this one can redefine.")),
+            ("subsets", &label, "label", tr("{name} has a type this property's type does not conform to.")),
+            ("redefines", &one, "one", tr("This property's multiplicity does not lie within {name}'s.")),
+            ("redefines", &kept, "kept", tr("{name} is leaf: nothing may redefine it. Clear \"No redefinition\" on it first.")),
+        ] {
+            assert_eq!(refused("uml.attribute.set", json!({ "attribute": all, key: [t] })), target(said, name), "{theme:?}: {key} {name}");
+        }
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // A default no other type reads, and one that does not fit having no type.
+        let text = Reason::DefaultUnread { value: "x".into(), kind: DefaultKind::Text };
+        assert_eq!(crate::panels::said(&text), Some(value(tr("{value} cannot be read as a default."), "x")), "{theme:?}");
+        let untyped = Reason::DefaultUnfit { value: "3".into(), ty: None };
+        assert_eq!(crate::panels::said(&untyped), Some(unfit(&tr("None"))), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A move that would take used stereotypes out of the packages that apply their profiles is said in
 /// the chosen language, the uses named: a class and a package dropped on another package in Models,
 /// and a class given another owner. So are a list of metaclasses that holds no names and a

@@ -89,6 +89,12 @@ fn refused(s: &mut S, cmd: &str, p: Json, key: &str, words: &[&str]) -> String {
     e
 }
 
+/// The parameter `cmd` is refused under and its typed reason, if it has one.
+fn typed(s: &mut S, cmd: &str, p: &Json) -> (Option<String>, Option<archforge_engine::Reason>) {
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute(cmd, p) else { panic!("{cmd} {p} is refused") };
+    (error.key, error.reason)
+}
+
 /// The element with the id `id`.
 fn obj(s: &S, id: &str) -> Obj {
     s.doc().by_uuid(Uuid::parse(id).unwrap()).unwrap()
@@ -416,6 +422,39 @@ fn a_type_change_the_default_does_not_fit_is_refused_naming_the_default() {
     refused(&mut s, "uml.attribute.set", json!({ "attribute": a, "name": "size", "type": "Real", "default": "big" }), "default", &["\"big\""]);
 }
 
+/// A default refused carries its reason typed beside the unchanged English, under the parameter it
+/// is about: one too long, one each type's default does not read, and one a new type does not fit,
+/// typed anew or left out (AR-475).
+#[test]
+fn a_default_refused_carries_its_reason_typed() {
+    use archforge_engine::{DefaultKind, Reason};
+    let mut s = session();
+    let (_, _, _, order, status) = shop(&mut s);
+    let mut check = |p: Json, key: &str, reason: Reason, english: &str| {
+        refused(&mut s, "uml.attribute.add", p.clone(), key, &[english]);
+        assert_eq!(typed(&mut s, "uml.attribute.add", &p), (Some(key.to_string()), Some(reason)), "{p}");
+    };
+    let add = |ty: &str, default: &str| json!({ "class": order, "name": "x", "type": ty, "default": default });
+    for (ty, value, kind, english) in [
+        ("Integer", "1.5", DefaultKind::Integer, "the default value \"1.5\" does not read: an Integer's default is a whole number"),
+        ("Real", "inf", DefaultKind::Real, "a Real's default is a number"),
+        ("Boolean", "yes", DefaultKind::Boolean, "a Boolean's default is true or false"),
+        ("UnlimitedNatural", "-1", DefaultKind::UnlimitedNatural, "an UnlimitedNatural's default is a whole number of 0 or more"),
+        (status.as_str(), "Shipped", DefaultKind::Literal("Status".into()), "one of its literals: Placed, Paid"),
+    ] {
+        check(add(ty, value), "default", Reason::DefaultUnread { value: value.into(), kind }, english);
+    }
+    let long = "x".repeat(archforge_uml::modifiers::MAX_DEFAULT + 1);
+    check(add("String", &long), "default", Reason::DefaultTooLong { max: 1000 }, "longer than 1000 characters; a default is at most 1000");
+    // A type the kept default does not fit, the default typed again or left out.
+    let a = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "size", "type": "Integer", "default": " 3" }));
+    let unfit = Some(Reason::DefaultUnfit { value: "3".into(), ty: Some("Boolean".into()) });
+    for p in [json!({ "attribute": a, "type": "Boolean", "default": " 3" }), json!({ "attribute": a, "type": "Boolean" })] {
+        refused(&mut s, "uml.attribute.set", p.clone(), "type", &["the default value \"3\" does not fit Boolean: a Boolean's default"]);
+        assert_eq!(typed(&mut s, "uml.attribute.set", &p), (Some("type".into()), unfit.clone()), "{p}");
+    }
+}
+
 /// A literal that goes, or its enumeration, takes the defaults that are it along, as the
 /// property's type goes; the property stays.
 #[test]
@@ -552,6 +591,60 @@ fn a_target_list_refused_carries_its_reason_typed() {
     // At the most, the list is read on, to the rules.
     let e = refused(&mut s, "uml.attribute.set", json!({ "attribute": lines, "subsets": vec![&all; 32] }), "subsets", &["named twice"]);
     assert!(!e.contains("at most"), "{e}");
+}
+
+/// A property a property may not subset or redefine is refused with the rule it breaks typed, its
+/// name and which list it is in, beside the unchanged English: every rule (AR-475).
+#[test]
+fn every_target_rule_broken_carries_its_reason_typed() {
+    use archforge_engine::{Reason, TargetRule as R};
+    let mut s = session();
+    let (pkg, _, item, order, _) = shop(&mut s);
+    let product = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Product" }));
+    let attribute = |s: &mut S, class: &str, name: &str, ty: &str, many: &str| {
+        run(s, "uml.attribute.add", json!({ "class": class, "name": name, "type": ty, "multiplicity": many }))
+    };
+    let label = attribute(&mut s, &item, "label", "String", "*");
+    let one = attribute(&mut s, &item, "one", &order, "1");
+    let all = attribute(&mut s, &order, "all", &item, "*");
+    let away = attribute(&mut s, &product, "away", &item, "*");
+    let lines = attribute(&mut s, &order, "lines", &order, "*");
+    let goods = attribute(&mut s, &order, "goods", &product, "*");
+    let more = run(&mut s, "uml.attribute.add", json!({ "class": order, "name": "more", "type": item, "multiplicity": "*", "subsets": [all] }));
+    let kept = run(&mut s, "uml.attribute.add", json!({ "class": item, "name": "kept", "type": item, "multiplicity": "*", "leaf": true }));
+    // Item composes products, and holds an end with no role.
+    let held = run(&mut s, "uml.association.add", json!({ "from": item, "to": product, "kind": "composition" }));
+    run(&mut s, "uml.association.set-end", json!({ "association": held, "end": 0, "multiplicity": "1", "navigable": false }));
+    let set_end = json!({ "association": held, "end": 1, "role": "products", "multiplicity": "*", "aggregation": "composite" });
+    run(&mut s, "uml.association.set-end", set_end);
+    let bare = run(&mut s, "uml.association.add", json!({ "from": item, "to": product }));
+    let [products, unnamed] = [&held, &bare].map(|a| {
+        let end = archforge_uml::figures::member_ends(s.doc(), obj(&s, a)).unwrap()[1];
+        s.doc().uuid(end).unwrap().to_string()
+    });
+    for (property, key, target, name, rule, english) in [
+        (&lines, "subsets", &order, "Order", R::NotAProperty, "is not a property; an attribute or an association's end is"),
+        (&lines, "redefines", &lines, "lines", R::Itself, "is the property itself; a property redefines another"),
+        (&lines, "subsets", &unnamed, "", R::Unnamed, "has no name, so the braces could not name it"),
+        (&lines, "subsets", &away, "away", R::OutOfReach, "it may subset: all (Order)"),
+        (&lines, "redefines", &all, "all", R::OutOfReach, "is not a property of a classifier this property's classifier specializes"),
+        (&lines, "subsets", &label, "label", R::Type, "has a type this property's type does not conform to"),
+        (&lines, "subsets", &one, "one", R::Upper, "allows fewer values than this property"),
+        (&lines, "redefines", &one, "one", R::Multiplicity, "has a multiplicity this property's lower and upper bounds"),
+        (&all, "subsets", &more, "more", R::Cycle, "subsets this property already"),
+        (&goods, "redefines", &products, "products", R::Composite, "is composite and this property is not"),
+        (&lines, "redefines", &kept, "kept", R::Leaf, "is leaf (isLeaf), so nothing may redefine it"),
+    ] {
+        let p = json!({ "attribute": property, key: [target] });
+        refused(&mut s, "uml.attribute.set", p.clone(), key, &[target.as_str(), english]);
+        let reason = Reason::TargetBreaks { name: name.into(), rule, redefining: key == "redefines" };
+        assert_eq!(typed(&mut s, "uml.attribute.set", &p), (Some(key.to_string()), Some(reason)), "{p}");
+    }
+    // A name like the property's own, whatever the case.
+    let p = json!({ "attribute": lines, "name": "LABEL", "subsets": [label] });
+    refused(&mut s, "uml.attribute.set", p.clone(), "subsets", &["has this property's name"]);
+    let same = Reason::TargetBreaks { name: "label".into(), rule: R::SameName, redefining: false };
+    assert_eq!(typed(&mut s, "uml.attribute.set", &p).1, Some(same));
 }
 
 /// A type change that breaks a kept Subsets target is refused, naming it; so is an aggregation

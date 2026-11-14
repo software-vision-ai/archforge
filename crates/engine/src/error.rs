@@ -259,6 +259,17 @@ pub enum Reason {
     ValuesMisfit { name: Box<str>, elements: usize, bounds: Box<str> },
     /// A literal is the value of a stereotype property on an element that stays, so it stays.
     LiteralValued(Box<LiteralValued>),
+    /// A property's default value is longer than `max` characters.
+    DefaultTooLong { max: usize },
+    /// A property's default `value`, as typed and cut short, does not read as its type's default,
+    /// which is `kind`.
+    DefaultUnread { value: Box<str>, kind: DefaultKind },
+    /// A property's default `value`, cut short, does not fit `ty`, the type it would take (none for
+    /// no type), so the type stays until the default is changed or cleared.
+    DefaultUnfit { value: Box<str>, ty: Option<Box<str>> },
+    /// The property `name` breaks `rule` as a property this one would subset, or, `redefining`,
+    /// redefine.
+    TargetBreaks { name: Box<str>, rule: TargetRule, redefining: bool },
 }
 
 /// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.
@@ -318,6 +329,51 @@ pub struct LiteralValued {
     pub stereotype: String,
     /// The element the stereotype is applied to, by its name or, without one, its id.
     pub element: String,
+}
+
+/// What a property's default is, by its type, in a [`Reason::DefaultUnread`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultKind {
+    /// A whole number, an Integer's.
+    Integer,
+    /// A number, a Real's.
+    Real,
+    /// True or false, a Boolean's.
+    Boolean,
+    /// A whole number of 0 or more, or `*`, an UnlimitedNatural's.
+    UnlimitedNatural,
+    /// One of the literals of the enumeration named so.
+    Literal(Box<str>),
+    /// Any text, a String's or another type's.
+    Text,
+}
+
+/// The rule a property breaks as one another subsets or redefines, in a [`Reason::TargetBreaks`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetRule {
+    /// It is no property at all.
+    NotAProperty,
+    /// It is the property itself.
+    Itself,
+    /// It has no name to be named by in the braces.
+    Unnamed,
+    /// It is not where the property's targets are: a property of its classifier or of one its
+    /// classifier specializes, for a subset; of one its classifier specializes, for a redefinition.
+    OutOfReach,
+    /// It has the property's name, whatever the case, which a subset never has.
+    SameName,
+    /// It subsets the property already, and subsets never run round a cycle.
+    Cycle,
+    /// Its type is not one the property's type conforms to.
+    Type,
+    /// Its upper bound is below the property's.
+    Upper,
+    /// The property's bounds do not both lie within its bounds.
+    Multiplicity,
+    /// It is composite and the property is not.
+    Composite,
+    /// It is leaf: nothing redefines it.
+    Leaf,
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.
