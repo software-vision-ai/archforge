@@ -1209,6 +1209,15 @@ str		Metaclasses carry no skills	As metaclasses não têm skills
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Uma metaclasse da UML, que os estereótipos estendem. É da própria UML, fica fora de Modelos e dos menus de tipos e nunca muda.
 str		The UML library holds the metaclasses that stereotypes extend. It never changes.	A biblioteca da UML contém as metaclasses que os estereótipos estendem. Nunca muda.
 str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} é uma metaclasse da UML, guardada na biblioteca da UML. Nunca muda.
+str		{package} applies {profile} already.	{package} já aplica {profile}.
+str		{package} does not apply {profile}.	{package} não aplica {profile}.
+str		A profile holds at most {max} stereotypes.	Um perfil contém no máximo {max} estereótipos.
+str		A stereotype extends at most {max} metaclasses.	Um estereótipo estende no máximo {max} metaclasses.
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} é uma metaclasse da UML que o Archforge ainda não desenha. Um estereótipo estende {metaclasses}.
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} não é uma metaclasse que o Archforge desenhe. Um estereótipo estende {metaclasses}.
+str		{name} is named twice. Name each metaclass once.	{name} é indicada duas vezes. Indique cada metaclasse uma só vez.
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} é a extremidade de extensão de um estereótipo. Em vez disso, retire a metaclasse daquilo que o estereótipo estende.
+plural		{name} has values on {n} element. Remove those first.	{name} tem valores em {n} elemento. Retire-os primeiro.|{name} tem valores em {n} elementos. Retire-os primeiro.
 str		Stereotypes · {n}	Estereótipos · {n}
 str		Add stereotype	Adicionar estereótipo
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Ainda nenhum. Adicione um aqui ou em Modelos ▸ Novo ▸ Estereótipo.

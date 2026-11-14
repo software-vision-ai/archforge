@@ -571,6 +571,65 @@ fn every_use_that_refuses_carries_its_reason_typed() {
     check(&mut s, "element.remove", json!({ "ids": [reference] }), only_loose, "Reference is in use: «Reference» on 1 element.");
 }
 
+/// A profile's and a stereotype's own rules, refused, carry their reason typed beside the unchanged
+/// English: a profile applied twice or unapplied where it is not applied, a profile full, a
+/// metaclass not drawn yet, unknown, named twice or one too many, an extension end removed, and a
+/// property removed whose values are set (AR-445).
+#[test]
+fn every_profile_rule_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let [commerce, order, customer, _, persistence, entity, _, reference] = applied_shop(&mut s);
+    let tools = run(&mut s, "uml.package.add", json!({ "name": "Tools" }));
+    let check = |s: &mut S, cmd: &str, p: Json, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    };
+    let applied = Reason::ProfileApplied { package: "Commerce".into(), profile: "Persistence".into() };
+    check(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }), applied, "Commerce applies Persistence already");
+    let not_applied = Reason::ProfileNotApplied { package: "Tools".into(), profile: "Persistence".into() };
+    check(&mut s, "uml.profile.unapply", json!({ "package": tools, "profile": persistence }), not_applied, "Tools does not apply Persistence");
+    // The metaclasses a stereotype is given, when it is made and when it is changed.
+    let made = |extends: Json| json!({ "profile": persistence, "name": "Fresh", "extends": extends });
+    let changed = |extends: Json| json!({ "stereotype": entity, "extends": extends });
+    let not_drawn = || Reason::MetaclassNotDrawn { name: "Actor".into() };
+    check(&mut s, "uml.stereotype.add", made(json!(["Actor"])), not_drawn(), "Actor is a UML metaclass Archforge does not draw yet");
+    check(&mut s, "uml.stereotype.set", changed(json!(["Class", "Actor"])), not_drawn(), "Actor is a UML metaclass Archforge does not draw yet");
+    let none = Reason::NotAMetaclass { name: "Table".into() };
+    check(&mut s, "uml.stereotype.add", made(json!(["Table"])), none, "\"Table\" is not a metaclass Archforge draws");
+    // A long name is cut to its first 40 characters, in the reason as in the sentence.
+    let cut = Reason::NotAMetaclass { name: "T".repeat(40) };
+    check(&mut s, "uml.stereotype.add", made(json!(["T".repeat(41)])), cut, &format!("{:?} is not a metaclass", "T".repeat(40)));
+    let twice = Reason::NamedTwice { kind: "metaclass", name: "Class".into() };
+    check(&mut s, "uml.stereotype.set", changed(json!(["Interface", "Class", "Class"])), twice, "Class is named twice");
+    let most = Reason::TooMany { kind: "metaclass", max: 9 };
+    check(&mut s, "uml.stereotype.add", made(json!(vec!["Class"; 10])), most, "at most 9 metaclasses");
+    // An extension's end goes only with its extension, and a property stays while values are set.
+    let base = {
+        let st = s.doc();
+        st.uuid(profiles::extensions(st, obj(st, &entity))[0].base).unwrap().to_string()
+    };
+    let end = Reason::ExtensionEnd { name: "base_Class".into() };
+    check(&mut s, "element.remove", json!({ "ids": [base] }), end, "base_Class is a stereotype's extension end");
+    let table = property(&mut s, &entity, "table");
+    for (element, elements, english) in [(&order, 1, "the values of table are set on 1 element;"), (&customer, 2, "set on 2 elements;")] {
+        run(&mut s, "uml.stereotype.apply", json!({ "element": element, "stereotype": entity }));
+        run(&mut s, "uml.stereotype.set-value", json!({ "element": element, "stereotype": entity, "property": "table", "values": ["t"] }));
+        check(&mut s, "element.remove", json!({ "ids": [table] }), Reason::ValuesSet { name: "table".into(), elements }, english);
+    }
+    // A profile that holds the most takes no stereotype more, made in it or moved to it.
+    let full = run(&mut s, "uml.profile.add", json!({ "name": "Full" }));
+    for n in 0..profiles::MAX_STEREOTYPES {
+        run(&mut s, "uml.stereotype.add", json!({ "profile": full, "name": format!("S{n}") }));
+    }
+    let most = || Reason::TooMany { kind: "stereotype", max: 256 };
+    check(&mut s, "uml.stereotype.add", json!({ "profile": full, "name": "Over" }), most(), "a profile holds at most 256 stereotypes");
+    check(&mut s, "uml.stereotype.set", json!({ "stereotype": reference, "profile": full }), most(), "a profile holds at most 256 stereotypes");
+}
+
 /// The session `s` with the package `package` moved to the model's top level, as a project made
 /// before the root package keeps one: removed, it takes what it holds along.
 fn at_top(s: &S, package: &str) -> S {

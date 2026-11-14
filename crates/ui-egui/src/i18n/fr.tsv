@@ -1209,6 +1209,15 @@ str		Metaclasses carry no skills	Les métaclasses ne portent pas de skills
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Une métaclasse UML, que les stéréotypes étendent. Elle appartient à UML, reste hors de Modèles et des menus de types, et ne change jamais.
 str		The UML library holds the metaclasses that stereotypes extend. It never changes.	La bibliothèque UML contient les métaclasses que les stéréotypes étendent. Elle ne change jamais.
 str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} est une métaclasse UML, conservée dans la bibliothèque UML. Elle ne change jamais.
+str		{package} applies {profile} already.	{package} applique déjà {profile}.
+str		{package} does not apply {profile}.	{package} n’applique pas {profile}.
+str		A profile holds at most {max} stereotypes.	Un profil contient au plus {max} stéréotypes.
+str		A stereotype extends at most {max} metaclasses.	Un stéréotype étend au plus {max} métaclasses.
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} est une métaclasse UML qu’Archforge ne dessine pas encore. Un stéréotype étend {metaclasses}.
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} n’est pas une métaclasse que dessine Archforge. Un stéréotype étend {metaclasses}.
+str		{name} is named twice. Name each metaclass once.	{name} est nommée deux fois. Nommez chaque métaclasse une seule fois.
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} est l’extrémité d’extension d’un stéréotype. Retirez plutôt la métaclasse de ce que le stéréotype étend.
+plural		{name} has values on {n} element. Remove those first.	{name} a des valeurs sur {n} élément. Retirez-les d’abord.|{name} a des valeurs sur {n} éléments. Retirez-les d’abord.
 str		Stereotypes · {n}	Stéréotypes · {n}
 str		Add stereotype	Ajouter un stéréotype
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Aucun pour l’instant. Ajoutez-en un ici ou depuis Modèles ▸ Nouveau ▸ Stéréotype.

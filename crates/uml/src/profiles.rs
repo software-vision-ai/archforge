@@ -182,6 +182,13 @@ pub fn metaclass_problem(name: &str) -> Option<String> {
     Some(format!("{what}; a stereotype extends {}", offered.join(", ")))
 }
 
+/// [`metaclass_problem`] as a refusal under `key`, its reason typed for an interface to say.
+fn metaclass_refusal(key: &str, name: &str) -> Option<CommandError> {
+    let reason =
+        if NOT_DRAWN.contains(&name) { Reason::MetaclassNotDrawn { name: name.to_string() } } else { Reason::NotAMetaclass { name: short(name) } };
+    metaclass_problem(name).map(|why| refuse(key, why).because(reason))
+}
+
 /// Why `o` may not be changed, when it is the library or a metaclass: they are UML's own.
 pub fn library_problem(store: &Store, o: Obj) -> Option<String> {
     if library(store) == Some(o) {
@@ -723,17 +730,18 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
         }
         c if c == PROPERTY => {
             if is_base(store, o) {
-                return Some(refuse(
-                    "ids",
-                    format!("{} is a stereotype's extension end; drop the metaclass from what the stereotype extends instead", name_of(store, o)),
-                ));
+                let name = name_of(store, o);
+                let said = format!("{name} is a stereotype's extension end; drop the metaclass from what the stereotype extends instead");
+                return Some(refuse("ids", said).because(Reason::ExtensionEnd { name }));
             }
             let n = values_set(store, o);
             if n == 0 {
                 return None;
             }
             let on = if n == 1 { "1 element".to_string() } else { format!("{n} elements") };
-            return Some(refuse("ids", format!("the values of {} are set on {on}; remove those first", name_of(store, o))));
+            let name = name_of(store, o);
+            let said = format!("the values of {name} are set on {on}; remove those first");
+            return Some(refuse("ids", said).because(Reason::ValuesSet { name, elements: n }));
         }
         _ => return None,
     };
@@ -783,16 +791,18 @@ fn metaclass_names(p: &Params, key: &str) -> Result<Option<Vec<String>>, Command
     let Some(v) = p.get(key) else { return Ok(None) };
     let items = v.as_array().ok_or_else(|| refuse(key, "a list of metaclass names"))?;
     if items.len() > METACLASSES.len() {
-        return Err(refuse(key, format!("at most {} metaclasses", METACLASSES.len())));
+        let most = Reason::TooMany { kind: "metaclass", max: METACLASSES.len() };
+        return Err(refuse(key, format!("at most {} metaclasses", METACLASSES.len())).because(most));
     }
     let mut out: Vec<String> = Vec::new();
     for item in items {
         let name = item.as_str().ok_or_else(|| refuse(key, "a list of metaclass names"))?;
-        if let Some(why) = metaclass_problem(name) {
-            return Err(refuse(key, why));
+        if let Some(refused) = metaclass_refusal(key, name) {
+            return Err(refused);
         }
         if out.iter().any(|n| n == name) {
-            return Err(refuse(key, format!("{name} is named twice")));
+            let twice = Reason::NamedTwice { kind: "metaclass", name: name.to_string() };
+            return Err(refuse(key, format!("{name} is named twice")).because(twice));
         }
         out.push(name.to_string());
     }
@@ -827,13 +837,20 @@ fn profile_rename(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, profile)? }))
 }
 
+/// The refusal of one more stereotype in `profile`, when it holds the most a profile does.
+fn full(store: &Store, profile: Obj) -> Option<CommandError> {
+    let most = Reason::TooMany { kind: "stereotype", max: MAX_STEREOTYPES };
+    (stereotypes(store, profile).len() >= MAX_STEREOTYPES)
+        .then(|| refuse("profile", format!("a profile holds at most {MAX_STEREOTYPES} stereotypes")).because(most))
+}
+
 /// `uml.stereotype.add`: a stereotype in a profile, extending the metaclasses named.
 fn stereotype_add(ctx: &mut C<'_>, p: &Params) -> R {
     let profile = element(ctx.doc, p, "profile", PROFILE, "a profile")?;
     let name = text(p, "name");
     check_stereotype_name(ctx.doc, profile, name, None)?;
-    if stereotypes(ctx.doc, profile).len() >= MAX_STEREOTYPES {
-        return Err(refuse("profile", format!("a profile holds at most {MAX_STEREOTYPES} stereotypes")));
+    if let Some(refused) = full(ctx.doc, profile) {
+        return Err(refused);
     }
     let extends = metaclass_names(p, "extends")?.unwrap_or_default();
     let s = ctx.doc.create(STEREOTYPE).map_err(fail)?;
@@ -866,8 +883,8 @@ fn stereotype_set(ctx: &mut C<'_>, p: &Params) -> R {
         if !uses.is_empty() {
             return Err(in_use(ctx.doc, "profile", Used::Moved(name_of(ctx.doc, s)), &uses));
         }
-        if stereotypes(ctx.doc, to).len() >= MAX_STEREOTYPES {
-            return Err(refuse("profile", format!("a profile holds at most {MAX_STEREOTYPES} stereotypes")));
+        if let Some(refused) = full(ctx.doc, to) {
+            return Err(refused);
         }
     }
     let had = extensions(ctx.doc, s);
@@ -923,7 +940,9 @@ fn profile_apply(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = element(ctx.doc, p, "package", PACKAGE, "a package")?;
     let profile = element(ctx.doc, p, "profile", PROFILE, "a profile")?;
     if applied(ctx.doc, pkg).iter().any(|(_, x)| *x == profile) {
-        return Err(refuse("profile", format!("{} applies {} already", name_of(ctx.doc, pkg), name_of(ctx.doc, profile))));
+        let (package, profile) = (name_of(ctx.doc, pkg), name_of(ctx.doc, profile));
+        let applied = Reason::ProfileApplied { package: package.as_str().into(), profile: profile.as_str().into() };
+        return Err(refuse("profile", format!("{package} applies {profile} already")).because(applied));
     }
     let a = ctx.doc.create(PROFILE_APPLICATION).map_err(fail)?;
     ctx.doc.set(a, profile_application::APPLIED_PROFILE, Value::Ref(profile)).map_err(fail)?;
@@ -937,7 +956,9 @@ fn profile_unapply(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = element(ctx.doc, p, "package", PACKAGE, "a package")?;
     let profile = element(ctx.doc, p, "profile", PROFILE, "a profile")?;
     let Some((a, _)) = applied(ctx.doc, pkg).into_iter().find(|(_, x)| *x == profile) else {
-        return Err(refuse("profile", format!("{} does not apply {}", name_of(ctx.doc, pkg), name_of(ctx.doc, profile))));
+        let (package, profile) = (name_of(ctx.doc, pkg), name_of(ctx.doc, profile));
+        let not_applied = Reason::ProfileNotApplied { package: package.as_str().into(), profile: profile.as_str().into() };
+        return Err(refuse("profile", format!("{package} does not apply {profile}")).because(not_applied));
     };
     let uses = unapply_uses(ctx.doc, pkg, profile);
     if !uses.is_empty() {

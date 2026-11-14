@@ -193,6 +193,20 @@ pub enum Reason {
     /// The element is UML's own and never changes: the UML library that holds the metaclasses
     /// stereotypes extend, or its metaclass of this name.
     UmlOwn { metaclass: Option<String> },
+    /// The package applies the profile already.
+    ProfileApplied { package: Box<str>, profile: Box<str> },
+    /// The package does not apply the profile, so there is nothing to unapply.
+    ProfileNotApplied { package: Box<str>, profile: Box<str> },
+    /// `name` is a UML metaclass the notation does not draw yet, so no stereotype extends it.
+    MetaclassNotDrawn { name: String },
+    /// `name`, cut to its first characters, is no UML metaclass.
+    NotAMetaclass { name: String },
+    /// `name` is given twice in a list that takes each of `kind` once.
+    NamedTwice { kind: &'static str, name: String },
+    /// The property `name` is a stereotype's extension end, which goes only with the extension.
+    ExtensionEnd { name: String },
+    /// The stereotype property `name` has values set on this many elements, so it stays.
+    ValuesSet { name: String, elements: usize },
 }
 
 /// What a [`Reason::InUse`] names; boxed in the reason, so the error stays small.
