@@ -246,6 +246,11 @@ pub enum Reason {
     NotAnItemKey { key: String },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },
+    /// The built-in type `name` is never made leaf.
+    BuiltInNotLeaf { name: String },
+    /// The elements named, a member with its owner as `Class::name()`, redefine the element, so it
+    /// is made leaf only once their redefinitions are gone.
+    Redefined(Box<[String]>),
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.

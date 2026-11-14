@@ -1330,6 +1330,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} にはすでに {name} という名前のメンバーがあります。
 str		The package {owner} keeps the name {name} for a built-in type.	パッケージ {owner} は名前 {name} を組み込み型用に予約しています。
 str		{name} is a built-in type and stays in Types.	{name} は組み込み型で、Types に留まります。
+str		{name} is a built-in type, which is never made leaf.	{name} は組み込み型のため、leaf にはできません。
 str		Constraints · {n}	制約 · {n}
 str		Add constraint	制約を追加
 str		Edit constraint	制約を編集

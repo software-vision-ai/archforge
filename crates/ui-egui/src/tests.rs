@@ -5395,9 +5395,10 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
 
 /// The lists of properties a property subsets and redefines, refused by the engine, are said in
 /// the chosen language: too many for each list, an object with another key, an item that is no id,
-/// no such element and a property named twice, with nothing written. In light and dark (AR-466).
+/// no such element and a property named twice, with nothing written; so is leaf refused for a
+/// built-in type and for a property something redefines. In light and dark (AR-466).
 #[test]
-fn a_target_list_refused_is_said_in_the_chosen_language() {
+fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr};
     use serde_json::json;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -5427,6 +5428,19 @@ fn a_target_list_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("subsets", json!(["nope"])), none, "{theme:?}");
         assert_eq!(refused("redefines", json!([all, all])), tr("An element is named twice. Name each element once."), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // Made leaf: refused for a built-in type, and for a property something redefines.
+        id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+        id(&mut h, "uml.generalization.add", json!({ "specific": order, "general": item }));
+        crate::panels::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, "redefines": [all] })).unwrap();
+        let integer = named(&h, archforge_uml::PRIMITIVE_TYPE, "Integer").to_string();
+        let leaf = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let built_in = fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", "Integer")]);
+        assert_eq!(leaf(&mut h, "uml.classifier.set", json!({ "classifier": integer, "leaf": true })), built_in, "{theme:?}");
+        let redefined = crate::uml_panel::leaf_refusal(&["Order::lines".to_string()]);
+        assert!(redefined.starts_with("Order::lines redefiniert"), "{theme:?}: {redefined}");
+        assert_eq!(leaf(&mut h, "uml.attribute.set", json!({ "attribute": all, "leaf": true })), redefined, "{theme:?}");
     }
     crate::i18n::set_language("en");
 }

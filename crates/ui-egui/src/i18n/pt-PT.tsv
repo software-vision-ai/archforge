@@ -1330,6 +1330,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} já possui um membro chamado {name}.
 str		The package {owner} keeps the name {name} for a built-in type.	O pacote {owner} reserva o nome {name} para um tipo integrado.
 str		{name} is a built-in type and stays in Types.	{name} é um tipo integrado e fica em Types.
+str		{name} is a built-in type, which is never made leaf.	{name} é um tipo integrado e nunca é marcado como leaf.
 str		Constraints · {n}	Restrições · {n}
 str		Add constraint	Adicionar restrição
 str		Edit constraint	Editar restrição

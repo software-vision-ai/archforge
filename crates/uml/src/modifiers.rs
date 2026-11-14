@@ -823,9 +823,9 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
     let leaf = p.bool("leaf").unwrap_or(was_leaf);
     if leaf
         && !was_leaf
-        && let Some(why) = current.and_then(|c| crate::relations::leaf_problem(store, c))
+        && let Some(refused) = current.and_then(|c| crate::relations::leaf_problem(store, c))
     {
-        return Err(refuse("leaf", why));
+        return Err(refused);
     }
     let (derived, read_only, ordered, unique) = current.map(|c| flags(store, c)).unwrap_or((false, false, false, true));
     Ok(Modifiers {

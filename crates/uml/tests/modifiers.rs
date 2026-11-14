@@ -740,6 +740,11 @@ fn a_leaf_property_is_never_redefined_and_one_redefined_is_not_made_leaf() {
     let e =
         refused(&mut s, "uml.attribute.set", json!({ "attribute": parts, "leaf": true }), "leaf", &[lines.as_str(), "Order::lines", "redefined by"]);
     assert!(e.contains(&parts), "{e}");
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute("uml.attribute.set", &json!({ "attribute": parts, "leaf": true }))
+    else {
+        panic!("refused")
+    };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::Redefined(["Order::lines".to_string()].into())));
     assert_eq!(archforge_uml::relations::redefiners(s.doc(), obj(&s, &parts)), [obj(&s, &lines)]);
     assert!(archforge_uml::relations::leaf_problem(s.doc(), obj(&s, &total)).is_none());
     // An end made leaf says so beside its line, and comes back from its rows leaf.

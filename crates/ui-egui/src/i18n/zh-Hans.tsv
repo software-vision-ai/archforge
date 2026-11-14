@@ -1330,6 +1330,7 @@ str		{name} stays in a package: a primitive type or an association class is neve
 str		{owner} already owns a member named {name}.	{owner} 已拥有名为 {name} 的成员。
 str		The package {owner} keeps the name {name} for a built-in type.	包 {owner} 将名称 {name} 保留给内置类型。
 str		{name} is a built-in type and stays in Types.	{name} 是内置类型，留在 Types 中。
+str		{name} is a built-in type, which is never made leaf.	{name} 是内置类型，永远不会设为 leaf。
 str		Constraints · {n}	约束 · {n}
 str		Add constraint	添加约束
 str		Edit constraint	编辑约束
