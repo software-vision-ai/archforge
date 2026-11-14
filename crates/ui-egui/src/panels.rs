@@ -111,14 +111,15 @@ pub struct State {
     pub nary_remove: Option<crate::uml_nary::RemoveAsk>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
-    /// open last frame, whether an editor that just opened is still to be brought into view, and
-    /// the body's visible rectangle.
+    /// open last frame, whether an editor that just opened is still to be brought into view, the
+    /// body's visible rectangle, and the control of the body that had the keyboard last frame.
     pub scroll: f32,
     pub content: f32,
     pub scrolled_for: Option<(Panel, Option<Uuid>)>,
     pub open_editors: Vec<Option<Option<Uuid>>>,
     pub reveal: bool,
     pub body: Option<Rect>,
+    pub held: Option<egui::Id>,
 }
 
 /// What is left under the last control of a scrolled body, for its trailing text.
@@ -161,14 +162,40 @@ pub(crate) fn editing(s: &State) -> bool {
 pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {
     let Some(body) = shell.panels.body.filter(|_| shell.panels.reveal) else { return };
     shell.panels.reveal = false;
-    let down = (card.bottom() + 8.0 - body.bottom()).min(card.top() - 8.0 - body.top());
-    let up = body.top() + 8.0 - card.top();
-    if down > 0.0 {
-        shell.panels.scroll += down;
-    } else if up > 0.0 {
-        shell.panels.scroll -= up;
-    }
+    shell.panels.scroll += into_view(body, card);
     ui.ctx().request_repaint();
+}
+
+/// How far a body showing `body` scrolls on to bring `part` into view: its foot if it fits, else
+/// its top, each 8 points clear of the edge; nothing for a part already in view.
+fn into_view(body: Rect, part: Rect) -> f32 {
+    let down = (part.bottom() + 8.0 - body.bottom()).min(part.top() - 8.0 - body.top());
+    let up = body.top() + 8.0 - part.top();
+    if down > 0.0 { down } else { -up.max(0.0) }
+}
+
+/// The body follows the keyboard (AR-470). Before it draws: while one of its controls has the
+/// keyboard, no text is being typed and no menu is open, Page Up, Page Down, Home and End scroll
+/// it, as they scroll the lists of versions.
+fn body_keys(shell: &mut Shell, ui: &egui::Ui, body: Rect) {
+    let held = ui.memory(|m| m.focused());
+    if held.is_some() && held == shell.panels.held && shell.panels.menu.is_none() && !ui.ctx().text_edit_focused() {
+        crate::version_details::page_keys(ui, &mut shell.panels.scroll, (body.height() - ROW).max(ROW));
+    }
+}
+
+/// After the body has drawn at the scroll `drawn`: a control of the body the keyboard has just
+/// moved to, by Tab or any way but the pointer, is brought into view, so Tab goes on past the
+/// fold. The toolkit hands the keyboard to a control that is laid out, in view or not.
+fn follow_keys(shell: &mut Shell, ui: &egui::Ui, body: Rect, drawn: f32) {
+    let now = ui.memory(|m| m.focused()).and_then(|id| Some((id, shell.registry.laid_out(id)?)));
+    let was = std::mem::replace(&mut shell.panels.held, now.map(|(id, _)| id));
+    let pointer = ui.input(|i| i.pointer.any_down() || i.pointer.any_released());
+    if let Some((_, at)) = now.filter(|(id, _)| Some(*id) != was && !pointer) {
+        // An editor brought into view this frame has moved the scroll already.
+        shell.panels.scroll += into_view(body, at.translate(vec2(0.0, drawn - shell.panels.scroll)));
+        ui.ctx().request_repaint();
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2678,9 +2705,11 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         shell.panels.open_editors = open;
     }
     let room = (shell.panels.content - body.height()).max(0.0);
+    body_keys(shell, ui, body);
     shell.panels.scroll = shell.panels.scroll.clamp(0.0, room);
     shell.panels.body = Some(body);
-    let top = body_y - shell.panels.scroll;
+    let drawn = shell.panels.scroll;
+    let top = body_y - drawn;
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(body));
     clip.set_clip_rect(body);
     shell.registry.reach_from(top);
@@ -2689,8 +2718,10 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         Panel::Skills => skills(shell, &mut clip, p, r, top, &s),
         _ => {}
     }
+    shell.registry.reach_end();
     shell.panels.content = (shell.registry.reach() - top + SCROLL_TAIL).max(0.0);
     shell.panels.reveal = false;
+    follow_keys(shell, ui, body, drawn);
     if ui.rect_contains_pointer(body) && shell.panels.menu.is_none() {
         let dy = ui.input(|i| i.smooth_scroll_delta.y);
         if dy != 0.0 {
