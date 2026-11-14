@@ -13,6 +13,16 @@ that program and everything it started ended. A watchdog starts with no other st
 under way, so none of them inherits its pipe; no start waits for another longer than half a second,
 so a stalled start never holds up a stop or a recovery of another project.
 
+A start that fails once its server runs stops that server before it returns: every check that
+needs no server comes before the server's start, and what follows (the record, the wait until it
+is ready) owns the server through a value whose drop stops it. One moment stays open: an Archforge
+killed between a server's start and its record, which needs the server's process id and so cannot
+come first. That is the record's write to disk, measured at 5 to 10 ms on macOS. A server left so
+has neither record nor watchdog, so no sweep finds it, and its run folder stays. Recovery treats
+it as any server it did not record: once it holds the project's lock, and if its program's file is
+named `dolt`, the project is refused as open elsewhere, naming the server's process id, until that
+process is stopped.
+
 **Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
 the portable-target check leaves it out. No toolkit.
 
