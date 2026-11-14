@@ -432,7 +432,10 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooLong { max } => return Some(fmt(&tr("It can't be longer than {max} characters."), &[("max", &max.to_string())])),
         Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
         Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
-        other => return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other)),
+        Reason::InUse(used) => return Some(crate::uml_profiles::in_use(used)),
+        other => {
+            return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other));
+        }
     };
     let what = a_kind(kind)?;
     // A sentence that starts with the kind starts with a capital, as "A class cannot ...".

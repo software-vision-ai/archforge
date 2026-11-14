@@ -4924,6 +4924,85 @@ fn a_set_or_an_association_end_rule_broken_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A profile unapplied, a stereotype removed, moved or given other metaclasses, and a package that
+/// applies or holds a profile removed, while elements use the stereotypes, are said in the chosen
+/// language with the uses named or counted, never in the engine's English. In light and dark
+/// (AR-437).
+#[test]
+fn a_use_that_refuses_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, trn};
+    use archforge_engine::{InUse, Reason, Used};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let commerce = id(&mut h, "uml.package.add", json!({ "name": "Commerce" }));
+        let [order, customer, invoice] =
+            ["Order", "Customer", "Invoice"].map(|n| id(&mut h, "uml.class.add", json!({ "package": commerce, "name": n })));
+        let [persistence, elsewhere] = ["Persistence", "Elsewhere"].map(|n| id(&mut h, "uml.profile.add", json!({ "name": n })));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        for class in [&order, &customer] {
+            id(&mut h, "uml.stereotype.apply", json!({ "element": class, "stereotype": entity }));
+        }
+        let on = |elements: &str| fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", "Entity"), ("elements", elements)]);
+        let two = on(&fmt(&tr("{first} and {second}"), &[("first", "Order"), ("second", "Customer")]));
+        let in_use = tr("{name} is in use: {uses}. Remove those first.");
+        assert_ne!(in_use, "{name} is in use: {uses}. Remove those first.", "{theme:?}: the language is German");
+        let named = fmt(&in_use, &[("name", "Entity"), ("uses", &two)]);
+        let unapply = json!({ "package": commerce, "profile": persistence });
+        let extension = tr("«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.");
+        let on_class = fmt(&extension, &[("stereotype", "Entity"), ("metaclass", "Class"), ("uses", &two)]);
+        let in_package = |uses: &str| {
+            fmt(
+                &tr("{profile} is in use in {package}: {uses}. Remove those first."),
+                &[("profile", "Persistence"), ("package", "Commerce"), ("uses", uses)],
+            )
+        };
+        for (cmd, p, said) in [
+            ("uml.profile.unapply", unapply.clone(), in_package(&two)),
+            ("element.remove", json!({ "ids": [entity] }), named.clone()),
+            ("uml.stereotype.set", json!({ "stereotype": entity, "profile": elsewhere }), named.clone()),
+            ("uml.stereotype.set", json!({ "stereotype": entity, "extends": ["Interface"] }), on_class.clone()),
+            (
+                "element.remove",
+                json!({ "ids": [commerce] }),
+                fmt(&tr("{name} applies the profiles its elements use: {uses}. Remove those first."), &[("name", "Commerce"), ("uses", &two)]),
+            ),
+        ] {
+            assert_eq!(refused(&mut h, cmd, p), said, "{theme:?}: in German");
+        }
+        // What Models says before it asks, and what Properties says under Extends, are those words.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let before_asking = crate::uml_profiles::removal_refusal(st, st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap());
+        assert_eq!(before_asking, Some(named.clone()), "{theme:?}");
+        crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [entity] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        for control in [format!("{}.Class.edit", crate::uml_profiles::EXTENDS_ROW_ID), format!("{}.remove", crate::uml_profiles::EXTENSION_ID)] {
+            let at = rect_of(&h, &control).center();
+            click(&mut h, at);
+        }
+        assert_eq!(h.state().panels.profile_refused.as_ref().map(|r| r.why.clone()), Some(on_class.clone()), "{theme:?}");
+        // A third element, and the uses are counted.
+        id(&mut h, "uml.stereotype.apply", json!({ "element": invoice, "stereotype": entity }));
+        assert_eq!(refused(&mut h, "uml.profile.unapply", unapply), in_package(&on(&trn("{n} element", "{n} elements", 3))), "{theme:?}");
+        // A package that would take a used profile along has no parent, which no command makes.
+        let held = Used::HeldProfile { package: "Tools".into(), profile: "Audit".into() };
+        let said = crate::panels::said(&Reason::InUse(Box::new(InUse { what: held, uses: vec![("Entity".into(), vec!["Order".into()], 1)] })));
+        let holds = tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first.");
+        assert_eq!(said, Some(fmt(&holds, &[("name", "Tools"), ("profile", "Audit"), ("uses", &on("Order"))])), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

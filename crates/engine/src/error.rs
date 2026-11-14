@@ -187,6 +187,36 @@ pub enum Reason {
     /// An element of `kind` named `name` holds a built-in type's name where the built-in types are
     /// kept, so that built-in type cannot be used.
     BuiltInTaken { kind: &'static str, name: String },
+    /// A profile, a stereotype, one of its extensions or a package's profile applications stays
+    /// while stereotype applications need it: what is in use, and the uses.
+    InUse(Box<InUse>),
+}
+
+/// What a [`Reason::InUse`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InUse {
+    /// What is in use, and where.
+    pub what: Used,
+    /// The uses by stereotype: its name, the names of the elements it is applied to while a refusal
+    /// names them (two at most, none when it counts them), and how many applications in all.
+    pub uses: Vec<(String, Vec<String>, usize)>,
+}
+
+/// What is in use in a [`Reason::InUse`], each by its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Used {
+    /// A profile or a stereotype, which would go.
+    Element(String),
+    /// A stereotype, which would move to another profile.
+    Moved(String),
+    /// A profile a package would no longer apply.
+    ProfileIn { profile: String, package: String },
+    /// A stereotype's extension of a metaclass, which would be dropped.
+    Extension { stereotype: String, metaclass: String },
+    /// A profile inside a package that would go and take it along.
+    HeldProfile { package: String, profile: String },
+    /// The profiles a package applies, which would go with it.
+    AppliedProfiles { package: String },
 }
 
 /// A template parameter as a refusal names it, with the binding of its template or the default
