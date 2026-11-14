@@ -1202,6 +1202,8 @@ str		This metaclass	This metaclass
 str		On this metaclass · {n}	On this metaclass · {n}
 str		Metaclasses carry no skills	Metaclasses carry no skills
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.
+str		The UML library holds the metaclasses that stereotypes extend. It never changes.	The UML library holds the metaclasses that stereotypes extend. It never changes.
+str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} is a UML metaclass, kept in the UML library. It never changes.
 str		Stereotypes · {n}	Stereotypes · {n}
 str		Add stereotype	Add stereotype
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	None yet. Add one here or from Models ▸ New ▸ Stereotype.

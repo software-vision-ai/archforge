@@ -1203,6 +1203,8 @@ str		This metaclass	このメタクラス
 str		On this metaclass · {n}	このメタクラス上 · {n}
 str		Metaclasses carry no skills	メタクラスにはスキルを付けられません
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	ステレオタイプが拡張する UML のメタクラスです。これは UML 自身のもので、モデルや型メニューには表示されず、変更されることもありません。
+str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML ライブラリには、ステレオタイプが拡張するメタクラスが入っています。変更されることはありません。
+str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} は UML ライブラリにある UML のメタクラスです。変更されることはありません。
 str		Stereotypes · {n}	ステレオタイプ · {n}
 str		Add stereotype	ステレオタイプを追加
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。

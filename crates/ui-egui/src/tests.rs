@@ -4999,6 +4999,17 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
         let said = crate::panels::said(&Reason::InUse(Box::new(InUse { what: held, uses: vec![("Entity".into(), vec!["Order".into()], 1)] })));
         let holds = tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first.");
         assert_eq!(said, Some(fmt(&holds, &[("name", "Tools"), ("profile", "Audit"), ("uses", &on("Order"))])), "{theme:?}");
+        // UML's own: a metaclass, named, and the library that keeps it.
+        let (class, library) = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let id = |o: Option<archforge_mof::Obj>| st.uuid(o.unwrap()).unwrap().to_string();
+            (id(archforge_uml::profiles::metaclass(st, "Class")), id(archforge_uml::profiles::library(st)))
+        };
+        let a_metaclass = fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", "Class")]);
+        assert_eq!(refused(&mut h, "uml.class.rename", json!({ "class": class, "name": "Klass" })), a_metaclass, "{theme:?}");
+        let the_library = tr("The UML library holds the metaclasses that stereotypes extend. It never changes.");
+        assert!(a_metaclass.starts_with("Class ist") && the_library.starts_with("Die UML-Bibliothek"), "{theme:?}: {a_metaclass} {the_library}");
+        assert_eq!(refused(&mut h, "element.remove", json!({ "ids": [library] })), the_library, "{theme:?}");
     }
     crate::i18n::set_language("en");
 }

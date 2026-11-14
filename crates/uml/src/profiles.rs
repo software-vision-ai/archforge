@@ -196,6 +196,12 @@ pub fn library_problem(store: &Store, o: Obj) -> Option<String> {
     })
 }
 
+/// [`library_problem`] as a refusal under `key`, its reason typed for an interface to say.
+pub fn library_refusal(store: &Store, key: &str, o: Obj) -> Option<CommandError> {
+    let metaclass = (library(store) != Some(o)).then(|| name_of(store, o));
+    library_problem(store, o).map(|why| refuse(key, why).because(Reason::UmlOwn { metaclass }))
+}
+
 // Profiles and stereotypes.
 
 /// The profiles `package` holds, in its order.
@@ -691,8 +697,8 @@ pub fn stranding(store: &Store, moved: Obj, uses: &Uses) -> String {
 /// stereotypes are applied, a stereotype property whose values are set, a package whose profile
 /// applications its contents need; and the library and its metaclasses, which are UML's own.
 pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
-    if let Some(why) = library_problem(store, o) {
-        return Some(refuse("ids", why));
+    if let Some(refused) = library_refusal(store, "ids", o) {
+        return Some(refused);
     }
     let uses = match store.class_of(o).ok()? {
         c if c == PROFILE => profile_uses(store, o),

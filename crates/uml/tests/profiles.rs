@@ -524,6 +524,26 @@ fn every_use_that_refuses_carries_its_reason_typed() {
     let applies = in_use(Used::AppliedProfiles { package: text("Commerce") }, &[both.as_slice(), &named].concat());
     let english = "Commerce applies the profiles its elements use: «Entity» on 3 elements, «Id» on id, «Tracked» on Order and Customer.";
     check(&mut s, "element.remove", json!({ "ids": [commerce] }), applies, english);
+    // UML's own library and its metaclasses, wherever a command is given one.
+    let (class, library) = {
+        let st = s.doc();
+        (st.uuid(profiles::metaclass(st, "Class").unwrap()).unwrap().to_string(), st.uuid(profiles::library(st).unwrap()).unwrap().to_string())
+    };
+    let own = |metaclass: Option<&str>| Reason::UmlOwn { metaclass: metaclass.map(text) };
+    let kept = "is the UML metaclass Class, kept in the UML library, which is never changed";
+    check(&mut s, "uml.class.rename", json!({ "class": class, "name": "Klass" }), own(Some("Class")), kept);
+    check(&mut s, "uml.attribute.add", json!({ "class": order, "name": "kind", "type": class }), own(Some("Class")), kept);
+    check(&mut s, "uml.attribute.add", json!({ "class": class, "name": "kind", "type": "Integer" }), own(Some("Class")), kept);
+    check(&mut s, "uml.association.add-nary", json!({ "classes": [order, customer, class] }), own(Some("Class")), kept);
+    check(&mut s, "uml.stereotype.apply", json!({ "element": class, "stereotype": entity }), own(Some("Class")), kept);
+    check(&mut s, "element.remove", json!({ "ids": [library] }), own(None), "it is the UML library");
+    // A description names no parameter, as before.
+    for (element, reason, english) in [(&class, own(Some("Class")), kept), (&library, own(None), "it is the UML library")] {
+        let described = json!({ "element": element, "text": "Ours" });
+        check(&mut s, "element.describe", described.clone(), reason, english);
+        let Err(EngineError::Failed { error, .. }) = s.execute("element.describe", &described) else { panic!("refused") };
+        assert_eq!(error.key, None, "{}", error.message);
+    }
     // A package with no parent takes the profile it holds along.
     let mut top = at_top(&s, &tools);
     let held = Used::HeldProfile { package: text("Tools"), profile: text("Audit") };
