@@ -5567,6 +5567,57 @@ fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
     });
 }
 
+/// An n-ary association's end editor moved to another end, with no refusal, is a new place: the
+/// body was wheeled up from the last end's editor until the end above it sits at the fold, and that
+/// end's editor, opened there, comes into view with its Apply.
+#[test]
+fn an_end_editor_moved_to_another_end_comes_into_view() {
+    in_both_appearances(|theme| {
+        let (mut h, ids) = nary_sample(theme, true);
+        let a = ids["recommends"].clone();
+        for _ in 0..24 {
+            let add = serde_json::json!({ "association": a, "class": ids["Customer"] });
+            crate::panels::run(h.state_mut(), "uml.association.add-end", add).unwrap();
+        }
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [a] })).unwrap();
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let last = archforge_uml::nary::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap()).len() - 1;
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.end.{last}.edit"));
+        click(&mut h, at);
+        let above = format!("workspace.properties.end.{}.edit", last - 1);
+        let row = rect_of(&h, &above).center().y;
+        let body = h.state().panels.body.expect("the Properties body");
+        wheel_properties(&mut h, body.bottom() - 20.0 - row);
+        let at = in_view(&h, &above).expect("the end above at the fold");
+        let apply = format!("workspace.properties.end.{}.apply", last - 1);
+        click(&mut h, at);
+        assert_eq!(h.state().panels.nary_end.as_ref().map(|e| e.end), Some(last - 1), "{theme:?}: the editor moved");
+        assert!(in_view(&h, &apply).is_some(), "{theme:?}: its Apply in view");
+    });
+}
+
+/// A member's editor moved from a new attribute to a new operation is a new place, though neither
+/// has an item yet: the operation's editor, opened under a long list of operations, comes into
+/// view with its Apply.
+#[test]
+fn a_member_editor_moved_to_another_list_comes_into_view() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        for i in 0..16 {
+            crate::panels::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": format!("run{i}") })).unwrap();
+        }
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
+        click(&mut h, at);
+        let at = reached_in_properties(&mut h, "workspace.properties.operations.add");
+        click(&mut h, at);
+        let kind = h.state().panels.member.as_ref().map(|e| (e.kind, e.target));
+        assert_eq!(kind, Some((crate::uml_panel::MemberKind::Operation, None)), "{theme:?}: a new operation's editor");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: its Apply in view");
+    });
+}
+
 /// A member's editor shares the card: an attribute added at the foot of a long list, refused for a
 /// name another attribute has, keeps its refusal and buttons in view.
 #[test]

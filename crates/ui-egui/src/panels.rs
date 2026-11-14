@@ -144,28 +144,34 @@ pub(crate) enum Editor {
     NaryEnd,
 }
 
-/// An open editor: what it edits, and the refusal its card shows.
-type OpenEditor = Option<(Option<Uuid>, Option<String>)>;
+/// Where an open editor edits: the item, or none for one being added, and the list of the selected
+/// element it belongs to (a kind of member, type, object or key, or the end of an association), so
+/// a move to another item or another list counts as a new place.
+type Place = (Option<Uuid>, usize);
 
-/// The editors open, by what they edit, with their refusals, to tell when one opens or is refused.
+/// An open editor: where it edits, and the refusal its card shows.
+type OpenEditor = Option<(Place, Option<String>)>;
+
+/// The editors open, by where they edit, with their refusals, to tell when one opens, moves or is
+/// refused.
 fn open_editors(s: &State) -> Vec<(Editor, OpenEditor)> {
     vec![
-        (Editor::Column, s.column.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Key, s.key.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Check, s.check.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Index, s.index.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Type, s.type_edit.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Object, s.object_edit.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Member, s.member.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Constraint, s.constraint.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Qualifier, s.qualifier.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Template, s.template.as_ref().map(|e| (e.target, e.refused.clone()))),
-        (Editor::Profile, s.profile_edit.as_ref().map(|e| (e.target.as_deref().and_then(Uuid::parse), None))),
-        (Editor::NaryEnd, s.nary_end.as_ref().map(|e| (Some(e.association), e.refused.as_ref().map(|(_, why)| why.clone())))),
+        (Editor::Column, s.column.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Key, s.key.as_ref().map(|e| ((e.target, usize::from(e.primary)), e.refused.clone()))),
+        (Editor::Check, s.check.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Index, s.index.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Type, s.type_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Object, s.object_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Member, s.member.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Constraint, s.constraint.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Qualifier, s.qualifier.as_ref().map(|e| ((e.target, e.end), e.refused.clone()))),
+        (Editor::Template, s.template.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Profile, s.profile_edit.as_ref().map(|e| ((e.target.as_deref().and_then(Uuid::parse), 0), None))),
+        (Editor::NaryEnd, s.nary_end.as_ref().map(|e| ((Some(e.association), e.end), e.refused.as_ref().map(|(_, why)| why.clone())))),
     ]
 }
 
-/// The editors of `now` to bring into view: each one opened, or moved to another target, since
+/// The editors of `now` to bring into view: each one opened, or moved to another place, since
 /// `was`, or whose card shows a new refusal, so the refusal and the card's Cancel and Apply are in
 /// view, as on opening (AR-469). A refusal that goes, or stays, moves nothing, so a body scrolled
 /// away from it stays put; and an editor that changed nothing is not brought into view because
@@ -173,7 +179,7 @@ fn open_editors(s: &State) -> Vec<(Editor, OpenEditor)> {
 fn to_reveal(now: &[(Editor, OpenEditor)], was: &[(Editor, OpenEditor)]) -> Vec<Editor> {
     let before = |editor: Editor| was.iter().find(|(e, _)| *e == editor).and_then(|(_, open)| open.as_ref());
     let changed = |(editor, now): &(Editor, OpenEditor)| match (now, before(*editor)) {
-        (Some((target, why)), Some((was, said))) => target != was || (why.is_some() && why != said),
+        (Some((place, why)), Some((was, said))) => place != was || (why.is_some() && why != said),
         (Some(_), None) => true,
         (None, _) => false,
     };
