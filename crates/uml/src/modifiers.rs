@@ -31,7 +31,7 @@ use crate::{
     OPAQUE_EXPRESSION, PROPERTY, association, instance_value, literal_boolean, literal_integer, literal_real, literal_string,
     literal_unlimited_natural, multiplicity_element, opaque_expression, property, structural_feature, typed_element,
 };
-use archforge_engine::{CommandError, Params, Reason};
+use archforge_engine::{CommandError, DefaultKind, Params, Reason, TargetRule};
 
 /// The longest default value, in characters.
 pub const MAX_DEFAULT: usize = 1000;
@@ -151,6 +151,28 @@ impl DefaultError {
             DefaultError::TooLong => format!("the default value is longer than {MAX_DEFAULT} characters; a default is at most {MAX_DEFAULT}"),
             DefaultError::Malformed(value, form) => format!("the default value {value:?} does not read: {}", form.accepted(store)),
         }
+    }
+
+    /// Why, typed for an interface to say: the most characters, or the value and what its type's
+    /// default is.
+    pub fn reason(&self, store: &Store) -> Reason {
+        let kind = |form: DefaultForm| match form {
+            DefaultForm::Integer => DefaultKind::Integer,
+            DefaultForm::Real => DefaultKind::Real,
+            DefaultForm::Boolean => DefaultKind::Boolean,
+            DefaultForm::UnlimitedNatural => DefaultKind::UnlimitedNatural,
+            DefaultForm::Enumeration(e) => DefaultKind::Literal(name_of(store, e).into()),
+            DefaultForm::String | DefaultForm::Opaque => DefaultKind::Text,
+        };
+        match self {
+            DefaultError::TooLong => Reason::DefaultTooLong { max: MAX_DEFAULT },
+            DefaultError::Malformed(value, form) => Reason::DefaultUnread { value: value.as_str().into(), kind: kind(*form) },
+        }
+    }
+
+    /// The refusal of the default under `default`: [`DefaultError::said`], its reason typed.
+    pub fn refusal(&self, store: &Store) -> CommandError {
+        refuse("default", self.said(store)).because(self.reason(store))
     }
 }
 
@@ -572,6 +594,37 @@ impl TargetProblem {
             }
         }
     }
+
+    /// The rule broken, typed for an interface to say.
+    pub fn rule(self) -> TargetRule {
+        match self {
+            TargetProblem::NotAProperty => TargetRule::NotAProperty,
+            TargetProblem::Itself => TargetRule::Itself,
+            TargetProblem::Unnamed => TargetRule::Unnamed,
+            TargetProblem::OutOfReach => TargetRule::OutOfReach,
+            TargetProblem::SameName => TargetRule::SameName,
+            TargetProblem::Cycle => TargetRule::Cycle,
+            TargetProblem::Type => TargetRule::Type,
+            TargetProblem::Upper => TargetRule::Upper,
+            TargetProblem::Multiplicity => TargetRule::Multiplicity,
+            TargetProblem::Composite => TargetRule::Composite,
+            TargetProblem::Leaf => TargetRule::Leaf,
+        }
+    }
+}
+
+/// The refusal of `t` as a property `shape` subsets or, `redefining`, redefines, for `problem`:
+/// under `subsets` or `redefines`, naming `t` by its id and name, why, and what `shape` may name
+/// instead, its reason typed.
+fn target_refusal(store: &Store, shape: &Shape, t: Obj, problem: TargetProblem, redefining: bool) -> CommandError {
+    let (key, verb, may) = if redefining {
+        ("redefines", "redefine", redefines_candidates(store, shape))
+    } else {
+        ("subsets", "subset", subsets_candidates(store, shape))
+    };
+    let (id, name) = (uuid_of(store, t).unwrap_or_default(), name_of(store, t));
+    let said = format!("{id} ({name}) {}; it may {verb}: {}", problem.why(redefining), listed(store, &may));
+    refuse(key, said).because(Reason::TargetBreaks { name: name.into(), rule: problem.rule(), redefining })
 }
 
 /// Whether `t` is a property, with a name, other than the shape's own.
@@ -763,21 +816,18 @@ fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, Command
 /// change, naming the default, never clearing it. Every target is checked against the new shape
 /// except one the property had that the rules no longer allowed already, which never blocks an
 /// unrelated edit; a refusal names the target, why, and the properties it may name instead. Leaf
-/// is taken only while nothing redefines the property (AR-138).
+/// is taken only while nothing redefines the property (AR-138). Every refusal carries its reason
+/// typed.
 pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> Result<Modifiers, CommandError> {
     let stored = current.map(|c| default_text(store, c)).unwrap_or_default();
     let type_changed = current.is_some_and(|c| one(store, c, typed_element::TYPE) != shape.ty);
     let form = DefaultForm::of(store, shape.ty);
     let type_refusal = |typed: &str| {
-        let ty = shape.ty.map(|t| name_of(store, t)).unwrap_or_else(|| "no type".into());
-        refuse(
-            "type",
-            format!(
-                "the default value {:?} does not fit {ty}: {}; change or clear the default before changing the type",
-                short(typed.trim()),
-                form.accepted(store)
-            ),
-        )
+        let (value, named) = (short(typed.trim()), shape.ty.map(|t| name_of(store, t)));
+        let ty = named.as_deref().unwrap_or("no type");
+        let accepted = form.accepted(store);
+        let said = format!("the default value {value:?} does not fit {ty}: {accepted}; change or clear the default before changing the type");
+        refuse("type", said).because(Reason::DefaultUnfit { value: value.into(), ty: named.map(Into::into) })
     };
     let default = match (p.str("default"), current) {
         // Left out under the same type: the stored value as it is, never read again, so one that
@@ -789,10 +839,9 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
         (Some(typed), _) => match parse_default(store, form, typed) {
             Ok(d) => d,
             Err(_) if type_changed && !stored.is_empty() && typed.trim() == stored.trim() => return Err(type_refusal(typed)),
-            Err(e) => return Err(refuse("default", e.said(store))),
+            Err(e) => return Err(e.refusal(store)),
         },
     };
-    let id = |o: Obj| uuid_of(store, o).unwrap_or_default();
     let list_of = |key: &str, kept: Vec<Obj>| -> Result<(Vec<Obj>, Vec<Obj>), CommandError> {
         match p.get(key).and_then(Json::as_array) {
             Some(items) => Ok((targets(store, items, key)?, kept)),
@@ -807,16 +856,14 @@ pub fn read(store: &Store, p: &Params, shape: &Shape, current: Option<Obj>) -> R
     for t in &subsets_wanted {
         let stale = subsets_had.contains(t) && was.as_ref().is_some_and(|w| subsets_problem(store, w, *t).is_some());
         if let Some(problem) = subsets_problem(store, shape, *t).filter(|_| !stale) {
-            let may = listed(store, &subsets_candidates(store, shape));
-            return Err(refuse("subsets", format!("{} ({}) {}; it may subset: {may}", id(*t), name_of(store, *t), problem.why(false))));
+            return Err(target_refusal(store, shape, *t, problem, false));
         }
     }
     let (redefines_wanted, redefines_had) = list_of("redefines", current.map(|c| redefines(store, c)).unwrap_or_default())?;
     for t in &redefines_wanted {
         let stale = redefines_had.contains(t) && was.as_ref().is_some_and(|w| redefines_problem(store, w, *t).is_some());
         if let Some(problem) = redefines_problem(store, shape, *t).filter(|_| !stale) {
-            let may = listed(store, &redefines_candidates(store, shape));
-            return Err(refuse("redefines", format!("{} ({}) {}; it may redefine: {may}", id(*t), name_of(store, *t), problem.why(true))));
+            return Err(target_refusal(store, shape, *t, problem, true));
         }
     }
     let was_leaf = current.is_some_and(|c| crate::relations::is_leaf(store, c));
