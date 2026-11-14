@@ -1223,6 +1223,8 @@ str		Give the metaclasses as a list of names.	Indica las metaclases como una lis
 str		This stereotype is in no profile.	Este estereotipo no está en ningún perfil.
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} es el extremo de extensión de un estereotipo. En su lugar, quita la metaclase de lo que el estereotipo extiende.
 plural		{name} has values on {n} element. Remove those first.	{name} tiene valores en {n} elemento. Quítalos primero.|{name} tiene valores en {n} elementos. Quítalos primero.
+plural		Values on {n} element don't fit {name} [{bounds}].	Los valores en {n} elemento no encajan en {name} [{bounds}].|Los valores en {n} elementos no encajan en {name} [{bounds}].
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	El literal {literal} es el valor de {property} en «{stereotype}» sobre {element}. Pon allí otro valor primero.
 str		Stereotypes · {n}	Estereotipos · {n}
 str		Add stereotype	Añadir estereotipo
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Ninguno aún. Añádelo aquí o desde Modelos ▸ Nuevo ▸ Estereotipo.

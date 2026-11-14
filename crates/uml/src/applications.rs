@@ -23,7 +23,7 @@
 //!
 //! What the values depend on is protected where it could lose them: a property whose values are
 //! set is not removed (AR-134), nor retyped, nor given a multiplicity a set value breaks
-//! ([`reshape_problem`]); a literal a value names is not removed ([`literal_problem`]).
+//! ([`reshape_refusal`]); a literal a value names is not removed ([`literal_refusal`]).
 //!
 //! Whether a class diagram shows the values of its cards' stereotypes is the diagram's own choice
 //! (`Show stereotype values on this diagram`), kept as Archforge's marks are kept, by a core tag, as
@@ -32,7 +32,9 @@
 //! core leaves any tag; the tag, left on nothing, is the one the next diagram turned on reuses.
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, Unextended, always, cmd};
+use archforge_engine::{
+    Accepted, CommandError, CommandSpec, Ctx, Facts, LiteralValued, Params, Reason, Unextended, ValueMisfit, Values, always, cmd,
+};
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -337,6 +339,37 @@ impl ValueProblem {
             ValueProblem::Twice(v) => format!("{p} is unique and holds {v:?} twice"),
         }
     }
+
+    /// The refusal of the values of `property` under `values`: [`ValueProblem::said`], with its
+    /// reason typed for an interface to say.
+    pub fn refusal(&self, store: &Store, property: Obj) -> CommandError {
+        refuse("values", self.said(store, property)).because(Reason::Values(Box::new(self.typed(store, property))))
+    }
+
+    /// Why, typed for an interface to say: the property's name and what does not fit.
+    pub fn typed(&self, store: &Store, property: Obj) -> Values {
+        let misfit = match self {
+            ValueProblem::TooMany => ValueMisfit::TooMany { max: MAX_VALUES },
+            ValueProblem::Empty => ValueMisfit::Empty,
+            ValueProblem::Malformed(DefaultError::TooLong) => ValueMisfit::TooLong { max: crate::modifiers::MAX_DEFAULT },
+            ValueProblem::Malformed(DefaultError::Malformed(v, form)) => {
+                let accepted = match form {
+                    DefaultForm::Integer => Accepted::Integer,
+                    DefaultForm::Real => Accepted::Real,
+                    DefaultForm::Boolean => Accepted::Boolean,
+                    DefaultForm::UnlimitedNatural => Accepted::UnlimitedNatural,
+                    DefaultForm::String | DefaultForm::Opaque => Accepted::Text,
+                    DefaultForm::Enumeration(e) => {
+                        Accepted::Literals(crate::commands::literals(store, *e).into_iter().map(|l| name_of(store, l)).collect())
+                    }
+                };
+                ValueMisfit::Unread { value: v.clone(), accepted }
+            }
+            ValueProblem::Count(n, lower, upper) => ValueMisfit::Count { given: *n, lower: *lower, upper: *upper },
+            ValueProblem::Twice(v) => ValueMisfit::Twice { value: v.clone() },
+        };
+        Values { property: name_of(store, property), misfit }
+    }
 }
 
 /// What a value of `form` is, as a refusal says it.
@@ -435,10 +468,11 @@ pub fn value_rows(store: &Store, element: Obj) -> Vec<(String, Vec<String>)> {
 
 // What the values depend on.
 
-/// Why `property`, a stereotype's, may not take the type `ty` and the bounds `bounds` while values
-/// of it are set: a new type would read them otherwise, and bounds that a set value breaks would
-/// lose it. None for any other property, or when nothing is set.
-pub fn reshape_problem(store: &Store, property: Obj, ty: Option<Obj>, bounds: (u64, Option<u64>), unique: bool) -> Option<String> {
+/// The refusal of `property`, a stereotype's, taking the type `ty` and the bounds `bounds` while
+/// values of it are set, under `type` or `multiplicity`, its reason typed: a new type would read
+/// them otherwise, and bounds that a set value breaks would lose it. None for any other property,
+/// or when nothing is set.
+pub fn reshape_refusal(store: &Store, property: Obj, ty: Option<Obj>, bounds: (u64, Option<u64>), unique: bool) -> Option<CommandError> {
     let s = store.container(property).ok().flatten().map(|(c, _)| c).filter(|c| profiles::is_stereotype(store, *c))?;
     let applications: Vec<Obj> =
         profiles::applications_of(store, s).into_iter().map(|a| a.instance).filter(|i| is_set(store, *i, property)).collect();
@@ -448,7 +482,8 @@ pub fn reshape_problem(store: &Store, property: Obj, ty: Option<Obj>, bounds: (u
     let p = name_of(store, property);
     let on = |n: usize| if n == 1 { "1 element".to_string() } else { format!("{n} elements") };
     if ty != one(store, property, typed_element::TYPE) {
-        return Some(format!("the values of {p} are set on {}; clear them before giving it another type", on(applications.len())));
+        let said = format!("the values of {p} are set on {}; clear them before giving it another type", on(applications.len()));
+        return Some(refuse("type", said).because(Reason::ValuesSet { name: p, elements: applications.len() }));
     }
     let (lower, upper) = bounds;
     let broken = applications
@@ -464,12 +499,18 @@ pub fn reshape_problem(store: &Store, property: Obj, ty: Option<Obj>, bounds: (u
             n < lower || upper.is_some_and(|u| n > u) || twice
         })
         .count();
-    (broken > 0).then(|| format!("the values set on {} do not fit {p} [{}]; change those values first", on(broken), bounds_text(lower, upper)))
+    if broken == 0 {
+        return None;
+    }
+    let bounds = bounds_text(lower, upper);
+    let said = format!("the values set on {} do not fit {p} [{bounds}]; change those values first", on(broken));
+    Some(refuse("multiplicity", said).because(Reason::ValuesMisfit { name: p.into(), elements: broken, bounds: bounds.into() }))
 }
 
-/// Why a removal would lose a value, `goes` telling what the removal takes away: a literal a
-/// value names, on an application whose element stays. None when none would.
-pub fn literal_problem(store: &Store, goes: impl Fn(Obj) -> bool) -> Option<String> {
+/// The refusal under `key` of a removal that would lose a value, `goes` telling what the removal
+/// takes away: a literal a value names, on an application whose element stays, its reason typed.
+/// None when none would.
+pub fn literal_refusal(store: &Store, key: &str, goes: impl Fn(Obj) -> bool) -> Option<CommandError> {
     for v in store.alive().filter(|o| store.class_of(*o).ok() == Some(INSTANCE_VALUE)) {
         let Some(l) = one(store, v, instance_value::INSTANCE).filter(|l| store.class_of(*l).ok() == Some(crate::ENUMERATION_LITERAL)) else {
             continue;
@@ -485,12 +526,10 @@ pub fn literal_problem(store: &Store, goes: impl Fn(Obj) -> bool) -> Option<Stri
             continue;
         }
         let property = one(store, s, slot::DEFINING_FEATURE).map(|p| name_of(store, p)).unwrap_or_default();
-        let on = element.map(|e| name_or_id(store, e)).unwrap_or_default();
-        return Some(format!(
-            "the literal {} is the value of {property} in «{}» on {on}; set another value there first",
-            name_of(store, l),
-            name_of(store, stereotype)
-        ));
+        let element = element.map(|e| name_or_id(store, e)).unwrap_or_default();
+        let (literal, stereotype) = (name_of(store, l), name_of(store, stereotype));
+        let said = format!("the literal {literal} is the value of {property} in «{stereotype}» on {element}; set another value there first");
+        return Some(refuse(key, said).because(Reason::LiteralValued(Box::new(LiteralValued { literal, property, stereotype, element }))));
     }
     None
 }
@@ -616,7 +655,7 @@ fn set_value_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let (element, stereotype, instance) = application_param(ctx.doc, p)?;
     let property = property_param(ctx.doc, p, "property", stereotype)?;
     let texts = texts_param(p)?;
-    let values = read_values(ctx.doc, property, &texts).map_err(|e| refuse("values", e.said(ctx.doc, property)))?;
+    let values = read_values(ctx.doc, property, &texts).map_err(|e| e.refusal(ctx.doc, property))?;
     set_values(ctx.doc, instance, property, &values)?;
     for n in archforge_diagram::views_of(ctx.doc, element).2 {
         if archforge_diagram::diagram_of(ctx.doc, n).is_some_and(|d| values_shown(ctx.doc, d)) {

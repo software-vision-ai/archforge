@@ -833,8 +833,8 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A literal a stereotype's value names stays while the element carrying that value stays
     // (AR-135): the value would go with it unseen.
     let going: Vec<Obj> = gone_classes.iter().chain(&gone_generalizations).copied().chain(going_with(store, &classes)).collect();
-    if let Some(why) = crate::applications::literal_problem(store, |o| goes_by(store, objs, &going, o)) {
-        return Err(refuse("ids", why));
+    if let Some(refused) = crate::applications::literal_refusal(store, "ids", |o| goes_by(store, objs, &going, o)) {
+        return Err(refused);
     }
     // A classifier's nested classifiers go with it (AR-132), named among what goes so their
     // relationships, constraints and sets are worked out as theirs.

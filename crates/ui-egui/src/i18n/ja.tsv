@@ -1223,6 +1223,8 @@ str		Give the metaclasses as a list of names.	メタクラスは名前のリス�
 str		This stereotype is in no profile.	このステレオタイプはどのプロファイルにも入っていません。
 str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} はステレオタイプの拡張端です。代わりに、ステレオタイプが拡張するものからそのメタクラスを外してください。
 plural		{name} has values on {n} element. Remove those first.	{name} には {n} 個の要素で値が設定されています。先にそれらを外してください。
+plural		Values on {n} element don't fit {name} [{bounds}].	{n} 個の要素の値が {name} [{bounds}] に合いません。
+str		The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first.	リテラル {literal} は {element} の «{stereotype}» にある {property} の値です。先にそこへ別の値を設定してください。
 str		Stereotypes · {n}	ステレオタイプ · {n}
 str		Add stereotype	ステレオタイプを追加
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
