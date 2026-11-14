@@ -573,6 +573,8 @@ str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.
 str		It can't hold a control or hidden character.	Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.
 str		It can't start or end with a space.	Am Anfang und am Ende darf kein Leerzeichen stehen.
+str		This element takes no description.	Dieses Element erhält keine Beschreibung.
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Dieses Element besitzt {max} oder mehr Kommentare, daher lässt sich seine Beschreibung nicht finden. Entfernen Sie zuerst einige in der Datei.
 str	refusal	a class	eine Klasse
 str	refusal	an association class	eine Assoziationsklasse
 str	refusal	an interface	eine Schnittstelle
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Lange Einschränkungen oder solche über mehrere Elemente lesen sich am besten als verknüpfte Notiz; die Wahl gilt je Diagramm.
 str		Type an expression. A constraint without one states no rule.	Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Geschweifte Klammern stehen bei einem eingeschränkten Element, und dieses Diagramm zeigt keines davon. Zeigen Sie sie als verknüpfte Notiz.
+str		Only a classifier of the model's own or a package owns constraints.	Nur ein modelleigener Klassifizierer oder ein Paket besitzt Einschränkungen.
+str		A constraint names only elements of this model.	Eine Einschränkung nennt nur Elemente dieses Modells.
+str		A constraint names at most {max} elements.	Eine Einschränkung nennt höchstens {max} Elemente.
+str		An element is named twice. Name each element once.	Ein Element ist zweimal genannt. Jedes Element nur einmal nennen.
 str		a constraint	eine Einschränkung
 str		{constraint} constrained nothing else and went with it	{constraint} schränkte nichts anderes ein und wurde mit entfernt
 str		{constraint} now constrains {elements} only	{constraint} schränkt jetzt nur noch {elements} ein

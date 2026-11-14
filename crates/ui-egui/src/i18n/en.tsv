@@ -572,6 +572,8 @@ str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
 str		It can't hold a control or hidden character.	It can't hold a control or hidden character.
 str		It can't start or end with a space.	It can't start or end with a space.
+str		This element takes no description.	This element takes no description.
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	This element owns {max} comments or more, so its description can't be found. Remove some in the file first.
 str	refusal	a class	a class
 str	refusal	an association class	an association class
 str	refusal	an interface	an interface
@@ -1343,6 +1345,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Long or multi-element constraints read best as a linked note; the choice is per diagram.
 str		Type an expression. A constraint without one states no rule.	Type an expression. A constraint without one states no rule.
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.
+str		Only a classifier of the model's own or a package owns constraints.	Only a classifier of the model's own or a package owns constraints.
+str		A constraint names only elements of this model.	A constraint names only elements of this model.
+str		A constraint names at most {max} elements.	A constraint names at most {max} elements.
+str		An element is named twice. Name each element once.	An element is named twice. Name each element once.
 str		a constraint	a constraint
 str		{constraint} constrained nothing else and went with it	{constraint} constrained nothing else and went with it
 str		{constraint} now constrains {elements} only	{constraint} now constrains {elements} only

@@ -573,6 +573,8 @@ str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
 str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。
 str		It can't start or end with a space.	先頭や末尾に空白は使えません。
+str		This element takes no description.	この要素には説明を付けられません。
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	この要素は {max} 個以上のコメントを所有しているため、説明を見つけられません。先にファイルでいくつか削除してください。
 str	refusal	a class	クラス
 str	refusal	an association class	関連クラス
 str	refusal	an interface	インターフェース
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	長い制約や複数の要素にまたがる制約は、リンクされたノートにすると読みやすくなります。選択は図ごとです。
 str		Type an expression. A constraint without one states no rule.	式を入力してください。式のない制約はルールを表しません。
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	波括弧は制約される要素のそばに置かれますが、この図にはそのどれも表示されていません。リンクされたノートとして表示してください。
+str		Only a classifier of the model's own or a package owns constraints.	制約を所有できるのは、モデル自身の分類子かパッケージだけです。
+str		A constraint names only elements of this model.	制約が指定できるのは、このモデルの要素だけです。
+str		A constraint names at most {max} elements.	制約が指定できる要素は最大 {max} 個です。
+str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
 str		a constraint	制約
 str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました
 str		{constraint} now constrains {elements} only	{constraint} が制約するのは {elements} だけになりました

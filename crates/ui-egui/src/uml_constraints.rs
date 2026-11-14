@@ -10,6 +10,7 @@
 //! field ringed, the editor kept open and the model untouched. The bin removes the constraint, the
 //! arrows move it among its context's.
 
+use archforge_engine::{EngineError, Reason};
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::constraints::{self, Form};
 use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
@@ -584,14 +585,9 @@ fn commit(shell: &mut Shell, edit: &ConstraintEdit) {
     match result {
         Ok(_) => reselect(shell, context),
         Err(e) => {
-            let text = e.to_string();
-            let at = if text.contains("braces sit by") { Some("show") } else { None };
-            let why = if at.is_some() {
-                tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.")
-            } else {
-                text
-            };
-            refuse(shell, why, at);
+            // Braces with nothing to sit by are said under the form's buttons, any other refusal under Apply.
+            let braces = matches!(&e, EngineError::Failed { error, .. } if error.reason == Some(Reason::BracesNoElement));
+            refuse(shell, crate::panels::refusal(&e), braces.then_some("show"));
         }
     }
 }

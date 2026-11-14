@@ -573,6 +573,8 @@ str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
 str		It can't hold a control or hidden character.	不能包含控制字符或隐藏字符。
 str		It can't start or end with a space.	不能以空格开头或结尾。
+str		This element takes no description.	此元素不能有描述。
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	此元素拥有 {max} 条或更多注释，因此找不到它的描述。请先在文件中删除一些。
 str	refusal	a class	类
 str	refusal	an association class	关联类
 str	refusal	an interface	接口
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	较长或涉及多个元素的约束最好显示为链接的注释；此选择按图而定。
 str		Type an expression. A constraint without one states no rule.	请输入表达式。没有表达式的约束不陈述任何规则。
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	花括号位于受约束的元素旁边，而此图未显示其中任何一个。请将其显示为链接的注释。
+str		Only a classifier of the model's own or a package owns constraints.	只有模型自有的分类器或包可以拥有约束。
+str		A constraint names only elements of this model.	约束只能指定此模型中的元素。
+str		A constraint names at most {max} elements.	一个约束最多指定 {max} 个元素。
+str		An element is named twice. Name each element once.	有元素被指定了两次。每个元素只指定一次。
 str		a constraint	一个约束
 str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
 str		{constraint} now constrains {elements} only	{constraint} 现在只约束 {elements}

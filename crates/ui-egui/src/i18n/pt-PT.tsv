@@ -573,6 +573,8 @@ str		The text can't be empty.	O texto não pode estar vazio.
 str		It can't be longer than {max} characters.	São permitidos no máximo {max} caracteres.
 str		It can't hold a control or hidden character.	Não são permitidos caracteres de controlo nem ocultos.
 str		It can't start or end with a space.	Não pode começar nem terminar com um espaço.
+str		This element takes no description.	Este elemento não aceita descrição.
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Este elemento possui {max} ou mais comentários, pelo que não é possível encontrar a sua descrição. Remova primeiro alguns no ficheiro.
 str	refusal	a class	uma classe
 str	refusal	an association class	uma classe de associação
 str	refusal	an interface	uma interface
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Restrições longas ou de vários elementos leem-se melhor como nota ligada; a escolha é feita por diagrama.
 str		Type an expression. A constraint without one states no rule.	Escreva uma expressão. Uma restrição sem expressão não enuncia nenhuma regra.
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	As chavetas ficam junto a um elemento restringido, e este diagrama não mostra nenhum. Mostre-a como nota ligada.
+str		Only a classifier of the model's own or a package owns constraints.	Só um classificador do próprio modelo ou um pacote possui restrições.
+str		A constraint names only elements of this model.	Uma restrição só indica elementos deste modelo.
+str		A constraint names at most {max} elements.	Uma restrição indica no máximo {max} elementos.
+str		An element is named twice. Name each element once.	Um elemento é indicado duas vezes. Indique cada elemento uma só vez.
 str		a constraint	uma restrição
 str		{constraint} constrained nothing else and went with it	{constraint} não restringia mais nada e foi eliminada com ele
 str		{constraint} now constrains {elements} only	{constraint} agora só restringe {elements}

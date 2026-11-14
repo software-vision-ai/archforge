@@ -573,6 +573,8 @@ str		The text can't be empty.	Le texte ne peut pas être vide.
 str		It can't be longer than {max} characters.	{max} caractères au maximum.
 str		It can't hold a control or hidden character.	Les caractères de contrôle ou invisibles ne sont pas autorisés.
 str		It can't start or end with a space.	Aucune espace n’est permise au début ou à la fin.
+str		This element takes no description.	Cet élément n'accepte pas de description.
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Cet élément possède {max} commentaires ou plus, sa description est donc introuvable. Supprimez-en d'abord quelques-uns dans le fichier.
 str	refusal	a class	une classe
 str	refusal	an association class	une classe d’association
 str	refusal	an interface	une interface
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Les contraintes longues ou portant sur plusieurs éléments se lisent mieux en note liée ; le choix se fait par diagramme.
 str		Type an expression. A constraint without one states no rule.	Saisissez une expression. Une contrainte sans expression n'énonce aucune règle.
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Les accolades se placent près d'un élément contraint, et ce diagramme n'en montre aucun. Affichez-la en note liée.
+str		Only a classifier of the model's own or a package owns constraints.	Seuls un classificateur propre au modèle ou un paquetage possèdent des contraintes.
+str		A constraint names only elements of this model.	Une contrainte ne nomme que des éléments de ce modèle.
+str		A constraint names at most {max} elements.	Une contrainte nomme au plus {max} éléments.
+str		An element is named twice. Name each element once.	Un élément est nommé deux fois. Nommez chaque élément une seule fois.
 str		a constraint	une contrainte
 str		{constraint} constrained nothing else and went with it	{constraint} ne contraignait rien d'autre et a été supprimée avec
 str		{constraint} now constrains {elements} only	{constraint} ne contraint plus que {elements}

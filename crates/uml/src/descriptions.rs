@@ -16,7 +16,8 @@
 //! drawn on a diagram are no Comments at all but the diagram's own nodes, their text on the node
 //! (`archforge_diagram::commands::NOTE`), so they can never be taken for a description either.
 
-use archforge_engine::CommandError;
+use archforge_core::skills::Problem;
+use archforge_engine::{CommandError, Reason};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::commands::{fail, refuse, short, uuid_of};
@@ -89,13 +90,13 @@ pub fn description_of(store: &Store, element: Obj) -> String {
 
 /// Why `text` is no description, when it is not: too long, holding a control character other than
 /// a line break or a tab, or starting or ending with a space. An empty text clears one and is fine.
-fn text_problem(text: &str) -> Option<String> {
+fn text_problem(text: &str) -> Option<Problem> {
     if text.chars().count() > MAX_DESCRIPTION {
-        Some(format!("is longer than {MAX_DESCRIPTION} characters"))
+        Some(Problem::too_long(MAX_DESCRIPTION))
     } else if text.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
-        Some("holds a control character".into())
+        Some(Problem::new(Reason::ControlCharacter, "holds a control character"))
     } else if text.trim() != text {
-        Some("starts or ends with a space".into())
+        Some(Problem::edge_space())
     } else {
         None
     }
@@ -111,7 +112,7 @@ fn text_problem(text: &str) -> Option<String> {
 /// or more.
 pub fn describe_element(store: &mut Store, o: Obj, text: &str) -> Result<(), CommandError> {
     if !describable(store, o) {
-        return Err(refuse("element", format!("{} takes no description; {DESCRIBABLE} does", uuid_of(store, o)?)));
+        return Err(refuse("element", format!("{} takes no description; {DESCRIBABLE} does", uuid_of(store, o)?)).because(Reason::TakesNoDescription));
     }
     if let Some(problem) = text_problem(text) {
         return Err(refuse(
@@ -120,7 +121,8 @@ pub fn describe_element(store: &mut Store, o: Obj, text: &str) -> Result<(), Com
                 "the text {:?} {problem}; a description is up to {MAX_DESCRIPTION} characters with no control character but line breaks and tabs, and no space at either end, or nothing to clear it",
                 short(text)
             ),
-        ));
+        )
+        .because(problem.reason));
     }
     if owned_comments(store, o).1 {
         return Err(refuse(
@@ -129,7 +131,8 @@ pub fn describe_element(store: &mut Store, o: Obj, text: &str) -> Result<(), Com
                 "{} owns {MAX_COMMENTS} or more comments, which only a model read from a file holds; its description is looked for among its first {MAX_COMMENTS} alone, so it is neither described nor cleared here. Remove some of its comments in the file first",
                 uuid_of(store, o)?
             ),
-        ));
+        )
+        .because(Reason::TooManyComments { max: MAX_COMMENTS }));
     }
     let held = description_comments(store, o);
     store

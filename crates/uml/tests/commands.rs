@@ -5,7 +5,7 @@
 
 use archforge_diagram::{DiagramView, ProjectView};
 use archforge_engine::testing::sweep_with;
-use archforge_engine::{Options, Session};
+use archforge_engine::{EngineError, Options, Reason, Session};
 use archforge_mof::{CompositeSlabs, Obj, Store, Uuid, Value};
 use archforge_uml::{ALONE, CLASS_DIAGRAM, PACKAGE, registry};
 use serde_json::{Value as Json, json};
@@ -64,6 +64,12 @@ fn refused_key(s: &mut S, cmd: &str, p: Json) -> String {
     let e = s.execute(cmd, &p).expect_err(&format!("{cmd} {p} was not refused"));
     assert_eq!(picture(s.doc()), before, "{cmd} changed nothing");
     format!("{e:?}")
+}
+
+/// The typed reason `cmd` is refused with, if it has one.
+fn reason(s: &mut S, cmd: &str, p: Json) -> Option<Reason> {
+    let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+    error.reason
 }
 
 fn obj(st: &Store, id: &str) -> Obj {
@@ -361,9 +367,15 @@ fn a_description_that_does_not_fit_is_refused_naming_the_value_and_the_accepted_
     let order = all[1].clone();
     run(&mut s, "element.describe", json!({ "element": order, "text": "Kept." }));
     let long = "x".repeat(archforge_uml::descriptions::MAX_DESCRIPTION + 1);
-    for (text, says) in [(" padded ", "space"), ("a\u{7}b", "control"), (long.as_str(), "longer than 4096")] {
+    let fits = [
+        (" padded ", "space", Reason::EdgeSpace),
+        ("a\u{7}b", "control", Reason::ControlCharacter),
+        (long.as_str(), "longer than 4096", Reason::TooLong { max: 4096 }),
+    ];
+    for (text, says, typed) in fits {
         let e = refused_key(&mut s, "element.describe", json!({ "element": order, "text": text }));
         assert!(e.contains("text") && e.contains(says) && e.contains("up to 4096 characters"), "{e}");
+        assert_eq!(reason(&mut s, "element.describe", json!({ "element": order, "text": text })), Some(typed), "{says}");
     }
     let at_most = "y".repeat(archforge_uml::descriptions::MAX_DESCRIPTION);
     run(&mut s, "element.describe", json!({ "element": order, "text": at_most }));
@@ -381,6 +393,7 @@ fn a_description_that_does_not_fit_is_refused_naming_the_value_and_the_accepted_
         let e = refused_key(&mut s, "element.describe", json!({ "element": id, "text": "About it" }));
         assert!(e.contains(id.as_str()) && e.contains("takes no description") && e.contains("a package, a class"), "{e}");
         assert!(!e.contains("association end"), "an end is not offered: {e}");
+        assert_eq!(reason(&mut s, "element.describe", json!({ "element": id, "text": "About it" })), Some(Reason::TakesNoDescription));
     }
 }
 
@@ -440,6 +453,7 @@ fn an_element_owning_the_most_comments_is_neither_described_nor_cleared() {
     for text in ["New.", ""] {
         let e = refused_key(&mut s, "element.describe", json!({ "element": order, "text": text }));
         assert!(e.contains(&order) && e.contains("64 or more comments") && e.contains("file"), "{e}");
+        assert_eq!(reason(&mut s, "element.describe", json!({ "element": order, "text": text })), Some(Reason::TooManyComments { max: 64 }));
     }
     // One fewer, and it is described again.
     let mut st = copy(s.doc());

@@ -573,6 +573,8 @@ str		The text can't be empty.	El texto no puede estar vacío.
 str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
 str		It can't hold a control or hidden character.	No se admiten caracteres de control ni ocultos.
 str		It can't start or end with a space.	No puede empezar ni terminar con un espacio.
+str		This element takes no description.	Este elemento no admite descripción.
+str		This element owns {max} comments or more, so its description can't be found. Remove some in the file first.	Este elemento posee {max} comentarios o más, por lo que no se puede encontrar su descripción. Elimina antes algunos en el archivo.
 str	refusal	a class	una clase
 str	refusal	an association class	una clase de asociación
 str	refusal	an interface	una interfaz
@@ -1344,6 +1346,10 @@ str		Stored as written. Archforge keeps the text and its references but does not
 str		Long or multi-element constraints read best as a linked note; the choice is per diagram.	Las restricciones largas o de varios elementos se leen mejor como nota enlazada; la elección es por diagrama.
 str		Type an expression. A constraint without one states no rule.	Escribe una expresión. Una restricción sin ella no establece ninguna regla.
 str		Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.	Las llaves se colocan junto a un elemento restringido, y este diagrama no muestra ninguno. Muéstrala como nota enlazada.
+str		Only a classifier of the model's own or a package owns constraints.	Solo un clasificador propio del modelo o un paquete posee restricciones.
+str		A constraint names only elements of this model.	Una restricción solo nombra elementos de este modelo.
+str		A constraint names at most {max} elements.	Una restricción nombra como máximo {max} elementos.
+str		An element is named twice. Name each element once.	Un elemento aparece dos veces. Nombra cada elemento una sola vez.
 str		a constraint	una restricción
 str		{constraint} constrained nothing else and went with it	{constraint} no restringía nada más y se eliminó con él
 str		{constraint} now constrains {elements} only	{constraint} ahora solo restringe {elements}

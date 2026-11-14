@@ -222,6 +222,19 @@ pub enum Reason {
     /// No package around the element applies the stereotype's `profile`; `package` is the one the
     /// element sits in.
     ProfileOutOfScope { profile: Box<str>, package: Box<str> },
+    /// A constraint's expression is empty or holds only spaces, so it states no rule.
+    NoExpression,
+    /// The element owns no constraint: a classifier of the model's own or a package does.
+    NotAContext,
+    /// The element is none a constraint names: an element of the model's own is.
+    NotConstrainable,
+    /// A constraint shown as braces sits by an element it names, and the diagram shows none of them.
+    BracesNoElement,
+    /// The element is of a kind that takes no description.
+    TakesNoDescription,
+    /// The element owns `max` comments or more, so its description, looked for among the first
+    /// `max` alone, is neither set nor cleared.
+    TooManyComments { max: usize },
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.
