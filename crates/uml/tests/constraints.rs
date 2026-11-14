@@ -234,6 +234,48 @@ fn an_empty_expression_and_an_element_outside_the_model_are_refused_changing_not
     assert!(e.contains("owns no constraint"), "{e}");
 }
 
+/// A constraint's own rules, refused, carry their reason typed beside the unchanged English: an
+/// expression that states no rule, a context that owns none, an element no constraint names or one
+/// named twice, more elements than one names, and braces with nothing to sit by. A refusal about
+/// an id keeps only its sentence (AR-447).
+#[test]
+fn every_constraint_rule_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let [_, order, _, total, d, on, _] = shop(&mut s);
+    let c = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "x" }));
+    let check = |s: &mut S, cmd: &str, p: Json, reason: Option<Reason>, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, reason, "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    };
+    let none = "type an expression; a constraint without one states no rule";
+    check(&mut s, "uml.constraint.add", json!({ "context": order, "expression": " \n" }), Some(Reason::NoExpression), none);
+    check(&mut s, "uml.constraint.set", json!({ "constraint": c, "expression": "" }), Some(Reason::NoExpression), none);
+    let owns = "owns no constraint; a class, an interface";
+    check(&mut s, "uml.constraint.add", json!({ "context": total, "expression": "x" }), Some(Reason::NotAContext), owns);
+    // The elements a constraint names, when it is made and when it is changed.
+    let made = |constrained: Json| json!({ "context": order, "expression": "x", "constrained": constrained });
+    let changed = |constrained: Json| json!({ "constraint": c, "constrained": constrained });
+    let outside = "is outside this model; a constraint names a package";
+    check(&mut s, "uml.constraint.add", made(json!([order, d])), Some(Reason::NotConstrainable), outside);
+    check(&mut s, "uml.constraint.set", changed(json!([on])), Some(Reason::NotConstrainable), outside);
+    let twice = || Some(Reason::NamedTwice { kind: "constrained element", name: total.clone() });
+    check(&mut s, "uml.constraint.add", made(json!([order, total, total])), twice(), "is named twice; name each element once");
+    // The most a constraint names is refused one past it; at the most, the list is read on.
+    let most = Some(Reason::TooMany { kind: "constrained element", max: 256 });
+    check(&mut s, "uml.constraint.set", changed(json!(vec![&total; 257])), most, "a constraint names at most 256 elements; 257 were given");
+    check(&mut s, "uml.constraint.set", changed(json!(vec![&total; 256])), twice(), "is named twice");
+    check(&mut s, "uml.constraint.set", changed(json!([order, "nope"])), None, "is not an id");
+    check(&mut s, "uml.constraint.set", json!({ "constraint": order, "name": "n" }), None, "is not a constraint of this model");
+    // Braces need an element of theirs on the diagram.
+    run(&mut s, "diagram.unplace", json!({ "nodes": [on] }));
+    let braces = json!({ "diagram": d, "constraint": c, "as": "braces" });
+    check(&mut s, "uml.constraint.show", braces, Some(Reason::BracesNoElement), "braces sit by an element they constrain");
+}
+
 /// Deleting a constrained element drops it from the constraint in the same undo step; a constraint
 /// left naming nothing goes with it; undo brings both back. `dropped_by` says beforehand what
 /// changes, for the toast. Removing an element from a diagram changes nothing in the model.

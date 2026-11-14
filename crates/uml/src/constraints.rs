@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::{ProjectView, diagram, node};
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, cmd};
 use archforge_mof::{Obj, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -269,7 +269,7 @@ fn object(store: &Store, key: &str, id: &str) -> Result<Obj, CommandError> {
 fn context_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let o = object(store, key, text(p, key))?;
     if !is_context(store, o) {
-        return Err(refuse(key, format!("{} owns no constraint; {CONTEXTS} does", text(p, key))));
+        return Err(refuse(key, format!("{} owns no constraint; {CONTEXTS} does", text(p, key))).because(Reason::NotAContext));
     }
     Ok(o)
 }
@@ -288,7 +288,8 @@ fn constraint_param(store: &Store, p: &Params, key: &str) -> Result<Obj, Command
 fn constrained_param(store: &Store, p: &Params, key: &str, context: Obj) -> Result<Vec<Obj>, CommandError> {
     let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > MAX_CONSTRAINED {
-        return Err(refuse(key, format!("a constraint names at most {MAX_CONSTRAINED} elements; {} were given", items.len())));
+        let most = Reason::TooMany { kind: "constrained element", max: MAX_CONSTRAINED };
+        return Err(refuse(key, format!("a constraint names at most {MAX_CONSTRAINED} elements; {} were given", items.len())).because(most));
     }
     if items.is_empty() {
         return Ok(vec![context]);
@@ -298,10 +299,13 @@ fn constrained_param(store: &Store, p: &Params, key: &str, context: Obj) -> Resu
         let id = item.as_str().ok_or_else(|| refuse(key, "every element is an id, as a string"))?;
         let o = object(store, key, id)?;
         if !is_constrainable(store, o) {
-            return Err(refuse(key, format!("{} is outside this model; a constraint names {CONSTRAINABLE}", short(id))));
+            return Err(
+                refuse(key, format!("{} is outside this model; a constraint names {CONSTRAINABLE}", short(id))).because(Reason::NotConstrainable)
+            );
         }
         if out.contains(&o) {
-            return Err(refuse(key, format!("{} is named twice; name each element once", short(id))));
+            let twice = Reason::NamedTwice { kind: "constrained element", name: short(id) };
+            return Err(refuse(key, format!("{} is named twice; name each element once", short(id))).because(twice));
         }
         out.push(o);
     }
@@ -312,7 +316,7 @@ fn constrained_param(store: &Store, p: &Params, key: &str, context: Obj) -> Resu
 fn expression_param<'a>(p: &'a Params, key: &str) -> Result<&'a str, CommandError> {
     let e = text(p, key);
     match expression_problem(e) {
-        Some(why) => Err(refuse(key, why)),
+        Some(why) => Err(refuse(key, why).because(Reason::NoExpression)),
         None => Ok(e),
     }
 }
@@ -405,10 +409,9 @@ pub fn show(store: &mut Store, d: Obj, c: Obj, form: Form, at: Option<(f64, f64)
     let (parent, size, place) = match form {
         Form::Braces => {
             let Some(anchor) = anchor else {
-                return Err(refuse(
-                    "as",
-                    format!("braces sit by an element they constrain, and this diagram shows none of {}'s; show it as a note", name_of(store, c)),
-                ));
+                let said =
+                    format!("braces sit by an element they constrain, and this diagram shows none of {}'s; show it as a note", name_of(store, c));
+                return Err(refuse("as", said).because(Reason::BracesNoElement));
             };
             let r = rect(anchor);
             ((anchor, node::CHILD), (braces_width(&format!("{{{expr}}}")), BRACES_HEIGHT), (r.x, r.y + r.height + BRACES_GAP))

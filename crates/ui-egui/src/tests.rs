@@ -5175,6 +5175,81 @@ fn an_application_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A constraint's and a description's own rules, refused by the engine, are said in the chosen
+/// language: an expression that states no rule, a context that owns none, an element no constraint
+/// names or one named twice, too many elements, an element that takes no description and a
+/// description too long; and braces with nothing to sit by are said under the editor's form
+/// buttons, any other refusal of Apply under it, with nothing written. In light and dark (AR-447).
+#[test]
+fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1800.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let refused =
+            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let [order, payment] = ["Order", "Payment"].map(|n| named(&h, archforge_uml::CLASS, n).to_string());
+        let (diagram, node) = (h.state().canvas.active.unwrap().to_string(), nodes["Order"].clone());
+        let made = |constrained: serde_json::Value| json!({ "context": order, "expression": "x", "constrained": constrained });
+        let none = tr("Type an expression. A constraint without one states no rule.");
+        assert_eq!(
+            none, "Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.",
+            "{theme:?}: the language is German"
+        );
+        assert_eq!(refused(&mut h, "uml.constraint.add", json!({ "context": order, "expression": " " })), none, "{theme:?}");
+        let owns = tr("Only a classifier of the model's own or a package owns constraints.");
+        assert_eq!(refused(&mut h, "uml.constraint.add", json!({ "context": node, "expression": "x" })), owns, "{theme:?}");
+        let outside = tr("A constraint names only elements of this model.");
+        assert_eq!(refused(&mut h, "uml.constraint.add", made(json!([diagram]))), outside, "{theme:?}");
+        let twice = tr("An element is named twice. Name each element once.");
+        assert_eq!(refused(&mut h, "uml.constraint.add", made(json!([order, payment, payment]))), twice, "{theme:?}");
+        let most = fmt(&tr("A constraint names at most {max} elements."), &[("max", "256")]);
+        assert_eq!(most, "Eine Einschränkung nennt höchstens 256 Elemente.", "{theme:?}");
+        assert_eq!(refused(&mut h, "uml.constraint.add", made(json!(vec![&order; 257]))), most, "{theme:?}");
+        // A description: on a constraint, which takes none, and one too long for a class.
+        let rule = crate::panels::run(h.state_mut(), "uml.constraint.add", json!({ "context": payment, "expression": "x" })).unwrap()["id"].clone();
+        let takes_none = tr("This element takes no description.");
+        assert_eq!(refused(&mut h, "element.describe", json!({ "element": rule, "text": "About it" })), takes_none, "{theme:?}");
+        let long = fmt(&tr("It can't be longer than {max} characters."), &[("max", "4096")]);
+        assert_eq!(refused(&mut h, "element.describe", json!({ "element": order, "text": "x".repeat(4097) })), long, "{theme:?}");
+        // An element with 64 comments, which only a file holds, is said from its reason.
+        let comments = tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first.");
+        assert_eq!(crate::panels::said(&Reason::TooManyComments { max: 64 }), Some(fmt(&comments, &[("max", "64")])), "{theme:?}");
+        // Braces picked in the editor for a class the diagram no longer shows: said under the form.
+        // The window is tall, so the German panel's Constraints section is in reach of the pointer.
+        crate::panels::run(h.state_mut(), "diagram.unplace", json!({ "nodes": [node] })).unwrap();
+        crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [order] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let at = rect_of(&h, "workspace.properties.constraints.add").center();
+        click(&mut h, at);
+        let edit = h.state_mut().panels.constraint.as_mut().expect("the editor");
+        (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
+        h.run();
+        let revision = h.state().session.as_ref().unwrap().revision();
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        click(&mut h, at);
+        let braces = tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.");
+        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(braces.as_str()), Some("show")), "{theme:?}");
+        assert!(braces.starts_with("Geschweifte Klammern") && painted(&h).contains(&braces), "{theme:?}: said in German in the editor");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // Any other refusal of Apply is said under it, as a sentence: here the diagram as the element.
+        let shown = h.state().canvas.active.unwrap();
+        h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
+        h.run();
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        click(&mut h, at);
+        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

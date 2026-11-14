@@ -438,7 +438,11 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
             return Some(fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", name)]));
         }
         other => {
-            return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other)).or_else(|| profile_said(other));
+            return relationship_said(other)
+                .or_else(|| template_said(other))
+                .or_else(|| set_and_end_said(other))
+                .or_else(|| profile_said(other))
+                .or_else(|| constraint_said(other));
         }
     };
     let what = a_kind(kind)?;
@@ -446,6 +450,26 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
     let what =
         if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
     Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A constraint's or a description's rule broken, in the constraint editor's own words where it has
+/// them; none for another reason.
+fn constraint_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    Some(match reason {
+        Reason::NoExpression => tr("Type an expression. A constraint without one states no rule."),
+        Reason::BracesNoElement => tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note."),
+        Reason::NotAContext => tr("Only a classifier of the model's own or a package owns constraints."),
+        Reason::NotConstrainable => tr("A constraint names only elements of this model."),
+        Reason::TooMany { kind: "constrained element", max } => fmt(&tr("A constraint names at most {max} elements."), &[("max", &max.to_string())]),
+        Reason::NamedTwice { kind: "constrained element", .. } => tr("An element is named twice. Name each element once."),
+        Reason::TakesNoDescription => tr("This element takes no description."),
+        Reason::TooManyComments { max } => fmt(
+            &tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first."),
+            &[("max", &max.to_string())],
+        ),
+        _ => return None,
+    })
 }
 
 /// A profile's or a stereotype's rule broken; none for a reason or a kind the catalogues don't say.
