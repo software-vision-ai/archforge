@@ -239,6 +239,18 @@ pub enum Reason {
     /// The element owns `max` comments or more, so its description, looked for among the first
     /// `max` alone, is neither set nor cleared.
     TooManyComments { max: usize },
+    /// A list that takes ids of `kind`, each as text or as an object with its id, holds something
+    /// else.
+    IdsExpected { kind: &'static str },
+    /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
+    NotAnItemKey { key: String },
+    /// No element of the model has the id `id`, cut to its first characters.
+    NoElement { id: String },
+    /// The built-in type `name` is never made leaf.
+    BuiltInNotLeaf { name: String },
+    /// The elements named, a member with its owner as `Class::name()`, redefine the element, so it
+    /// is made leaf only once their redefinitions are gone.
+    Redefined(Box<[String]>),
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.

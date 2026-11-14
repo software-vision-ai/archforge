@@ -37,6 +37,11 @@ pub const SELECT_ALL: &str = "edit.select-all";
 /// The Versions menu's rows by section, on every system (`docs/design/versioning.md`, section 11).
 pub static VERSIONS_MENU: [&[&str]; 4] = [&[SAVE_VERSION], &[VERSIONS, COMPARE], &[NEW_BRANCH, BRANCHES], &[OLDER, NEWER, BACK]];
 
+/// The File menu's rows by section, the same groups on every system (AR-454): Settings… and Exit
+/// end it only where the bar is in the window, as macOS keeps them in its application menu. Read
+/// through `file_menu`, which leaves out the rows this system shows elsewhere.
+pub static FILE_MENU: [&[&str]; 5] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE], &[SETTINGS], &[QUIT]];
+
 /// One application action.
 pub struct Action {
     /// What a menu item or a search row names it by, never shown.
@@ -277,6 +282,15 @@ pub static ACTIONS: &[Action] = &[
 /// on Windows and Linux: the one answer every wording that differs between the two asks for.
 fn native_bar(shell: &Shell) -> bool {
     !shell.in_window_menu
+}
+
+/// The File menu's rows on this system, by section: `FILE_MENU` without Settings… and Exit in the
+/// native bar, which has them in its application menu, and without a section that has no row left,
+/// so no divider stands at an edge or beside another.
+pub fn file_menu(shell: &Shell) -> Vec<Vec<&'static str>> {
+    let shown = |id: &&str| !(native_bar(shell) && [SETTINGS, QUIT].contains(id));
+    let sections = FILE_MENU.iter().map(|section| section.iter().copied().filter(shown).collect::<Vec<_>>());
+    sections.filter(|section| !section.is_empty()).collect()
 }
 
 /// The File menu's title on this system: the native bar takes the system's own word where a
@@ -636,6 +650,18 @@ pub(crate) mod tests {
         shell.state.recent_sort = RecentSort::Name;
         let flipped = [APPEARANCE, VIEW, SORT].map(|id| label(&shell, id));
         assert_eq!(flipped, ["Switch to the light appearance", "Show recent projects as a list", "Sort recent projects by last opened"]);
+    }
+
+    /// File has the same groups on every system: New project…, Open project… and Close project, then
+    /// Save, then Generate…. The bar in the window ends it with Settings… and Exit, each set apart;
+    /// the native bar has both in its application menu, so leaves them out with no group left empty.
+    #[test]
+    fn file_has_the_same_groups_on_every_system() {
+        let (mut shell, ..) = shell();
+        shell.in_window_menu = false;
+        assert_eq!(file_menu(&shell), [vec![NEW, OPEN, CLOSE], vec![SAVE], vec![GENERATE]], "the native bar");
+        shell.in_window_menu = true;
+        assert_eq!(file_menu(&shell), [vec![NEW, OPEN, CLOSE], vec![SAVE], vec![GENERATE], vec![SETTINGS], vec![QUIT]], "the bar in the window");
     }
 
     /// The wording that differs by system, each asked with the native bar and with the bar in the

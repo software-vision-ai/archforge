@@ -36,8 +36,11 @@ An open project fills the window with its workspace.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
 **View**, **Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
-opens it or moves to it. A few words follow the system: the last row of **File** is **Exit** there
-and **Quit Archforge** in the application menu on macOS, whose **Edit** menu writes **Select All**. A row that cannot act now is greyed out and says why when you point at
+opens it or moves to it. **File** has the same groups on every system: **New project…**, **Open
+project…** and **Close project**, then **Save**, then **Generate…**; in the strip **Settings…** and
+**Exit** follow at its end, where macOS has them in its application menu. A few words follow the
+system: the last row of **File** is **Exit** there and **Quit Archforge** in the application menu on
+macOS, whose **Edit** menu writes **Select All**. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 A click elsewhere only closes the menu: it does not also press, select or drag what is under it, so

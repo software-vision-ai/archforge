@@ -10,8 +10,8 @@ use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
-    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, QUIT, REDO, SAVE, SAVE_VERSION,
-    SELECT_ALL, SETTINGS, UNDO, VERSIONS,
+    self, ABOUT, BACK, BRANCHES, CLOSE, COMPARE, COPY, CUT, GENERATE, Keys, NEW, NEW_BRANCH, NEWER, OPEN, PASTE, REDO, SAVE, SAVE_VERSION,
+    SELECT_ALL, UNDO, VERSIONS,
 };
 use crate::home::{control, off_words};
 use crate::i18n::{tr, tr_ctx};
@@ -29,7 +29,7 @@ struct Group {
 
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
-    Group { id: "file", title: || tr("File"), sections: |_| vec![vec![NEW, OPEN, SAVE, GENERATE], vec![SETTINGS, CLOSE], vec![QUIT]] },
+    Group { id: "file", title: || tr("File"), sections: actions::file_menu },
     Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
     Group { id: "view", title: || tr_ctx("menu", "View"), sections: |_| crate::view_menu::VIEW_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
@@ -474,6 +474,7 @@ fn versions_off(shell: &Shell, id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actions::SETTINGS;
     use crate::actions::tests::{shell, tab};
     use std::sync::mpsc::channel;
 

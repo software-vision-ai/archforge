@@ -144,21 +144,26 @@ pub fn redefiner_name(store: &Store, o: Obj) -> String {
 
 /// Why `o`, a classifier, a property or an operation, may not be made leaf, when it may not: a
 /// built-in type is never changed, and an element something redefines already would break the
-/// rule at once; the refusal names those elements and asks for their redefinitions to go first.
-pub fn leaf_problem(store: &Store, o: Obj) -> Option<String> {
+/// rule at once; the refusal, about `leaf`, names those elements and asks for their redefinitions to
+/// go first, its reason typed.
+pub fn leaf_problem(store: &Store, o: Obj) -> Option<CommandError> {
     let id = uuid_of(store, o).unwrap_or_default();
     if crate::members::is_built_in(store, o) {
-        return Some(format!("{id} is the built-in type {}, which is never made leaf", name_of(store, o)));
+        let name = name_of(store, o);
+        let said = format!("{id} is the built-in type {name}, which is never made leaf");
+        return Some(refuse("leaf", said).because(Reason::BuiltInNotLeaf { name }));
     }
     let by = redefiners(store, o);
     if by.is_empty() {
         return None;
     }
-    let names: Vec<String> = by.iter().map(|r| format!("{} ({})", redefiner_name(store, *r), uuid_of(store, *r).unwrap_or_default())).collect();
-    Some(format!(
+    let names: Box<[String]> = by.iter().map(|r| redefiner_name(store, *r)).collect();
+    let listed: Vec<String> = by.iter().zip(&names).map(|(r, name)| format!("{name} ({})", uuid_of(store, *r).unwrap_or_default())).collect();
+    let said = format!(
         "{id} is redefined by {}; remove those redefinitions (a property's redefines, with uml.attribute.set or uml.association.set-end) before making it leaf",
-        names.join(", ")
-    ))
+        listed.join(", ")
+    );
+    Some(refuse("leaf", said).because(Reason::Redefined(names)))
 }
 
 /// The generalizations that specialize the classifier `c` directly, each with its specific
@@ -213,9 +218,9 @@ fn classifier_set(ctx: &mut C<'_>, p: &Params) -> R {
     }
     if leaf_on == Some(true)
         && !is_leaf(ctx.doc, c)
-        && let Some(why) = leaf_problem(ctx.doc, c)
+        && let Some(refused) = leaf_problem(ctx.doc, c)
     {
-        return Err(refuse("leaf", why));
+        return Err(refused);
     }
     if let Some(on) = final_on.filter(|on| *on != is_final(ctx.doc, c)) {
         ctx.doc.set(c, classifier::IS_FINAL_SPECIALIZATION, Value::Bool(on)).map_err(fail)?;
