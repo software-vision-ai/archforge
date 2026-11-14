@@ -2,7 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # 应用程序菜单
 str		Quit Archforge	退出 Archforge
+str		Exit	退出
 str		File	文件
+str	macOS	File	文件
 str		Help	帮助
 str	menu	View	视图
 str		Ctrl	Ctrl
@@ -17,7 +19,7 @@ str		This project has one branch	此项目只有一个分支
 str		Leave the text field first	请先离开文本框
 str		Widen the window to search	请加宽窗口以进行搜索
 str		Already showing	已在显示
-str		Open…	打开…
+str		Open project…	打开项目…
 str		Find…	查找…
 str		Save	存储
 # 生成
@@ -53,7 +55,6 @@ str		Copy request	复制请求
 str		{name} — Archforge	{name} — Archforge
 # 主页
 str		Recent projects	最近的项目
-str		Open project	打开项目
 str		Close project	关闭项目
 str		Close	关闭
 str		Home	主页
@@ -484,7 +485,7 @@ str		The project stayed on its branch because it changed or was busy.	由于项�
 str		Your latest changes could not be written, so the project stayed on its branch.	无法写入您最近的更改，因此项目仍停留在其分支上。
 str		The project stayed on its branch: {why}	项目仍停留在其分支上：{why}
 str		Switch to {branch}?	切换到 {branch}？
-str		Switch branch	切换分支
+str		Switch branch…	切换分支…
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} 有未保存的更改。它们会保留在 {branch} 上，您回来时仍在。您将无法撤销之前的步骤。
 str		Save version and switch	保存版本并切换
 str		Switch	切换
@@ -605,6 +606,7 @@ str	refusal	an association end	关联端
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。
 str		Working changes	工作更改
 str		History	历史记录
+str		History…	历史记录…
 str		Retry	重试
 str		No changes since the last version.	自上一版本以来没有更改。
 str		What you're typing isn't kept yet	正在输入的文本尚未保存
@@ -920,12 +922,12 @@ str		Cut	剪切
 str		Copy	拷贝
 str		Paste	粘贴
 str		Select all	全选
+str		Select All	全选
 str		Nothing to act on here	这里没有可操作的内容
 plural		+ {n} more column	+ 另 {n} 列
 str		Minimap	缩略图
 str		Hide minimap	隐藏缩略图
 str		Show minimap	显示缩略图
-str		The minimap is showing	缩略图已显示
 str		Make the canvas larger to show the minimap	扩大画布以显示小地图
 str		Whole diagram	整个图
 str		Zoom in	放大

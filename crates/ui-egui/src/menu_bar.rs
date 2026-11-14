@@ -401,7 +401,21 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
     paint.galley(pos2(row.right() - 10.0 - width, row.center().y - detail.size().y / 2.0), detail, p.text_secondary);
     let ink = if live { p.text } else { p.text_muted };
     ux::text_mid(paint, row.left() + 10.0, row.center().y, &label, types::SMALL, ink, Some((row.width() - 28.0 - width).max(0.0)));
+    tick(shell, ui, p, id, row);
     live && resp.clicked()
+}
+
+/// A row that shows and hides something, as View's panel rows do: a check box to a screen reader,
+/// checked while its thing shows, and then with a tick at its right. Any other row stays as it is.
+fn tick(shell: &Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) {
+    let Some(on) = actions::ticked(shell, id) else { return };
+    ui.ctx().accesskit_node_builder(widgets::egui_id(&format!("strip.menu.row.{id}")), |node| {
+        node.set_role(egui::accesskit::Role::MenuItemCheckBox);
+        node.set_toggled(if on { egui::accesskit::Toggled::True } else { egui::accesskit::Toggled::False });
+    });
+    if on {
+        ux::icon_mid(ui.painter(), pos2(row.right() - 16.0, row.center().y), &ux::icons::TICK, p.accent);
+    }
 }
 
 /// Why the row of the action `id` is off, in words: the first thing that keeps it off.

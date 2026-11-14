@@ -696,11 +696,16 @@ graph line and "Changed by" go.
 Menus (AR-154, deciding AR-20): **File**, **Edit**, **View**, **Model**, **Versions**, **Help**, the
 macOS application menu, and an in-window menu on Windows and
 Linux. A group appears only with real actions. **File** holds Save, and **Versions** holds Save version…. On
-Windows and Linux Quit is under File and About under Help. **Model** holds the create-element and
+Windows and Linux Exit is under File and About under Help; macOS keeps Quit Archforge in its application menu.
+Wording that follows the system (AR-454) is decided in one place, by whether the bar is the system's own
+(`actions::native_bar`): Quit Archforge and Exit; Select All in the native bar and Select all in the window's; and in
+German the File menu's title, Ablage in the native bar and Datei in the window's. Open project… reads the same in File, the
+strip and the search. An ellipsis marks a row that opens something asking for more before it acts. **Model** holds the create-element and
 create-relationship actions through the same commands as the diagram tools (`workspace.tools.*`,
 `crates/ui-egui/src/canvas.rs:2714-2750`): Note, Link note and the open diagram's own kinds, for UML those
-of the existing relationship and classifier lists. **Versions** also holds History, Compare…, New branch…,
-Switch branch, Back to current work, and older and newer. New project, Close project, the zooms and the
+of the existing relationship and classifier lists. **Versions** also holds History…, Compare…, New branch…,
+Switch branch…, Back to current work, and older and newer. **View**'s Minimap and its explorer and panel rows are nouns,
+ticked while theirs shows (a checked check box to a screen reader); choosing one shows it, or hides it while ticked. New project, Close project, the zooms and the
 tool picks show no shortcut, as none exists today.
 
 Menu audit (AR-307), every menu in Home, an open project, a text field, a canvas selection and
@@ -727,7 +732,7 @@ app was run on, so the Windows and Linux bar was never seen in a real window); *
 | macOS and the in-window bar hold the same rows with the same keys | app, harness | Fine: `the_menus_are_the_tables_with_the_designs_keys`, `the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes`. macOS has no Window or Help menu, no Hide Others or Show All and no ⌘W; File's order differs between the two: decisions, own ticket |
 | Behind a dialog only About, Hide and Quit stay on | app | Fine on macOS, seen with About open; the in-window bar closes instead (harness) |
 | Every label goes through the catalogues, with its ellipsis kept in all seven | code | Fine, by a scan of the catalogues and `every_action_keeps_its_name`; labels fit the menu in English, German, Spanish, French and Portuguese (harness, probed by hand on an ER project; Japanese and Chinese are not drawn there, a class diagram's Model rows were not measured) |
-| An ellipsis on every row that asks for more, one verb per action | code | Naming decisions, own ticket: History and Switch branch open a list without one; View's panel rows are bare nouns beside Show minimap; Open… beside the strip's Open project; Quit and German Ablage on Windows and Linux |
+| An ellipsis on every row that asks for more, one verb per action | code | Decided in AR-454 and built in AR-461: History… and Switch branch… have one; View's panel rows and Minimap are nouns with a tick while shown (`a_row_with_a_tick_is_a_check_box_checked_while_its_thing_shows`); Open project… in File, the strip and the search; Exit and German Datei on Windows and Linux, Select All in the native bar (`the_wording_follows_the_systems_bar`, `the_bar_in_the_window_says_its_systems_words`) |
 
 Journeys to draw in `ArchforgeUx.figcraft`, from page 02's components, in light and dark, with real
 content:

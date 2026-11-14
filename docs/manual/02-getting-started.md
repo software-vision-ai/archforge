@@ -69,7 +69,7 @@ a version is and how to save one with a description.
 - On Home, **Recent projects** lists the last twelve projects you opened. Choose one to open it;
   it comes back with the diagrams you had open and the view you left them in.
 - To open a project that is not in the list, choose **Browse files** on the **Open a project** card,
-  or **+ Open project** in the strip at the very top, and pick the project's `.archforge` folder.
+  or **+ Open project…** in the strip at the very top, and pick the project's `.archforge` folder.
 - **Pin a folder** on Home keeps a folder of projects one click away.
 
 ## Finding a project on disk
