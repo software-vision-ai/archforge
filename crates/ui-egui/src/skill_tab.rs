@@ -576,21 +576,29 @@ pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rec
     }
 }
 
-/// The source, styled as it is typed, with the toolbar's edit and its shortcuts applied.
+/// Takes this frame's first press of ⌘B, ⌘I or ⌘K (Ctrl on other systems) and gives its format.
+/// Matched exactly: `consume_key` lets an extra Shift or Alt through, which would make ⇧⌘B bold.
+fn chord(inp: &mut egui::InputState) -> Option<Format> {
+    let (at, format) = inp.events.iter().enumerate().find_map(|(at, e)| match e {
+        egui::Event::Key { key, pressed: true, modifiers, .. } if modifiers.matches_exact(egui::Modifiers::COMMAND) => match key {
+            egui::Key::B => Some((at, Format::Bold)),
+            egui::Key::I => Some((at, Format::Italic)),
+            egui::Key::K => Some((at, Format::Link)),
+            _ => None,
+        },
+        _ => None,
+    })?;
+    inp.events.remove(at);
+    Some(format)
+}
+
+/// The source, styled as it is typed, with the toolbar's edit and its shortcuts applied: ⌘B, ⌘I
+/// and ⌘K, each with exactly that modifier.
 #[allow(clippy::too_many_arguments)]
 fn write(shell: &mut Shell, ui: &egui::Ui, child: &mut egui::Ui, p: &Palette, page: Rect, i: usize, editor_id: egui::Id, pressed: Option<Format>) {
     let ctx = ui.ctx().clone();
     let focused = ctx.memory(|m| m.has_focus(editor_id));
-    let shortcut = if focused {
-        ctx.input_mut(|inp| {
-            [(egui::Key::B, Format::Bold), (egui::Key::I, Format::Italic), (egui::Key::K, Format::Link)]
-                .into_iter()
-                .find(|(k, _)| inp.consume_key(egui::Modifiers::COMMAND, *k))
-                .map(|(_, f)| f)
-        })
-    } else {
-        None
-    };
+    let shortcut = if focused { ctx.input_mut(chord) } else { None };
     let doc = &mut shell.canvas.skills[i];
     if let Some(f) = pressed.or(shortcut) {
         let mut state = egui::text_edit::TextEditState::load(&ctx, editor_id).unwrap_or_default();
@@ -704,6 +712,19 @@ mod tests {
         assert_eq!(markdown::slug("顧客 命名"), "顧客-命名");
         assert_eq!(markdown::slug("!!"), "skill");
         assert_eq!(markdown::body_start("---\nname: x\n"), 0, "an unclosed header is text");
+    }
+
+    /// A chord's press is taken out of the frame's input; the rest of it stays (AR-450).
+    #[test]
+    fn a_chord_takes_its_own_press_and_leaves_the_rest() {
+        let press = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        let shifted = press(egui::Key::B, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+        let mut inp = egui::InputState::default();
+        inp.events = vec![shifted.clone(), press(egui::Key::I, egui::Modifiers::COMMAND), egui::Event::Text("x".into())];
+        assert_eq!(chord(&mut inp), Some(Format::Italic));
+        assert_eq!(inp.events, [shifted, egui::Event::Text("x".into())]);
+        assert_eq!(chord(&mut inp), None);
+        assert_eq!(inp.events.len(), 2);
     }
 
     #[test]
