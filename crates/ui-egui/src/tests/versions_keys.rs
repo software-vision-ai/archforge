@@ -147,46 +147,48 @@ fn a_page_key_moves_at_least_a_row_in_a_short_list() {
     });
 }
 
-/// Tab and Shift+Tab bring every part of a list they come to whole into view: the versions and
-/// Show more under them, the working changes, and the branches and their menu buttons.
+/// Tab and Shift+Tab land on every part of a list in turn, none skipped, and bring each whole into
+/// view: the versions and Show more under them, the working changes, and the branches and their
+/// menu buttons.
 #[test]
 fn tab_brings_each_part_of_a_list_whole_into_view() {
-    // Tab from `from` to `to`, each of `parts` it comes to by the way drawn whole between `bounds`.
-    let walk = |h: &mut Harness<'static, Shell>, (from, to): (&str, &str), back: bool, bounds: (f32, f32), parts: &[String]| {
-        focus(h, from);
-        for _ in 0..120 {
+    // From the first of `order` Tab, or Shift+Tab from its last when `back`, lands on each of the
+    // rest in turn, drawn whole between `bounds`.
+    let walk = |h: &mut Harness<'static, Shell>, order: &[String], back: bool, bounds: (f32, f32)| {
+        let order: Vec<&String> = if back { order.iter().rev().collect() } else { order.iter().collect() };
+        focus(h, order[0]);
+        let mut landed = vec![order[0].clone()];
+        while landed.len() < order.len() {
             key(h, Key::Tab, if back { Modifiers::SHIFT } else { Modifiers::NONE });
-            if let Some(now) = parts.iter().find(|id| holds(h, id)) {
-                assert!(whole(h, now, bounds), "{now} in view, on the way to {to}");
-            }
-            if holds(h, to) {
-                return;
+            let on = order.iter().find(|id| holds(h, id));
+            landed.push(on.map_or_else(|| format!("{:?}", h.ctx.memory(|m| m.focused())), |id| (*id).clone()));
+            if let Some(on) = on {
+                assert!(whole(h, on, bounds), "{on} in view, after {:?}", &landed[..landed.len() - 1]);
             }
         }
-        panic!("Tab never reached {to}");
+        assert_eq!(landed.iter().collect::<Vec<_>>(), order, "every part in turn");
     };
     in_both_appearances(|theme| {
         let (mut h, _host) = long_history(theme);
         let bounds = within(&h, rect_of(&h, "workspace.versions.row.v0").top(), None);
-        let (first, more) = ("workspace.versions.row.v0", "workspace.versions.more");
-        let history = (0..50).map(|n| format!("workspace.versions.row.v{n}")).chain([more.to_string()]).collect::<Vec<_>>();
-        walk(&mut h, (first, more), false, bounds, &history);
-        walk(&mut h, (more, first), true, bounds, &history);
+        let history = (0..50).map(|n| format!("workspace.versions.row.v{n}")).chain(["workspace.versions.more".to_string()]).collect::<Vec<_>>();
+        walk(&mut h, &history, false, bounds);
+        walk(&mut h, &history, true, bounds);
 
         let mut h = many_changes(theme);
         let rows = change_rows(&h);
         let bounds = within(&h, rect_of(&h, &rows[0]).top() - 24.0, Some("workspace.versions.history"));
-        walk(&mut h, (&rows[0], &rows[29]), false, bounds, &rows);
-        walk(&mut h, (&rows[29], &rows[0]), true, bounds, &rows);
+        walk(&mut h, &rows, false, bounds);
+        walk(&mut h, &rows, true, bounds);
 
         let mut h = many_branches(theme);
         let main = "workspace.versions.branch.row.main";
         let bounds = within(&h, rect_of(&h, main).top(), Some("workspace.versions.working"));
-        let last = "workspace.versions.branch.more.b19";
         let names = (0..20).map(|i| format!("b{i:02}"));
-        let branches = names.flat_map(|n| ["row", "more"].map(|part| format!("workspace.versions.branch.{part}.{n}"))).collect::<Vec<_>>();
-        walk(&mut h, (main, last), false, bounds, &branches);
-        walk(&mut h, (last, main), true, bounds, &branches);
+        let rows = names.flat_map(|n| ["row", "more"].map(|part| format!("workspace.versions.branch.{part}.{n}")));
+        let branches = std::iter::once(main.to_string()).chain(rows).collect::<Vec<_>>();
+        walk(&mut h, &branches, false, bounds);
+        walk(&mut h, &branches, true, bounds);
     });
 }
 
