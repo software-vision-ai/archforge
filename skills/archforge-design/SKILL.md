@@ -73,9 +73,17 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   a row runs at the next frame's start, Esc closes, a press elsewhere closes and reaches nothing
   behind the menu (its release neither; AR-452), the window losing the focus closes as Esc does, and while a menu is
   open the frame's keys are held from the window behind, as under a dialog. F10 with no modifier
-  opens the first menu on its first live row and closes it again (Shift+F10 stays with the row
-  menus); Left and Right go between the groups and Up and Down through the live rows, all wrapping;
-  Enter or Space runs the row; Esc gives the keyboard focus back; a moving pointer takes the highlight.
+  opens the first menu and closes it again (Shift+F10 stays with the row
+  menus); Left and Right go between the groups and Up and Down through every row, off or not, all wrapping;
+  a menu opens on its first live row, or on its first row when none is live;
+  Enter or Space runs a live row and does nothing on a row off; Esc gives the keyboard focus back; a moving pointer takes the highlight.
+  A row off under the keys is highlighted as a live one, in its muted ink, with its reason in a bubble beside the menu
+  (under the pointer the bubble stays below the row).
+  To a screen reader (AR-453) the titles are the items of a menu bar, the open menu is a menu under its title holding
+  the rows alone, a row off carries its reason as its description, and the row under the keys is the active
+  descendant of whatever has the keyboard (the field the menu was opened on, or the window): the reader's focus
+  follows the arrows while the keyboard focus never moves, so a field keeps its text, its selection and a name
+  typed in place. The parts that swallow a press away sense no keyboard and are no nodes.
 - The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
   field has the keyboard, so a skill's text keeps ⌘K for a link, and while the bar has no room for the
   field, which then closes an open list), Zoom in, Zoom out and Whole diagram (the

@@ -1,7 +1,8 @@
 //! The menu bar in the title strip on Windows and Linux: the groups of the table below, each a popup
 //! of rows from the table of actions. macOS keeps its native menu, so `Shell::in_window_menu` is false
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
-//! F10 reaches the bar from the keys: the arrows walk groups and live rows, wrapping, Enter or Space runs the row.
+//! F10 reaches the bar from the keys: the arrows walk groups and rows, off or not, wrapping, Enter or Space runs a row that can act.
+//! To a screen reader the bar is a menu bar, the open menu its title's menu, and the row under the keys has its focus.
 //! A press away from the bar and its open menu only closes the menu, and so does the window losing the focus.
 
 use egui::text_edit::TextEditState;
@@ -143,20 +144,39 @@ pub(crate) fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool 
     })
 }
 
-/// The next live row of `group` after `from`, going down or up and wrapping; from no row, the first
-/// live one that way. None when every row is off.
+/// The next row of `group` after `from`, off or not, going down or up and wrapping; from no row,
+/// the first that way. A row off is reached so that its reason is, and takes no Enter.
 fn step(shell: &Shell, group: &Group, from: Option<&str>, down: bool) -> Option<&'static str> {
     let mut rows: Vec<&'static str> = (group.sections)(shell).concat();
     if !down {
         rows.reverse();
     }
     let start = from.and_then(|id| rows.iter().position(|r| *r == id)).map_or(0, |at| at + 1);
-    (0..rows.len()).map(|n| rows[(start + n) % rows.len()]).find(|id| actions::available(shell, id))
+    rows.get(start % rows.len().max(1)).copied()
+}
+
+/// The row a menu opens on from the keys: the first that can act, or the first when none can, so
+/// that a menu with every row off still says a row.
+fn first(shell: &Shell, group: &Group) -> Option<&'static str> {
+    let rows = (group.sections)(shell).concat();
+    rows.iter().find(|id| actions::available(shell, id)).or(rows.first()).copied()
+}
+
+/// Puts a screen reader's focus on the row under the keys, as the active descendant of what has
+/// the keyboard: the field the menu was opened on, or else the window. The keyboard itself never
+/// moves, so the field keeps its text, its selection and the name typed in place. Called once the
+/// frame is drawn, when the field and the row are both known to the reader: a row is one only
+/// while its menu is open.
+pub(crate) fn say_row(shell: &Shell, ctx: &egui::Context) {
+    let row = shell.menu_bar.row.map(|id| widgets::egui_id(&format!("strip.menu.row.{id}")));
+    let Some(row) = row.filter(|row| ctx.has_accesskit_node(*row)) else { return };
+    let holder = ctx.memory(egui::Memory::focused).filter(|id| ctx.has_accesskit_node(*id)).unwrap_or_else(egui::accesskit_root_id);
+    ctx.accesskit_node_builder(holder, |node| node.set_active_descendant(row.accesskit_id()));
 }
 
 /// The keys of the bar, before anything behind it can read them: F10 opens the first menu when the
 /// bar can open at all, and with a menu open F10 or Esc closes it, handing the focus back, the
-/// arrows move, and Enter or Space runs the row if it can still act.
+/// arrows move, and Enter or Space runs the row if it can act.
 pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Enter, Escape, F10, Space};
     let Some(at) = GROUPS.iter().position(|g| shell.menu_bar.open == Some(g.id)) else {
@@ -164,7 +184,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
         shell.menu_bar.selected = shell.menu_bar.back.and_then(|id| TextEditState::load(ctx, id)?.cursor.char_range());
         if shell.in_window_menu && actions::free(shell) && press(ctx, F10, false) {
             shell.menu_bar.open = Some(GROUPS[0].id);
-            shell.menu_bar.row = step(shell, &GROUPS[0], None, true);
+            shell.menu_bar.row = first(shell, &GROUPS[0]);
         }
         return;
     };
@@ -184,7 +204,7 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     } else if across > 0 {
         let group = &GROUPS[(at + across) % GROUPS.len()];
         shell.menu_bar.open = Some(group.id);
-        shell.menu_bar.row = step(shell, group, None, true);
+        shell.menu_bar.row = first(shell, group);
     } else if press(ctx, ArrowDown, true) {
         shell.menu_bar.row = step(shell, &GROUPS[at], from, true);
     } else if press(ctx, ArrowUp, true) {
@@ -215,11 +235,14 @@ pub(crate) fn chord(keys: &Keys) -> String {
 
 /// Draws the bar in `strip` from `start` and the open group's menu; a press elsewhere closes it and
 /// reaches nothing else, and a click on the open menu's own title closes it too, giving the keyboard back.
+/// The titles are the items of a menu bar to a screen reader.
 pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, start: f32) {
     if !shell.in_window_menu {
         return;
     }
     let paint = ui.painter().clone();
+    let role = egui::UiBuilder::new().accessibility_role(egui::accesskit::Role::MenuBar).accessibility_parent(ui.unique_id());
+    let titles = egui::Ui::new(ui.ctx().clone(), widgets::egui_id("strip.menu.bar"), role.layer_id(ui.layer_id()).max_rect(strip));
     let (mid, mut x, mut bar, mut shown) = (strip.center().y, start, Rect::NOTHING, None);
     for group in GROUPS {
         let was_open = shell.menu_bar.open == Some(group.id);
@@ -227,7 +250,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         let text = ux::galley(&paint, &title, types::SMALL, p.text, None);
         let size = vec2(text.size().x + 2.0 * GROUP_PAD, GROUP_HEIGHT);
         let button = Rect::from_center_size(pos2(x + size.x / 2.0, mid), size);
-        let resp = control(shell, ui, &format!("strip.menu.{}", group.id), "menu", button, true).accessible_name(title.as_str());
+        let resp = control(shell, &titles, &format!("strip.menu.{}", group.id), "menu", button, true).accessible_name(title.as_str());
         ui.ctx().accesskit_node_builder(resp.id, |node| {
             node.set_role(egui::accesskit::Role::MenuItem);
             node.set_expanded(was_open);
@@ -244,7 +267,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
             shell.menu_bar.closed_by_title = was_open;
         }
         if shell.menu_bar.open == Some(group.id) {
-            shown = Some((group, button));
+            shown = Some((group, button, resp.id));
         }
         bar = bar.union(button);
         x = button.right() + GROUP_GAP;
@@ -252,8 +275,8 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
     shell.menu_bar.rect = Some(bar);
     let press = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()));
     shell.menu_bar.pressed = press.flatten().is_some_and(|at| bar.contains(at));
-    let Some((group, button)) = shown else { return };
-    let (menu, picked) = popup(shell, ui, p, group, pos2(button.left(), strip.bottom()));
+    let Some((group, button, title)) = shown else { return };
+    let (menu, picked) = popup(shell, ui, p, group, title, pos2(button.left(), strip.bottom()));
     shell.menu_bar.pressed |= press.flatten().is_some_and(|at| menu.contains(at));
     let outside = press.is_some() && !shell.menu_bar.pressed;
     if let Some(id) = picked {
@@ -277,10 +300,11 @@ fn around(window: Rect, bar: Rect) -> [Rect; 4] {
 }
 
 /// The menu of `group` at `at`, kept inside the window: its rectangle and the row picked this frame.
+/// To a screen reader its rows are a menu under `title`, the group's item in the bar.
 /// Its layer covers the window around the bar, under the rows, so a press away from both lands on
 /// the layer: nothing behind the menu is pressed, dragged or pointed at, and the release that
 /// follows finds the layer gone and reaches nothing either.
-fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui::Pos2) -> (Rect, Option<&'static str>) {
+fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, title: egui::Id, at: egui::Pos2) -> (Rect, Option<&'static str>) {
     let sections = (group.sections)(shell);
     let window = ui.ctx().content_rect();
     let (count, dividers) = (sections.iter().map(Vec::len).sum::<usize>() as f32, sections.len().saturating_sub(1) as f32 * DIVIDER);
@@ -297,10 +321,12 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
         paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
-        // Sensing both, so it wins over what lies behind at its parts' edges too; never the keyboard.
+        // Sensing both, so it wins over what lies behind at its parts' edges too; never the keyboard,
+        // which also keeps the parts from a screen reader.
         for (n, part) in around(window, shell.menu_bar.rect.unwrap_or(Rect::NOTHING)).into_iter().enumerate() {
             ui.interact(part, widgets::egui_id(&format!("strip.menu.away.{n}")), Sense::CLICK | Sense::DRAG);
         }
+        let ui = &ui.new_child(egui::UiBuilder::new().accessibility_role(egui::accesskit::Role::Menu).accessibility_parent(title));
         let mut picked = None;
         let mut y = m.top() + MENU_PAD;
         for (n, section) in sections.iter().enumerate() {
@@ -323,23 +349,33 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
 }
 
 /// One row, a menu item with its name and keys, highlighted under the keys or else the pointer; off,
-/// it says why on hover and takes no click. True when clicked.
+/// it says why on hover and under the keys, and to a screen reader always, and takes no click. True
+/// when clicked.
 fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) -> bool {
     let paint = ui.painter();
     let label = actions::label(shell, id);
     let auto = format!("strip.menu.row.{id}");
     let live = actions::available(shell, id);
+    let keyed = shell.menu_bar.row == Some(id);
     let resp = if live {
         control(shell, ui, &auto, "menu-item", row, true).accessible_name(label.as_str())
     } else {
         widgets::record_visible(ui, &mut shell.registry, &auto, "menu-item", row);
         let why = why_off(shell, id);
         let resp = ui.interact(row, widgets::egui_id(&auto), Sense::hover());
-        // Before the reason: the toolkit describes only a row a screen reader already knows.
-        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| node.set_disabled());
-        resp.on_hover_text(why).accessible_name(label.as_str())
+        ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| {
+            node.set_disabled();
+            node.set_description(why.as_str());
+        });
+        // The keys bring no pointer, so under them the reason shows by itself, beside the menu:
+        // the rows the arrows go to next stay in sight.
+        if keyed {
+            let beside = egui::Popup::from_response(&resp).kind(egui::PopupKind::Tooltip).align(egui::RectAlign::RIGHT_START);
+            beside.show(|ui| ui.label(why.as_str()));
+        }
+        let resp = if keyed { resp } else { resp.on_hover_text(why) };
+        resp.accessible_name(label.as_str())
     };
-    let keyed = live && shell.menu_bar.row == Some(id);
     // A menu item to a screen reader whether it can act or not, as the row menus' rows are.
     ui.ctx().accesskit_node_builder(widgets::egui_id(&auto), |node| {
         node.set_role(egui::accesskit::Role::MenuItem);

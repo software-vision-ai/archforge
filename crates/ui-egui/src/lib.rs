@@ -2088,6 +2088,7 @@ impl Shell {
         close_ask::show(self, ui);
         edit_menu::note(self, ui.ctx());
         edit_menu::keep_text_selected(self, ui.ctx());
+        menu_bar::say_row(self, ui.ctx());
         // A project shown in this frame (made, opened or recalled from its tab) gets its model on
         // the next: that frame is asked for now, not left to the pointer's next move.
         if self.project.as_ref().is_some_and(|p| self.adopted.as_ref() != Some(&p.path)) {

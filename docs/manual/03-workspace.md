@@ -44,8 +44,12 @@ click again to act there. A click on the open menu's name closes it too, and lik
 keyboard back where it was. The menu also closes when the window stops being the active one, again
 as Esc closes it.
 F10 opens the first menu from the keyboard and closes it again. The Left and Right arrows go between
-the menus and the Up and Down arrows go through the rows that can act, both wrapping around at the
-ends. Enter or Space runs the row, and Esc puts the keyboard focus back where it was. A name, a
+the menus and the Up and Down arrows go through the rows, both wrapping around at the ends. A menu
+opens on its first row that can act. The arrows also reach a row that is greyed out: it shows why
+beside the menu, and Enter and Space do nothing on it. Enter or Space runs a row that can act, and
+Esc puts the keyboard focus back where it was. A screen reader is given the strip's menus as a menu
+bar and the open one as a menu, follows the arrows from row to row, and is told why a greyed-out row
+cannot act. A name, a
 note's text or a class's member you are typing in place stays open for the **Edit** menu's rows to
 act on; it is finished before another menu's row runs, and by a click elsewhere, as it would be with
 no menu.
