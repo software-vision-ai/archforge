@@ -201,6 +201,24 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         }
         Reason::Unextended(u) => unextended(&u.stereotype, u.metaclass, &u.extends),
         Reason::ProfileOutOfScope { profile, package } => out_of_scope(profile, package),
+        Reason::NotApplied { stereotype, element } => {
+            fmt(&tr("«{stereotype}» is not applied to {name}."), &[("stereotype", stereotype), ("name", element)])
+        }
+        Reason::NoProperty(no) => fmt(
+            &tr("«{stereotype}» has no property {name}. It has {properties}."),
+            &[("stereotype", &no.stereotype), ("name", &no.name), ("properties", &no.has.join(", "))],
+        ),
+        Reason::NoProperties { stereotype, name } => {
+            fmt(&tr("«{stereotype}» has no property {name}. It has no properties yet."), &[("stereotype", stereotype), ("name", name)])
+        }
+        Reason::NotA { kind: "stereotype", name } => fmt(&tr("{name} is not a stereotype."), &[("name", name)]),
+        Reason::NotA { kind: "class diagram", name } => fmt(&tr("{name} is not a class diagram."), &[("name", name)]),
+        Reason::ValuesExpected => tr("Give the values as a list of texts."),
+        Reason::IdEmpty => tr("No id is given. Give the element's id."),
+        Reason::Gone => tr("This element is gone."),
+        Reason::ParameterElement { name, template } => {
+            fmt(&tr("{name} is a template parameter of {template} and types only its members."), &[("name", name), ("template", template)])
+        }
         Reason::Values(values) => values_said(values),
         Reason::ValuesMisfit { name, elements, bounds } => {
             let n = u64::try_from(*elements).ok()?;

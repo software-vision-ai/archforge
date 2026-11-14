@@ -631,8 +631,8 @@ fn every_profile_rule_refused_carries_its_reason_typed() {
 }
 
 /// An element that takes no stereotype, and a stereotype that may not be applied to one, refused,
-/// carry their reason typed beside the unchanged English, under the parameter each is about; a
-/// template parameter's classifier is refused with its sentence alone (AR-446).
+/// carry their reason typed beside the unchanged English, under the parameter each is about, a
+/// template parameter's classifier among them (AR-446, AR-473).
 #[test]
 fn every_application_refused_carries_its_reason_typed() {
     use archforge_engine::{EngineError, Reason, Unextended};
@@ -668,7 +668,8 @@ fn every_application_refused_carries_its_reason_typed() {
         (st.uuid(profiles::metaclass(st, "Class").unwrap()).unwrap().to_string(), st.uuid(t).unwrap().to_string())
     };
     check(&mut s, &class, &entity, "element", Some(Reason::UmlOwn { metaclass: Some("Class".into()) }), "UML metaclass Class");
-    check(&mut s, &t, &entity, "element", None, "is the template parameter T of Customer");
+    let parameter = Reason::ParameterElement { name: "T".into(), template: "Customer".into() };
+    check(&mut s, &t, &entity, "element", Some(parameter), "is the template parameter T of Customer");
     // What may not be applied: applied already, extending another metaclass or none, out of scope.
     let applied = Reason::StereotypeApplied { stereotype: "Entity".into(), element: "Order".into() };
     check(&mut s, &order, &entity, "stereotype", Some(applied), "«Entity» is applied to Order already");
@@ -817,6 +818,56 @@ fn every_value_refused_carries_its_reason_typed() {
     let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element: "Order".into() };
     let valued = Reason::LiteralValued(Box::new(valued));
     check(&mut s, "element.remove", json!({ "ids": [lazy] }), "ids", valued, "the literal lazy is the value of fetch in «Entity» on Order");
+}
+
+/// The applications' parameters refused carry their reason typed beside the unchanged English,
+/// under the parameter each is about: an id missing, malformed or of no element, an element of the
+/// wrong kind, a stereotype not applied, a property not named or one it lacks, with or without
+/// others, and values that are no list of texts or too many; so does an element gone (AR-473).
+#[test]
+fn every_application_parameter_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, NoProperty, Reason, ValueMisfit, Values};
+    let mut s = session();
+    let [commerce, order, _, id_attr, _, entity, id, ..] = applied_shop(&mut s);
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{p}: {}", error.message);
+        assert!(error.message.contains(english), "{p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{p} changed nothing");
+    };
+    let gone = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Gone" }));
+    run(&mut s, "element.remove", json!({ "ids": [gone] }));
+    let apply = "uml.stereotype.apply";
+    let on = |element: &str| json!({ "element": element, "stereotype": entity });
+    check(&mut s, apply, on(""), "element", Reason::IdEmpty, "\"\" is not an id");
+    check(&mut s, apply, on("nope"), "element", Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id");
+    check(&mut s, apply, on(&gone), "element", Reason::NoElement { id: gone.clone() }, "there is no element");
+    let not_a = |kind, name: &str| Reason::NotA { kind, name: name.into() };
+    check(&mut s, apply, json!({ "element": order, "stereotype": order }), "stereotype", not_a("stereotype", "Order"), "is not a stereotype");
+    let shown = json!({ "diagram": order, "show": true });
+    check(&mut s, "uml.stereotype.show-values", shown, "diagram", not_a("class diagram", "Order"), "is not a class diagram");
+    // Values set where the stereotype is not applied, on a property it lacks, and values no list.
+    let set = |element: &str, stereotype: &str, property: &str, values: Json| json!({ "element": element, "stereotype": stereotype, "property": property, "values": values });
+    let set_value = "uml.stereotype.set-value";
+    run(&mut s, apply, json!({ "element": id_attr, "stereotype": id }));
+    let unapplied = Reason::NotApplied { stereotype: "Entity".into(), element: "Order".into() };
+    check(&mut s, set_value, set(&order, &entity, "table", json!(["x"])), "stereotype", unapplied, "«Entity» is not applied to Order");
+    run(&mut s, apply, on(&order));
+    let has = vec!["table".to_string(), "cached".to_string()];
+    let lacks = Reason::NoProperty(Box::new(NoProperty { stereotype: "Entity".into(), name: "colour".into(), has }));
+    check(&mut s, set_value, set(&order, &entity, "colour", json!(["x"])), "property", lacks, "it has table, cached");
+    check(&mut s, set_value, set(&order, &entity, "", json!(["x"])), "property", Reason::IdEmpty, "has no property \"\"; it has table");
+    let none = Reason::NoProperties { stereotype: "Id".into(), name: "x".into() };
+    check(&mut s, set_value, set(&id_attr, &id, "x", json!(["x"])), "property", none, "«Id» has no property \"x\"; it has none");
+    check(&mut s, set_value, set(&order, &entity, "table", json!(["x", 1])), "values", Reason::ValuesExpected, "a list of values, each as text");
+    let most = Reason::Values(Box::new(Values { property: "table".into(), misfit: ValueMisfit::TooMany { max: 256 } }));
+    check(&mut s, set_value, set(&order, &entity, "table", json!(vec!["x"; 257])), "values", most, "at most 256 values");
+    // An element gone, as a store's caller may hand one to apply.
+    let mut st = store(1 << 40);
+    let class = st.create(archforge_uml::CLASS).unwrap();
+    st.destroy(class).unwrap();
+    assert_eq!(applications::apply(&mut st, class, class).unwrap_err().reason, Some(Reason::Gone));
 }
 
 /// The session `s` with the package `package` moved to the model's top level, as a project made

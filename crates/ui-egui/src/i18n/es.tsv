@@ -1296,6 +1296,15 @@ str		This is no element of the model, so no stereotype applies to it.	Esto no es
 str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} pertenece a un perfil, que define estereotipos y no lleva ninguno.
 str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} no lleva ningún estereotipo. Un estereotipo extiende {metaclasses}.
 str		«{stereotype}» is applied to {name} already.	«{stereotype}» ya está aplicado a {name}.
+str		«{stereotype}» is not applied to {name}.	«{stereotype}» no está aplicado a {name}.
+str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» no tiene la propiedad {name}. Tiene {properties}.
+str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» no tiene la propiedad {name}. Aún no tiene propiedades.
+str		{name} is not a stereotype.	{name} no es un estereotipo.
+str		{name} is not a class diagram.	{name} no es un diagrama de clases.
+str		Give the values as a list of texts.	Indica los valores como una lista de textos.
+str		No id is given. Give the element's id.	No se ha indicado ningún identificador. Indica el identificador del elemento.
+str		This element is gone.	Este elemento ya no existe.
+str		{name} is a template parameter of {template} and types only its members.	{name} es un parámetro de plantilla de {template} y solo tipa sus miembros.
 str		An element carries at most {max} stereotypes.	Un elemento lleva como máximo {max} estereotipos.
 str		{value} is no value of {name}. {accepted}	{value} no es un valor de {name}. {accepted}
 str		A whole number, such as 42 or -7.	Un número entero, como 42 o -7.

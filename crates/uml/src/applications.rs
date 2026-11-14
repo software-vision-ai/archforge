@@ -33,7 +33,7 @@
 
 use archforge_diagram::ProjectView;
 use archforge_engine::{
-    Accepted, CommandError, CommandSpec, Ctx, Facts, LiteralValued, Params, Reason, Unextended, ValueMisfit, Values, always, cmd,
+    Accepted, CommandError, CommandSpec, Ctx, Facts, LiteralValued, NoProperty, Params, Reason, Unextended, ValueMisfit, Values, always, cmd,
 };
 use archforge_mof::{Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
@@ -141,17 +141,17 @@ fn refusal(key: &str, (said, reason): Why) -> CommandError {
     }
 }
 
-/// [`element_problem`] with its reason typed for an interface to say; a template parameter's
-/// classifier, an element gone and one without a metaclass have only their sentence.
+/// [`element_problem`] with its reason typed for an interface to say; one without a metaclass is
+/// one that takes no stereotype.
 fn element_why(store: &Store, element: Obj) -> Option<Why> {
     if !store.is_alive(element) {
-        return Some(("it is gone".into(), None));
+        return Some(("it is gone".into(), Some(Reason::Gone)));
     }
     if let Some(refused) = profiles::library_refusal(store, "element", element) {
         return Some((refused.message, refused.reason));
     }
-    if let Some(why) = crate::templates::parameter_element_problem(store, element) {
-        return Some((why, None));
+    if let Some((said, reason)) = crate::templates::parameter_element_why(store, element) {
+        return Some((said, Some(reason)));
     }
     if is_application(store, element) {
         let id = uuid_of(store, element).unwrap_or_default();
@@ -170,7 +170,9 @@ fn element_why(store: &Store, element: Obj) -> Option<Why> {
     if !in_model(store, element) {
         return Some((format!("{} is no element of the model", uuid_of(store, element).unwrap_or_default()), Some(Reason::NotInModel)));
     }
-    let Ok(class) = store.class_of(element) else { return Some(("it has no metaclass".into(), None)) };
+    let Ok(class) = store.class_of(element) else {
+        return Some(("it has no metaclass".into(), Some(Reason::TakesNoStereotype { name: name_or_id(store, element) })));
+    };
     if METACLASSES.iter().any(|(_, kind)| store.universe().conforms(class, TypeRef::Class(*kind))) {
         return None;
     }
@@ -578,42 +580,64 @@ fn show_values(store: &mut Store, diagram: Obj, on: bool) -> Result<(), CommandE
 
 // Commands.
 
-/// The model's element the id under `key` names.
+/// The model's element the id under `key` names; refused with its reason typed.
 fn element_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
     let id = text(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))
+    let Some(uuid) = Uuid::parse(id) else {
+        let reason = if id.is_empty() { Reason::IdEmpty } else { Reason::NoElement { id: short(id) } };
+        return Err(refuse(key, format!("{:?} is not an id", short(id))).because(reason));
+    };
+    let none = || refuse(key, format!("there is no element {}", short(id))).because(Reason::NoElement { id: short(id) });
+    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(none)
+}
+
+/// The element the id under `key` names, refused with its reason typed unless `is` says it is of
+/// `kind`: a stereotype or a class diagram.
+fn kind_param(store: &Store, p: &Params, key: &str, kind: &'static str, is: impl Fn(Obj) -> bool) -> Result<Obj, CommandError> {
+    let o = element_param(store, p, key)?;
+    if !is(o) {
+        return Err(refuse(key, format!("{} is not a {kind}", text(p, key))).because(Reason::NotA { kind, name: name_or_id(store, o) }));
+    }
+    Ok(o)
 }
 
 /// The stereotype the id under `key` names.
 fn stereotype_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
-    let s = element_param(store, p, key)?;
-    if !profiles::is_stereotype(store, s) {
-        return Err(refuse(key, format!("{} is not a stereotype", text(p, key))));
-    }
-    Ok(s)
+    kind_param(store, p, key, "stereotype", |s| profiles::is_stereotype(store, s))
 }
 
-/// The property of `stereotype` under `key`: its id, or its name whatever the case.
+/// The property of `stereotype` under `key`: its id, or its name whatever the case; refused with
+/// its reason typed: none given, or none of the name with the properties it has, or none at all.
 fn property_param(store: &Store, p: &Params, key: &str, stereotype: Obj) -> Result<Obj, CommandError> {
     let wanted = text(p, key);
     let all = profiles::properties(store, stereotype);
     let by_id = Uuid::parse(wanted).and_then(|u| store.by_uuid(u)).filter(|o| all.contains(o));
     let by_name = || all.iter().copied().find(|a| name_of(store, *a).eq_ignore_ascii_case(wanted));
     by_id.or_else(by_name).ok_or_else(|| {
-        let names: Vec<String> = all.iter().map(|a| name_of(store, *a)).collect();
-        let offered = if names.is_empty() { "it has none".to_string() } else { format!("it has {}", names.join(", ")) };
-        refuse(key, format!("«{}» has no property {:?}; {offered}", name_of(store, stereotype), short(wanted)))
+        let has: Vec<String> = all.iter().map(|a| name_of(store, *a)).collect();
+        let offered = if has.is_empty() { "it has none".to_string() } else { format!("it has {}", has.join(", ")) };
+        let (stereotype, name) = (name_of(store, stereotype), short(wanted));
+        let said = format!("«{stereotype}» has no property {name:?}; {offered}");
+        let reason = if name.is_empty() {
+            Reason::IdEmpty
+        } else if has.is_empty() {
+            Reason::NoProperties { stereotype: stereotype.into(), name: name.into() }
+        } else {
+            Reason::NoProperty(Box::new(NoProperty { stereotype, name, has }))
+        };
+        refuse(key, said).because(reason)
     })
 }
 
 /// The application of the stereotype under `stereotype` to the element under `element`, refused
-/// when it is not applied there.
+/// when it is not applied there, its reason typed.
 fn application_param(store: &Store, p: &Params) -> Result<(Obj, Obj, Obj), CommandError> {
     let element = element_param(store, p, "element")?;
     let stereotype = stereotype_param(store, p, "stereotype")?;
-    let instance = application(store, element, stereotype)
-        .ok_or_else(|| refuse("stereotype", format!("«{}» is not applied to {}", name_of(store, stereotype), name_or_id(store, element))))?;
+    let instance = application(store, element, stereotype).ok_or_else(|| {
+        let (s, e) = (name_of(store, stereotype), name_or_id(store, element));
+        refuse("stereotype", format!("«{s}» is not applied to {e}")).because(Reason::NotApplied { stereotype: s.into(), element: e.into() })
+    })?;
     Ok((element, stereotype, instance))
 }
 
@@ -636,16 +660,18 @@ fn unapply_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, element)? }))
 }
 
-/// The texts under `values`: a list of strings, or one string for one value.
-fn texts_param(p: &Params) -> Result<Vec<String>, CommandError> {
+/// The texts under `values` for `property`: a list of strings, refused with its reason typed.
+fn texts_param(store: &Store, p: &Params, property: Obj) -> Result<Vec<String>, CommandError> {
+    let expected = || refuse("values", "a list of values, each as text").because(Reason::ValuesExpected);
     match p.get("values") {
         Some(Json::Array(items)) => {
             if items.len() > MAX_VALUES {
-                return Err(refuse("values", format!("at most {MAX_VALUES} values")));
+                let most = Reason::Values(Box::new(ValueProblem::TooMany.typed(store, property)));
+                return Err(refuse("values", format!("at most {MAX_VALUES} values")).because(most));
             }
-            items.iter().map(|i| i.as_str().map(str::to_string).ok_or_else(|| refuse("values", "a list of values, each as text"))).collect()
+            items.iter().map(|i| i.as_str().map(str::to_string).ok_or_else(expected)).collect()
         }
-        _ => Err(refuse("values", "a list of values, each as text")),
+        _ => Err(expected()),
     }
 }
 
@@ -655,7 +681,7 @@ fn texts_param(p: &Params) -> Result<Vec<String>, CommandError> {
 fn set_value_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let (element, stereotype, instance) = application_param(ctx.doc, p)?;
     let property = property_param(ctx.doc, p, "property", stereotype)?;
-    let texts = texts_param(p)?;
+    let texts = texts_param(ctx.doc, p, property)?;
     let values = read_values(ctx.doc, property, &texts).map_err(|e| e.refusal(ctx.doc, property))?;
     set_values(ctx.doc, instance, property, &values)?;
     for n in archforge_diagram::views_of(ctx.doc, element).2 {
@@ -732,11 +758,11 @@ fn applicable_cmd(ctx: &mut C<'_>, p: &Params) -> R {
 /// a compartment of its own under the members. Turned on, every card of the diagram with values set
 /// grows to show them (AR-241); a card without values is left as it is.
 fn show_values_cmd(ctx: &mut C<'_>, p: &Params) -> R {
-    let d = element_param(ctx.doc, p, "diagram")?;
-    let kind = ctx.doc.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
-    if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind.as_deref() != Some(crate::CLASS_DIAGRAM) {
-        return Err(refuse("diagram", format!("{} is not a class diagram", text(p, "diagram"))));
-    }
+    let store: &Store = ctx.doc;
+    let d = kind_param(store, p, "diagram", "class diagram", |d| {
+        let kind = store.get(d, archforge_diagram::diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string));
+        store.class_of(d).ok() == Some(archforge_diagram::DIAGRAM) && kind.as_deref() == Some(crate::CLASS_DIAGRAM)
+    })?;
     let on = p.bool("show").unwrap_or(false);
     show_values(ctx.doc, d, on)?;
     if on {

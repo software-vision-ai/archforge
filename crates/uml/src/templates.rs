@@ -232,6 +232,14 @@ pub fn parameter_element_problem(store: &Store, o: Obj) -> Option<String> {
     ))
 }
 
+/// [`parameter_element_problem`] with its reason typed for an interface to say: the classifier's
+/// name and its template's.
+pub fn parameter_element_why(store: &Store, o: Obj) -> Option<(String, Reason)> {
+    let said = parameter_element_problem(store, o)?;
+    let template = parameter_of(store, o).and_then(|p| template_of(store, p)).map(|t| name_of(store, t)).unwrap_or_default();
+    Some((said, Reason::ParameterElement { name: name_of(store, o).into(), template: template.into() }))
+}
+
 /// Why `ty` may not type a member of `within` (none for an element outside any classifier): it is
 /// a template parameter's classifier and `within` is not its template.
 pub fn type_scope_problem(store: &Store, ty: Obj, within: Option<Obj>) -> Option<String> {

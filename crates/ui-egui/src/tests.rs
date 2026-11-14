@@ -5704,6 +5704,73 @@ fn a_value_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The applications' parameters refused by the engine are said in the chosen language: an id
+/// missing or of no element, an element of the wrong kind, a template parameter's classifier, a
+/// stereotype not applied, a property it lacks, with or without others, and values that are no list
+/// of texts or too many; so is an element gone. In light and dark (AR-473).
+#[test]
+fn an_application_parameter_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let run =
+            |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
+        let id =
+            |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p)["id"].as_str().unwrap().to_string();
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let commerce = id(&mut h, "uml.package.add", json!({ "name": "Commerce" }));
+        let order = id(&mut h, "uml.class.add", json!({ "package": commerce, "name": "Order" }));
+        let count = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "count", "type": "Integer" }));
+        let persistence = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+        id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+        let key = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Key", "extends": ["Property"] }));
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        id(&mut h, "uml.stereotype.apply", json!({ "element": count, "stereotype": key }));
+        let apply = |element: &str, stereotype: &str| ("uml.stereotype.apply", json!({ "element": element, "stereotype": stereotype }));
+        let (cmd, p) = apply("", &entity);
+        assert_eq!(refused(&mut h, cmd, p), "Es ist keine ID angegeben. Geben Sie die ID des Elements an.", "{theme:?}: the language is German");
+        let (cmd, p) = apply("nope", &entity);
+        assert_eq!(refused(&mut h, cmd, p), fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]), "{theme:?}");
+        let (cmd, p) = apply(&order, &order);
+        assert_eq!(refused(&mut h, cmd, p), fmt(&tr("{name} is not a stereotype."), &[("name", "Order")]), "{theme:?}");
+        let shown = refused(&mut h, "uml.stereotype.show-values", json!({ "diagram": order, "show": true }));
+        assert_eq!(shown, fmt(&tr("{name} is not a class diagram."), &[("name", "Order")]), "{theme:?}");
+        let t = run(&mut h, "uml.template-parameter.add", json!({ "classifier": order, "name": "T" }))["element"].as_str().unwrap().to_string();
+        let (cmd, p) = apply(&t, &entity);
+        let parameter = fmt(&tr("{name} is a template parameter of {template} and types only its members."), &[("name", "T"), ("template", "Order")]);
+        assert_eq!(refused(&mut h, cmd, p), parameter, "{theme:?}");
+        // Values set where the stereotype is not applied, on a property it lacks, and values no list.
+        let set = |element: &str, stereotype: &str, property: &str, values: serde_json::Value| {
+            ("uml.stereotype.set-value", json!({ "element": element, "stereotype": stereotype, "property": property, "values": values }))
+        };
+        let (cmd, p) = set(&order, &entity, "table", json!(["x"]));
+        let unapplied = fmt(&tr("«{stereotype}» is not applied to {name}."), &[("stereotype", "Entity"), ("name", "Order")]);
+        assert_eq!(refused(&mut h, cmd, p), unapplied, "{theme:?}");
+        id(&mut h, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+        let (cmd, p) = set(&order, &entity, "colour", json!(["x"]));
+        let lacks = fmt(
+            &tr("«{stereotype}» has no property {name}. It has {properties}."),
+            &[("stereotype", "Entity"), ("name", "colour"), ("properties", "table")],
+        );
+        assert_eq!(refused(&mut h, cmd, p), lacks, "{theme:?}");
+        let (cmd, p) = set(&count, &key, "x", json!(["x"]));
+        let none = fmt(&tr("«{stereotype}» has no property {name}. It has no properties yet."), &[("stereotype", "Key"), ("name", "x")]);
+        assert_eq!(refused(&mut h, cmd, p), none, "{theme:?}");
+        let (cmd, p) = set(&order, &entity, "table", json!([1]));
+        assert_eq!(refused(&mut h, cmd, p), tr("Give the values as a list of texts."), "{theme:?}");
+        let (cmd, p) = set(&order, &entity, "table", json!(vec!["x"; 257]));
+        assert_eq!(refused(&mut h, cmd, p), fmt(&tr("{name} holds at most {n} values."), &[("name", "table"), ("n", "256")]), "{theme:?}");
+        assert_eq!(crate::panels::said(&archforge_engine::Reason::Gone), Some(tr("This element is gone.")), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

@@ -1295,6 +1295,15 @@ str		This is no element of the model, so no stereotype applies to it.	This is no
 str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} belongs to a profile, which defines stereotypes and takes none.
 str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} takes no stereotype. A stereotype extends {metaclasses}.
 str		«{stereotype}» is applied to {name} already.	«{stereotype}» is applied to {name} already.
+str		«{stereotype}» is not applied to {name}.	«{stereotype}» is not applied to {name}.
+str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» has no property {name}. It has {properties}.
+str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» has no property {name}. It has no properties yet.
+str		{name} is not a stereotype.	{name} is not a stereotype.
+str		{name} is not a class diagram.	{name} is not a class diagram.
+str		Give the values as a list of texts.	Give the values as a list of texts.
+str		No id is given. Give the element's id.	No id is given. Give the element's id.
+str		This element is gone.	This element is gone.
+str		{name} is a template parameter of {template} and types only its members.	{name} is a template parameter of {template} and types only its members.
 str		An element carries at most {max} stereotypes.	An element carries at most {max} stereotypes.
 str		{value} is no value of {name}. {accepted}	{value} is no value of {name}. {accepted}
 str		A whole number, such as 42 or -7.	A whole number, such as 42 or -7.
