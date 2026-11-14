@@ -519,18 +519,28 @@ pub(crate) mod tests {
     /// take once it names the largest process id there is. It is written without a process id,
     /// read, completed with the largest valid one, read again and removed under the lock. One a
     /// byte longer is refused before anything is written. Linux makes a folder that long; macOS
-    /// stops near 1,024 bytes (its PATH_MAX), so there another field makes up the rest.
+    /// stops near 1,024 bytes (its PATH_MAX), so there another field makes up the rest. The path
+    /// is measured as the record holds it: its folder has a name JSON escapes where the platform
+    /// allows one, and on Windows its separators and verbatim prefix are escaped.
     #[test]
     fn a_record_at_the_limit_is_written_completed_read_and_removed_and_a_byte_more_is_refused() {
         let (dir, deep) = (crate::home::tests::Scratch::new("size"), crate::home::tests::Scratch::new("deep"));
+        let root = deep.0.canonicalize().unwrap();
+        let pending =
+            Record { data_dir: String::new(), server_pid: None, run_root: root.to_str().unwrap().into(), owner_started: String::new(), ..rec("") };
         let largest = |r: &Record| serde_json::to_vec_pretty(&Record { server_pid: Some(u32::MAX), ..r.clone() }).unwrap().len();
-        let pending = Record { data_dir: String::new(), server_pid: None, ..rec("") };
-        let most = usize::try_from(CAP).unwrap() - largest(&pending);
-        // The deepest canonical folder that can be made, up to `most` bytes as text.
-        let (mut project, mut name) = (deep.0.canonicalize().unwrap(), 255);
+        // What the limit leaves once the record names `data_dir` as written, escapes included.
+        let room = |data_dir: &str| usize::try_from(CAP).unwrap().checked_sub(largest(&Record { data_dir: data_dir.into(), ..pending.clone() }));
+        assert_eq!(room(&"\"".repeat(room("").unwrap())), None, "a path is measured as the record holds it");
+        // The deepest canonical folder whose record fits that can be made, below a name JSON
+        // escapes where the platform allows one.
+        let (mut project, mut name) = (root.join("q\"\\"), 255);
+        if std::fs::create_dir(&project).is_err() {
+            project = root.clone();
+        }
         while name > 0 {
             let next = project.join("d".repeat(name));
-            let made = next.as_os_str().len() <= most && std::fs::create_dir(&next).is_ok();
+            let made = next.to_str().is_some_and(|t| room(t).is_some()) && std::fs::create_dir(&next).is_ok();
             if made && next.canonicalize().is_ok_and(|c| c == next) {
                 project = next;
             } else {
@@ -540,9 +550,10 @@ pub(crate) mod tests {
                 name -= 1;
             }
         }
-        let data_dir = project.display().to_string();
+        let data_dir = project.to_str().unwrap().to_string();
+        assert!(cfg!(windows) || data_dir.contains("q\"\\"), "a name JSON escapes is in the path: {data_dir}");
         let at =
-            |extra: usize| Record { owner_started: "x".repeat(1 + most - data_dir.len() + extra), data_dir: data_dir.clone(), ..pending.clone() };
+            |extra: usize| Record { owner_started: "x".repeat(room(&data_dir).unwrap_or(0) + extra), data_dir: data_dir.clone(), ..pending.clone() };
         let (edge, pid) = (at(0), u32::try_from(i32::MAX).unwrap());
         assert_eq!(largest(&edge), 4096, "{} bytes of the path are a real folder's", data_dir.len());
         let (file, done) = (path(&dir.0, &data_dir), Record { server_pid: Some(pid), ..edge.clone() });
