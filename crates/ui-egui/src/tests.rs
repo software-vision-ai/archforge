@@ -5532,6 +5532,32 @@ fn a_body_scrolled_away_from_a_refusal_stays_put() {
     });
 }
 
+/// Two editors open at once, an attribute's drawn above a constraint's: a refusal in the
+/// constraint's alone brings the constraint's card into view, not the attribute's, which changed
+/// nothing.
+#[test]
+fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        for i in 0..16 {
+            crate::panels::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") })).unwrap();
+        }
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
+        click(&mut h, at);
+        let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_some() && h.state().panels.constraint.is_some(), "{theme:?}: both editors open");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: the attribute's editor in view");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: the constraint's editor under the fold");
+        let why = crate::i18n::tr("A constraint names only elements of this model.");
+        h.state_mut().panels.constraint.as_mut().expect("the editor").refused = Some(why.clone());
+        h.run();
+        assert!(said_in_view(&h, &why), "{theme:?}: the constraint's refusal is in view");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_some() && in_view(&h, CONSTRAINT_CANCEL).is_some(), "{theme:?}: its buttons too");
+    });
+}
+
 /// A member's editor shares the card: an attribute added at the foot of a long list, refused for a
 /// name another attribute has, keeps its refusal and buttons in view.
 #[test]
