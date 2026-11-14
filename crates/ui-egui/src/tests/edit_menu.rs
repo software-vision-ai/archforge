@@ -356,13 +356,16 @@ fn command_a_on_the_canvas_selects_what_the_diagram_draws() {
     }
 }
 
-/// Text selected on a label turns Copy on, and Copy copies it; a press elsewhere turns it off.
+/// Text selected on a label turns Copy on, and Copy copies it, chosen from the keys or by the
+/// pointer: a press on the in-window bar or its menu leaves the words selected, a press elsewhere
+/// ends the selection and turns Copy off.
 #[test]
 fn copy_takes_text_selected_on_a_label() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         crate::i18n::set_language("en");
         let mut shell = Shell::new(Services::default());
         (shell.state.theme, shell.in_window_menu) = (theme, true);
+        // The label lies where the Edit menu's Copy row opens, so the row's press is over its words.
         let words = "Selected words";
         let mut h = Harness::builder().with_size(egui::vec2(1600.0, 1000.0)).build_ui_state(
             move |ui, shell: &mut Shell| {
@@ -370,7 +373,7 @@ fn copy_takes_text_selected_on_a_label() {
                 shell.ui(ui);
                 egui::Area::new(crate::widgets::egui_id("test.label"))
                     .order(egui::Order::Foreground)
-                    .fixed_pos(egui::pos2(600.0, 500.0))
+                    .fixed_pos(egui::pos2(300.0, 150.0))
                     .show(ui.ctx(), |ui| ui.label(words));
             },
             shell,
@@ -378,10 +381,10 @@ fn copy_takes_text_selected_on_a_label() {
         h.run();
         assert!(!actions::available(h.state(), COPY));
         // A drag across the label's words.
-        for (x, pressed) in [(601.0, true), (760.0, false)] {
-            h.event(Event::PointerMoved(egui::pos2(x, 507.0)));
+        for (x, pressed) in [(301.0, true), (460.0, false)] {
+            h.event(Event::PointerMoved(egui::pos2(x, 157.0)));
             h.run();
-            h.event(Event::PointerButton { pos: egui::pos2(x, 507.0), button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+            h.event(Event::PointerButton { pos: egui::pos2(x, 157.0), button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
             h.run();
         }
         assert!(actions::available(h.state(), COPY), "the selection turns Copy on");
@@ -393,10 +396,73 @@ fn copy_takes_text_selected_on_a_label() {
         assert_eq!(h.state().menu_bar.row, Some(COPY));
         h.key_press(Key::Enter);
         assert!((0..4).any(|_| (h.step(), copied(&h, words)).1), "the row copied the words");
-        let at = rect_of(&h, "strip.menu.edit").center();
-        click(&mut h, at);
-        assert!(!actions::available(h.state(), COPY), "the press that opens the menu ends the selection");
+        // By the pointer: the presses on the bar and on the row leave the words selected, and
+        // nothing is copied until the row is chosen.
+        let selected = |h: &Harness<'static, Shell>| h.ctx.plugin::<egui::text_selection::LabelSelectionState>().lock().has_selection();
+        let mut early = false;
+        let mut press = |h: &mut Harness<'static, Shell>, at: egui::Pos2| {
+            h.event(Event::PointerMoved(at));
+            h.step();
+            for pressed in [true, false] {
+                h.event(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+                h.step();
+                early |= copied(h, words);
+            }
+        };
+        let edit = rect_of(&h, "strip.menu.edit").center();
+        press(&mut h, edit);
+        assert_eq!(h.state().menu_bar.open, Some("edit"));
+        assert!(selected(&h) && actions::available(h.state(), COPY), "{theme:?}: the press that opens the menu keeps the selection");
+        // A press on a row that is off, then the menu closed and opened again by its title.
+        let cut = rect_of(&h, "strip.menu.row.edit.cut").center();
+        for at in [cut, edit, edit] {
+            press(&mut h, at);
+        }
+        assert!(selected(&h) && h.state().menu_bar.open == Some("edit"), "{theme:?}: presses on the bar and its menu keep it too");
+        let row = rect_of(&h, "strip.menu.row.edit.copy").center();
+        press(&mut h, row);
+        assert!(!early, "{theme:?}: nothing was copied before the row ran");
+        assert!((0..4).any(|_| (h.step(), copied(&h, words)).1), "{theme:?}: the row chosen by the pointer copied the words");
+        assert!(selected(&h) && h.state().menu_bar.open.is_none(), "{theme:?}: and left them selected");
+        assert!(h.ctx.input(|i| i.pointer.latest_pos() == Some(row)), "{theme:?}: the input has its pointer back");
+        // A press elsewhere, on no label, ends the selection as before: the row is off.
+        click(&mut h, egui::pos2(600.0, 700.0));
+        click(&mut h, edit);
+        assert!(!selected(&h) && !actions::available(h.state(), COPY), "{theme:?}: nothing selected, Copy is off");
+        click(&mut h, row);
+        assert!(!(0..4).any(|_| (h.step(), copied(&h, words)).1) && h.state().menu_bar.open == Some("edit"), "{theme:?}: the row off copies nothing");
     }
+}
+
+/// A press on the bar in the pass that first registers the pointer's holder leaves the input its
+/// pointer: that pass would not give it back. Later passes hide the press only while text is
+/// selected, and each frame forgets the last one's press.
+#[test]
+fn the_first_pass_keeps_its_pointer() {
+    let (mut shell, ..) = actions::tests::shell();
+    (shell.menu_bar.pressed, shell.edit.text_selected) = (true, true);
+    let ctx = egui::Context::default();
+    let at = egui::pos2(10.0, 10.0);
+    let press = Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE };
+    let input = || egui::RawInput { events: vec![Event::PointerMoved(at), press.clone()], ..Default::default() };
+    ctx.run_ui(input(), |ui| crate::edit_menu::keep_text_selected(&shell, ui.ctx())).drop_without_applying_deltas();
+    assert!(ctx.input(|i| i.pointer.any_down() && i.pointer.any_pressed()), "the first pass took nothing");
+    let mut hidden = false;
+    ctx.run_ui(input(), |ui| {
+        crate::edit_menu::keep_text_selected(&shell, ui.ctx());
+        hidden = ui.input(|i| !i.pointer.any_pressed());
+    })
+    .drop_without_applying_deltas();
+    assert!(hidden && ctx.input(|i| i.pointer.any_down() && i.pointer.any_pressed()), "a later pass hides the press and gives it back");
+    shell.edit.text_selected = false;
+    ctx.run_ui(input(), |ui| {
+        crate::edit_menu::keep_text_selected(&shell, ui.ctx());
+        hidden = ui.input(|i| !i.pointer.any_pressed());
+    })
+    .drop_without_applying_deltas();
+    assert!(!hidden, "with no text selected the press stays in the input");
+    crate::menu_bar::keep_valid(&mut shell, &ctx);
+    assert!(!shell.menu_bar.pressed, "a frame that draws no bar starts with no press on it");
 }
 
 /// Whether the frame just drawn copied `text`.
@@ -721,6 +787,72 @@ fn delete_after_select_all_deletes_no_line_or_set_from_the_model() {
         h.run();
         key(&mut h, Key::Delete, Modifiers::NONE);
         assert!(alive(&h, &set), "the set stays in the model");
+    }
+}
+
+/// Delete after a click on a generalization set's label takes the set from the model and keeps its
+/// generalizations and every box (AR-129), both while no node holds the label and after the label
+/// was moved, which nests its node in a classifier's: the keys' boxes are the diagram's own nodes,
+/// so a selected set never counts among them. With a box selected beside the set, the box goes off
+/// the diagram and the set stays.
+#[test]
+fn delete_on_a_set_label_removes_the_set_and_keeps_its_lines() {
+    use archforge_uml::generalization_sets as sets;
+    let object = |h: &Harness<'static, Shell>, id: &str| {
+        let st = h.state().session.as_ref().unwrap().doc();
+        st.by_uuid(archforge_mof::Uuid::parse(id).unwrap()).filter(|o| st.is_alive(*o))
+    };
+    let boxes = |h: &Harness<'static, Shell>| {
+        let s = h.state().session.as_ref().unwrap();
+        s.doc().list(s.view().open_diagram.unwrap(), archforge_diagram::diagram::NODE).unwrap().len()
+    };
+    for (theme, moved, with_box) in [
+        (ThemeKind::Light, false, false),
+        (ThemeKind::Dark, false, false),
+        (ThemeKind::Light, true, false),
+        (ThemeKind::Dark, true, false),
+        (ThemeKind::Light, false, true),
+        (ThemeKind::Dark, true, true),
+    ] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        let (gens, payment) = crate::uml_ui::put_payment_kinds(h.state_mut()).unwrap();
+        (h.state_mut().canvas.zoom, h.state_mut().canvas.pan) = (0.75, egui::vec2(-470.0, -230.0));
+        let d = h.state().canvas.active.unwrap().to_string();
+        let s = h.state_mut().session.as_mut().unwrap();
+        let set = s.execute("uml.generalization-set.add", &serde_json::json!({ "generalizations": gens, "name": "method" })).unwrap().value["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        s.execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+        h.run();
+        let label = format!("workspace.canvas.generalizationSet.{set}");
+        if moved {
+            let at = rect_of(&h, &label).center();
+            drag(&mut h, at, at + egui::vec2(40.0, -20.0));
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [] })).unwrap();
+            h.run();
+        }
+        let st = h.state().session.as_ref().unwrap().doc();
+        let node = sets::label_node(st, st.by_uuid(archforge_mof::Uuid::parse(&d).unwrap()).unwrap(), object(&h, &set).unwrap());
+        assert_eq!(node.is_some(), moved, "{theme:?}: a node holds the label only once it was moved");
+        let before = boxes(&h);
+        let at = rect_of(&h, &label).center();
+        click(&mut h, at);
+        assert_eq!(selection(&h), std::slice::from_ref(&set), "{theme:?} moved {moved}: the click on the label selects the set alone");
+        if with_box {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [payment, set] })).unwrap();
+            h.run();
+        }
+        key(&mut h, Key::Delete, Modifiers::NONE);
+        assert!(gens.iter().all(|g| object(&h, g).is_some()), "{theme:?} moved {moved}: the generalizations stay");
+        assert!(object(&h, &payment).is_some(), "{theme:?} moved {moved}: no class left the model");
+        if with_box {
+            assert!(object(&h, &set).is_some(), "{theme:?} moved {moved}: beside a box the set stays in the model");
+            assert_eq!(boxes(&h), before - 1, "{theme:?} moved {moved}: and the box is off the diagram");
+        } else {
+            assert!(object(&h, &set).is_none(), "{theme:?} moved {moved}: the set is gone from the model");
+            assert_eq!(boxes(&h), before, "{theme:?} moved {moved}: every box is still on the diagram");
+        }
     }
 }
 

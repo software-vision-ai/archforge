@@ -56,12 +56,15 @@ pub(crate) struct Bar {
     pub(crate) selected: Option<egui::text::CCursorRange>,
     /// Where the bar was drawn last.
     rect: Option<Rect>,
+    /// Whether a press of this frame landed on the bar or on its open menu.
+    pub(crate) pressed: bool,
     /// The inline editor the bar keeps open after taking its keyboard, until the menu closes.
     pub(crate) held: Option<egui::Id>,
 }
 
 /// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
 pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
+    shell.menu_bar.pressed = false;
     if let Some(id) = shell.menu_bar.chosen.take() {
         // A pointer's click on the row took the keyboard, and its selection, from the field the
         // menu was opened on.
@@ -229,9 +232,12 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
         x = button.right() + GROUP_GAP;
     }
     shell.menu_bar.rect = Some(bar);
+    let press = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()));
+    shell.menu_bar.pressed = press.flatten().is_some_and(|at| bar.contains(at));
     let Some((group, button)) = shown else { return };
     let (menu, picked) = popup(shell, ui, p, group, pos2(button.left(), strip.bottom()));
-    let outside = ui.input(|i| i.pointer.any_pressed() && !i.pointer.interact_pos().is_some_and(|at| menu.contains(at) || bar.contains(at)));
+    shell.menu_bar.pressed |= press.flatten().is_some_and(|at| menu.contains(at));
+    let outside = press.is_some() && !shell.menu_bar.pressed;
     if let Some(id) = picked {
         shell.menu_bar.chosen = Some(id);
         shell.menu_bar.open = None;

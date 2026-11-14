@@ -165,8 +165,9 @@ made: on the canvas, in Properties, or by an agent. A drag, an Apply and an Arra
 one step. **Edit ▸ Undo** and **Edit ▸ Redo** do the same, and while you are typing in a field they
 act on that field's text instead of the model. **Cut**, **Copy** and **Paste** work on the text of
 the field you are typing in, as their keys do; Copy also copies text you have selected in a skill's
-preview. On Windows and Linux a click on the menu bar ends that selection, so copy it with Ctrl C,
-or reach **Edit ▸ Copy** with F10. Undo is not the same as going back to a saved version:
+preview, with its keys or with **Edit ▸ Copy**: the words stay selected while you open the menu,
+with the pointer or with F10, and a click anywhere else ends the selection. Undo is not the same
+as going back to a saved version:
 [Versions](09-versions.md#autosave-a-saved-version-and-undo) says how they differ.
 
 ## Removing from a diagram versus deleting from the model

@@ -48,6 +48,54 @@ pub(crate) fn note(shell: &mut Shell, ctx: &egui::Context) {
     shell.edit.text_selected = ctx.plugin_opt::<LabelSelectionState>().is_some_and(|p| p.lock().has_selection());
 }
 
+/// Holds the frame's pointer while the toolkit's label selection ends its pass, and gives it back.
+#[derive(Default)]
+struct PointerBack {
+    /// Whether this pass runs the holder, so what it takes it returns: a pass runs the plugins
+    /// that were there as it began.
+    runs: bool,
+    held: Option<egui::PointerState>,
+}
+
+impl egui::Plugin for PointerBack {
+    /// The holder's name, for the toolkit's profiling.
+    fn debug_name(&self) -> &'static str {
+        "archforge.pointer-back"
+    }
+
+    /// Marks the pass as one that will run [`Self::on_end_pass`].
+    fn on_begin_pass(&mut self, _ui: &mut egui::Ui) {
+        self.runs = true;
+    }
+
+    /// Runs after the label selection's own end of the pass, as plugins end in the order they were
+    /// added and the toolkit adds its own first: the input has its pointer again before the pass
+    /// is over.
+    fn on_end_pass(&mut self, ui: &mut egui::Ui) {
+        self.runs = false;
+        if let Some(pointer) = self.held.take() {
+            ui.input_mut(|i| i.pointer = pointer);
+        }
+    }
+}
+
+/// Keeps text selected on a label through a press on the in-window menu bar or its open menu, so
+/// Edit ▸ Copy chosen by the pointer still finds it. The toolkit ends a label's selection on any
+/// press that is on no label, as its pass ends; for that moment alone the input shows no pointer,
+/// and [`PointerBack`] returns it in the same pass. Called once the frame's drawing has read the
+/// pointer, after [`note`]; the holder is registered on first use and acts from the next pass on.
+pub(crate) fn keep_text_selected(shell: &Shell, ctx: &egui::Context) {
+    ctx.add_plugin(PointerBack::default());
+    if !(shell.menu_bar.pressed && shell.edit.text_selected) {
+        return;
+    }
+    let Some(back) = ctx.plugin_opt::<PointerBack>() else { return };
+    let mut back = back.lock();
+    if back.runs {
+        back.held = Some(ctx.input_mut(|i| std::mem::take(&mut i.pointer)));
+    }
+}
+
 /// Hands the waiting steps to the field, as the input of this frame. A paste is asked of the window
 /// instead, the one part of the program that reads the system's clipboard: its text arrives as the
 /// next frame's input, which is asked for now.

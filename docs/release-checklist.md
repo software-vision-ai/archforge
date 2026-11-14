@@ -89,7 +89,9 @@ change back and bring it again, and are disabled when there is no step to take. 
 disabled, and Select all selects every box and line the diagram draws. On the field all four are enabled, and
 the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
 Copy is enabled and Cut and Paste are not, and the words paste into the field, those copied with ⌘C and
-those copied with **Edit ▸ Copy** alike. Model on a class
+those copied with **Edit ▸ Copy** alike. On Windows and Linux, where the menu bar sits in the window,
+the words stay selected while you open **Edit** with the pointer, and **Edit ▸ Copy** chosen there
+copies them. Model on a class
 diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
 and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
 (⇧⌘H), **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌘[), **Newer version** (⌘]) and **Back to
@@ -100,8 +102,8 @@ shows), **Diagrams**, **Models**, **Versions**, **Chat**, **Appearance**, **Prop
 zoom grows about the canvas's centre, the whole diagram comes into view and the Skills panel opens. In the
 skill's text ⌘K makes a link and opens no search; on the canvas it opens the search.
 
-**Covers:** the native macOS menu bar, which the harness has no part of, and the real window waking
-when an item in it is chosen.
+**Covers:** the native macOS menu bar, which the harness has no part of, the real window waking
+when an item in it is chosen, and a real pointer on the in-window bar over a real preview's selection.
 
 ## 6. About Archforge and its support links
 

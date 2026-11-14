@@ -2162,7 +2162,10 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     };
     // A selection that holds boxes, such as Select all's, takes the boxes off below: a set or a
     // line selected beside them is never deleted from the model on its own.
-    // A selected generalization set goes from the model, its generalizations kept (AR-129).
+    // A selected generalization set goes from the model, its generalizations kept (AR-129). Its
+    // label's node never counts as a box here: `selected` holds the diagram's own nodes alone, and
+    // a label's node is always nested in a classifier's, so a set selected by its label, moved or
+    // not, leaves `selected` empty (`delete_on_a_set_label_removes_the_set_and_keeps_its_lines`).
     if delete && selected.is_empty() && crate::uml_sets::remove_selected_set(shell) {
         return;
     }
