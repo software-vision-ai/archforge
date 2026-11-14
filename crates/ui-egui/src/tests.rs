@@ -4201,49 +4201,50 @@ fn only_bare_f10_opens_the_bar() {
     }
 }
 
-/// Up and Down skip the rows that are off and wrap at both ends; the row under the keys is marked.
+/// Up and Down go through every row, off or not, and wrap at both ends; the row under the keys is marked.
 #[test]
-fn up_and_down_walk_the_live_rows_and_wrap() {
-    use crate::actions::{GENERATE, QUIT, SAVE, SETTINGS};
+fn up_and_down_walk_every_row_and_wrap() {
+    use crate::actions::{CLOSE, GENERATE, NEW, OPEN, QUIT, SAVE, SETTINGS};
     use egui::Key::{ArrowDown, ArrowUp, F10};
     use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
-        for (key, row) in [(ArrowDown, QUIT), (ArrowDown, SETTINGS), (ArrowUp, QUIT), (ArrowUp, SETTINGS)] {
+        for (key, row) in [(ArrowDown, CLOSE), (ArrowDown, QUIT), (ArrowDown, NEW), (ArrowUp, QUIT), (ArrowUp, CLOSE), (ArrowUp, SETTINGS)] {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h), (Some("file"), Some(row)), "{theme:?}: {key:?}");
         }
         let selected = |h: &Harness<'static, Shell>, name: &str| h.get_by_label(name).accesskit_node().data().is_selected() == Some(true);
         assert!(selected(&h, "Settings…") && !selected(&h, "Quit Archforge"), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
-        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}");
+        assert_eq!(menu_at(&h).1, Some(CLOSE), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
-        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}: a held arrow goes on");
+        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}: a held arrow goes on");
         h.event(egui::Event::Key { key: ArrowDown, physical_key: None, pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
         menu_tap(&mut h, ArrowDown, egui::Modifiers::SHIFT);
-        assert_eq!(menu_at(&h).1, Some(SETTINGS), "{theme:?}: only the bare arrow moves");
-        // Three live rows or more tell Up from Down, which two that wrap cannot.
+        assert_eq!(menu_at(&h).1, Some(QUIT), "{theme:?}: only the bare arrow moves");
+        // On a project the menu opens past its rows off, and Up reaches them.
         let mut h = menu_harness(theme, true);
         menu_press(&mut h, F10);
         assert_eq!(menu_at(&h).1, Some(SAVE), "{theme:?}");
-        for (key, row) in [(ArrowDown, GENERATE), (ArrowDown, SETTINGS), (ArrowUp, GENERATE), (ArrowUp, SAVE), (ArrowUp, QUIT), (ArrowDown, SAVE)] {
+        for (key, row) in [(ArrowDown, GENERATE), (ArrowUp, SAVE), (ArrowUp, OPEN), (ArrowUp, NEW), (ArrowUp, QUIT), (ArrowDown, NEW)] {
             menu_press(&mut h, key);
             assert_eq!(menu_at(&h).1, Some(row), "{theme:?}: {key:?} on a project");
         }
     }
 }
 
-/// Left and Right go between the groups, wrapping, each on its first live row.
+/// Left and Right go between the groups, wrapping, each on its first live row, or on its first
+/// row where none can act.
 #[test]
 fn left_and_right_move_between_the_groups_and_wrap() {
-    use crate::actions::{ABOUT, FIND, SETTINGS};
+    use crate::actions::{ABOUT, FIND, SAVE_VERSION, SETTINGS, UNDO};
     use egui::Key::{ArrowLeft, ArrowRight, F10};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
         menu_press(&mut h, F10);
-        let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", None), ("model", None), ("help", Some(ABOUT)));
-        let (versions, view, r, l) = (("versions", None), ("view", Some(FIND)), ArrowRight, ArrowLeft);
+        let (file, edit, model, help) = (("file", Some(SETTINGS)), ("edit", Some(UNDO)), ("model", Some("model.note")), ("help", Some(ABOUT)));
+        let (versions, view, r, l) = (("versions", Some(SAVE_VERSION)), ("view", Some(FIND)), ArrowRight, ArrowLeft);
         let rights = [(r, edit), (r, view), (r, model), (r, versions), (r, help), (r, file)];
         let lefts = [(l, help), (l, versions), (l, model), (l, view), (l, edit), (l, file)];
         for (key, at) in rights.into_iter().chain(lefts) {
@@ -4402,6 +4403,104 @@ fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {
         h.event(egui::Event::PointerMoved(rect_of(&h, "strip.menu.row.file.new").center()));
         h.run();
         assert!(h.query_by_label(off).is_some(), "{theme:?}");
+    }
+}
+
+/// A screen reader finds the titles in a menu bar, and under the open title a menu holding its rows
+/// alone: the parts that swallow a press away from the menu are nothing it can read.
+#[test]
+fn the_bar_is_a_menu_bar_and_the_open_menu_a_menu_of_its_rows_alone() {
+    use egui::accesskit::Role::{Menu, MenuBar, MenuItem};
+    use egui_kittest::kittest::{NodeT, Queryable, by};
+    let away: Vec<_> = (0..4).map(|n| crate::widgets::egui_id(&format!("strip.menu.away.{n}")).accesskit_id()).collect();
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        click_menu(&mut h, "strip.menu.file");
+        let titles = ["File", "Edit", "View", "Model", "Versions", "Help"].map(|name| h.get_by_label(name).accesskit_node());
+        let bar = titles[0].parent().unwrap();
+        assert_eq!((bar.role(), bar.children().count()), (MenuBar, 6), "{theme:?}");
+        assert!(titles.iter().all(|title| title.parent().map(|b| b.id()) == Some(bar.id())), "{theme:?}: one bar holds every title");
+        let menu = h.get_by_label("Settings…").accesskit_node().parent().unwrap();
+        assert_eq!((menu.role(), menu.parent().map(|title| title.id())), (Menu, Some(titles[0].id())), "{theme:?}: the menu is its title's");
+        assert_eq!(menu.children().map(|row| row.role()).collect::<Vec<_>>(), [MenuItem; 7], "{theme:?}: the rows and nothing else");
+        assert_eq!(h.query_all(by().predicate(|node| away.contains(&node.locate().0))).count(), 0, "{theme:?}: no part around the bar");
+    }
+}
+
+/// A screen reader's focus is on the row under the keys, in a menu with every row off too, while
+/// the keyboard stays with the field the menu was opened on, or with nothing. A pointer taking the
+/// highlight takes that focus away, and a closed menu leaves it where the keyboard is.
+#[test]
+fn a_screen_readers_focus_follows_the_keys_and_the_keyboard_stays_put() {
+    use egui::Key::{ArrowDown, ArrowRight, Escape, F10, K};
+    use egui_kittest::kittest::{NodeT, Queryable, by};
+    let on = |h: &Harness<'static, Shell>, names: [&str; 2]| names.map(|name| h.get_by_label(name).accesskit_node().is_focused());
+    for (theme, field) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = menu_harness(theme, false);
+        if field {
+            menu_tap(&mut h, K, egui::Modifiers::COMMAND);
+        }
+        let held = h.ctx.memory(egui::Memory::focused);
+        assert_eq!((held.is_some(), h.root().accesskit_node().is_focused()), (field, !field), "{theme:?}: before the menu");
+        menu_press(&mut h, F10);
+        assert_eq!(on(&h, ["Settings…", "Close project"]), [true, false], "{theme:?} {field}: the row the menu opens on");
+        menu_press(&mut h, ArrowDown);
+        assert_eq!(on(&h, ["Settings…", "Close project"]), [false, true], "{theme:?} {field}: a row off");
+        menu_press(&mut h, ArrowRight);
+        assert_eq!(on(&h, ["Undo", "Redo"]), [true, false], "{theme:?} {field}: every row off");
+        assert_eq!(h.ctx.memory(egui::Memory::focused), held, "{theme:?} {field}: the keyboard never moved");
+        // Two places: a pointer that only arrives has not moved yet.
+        for row in ["strip.menu.row.edit.undo", "strip.menu.row.edit.redo"] {
+            h.event(egui::Event::PointerMoved(rect_of(&h, row).center()));
+            h.run();
+        }
+        assert_eq!(on(&h, ["Undo", "Redo"]), [false, false], "{theme:?} {field}: the pointer's row is not the keys'");
+        menu_press(&mut h, ArrowDown);
+        assert_eq!(on(&h, ["Undo", "Redo"]), [true, false], "{theme:?} {field}: the keys again");
+        menu_press(&mut h, Escape);
+        assert_eq!((h.ctx.memory(egui::Memory::focused), h.root().accesskit_node().is_focused()), (held, !field), "{theme:?} {field}: closed");
+        let named = h.query_all(by().predicate(|node| node.is_focused() && node.data().active_descendant().is_some())).count();
+        assert_eq!(named, 0, "{theme:?} {field}: no row is named once the menu is gone");
+        // What has the keyboard without being drawn is nothing a reader knows: the window stands in,
+        // and no node is made up for it. One frame: the keyboard leaves what is not drawn as it ends.
+        let unseen = egui::Id::unique("unseen");
+        h.ctx.memory_mut(|m| m.request_focus(unseen));
+        h.event(egui::Event::Key { key: F10, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.step();
+        let made_up = h.query_all(by().predicate(|node| node.locate().0 == unseen.accesskit_id())).count();
+        assert_eq!((on(&h, ["Settings…", "Close project"]), made_up), ([true, false], 0), "{theme:?} {field}: nothing drawn has the keyboard");
+    }
+}
+
+/// The arrows reach a row that is off: it is highlighted, shows why as it does under the pointer and
+/// says so to a screen reader, and Enter or Space on it does nothing. The reason goes with the keys.
+#[test]
+fn a_row_off_is_reached_by_the_keys_says_why_and_runs_nothing() {
+    use egui::Key::{ArrowDown, ArrowUp, Enter, F10, Space};
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let why = "Open or go back to a project first";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, F10);
+        assert!(h.query_by_label(why).is_none(), "{theme:?}: no reason on a row that can act");
+        menu_press(&mut h, ArrowDown);
+        assert_eq!(menu_at(&h), (Some("file"), Some(crate::actions::CLOSE)), "{theme:?}");
+        let row = h.get_by_label("Close project").accesskit_node().data().clone();
+        assert_eq!((row.is_disabled(), row.is_selected(), row.description()), (true, Some(true), Some(why)), "{theme:?}");
+        assert!(h.query_by_label(why).is_some(), "{theme:?}: shown without the pointer");
+        for key in [Enter, Space] {
+            menu_press(&mut h, key);
+            assert_eq!((menu_at(&h), h.state().menu_bar.chosen), ((Some("file"), Some(crate::actions::CLOSE)), None), "{theme:?}: {key:?}");
+        }
+        menu_press(&mut h, ArrowUp);
+        assert!(h.query_by_label(why).is_none(), "{theme:?}: the reason left with the keys");
+        let row = h.get_by_label("Close project").accesskit_node().data().clone();
+        assert_eq!((row.is_selected(), row.description()), (None, Some(why)), "{theme:?}: still said to a screen reader");
+        // A pointer arriving on the row leaves it under the keys, and brings no second reason.
+        menu_press(&mut h, ArrowDown);
+        h.event(egui::Event::PointerMoved(rect_of(&h, "strip.menu.row.file.close").center()));
+        h.run();
+        assert_eq!((menu_at(&h).1, h.query_all_by_label(why).count()), (Some(crate::actions::CLOSE), 1), "{theme:?}");
     }
 }
 
