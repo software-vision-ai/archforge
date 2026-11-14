@@ -93,3 +93,27 @@ fn the_chords_still_run_their_actions() {
         assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: Ctrl+Shift+H opens History");
     });
 }
+
+/// A Mac's Control with an action's own chord is nobody's chord: with the keyboard in a field it
+/// runs no action and the field deletes nothing on it, though Control and H alone delete there.
+#[test]
+fn a_macs_control_with_an_actions_chord_does_nothing_in_a_field() {
+    in_both_appearances(|theme| {
+        let history = Modifiers::MAC_CMD.plus(Modifiers::COMMAND).plus(Modifiers::SHIFT);
+        let (mut h, host) = saving_harness(Some(commerce()), None);
+        h.state_mut().state.theme = theme;
+        key(&mut h, Key::K, Modifiers::MAC_CMD.plus(Modifiers::COMMAND));
+        h.event(egui::Event::Text("order".into()));
+        h.run();
+        key(&mut h, Key::H, Modifiers::CTRL);
+        assert_eq!(h.state().home_search.query, "orde", "{theme:?}: the field has the keyboard, and Control with H deletes");
+        host.version_reads.lock().unwrap().clear();
+        assert!(crate::actions::available(h.state(), crate::actions::VERSIONS), "{theme:?}: History can open");
+        key(&mut h, Key::H, history.plus(Modifiers::CTRL));
+        assert_eq!(h.state().home_search.query, "orde", "{theme:?}: nothing is deleted");
+        assert_eq!(host.version_reads.lock().unwrap().len(), 0, "{theme:?}: and History stays shut");
+        key(&mut h, Key::H, history);
+        assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: the chord itself opens History from there");
+        assert_eq!(h.state().home_search.query, "orde", "{theme:?}");
+    });
+}
