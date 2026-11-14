@@ -108,7 +108,6 @@ const CMDLINE_CAP: u64 = 4096;
 /// whole is an error, never "none"; an empty `command` is no process's. On unix only this user's
 /// processes are looked at. A server run by another user is out of scope: this crate starts
 /// every server itself, as the user Archforge runs as, and could not stop another user's.
-#[cfg_attr(not(all(test, unix)), expect(dead_code, reason = "AR-457's recovery is its first caller"))]
 pub(crate) fn running(command: &[String]) -> Result<Vec<u32>, Error> {
     platform::running(command)
 }

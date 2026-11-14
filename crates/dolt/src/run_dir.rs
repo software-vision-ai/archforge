@@ -98,6 +98,14 @@ fn make_private(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir(dir)
 }
 
+/// Whether `dir` is a run folder of this crate's: named as it names them, directly under `root`,
+/// a real folder (not a link), owned by `uid` on unix.
+pub(crate) fn is_own(root: &Path, dir: &Path, uid: Option<u32>) -> bool {
+    dir.file_name().and_then(|n| n.to_str()).is_some_and(is_run_dir_name)
+        && dir.parent() == Some(root)
+        && std::fs::symlink_metadata(dir).is_ok_and(|m| m.is_dir() && !m.file_type().is_symlink() && owned_by(&m, uid))
+}
+
 /// Removes a run folder if it passes every check: named as this crate names them, directly under
 /// `root`, a real folder (not a link), owned by `uid` on unix. Only its known entries go; anything
 /// else keeps it in place and is logged. Returns whether it is gone.

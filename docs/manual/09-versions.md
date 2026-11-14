@@ -587,7 +587,7 @@ to *contact* there. Switch back to `main`, and *Customer* still has *email*.
 
 Click another branch in **Branches**, press Enter on it, or choose **Switch** from its **More**
 menu. From the version chip, choose the branch at the top of its list, or press ⇧⌘B (Ctrl Shift B),
-or choose **Versions ▸ Switch branch**, to list the branches there; type to narrow them, and click
+or choose **Versions ▸ Switch branch…**, to list the branches there; type to narrow them, and click
 one or press Enter on it.
 
 With nothing unsaved, Archforge switches at once. With unsaved changes, it asks **Switch to** and

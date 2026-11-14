@@ -36,7 +36,8 @@ An open project fills the window with its workspace.
 
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
 **View**, **Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
-opens it or moves to it. A row that cannot act now is greyed out and says why when you point at
+opens it or moves to it. A few words follow the system: the last row of **File** is **Exit** there
+and **Quit Archforge** in the application menu on macOS, whose **Edit** menu writes **Select All**. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 A click elsewhere only closes the menu: it does not also press, select or drag what is under it, so
@@ -55,11 +56,10 @@ act on; it is finished before another menu's row runs, and by a click elsewhere,
 no menu.
 
 **View** holds **Find…** (⌘K, `Ctrl+K`), which opens the search in the bar; **Zoom in**, **Zoom
-out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Show minimap**, while you
-have folded it and the canvas is large enough to show it; then **Diagrams**, **Models** and **Versions**, which open that explorer, and **Chat**,
-**Appearance**, **Properties** and **Skills**, which open that panel. Find… waits while you type in a
-text field, where ⌘K stays the field's own, and while the window is too narrow to show the search; the canvas's rows need a diagram showing; a row that
-opens something is greyed out while it already shows, and every row but Find… needs a project open.
+out** and **Whole diagram**, as the minimap's +, − and Whole diagram do; **Minimap**, while the canvas is large enough to show it; then **Diagrams**, **Models** and **Versions**, the explorers, and **Chat**,
+**Appearance**, **Properties** and **Skills**, the panels. Each of these eight rows has a tick while its minimap, explorer or panel shows:
+choose a row without a tick to show it, and one with a tick to hide it again, as a click on its rail icon does. Find… waits while you type in a
+text field, where ⌘K stays the field's own, and while the window is too narrow to show the search; the canvas's rows need a diagram showing, and every row but Find… needs a project open.
 
 **Model** holds what the diagram tools make. Choosing a row picks that tool on the canvas's toolbar,
 as a click on the tool does: click the canvas to place the element, or drag between two elements to
@@ -68,11 +68,11 @@ diagram: **Entity** and **Relationship** on an ER diagram; on a class diagram th
 classifier tool, **Package**, and every kind of the Relationship tool. While no diagram shows, or
 the diagram can't be changed, the rows are greyed out.
 
-**Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History** (⇧⌘H), which opens the list
-of versions, **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌥⌘←, `Ctrl+Alt+←`), **Newer version** (⌥⌘→, `Ctrl+Alt+→`) and
+**Versions** holds **Save version…** (⇧⌘S, `Ctrl+Shift+S`), **History…** (⇧⌘H), which opens the list
+of versions, **Compare…**, **New branch…**, **Switch branch…** (⇧⌘B), **Older version** (⌥⌘←, `Ctrl+Alt+←`), **Newer version** (⌥⌘→, `Ctrl+Alt+→`) and
 **Back to current work**. Compare… sets the version whose details show, or else the newest, against
 your current work; New branch… opens the dialog the Branches header's **+** opens; Newer version needs a version showing. Save version… needs changes to save. While you look at an earlier version,
-History gives way to Back to current work, which takes the same keys; Switch branch needs a second
+History… gives way to Back to current work, which takes the same keys; Switch branch… needs a second
 branch. While the project is busy, saving or switching branch, every row waits.
 
 ## New diagram
@@ -128,6 +128,12 @@ sections such as a table's **Columns · 4** or a class's **Attributes · 2**. Th
 every diagram. Each row has an edit button (a pencil) at its right end; it opens the row's editor,
 which changes nothing until you apply it with the check at its foot (or Enter). The cross (or
 Escape) cancels, and the red bin removes the row.
+
+When Properties holds more than fits, it scrolls under the name and the description. With the
+keyboard, Tab and Shift+Tab move through its controls and the panel follows, so every control can
+be reached; while a button, a check box or a row of Properties has the keyboard, Page Up and Page
+Down scroll it by a page and Home and End go to its top and its end. In a text field these keys
+stay with the field, and while a menu is open they do not scroll it.
 
 Type a new name in the **Name** field, or a description in the **Description** field, and press
 Enter, or leave the field, to keep it; press Escape to give up what you typed and get back what

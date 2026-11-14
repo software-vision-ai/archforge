@@ -11,6 +11,7 @@ mod edit_menu;
 mod editor_refusals;
 mod field_keys;
 mod model_menu;
+mod properties_keys;
 mod read_only;
 mod skill_chords;
 mod switch_ask;
@@ -4070,6 +4071,22 @@ fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
     }
 }
 
+/// The bar in the window says the words of Windows and Linux, as `actions::file_title` and the
+/// table give them: in German File is Datei, never the native bar's Ablage, and the last row Beenden.
+#[test]
+fn the_bar_in_the_window_says_its_systems_words() {
+    use egui_kittest::kittest::Queryable;
+    in_both_appearances(|theme| {
+        let mut h = menu_harness(theme, false);
+        h.state_mut().state.language = "de".into();
+        h.run();
+        click_menu(&mut h, "strip.menu.file");
+        assert_eq!(crate::actions::file_title(h.state()), "Datei", "{theme:?}");
+        assert!(h.query_by_label("Datei").is_some() && h.query_by_label("Ablage").is_none(), "{theme:?}: the title");
+        assert!(h.query_by_label("Beenden").is_some() && h.query_by_label("Archforge beenden").is_none(), "{theme:?}: Exit");
+    });
+}
+
 /// A live row runs on the next frame and closes the menu; a row that is off takes no click.
 #[test]
 fn a_row_runs_its_action_and_a_row_off_takes_no_click() {
@@ -4216,7 +4233,7 @@ fn up_and_down_walk_every_row_and_wrap() {
             assert_eq!(menu_at(&h), (Some("file"), Some(row)), "{theme:?}: {key:?}");
         }
         let selected = |h: &Harness<'static, Shell>, name: &str| h.get_by_label(name).accesskit_node().data().is_selected() == Some(true);
-        assert!(selected(&h, "Settings…") && !selected(&h, "Quit Archforge"), "{theme:?}");
+        assert!(selected(&h, "Settings…") && !selected(&h, "Exit"), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
         assert_eq!(menu_at(&h).1, Some(CLOSE), "{theme:?}");
         menu_hold(&mut h, ArrowDown, egui::Modifiers::NONE);
@@ -4392,11 +4409,11 @@ fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {
         let data = h.get_by_label("New project…").accesskit_node().data().clone();
         assert!(data.is_disabled() && data.description() == Some(off), "{theme:?}");
         let said = |name: &str| h.get_by_label(name).accesskit_node().data().clone();
-        let roles = ["File", "Help", "New project…", "Quit Archforge"].map(|name| said(name).role());
+        let roles = ["File", "Help", "New project…", "Exit"].map(|name| said(name).role());
         assert_eq!(roles, [MenuItem; 4], "{theme:?}: titles and rows, on or off");
         assert_eq!((said("File").is_expanded(), said("Help").is_expanded()), (Some(true), Some(false)), "{theme:?}");
-        assert!(!said("Quit Archforge").is_disabled(), "{theme:?}");
-        assert!(h.get_by_label("Quit Archforge").accesskit_node().data().description().is_none(), "{theme:?}");
+        assert!(!said("Exit").is_disabled(), "{theme:?}");
+        assert!(h.get_by_label("Exit").accesskit_node().data().description().is_none(), "{theme:?}");
         assert!(
             h.query_by_label("File").is_some() && h.query_by_label("Help").is_some() && h.query_by_label(off).is_none(),
             "{theme:?}: shown only on hover"
