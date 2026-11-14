@@ -205,7 +205,8 @@ pub enum Reason {
     NamedTwice { kind: &'static str, name: String },
     /// The property `name` is a stereotype's extension end, which goes only with the extension.
     ExtensionEnd { name: String },
-    /// The stereotype property `name` has values set on this many elements, so it stays.
+    /// The stereotype property `name` has values set on this many elements, so it stays, and keeps
+    /// its type.
     ValuesSet { name: String, elements: usize },
     /// The stereotype sits in no profile, so nothing about it changes.
     InNoProfile,
@@ -251,6 +252,72 @@ pub enum Reason {
     /// The elements named, a member with its owner as `Class::name()`, redefine the element, so it
     /// is made leaf only once their redefinitions are gone.
     Redefined(Box<[String]>),
+    /// The values given a stereotype property do not fit it.
+    Values(Box<Values>),
+    /// The stereotype property `name` has values on this many `elements` that do not fit the
+    /// `bounds` it would take, written as a multiplicity, as `0..1`.
+    ValuesMisfit { name: Box<str>, elements: usize, bounds: Box<str> },
+    /// A literal is the value of a stereotype property on an element that stays, so it stays.
+    LiteralValued(Box<LiteralValued>),
+}
+
+/// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Values {
+    /// The stereotype property's name.
+    pub property: String,
+    /// What does not fit.
+    pub misfit: ValueMisfit,
+}
+
+/// What does not fit in a [`Values`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueMisfit {
+    /// More than `max` values.
+    TooMany { max: usize },
+    /// A value of nothing but spaces.
+    Empty,
+    /// A value longer than `max` characters.
+    TooLong { max: usize },
+    /// `value`, as typed and cut short, does not read as the property's type, which takes `accepted`.
+    Unread { value: String, accepted: Accepted },
+    /// `given` values, where the property's multiplicity allows `lower` to `upper`, none for no
+    /// upper bound.
+    Count { given: usize, lower: u64, upper: Option<u64> },
+    /// `value`, as typed and cut short, twice in a property that holds each value once.
+    Twice { value: String },
+}
+
+/// What a value of a stereotype property's type is, in a [`ValueMisfit::Unread`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Accepted {
+    /// A whole number.
+    Integer,
+    /// A number.
+    Real,
+    /// True or false.
+    Boolean,
+    /// A whole number of 0 or more, or `*`.
+    UnlimitedNatural,
+    /// Any text.
+    Text,
+    /// One of an enumeration's literals, by name.
+    Literals(Vec<String>),
+    /// One of the literals of the enumeration named `enumeration`, which has none yet.
+    NoLiterals { enumeration: String },
+}
+
+/// What a [`Reason::LiteralValued`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiteralValued {
+    /// The literal's name.
+    pub literal: String,
+    /// The stereotype property it is the value of.
+    pub property: String,
+    /// The stereotype applied.
+    pub stereotype: String,
+    /// The element the stereotype is applied to, by its name or, without one, its id.
+    pub element: String,
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.
