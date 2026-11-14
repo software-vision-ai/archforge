@@ -1368,7 +1368,7 @@ pub(crate) fn redefines_menu(
         return Some(Ok(vec![t.id]));
     }
     let t = targets.leaf.get(i.saturating_sub(targets.redefines.len()))?;
-    Some(Err(target_refusal(&t.name, archforge_uml::modifiers::TargetProblem::Leaf, true)))
+    Some(Err(target_refusal(&t.name, archforge_engine::TargetRule::Leaf, true)))
 }
 
 /// The properties Subsets offers a property named `name`: the kept list, less a property named
@@ -1554,7 +1554,7 @@ pub(crate) fn target_refusals(
             };
             let stale = had.contains(id) && was.is_some_and(|w| problem_of(w, t, redefining).is_some());
             if let Some(problem) = problem_of(shape, t, redefining).filter(|_| !stale) {
-                return Some((field, target_refusal(&name(store, t), problem, redefining)));
+                return Some((field, target_refusal(&name(store, t), problem.rule(), redefining)));
             }
         }
     }
@@ -1563,29 +1563,36 @@ pub(crate) fn target_refusals(
 
 /// Why a default does not read, in the user's words: the value and the form its type takes.
 pub(crate) fn default_refusal(store: &Store, e: &archforge_uml::modifiers::DefaultError) -> String {
-    use archforge_uml::modifiers::{DefaultError, DefaultForm};
-    let (value, form) = match e {
-        DefaultError::TooLong => {
-            return fmt(&tr("A default value is at most {n} characters."), &[("n", &archforge_uml::modifiers::MAX_DEFAULT.to_string())]);
+    default_said(&e.reason(store)).unwrap_or_else(|| e.said(store))
+}
+
+/// A property's default refused, typed, in the user's words: too long, not read as its type's
+/// default, or not fitting the type it would take; none for another reason.
+pub(crate) fn default_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::{DefaultKind as K, Reason};
+    let (value, kind) = match reason {
+        Reason::DefaultTooLong { max } => return Some(fmt(&tr("A default value is at most {n} characters."), &[("n", &max.to_string())])),
+        Reason::DefaultUnfit { value, ty } => {
+            let ty = ty.as_deref().map_or_else(|| tr("None"), str::to_string);
+            return Some(fmt(&tr("The default value {value} does not fit {type}; change or clear it first."), &[("value", value), ("type", &ty)]));
         }
-        DefaultError::Malformed(value, form) => (value.as_str(), *form),
+        Reason::DefaultUnread { value, kind } => (value.as_ref(), kind),
+        _ => return None,
     };
-    let said = match form {
-        DefaultForm::Integer => tr("{value} is not a whole number, which an Integer's default is, such as 42."),
-        DefaultForm::Real => tr("{value} is not a number, which a Real's default is, such as 2.5."),
-        DefaultForm::Boolean => tr("{value} is neither true nor false, which a Boolean's default is."),
-        DefaultForm::UnlimitedNatural => tr("{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is."),
-        DefaultForm::Enumeration(en) => {
-            return fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", &name(store, en))]);
-        }
-        DefaultForm::String | DefaultForm::Opaque => tr("{value} cannot be read as a default."),
+    let said = match kind {
+        K::Integer => tr("{value} is not a whole number, which an Integer's default is, such as 42."),
+        K::Real => tr("{value} is not a number, which a Real's default is, such as 2.5."),
+        K::Boolean => tr("{value} is neither true nor false, which a Boolean's default is."),
+        K::UnlimitedNatural => tr("{value} is neither a whole number of 0 or more nor *, which an UnlimitedNatural's default is."),
+        K::Literal(en) => return Some(fmt(&tr("{value} is not a literal of {enumeration}."), &[("value", value), ("enumeration", en)])),
+        K::Text => tr("{value} cannot be read as a default."),
     };
-    fmt(&said, &[("value", value)])
+    Some(fmt(&said, &[("value", value)]))
 }
 
 /// Why `name` cannot be subset (or, `redefining`, redefined), in the user's words.
-pub(crate) fn target_refusal(name: &str, problem: archforge_uml::modifiers::TargetProblem, redefining: bool) -> String {
-    use archforge_uml::modifiers::TargetProblem as P;
+pub(crate) fn target_refusal(name: &str, problem: archforge_engine::TargetRule, redefining: bool) -> String {
+    use archforge_engine::TargetRule as P;
     let said = match (problem, redefining) {
         (P::Unnamed, _) => return tr("A property without a name cannot be named here."),
         (P::NotAProperty | P::Itself | P::OutOfReach, false) => tr("{name} is not a property this one can subset."),

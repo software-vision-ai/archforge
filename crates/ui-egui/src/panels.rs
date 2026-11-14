@@ -544,8 +544,8 @@ fn constraint_said(reason: &archforge_engine::Reason) -> Option<String> {
     })
 }
 
-/// A rule broken by the properties a property subsets or redefines, as a list of ids, or by an
-/// element made leaf; none for another reason.
+/// A rule broken by the properties a property subsets or redefines, as a list of ids or each
+/// property named, by an element made leaf, or by a property's default; none for another reason.
 fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::Reason;
     const SUBSETTED: &str = "subsetted property";
@@ -559,7 +559,8 @@ fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
         Reason::BuiltInNotLeaf { name } => fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", name)]),
         Reason::Redefined(names) => crate::uml_panel::leaf_refusal(names),
-        _ => return None,
+        Reason::TargetBreaks { name, rule, redefining } => crate::uml_panel::target_refusal(name, *rule, *redefining),
+        other => return crate::uml_panel::default_said(other),
     })
 }
 
