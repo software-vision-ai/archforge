@@ -305,13 +305,22 @@ fn creation_helper() {
     }
 }
 
+/// Kills the helper as a crash that takes the server's watchdog along, which leaves the server
+/// running for recovery to find.
+fn orphan(owner: &mut std::process::Child, server: u32) {
+    let watchdog = format!("archforge-server-watchdog {server}$");
+    assert!(Command::new("/usr/bin/pkill").args(["-KILL", "-f", &watchdog]).status().unwrap().success(), "the server had a watchdog");
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    assert!(alive(server), "the server outlives its owner and its watchdog");
+}
+
+/// A crash inside a creation, its server left running, leaves a project that reads as unfinished.
 #[test]
 fn a_creation_killed_half_way_reads_as_unfinished_and_its_server_is_stopped() {
     let env = Env::new("midcrash");
     let (mut owner, orphan) = helper(&env, "Halfway", true);
-    owner.kill().unwrap();
-    owner.wait().unwrap();
-    assert!(alive(orphan), "the server outlives its owner, as measured");
+    self::orphan(&mut owner, orphan);
     assert!(matches!(env.create("Halfway"), Err(Error::Unfinished { .. })));
     assert!(wait_gone(orphan), "recovery stopped the orphaned server");
     assert!(matches!(env.open(&env.folder().join("Halfway.archforge")), Err(Error::Unfinished { .. })));
@@ -320,12 +329,12 @@ fn a_creation_killed_half_way_reads_as_unfinished_and_its_server_is_stopped() {
     assert!(matches!(env.create("Empty"), Err(Error::Unfinished { .. })));
 }
 
+/// A crash with a project open, its server left running, does not keep the project from opening.
 #[test]
 fn a_project_open_when_archforge_crashed_opens_again() {
     let env = Env::new("aftercrash");
     let (mut owner, orphan) = helper(&env, "Survivor", false);
-    owner.kill().unwrap();
-    owner.wait().unwrap();
+    self::orphan(&mut owner, orphan);
     let p = env.open(&env.folder().join("Survivor.archforge")).unwrap();
     assert!(wait_gone(orphan), "the orphaned server was stopped");
     assert_eq!(p.settings().name, "Survivor");

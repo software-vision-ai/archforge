@@ -2760,8 +2760,9 @@ mod tests {
         }
     }
 
-    /// An Archforge killed with a project open leaves its server running; the next start stops it,
-    /// and the project opens with what was saved and written (AR-422).
+    /// An Archforge killed with a project open and with the server's watchdog leaves the server
+    /// running; the next start stops it, and the project opens with what was saved and written
+    /// (AR-422).
     #[test]
     fn a_server_a_killed_archforge_left_running_is_stopped_at_the_next_start_and_its_project_opens_whole() {
         use std::io::BufRead;
@@ -2783,11 +2784,17 @@ mod tests {
             }
         });
         let ready = rx.recv_timeout(Duration::from_secs(120));
+        // The watchdog goes first, as when a whole process group is killed: it would stop the server.
+        let untied = ready.as_ref().is_ok_and(|server| {
+            let watchdog = format!("archforge-server-watchdog {server}$");
+            std::process::Command::new("/usr/bin/pkill").args(["-KILL", "-f", &watchdog]).status().unwrap().success()
+        });
         // SIGKILL: no exit path of the owner runs.
         owner.kill().unwrap();
         owner.wait().unwrap();
         let orphan = ready.expect("the owner opened its project");
         let _guard = KillOnDrop(orphan);
+        assert!(untied, "the server had a watchdog");
         assert!(!gone(orphan), "the server outlives the killed Archforge");
         sandbox.host.stop_orphans().unwrap().join().unwrap();
         // Stopped means a zombie at least, which its new parent reaps a moment later.

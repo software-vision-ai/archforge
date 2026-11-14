@@ -1,6 +1,7 @@
 //! The project database's server: runs `dolt sql-server` for one project folder beside the
 //! application, reachable only by this user with a password made for each start, connects to it,
-//! stops it, and recovers a server a crashed Archforge left behind.
+//! stops it, stops it too when Archforge is killed (unix), and recovers a server a crashed Archforge
+//! left behind.
 //!
 //! Host services: the application uses this crate and the interface never depends on it. Dolt
 //! embeds only into Go programs, so it runs as a separate process; everything above this crate
@@ -19,6 +20,7 @@ mod run_dir;
 mod runner;
 mod secret;
 mod server;
+mod watchdog;
 
 pub use binary::Dolt;
 pub use config::MAX_PACKET;
