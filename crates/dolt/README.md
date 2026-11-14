@@ -17,25 +17,34 @@ A start that fails once its server runs stops that server before it returns: eve
 needs no server comes before the server's start, and what follows (the record, the wait until it
 is ready) owns the server through a value whose drop stops it. One moment stays open: an Archforge
 killed between a server's start and its record, which needs the server's process id and so cannot
-come first. That is the record's write to disk, measured at 5 to 10 ms on macOS, and behind
-another change of a record the wait for the records' lock, two seconds at most. A server left so
+come first. That is the record's write to disk, measured at 5 to 10 ms on macOS. A server left so
 has neither record nor watchdog, so no sweep finds it, and its run folder stays. Recovery treats
 it as any server it did not record: once it holds the project's lock, and if its program's file is
 named `dolt`, the project is refused as open elsewhere, naming the server's process id, until that
 process is stopped.
 
-Every change of a server record (writing one, removing one, setting a damaged one aside) holds an
-operating-system lock on the file `.lock` in the records folder, so a change that looks before it
-acts (remove this record only if it is still the one read; write one only if none is there) sees
-no other change in between, from this Archforge or another of a build that has this lock. A record is never moved from its name
-to be compared, so no start finds a name free that is not. Reading takes no lock: a record appears
-and goes whole. The lock goes with its holder, so an Archforge killed in a change leaves the lock
-file and no lock. A change waits at most two seconds for the lock: behind a holder that has
-stalled it fails and changes nothing: a start fails; a removal leaves the record to the next
-recovery or sweep, and says so in the log; a damaged record stays where it is, which fails the
-opening of its project and leaves it out of a sweep. The same holds in a folder whose file system has no
-locks, and where the lock's name holds anything but a plain file: no server starts with its
-records there.
+Every change of a server record (writing one, removing one, setting a damaged one aside) holds
+that record's lock, an operating-system lock on a file of its own beside the record (the record's
+name ending in `.lock`), so a change that looks before it acts (remove this record only if it is
+still the one read; write one only if none is there) sees no other change in between, from this
+Archforge or another of a build that has this lock. A record is never moved from its name to be
+compared, so no start finds a name free that is not. Reading takes no lock: a record appears and
+goes whole. The lock goes with its holder, so an Archforge killed in a change leaves the lock file
+and no lock; the lock files stay, one empty file for each record name ever used.
+
+A start takes the lock before it starts its server and holds it until the record is written: a
+wait for the lock, or a start that cannot have it, comes before there is a server, and the moment
+named above is no longer than it was. A change waits at most two seconds for the lock: behind a
+holder that has stalled it fails and changes nothing. A start fails, having started no server; a
+removal leaves the record to the next recovery or sweep, and says so in the log; a damaged record
+stays where it is, which fails the opening of its project and leaves it out of a sweep. The lock
+is each project's own, so a start that has stalled, which holds its lock for as long, holds up
+that project's record only and no other project's. (What a stalled start does to other starts in
+the same Archforge is the half second named above.) The same failures follow where the file system has no locks, and where the lock's name
+holds anything but a plain file: no server starts with its records there. A damaged record that
+cannot be set aside (its lock held, too many set aside before it, or the move itself failing)
+fails the opening as well. A start that fails for a lost port tries again only when the record's
+name is free.
 
 **Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
 the portable-target check leaves it out. No toolkit.

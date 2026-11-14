@@ -255,8 +255,7 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // What neither covers: an Archforge killed between a server's start and its record. The record
 // holds the server's process id, so it cannot come first; a start that fails there stops its
 // server (`Started`), but a kill runs no code. That moment is the record's write to disk, measured
-// at 5 to 10 ms on macOS, and behind another change of a record the wait for the records' lock,
-// two seconds at most. A server left so has no record for a sweep to find, and its run folder
+// at 5 to 10 ms on macOS. A server left so has no record for a sweep to find, and its run folder
 // stays. Recovery treats it as any server it did not record: once it holds the project's lock, and
 // if its program's file is named `dolt`, the project is refused as open elsewhere, naming the
 // server's process id, until that process is stopped.
@@ -442,6 +441,10 @@ fn launch(
     let (cfg_text, no_files_text) = (paths::text("run folder", &cfg_dir)?, paths::text("run folder", &no_files)?);
     let mut attempt = 0;
     loop {
+        // The record's lock comes first: a wait for it leaves no server behind and no port to lose.
+        // Nothing added between the server's start and `drop(held)` may return: the lock would be
+        // held while the server is stopped (the tests' hook does that, in tests only).
+        let held = record::hold(&record::path(&opts.records, data_text), record::LOCK_WAIT)?;
         let port = free_port()?;
         let yaml =
             config::server_yaml(&config::Settings { port, socket: socket_text, data_dir: data_text, cfg_dir: cfg_text, no_files: no_files_text });
@@ -469,7 +472,9 @@ fn launch(
         };
         // Another start may have recorded a server since recovery looked: its record stays, and this
         // one gives way.
-        match record::write_new(&opts.records, &rec) {
+        let written = record::write_new(&held, &rec);
+        drop(held);
+        match written {
             #[cfg(all(test, unix))]
             Ok(true) => tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id()))),
             #[cfg(not(all(test, unix)))]
@@ -508,7 +513,7 @@ fn launch(
                 // A server that would not stop keeps its record, so recovery can still find it.
                 let cleared = child.stop() && record::remove_if(&opts.records, data_text, pid);
                 let lost_port = matches!(e, Error::StartFailed { .. }) && TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_err();
-                // With its record still there another try would only be refused by it.
+                // With a record still under the name another try would only be refused by it.
                 if lost_port && cleared && attempt < PORT_RETRIES {
                     attempt += 1;
                     continue;
@@ -669,13 +674,34 @@ mod tests {
         Server::start(&dolt, &dir.0.join("data"), &opts).unwrap().stop().unwrap();
     }
 
+    /// With the record's lock held elsewhere a start fails before it comes to its server, here a
+    /// link to dolt that is gone by then: no wait for the lock comes after a server's start.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_that_cannot_have_its_records_lock_starts_no_server() {
+        let dir = crate::home::tests::Scratch::new("lock-first");
+        let home = crate::Home::prepare(&dir.0.join("home")).unwrap();
+        std::os::unix::fs::symlink(Dolt::find(&home).unwrap().path(), dir.0.join("dolt")).unwrap();
+        let dolt = Dolt::at(&dir.0.join("dolt"), &home).unwrap();
+        std::fs::remove_file(dir.0.join("dolt")).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        private_records(&opts.records).unwrap();
+        let project = dir.0.join("data").canonicalize().unwrap();
+        let held = record::hold(&record::path(&opts.records, &project.display().to_string()), record::LOCK_WAIT).unwrap();
+        let what = |start: Result<Server, Error>| if let Err(Error::Io { what, .. }) = start { what } else { "another outcome".into() };
+        assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot lock");
+        drop(held);
+        assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot start", "with the lock it comes to the server");
+    }
+
     /// A record another start wrote after this one was read stays; the one read goes.
     #[test]
     fn forgetting_keeps_a_record_written_since_it_was_read() {
         let dir = crate::home::tests::Scratch::new("forget");
         let read = record::tests::rec("/p/a");
         let newer = Record { server_pid: 9, ..read.clone() };
-        assert!(record::write_new(&dir.0, &newer).unwrap());
+        assert!(record::tests::write_new(&dir.0, &newer).unwrap());
         let file = record::path(&dir.0, "/p/a");
         forget(&file, &read, None);
         assert_eq!(record::read(&dir.0, "/p/a").unwrap(), Some(newer.clone()), "the newer record stays");
