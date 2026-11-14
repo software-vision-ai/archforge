@@ -5176,26 +5176,32 @@ fn an_application_refused_is_said_in_the_chosen_language() {
 }
 
 /// The centre of the Properties control `id`, the panel's body wheeled until that centre is inside
-/// it: a control under the fold is not listed, and one the fold cuts is listed with a centre no
-/// press reaches (AR-467).
+/// it: a control under the fold or above the body is not listed, and one an edge cuts is listed
+/// with a centre no press reaches. It is looked for down to the body's end, then up to its top,
+/// and it is a failure when neither way has it (AR-467).
 fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos2 {
-    for _ in 0..60 {
+    let mut down = true;
+    for _ in 0..120 {
         let body = h.state().panels.body.expect("the Properties body");
         let at = h.state().widgets().iter().find(|w| w.id == id).map(|w| egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0));
         if let Some(at) = at.filter(|at| body.contains(*at)) {
             return at;
         }
-        // Up for a control cut by the body's top, down for one cut by its foot or not listed yet.
-        let up = at.is_some_and(|at| at.y < body.top());
+        let before = h.state().panels.scroll;
         h.event(egui::Event::PointerMoved(body.center()));
         h.event(egui::Event::MouseWheel {
             unit: egui::MouseWheelUnit::Point,
-            delta: egui::vec2(0.0, if up { 120.0 } else { -120.0 }),
+            delta: egui::vec2(0.0, if down { -120.0 } else { 120.0 }),
             modifiers: egui::Modifiers::NONE,
             phase: egui::TouchPhase::Move,
             source: egui::MouseWheelSource::Wheel,
         });
         h.run();
+        // At an end of the body: the search turns at its foot and gives up at its top.
+        if (h.state().panels.scroll - before).abs() < 0.5 {
+            assert!(down, "no control {id} in reach of the wheel in Properties");
+            down = false;
+        }
     }
     panic!("no control {id} in reach of the wheel in Properties");
 }
@@ -5273,6 +5279,11 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         let edit = h.state().panels.constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // A control above what shows is not listed either: it is found by wheeling up.
+        let above = "workspace.properties.attributes.add";
+        assert!(!ids(&h).iter().any(|i| i == above), "{theme:?}: Attributes is scrolled out above the editor's foot");
+        let at = reached_in_properties(&mut h, above);
+        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
         // Cancel, under the refusal, closes the editor and writes nothing.
         let at = reached_in_properties(&mut h, "workspace.properties.constraint.cancel");
         click(&mut h, at);
