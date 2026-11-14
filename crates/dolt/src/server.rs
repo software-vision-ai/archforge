@@ -5,6 +5,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::net::{Ipv4Addr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::identity::identity;
@@ -85,8 +87,11 @@ impl Server {
             output: format!("process {me} not found"),
         })?;
         let run_dir = run_dir::create(&run_root, uid)?;
-        let launched = launch(dolt, &data_dir, &data_text, &run_root, &run_dir, uid, &owner.started, opts);
-        if launched.is_err() {
+        let left = Arc::new(AtomicBool::new(false));
+        let launched = launch(dolt, &data_dir, &data_text, &run_root, &run_dir, uid, &owner.started, opts, &left);
+        // A server that would not stop may still run on its run folder, which recovery removes
+        // with the server's record, if it has one, once it is stopped or gone.
+        if launched.is_err() && !left.load(Ordering::Relaxed) {
             run_dir::remove(&run_root, &run_dir, uid);
         }
         launched
@@ -163,6 +168,8 @@ struct Started {
     stop_budget: Duration,
     /// Whether a stop was tried.
     tried: bool,
+    /// Set when a stop failed: the server may still run. Shared with the start that made it.
+    left: Arc<AtomicBool>,
 }
 
 impl Started {
@@ -171,10 +178,20 @@ impl Started {
         self.child.id()
     }
 
-    /// Stops the server: a polite signal on unix, then a kill after `budget`.
+    /// Stops the server: a polite signal on unix, then a kill after `budget`. A stop that fails
+    /// is noted in `left`, however it was asked for, a drop included.
     fn stop_within(&mut self, budget: Duration) -> Result<(), Error> {
         self.tried = true;
-        stop_child(&mut self.child, budget)
+        #[cfg(all(test, unix))]
+        let stopped = if tests::STOP_FAILS.take() { Err(Error::StillRunning { pid: self.id(), waited: budget }) } else { Ok(()) };
+        #[cfg(not(all(test, unix)))]
+        let stopped = Ok(());
+        let stopped = stopped.and_then(|()| stop_child(&mut self.child, budget));
+        // Set, never cleared: another server of the same start that did stop changes nothing.
+        if stopped.is_err() {
+            self.left.store(true, Ordering::Relaxed);
+        }
+        stopped
     }
 
     /// Stops the server, saying so in the log when it would not stop; returns whether it is gone.
@@ -403,7 +420,8 @@ fn stop_child(child: &mut Child, budget: Duration) -> Result<(), Error> {
 /// Writes the configuration, starts the server, records it, and waits until it is ready; a lost
 /// race for the port starts it again. Every step that can fail without the server comes before
 /// its start; what can fail after it (the record, the wait) returns through [`Started`], whose
-/// drop stops the server.
+/// drop stops the server. `left` says afterwards whether a server was started that would not
+/// stop: the caller then leaves the run folder to it.
 fn launch(
     dolt: &Dolt,
     data_dir: &Path,
@@ -413,6 +431,7 @@ fn launch(
     uid: Option<u32>,
     owner_started: &str,
     opts: &ServerOptions,
+    left: &Arc<AtomicBool>,
 ) -> Result<Server, Error> {
     let socket = if cfg!(unix) {
         let s = run.join("db.sock");
@@ -458,7 +477,7 @@ fn launch(
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
         let child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
         // From here to the `Server`, no return leaves the server running: see `Started`.
-        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false };
+        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false, left: left.clone() };
         #[cfg(all(test, unix))]
         tests::after_spawn(child.id())?;
         let rec = Record {
@@ -492,7 +511,11 @@ fn launch(
         // killed Archforge takes this server with it. The watchdog ends with this turn of the loop
         // or with the `Server`, in both after the attempt to stop the server.
         let watchdog = Watchdog::tie(child.id(), &command);
-        match wait_ready(&mut child.child, data_dir, socket.as_deref(), port, &password, &log_path, opts.ready_budget) {
+        #[cfg(all(test, unix))]
+        let before = tests::before_ready();
+        #[cfg(not(all(test, unix)))]
+        let before = Ok(());
+        match before.and_then(|()| wait_ready(&mut child.child, data_dir, socket.as_deref(), port, &password, &log_path, opts.ready_budget)) {
             Ok(()) => {
                 return Ok(Server {
                     child,
@@ -618,7 +641,13 @@ mod tests {
         /// Whether this thread's next start fails right after its server has started, and the
         /// process id of the server this thread last started.
         static FAIL_AFTER_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        /// Whether this thread's next start fails once its server is recorded, in the place of
+        /// the wait until it is ready.
+        static FAIL_BEFORE_READY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
         static SPAWNED: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+        /// Whether this thread's next stop of a server it started fails without trying: a server
+        /// that would not stop, which a polite signal, a kill and a wait all but rule out on unix.
+        pub(super) static STOP_FAILS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
 
     /// Notes the server just started and, once when a test asked for it, fails in the place of
@@ -627,6 +656,12 @@ mod tests {
     pub(super) fn after_spawn(server: u32) -> Result<(), Error> {
         SPAWNED.set(Some(server));
         if FAIL_AFTER_SPAWN.take() { Err(Error::BadPath { what: "test", path: String::new() }) } else { Ok(()) }
+    }
+
+    /// Fails, once when a test asked for it, in the place of a server that does not get ready.
+    #[cfg(unix)]
+    pub(super) fn before_ready() -> Result<(), Error> {
+        if FAIL_BEFORE_READY.take() { Err(Error::BadPath { what: "test", path: String::new() }) } else { Ok(()) }
     }
 
     /// Whether the watchdog of the server `server` runs.
@@ -693,6 +728,60 @@ mod tests {
         assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot lock");
         drop(held);
         assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot start", "with the lock it comes to the server");
+    }
+
+    /// A start fails once its server runs, and the server would not stop: its run folder stays
+    /// with its record, since the server may still run on them, and the project is refused as
+    /// open elsewhere, naming it. Once it is gone the next start clears both, and a failed start
+    /// whose server did stop leaves neither. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_start_keeps_the_run_folder_of_a_server_that_would_not_stop() {
+        let (dir, root) = (crate::home::tests::Scratch::new("kept"), crate::home::tests::Scratch::new("k"));
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts =
+            ServerOptions { run_root: Some(root.0.clone()), ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        // Every start here fails once its server runs and is recorded.
+        let start = || {
+            FAIL_BEFORE_READY.set(true);
+            Server::start(&dolt, &dir.0.join("data"), &opts)
+        };
+        let root = root.0.canonicalize().unwrap();
+        let run_folders = || std::fs::read_dir(&root).map(|d| d.flatten().map(|e| e.path()).collect::<Vec<_>>()).unwrap_or_default();
+        let records = || record::all(&opts.records).unwrap_or_default();
+        // A server this test leaves running on purpose is ended once it holds the project's lock
+        // (so that no half-written lock is left), and is gone before anything is asserted.
+        let end = |pid: u32| {
+            let until = Instant::now() + Duration::from_secs(20);
+            while recovery::read_lock(&dir.0.join("data")).ok() != Some(Lock::Pid(pid)) && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let _ = std::process::Command::new("/bin/kill").args(["-KILL", &pid.to_string()]).status();
+            while identity(pid).ok().flatten().is_some() && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        };
+        // Before its record, where only the drop of the start's hold on it stops the server.
+        FAIL_AFTER_SPAWN.set(true);
+        STOP_FAILS.set(true);
+        let unrecorded = Server::start(&dolt, &dir.0.join("data"), &opts);
+        end(SPAWNED.get().unwrap());
+        let (unrecorded_kept, no_record) = (run_folders(), records());
+        assert!(matches!(unrecorded, Err(Error::BadPath { what: "test", .. })), "{unrecorded:?}");
+        assert_eq!((unrecorded_kept.len(), no_record), (1, Vec::new()), "the folder stays, with no record to stay with it");
+        std::fs::remove_dir_all(&unrecorded_kept[0]).unwrap();
+        STOP_FAILS.set(true);
+        let failed = start();
+        let pid = SPAWNED.get().unwrap();
+        let (recorded, kept, again) = (records(), run_folders(), start());
+        end(pid);
+        assert!(matches!(failed, Err(Error::BadPath { what: "test", .. })), "{failed:?}");
+        assert!(kept.len() == 1 && kept[0].join("server.yaml").is_file(), "its run folder stays as it was: {kept:?}");
+        assert_eq!(recorded.iter().map(|(_, r)| (r.server_pid, PathBuf::from(&r.run_dir))).collect::<Vec<_>>(), [(pid, kept[0].clone())]);
+        assert!(matches!(again, Err(Error::OpenElsewhere { pid: open }) if open == pid), "{again:?}");
+        assert!(matches!(start(), Err(Error::BadPath { what: "test", .. })));
+        assert_eq!((run_folders(), records()), (Vec::new(), Vec::new()), "no folder and no record are left");
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
