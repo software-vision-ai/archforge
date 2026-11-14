@@ -45,14 +45,37 @@ impl Identity {
         }
     }
 
-    /// Whether the command line is exactly `expected`, the one this crate started.
+    /// Whether the command line is `expected`, the one this crate started: exactly so for a list. A
+    /// joined line is compared as `ps` writes `expected`, since `ps` rewrites every character
+    /// outside ASCII; like the joining itself, that form is not one-to-one (a line spelling `M-C`
+    /// out reads as the byte it stands for), so a random run folder name stays part of the proof.
     pub fn is(&self, expected: &[String]) -> bool {
         match &self.args {
             Args::List(a) => a == expected,
-            Args::Joined(s) => *s == expected.join(" "),
+            Args::Joined(s) => *s == ps_text(&expected.join(" ")),
             Args::Unknown => false,
         }
     }
+}
+
+/// `text` as `ps` prints it in the C locale, measured on macOS 27.2: a byte of a character outside
+/// ASCII becomes `M^` and a letter (0x80 to 0x9f), `\240` (0xa0) or `M-` and a sign (above);
+/// printable ASCII stays, and a control character, which no path of this crate holds, is left as
+/// it is and so never matches. Under a UTF-8 locale `ps` keeps such characters, but only where
+/// that locale exists: asked for one the machine lacks, it writes this form again, and the C
+/// locale is always there.
+#[cfg_attr(any(target_os = "linux", windows), allow(dead_code))]
+pub(crate) fn ps_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        match b {
+            ..=0x7f => out.push(char::from(b)),
+            0x80..=0x9f => out.extend(['M', '^', char::from(b ^ 0xc0)]),
+            0xa0 => out.push_str("\\240"),
+            _ => out.extend(['M', '-', char::from(b & 0x7f)]),
+        }
+    }
+    out
 }
 
 /// The last component of a path written with `/` or `\`.
@@ -138,7 +161,8 @@ mod platform {
     }
 
     /// `ps` prints start times in the local zone and language, which change while a process runs
-    /// (travel, a new time zone): a fixed zone and the C locale keep a start time the same.
+    /// (travel, a new time zone): a fixed zone and the C locale keep a start time the same, and the
+    /// C locale writes a command line the one way [`super::ps_text`] knows.
     pub fn env() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
         let mut env = runner::base_env();
         env.push(("TZ".into(), "UTC0".into()));
@@ -153,6 +177,27 @@ mod platform {
             let env = super::env();
             assert!(env.iter().any(|(k, v)| k == "TZ" && v == "UTC0"));
             assert!(env.iter().any(|(k, v)| k == "LC_ALL" && v == "C"));
+        }
+
+        /// A running process whose arguments hold characters outside ASCII, each kind of byte `ps`
+        /// rewrites among them, is the command line it was started with, and no other.
+        #[test]
+        fn a_command_line_outside_ascii_is_recognised_as_started() {
+            let odd = "é ü Ä\u{a0}…😀 M-C \\240";
+            let mut child = std::process::Command::new("/bin/sh").args(["-c", "read x", odd]).stdin(std::process::Stdio::piped()).spawn().unwrap();
+            let line = |last: &str| ["/bin/sh", "-c", "read x", last].map(String::from);
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            let mut id = super::identity(child.id()).unwrap().unwrap();
+            // Between fork and exec the child still shows this test's command line.
+            while !id.is(&line(odd)) && std::time::Instant::now() < until {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                id = super::identity(child.id()).unwrap().unwrap();
+            }
+            let (ours, other) = (id.is(&line(odd)), id.is(&line("e u A")));
+            drop(child.stdin.take());
+            child.wait().unwrap();
+            assert!(ours, "{id:?}");
+            assert!(!other);
         }
 
         /// The same process reads the same start time whatever this process's zone says.
@@ -355,6 +400,19 @@ mod tests {
         assert_eq!(parse_ps("S    Tue Oct 28\n"), None);
     }
 
+    /// The expected line takes the form `ps` gives it, byte kind by byte kind, and a joined line
+    /// matches only the command whose form it is.
+    #[test]
+    fn a_command_line_is_written_as_ps_writes_it() {
+        assert_eq!(ps_text("/bin/dolt sql-server --config /a b\\c~/server.yaml"), "/bin/dolt sql-server --config /a b\\c~/server.yaml");
+        assert_eq!(ps_text("é ü"), "M-CM-) M-CM-<");
+        assert_eq!(ps_text("Ä…😀"), "M-CM^DM-bM^@M-&M-pM^_M^XM^@", "the bytes 0x80 to 0x9f");
+        assert_eq!(ps_text("a\u{a0}b"), "aM-B\\240b", "a no-break space ends in the byte 0xa0");
+        let joined = Identity { started: "t".into(), args: Args::Joined("/é/dolt sql-server".replace('é', "M-CM-)")) };
+        assert!(joined.is(&["/é/dolt".into(), "sql-server".into()]) && joined.is_dolt_server());
+        assert!(!joined.is(&["/e/dolt".into(), "sql-server".into()]));
+    }
+
     #[test]
     fn proc_stat_survives_a_name_with_brackets_and_spaces() {
         let stat = "4242 (a) b) S 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1000 10";
@@ -365,6 +423,9 @@ mod tests {
             parse_cmdline(b"/usr/bin/dolt\0sql-server\0--config\0/r/server.yaml\0"),
             ["/usr/bin/dolt", "sql-server", "--config", "/r/server.yaml"]
         );
+        let outside = list(&["/é ü/dolt", "sql-server"]);
+        assert_eq!(Args::List(parse_cmdline("/é ü/dolt\0sql-server\0".as_bytes())), outside.args, "Linux reads the bytes themselves");
+        assert!(outside.is(&["/é ü/dolt".into(), "sql-server".into()]) && outside.is_dolt_server());
     }
 
     #[test]
