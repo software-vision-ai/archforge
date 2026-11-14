@@ -7,6 +7,7 @@ str		Help	Aide
 str	menu	View	Affichage
 str		Ctrl	Ctrl
 str		Shift	Maj
+str	key	Alt	Alt
 str		The project is busy	Le projet est occupé
 str		Open or go back to a project first	Ouvrez d'abord un projet ou revenez à un projet
 str		Show a diagram first	Affichez d'abord un diagramme

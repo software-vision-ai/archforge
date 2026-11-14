@@ -167,9 +167,9 @@ fn the_list_closes_on_every_way_the_project_goes() {
     }
 }
 
-/// Presses a step's keys and lets the window take them.
+/// Presses a step's keys, ⌥⌘ with the arrow `k` as a Mac sends them, and lets the window take them.
 fn press(h: &mut Harness<'static, Shell>, k: egui::Key) {
-    key(h, k, egui::Modifiers::COMMAND);
+    key(h, k, egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND | egui::Modifiers::ALT);
     h.run_steps(2);
 }
 
@@ -195,33 +195,63 @@ fn shown_kept(h: &mut Harness<'static, Shell>, host: &SavingHost, hash: &str) {
 #[test]
 fn the_keys_step_through_the_versions() {
     in_both(|mut h, host| {
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(host.version_limits.lock().unwrap().last(), Some(&50));
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h2");
         opened_list(&mut h, &host);
         key(&mut h, egui::Key::Escape, MOVE[0]);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert!(h.state().version_list.steps.reading.is_none(), "what was read serves the next step, the list closed or not");
         shown(&mut h, &host, "h1");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert!(host.reads.lock().unwrap().is_empty(), "the oldest has nothing before it");
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         shown_kept(&mut h, &host, "h2");
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         shown(&mut h, &host, "h3");
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         assert!(host.reads.lock().unwrap().is_empty(), "the newest has nothing after it");
         key(&mut h, egui::Key::H, MOVE[1]);
         assert_eq!(h.state().viewing(), None, "⇧⌘H goes back");
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         assert!(host.reads.lock().unwrap().is_empty(), "nothing is newer than current work");
         add_schema(&mut h, "shop");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         h.run_steps(4);
         shown_kept(&mut h, &host, "h3");
     });
+}
+
+/// ⌥⌘← and ⌥⌘→ step in both key shapes, a Mac's and that of Windows and Linux, and nothing near
+/// them does: not the arrow with the command key alone, with Shift more, with Alt alone, or with
+/// a Mac's Control more.
+#[test]
+fn the_step_keys_are_matched_exactly_in_both_key_shapes() {
+    use egui::Key::{ArrowLeft, ArrowRight};
+    use egui::Modifiers as M;
+    for shape in [M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
+        let others = [shape, shape | M::ALT | M::SHIFT, M::ALT, M::MAC_CMD | M::COMMAND | M::CTRL | M::ALT];
+        in_both(|mut h, host| {
+            for other in others {
+                key(&mut h, ArrowLeft, other);
+                assert!(host.version_reads.lock().unwrap().is_empty(), "{other:?} is not Older version's");
+            }
+            key(&mut h, ArrowLeft, shape | M::ALT);
+            answer_versions(&host);
+            h.run_steps(3);
+            shown(&mut h, &host, "h2");
+            key(&mut h, ArrowLeft, shape | M::ALT);
+            shown(&mut h, &host, "h1");
+            for other in others {
+                key(&mut h, ArrowRight, other);
+                shown_kept(&mut h, &host, "h1");
+            }
+            key(&mut h, ArrowRight, shape | M::ALT);
+            shown_kept(&mut h, &host, "h2");
+        });
+    }
 }
 
 /// A second press while the read is on its way is ignored, the window keeps waking, and a hold or
@@ -231,8 +261,8 @@ fn a_step_waiting_for_its_read() {
     let routes: [&dyn Fn(&mut Shell); 2] = [&|s| s.begin_hold().unwrap(), &|s| s.project.as_mut().unwrap().path = "/another".into()];
     for route in routes {
         in_both(|mut h, host| {
-            press(&mut h, egui::Key::OpenBracket);
-            press(&mut h, egui::Key::OpenBracket);
+            press(&mut h, egui::Key::ArrowLeft);
+            press(&mut h, egui::Key::ArrowLeft);
             assert_eq!(host.version_reads.lock().unwrap().len(), 1, "the second press is ignored");
             assert!(h.output().viewport_output[&egui::ViewportId::ROOT].repaint_delay.as_secs() < 1, "it wakes while waiting");
             route(h.state_mut());
@@ -244,7 +274,7 @@ fn a_step_waiting_for_its_read() {
         });
     }
     in_both(|mut h, host| {
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h2");
@@ -254,7 +284,7 @@ fn a_step_waiting_for_its_read() {
         h.state_mut().save();
         host.saves.lock().unwrap().pop().unwrap().send(Ok(true)).unwrap();
         h.run_steps(3);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert!(h.state().version_list.steps.reading.is_some(), "a finished save means reading again");
     });
 }
@@ -277,14 +307,14 @@ fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
     ];
     for (job, failed) in jobs.into_iter().flat_map(|job| [(job, false), (job, true)]) {
         in_both(|mut h, host| {
-            press(&mut h, egui::Key::OpenBracket);
+            press(&mut h, egui::Key::ArrowLeft);
             answer_versions(&host);
             h.steps(3);
             shown(&mut h, &host, "h2");
             job(&mut h, &host).0.send(if failed { Err(WorkSaved("no".into())) } else { Ok(()) }).unwrap();
             h.steps(8);
             assert!(!h.state().is_held() && h.state().viewing().is_none(), "over, and back on the work");
-            press(&mut h, egui::Key::OpenBracket);
+            press(&mut h, egui::Key::ArrowLeft);
             assert!(host.reads.lock().unwrap().is_empty(), "no step through what was read before");
             assert!(h.state().version_list.steps.reading.is_some(), "the versions are read again");
             key(&mut h, egui::Key::H, MOVE[1]);
@@ -299,7 +329,7 @@ fn a_restore_or_a_branch_switch_means_reading_the_versions_again() {
 fn the_viewing_chip_steps_and_goes_back() {
     use egui_kittest::kittest::NodeT;
     in_both(|mut h, host| {
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h2");
@@ -513,10 +543,10 @@ fn a_refused_view_says_why() {
 /// What a step is refused with while an edit is under way.
 const EDITING: &str = "Finish or cancel your edit first.";
 
-/// Asks for ⌘[ with an edit under way, which refuses it; the edit is then called off.
+/// Asks for ⌥⌘← with an edit under way, which refuses it; the edit is then called off.
 fn refused_step(h: &mut Harness<'static, Shell>, host: &SavingHost) {
     h.state_mut().session.as_mut().unwrap().begin_interaction("er.schema.add").unwrap();
-    press(h, egui::Key::OpenBracket);
+    press(h, egui::Key::ArrowLeft);
     answer_versions(host);
     h.run_steps(3);
     assert!(host.reads.lock().unwrap().is_empty() && h.state().viewing().is_none(), "the step did not go");
@@ -532,7 +562,7 @@ fn a_refused_step_says_why_with_no_diagram_open() {
         assert_eq!(centre(&h), (vec![], None), "nothing is open");
         refused_step(&mut h, &host);
         assert_eq!(painted_times(&h, EDITING), 1, "{:?}", painted(&h));
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(painted_times(&h, EDITING), 0, "the step went through, so the reason is over");
         shown(&mut h, &host, "h2");
         h.state_mut().back_to_current_work();
@@ -1297,13 +1327,13 @@ fn every_way_between_versions_stays_on_the_diagram_in_view() {
     in_both(|mut h, host| {
         let (a, b) = (add_diagram(&mut h, "Alpha"), add_diagram(&mut h, "Beta"));
         show_diagram(&mut h, a);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h3");
         assert_eq!(centre(&h), (vec![a], Some(a)));
         show_diagram(&mut h, b);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         shown(&mut h, &host, "h2");
         assert_eq!(centre(&h), (vec![b], Some(b)), "the step key");
         let at = rect_of(&h, "workspace.header.version.older").center();
@@ -1539,15 +1569,15 @@ fn stepping_back_to_the_version_in_view_calls_off_the_one_asked_for() {
 fn the_keys_step_from_the_version_asked_for() {
     in_both(|mut h, host| {
         add_schema(&mut h, "shop");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h3");
-        press(&mut h, egui::Key::OpenBracket);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(h.state().stepping_from(), Some("h1"));
-        press(&mut h, egui::Key::CloseBracket);
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
+        press(&mut h, egui::Key::ArrowRight);
         assert_eq!(h.state().stepping_from(), Some("h3"), "back to the one in view");
         let rows = rows_now(&h);
         answer_read(&mut h, &host, Ok(rows));
@@ -1667,7 +1697,7 @@ fn the_chip_narrows_to_an_icon_before_search_hides() {
 fn the_narrow_viewing_chip_names_the_version_it_shows() {
     in_both(|mut h, host| {
         let p = crate::ux::palette(h.state().state.theme == ThemeKind::Dark);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer_versions(&host);
         h.run_steps(3);
         shown(&mut h, &host, "h2");
@@ -1846,7 +1876,7 @@ fn mark(h: &mut Harness<'static, Shell>, hash: &str) {
 /// Unsaved work, so that going older from current work starts at the newest version.
 fn unsaved_then_older(h: &mut Harness<'static, Shell>, host: &SavingHost) {
     add_schema(h, "shop");
-    press(h, egui::Key::OpenBracket);
+    press(h, egui::Key::ArrowLeft);
     answer_versions(host);
     h.run_steps(3);
 }
@@ -1869,24 +1899,24 @@ fn stepping_skips_what_cannot_be_shown_and_says_so_on_arrival() {
         assert_eq!(h.state().canvas.notice, None, "not before it has arrived");
         shown(&mut h, &host, "h2");
         toast_says(&h, &skip_words(&h, 3, 2));
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         assert_eq!((h.state().viewing(), host.reads.lock().unwrap().len()), (Some("h2"), 0), "the newest can't be shown");
         assert!(h.get_by_label("Newer version").accesskit_node().is_disabled(), "and the chip says there is nowhere to go");
         h.state_mut().versions.unavailable.clear();
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         assert_eq!(h.state().canvas.notice, None, "the step that goes ends what was said");
         shown(&mut h, &host, "h3");
         assert_eq!(h.state().canvas.notice, None, "nothing was passed");
         mark(&mut h, "h2");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(h.state().canvas.notice, None, "not before it has arrived");
         shown(&mut h, &host, "h1");
         toast_says(&h, &skip_words(&h, 2, 1));
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowRight);
         shown_kept(&mut h, &host, "h3");
         toast_says(&h, &skip_words(&h, 2, 3));
         mark(&mut h, "h1");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!((h.state().viewing(), host.reads.lock().unwrap().len()), (Some("h3"), 0), "the oldest can't be shown either");
         assert!(h.get_by_label("Older version").accesskit_node().is_disabled());
     });
@@ -1934,7 +1964,7 @@ fn a_skip_that_never_arrives_is_not_said() {
 /// Viewing `v1`, the last of the two versions read with older pages to read; the History panel's
 /// read answered too.
 fn at_the_end_of_what_is_read(h: &mut Harness<'static, Shell>, host: &SavingHost) {
-    press(h, egui::Key::OpenBracket);
+    press(h, egui::Key::ArrowLeft);
     answer(h, host, Ok(page(0, 2, true)));
     shown(h, host, "v1");
     answer(h, host, Ok(page(0, 2, true)));
@@ -1950,31 +1980,31 @@ fn last_asked(host: &SavingHost) -> Option<String> {
 /// history has really ended.
 #[test]
 fn a_step_past_what_is_read_reads_on() {
-    use egui::Key::{CloseBracket, OpenBracket};
+    use egui::Key::{ArrowLeft, ArrowRight};
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
         assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "older pages exist");
-        press(&mut h, CloseBracket);
+        press(&mut h, ArrowRight);
         shown(&mut h, &host, "v0");
         answer(&mut h, &host, Ok(page(0, 2, true)));
-        press(&mut h, CloseBracket);
+        press(&mut h, ArrowRight);
         assert!(host.version_reads.lock().unwrap().is_empty(), "nothing is newer than the newest");
-        press(&mut h, OpenBracket);
+        press(&mut h, ArrowLeft);
         shown_kept(&mut h, &host, "v1");
         answer(&mut h, &host, Ok(page(0, 2, true)));
-        press(&mut h, OpenBracket);
+        press(&mut h, ArrowLeft);
         assert_eq!(last_asked(&host).as_deref(), Some("v1"), "the page after what is read");
-        press(&mut h, OpenBracket);
+        press(&mut h, ArrowLeft);
         assert_eq!(host.version_reads.lock().unwrap().len(), 1, "one read, however many presses");
         assert!(host.reads.lock().unwrap().is_empty(), "nothing to go to yet");
         answer(&mut h, &host, Ok(page(2, 4, false)));
         shown(&mut h, &host, "v2");
         answer(&mut h, &host, Ok(page(0, 4, false)));
-        press(&mut h, OpenBracket);
+        press(&mut h, ArrowLeft);
         shown(&mut h, &host, "v3");
         answer(&mut h, &host, Ok(page(0, 4, false)));
         assert!(h.get_by_label("Older version").accesskit_node().is_disabled(), "the history has ended");
-        press(&mut h, OpenBracket);
+        press(&mut h, ArrowLeft);
         assert!(host.version_reads.lock().unwrap().is_empty() && host.reads.lock().unwrap().is_empty(), "an end does nothing");
     });
 }
@@ -1983,7 +2013,7 @@ fn a_step_past_what_is_read_reads_on() {
 /// until it finds where it stands.
 #[test]
 fn a_step_from_a_version_not_read_yet_reads_until_it_is_found() {
-    for (key, to) in [(egui::Key::CloseBracket, "v2"), (egui::Key::OpenBracket, "v4")] {
+    for (key, to) in [(egui::Key::ArrowRight, "v2"), (egui::Key::ArrowLeft, "v4")] {
         in_both(|mut h, host| {
             h.state_mut().view_version("v3").unwrap();
             let rows = rows_now(&h);
@@ -2009,7 +2039,7 @@ fn a_press_during_the_first_read_waits_for_it() {
         h.run_steps(2);
         assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "not told as the end before it is known");
         let asked = host.version_asks.lock().unwrap().len();
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(host.version_asks.lock().unwrap().len(), asked, "the read on its way serves it");
         answer(&mut h, &host, Ok(page(0, 3, false)));
         shown(&mut h, &host, "v2");
@@ -2023,7 +2053,7 @@ fn a_step_reads_on_past_pages_that_cannot_be_shown() {
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
         ["v2", "v3"].iter().for_each(|hash| mark(&mut h, hash));
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Ok(page(2, 4, true)));
         assert_eq!(last_asked(&host).as_deref(), Some("v3"), "nothing to show yet, so on again");
         assert!(host.reads.lock().unwrap().is_empty());
@@ -2035,7 +2065,7 @@ fn a_step_reads_on_past_pages_that_cannot_be_shown() {
     });
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Ok(crate::VersionsPage { versions: Vec::new(), more: true }));
         assert!(host.version_reads.lock().unwrap().is_empty() && host.reads.lock().unwrap().is_empty());
         assert!(h.get_by_label("Older version").accesskit_node().is_disabled(), "the history has ended");
@@ -2050,13 +2080,13 @@ fn a_step_whose_read_fails_says_so_and_the_next_reads_again() {
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
         h.state_mut().canvas.say_refused_step(Some("Said by another".into()));
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(h.state().canvas.notice.as_deref(), Some("Said by another"), "a read ends only its own words");
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &failure_words(false));
         assert_eq!(h.state().viewing(), Some("v1"));
         assert!(!h.get_by_label("Older version").accesskit_node().is_disabled(), "not told as the end");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(h.state().canvas.notice, None, "reading again ends it");
         assert_eq!(last_asked(&host).as_deref(), Some("v1"), "that page again");
         answer(&mut h, &host, Ok(page(2, 3, false)));
@@ -2070,14 +2100,14 @@ fn a_step_whose_read_fails_says_so_and_the_next_reads_again() {
 fn a_first_read_that_fails_says_so_and_its_words_end() {
     use crate::version_chip::failure_words;
     in_both(|mut h, host| {
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &failure_words(true));
         assert_eq!(h.state().viewing(), None);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Ok(crate::VersionsPage::default()));
         assert_eq!(h.state().canvas.notice, None, "the read that followed found nothing to step to");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &failure_words(true));
         // Unsaved work, which Save makes a version of (with none it asks for nothing).
@@ -2097,7 +2127,7 @@ fn a_failed_step_is_said_over_a_versions_details() {
         let (mut h, host) = versions_listed(theme, vec![entry.clone()]);
         crate::version_details::open(h.state_mut(), entry);
         h.run_steps(2);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Err("no".into()));
         assert!(has_id(&h, "workspace.version-details.view"), "the details are still there");
         assert_eq!(painted_times(&h, &crate::version_chip::failure_words(true)), 1, "{:?}", painted(&h));
@@ -2111,7 +2141,7 @@ fn a_step_waiting_ends_when_the_person_moves() {
     for reply in [Ok(page(2, 3, false)), Err("no".to_string())] {
         in_both(|mut h, host| {
             at_the_end_of_what_is_read(&mut h, &host);
-            press(&mut h, egui::Key::OpenBracket);
+            press(&mut h, egui::Key::ArrowLeft);
             h.state_mut().back_to_current_work();
             h.run_steps(2);
             answer(&mut h, &host, reply.clone());
@@ -2120,8 +2150,8 @@ fn a_step_waiting_ends_when_the_person_moves() {
         });
         in_both(|mut h, host| {
             at_the_end_of_what_is_read(&mut h, &host);
-            press(&mut h, egui::Key::OpenBracket);
-            press(&mut h, egui::Key::CloseBracket);
+            press(&mut h, egui::Key::ArrowLeft);
+            press(&mut h, egui::Key::ArrowRight);
             answer(&mut h, &host, reply.clone());
             assert_eq!(h.state().canvas.notice, None);
             shown(&mut h, &host, "v0");
@@ -2136,10 +2166,10 @@ fn a_step_waiting_ends_when_the_person_moves() {
 fn a_step_waiting_stays_over_after_leaving_and_coming_back() {
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
-        press(&mut h, egui::Key::OpenBracket);
-        press(&mut h, egui::Key::CloseBracket);
+        press(&mut h, egui::Key::ArrowLeft);
+        press(&mut h, egui::Key::ArrowRight);
         assert_eq!(h.state().loads.wanted_commit(), Some("v0"), "it left");
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!((h.state().viewing(), h.state().loads.wanted_commit()), (Some("v1"), None), "and came back");
         answer(&mut h, &host, Ok(page(2, 3, false)));
         assert_eq!((h.state().viewing(), h.state().loads.wanted_commit()), (Some("v1"), None), "nothing further was asked for");
@@ -2151,11 +2181,11 @@ fn a_step_waiting_stays_over_after_leaving_and_coming_back() {
 fn a_new_read_leaves_what_was_said_since_a_failed_step() {
     in_both(|mut h, host| {
         at_the_end_of_what_is_read(&mut h, &host);
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         answer(&mut h, &host, Err("no".into()));
         toast_says(&h, &crate::version_chip::failure_words(false));
         h.state_mut().canvas.notice = Some("Said since".into());
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(last_asked(&host).as_deref(), Some("v1"), "a new read began");
         assert_eq!(h.state().canvas.notice.as_deref(), Some("Said since"));
     });
@@ -2222,7 +2252,7 @@ fn a_retry_ends_a_step_waiting_for_a_read() {
         let (mut h, host) = load_failed(theme, true);
         let page = |hash: &str| crate::VersionsPage { versions: vec![version_row(hash, None, (None, false), "2026-11-08T15:30:00Z")], more: true };
         answer(&mut h, &host, Ok(page("a")));
-        press(&mut h, egui::Key::OpenBracket);
+        press(&mut h, egui::Key::ArrowLeft);
         assert_eq!(last_asked(&host).as_deref(), Some("a"), "{theme:?}: the step reads on");
         click_id(&mut h, LOAD_RETRY);
         answer_read(&mut h, &host, Err("again".to_string().into()));

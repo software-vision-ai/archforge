@@ -205,7 +205,8 @@ pub static ACTIONS: &[Action] = &[
         label: |_| tr("Older version"),
         available: crate::version_chip::available,
         run: crate::version_chip::older,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::OpenBracket }),
+        // The arrows, not the brackets: a bracket's key follows the keyboard layout (AR-454).
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::ALT), key: Key::ArrowLeft }),
         search: None,
     },
     Action {
@@ -214,7 +215,7 @@ pub static ACTIONS: &[Action] = &[
         // From current work there is nothing newer; from a version the step reads what it needs.
         available: |s| crate::version_chip::available(s) && s.stepping_from().is_some(),
         run: crate::version_chip::newer,
-        keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::CloseBracket }),
+        keys: Some(Keys { modifiers: Modifiers::COMMAND.plus(Modifiers::ALT), key: Key::ArrowRight }),
         search: None,
     },
     Action {
@@ -337,6 +338,15 @@ fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
         _ => true,
     });
     hit
+}
+
+/// Whether `key` was pressed in `input` with no command key, Control or Alt held, with Shift or
+/// without: the press an arrow's own reader acts on. With one of them held it is a chord's, as
+/// ⌥⌘← is Older version's, and a chord whose action is off stays in the input: no reader behind it
+/// takes it for a plain arrow.
+pub(crate) fn plain_press(input: &egui::InputState, key: Key) -> bool {
+    let plain = |m: &Modifiers| !(m.command || m.ctrl || m.mac_cmd || m.alt);
+    input.events.iter().any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && plain(modifiers)))
 }
 
 /// Whether `keys` were pressed in this frame, exactly; takes the press as `take` does.
@@ -672,6 +682,24 @@ pub(crate) mod tests {
             assert_eq!(taken(keys, std::slice::from_ref(&control)), (false, vec![]), "{id}: a Mac's Control with the chord");
             assert_eq!(taken(keys, &[down(own | SHAPES[0].1, keys.key), control]), (true, vec![]), "{id}: and after the chord itself");
         }
+    }
+
+    /// An arrow is plain with nothing held or Shift alone, in the frame it is pressed: not with a
+    /// command key of either shape, Control or Alt, not its release, and not another key.
+    #[test]
+    fn a_plain_press_holds_no_command_key_control_or_alt() {
+        let plain = |events: &[egui::Event]| {
+            let mut input = egui::InputState::default();
+            input.events = events.to_vec();
+            plain_press(&input, Key::ArrowLeft)
+        };
+        assert!(plain(&[down(Modifiers::NONE, Key::ArrowLeft)]) && plain(&[down(Modifiers::SHIFT, Key::ArrowLeft)]));
+        for held in [SHAPES[0].1, SHAPES[1].1, Modifiers::MAC_CMD, Modifiers::COMMAND, Modifiers::CTRL, Modifiers::ALT] {
+            assert!(!plain(&[down(held, Key::ArrowLeft)]), "{held:?}");
+            assert!(plain(&[down(held, Key::ArrowLeft), down(Modifiers::NONE, Key::ArrowLeft)]), "{held:?}, then the arrow alone");
+        }
+        let release = egui::Event::Key { key: Key::ArrowLeft, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE };
+        assert!(!plain(&[release, down(Modifiers::NONE, Key::ArrowRight)]));
     }
 
     /// A chord takes its own press only: another chord's press on the same key in the same frame

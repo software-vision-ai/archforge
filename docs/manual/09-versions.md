@@ -213,7 +213,7 @@ There are three ways to show a version in place of your current work:
   closes the list. Scrolling to its end lists older versions. From your current work,
   ⇧⌘H (Ctrl Shift H) opens the list too; while a version shows, it takes you
   [back to current work](#back-to-current-work) instead.
-- Press ⌘[ (Ctrl [). From your current work this goes to the latest version when you have unsaved
+- Press ⌥⌘← (Ctrl Alt ←). From your current work this goes to the latest version when you have unsaved
   changes, and otherwise to the one before it, the newest version that differs from what you see.
 
 <!-- picture: workspace-version-list light | The version chip's list: Current work with unsaved changes, then the two versions by date and description, and New branch… at its foot -->
@@ -224,14 +224,14 @@ and the status bar says the same. The chip is tinted and shows the date between 
 **Back to current work** beside it. In a narrow window the chip is one icon, and pointing at it says
 which version shows.
 
-To step from one version to the next, press ⌘[ (Ctrl [) for an older one and ⌘] (Ctrl ]) for a newer
-one, or click ‹ and › on the chip. A step stays on the diagram you are looking at when the next
+To step from one version to the next, press ⌥⌘← (Ctrl Alt ←) for an older one and ⌥⌘→
+(Ctrl Alt →) for a newer one, or click ‹ and › on the chip. A step stays on the diagram you are looking at when the next
 version has it. At the oldest version ‹ is greyed out and says *No older version*; at the latest, ›
 says *No newer version*, since your current work is not a step away: use
 [Back to current work](#back-to-current-work). Click the date on the chip to open its list.
 
-In the example, with nothing unsaved, ⌘[ shows *Added Customer*: the class *Customer* without
-*email*. ⌘] then shows *Added email*, the same as your current work, and a second ⌘] goes no
+In the example, with nothing unsaved, ⌥⌘← shows *Added Customer*: the class *Customer* without
+*email*. ⌥⌘→ then shows *Added email*, the same as your current work, and a second ⌥⌘→ goes no
 further.
 
 <!-- picture: workspace-version-viewing dark | Viewing Added Customer: the banner over the centre, the tinted chip with its date, and Customer without email -->

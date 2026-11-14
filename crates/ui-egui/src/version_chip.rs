@@ -171,12 +171,12 @@ fn show_branches(shell: &mut Shell) {
     (l.branches, l.highlight, l.on_new, l.filter, l.scroll) = (true, 0, false, String::new(), TreeScroll::default());
 }
 
-/// ⌘[: the next older version.
+/// ⌥⌘← (Ctrl Alt ←): the next older version.
 pub(crate) fn older(shell: &mut Shell) {
     ask_step(shell, true);
 }
 
-/// ⌘]: the next newer version.
+/// ⌥⌘→ (Ctrl Alt →): the next newer version.
 pub(crate) fn newer(shell: &mut Shell) {
     ask_step(shell, false);
 }
