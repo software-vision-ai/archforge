@@ -432,7 +432,7 @@ mod tests {
             rows(&shell),
             [
                 row("file.new", icons::PLUS, "New project"),
-                row("file.open", icons::FOLDER, "Open project"),
+                row("file.open", icons::FOLDER, "Open project…"),
                 row("home.pin-folder", icons::PLUS, "Pin a folder"),
                 row("home.appearance", icons::MOON, "Switch to the dark appearance"),
                 row("home.recent-view", icons::GRID, "Show recent projects as a gallery"),
