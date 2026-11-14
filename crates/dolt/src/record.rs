@@ -1,5 +1,7 @@
 //! A record per running server, in the user's settings: which process serves which project, in
-//! which run folder, started by which Archforge. Recovery recognises a leftover server by it.
+//! which run folder, started by which Archforge. Recovery recognises a leftover server by it. A
+//! start writes it before its server starts, without the server's process id, and completes it
+//! once the server runs: the crate's README says what a start killed in between leaves.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -7,6 +9,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
+use crate::recovery::valid_pid;
 
 /// The most of a record read; a larger file is set aside.
 const CAP: u64 = 4096;
@@ -14,7 +17,8 @@ const CAP: u64 = 4096;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Record {
     pub data_dir: String,
-    pub server_pid: u32,
+    /// The server's process id; none from before the server starts until the record is completed.
+    pub server_pid: Option<u32>,
     /// The checked run root the run folder was made in, and the run folder.
     pub run_root: String,
     pub run_dir: String,
@@ -85,9 +89,7 @@ fn read_file(file: &Path) -> Result<Option<Record>, Error> {
         return Ok(None);
     }
     match serde_json::from_slice::<Record>(&bytes) {
-        Ok(r) if crate::recovery::valid_pid(r.server_pid) && crate::recovery::valid_pid(r.owner_pid) && Path::new(&r.run_root).is_absolute() => {
-            Ok(Some(r))
-        }
+        Ok(r) if r.server_pid.is_none_or(valid_pid) && valid_pid(r.owner_pid) && Path::new(&r.run_root).is_absolute() => Ok(Some(r)),
         _ => {
             set_aside(file, "it cannot be read");
             Ok(None)
@@ -110,20 +112,30 @@ fn set_aside(file: &Path, why: &str) {
     log::warn!("the server record {} could not be set aside ({why}): too many set aside", file.display());
 }
 
+/// Writes `r` in full under a temporary name in `records` and synchronises it. Returns that name.
+fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
+    use std::io::Write;
+    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", path(records, &r.data_dir), std::io::Error::other(e)))?;
+    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
+    // A name that is taken is another start's file: only one this call made is removed again.
+    let mut f = std::fs::File::create_new(&tmp).map_err(|e| Error::io("cannot write", &tmp, e))?;
+    match f.write_all(&bytes).and_then(|()| f.sync_all()) {
+        Ok(()) => Ok(tmp),
+        Err(e) => {
+            remove(&tmp);
+            Err(Error::io("cannot write", &tmp, e))
+        }
+    }
+}
+
 /// Writes a project's record unless one is there already, atomically and exclusively: the record
 /// is written in full under a temporary name, then linked to its own name, which fails if another
 /// start got there first. Returns whether it was written.
 pub(crate) fn write_new(records: &Path, r: &Record) -> Result<bool, Error> {
-    use std::io::Write;
     let file = path(records, &r.data_dir);
-    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", &file, std::io::Error::other(e)))?;
-    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
-    let written = std::fs::File::create_new(&tmp).and_then(|mut f| {
-        f.write_all(&bytes)?;
-        f.sync_all()
-    });
-    let linked = written.and_then(|()| std::fs::hard_link(&tmp, &file));
-    let _ = std::fs::remove_file(&tmp);
+    let tmp = write_tmp(records, r)?;
+    let linked = std::fs::hard_link(&tmp, &file);
+    remove(&tmp);
     match linked {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
@@ -131,17 +143,34 @@ pub(crate) fn write_new(records: &Path, r: &Record) -> Result<bool, Error> {
     }
 }
 
+/// Completes the record a start wrote before its server ran: `r`, which names the server's
+/// process id, is written in full under a temporary name and renamed over it, so a reader finds
+/// one or the other whole. A failure leaves the earlier record as it was.
+pub(crate) fn complete(records: &Path, r: &Record) -> Result<(), Error> {
+    let file = path(records, &r.data_dir);
+    let tmp = write_tmp(records, r)?;
+    std::fs::rename(&tmp, &file).map_err(|e| {
+        remove(&tmp);
+        Error::io("cannot write", &file, e)
+    })
+}
+
 /// Removes the project's record only while it still names `server_pid`, so a start never removes
 /// the record of a server another start made.
 pub(crate) fn remove_if(records: &Path, data_dir: &str, server_pid: u32) {
-    remove_while(&path(records, data_dir), |r| r.data_dir == data_dir && r.server_pid == server_pid);
+    remove_while(&path(records, data_dir), |r| r.data_dir == data_dir && r.server_pid == Some(server_pid));
 }
 
-/// Removes the record in `file` only while `is_it` holds for it. It is taken aside under a new name
-/// first and compared there, so a record another start writes meanwhile is never the one removed.
-/// One that is not meant goes back, or, if a newer record took its name meanwhile, stays under the
-/// new name, which ends in `.json`, so the start-up sweep reads it again.
+/// Removes the record in `file` only while `is_it` holds for it. It is read where it is first: one
+/// that is not meant is never moved, so a removal that read an earlier record does not take the
+/// record of a start under way from its name. One that is meant is taken aside under a new name
+/// and compared again there, so a record another start wrote in between is never the one removed:
+/// that one goes back, or, if a newer record took its name meanwhile, stays under the new name,
+/// which ends in `.json`, so the start-up sweep reads it again.
 pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) {
+    if !matches!(read_file(file), Ok(Some(r)) if is_it(&r)) {
+        return;
+    }
     let aside = match crate::secret::random_name(8) {
         Ok(n) => file.with_extension(format!("forget-{n}.json")),
         Err(e) => return log::warn!("the server record {} stays: {e}", file.display()),
@@ -198,7 +227,7 @@ pub(crate) mod tests {
     pub(crate) fn rec(data_dir: &str) -> Record {
         Record {
             data_dir: data_dir.into(),
-            server_pid: 7,
+            server_pid: Some(7),
             run_root: "/t".into(),
             run_dir: "/t/af-abcdefgh".into(),
             command: vec!["dolt".into()],
@@ -221,7 +250,7 @@ pub(crate) mod tests {
         assert_eq!(read(&dir, "/p/a").unwrap(), Some(rec("/p/a")));
         // A second start's record never replaces the first's, and is never removed by it.
         let mut other = rec("/p/a");
-        other.server_pid = 99;
+        other.server_pid = Some(99);
         assert!(!write_new(&dir, &other).unwrap());
         remove_if(&dir, "/p/a", 99);
         assert_eq!(read(&dir, "/p/a").unwrap(), Some(rec("/p/a")));
@@ -235,12 +264,44 @@ pub(crate) mod tests {
         assert_eq!(read(&dir, "/p/d").unwrap(), None);
         // A process id kill would read as a group, or a relative run root, is not trusted.
         let mut bad = rec("/p/e");
-        bad.server_pid = 0;
+        bad.server_pid = Some(0);
         std::fs::write(path(&dir, "/p/e"), serde_json::to_vec(&bad).unwrap()).unwrap();
         assert_eq!(read(&dir, "/p/e").unwrap(), None);
         let aside = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".damaged-")).count();
         assert_eq!(aside, 4);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The record of a start names no process until it is completed, and completing it replaces
+    /// the file whole: a second name for the first file still reads as the first record.
+    #[test]
+    fn a_record_is_completed_by_a_new_file_never_in_place() {
+        let dir = crate::home::tests::Scratch::new("complete");
+        let pending = Record { server_pid: None, ..rec("/p/a") };
+        assert!(write_new(&dir.0, &pending).unwrap());
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(pending.clone()));
+        let first = dir.0.join("first.json");
+        std::fs::hard_link(path(&dir.0, "/p/a"), &first).unwrap();
+        complete(&dir.0, &rec("/p/a")).unwrap();
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert_eq!(read_file(&first).unwrap(), Some(pending));
+        let names: Vec<String> = std::fs::read_dir(&dir.0).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names.len(), 2, "no temporary file stays: {names:?}");
+    }
+
+    /// A record as written before a start recorded itself first is a complete record; one whose
+    /// process id is left out or null names no process.
+    #[test]
+    fn a_record_of_the_earlier_format_is_a_complete_record() {
+        let dir = crate::home::tests::Scratch::new("format");
+        let old =
+            r#"{"data_dir":"/p/a","server_pid":7,"run_root":"/t","run_dir":"/t/af-abcdefgh","command":["dolt"],"owner_pid":8,"owner_started":"x"}"#;
+        std::fs::write(path(&dir.0, "/p/a"), old).unwrap();
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
+        for pid in ["", r#""server_pid":null,"#] {
+            std::fs::write(path(&dir.0, "/p/a"), old.replace(r#""server_pid":7,"#, pid)).unwrap();
+            assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(Record { server_pid: None, ..rec("/p/a") }));
+        }
     }
 
     /// Another sweep forgets the record and another start writes its own right after this one
@@ -249,7 +310,7 @@ pub(crate) mod tests {
     fn a_record_written_while_one_is_forgotten_stays() {
         let dir = crate::home::tests::Scratch::new("forget-race");
         assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
-        let newer = Record { server_pid: 9, ..rec("/p/a") };
+        let newer = Record { server_pid: Some(9), ..rec("/p/a") };
         let written = newer.clone();
         AFTER_ASIDE.with(|h| {
             *h.borrow_mut() = Some(Box::new(move |file: &Path| {
@@ -262,21 +323,24 @@ pub(crate) mod tests {
         assert_eq!(all(&dir.0).unwrap().len(), 1, "the old record went");
     }
 
-    /// A record that is not the one meant goes back under its own name; when a newer one took
-    /// that name meanwhile, both stay.
+    /// A record that is not the one meant stays under its own name untouched. One that was
+    /// replaced between the read and the move is not removed; when a newer one took its name
+    /// meanwhile, both stay.
     #[test]
     fn a_record_not_meant_goes_back_or_stays_beside_a_newer_one() {
         let dir = crate::home::tests::Scratch::new("forget-back");
         assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
-        remove_if(&dir.0, "/p/a", 99);
-        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")), "it went back");
-        assert_eq!(all(&dir.0).unwrap().len(), 1);
-        let newer = Record { server_pid: 9, ..rec("/p/a") };
+        let newer = Record { server_pid: Some(9), ..rec("/p/a") };
         let written = newer.clone();
         AFTER_ASIDE.with(|h| *h.borrow_mut() = Some(Box::new(move |file: &Path| assert!(write_new(file.parent().unwrap(), &written).unwrap()))));
         remove_if(&dir.0, "/p/a", 99);
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert!(AFTER_ASIDE.with(|h| h.borrow().is_some()), "it never left its name");
+        // The record meant when it was read, and another by the time it is aside.
+        let reads = std::cell::Cell::new(0);
+        remove_while(&path(&dir.0, "/p/a"), |_| reads.replace(reads.get() + 1) == 0);
         assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(newer));
-        let kept: Vec<Record> = all(&dir.0).unwrap().into_iter().map(|(_, r)| r).filter(|r| r.server_pid == 7).collect();
+        let kept: Vec<Record> = all(&dir.0).unwrap().into_iter().map(|(_, r)| r).filter(|r| r.server_pid == Some(7)).collect();
         assert_eq!(kept, vec![rec("/p/a")], "the one taken aside stays where the sweep reads it");
     }
 }

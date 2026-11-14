@@ -235,14 +235,18 @@ fn private_records(records: &Path) -> Result<(), Error> {
     crate::home::private_folder(records).map_err(|why| Error::RecordsUnsafe { path: records.to_path_buf(), why })
 }
 
+/// Whether the Archforge that wrote `r` still runs: its process id, started when the record says.
+fn owner_alive(r: &Record) -> Result<bool, Error> {
+    Ok(identity(r.owner_pid)?.is_some_and(|o| o.started == r.owner_started))
+}
+
 /// What the process `pid` is, judged against `record`.
 fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
     let Some(id) = identity(pid)? else { return Ok(Proc::Gone) };
     if let Some(r) = record
         && id.is(&r.command)
     {
-        let alive = identity(r.owner_pid)?.is_some_and(|o| o.started == r.owner_started);
-        return Ok(if alive { Proc::OursOwnerAlive } else { Proc::OursOwnerDead });
+        return Ok(if owner_alive(r)? { Proc::OursOwnerAlive } else { Proc::OursOwnerDead });
     }
     Ok(if id.is_dolt_server() { Proc::OtherDoltServer } else { Proc::Other })
 }
@@ -252,20 +256,17 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // start. Linux's parent-death signal would not do instead: it follows the thread that started the
 // server, and servers start on worker threads that end once a project is open. Windows' job objects
 // kill without a polite stop and need unsafe calls. So this sweep stays the backstop everywhere.
-// What neither covers: an Archforge killed between a server's start and its record. The record
-// holds the server's process id, so it cannot come first; a start that fails there stops its
-// server (`Started`), but a kill runs no code. That moment is the record's write to disk, measured
-// at 5 to 10 ms on macOS. A server left so has no record for a sweep to find, and its run folder
-// stays. Recovery treats it as any server it did not record: once it holds the project's lock, and
-// if its program's file is named `dolt`, the project is refused as open elsewhere, naming the
-// server's process id, until that process is stopped.
+// What neither covers yet: an Archforge killed after its server started and before the record
+// names the server's process id. The record written before the start is there, but this sweep
+// leaves a record without a process id alone; the opening of its project deals with it (`recover`).
 /// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
 /// forgets the records of servers that are gone: for a start-up, so a project never opened again
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
 /// left alone, and a process is signalled only while its command line, checked before each signal,
 /// is exactly the recorded one, whose configuration lies in a run folder with a random name made
-/// for that start: a process id another program took gets no signal. Returns how many servers
-/// were stopped.
+/// for that start: a process id another program took gets no signal. A record without a process
+/// id, of a start under way or of one its Archforge was killed in, is left as it is. Returns how
+/// many servers were stopped.
 pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     private_records(&opts.records)?;
     let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
@@ -285,16 +286,18 @@ fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Du
     };
     let mut stopped = 0;
     for (file, r) in all.into_iter().filter(|(_, r)| except != Some(r.data_dir.as_str())) {
-        match (classify(r.server_pid, Some(&r)), stop) {
+        // No process id: the record names no process to judge, so nothing is touched.
+        let Some(server) = r.server_pid else { continue };
+        match (classify(server, Some(&r)), stop) {
             (Ok(Proc::Gone | Proc::Other | Proc::OtherDoltServer), _) => forget(&file, &r, uid),
             (Ok(Proc::OursOwnerDead), Some(budget)) => {
-                log::info!("stopping the database server {} that a closed Archforge left running for {}", r.server_pid, r.data_dir);
-                match stop_foreign(r.server_pid, &r.command, budget) {
+                log::info!("stopping the database server {server} that a closed Archforge left running for {}", r.data_dir);
+                match stop_foreign(server, &r.command, budget) {
                     Ok(()) => {
                         forget(&file, &r, uid);
                         stopped += 1;
                     }
-                    Err(e) => log::warn!("the database server {} left running for {} stays: {e}", r.server_pid, r.data_dir),
+                    Err(e) => log::warn!("the database server {server} left running for {} stays: {e}", r.data_dir),
                 }
             }
             (Ok(_), _) => {}
@@ -314,7 +317,10 @@ fn forget(file: &Path, r: &Record, uid: Option<u32>) {
     record::remove_while(file, |found| found == r);
 }
 
-/// Recovery for this project: gathers the facts, decides, acts.
+/// Recovery for this project: gathers the facts, decides, acts. A record without a process id
+/// counts as a server of a living owner while the Archforge that wrote it runs (a start under way,
+/// refused naming that Archforge) and as a server that is gone once it does not: the record and
+/// its run folder go, unless the lock names the server that start left, which is stopped first.
 fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u32>) -> Result<(), Error> {
     let record = record::read(&opts.records, data_text)?;
     let lock = recovery::read_lock(data_dir)?;
@@ -323,7 +329,11 @@ fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u
         _ => Proc::Gone,
     };
     let recorded = match &record {
-        Some(r) => Some((r.server_pid, classify(r.server_pid, Some(r))?)),
+        Some(r) => Some(match r.server_pid {
+            Some(pid) => (pid, classify(pid, Some(r))?),
+            None if owner_alive(r)? => (r.owner_pid, Proc::OursOwnerAlive),
+            None => (r.owner_pid, Proc::Gone),
+        }),
         None => None,
     };
     let file = record::path(&opts.records, data_text);
@@ -400,10 +410,11 @@ fn stop_child(child: &mut Child, budget: Duration) -> Result<(), Error> {
     child.wait().map(|_| ()).map_err(|e| Error::io("cannot wait for the database server", format!("process {}", child.id()), e))
 }
 
-/// Writes the configuration, starts the server, records it, and waits until it is ready; a lost
-/// race for the port starts it again. Every step that can fail without the server comes before
-/// its start; what can fail after it (the record, the wait) returns through [`Started`], whose
-/// drop stops the server.
+/// Writes the configuration, records the start, starts the server, completes the record with the
+/// server's process id, and waits until it is ready; a lost race for the port starts it again.
+/// Every step that can fail without the server comes before its start; what can fail after it
+/// (completing the record, the wait) returns through [`Started`], whose drop stops the server. A
+/// start that fails takes its record along, unless its server would not stop.
 fn launch(
     dolt: &Dolt,
     data_dir: &Path,
@@ -452,37 +463,46 @@ fn launch(
         env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
         let mut c = runner::command(dolt.path(), &env);
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
-        let child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
-        // From here to the `Server`, no return leaves the server running: see `Started`.
-        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false };
-        #[cfg(all(test, unix))]
-        tests::after_spawn(child.id())?;
-        let rec = Record {
+        let pending = Record {
             data_dir: data_text.to_string(),
-            server_pid: child.id(),
+            server_pid: None,
             run_root: run_root_text.clone(),
             run_dir: run_text.clone(),
             command: command.clone(),
             owner_pid: std::process::id(),
             owner_started: owner_started.to_string(),
         };
-        // Another start may have recorded a server since recovery looked: its record stays, and this
-        // one gives way.
-        match record::write_new(&opts.records, &rec) {
-            #[cfg(all(test, unix))]
-            Ok(true) => tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id()))),
-            #[cfg(not(all(test, unix)))]
-            Ok(true) => {}
-            Ok(false) => {
-                child.stop();
-                let pid = record::read(&opts.records, data_text).ok().flatten().map_or(0, |r| r.server_pid);
-                return Err(Error::OpenElsewhere { pid });
-            }
-            // Dropping `child` stops the server.
-            Err(e) => return Err(e),
+        // Another start may have recorded itself since recovery looked: its record stays, and this
+        // one gives way before it has started a server.
+        if !record::write_new(&opts.records, &pending)? {
+            let other = record::read(&opts.records, data_text).ok().flatten();
+            return Err(Error::OpenElsewhere { pid: other.map_or(0, |r| r.server_pid.unwrap_or(r.owner_pid)) });
         }
-        // The record comes first: the watchdog may wait for its turn to start, and a server of an
-        // Archforge killed meanwhile is one the start-up sweep finds by its record. From here on a
+        #[cfg(all(test, unix))]
+        tests::RECORD_AT_SPAWN.set(record::read(&opts.records, data_text).ok().flatten());
+        let forget_pending = || record::remove_while(&record::path(&opts.records, data_text), |r| r == &pending);
+        let child = runner::spawn(&mut c, false).map_err(|e| {
+            forget_pending();
+            Error::io("cannot start", dolt.path(), e)
+        })?;
+        // From here to the `Server`, no return leaves the server running: see `Started`.
+        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false };
+        let rec = Record { server_pid: Some(child.id()), ..pending.clone() };
+        #[cfg(all(test, unix))]
+        let completed = tests::after_spawn(child.id()).and_then(|()| record::complete(&opts.records, &rec));
+        #[cfg(not(all(test, unix)))]
+        let completed = record::complete(&opts.records, &rec);
+        if let Err(e) = completed {
+            // A server that would not stop keeps its record, so recovery can still find it.
+            if child.stop() {
+                forget_pending();
+            }
+            return Err(e);
+        }
+        #[cfg(all(test, unix))]
+        tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id())));
+        // The complete record comes first: the watchdog may wait for its turn to start, and a server
+        // of an Archforge killed meanwhile is one the start-up sweep finds by its record. From here on a
         // killed Archforge takes this server with it. The watchdog ends with this turn of the loop
         // or with the `Server`, in both after the attempt to stop the server.
         let watchdog = Watchdog::tie(child.id(), &command);
@@ -610,6 +630,8 @@ mod tests {
 
     #[cfg(unix)]
     thread_local! {
+        /// The project's record as it was just before this thread last started a server.
+        pub(super) static RECORD_AT_SPAWN: std::cell::RefCell<Option<Record>> = const { std::cell::RefCell::new(None) };
         /// Whether this thread's next start fails right after its server has started, and the
         /// process id of the server this thread last started.
         static FAIL_AFTER_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -641,9 +663,134 @@ mod tests {
         std::fs::create_dir(dir.0.join("data")).unwrap();
         let opts = ServerOptions { ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
         let server = Server::start(&dolt, &dir.0.join("data"), &opts).unwrap();
-        assert!(watched(server.pid()), "the watchdog runs once the server has started");
+        let server_pid = server.pid();
+        assert!(watched(server_pid), "the watchdog runs once the server has started");
+        let record = record::all(&opts.records).unwrap().pop().map(|(_, r)| r);
         server.stop().unwrap();
         assert_eq!(WATCHED_AT_RECORD.get(), Some(false));
+        // Before the server started the record was there, whole but for the process id.
+        let at_spawn = RECORD_AT_SPAWN.take().unwrap();
+        assert_eq!(at_spawn.server_pid, None);
+        assert_eq!(record, Some(Record { server_pid: Some(server_pid), ..at_spawn }));
+    }
+
+    /// A start whose server cannot be started takes its record along: the next start is not
+    /// refused as open elsewhere. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_whose_server_cannot_start_leaves_no_record() {
+        let dir = crate::home::tests::Scratch::new("no-spawn");
+        let home = crate::Home::prepare(&dir.0.join("home")).unwrap();
+        // A link to dolt that is gone by the time the server is to start.
+        let link = dir.0.join("dolt");
+        std::os::unix::fs::symlink(Dolt::find(&home).unwrap().path(), &link).unwrap();
+        let dolt = Dolt::at(&link, &home).unwrap();
+        std::fs::remove_file(&link).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        for _ in 0..2 {
+            let failed = Server::start(&dolt, &dir.0.join("data"), &opts);
+            assert!(matches!(failed, Err(Error::Io { .. })), "{failed:?}");
+        }
+        assert_eq!(record::all(&opts.records).unwrap(), Vec::new());
+    }
+
+    /// Another start recorded itself after this one's recovery looked: this one gives way before
+    /// it starts a server, and the other's record stays. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_that_finds_a_record_gives_way_before_it_starts_a_server() {
+        let dir = crate::home::tests::Scratch::new("give-way");
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        private_records(&opts.records).unwrap();
+        let (root, uid) = run_dir::checked_root(&std::env::temp_dir()).unwrap();
+        let run = run_dir::create(&root, uid).unwrap();
+        let other = record::tests::rec("/p/a");
+        assert!(record::write_new(&opts.records, &other).unwrap());
+        SPAWNED.set(None);
+        let refused = launch(&dolt, &dir.0, "/p/a", &root, &run, uid, "x", &opts);
+        assert!(run_dir::remove(&root, &run, uid));
+        assert!(matches!(refused, Err(Error::OpenElsewhere { pid: 7 })), "{refused:?}");
+        assert_eq!(SPAWNED.get(), None, "no server was started");
+        assert_eq!(record::read(&opts.records, "/p/a").unwrap(), Some(other));
+    }
+
+    /// A project folder, its records and a run folder under `dir`, with the record a start leaves
+    /// before its server runs: of this process as the Archforge (`alive`), or of one that is gone.
+    fn left(dir: &Path, command: &[String], alive: bool) -> Result<(ServerOptions, PathBuf, Record), Error> {
+        let data = dir.join("data");
+        std::fs::create_dir_all(&data).map_err(|e| Error::io("cannot create", &data, e))?;
+        let data = data.canonicalize().map_err(|e| Error::io("cannot read", &data, e))?;
+        let opts = ServerOptions { run_root: Some(dir.to_path_buf()), ..ServerOptions::new(dir.join("records")) };
+        private_records(&opts.records)?;
+        let (root, uid) = run_dir::checked_root(dir)?;
+        let me = identity(std::process::id())?.map(|i| i.started).unwrap_or_default();
+        let r = Record {
+            data_dir: data.display().to_string(),
+            server_pid: None,
+            run_root: root.display().to_string(),
+            run_dir: run_dir::create(&root, uid)?.display().to_string(),
+            command: command.to_vec(),
+            owner_pid: std::process::id(),
+            owner_started: if alive { me } else { "long ago".into() },
+        };
+        record::remove(&record::path(&opts.records, &r.data_dir));
+        record::write_new(&opts.records, &r)?;
+        Ok((opts, data, r))
+    }
+
+    /// While its Archforge runs, such a record is a start under way: the project is refused,
+    /// naming that Archforge, and nothing goes. Once it is gone the start-up sweep still leaves
+    /// the record and the run folder, and the project's opening removes both.
+    #[test]
+    fn a_record_without_a_process_id_is_left_until_its_projects_opening() {
+        let dir = crate::home::tests::Scratch::new("pending");
+        for alive in [true, false] {
+            let (opts, data, r) = left(&dir.0, &["dolt".to_string()], alive).unwrap();
+            assert_eq!(stop_orphans(&opts).unwrap(), 0);
+            assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()), "the sweep leaves it");
+            assert!(Path::new(&r.run_dir).is_dir());
+            let opened = recover_only(&data, &opts);
+            if alive {
+                assert!(matches!(opened, Err(Error::OpenElsewhere { pid }) if pid == std::process::id()), "{opened:?}");
+                assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
+                assert!(Path::new(&r.run_dir).is_dir());
+            } else {
+                opened.unwrap();
+                assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), None);
+                assert!(!Path::new(&r.run_dir).exists());
+            }
+        }
+    }
+
+    /// The server a killed start left is known by the project's lock and its exact command line:
+    /// it is stopped politely. A lock holder whose command line differs in one character gets no
+    /// signal. Either way the record and the run folder go.
+    #[cfg(unix)]
+    #[test]
+    fn the_lock_holder_a_killed_start_left_is_stopped_and_no_other_process() {
+        use std::os::unix::process::ExitStatusExt;
+        let line = |last: &str| ["/bin/sh", "-c", "read x", last].map(String::from).to_vec();
+        for (runs, signal) in [("é ü", Some(15)), ("é u", None)] {
+            let dir = crate::home::tests::Scratch::new("pending-lock");
+            let mut holder = std::process::Command::new("/bin/sh").args(&line(runs)[1..]).stdin(Stdio::piped()).spawn().unwrap();
+            // Between fork and exec the child still shows this test's command line.
+            let until = Instant::now() + Duration::from_secs(5);
+            while !identity(holder.id()).unwrap().unwrap().is(&line(runs)) && Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            let (opts, data, r) = left(&dir.0, &line("é ü"), false).unwrap();
+            std::fs::create_dir(data.join(".dolt")).unwrap();
+            std::fs::write(data.join(".dolt/sql-server.info"), format!("{}:3306:u", holder.id())).unwrap();
+            let opened = recover_only(&data, &opts);
+            // Its input closes here, so it ends by itself unless a signal ended it before.
+            drop(holder.stdin.take());
+            assert_eq!(holder.wait().unwrap().signal(), signal, "{runs}");
+            opened.unwrap();
+            assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), None);
+            assert!(!Path::new(&r.run_dir).exists());
+        }
     }
 
     /// The failure is put there by the test, since a test cannot make the record's write fail
@@ -674,7 +821,7 @@ mod tests {
     fn forgetting_keeps_a_record_written_since_it_was_read() {
         let dir = crate::home::tests::Scratch::new("forget");
         let read = record::tests::rec("/p/a");
-        let newer = Record { server_pid: 9, ..read.clone() };
+        let newer = Record { server_pid: Some(9), ..read.clone() };
         assert!(record::write_new(&dir.0, &newer).unwrap());
         let file = record::path(&dir.0, "/p/a");
         forget(&file, &read, None);
