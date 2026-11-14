@@ -2713,6 +2713,11 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
             shell.panels.scroll = (shell.panels.scroll - dy).clamp(0.0, (shell.panels.content - body.height()).max(0.0));
         }
     }
+    // Content that shrank under the scroll, as a card does when its refusal goes, is followed on the
+    // next frame, not on the next input: until then the body would show past its end.
+    if shell.panels.scroll > (shell.panels.content - body.height()).max(0.0) {
+        ui.ctx().request_repaint();
+    }
     // A thin thumb at the right edge while the content overflows (the design has no scroll bar;
     // owner-delegated UX).
     if shell.panels.content > body.height() + 1.0 {
