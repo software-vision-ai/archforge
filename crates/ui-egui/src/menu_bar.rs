@@ -357,8 +357,9 @@ pub(crate) fn why_off(shell: &Shell, id: &str) -> String {
 }
 
 /// Why the Versions menu's row `id` is off: no project, then the row's own reason, then a hold.
-/// Compare… says Loading until the list is read, No versions yet only of a list read empty, and
-/// that the list couldn't be read when it couldn't.
+/// Compare… follows what `version_details::can_compare` decides: with no host it is not available,
+/// with its page open it is already showing, after a failed read it says so, and it says No versions
+/// yet only of a list read empty and known to be current; otherwise Loading.
 fn versions_off(shell: &Shell, id: &str) -> String {
     if shell.session.is_none() || shell.project.is_none() || shell.active.is_none() {
         return tr("Open or go back to a project first");
@@ -368,15 +369,18 @@ fn versions_off(shell: &Shell, id: &str) -> String {
     {
         return why;
     }
-    let page = shell.versions.page.as_ref();
+    // An empty list says there are no versions only while it is known to be current, as
+    // `version_details::to_compare` trusts a list only then.
+    let none_yet = shell.versions.page.as_ref().is_some_and(|p| p.versions.is_empty()) && crate::versions::last_known(&shell.versions);
     match id {
         BACK if shell.version_in_view().is_none() => tr("Current work is showing"),
         _ if shell.is_held() => tr("The project is busy"),
         NEW_BRANCH if shell.versions.making.is_some() => tr("Wait for the change under way to finish."),
         VERSIONS if shell.version_in_view().is_some() => tr("Back to current work first"),
+        COMPARE if shell.services.projects.is_none() => off_words(shell),
         COMPARE if crate::version_details::compare_open(shell) => tr("Already showing"),
         COMPARE if shell.versions.failed.is_some() => tr("The versions couldn't be read."),
-        COMPARE if page.is_some_and(|p| p.versions.is_empty()) => tr("No versions yet."),
+        COMPARE if none_yet => tr("No versions yet."),
         COMPARE => tr("Loading"),
         NEWER if shell.stepping_from().is_none() => tr("No newer version"),
         BRANCHES => tr("This project has one branch"),
@@ -445,6 +449,12 @@ mod tests {
         assert_eq!(words(&s), ["Loading", "Loading", "This project has one branch", "Current work is showing", "No newer version"]);
         s.versions.page = Some(crate::VersionsPage { versions: Vec::new(), more: false });
         assert_eq!(why_off(&s, COMPARE), "No versions yet.", "only of a list read and found empty");
+        s.versions.stale = true;
+        assert_eq!(why_off(&s, COMPARE), "Loading", "a save may have made the first version since");
+        s.versions.stale = false;
+        let host = s.services.projects.take();
+        assert_eq!(why_off(&s, COMPARE), "Not available yet", "nothing can read a version");
+        s.services.projects = host;
         s.versions.failed = Some("no server".into());
         assert_eq!(why_off(&s, COMPARE), "The versions couldn't be read.");
         s.versions.failed = None;
