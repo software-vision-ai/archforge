@@ -550,9 +550,7 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
             if edit {
                 key(h, Key::ArrowRight, Modifiers::NONE);
             }
-            while h.state().menu_bar.row != Some(to) {
-                key(h, Key::ArrowDown, Modifiers::NONE);
-            }
+            down_to(h, to);
             let enter = |pressed| Event::Key { key: Key::Enter, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
             h.event(enter(true));
             let copied = (0..4).any(|_| (h.step(), copied(h, "Later")).1);
@@ -664,6 +662,18 @@ fn another_menus_row_finds_the_name_typed_in_place_committed() {
     }
 }
 
+/// Presses ArrowDown in the open menu until the row `to` is marked, at most 32 times, and fails
+/// when the row was never reached, so a row that has gone is reported instead of hanging the test.
+fn down_to(h: &mut Harness<'static, Shell>, to: &str) {
+    for _ in 0..32 {
+        if h.state().menu_bar.row == Some(to) {
+            return;
+        }
+        key(h, Key::ArrowDown, Modifiers::NONE);
+    }
+    assert_eq!(h.state().menu_bar.row, Some(to), "ArrowDown never reached the row");
+}
+
 /// From the keys as well: F10 and the arrows reach Edit with the name still open, and File ▸ Close
 /// chosen with Enter finds it in the model and asks about it.
 #[test]
@@ -674,9 +684,7 @@ fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
         key(&mut h, Key::ArrowRight, Modifiers::NONE);
         assert_eq!((h.state().menu_bar.open, h.state().explorer.rename.as_ref().map(|r| r.text.as_str())), (Some("edit"), Some("Item")), "{theme:?}");
         key(&mut h, Key::ArrowLeft, Modifiers::NONE);
-        while h.state().menu_bar.row != Some(actions::CLOSE) {
-            key(&mut h, Key::ArrowDown, Modifiers::NONE);
-        }
+        down_to(&mut h, actions::CLOSE);
         h.event(Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE });
         close_asks(h, theme);
     }
