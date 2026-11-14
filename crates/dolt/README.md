@@ -21,7 +21,11 @@ server runs removes its record; one that fails after its server runs and before 
 complete stops the server and then removes the record, all still holding the lock (a record that
 cannot be removed stays, which the log says, for the next opening of its project). From the
 server's start on, a value whose drop stops the server owns it, so a start that fails later (the
-wait until the server is ready) stops that server before it returns too.
+wait until the server is ready) stops that server before it returns too. A record takes at most
+4096 bytes, written or read alike: a start whose record could take more once it names the
+server's process id, whichever, fails before it writes the record or starts the server (the paths
+it holds, the project folder's above all, are too long), and leaves nothing behind but the
+record's lock file, as every start does.
 
 A server that would not stop then (hardly possible on unix, where a kill follows the polite
 signal) may still run, without a watchdog. Its run folder stays, and the start leaves its record,

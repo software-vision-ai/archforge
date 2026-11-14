@@ -19,8 +19,16 @@ use serde::{Deserialize, Serialize};
 use crate::Error;
 use crate::recovery::valid_pid;
 
-/// The most of a record read; a larger file is set aside.
+/// The most of a record read; a larger file is set aside. No record is written that would be
+/// larger once it names a process id, whichever.
 const CAP: u64 = 4096;
+
+/// Whether a record of `len` bytes is within [`CAP`]: the one test of size, for reading and for
+/// writing.
+fn fits(len: usize) -> bool {
+    u64::try_from(len).is_ok_and(|n| n <= CAP)
+}
+
 /// The longest a change waits for the lock: two seconds, less in this crate's own tests. A longer
 /// wait means the holder has stalled, and the change fails instead of hanging with it.
 pub(crate) const LOCK_WAIT: Duration = Duration::from_millis(if cfg!(test) { 100 } else { 2000 });
@@ -168,7 +176,7 @@ fn load(file: &Path, project: Option<&str>) -> Result<Found, Error> {
     };
     let mut bytes = Vec::new();
     f.take(CAP + 1).read_to_end(&mut bytes).map_err(|e| Error::io("cannot read", file, e))?;
-    if bytes.len() as u64 > CAP {
+    if !fits(bytes.len()) {
         return Ok(Found::Bad("it is too large"));
     }
     Ok(match serde_json::from_slice::<Record>(&bytes) {
@@ -198,10 +206,17 @@ fn own_folder<'a>(held: &'a Held, r: &Record) -> Result<&'a Path, Error> {
 
 /// Writes `r` in full under a new temporary name in `records` and synchronises it. Returns that
 /// name. The name is made exclusively, so nothing under it, a link included, is written through.
+/// A record the reader would refuse for its size once it names the largest process id there is
+/// is refused first, and nothing is written.
 fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
     use std::io::Write;
+    let json = |r: &Record| serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", records, std::io::Error::other(e)));
+    let largest = json(&Record { server_pid: Some(u32::MAX), ..r.clone() })?.len();
+    if !fits(largest) {
+        return Err(Error::RecordTooLarge { project: r.data_dir.clone(), len: largest, max: CAP });
+    }
+    let bytes = json(r)?;
     let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
-    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", &tmp, std::io::Error::other(e)))?;
     // A name that is taken is another file's: only one this call made is removed again.
     let mut f = std::fs::File::create_new(&tmp).map_err(|e| Error::io("cannot write", &tmp, e))?;
     match f.write_all(&bytes).and_then(|()| f.sync_all()) {
@@ -497,6 +512,28 @@ pub(crate) mod tests {
         assert_eq!(look(&held, "/p/a").unwrap(), Some(rec("/p/a")));
         assert!(remove_held(&held, |r| *r == rec("/p/a")) && look(&held, "/p/a").unwrap().is_none());
         assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the lock and the second name: no temporary file");
+    }
+
+    /// The writer and the reader take the same sizes. A record that takes exactly the most a record
+    /// may take once it names the largest process id there is gets written, completed and read
+    /// back. One a byte longer is refused before anything is written.
+    #[test]
+    fn a_record_is_written_only_if_it_reads_back_whatever_process_it_names() {
+        let dir = crate::home::tests::Scratch::new("size");
+        let at = |extra: usize| {
+            let r = Record { server_pid: None, ..rec("/p/a") };
+            let len = serde_json::to_vec_pretty(&Record { server_pid: Some(u32::MAX), ..r.clone() }).unwrap().len();
+            Record { data_dir: format!("/p/a{}", "x".repeat(usize::try_from(CAP).unwrap() - len + extra)), ..r }
+        };
+        let (edge, over, largest) = (at(0), at(1), u32::try_from(i32::MAX).unwrap());
+        let held = hold(&path(&dir.0, &edge.data_dir), LOCK_WAIT).unwrap();
+        assert!(super::write_new(&held, &edge).unwrap());
+        complete(&held, &edge, largest).unwrap();
+        assert_eq!(std::fs::metadata(path(&dir.0, &edge.data_dir)).unwrap().len(), CAP);
+        assert_eq!(read(&dir.0, &edge.data_dir).unwrap(), Some(Record { server_pid: Some(largest), ..edge }));
+        let refused = super::write_new(&hold(&path(&dir.0, &over.data_dir), LOCK_WAIT).unwrap(), &over);
+        assert!(matches!(&refused, Err(Error::RecordTooLarge { len, max: CAP, .. }) if *len == 4097), "{refused:?}");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 3, "the first record and two locks: nothing of the second");
     }
 
     /// A record of the earlier format, with a process id always, reads as a complete record; one

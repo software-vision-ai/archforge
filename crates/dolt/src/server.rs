@@ -935,6 +935,27 @@ mod tests {
         }
     }
 
+    /// A project whose record would be larger than a record may be, once it names the server, is
+    /// refused before anything is written for it or started. Its path, as a start is given it, is
+    /// one Linux could hold (macOS cannot make a folder that deep). Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_whose_record_would_be_too_large_starts_nothing() {
+        let (dir, root) = (crate::home::tests::Scratch::new("too-large"), crate::home::tests::Scratch::new("t"));
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        private_records(&opts.records).unwrap();
+        let (root, uid) = run_dir::checked_root(&root.0).unwrap();
+        let (run, project) = (run_dir::create(&root, uid).unwrap(), format!("/p{}", "/deep".repeat(800)));
+        let refused = launch(&dolt, &dir.0, &project, &root, &run, uid, "x", &opts, &Arc::new(AtomicBool::new(false)));
+        assert!(matches!(&refused, Err(Error::RecordTooLarge { project: named, .. }) if *named == project), "{refused:?}");
+        assert_eq!(SPAWNED.get(), None, "no server was started");
+        let names: Vec<_> = std::fs::read_dir(&opts.records).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().all(|n| n.ends_with(".lock")), "no record and no temporary file: {names:?}");
+        assert!(!run.join("server.yaml").exists());
+        assert!(record::hold(&record::path(&opts.records, &project), Duration::ZERO).is_ok(), "the lock went with the start");
+    }
+
     /// A start fails once its server runs, and the server would not stop: its run folder stays
     /// with its record, since the server may still run on them, and the project is refused as
     /// open elsewhere, naming it, also where the record was not complete yet, by the command line

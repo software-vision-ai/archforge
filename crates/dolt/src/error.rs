@@ -52,6 +52,13 @@ pub enum Error {
         len: usize,
         max: usize,
     },
+    /// The project's server record would be larger than a record may be: the paths it holds (the
+    /// project folder's, dolt's, the run folder's) are too long.
+    RecordTooLarge {
+        project: String,
+        len: usize,
+        max: u64,
+    },
     /// The server records folder is not a private folder of this user.
     RecordsUnsafe {
         path: PathBuf,
@@ -128,6 +135,10 @@ impl fmt::Display for Error {
             Error::SocketPathTooLong { path, len, max } => {
                 write!(f, "the socket path {} is {len} bytes long; the limit here is {max}", path.display())
             }
+            Error::RecordTooLarge { project, len, max } => write!(
+                f,
+                "the server record of the project {project:?} would take {len} bytes, over the {max} a record may take: the paths it holds are too long"
+            ),
             Error::RecordsUnsafe { path, why } => write!(f, "the server records folder {} is not private: {why}", path.display()),
             Error::RunRootUnsafe { path, why } => write!(f, "the run folder location {} cannot be used: {why}", path.display()),
             Error::StartFailed { status, log_tail } => write!(f, "the database server stopped while starting ({status}); its log ends: {log_tail}"),
