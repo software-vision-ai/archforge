@@ -48,7 +48,7 @@ default one.
 
 ## 4. Pinning a folder and opening a project
 
-**Do:** on Home choose **Pin a folder** and pick a folder; then choose **+ Open project** at the top
+**Do:** on Home choose **Pin a folder** and pick a folder; then choose **+ Open project…** at the top
 (or press ⌘O), pick a `.archforge` folder and open it; then try ⌘O with a folder that is not a
 project.
 
@@ -68,7 +68,7 @@ About, type into a name field and, with the field still active, press ⌘Z and t
 **Edit ▸ Undo**. Open a class diagram (make one with **+** in **Diagrams** if the project has none),
 place two classes on it and draw a line from one to the other. Click the canvas so the field lets go,
 make a change, press ⌘Z and then ⇧⌘Z, then press ⌘A and look at **Edit**. With the field active again,
-press ⌘A, ⌘C, ⌘X and ⌘V, then choose **Edit ▸ Select all**, **Edit ▸ Copy**, **Edit ▸ Cut** and
+press ⌘A, ⌘C, ⌘X and ⌘V, then choose **Edit ▸ Select All**, **Edit ▸ Copy**, **Edit ▸ Cut** and
 **Edit ▸ Paste** in turn. Select a few words in a skill's preview, look at **Edit** and press ⌘C; paste
 them into a name field. Select a few other words in the preview, choose **Edit ▸ Copy** and paste them
 into the name field. With the class diagram showing, look through **Model**, choose
@@ -79,27 +79,28 @@ choose **Versions ▸ Save version…** and cancel; choose **Older version**, th
 click the canvas and press ⌘K.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
-**New project…**, **Open…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
+**New project…**, **Open project…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), each enabled
 while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
 save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog
 is up, every File item is disabled. Edit offers **Undo** (⌘Z) and **Redo** (⇧⌘Z). While a field has the
 keyboard, both are enabled and act on the field's own text, never the model; on the canvas they take the
 change back and bring it again, and are disabled when there is no step to take. Edit also offers **Cut**
-(⌘X), **Copy** (⌘C), **Paste** (⌘V) and **Select all** (⌘A). On the canvas Cut, Copy and Paste are
-disabled, and Select all selects every box and line the diagram draws. On the field all four are enabled, and
+(⌘X), **Copy** (⌘C), **Paste** (⌘V) and **Select All** (⌘A). On the canvas Cut, Copy and Paste are
+disabled, and Select All selects every box and line the diagram draws. On the field all four are enabled, and
 the keys and the items alike select, copy, cut and paste its text. With words selected in the preview,
 Copy is enabled and Cut and Paste are not, and the words paste into the field, those copied with ⌘C and
 those copied with **Edit ▸ Copy** alike. On Windows and Linux, where the menu bar sits in the window,
 the words stay selected while you open **Edit** with the pointer, and **Edit ▸ Copy** chosen there
 copies them. Model on a class
 diagram lists Class to Package, the kinds of the Relationship tool, then **Note** and **Link note**,
-and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History**
-(⇧⌘H), **Compare…**, **New branch…**, **Switch branch** (⇧⌘B), **Older version** (⌥⌘←), **Newer version** (⌥⌘→) and **Back to
-current work** (⇧⌘H). While an earlier version shows, History is disabled and Back to current work enabled,
+and Interface places an interface where you click. On an ER diagram it lists **Entity**, **Relationship**, **Note** and **Link note**. On Home it lists Note and Link note, disabled. Versions lists **Save version…** (⇧⌘S), **History…**
+(⇧⌘H), **Compare…**, **New branch…**, **Switch branch…** (⇧⌘B), **Older version** (⌥⌘←), **Newer version** (⌥⌘→) and **Back to
+current work** (⇧⌘H). While an earlier version shows, History… is disabled and Back to current work enabled,
 and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. With a project open that has at least two versions, press ⌥⌘← and see the next older version show, press it again and see the one before it, then press ⌥⌘→ and see the newer one again; from current work ⌥⌘→ does nothing and moves nothing on the canvas. ⇧⌘S opens Save version and never saves. View lists
-**Find…** (⌘K), **Zoom in**, **Zoom out**, **Whole diagram**, **Show minimap** (disabled while the minimap
-shows), **Diagrams**, **Models**, **Versions**, **Chat**, **Appearance**, **Properties** and **Skills**; the
-zoom grows about the canvas's centre, the whole diagram comes into view and the Skills panel opens. In the
+**Find…** (⌘K), **Zoom in**, **Zoom out**, **Whole diagram**, **Minimap**, **Diagrams**, **Models**, **Versions**, **Chat**, **Appearance**, **Properties** and **Skills**, the
+last eight each with a tick while its minimap, explorer or panel shows; the
+zoom grows about the canvas's centre, the whole diagram comes into view and the Skills panel opens, its row then ticked. Choosing
+**Skills** again folds the panel away and the tick goes. In the
 skill's text ⌘K makes a link and opens no search; on the canvas it opens the search.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, the real window waking

@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use muda::accelerator::Accelerator;
-use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use archforge_ui_egui::Shell;
 use archforge_ui_egui::actions::{
@@ -20,8 +20,12 @@ use archforge_ui_egui::view_menu::VIEW_MENU;
 
 /// A run of actions, set apart from the next by a separator.
 type Group = &'static [&'static str];
-/// Every item, by the action it runs.
-type Items = Vec<(&'static str, MenuItem)>;
+/// Every item, by the action it runs: the plain ones, and those with a tick.
+#[derive(Default)]
+struct Items {
+    plain: Vec<(&'static str, MenuItem)>,
+    ticked: Vec<(&'static str, CheckMenuItem)>,
+}
 
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const FILE: [Group; 3] = [&[NEW, OPEN, CLOSE], &[SAVE], &[GENERATE]];
@@ -30,8 +34,7 @@ const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 pub struct NativeMenu {
     _menu: Menu,
     chosen: Receiver<MenuEvent>,
-    /// Every item, by the action it runs.
-    items: Vec<(&'static str, MenuItem)>,
+    items: Items,
     model: Submenu,
     /// The rows `model` holds, by section; none until the first frame fills it.
     model_rows: Vec<Vec<&'static str>>,
@@ -49,20 +52,30 @@ fn accelerator(keys: &Keys) -> Option<Accelerator> {
 }
 
 /// The table's item for action `id`, off until the first frame asks; recorded in `items`.
-fn item(shell: &Shell, id: &'static str, items: &mut Vec<(&'static str, MenuItem)>) -> MenuItem {
+fn item(shell: &Shell, id: &'static str, items: &mut Items) -> MenuItem {
     let new = MenuItem::with_id(id, actions::label(shell, id), false, actions::keys(id).and_then(accelerator));
-    items.push((id, new.clone()));
+    items.plain.push((id, new.clone()));
     new
 }
 
-/// Appends `groups` to `menu`, with a separator between groups.
+/// As `item`, for an action that shows and hides something: an item that can wear a tick.
+fn ticked_item(shell: &Shell, id: &'static str, items: &mut Items) -> CheckMenuItem {
+    let new = CheckMenuItem::with_id(id, actions::label(shell, id), false, false, actions::keys(id).and_then(accelerator));
+    items.ticked.push((id, new.clone()));
+    new
+}
+
+/// Appends `groups` to `menu`, with a separator between groups; an action with a tick gets an item that shows it.
 fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups: &[G], items: &mut Items) -> Result<(), muda::Error> {
     for (n, group) in groups.iter().enumerate() {
         if n > 0 {
             menu.append(&PredefinedMenuItem::separator())?;
         }
         for id in group.as_ref() {
-            menu.append(&item(shell, id, items))?;
+            match actions::ticked(shell, id) {
+                Some(_) => menu.append(&ticked_item(shell, id, items))?,
+                None => menu.append(&item(shell, id, items))?,
+            }
         }
     }
     Ok(())
@@ -72,12 +85,12 @@ fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups
 pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
-    let mut items = Vec::new();
+    let mut items = Items::default();
     let app = Submenu::new("Archforge", true);
     append_groups(shell, &app, &APP, &mut items).map_err(err)?;
     let quit = item(shell, QUIT, &mut items);
     app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
-    let file = Submenu::new(tr("File"), true);
+    let file = Submenu::new(actions::file_title(shell), true);
     append_groups(shell, &file, &FILE, &mut items).map_err(err)?;
     let edit = Submenu::new(tr("Edit"), true);
     append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
@@ -114,12 +127,18 @@ fn run_chosen(chosen: &Receiver<MenuEvent>, shell: &mut Shell) {
 }
 
 impl NativeMenu {
-    /// Runs the items chosen since the last frame, then fits Model to the diagram and enables each for what the shell can do now.
+    /// Runs the items chosen since the last frame, then fits Model to the diagram, enables each for
+    /// what the shell can do now and ticks those whose thing shows: the system flips a tick when
+    /// its item is chosen, so each is set again from the shell.
     pub fn frame(&mut self, shell: &mut Shell) {
         run_chosen(&self.chosen, shell);
         self.follow_diagram(shell);
-        for (id, item) in &self.items {
+        for (id, item) in &self.items.plain {
             item.set_enabled(actions::available(shell, id));
+        }
+        for (id, item) in &self.items.ticked {
+            item.set_enabled(actions::available(shell, id));
+            item.set_checked(actions::ticked(shell, id) == Some(true));
         }
     }
 
@@ -130,7 +149,7 @@ impl NativeMenu {
             return;
         }
         while self.model.remove_at(0).is_some() {}
-        self.items.retain(|(id, _)| !id.starts_with("model."));
+        self.items.plain.retain(|(id, _)| !id.starts_with("model."));
         let built = append_groups(shell, &self.model, &rows, &mut self.items);
         self.model_rows = settle(rows, built, &mut self.failing);
     }
@@ -314,7 +333,7 @@ mod tests {
         assert!(shell.about.is_none(), "only Generate was chosen");
     }
 
-    /// Open… asks the picker once, and saves nothing.
+    /// Open project… asks the picker once, and saves nothing.
     #[test]
     fn open_asks_for_a_project() {
         let (mut shell, host, picks) = shell_with_project();

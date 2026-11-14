@@ -45,7 +45,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   and a style set on one box wins.
 
 ## Shell
-- The title strip is 32 pt tall, clear of the macOS window buttons, and holds Home, + Open project
+- The title strip is 32 pt tall, clear of the macOS window buttons, and holds Home, + Open project…
   and the theme switch; dragging it moves the window and a double click zooms it.
 - The brand at the bar's left is the app icon's beaver and the wordmark ArchForge: Arch in the
   text colour, Forge in the icon's blue (a lighter blue in Dark).
@@ -87,17 +87,23 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
   field has the keyboard, so a skill's text keeps ⌘K for a link, and while the bar has no room for the
   field, which then closes an open list), Zoom in, Zoom out and Whole diagram (the
-  minimap's own steps, about the canvas's centre as last drawn), Show minimap (on while folded and the canvas, as last drawn, has room for it), then a row
-  per explorer and panel that opens it, off while it already shows. Only Find… is on at Home.
+  minimap's own steps, about the canvas's centre as last drawn), Minimap (on while the canvas, as last drawn, has room for it), then a row
+  per explorer and panel. Minimap and those rows are nouns with a tick while theirs shows (AR-454), a
+  checked check box to a screen reader and a check item in the native bar; choosing one shows it, or
+  hides it while ticked, as its rail icon does. Only Find… is on at Home, and nothing is ticked there.
+- Wording that follows the system is decided once, in `actions::native_bar` (AR-454): Quit Archforge
+  in the native bar and Exit in the window's; Select All and Select all; in German the File menu is
+  Ablage in the native bar (`actions::file_title`) and Datei in the window's. A row that opens
+  something asking for more ends in an ellipsis: History…, Switch branch…, Open project….
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes
   nothing by itself: its rows are the open diagram's notation's, then Note and Link note. Its group
   stays with no diagram, its rows off, so the bar doesn't move; the native menu is rebuilt when the
   rows change. A row is off while no diagram shows or the model can't change.
-- The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History (⇧⌘H, the
+- The Versions menu (`actions::VERSIONS_MENU`, AR-305) is Save version… (⇧⌘S), History… (⇧⌘H, the
   chip's list), Compare… (the version whose details show, else the newest once the list is current,
   against current work; off while it may be behind a save),
-  New branch…, Switch branch, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
-  even while it is read, History is off and Back to current work takes ⇧⌘H; a hold turns every other
+  New branch…, Switch branch…, Older version, Newer version (off from current work) and Back to current work. While a version is in view,
+  even while it is read, History… is off and Back to current work takes ⇧⌘H; a hold turns every other
   row off. New branch… (AR-407) opens the Branches header's dialog, on while the host keeps branches and
   nothing holds the project; the chip's list ends in the same row, pinned under its rows and reached by ↓
   past the last one. Every shortcut is matched
@@ -107,7 +113,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 
 ## Home and projects
 - Home fills the window on its own, without toolbar or status bar; the only menu bar it shows is
-  the in-window one in the title strip, on Windows and Linux. Its welcome has no button: a project opens from the Open a project card or the title strip's + Open project.
+  the in-window one in the title strip, on Windows and Linux. Its welcome has no button: a project opens from the Open a project card or the title strip's + Open project….
 - Archforge looks for Dolt when it starts. Without a Dolt it can keep projects in, Home shows a
   card in the banner's place (2026-11-03): an amber database tile, "Install Dolt to keep your
   projects" and why, Install Dolt (Dolt's installation page, in the browser) and Look again; it has

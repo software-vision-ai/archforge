@@ -4,7 +4,7 @@
 
 use egui::{Key, Modifiers};
 
-use crate::i18n::tr;
+use crate::i18n::{tr, tr_ctx};
 use crate::state::{RecentSort, RecentView};
 use crate::theme::ThemeKind;
 use crate::ux::{Icon, icons};
@@ -81,7 +81,7 @@ pub static ACTIONS: &[Action] = &[
     },
     Action {
         id: QUIT,
-        label: |_| tr("Quit Archforge"),
+        label: |s| if native_bar(s) { tr("Quit Archforge") } else { tr("Exit") },
         available: |_| true,
         run: Shell::request_quit,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::Q }),
@@ -113,11 +113,11 @@ pub static ACTIONS: &[Action] = &[
     },
     Action {
         id: OPEN,
-        label: |_| tr("Open…"),
+        label: |_| tr("Open project…"),
         available: |s| free(s) && s.can_open_project(),
         run: Shell::open_from_picker,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O }),
-        search: Some(InSearch { icon: |_| &icons::FOLDER, label: Some(|| tr("Open project")) }),
+        search: Some(InSearch { icon: |_| &icons::FOLDER, label: None }),
     },
     Action {
         id: CLOSE,
@@ -185,7 +185,7 @@ pub static ACTIONS: &[Action] = &[
     },
     Action {
         id: VERSIONS,
-        label: |_| tr("History"),
+        label: |_| tr("History…"),
         // Its keys are Back to current work's while a version is in view.
         available: |s| crate::version_chip::available(s) && s.version_in_view().is_none(),
         run: crate::version_chip::open,
@@ -229,7 +229,7 @@ pub static ACTIONS: &[Action] = &[
     },
     Action {
         id: BRANCHES,
-        label: |_| tr("Switch branch"),
+        label: |_| tr("Switch branch…"),
         // While the list can open and there are branches to switch between.
         available: |s| crate::version_chip::available(s) && crate::version_chip::branch_name(s).is_some(),
         run: crate::version_chip::open_branches,
@@ -265,13 +265,31 @@ pub static ACTIONS: &[Action] = &[
     Action { id: PASTE, label: |_| tr("Paste"), available: edit_menu::on_field, run: edit_menu::paste, keys: command(Key::V), search: None },
     Action {
         id: SELECT_ALL,
-        label: |_| tr("Select all"),
+        label: |s| if native_bar(s) { tr("Select All") } else { tr("Select all") },
         available: edit_menu::can_select_all,
         run: edit_menu::select_all,
         keys: command(Key::A),
         search: None,
     },
 ];
+
+/// Whether the menus are the system's own bar, as on macOS, and not the bar drawn in the window, as
+/// on Windows and Linux: the one answer every wording that differs between the two asks for.
+fn native_bar(shell: &Shell) -> bool {
+    !shell.in_window_menu
+}
+
+/// The File menu's title on this system: the native bar takes the system's own word where a
+/// language has one, as German does.
+pub fn file_title(shell: &Shell) -> String {
+    if native_bar(shell) { tr_ctx("macOS", "File") } else { tr("File") }
+}
+
+/// Whether the row `id` is ticked, for a row that shows and hides something; `None` for a row
+/// that has no tick.
+pub fn ticked(shell: &Shell, id: &str) -> Option<bool> {
+    view_menu::ticked(shell, id)
+}
 
 /// The action `id`.
 fn find(id: &str) -> Option<&'static Action> {
@@ -604,7 +622,7 @@ pub(crate) mod tests {
             "Generate…",
             "Save",
             "New project…",
-            "Open…",
+            "Open project…",
             "Close project",
             "Find…",
             "Pin a folder",
@@ -618,6 +636,27 @@ pub(crate) mod tests {
         shell.state.recent_sort = RecentSort::Name;
         let flipped = [APPEARANCE, VIEW, SORT].map(|id| label(&shell, id));
         assert_eq!(flipped, ["Switch to the light appearance", "Show recent projects as a list", "Sort recent projects by last opened"]);
+    }
+
+    /// The wording that differs by system, each asked with the native bar and with the bar in the
+    /// window: Quit Archforge and Exit, Select All and Select all, and in German the File menu's
+    /// title, Ablage and Datei. Every other language has one word for File.
+    #[test]
+    fn the_wording_follows_the_systems_bar() {
+        let (mut shell, ..) = shell();
+        let words = |s: &Shell| [label(s, QUIT), label(s, SELECT_ALL), file_title(s)];
+        for (language, native, in_window) in [
+            ("en", ["Quit Archforge", "Select All", "File"], ["Exit", "Select all", "File"]),
+            ("de", ["Archforge beenden", "Alles auswählen", "Ablage"], ["Beenden", "Alles auswählen", "Datei"]),
+            ("fr", ["Quitter Archforge", "Tout sélectionner", "Fichier"], ["Quitter", "Tout sélectionner", "Fichier"]),
+        ] {
+            crate::i18n::set_language(language);
+            shell.in_window_menu = false;
+            assert_eq!(words(&shell), native, "{language}: the native bar");
+            shell.in_window_menu = true;
+            assert_eq!(words(&shell), in_window, "{language}: the bar in the window");
+        }
+        crate::i18n::set_language("en");
     }
 
     /// No two rows of any menu share their keys but History and Back to current work, which are

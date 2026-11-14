@@ -2,7 +2,9 @@
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # Programmmenü
 str		Quit Archforge	Archforge beenden
-str		File	Ablage
+str		Exit	Beenden
+str		File	Datei
+str	macOS	File	Ablage
 str		Help	Hilfe
 str	menu	View	Ansicht
 str		Ctrl	Strg
@@ -17,7 +19,7 @@ str		This project has one branch	Dieses Projekt hat einen Zweig
 str		Leave the text field first	Verlassen Sie zuerst das Textfeld
 str		Widen the window to search	Vergrößern Sie das Fenster, um zu suchen
 str		Already showing	Wird bereits angezeigt
-str		Open…	Öffnen …
+str		Open project…	Projekt öffnen …
 str		Find…	Suchen …
 str		Save	Sichern
 # Generieren
@@ -53,7 +55,6 @@ str		Copy request	Auftrag kopieren
 str		{name} — Archforge	{name} — Archforge
 # Home
 str		Recent projects	Zuletzt geöffnete Projekte
-str		Open project	Projekt öffnen
 str		Close project	Projekt schließen
 str		Close	Schließen
 str		Home	Start
@@ -484,7 +485,7 @@ str		The project stayed on its branch because it changed or was busy.	Das Projek
 str		Your latest changes could not be written, so the project stayed on its branch.	Ihre letzten Änderungen konnten nicht geschrieben werden, daher ist das Projekt auf seinem Zweig geblieben.
 str		The project stayed on its branch: {why}	Das Projekt ist auf seinem Zweig geblieben: {why}
 str		Switch to {branch}?	Zu {branch} wechseln?
-str		Switch branch	Zweig wechseln
+str		Switch branch…	Zweig wechseln…
 str		{branch} has unsaved changes. They stay on {branch} and are there when you come back. You won't be able to undo earlier steps.	{branch} hat nicht gespeicherte Änderungen. Sie bleiben auf {branch} und sind da, wenn Sie zurückkommen. Frühere Schritte können Sie dann nicht mehr rückgängig machen.
 str		Save version and switch	Version speichern und wechseln
 str		Switch	Wechseln
@@ -605,6 +606,7 @@ str	refusal	an association end	ein Assoziationsende
 str		A name can't start or end with a space.	Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.
 str		Working changes	Aktuelle Änderungen
 str		History	Verlauf
+str		History…	Verlauf…
 str		Retry	Erneut versuchen
 str		No changes since the last version.	Keine Änderungen seit der letzten Version.
 str		What you're typing isn't kept yet	Was Sie gerade eingeben, ist noch nicht gesichert
@@ -920,12 +922,12 @@ str		Cut	Ausschneiden
 str		Copy	Kopieren
 str		Paste	Einsetzen
 str		Select all	Alles auswählen
+str		Select All	Alles auswählen
 str		Nothing to act on here	Hier gibt es nichts zu tun
 plural		+ {n} more column	+ {n} weitere Spalte|+ {n} weitere Spalten
 str		Minimap	Minimap
 str		Hide minimap	Minimap ausblenden
 str		Show minimap	Minimap einblenden
-str		The minimap is showing	Die Minimap wird angezeigt
 str		Make the canvas larger to show the minimap	Vergrößern Sie die Zeichenfläche, um die Übersichtskarte zu zeigen
 str		Whole diagram	Ganzes Diagramm
 str		Zoom in	Vergrößern

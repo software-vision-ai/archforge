@@ -529,7 +529,7 @@ fn status_bar(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect) {
         None => (p.text_muted, tr("The model could not be opened")),
         Some(_) if shell.looking_only() => (p.accent, crate::version_chip::read_only_words(shell)),
         Some(_) if shell.is_saving() => (p.accent, tr("Saving…")),
-        // Open works from the workspace too (Cmd+O, File ▸ Open…): its wait and its failure show
+        // Open works from the workspace too (Cmd+O, File ▸ Open project…): its wait and its failure show
         // here, and the project stays open.
         Some(_) if shell.is_opening() => (p.accent, tr("Opening…")),
 
