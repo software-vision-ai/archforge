@@ -576,11 +576,21 @@ pub(crate) fn link_card(shell: &mut Shell, ui: &egui::Ui, p: &Palette, page: Rec
     }
 }
 
+/// Whether ⌘ (Ctrl on other systems) is held and nothing else. `matches_exact` alone lets macOS's
+/// Control with ⌘ through: it checks that `command` is set, never that `ctrl` is not.
+fn command_alone(held: egui::Modifiers) -> bool {
+    held.matches_exact(egui::Modifiers::COMMAND) && !(held.ctrl && held.mac_cmd)
+}
+
 /// Takes this frame's first press of ⌘B, ⌘I or ⌘K (Ctrl on other systems) and gives its format.
 /// Matched exactly: `consume_key` lets an extra Shift or Alt through, which would make ⇧⌘B bold.
+/// A press of K that is the link chord with more held is dropped: the text field reads any K with
+/// Control as "delete to the end of the paragraph", so Ctrl Shift K would delete on Windows and Linux.
 fn chord(inp: &mut egui::InputState) -> Option<Format> {
+    let more = |held: &egui::Modifiers| held.ctrl && held.command && !command_alone(*held);
+    inp.events.retain(|e| !matches!(e, egui::Event::Key { key: egui::Key::K, pressed: true, modifiers, .. } if more(modifiers)));
     let (at, format) = inp.events.iter().enumerate().find_map(|(at, e)| match e {
-        egui::Event::Key { key, pressed: true, modifiers, .. } if modifiers.matches_exact(egui::Modifiers::COMMAND) => match key {
+        egui::Event::Key { key, pressed: true, modifiers, .. } if command_alone(*modifiers) => match key {
             egui::Key::B => Some((at, Format::Bold)),
             egui::Key::I => Some((at, Format::Italic)),
             egui::Key::K => Some((at, Format::Link)),
@@ -714,17 +724,33 @@ mod tests {
         assert_eq!(markdown::body_start("---\nname: x\n"), 0, "an unclosed header is text");
     }
 
-    /// A chord's press is taken out of the frame's input; the rest of it stays (AR-450).
+    /// A chord's press is taken out of the frame's input, in the shape a macOS keyboard sends and
+    /// in the others'; the rest stays, a press with Shift or with Control and ⌘ included. Only a K
+    /// the field would read as a deletion goes too (AR-450).
     #[test]
     fn a_chord_takes_its_own_press_and_leaves_the_rest() {
+        use egui::{Key, Modifiers};
         let press = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
-        let shifted = press(egui::Key::B, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+        let (mac, others) = (Modifiers::MAC_CMD | Modifiers::COMMAND, Modifiers::CTRL | Modifiers::COMMAND);
+        let kept = [
+            press(Key::B, mac | Modifiers::CTRL),
+            press(Key::B, mac | Modifiers::SHIFT),
+            egui::Event::Text("x".into()),
+            press(Key::K, Modifiers::CTRL),
+            press(Key::K, mac | Modifiers::SHIFT),
+            egui::Event::Key { key: Key::K, physical_key: None, pressed: false, repeat: false, modifiers: mac | Modifiers::CTRL },
+        ];
         let mut inp = egui::InputState::default();
-        inp.events = vec![shifted.clone(), press(egui::Key::I, egui::Modifiers::COMMAND), egui::Event::Text("x".into())];
+        inp.events = kept.to_vec();
+        inp.events.insert(2, press(Key::I, mac));
+        inp.events.extend([press(Key::K, others), press(Key::K, mac | Modifiers::CTRL), press(Key::K, others | Modifiers::SHIFT)]);
         assert_eq!(chord(&mut inp), Some(Format::Italic));
-        assert_eq!(inp.events, [shifted, egui::Event::Text("x".into())]);
+        assert_eq!(inp.events[..6], kept);
+        assert_eq!(inp.events[6..], [press(Key::K, others)], "a K the field would delete on is dropped");
+        assert_eq!(chord(&mut inp), Some(Format::Link));
+        assert_eq!(inp.events, kept);
         assert_eq!(chord(&mut inp), None);
-        assert_eq!(inp.events.len(), 2);
+        assert_eq!(inp.events, kept);
     }
 
     #[test]

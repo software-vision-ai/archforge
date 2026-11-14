@@ -1,4 +1,5 @@
-//! The skill text editor's chords: ⌘B, ⌘I and ⌘K act only with exactly their modifiers (AR-450).
+//! The skill text editor's chords: ⌘B, ⌘I and ⌘K (Ctrl elsewhere) act only with nothing else held
+//! (AR-450).
 
 use egui::{Key, Modifiers};
 
@@ -29,22 +30,26 @@ fn skill_harness(theme: ThemeKind) -> Harness<'static, Shell> {
     h
 }
 
-/// With Shift or Alt held as well, and when its key is let go, a chord leaves the text alone;
-/// pressed alone, it formats the selection.
+/// With Shift, Alt or (on macOS) Control held as well, and when its key is let go, a chord leaves
+/// the text alone; pressed alone, as a macOS keyboard sends ⌘ and as the others send Ctrl, it
+/// formats the selection.
 #[test]
-fn a_chord_with_shift_or_alt_held_leaves_the_text_alone() {
+fn a_chord_with_another_modifier_held_leaves_the_text_alone() {
+    let (mac, others) = (Modifiers::MAC_CMD | Modifiers::COMMAND, Modifiers::CTRL | Modifiers::COMMAND);
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         for (k, formatted) in [(Key::B, "Use **names**."), (Key::I, "Use *names*."), (Key::K, "Use [names](url).")] {
-            let mut h = skill_harness(theme);
-            for extra in [Modifiers::SHIFT, Modifiers::ALT, Modifiers::SHIFT | Modifiers::ALT] {
-                key(&mut h, k, Modifiers::COMMAND | extra);
-                assert_eq!(h.state().canvas.skills[0].text, "Use names.", "{theme:?} {k:?} with {extra:?}");
+            for alone in [mac, others] {
+                let mut h = skill_harness(theme);
+                for held in [alone | Modifiers::SHIFT, alone | Modifiers::ALT, alone | Modifiers::SHIFT | Modifiers::ALT, mac | Modifiers::CTRL] {
+                    key(&mut h, k, held);
+                    assert_eq!(h.state().canvas.skills[0].text, "Use names.", "{theme:?} {k:?} with {held:?}");
+                }
+                h.key_up_modifiers(alone, k);
+                h.run();
+                assert_eq!(h.state().canvas.skills[0].text, "Use names.", "{theme:?} {k:?} let go, {alone:?}");
+                key(&mut h, k, alone);
+                assert_eq!(h.state().canvas.skills[0].text, formatted, "{theme:?} {k:?} with {alone:?} alone");
             }
-            h.key_up_modifiers(Modifiers::COMMAND, k);
-            h.run();
-            assert_eq!(h.state().canvas.skills[0].text, "Use names.", "{theme:?} {k:?} let go");
-            key(&mut h, k, Modifiers::COMMAND);
-            assert_eq!(h.state().canvas.skills[0].text, formatted, "{theme:?} {k:?} alone");
         }
     }
 }
