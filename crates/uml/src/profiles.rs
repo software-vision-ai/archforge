@@ -35,7 +35,7 @@
 use std::collections::BTreeSet;
 
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, InUse, Params, Reason, Used, always, cmd};
 use archforge_mof::{ClassId, Obj, Store, Value};
 use serde_json::{Value as Json, json};
 
@@ -640,33 +640,42 @@ pub fn values_set(store: &Store, p: Obj) -> usize {
     store.referrers(p).into_iter().filter(|(s, prop)| *prop == slot::DEFINING_FEATURE && is(store, *s, crate::SLOT)).count()
 }
 
+/// The uses as a refusal names them: per stereotype its name, its elements' names while there are
+/// at most two of different names (else none, as they are counted), and how many in all.
+pub fn uses_named(store: &Store, uses: &Uses) -> Vec<(String, Vec<String>, usize)> {
+    let named = |(s, es, loose): &(Obj, Vec<Obj>, usize)| {
+        let names: Vec<String> = es.iter().take(MAX_NAMED.saturating_add(1)).map(|e| name_of(store, *e)).collect();
+        let alike = matches!(names.as_slice(), [a, b] if a.eq_ignore_ascii_case(b));
+        let told = *loose == 0 && names.len() <= MAX_NAMED && !alike;
+        (name_of(store, *s), if told { names } else { Vec::new() }, es.len().saturating_add(*loose))
+    };
+    uses.by.iter().map(named).collect()
+}
+
 /// The uses in words: `«Entity» on Order and Customer, «Id» on 2 elements`, each stereotype's
 /// elements named while there are at most two, else counted.
 pub fn uses_text(store: &Store, uses: &Uses) -> String {
-    let parts: Vec<String> = uses
-        .by
-        .iter()
-        .map(|(s, es, loose)| {
-            let n = es.len().saturating_add(*loose);
-            let alike = matches!(es.as_slice(), [a, b] if name_of(store, *a).eq_ignore_ascii_case(&name_of(store, *b)));
-            let on = if *loose == 0 && es.len() <= MAX_NAMED && !alike {
-                let names: Vec<String> = es.iter().map(|e| name_of(store, *e)).collect();
-                names.join(" and ")
-            } else if n == 1 {
-                "1 element".to_string()
-            } else {
-                format!("{n} elements")
-            };
-            format!("«{}» on {on}", name_of(store, *s))
-        })
-        .collect();
-    parts.join(", ")
+    let said = |(s, names, n): (String, Vec<String>, usize)| match n {
+        _ if !names.is_empty() => format!("«{s}» on {}", names.join(" and ")),
+        1 => format!("«{s}» on 1 element"),
+        n => format!("«{s}» on {n} elements"),
+    };
+    uses_named(store, uses).into_iter().map(said).collect::<Vec<_>>().join(", ")
 }
 
-/// A refusal that names the uses: `{what} is in use{where}: {uses}. Remove those first.`
-fn in_use(store: &Store, key: &str, what: &str, where_: Option<Obj>, uses: &Uses) -> CommandError {
-    let at = where_.map(|p| format!(" in {}", name_of(store, p))).unwrap_or_default();
-    refuse(key, format!("{what} is in use{at}: {}. Remove those first.", uses_text(store, uses)))
+/// A refusal that names what is in use and the uses, as `{what} is in use{where}: {uses}. Remove
+/// those first.`, its reason typed.
+fn in_use(store: &Store, key: &str, what: Used, uses: &Uses) -> CommandError {
+    let said = match &what {
+        Used::Element(name) => format!("{name} is in use"),
+        Used::Moved(stereotype) => format!("«{stereotype}» is in use"),
+        Used::ProfileIn { profile, package } => format!("{profile} is in use in {package}"),
+        Used::Extension { stereotype, metaclass } => format!("«{stereotype}» on {metaclass} is in use"),
+        Used::HeldProfile { package, profile } => format!("{package} holds the profile {profile}, which is in use"),
+        Used::AppliedProfiles { package } => format!("{package} applies the profiles its elements use"),
+    };
+    let reason = Reason::InUse(Box::new(InUse { what, uses: uses_named(store, uses) }));
+    refuse(key, format!("{said}: {}. Remove those first.", uses_text(store, uses))).because(reason)
 }
 
 /// The refusal of a move of `moved` that would strand `uses`, naming them.
@@ -695,15 +704,8 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
                 for profile in profiles_within(store, o) {
                     let uses = profile_uses(store, profile);
                     if !uses.is_empty() {
-                        return Some(refuse(
-                            "ids",
-                            format!(
-                                "{} holds the profile {}, which is in use: {}. Remove those first.",
-                                name_of(store, o),
-                                name_of(store, profile),
-                                uses_text(store, &uses)
-                            ),
-                        ));
+                        let held = Used::HeldProfile { package: name_of(store, o), profile: name_of(store, profile) };
+                        return Some(in_use(store, "ids", held, &uses));
                     }
                 }
             }
@@ -711,10 +713,7 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
             if uses.is_empty() {
                 return None;
             }
-            return Some(refuse(
-                "ids",
-                format!("{} applies the profiles its elements use: {}. Remove those first.", name_of(store, o), uses_text(store, &uses)),
-            ));
+            return Some(in_use(store, "ids", Used::AppliedProfiles { package: name_of(store, o) }, &uses));
         }
         c if c == PROPERTY => {
             if is_base(store, o) {
@@ -732,7 +731,7 @@ pub fn removal_problem(store: &Store, o: Obj) -> Option<CommandError> {
         }
         _ => return None,
     };
-    (!uses.is_empty()).then(|| in_use(store, "ids", &name_of(store, o), None, &uses))
+    (!uses.is_empty()).then(|| in_use(store, "ids", Used::Element(name_of(store, o)), &uses))
 }
 
 /// Takes `profile`'s applications away from every package before it goes: an application needs its
@@ -859,7 +858,7 @@ fn stereotype_set(ctx: &mut C<'_>, p: &Params) -> R {
     if to != from {
         let uses = stereotype_uses(ctx.doc, s);
         if !uses.is_empty() {
-            return Err(in_use(ctx.doc, "profile", &format!("«{}»", name_of(ctx.doc, s)), None, &uses));
+            return Err(in_use(ctx.doc, "profile", Used::Moved(name_of(ctx.doc, s)), &uses));
         }
         if stereotypes(ctx.doc, to).len() >= MAX_STEREOTYPES {
             return Err(refuse("profile", format!("a profile holds at most {MAX_STEREOTYPES} stereotypes")));
@@ -873,8 +872,8 @@ fn stereotype_set(ctx: &mut C<'_>, p: &Params) -> R {
     for e in &dropped {
         let uses = extension_uses(ctx.doc, s, e.metaclass);
         if !uses.is_empty() {
-            let what = format!("«{}» on {}", name_of(ctx.doc, s), name_of(ctx.doc, e.metaclass));
-            return Err(in_use(ctx.doc, "extends", &what, None, &uses));
+            let dropped = Used::Extension { stereotype: name_of(ctx.doc, s), metaclass: name_of(ctx.doc, e.metaclass) };
+            return Err(in_use(ctx.doc, "extends", dropped, &uses));
         }
     }
     set_name(ctx.doc, s, &name)?;
@@ -936,7 +935,8 @@ fn profile_unapply(ctx: &mut C<'_>, p: &Params) -> R {
     };
     let uses = unapply_uses(ctx.doc, pkg, profile);
     if !uses.is_empty() {
-        return Err(in_use(ctx.doc, "profile", &name_of(ctx.doc, profile), Some(pkg), &uses));
+        let unapplied = Used::ProfileIn { profile: name_of(ctx.doc, profile), package: name_of(ctx.doc, pkg) };
+        return Err(in_use(ctx.doc, "profile", unapplied, &uses));
     }
     ctx.doc.destroy(a).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))

@@ -476,6 +476,81 @@ fn the_sweep_over_profiles_breaks_nothing() {
     assert!(calls > 50, "{calls}");
 }
 
+/// Every refusal for uses carries its reason typed beside the unchanged English, for an interface
+/// to say in its own words: what is in use, and the uses, named while a stereotype has at most two
+/// and counted past that (AR-437).
+#[test]
+fn every_use_that_refuses_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, InUse, Reason, Used};
+    let mut s = session();
+    let [commerce, order, customer, id_attr, persistence, entity, id, reference] = shop(&mut s);
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+    let invoice = run(&mut s, "uml.class.add", json!({ "package": commerce, "name": "Invoice" }));
+    let tools = run(&mut s, "uml.package.add", json!({ "name": "Tools" }));
+    let audit = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": tools }));
+    let tracked = run(&mut s, "uml.stereotype.add", json!({ "profile": audit, "name": "Tracked", "extends": ["Class"] }));
+    run(&mut s, "uml.profile.apply", json!({ "package": commerce, "profile": audit }));
+    let elsewhere = run(&mut s, "uml.profile.add", json!({ "name": "Elsewhere" }));
+    let uses = [(&entity, &order), (&entity, &customer), (&entity, &invoice), (&id, &id_attr), (&tracked, &order), (&tracked, &customer)];
+    let mut s = with_applications(&s, &uses.map(|(s, e)| (s.as_str(), e.as_str())));
+    let text = |n: &str| n.to_string();
+    // Three elements are counted; one, or two of different names, are named.
+    let counted = vec![(text("Entity"), vec![], 3)];
+    let both = vec![counted[0].clone(), (text("Id"), vec![text("id")], 1)];
+    let named = [(text("Tracked"), vec![text("Order"), text("Customer")], 2)];
+    let in_use = |what: Used, uses: &[(String, Vec<String>, usize)]| Reason::InUse(Box::new(InUse { what, uses: uses.to_vec() }));
+    let check = |s: &mut S, cmd: &str, p: Json, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!(error.reason, Some(reason), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    };
+    let unapplied = Used::ProfileIn { profile: text("Persistence"), package: text("Commerce") };
+    let english = "Persistence is in use in Commerce: «Entity» on 3 elements, «Id» on id. Remove those first.";
+    check(&mut s, "uml.profile.unapply", json!({ "package": commerce, "profile": persistence }), in_use(unapplied, &both), english);
+    check(
+        &mut s,
+        "element.remove",
+        json!({ "ids": [entity] }),
+        in_use(Used::Element(text("Entity")), &counted),
+        "Entity is in use: «Entity» on 3 elements",
+    );
+    let moved = json!({ "stereotype": entity, "profile": elsewhere });
+    check(&mut s, "uml.stereotype.set", moved, in_use(Used::Moved(text("Entity")), &counted), "«Entity» is in use: «Entity» on 3 elements");
+    let dropped = Used::Extension { stereotype: text("Entity"), metaclass: text("Class") };
+    let other = json!({ "stereotype": entity, "extends": ["Interface"] });
+    check(&mut s, "uml.stereotype.set", other, in_use(dropped, &counted), "«Entity» on Class is in use: «Entity» on 3 elements");
+    let applies = in_use(Used::AppliedProfiles { package: text("Commerce") }, &[both.as_slice(), &named].concat());
+    let english = "Commerce applies the profiles its elements use: «Entity» on 3 elements, «Id» on id, «Tracked» on Order and Customer.";
+    check(&mut s, "element.remove", json!({ "ids": [commerce] }), applies, english);
+    // A package with no parent takes the profile it holds along.
+    let mut top = at_top(&s, &tools);
+    let held = Used::HeldProfile { package: text("Tools"), profile: text("Audit") };
+    let english = "Tools holds the profile Audit, which is in use: «Tracked» on Order and Customer. Remove those first.";
+    check(&mut top, "element.remove", json!({ "ids": [tools] }), in_use(held, &named), english);
+    // Two elements whose names differ only by case are counted, never named twice.
+    let upper = run(&mut s, "uml.attribute.add", json!({ "class": customer, "name": "ID", "type": "Integer" }));
+    run(&mut s, "uml.stereotype.apply", json!({ "element": upper, "stereotype": id }));
+    let alike = in_use(Used::Element(text("Id")), &[(text("Id"), vec![], 2)]);
+    check(&mut s, "element.remove", json!({ "ids": [id] }), alike, "Id is in use: «Id» on 2 elements.");
+    // An application that traces to no element, as a project edited by hand may hold, is counted
+    // with the others, and none is named then.
+    let (tables, junctions) = tables();
+    let saved = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let mut st = store(1 << 50);
+    rows::restore(&mut st, &saved, &tables, &junctions).unwrap();
+    for stereotype in [&tracked, &reference] {
+        let loose = st.create(archforge_uml::INSTANCE_SPECIFICATION).unwrap();
+        st.push(loose, archforge_uml::instance_specification::CLASSIFIER, Value::Ref(obj(&st, stereotype))).unwrap();
+    }
+    let mut s = session_over(st);
+    let with_loose = in_use(Used::Element(text("Tracked")), &[(text("Tracked"), vec![], 3)]);
+    check(&mut s, "element.remove", json!({ "ids": [tracked] }), with_loose, "Tracked is in use: «Tracked» on 3 elements.");
+    let only_loose = in_use(Used::Element(text("Reference")), &[(text("Reference"), vec![], 1)]);
+    check(&mut s, "element.remove", json!({ "ids": [reference] }), only_loose, "Reference is in use: «Reference» on 1 element.");
+}
+
 /// The session `s` with the package `package` moved to the model's top level, as a project made
 /// before the root package keeps one: removed, it takes what it holds along.
 fn at_top(s: &S, package: &str) -> S {

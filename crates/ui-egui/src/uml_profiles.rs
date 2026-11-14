@@ -9,6 +9,7 @@
 //! that selects them. The rules are the model's (`archforge_uml::profiles`): the shell asks them
 //! and says their answers in the user's words.
 
+use archforge_engine::{InUse, Used};
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::profiles::{self, Uses};
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
@@ -71,28 +72,42 @@ pub struct ProfileRefusal {
 
 // What the shell says of uses.
 
-/// The elements a stereotype is used on, in words: one name, two names joined, or how many.
-fn on_text(store: &Store, elements: &[Obj], loose: usize) -> String {
-    let n = elements.len().saturating_add(loose);
-    match (elements, loose) {
-        ([one], 0) => name(store, *one),
-        // Two of one name are counted, never named twice.
-        ([a, b], 0) if !name(store, *a).eq_ignore_ascii_case(&name(store, *b)) => {
-            fmt(&tr("{first} and {second}"), &[("first", &name(store, *a)), ("second", &name(store, *b))])
-        }
+/// The elements a stereotype is used on, in words: one name, two names joined, or how many, `n`,
+/// when none is named.
+fn on_text(names: &[String], n: usize) -> String {
+    match names {
+        [one] => one.clone(),
+        [a, b] => fmt(&tr("{first} and {second}"), &[("first", a), ("second", b)]),
         _ => trn("{n} element", "{n} elements", u64::try_from(n).unwrap_or(u64::MAX)),
     }
 }
 
-/// The uses in the user's words: `«Entity» on Order and Customer, «Id» on 2 elements`.
-pub(crate) fn uses_text(store: &Store, uses: &Uses) -> String {
-    uses.by
-        .iter()
-        .map(|(s, es, loose)| {
-            fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", &name(store, *s)), ("elements", &on_text(store, es, *loose))])
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+/// What is in use and its uses, in the user's words, as `Persistence is in use in Commerce: «Entity»
+/// on Order and Customer, «Id» on 2 elements. Remove those first.`: what Profiles' panels say before
+/// asking, and what a refusal of the engine's says (AR-437).
+pub(crate) fn in_use(used: &InUse) -> String {
+    let on = |(s, names, n): &(String, Vec<String>, usize)| {
+        fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", s), ("elements", &on_text(names, *n))])
+    };
+    let uses = used.uses.iter().map(on).collect::<Vec<_>>().join(", ");
+    // A sentence names its two parts by its own keys, so each part is given under every key it goes by.
+    let (template, first, second) = match &used.what {
+        Used::Element(name) | Used::Moved(name) => (tr("{name} is in use: {uses}. Remove those first."), name, name),
+        Used::ProfileIn { profile, package } => (tr("{profile} is in use in {package}: {uses}. Remove those first."), profile, package),
+        Used::Extension { stereotype, metaclass } => {
+            (tr("«{stereotype}» on {metaclass} is in use: {uses}. Remove those first."), stereotype, metaclass)
+        }
+        Used::HeldProfile { package, profile } => {
+            (tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first."), profile, package)
+        }
+        Used::AppliedProfiles { package } => (tr("{name} applies the profiles its elements use: {uses}. Remove those first."), package, package),
+    };
+    fmt(&template, &[("profile", first), ("stereotype", first), ("name", second), ("package", second), ("metaclass", second), ("uses", &uses)])
+}
+
+/// `uses` of `what`, in the user's words.
+fn uses_said(store: &Store, what: Used, uses: &Uses) -> String {
+    in_use(&InUse { what, uses: profiles::uses_named(store, uses) })
 }
 
 /// The ids of the elements in use.
@@ -102,35 +117,10 @@ fn use_ids(store: &Store, uses: &Uses) -> Vec<Uuid> {
 
 /// Why `obj` may not be removed for its uses, in the user's words; none when the uses allow it.
 pub(crate) fn removal_refusal(store: &Store, obj: Obj) -> Option<String> {
-    let uses = match store.class_of(obj).ok()? {
-        c if c == archforge_uml::PROFILE => profiles::profile_uses(store, obj),
-        c if c == archforge_uml::STEREOTYPE => profiles::stereotype_uses(store, obj),
-        c if c == archforge_uml::PACKAGE => {
-            // A package with no parent takes its profiles along: one in use stays.
-            if archforge_uml::commands::package_of(store, obj).is_none() {
-                for profile in profiles::profiles_within(store, obj) {
-                    let uses = profiles::profile_uses(store, profile);
-                    if !uses.is_empty() {
-                        return Some(fmt(
-                            &tr("{name} holds the profile {profile}, which is in use: {uses}. Remove those first."),
-                            &[("name", &name(store, obj)), ("profile", &name(store, profile)), ("uses", &uses_text(store, &uses))],
-                        ));
-                    }
-                }
-            }
-            let uses = profiles::removal_uses(store, obj);
-            if uses.is_empty() {
-                return None;
-            }
-            return Some(fmt(
-                &tr("{name} applies the profiles its elements use: {uses}. Remove those first."),
-                &[("name", &name(store, obj)), ("uses", &uses_text(store, &uses))],
-            ));
-        }
-        _ => return None,
-    };
-    (!uses.is_empty())
-        .then(|| fmt(&tr("{name} is in use: {uses}. Remove those first."), &[("name", &name(store, obj)), ("uses", &uses_text(store, &uses))]))
+    match profiles::removal_problem(store, obj)?.reason? {
+        archforge_engine::Reason::InUse(used) => Some(in_use(&used)),
+        _ => None,
+    }
 }
 
 // Models.
@@ -608,10 +598,7 @@ pub(crate) fn unapply_profile(shell: &mut Shell, package: Uuid, profile: Uuid) {
         let uses = profiles::unapply_uses(store, pk, pr);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: package,
-            why: fmt(
-                &tr("{profile} is in use in {package}: {uses}. Remove those first."),
-                &[("profile", &name(store, pr)), ("package", &name(store, pk)), ("uses", &uses_text(store, &uses))],
-            ),
+            why: uses_said(store, Used::ProfileIn { profile: name(store, pr), package: name(store, pk) }, &uses),
             uses: use_ids(store, &uses),
         })
     });
@@ -889,10 +876,7 @@ fn set_extends(shell: &mut Shell, s: Uuid, names: &[String], dropped: Option<&st
         let uses = profiles::extension_uses(store, st, metaclass);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: s,
-            why: fmt(
-                &tr("«{stereotype}» on {metaclass} is in use: {uses}. Remove those first."),
-                &[("stereotype", &name(store, st)), ("metaclass", m), ("uses", &uses_text(store, &uses))],
-            ),
+            why: uses_said(store, Used::Extension { stereotype: name(store, st), metaclass: m.to_string() }, &uses),
             uses: use_ids(store, &uses),
         })
     });
@@ -917,7 +901,7 @@ fn move_stereotype(shell: &mut Shell, s: Uuid, to: Uuid) {
         let uses = profiles::stereotype_uses(store, st);
         (!uses.is_empty()).then(|| ProfileRefusal {
             owner: s,
-            why: fmt(&tr("{name} is in use: {uses}. Remove those first."), &[("name", &name(store, st)), ("uses", &uses_text(store, &uses))]),
+            why: uses_said(store, Used::Moved(name(store, st)), &uses),
             uses: use_ids(store, &uses),
         })
     });
