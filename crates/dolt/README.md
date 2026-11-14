@@ -15,7 +15,16 @@ so a stalled start never holds up a stop or a recovery of another project.
 
 A start that fails once its server runs stops that server before it returns: every check that
 needs no server comes before the server's start, and what follows (the record, the wait until it
-is ready) owns the server through a value whose drop stops it. One moment stays open: an Archforge
+is ready) owns the server through a value whose drop stops it.
+
+A server that would not stop then (hardly possible on unix, where a kill follows the polite
+signal) may still run, without a watchdog. Its run folder stays, and so does its record if it had one: the project is
+refused as open elsewhere, naming that server, until the server has ended or that Archforge has,
+and recovery or the start-up sweep then clears both, stopping the server first if it still runs.
+Without a record (its write failed, or another start's record was there) the folder stays for a
+server nothing finds, as in the moment that follows.
+
+One moment stays open: an Archforge
 killed between a server's start and its record, which needs the server's process id and so cannot
 come first. That is the record's write to disk, measured at 5 to 10 ms on macOS. A server left so
 has neither record nor watchdog, so no sweep finds it, and its run folder stays. Recovery treats
