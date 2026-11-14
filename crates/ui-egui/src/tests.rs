@@ -10,6 +10,7 @@ mod branches;
 mod edit_menu;
 mod field_keys;
 mod model_menu;
+mod properties_keys;
 mod read_only;
 mod skill_chords;
 mod switch_ask;
