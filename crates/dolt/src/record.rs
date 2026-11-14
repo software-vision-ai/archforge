@@ -1,5 +1,6 @@
 //! A record per running server, in the user's settings: which process serves which project, in
-//! which run folder, started by which Archforge. Recovery recognises a leftover server by it.
+//! which run folder, started by which Archforge. Recovery recognises a leftover server by it. A
+//! record without the server's process id is one a start wrote before its server ran.
 //!
 //! Every change of a record (writing, removing, setting a damaged one aside) holds that record's
 //! lock, an operating-system lock on a file of its own beside the record, so a change that looks
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
+use crate::recovery::valid_pid;
 
 /// The most of a record read; a larger file is set aside.
 const CAP: u64 = 4096;
@@ -81,7 +83,9 @@ enum Found {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Record {
     pub data_dir: String,
-    pub server_pid: u32,
+    /// The server's process id; none in the record of a start written before its server ran (no
+    /// start writes one yet: AR-457). A record of the earlier format always has one.
+    pub server_pid: Option<u32>,
     /// The checked run root the run folder was made in, and the run folder.
     pub run_root: String,
     pub run_dir: String,
@@ -168,9 +172,7 @@ fn load(file: &Path, project: Option<&str>) -> Result<Found, Error> {
     }
     Ok(match serde_json::from_slice::<Record>(&bytes) {
         Ok(r) if project.is_some_and(|p| p != r.data_dir) => Found::Bad("it names another project"),
-        Ok(r) if crate::recovery::valid_pid(r.server_pid) && crate::recovery::valid_pid(r.owner_pid) && Path::new(&r.run_root).is_absolute() => {
-            Found::Good(r)
-        }
+        Ok(r) if r.server_pid.is_none_or(valid_pid) && valid_pid(r.owner_pid) && Path::new(&r.run_root).is_absolute() => Found::Good(r),
         _ => Found::Bad("it cannot be read"),
     })
 }
@@ -212,10 +214,20 @@ pub(crate) fn write_new(held: &Held, r: &Record) -> Result<bool, Error> {
     }
 }
 
+/// The record under the lock `held`, as it is: read only, nothing set aside. A file that holds no
+/// record of the project at `data_dir` is an error.
+pub(crate) fn look(held: &Held, data_dir: &str) -> Result<Option<Record>, Error> {
+    match load(&held.record, Some(data_dir))? {
+        Found::Absent => Ok(None),
+        Found::Good(r) => Ok(Some(r)),
+        Found::Bad(why) => Err(Error::io("cannot read", &held.record, std::io::Error::other(why))),
+    }
+}
+
 /// Removes the project's record only while it still names `server_pid`, so a start never removes
 /// the record of a server another start made. Returns whether the record's name is free now.
 pub(crate) fn remove_if(records: &Path, data_dir: &str, server_pid: u32) -> bool {
-    remove_while(&path(records, data_dir), |r| r.data_dir == data_dir && r.server_pid == server_pid)
+    remove_while(&path(records, data_dir), |r| r.data_dir == data_dir && r.server_pid == Some(server_pid))
 }
 
 /// Removes the record in `file` only while `is_it` holds for it. The look and the removal happen
@@ -256,7 +268,7 @@ pub(crate) mod tests {
         /// What a test does in the middle of the next change, with the lock held: once.
         static IN_CHANGE: RefCell<Option<Box<dyn FnOnce(&Path)>>> = const { RefCell::new(None) };
         /// What a test does once the next change finds the lock held and starts to wait: once.
-        static WAITING: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+        pub(crate) static WAITING: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
     }
 
     /// Runs the hook a test set for a change's wait for the lock, once.
@@ -289,7 +301,7 @@ pub(crate) mod tests {
     pub(crate) fn rec(data_dir: &str) -> Record {
         Record {
             data_dir: data_dir.into(),
-            server_pid: 7,
+            server_pid: Some(7),
             run_root: "/t".into(),
             run_dir: "/t/af-abcdefgh".into(),
             command: vec!["dolt".into()],
@@ -312,7 +324,7 @@ pub(crate) mod tests {
         assert_eq!(read(&dir, "/p/a").unwrap(), Some(rec("/p/a")));
         // A second start's record never replaces the first's, and is never removed by it.
         let mut other = rec("/p/a");
-        other.server_pid = 99;
+        other.server_pid = Some(99);
         assert!(!write_new(&dir, &other).unwrap());
         remove_if(&dir, "/p/a", 99);
         assert_eq!(read(&dir, "/p/a").unwrap(), Some(rec("/p/a")));
@@ -326,7 +338,7 @@ pub(crate) mod tests {
         assert_eq!(read(&dir, "/p/d").unwrap(), None);
         // A process id kill would read as a group, or a relative run root, is not trusted.
         let mut bad = rec("/p/e");
-        bad.server_pid = 0;
+        bad.server_pid = Some(0);
         std::fs::write(path(&dir, "/p/e"), serde_json::to_vec(&bad).unwrap()).unwrap();
         assert_eq!(read(&dir, "/p/e").unwrap(), None);
         let aside = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".damaged-")).count();
@@ -415,6 +427,25 @@ pub(crate) mod tests {
         assert!(!remove_if(&dir.0, "/p/a", 7), "the damaged file still holds the name");
         std::fs::create_dir(path(&dir.0, "/p/b")).unwrap();
         assert!(!remove_if(&dir.0, "/p/b", 7));
+    }
+
+    /// A record of the earlier format, with a process id always, reads as a complete record; one
+    /// whose process id is left out or null names no process.
+    #[test]
+    fn a_record_of_the_earlier_format_is_a_complete_record() {
+        let dir = crate::home::tests::Scratch::new("format");
+        let old =
+            r#"{"data_dir":"/p/a","server_pid":7,"run_root":"/t","run_dir":"/t/af-abcdefgh","command":["dolt"],"owner_pid":8,"owner_started":"x"}"#;
+        std::fs::write(path(&dir.0, "/p/a"), old).unwrap();
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
+        let held = hold(&path(&dir.0, "/p/a"), LOCK_WAIT).unwrap();
+        assert_eq!(look(&held, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert!(look(&held, "/p/b").is_err(), "a record of another project is none of this one's");
+        drop(held);
+        for pid in ["", r#""server_pid":null,"#] {
+            std::fs::write(path(&dir.0, "/p/a"), old.replace(r#""server_pid":7,"#, pid)).unwrap();
+            assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(Record { server_pid: None, ..rec("/p/a") }));
+        }
     }
 
     /// A start that wrote its record over a damaged one between a reader's first look and its
