@@ -3,7 +3,7 @@
 **Purpose.** The project database's server: runs `dolt sql-server` for one project folder beside the
 application, reachable only by this user with a password made for each start, connects to it, stops
 it, and recovers a server a crashed Archforge left behind: at the next opening of its project, and
-for every project at the application's start-up. On unix each server also has a watchdog, a small
+for every project at the application's start-up (but a record without a process id, below). On unix each server also has a watchdog, a small
 `/bin/sh` child that reads a pipe only Archforge holds open: when Archforge is gone, a kill
 included, the watchdog stops the server politely at once, if the process is still that server. The
 start-up sweep stays the backstop: for Windows, and for a watchdog that was killed too, could not
@@ -31,6 +31,38 @@ has neither record nor watchdog, so no sweep finds it, and its run folder stays.
 it as any server it did not record: once it holds the project's lock, and if its program's file is
 named `dolt`, the project is refused as open elsewhere, naming the server's process id, until that
 process is stopped.
+
+A record may also name no process id: the record a start writes before its server runs, which
+AR-457's second part makes every start write, holding the record's lock until the record is
+complete. The opening of its project settles such a record before anything else:
+
+- While the record's lock cannot be had, its start is under way: the project is refused as open
+  elsewhere, naming that Archforge.
+- Once it can, that start will not go on. Its server is looked for by the exact command line
+  recorded, but only where that line ends in `--config` and the `server.yaml` of the recorded run
+  folder, and that folder is one of this user's (a real folder, not a link) directly under the
+  recorded run root, named as this crate names them: the random name makes the line that start's
+  alone. Every process listed is proven again by its own command line before anything is done
+  about it; no process is looked up by its name, and none is signalled on the word of a record
+  alone. A record whose line is not so tied signals nothing and removes no file but itself.
+- Whose Archforge still runs: a server found refuses the project, naming the server, and nothing
+  goes.
+- Whose Archforge is gone: the server's `server.yaml` is removed first. Where a child cut
+  between its fork and its exec keeps the record's lock until its exec (an open file's lock, as
+  the standard library takes it on unix, read from its documentation, not measured) the list
+  finds it anyway; where it does not (a lock a file system emulates per process), the child finds
+  no configuration once it runs dolt, and a dolt started without its configuration exits 1 at
+  once and takes no lock (measured with dolt 2.7.3). Every server found is stopped, checked
+  again before each signal; only then do the run folder and the record go. A running server
+  whose run folder is removed runs on, keeping the project's lock and its port (measured with
+  dolt 2.7.3), which is why it is stopped first.
+- Where the list or a proof fails, or a server would not stop, the opening fails and nothing more
+  goes, until the list works again.
+
+The start-up sweep leaves a record without a process id alone for now (AR-459), so a server of a
+start its Archforge did not finish runs on until its project is opened. A record of the earlier
+format, with a process id always, is a complete record and is read as one; nothing is migrated,
+since the application is not released.
 
 Every change of a server record (writing one, removing one, setting a damaged one aside) holds
 that record's lock, an operating-system lock on a file of its own beside the record (the record's
@@ -74,7 +106,7 @@ removed. The password never shows in a log, an error or a debug print.
 | `ServerOptions::new` | `pub fn new(records: impl Into<PathBuf>) -> ServerOptions` (records folder; run root, budgets) |
 | `Server::start` | `pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error>` |
 | `Server::connect` | `pub fn connect(&self) -> Result<mysql::Conn, Error>` (socket on unix, loopback on Windows) |
-| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone; returns how many it stopped) |
+| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone, leaves a record without a process id to its project's opening; returns how many it stopped) |
 | `Server::stop` | `pub fn stop(self) -> Result<(), Error>` (dropping a server stops it too) |
 | `Server::{port, socket, password, data_dir, pid}` | the running server's facts |
 | `Error` | one enum; every variant names the value it is about |
