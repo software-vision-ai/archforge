@@ -574,12 +574,19 @@ fn key_rows(shell: &Shell, ui: &egui::Ui, rows: &[(egui::Id, Span)], parts: &[(e
 
 /// The row Page Up, Page Down, Home or End moves the focus to from the row `at`, by where the keys
 /// take `at`'s top ([`crate::version_details::page_keys`]): going down, the last row whose top is at
-/// or above it, going up, the first at or below it; none when no such key was pressed.
+/// or above it, going up, the first at or below it, and at least the next row that way, as a page
+/// can be shorter than a group's heading and first row; none when no such key was pressed.
 fn paged(ui: &egui::Ui, rows: &[(egui::Id, Span)], at: usize, page: f32) -> Option<usize> {
     let from = rows.get(at)?.1.0;
     let mut to = from;
     crate::version_details::page_keys(ui, &mut to, page);
-    if to > from { rows.iter().rposition(|(_, (top, _))| *top <= to) } else { rows.iter().position(|(_, (top, _))| *top >= to).filter(|_| to < from) }
+    if to > from {
+        rows.iter().rposition(|(_, (top, _))| *top <= to).map(|i| i.max((at + 1).min(rows.len() - 1)))
+    } else if to < from {
+        rows.iter().position(|(_, (top, _))| *top >= to).map(|i| i.min(at.saturating_sub(1)))
+    } else {
+        None
+    }
 }
 
 /// Scrolls `scroll` so that what spans `from` to `to` in a list's content comes whole into a view

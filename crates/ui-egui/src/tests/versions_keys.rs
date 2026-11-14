@@ -117,6 +117,36 @@ fn the_page_keys_move_the_keyboard_through_each_list() {
     });
 }
 
+/// In a window so short that Working changes shows less than a page of a group's heading and two
+/// rows, Page Down from the group's first row and Page Up from the row under it each move a row.
+#[test]
+fn a_page_key_moves_at_least_a_row_in_a_short_list() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = changes_panel(theme);
+        (0..5).for_each(|i| add_schema(&mut h, &format!("s{i}")));
+        compared(&mut h);
+        let rows = h.state().versions.changes.iter().map(|d| format!("workspace.versions.change.{}.{}", d.id, d.class.0)).collect::<Vec<_>>();
+        // The list's page is its height less 8 and a row: under the 70 points to the second row.
+        let short = |h: &Harness<'static, Shell>| {
+            let (top, bottom) = within(h, rect_of(h, &rows[0]).top() - 24.0, Some("workspace.versions.history"));
+            bottom - top - 8.0 - 44.0 < 70.0
+        };
+        for height in (400..900).step_by(4) {
+            h.set_size(egui::vec2(1600.0, height as f32));
+            h.run_steps(2);
+            if has_id(&h, &rows[0]) && short(&h) {
+                break;
+            }
+        }
+        assert!(has_id(&h, &rows[0]) && short(&h), "{theme:?}: a short list shows");
+        focus(&mut h, &rows[0]);
+        key(&mut h, Key::PageDown, Modifiers::NONE);
+        assert!(holds(&h, &rows[1]), "{theme:?}: Page Down from the group's first row");
+        key(&mut h, Key::PageUp, Modifiers::NONE);
+        assert!(holds(&h, &rows[0]), "{theme:?}: Page Up from the row under it");
+    });
+}
+
 /// Tab and Shift+Tab bring every part of a list they come to whole into view: the versions and
 /// Show more under them, the working changes, and the branches and their menu buttons.
 #[test]
