@@ -4,7 +4,8 @@
 use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::Error;
@@ -40,12 +41,24 @@ pub(crate) fn command(program: &Path, env: &[(OsString, OsString)]) -> Command {
     c
 }
 
+/// Held while a child starts.
+static STARTING: Mutex<()> = Mutex::new(());
+
+/// Starts `c`, one start of this crate at a time: where a pipe's close-on-exec mark is set only
+/// after the pipe is made (macOS), a child started in between would inherit the pipe and hold it
+/// open, so a helper's output or a watchdog's input would not end when it should. A start that
+/// hangs holds the others up meanwhile.
+pub(crate) fn spawn(c: &mut Command) -> std::io::Result<Child> {
+    let _one = STARTING.lock().unwrap_or_else(PoisonError::into_inner);
+    c.spawn()
+}
+
 /// Runs `program` with `args` and waits at most `budget`; a helper still running then is killed.
 pub(crate) fn run(program: &Path, args: &[&OsStr], env: &[(OsString, OsString)], budget: Duration) -> Result<Output, Error> {
     let name = program.display().to_string();
     let mut c = command(program, env);
     c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = c.spawn().map_err(|e| Error::io("cannot run", program, e))?;
+    let mut child = spawn(&mut c).map_err(|e| Error::io("cannot run", program, e))?;
     let out = child.stdout.take().map(|s| std::thread::spawn(move || drain(s)));
     let err = child.stderr.take().map(|s| std::thread::spawn(move || drain(s)));
     let started = Instant::now();

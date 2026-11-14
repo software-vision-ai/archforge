@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use crate::identity::identity;
 use crate::record::{self, Record};
 use crate::recovery::{self, Action, Lock, Proc};
+use crate::watchdog::Watchdog;
 use crate::{Dolt, Error, Secret, config, paths, run_dir, runner};
 
 /// How long a connection may take to open, and a query to answer, during readiness.
@@ -71,6 +72,8 @@ pub struct Server {
     uid: Option<u32>,
     stop_budget: Duration,
     stopped: bool,
+    /// Dropped, and so ended, after the attempt to stop the server.
+    _watchdog: Watchdog,
 }
 
 impl Server {
@@ -200,11 +203,11 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
     Ok(if id.is_dolt_server() { Proc::OtherDoltServer } else { Proc::Other })
 }
 
-// Why a sweep at start-up, and no tie from the server to its Archforge (AR-422): Linux's parent-death
-// signal follows the thread that started the server, and servers start on worker threads that end
-// once a project is open; macOS has no such signal, only a watcher process; Windows' job objects
-// kill without a polite stop. Each needs unsafe calls or a helper process of its own, so it is left
-// for a ticket of its own, and this sweep stays the backstop on every platform either way.
+// Why a sweep at start-up besides the tie from a server to its Archforge (AR-422, AR-424): the tie is
+// a watchdog process, which exists on unix only, can be killed with its Archforge, and may fail to
+// start. Linux's parent-death signal would not do instead: it follows the thread that started the
+// server, and servers start on worker threads that end once a project is open. Windows' job objects
+// kill without a polite stop and need unsafe calls. So this sweep stays the backstop everywhere.
 /// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
 /// forgets the records of servers that are gone: for a start-up, so a project never opened again
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
@@ -399,7 +402,10 @@ fn launch(
         env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
         let mut c = runner::command(dolt.path(), &env);
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
-        let mut child = c.spawn().map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+        let mut child = runner::spawn(&mut c).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+        // From here on a killed Archforge takes this server with it. The watchdog ends with this
+        // turn of the loop or with the `Server`, in both after the attempt to stop the server.
+        let watchdog = Watchdog::tie(child.id(), &command);
         let rec = Record {
             data_dir: data_text.to_string(),
             server_pid: child.id(),
@@ -438,6 +444,7 @@ fn launch(
                     uid,
                     stop_budget: opts.stop_budget,
                     stopped: false,
+                    _watchdog: watchdog,
                 });
             }
             Err(e) => {

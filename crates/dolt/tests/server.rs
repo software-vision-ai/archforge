@@ -1,5 +1,5 @@
-//! The server against a real dolt: start, the password, no usage records, a second start, crash
-//! recovery, leftovers, the socket limit, an odd folder name, and a lock that names another
+//! The server against a real dolt: start, the password, no usage records, a second start, a killed
+//! owner, crash recovery, leftovers, the socket limit, an odd folder name, and a lock that names another
 //! program. These tests need dolt 2.6 or later; without it they fail and say how to install it.
 //! Measured on macOS; the Linux and Windows runs are still to be done.
 #![cfg(unix)]
@@ -121,6 +121,22 @@ fn wait_gone(pid: u32) -> bool {
     false
 }
 
+/// Whether the watchdog of the server `server` runs.
+fn watched(server: u32) -> bool {
+    let watchdog = format!("archforge-server-watchdog {server}$");
+    Command::new("/usr/bin/pgrep").args(["-f", &watchdog]).stdout(Stdio::null()).status().unwrap().success()
+}
+
+/// Kills the helper as a crash that takes the server's watchdog along (a killed process group,
+/// say), which leaves the server running for the next start to find.
+fn orphan(owner: &mut std::process::Child, server: u32) {
+    let watchdog = format!("archforge-server-watchdog {server}$");
+    assert!(Command::new("/usr/bin/pkill").args(["-KILL", "-f", &watchdog]).status().unwrap().success(), "the server had a watchdog");
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    assert!(alive(server), "the server outlives its owner and its watchdog");
+}
+
 fn one(conn: &mut mysql::Conn) -> i64 {
     conn.query_first::<i64, _>("SELECT 1").unwrap().unwrap()
 }
@@ -151,9 +167,11 @@ fn a_server_starts_answers_on_socket_and_port_and_stops_without_leftovers() {
     assert_eq!(one(&mut socket(&server, Some(&pw)).unwrap()), 1);
     assert_eq!(env.leftovers(), (1, 1));
     let pid = server.pid();
+    assert!(watched(pid));
     server.stop().unwrap();
     assert!(!alive(pid));
     assert_eq!(env.leftovers(), (0, 0));
+    assert!(!watched(pid), "its watchdog ended with it");
 }
 
 #[test]
@@ -260,9 +278,7 @@ fn a_server_left_by_a_crashed_archforge_is_stopped_at_the_next_start() {
     let env = Env::new("crash");
     let (mut owner, orphan) = helper(&env);
     let _guard = KillOnDrop(orphan);
-    owner.kill().unwrap();
-    owner.wait().unwrap();
-    assert!(alive(orphan), "the server outlives its owner, as measured");
+    self::orphan(&mut owner, orphan);
     let server = env.start().unwrap();
     let _guard2 = KillOnDrop(server.pid());
     assert!(wait_gone(orphan), "the orphan was stopped");
@@ -271,16 +287,33 @@ fn a_server_left_by_a_crashed_archforge_is_stopped_at_the_next_start() {
     assert_eq!(env.leftovers(), (0, 0));
 }
 
-/// A server whose Archforge was killed is stopped politely at the next start-up, though its
+/// A killed Archforge's server stops at once and politely, with no start-up after the kill, and
+/// its watchdog ends too (AR-424).
+#[test]
+fn a_killed_archforges_server_stops_at_once_with_no_start_up_in_between() {
+    let env = Env::new("tied");
+    let (mut owner, server) = helper(&env);
+    let _guard = KillOnDrop(server);
+    // SIGKILL: no exit path of the owner runs.
+    owner.kill().unwrap();
+    owner.wait().unwrap();
+    assert!(wait_gone(server), "its watchdog stopped it");
+    assert!(!env.data().join(".dolt/sql-server.info").exists(), "it stopped politely, removing its lock");
+    let until = Instant::now() + Duration::from_secs(10);
+    while watched(server) && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!watched(server), "the watchdog ended too");
+}
+
+/// A server whose Archforge was killed with its watchdog is stopped politely at the next start-up, though its
 /// project is not opened, and its record and run folder go (AR-422).
 #[test]
 fn a_server_a_killed_archforge_left_running_is_stopped_at_start_up_without_opening_its_project() {
     let env = Env::new("orphan");
     let (mut owner, orphan) = helper(&env);
     let _guard = KillOnDrop(orphan);
-    owner.kill().unwrap();
-    owner.wait().unwrap();
-    assert!(alive(orphan), "the server outlives its owner");
+    self::orphan(&mut owner, orphan);
     assert_eq!(archforge_dolt::stop_orphans(&env.opts()).unwrap(), 1);
     assert!(wait_gone(orphan), "start-up stopped it");
     assert_eq!(env.leftovers(), (0, 0), "its record and run folder went with it");
@@ -330,8 +363,7 @@ fn a_dead_server_its_stale_socket_record_and_lock_do_not_stop_a_start() {
     let env = Env::new("stale");
     let (mut owner, server_pid) = helper(&env);
     let _guard = KillOnDrop(server_pid);
-    owner.kill().unwrap();
-    owner.wait().unwrap();
+    orphan(&mut owner, server_pid);
     Command::new("/bin/kill").args(["-KILL", &server_pid.to_string()]).status().unwrap();
     assert!(wait_gone(server_pid));
     assert!(env.data().join(".dolt/sql-server.info").exists(), "the killed server left its lock");
