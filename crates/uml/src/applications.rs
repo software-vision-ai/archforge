@@ -360,7 +360,8 @@ impl ValueProblem {
                     DefaultForm::UnlimitedNatural => Accepted::UnlimitedNatural,
                     DefaultForm::String | DefaultForm::Opaque => Accepted::Text,
                     DefaultForm::Enumeration(e) => {
-                        Accepted::Literals(crate::commands::literals(store, *e).into_iter().map(|l| name_of(store, l)).collect())
+                        let names: Vec<String> = crate::commands::literals(store, *e).into_iter().map(|l| name_of(store, l)).collect();
+                        if names.is_empty() { Accepted::NoLiterals { enumeration: name_of(store, *e) } } else { Accepted::Literals(names) }
                     }
                 };
                 ValueMisfit::Unread { value: v.clone(), accepted }

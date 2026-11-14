@@ -1302,6 +1302,7 @@ str		true or false.	true ou false.
 str		A whole number of 0 or more, or *.	Un nombre entier de 0 ou plus, ou *.
 str		Any text.	N’importe quel texte.
 str		One of {literals}.	L’un de {literals}.
+str		The enumeration {name} has no literals yet.	L’énumération {name} n’a encore aucun littéral.
 str		{name} holds at most {n} values.	{name} contient au plus {n} valeurs.
 str		{name} holds each value once, and {value} is there twice.	{name} contient chaque valeur une seule fois, et {value} y figure deux fois.
 str		A value is empty. Clear the field to show the default.	Une valeur est vide. Videz le champ pour afficher la valeur par défaut.

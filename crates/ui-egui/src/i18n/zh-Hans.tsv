@@ -1302,6 +1302,7 @@ str		true or false.	true 或 false。
 str		A whole number of 0 or more, or *.	0 或更大的整数，或 *。
 str		Any text.	任意文本。
 str		One of {literals}.	{literals} 之一。
+str		The enumeration {name} has no literals yet.	枚举 {name} 尚无字面量。
 str		{name} holds at most {n} values.	{name} 最多包含 {n} 个值。
 str		{name} holds each value once, and {value} is there twice.	{name} 每个值只能出现一次，而 {value} 出现了两次。
 str		A value is empty. Clear the field to show the default.	有一个值为空。清空该字段即可显示默认值。

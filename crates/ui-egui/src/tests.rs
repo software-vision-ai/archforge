@@ -5488,6 +5488,8 @@ fn a_value_refused_is_said_in_the_chosen_language() {
         let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
         let tags = id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "0..2" }));
         id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "state", "type": status }));
+        let phase = id(&mut h, "uml.enumeration.add", json!({ "package": commerce, "name": "Phase" }));
+        id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "phase", "type": phase }));
         id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
         id(&mut h, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
         let set = |property: &str, values: serde_json::Value| {
@@ -5513,6 +5515,8 @@ fn a_value_refused_is_said_in_the_chosen_language() {
             &[("value", "closed"), ("name", "state"), ("accepted", &fmt(&tr("One of {literals}."), &[("literals", "open, shut")]))],
         );
         assert_eq!(refused(&mut h, cmd, p), unread, "{theme:?}");
+        let (cmd, p) = set("phase", json!(["x"]));
+        assert_eq!(refused(&mut h, cmd, p), "x ist kein Wert von phase. Die Aufzählung Phase hat noch keine Literale.", "{theme:?}");
         // What each type reads, said from its reason.
         let types = [
             (Accepted::Integer, tr("A whole number, such as 42 or -7.")),

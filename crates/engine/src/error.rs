@@ -291,6 +291,8 @@ pub enum Accepted {
     Text,
     /// One of an enumeration's literals, by name.
     Literals(Vec<String>),
+    /// One of the literals of the enumeration named `enumeration`, which has none yet.
+    NoLiterals { enumeration: String },
 }
 
 /// What a [`Reason::LiteralValued`] names; boxed in the reason, so the error stays small.

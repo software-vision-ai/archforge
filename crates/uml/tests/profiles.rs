@@ -769,7 +769,8 @@ fn every_value_refused_carries_its_reason_typed() {
     let lazy = run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
     run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "eager" }));
     let tags = run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "0..2" }));
-    for (name, ty) in [("fetch", fetch.as_str()), ("rows", "Integer"), ("ratio", "Real"), ("limit", "UnlimitedNatural")] {
+    let bare = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Bare" }));
+    for (name, ty) in [("fetch", fetch.as_str()), ("rows", "Integer"), ("ratio", "Real"), ("limit", "UnlimitedNatural"), ("phase", bare.as_str())] {
         run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": name, "type": ty }));
     }
     run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
@@ -790,6 +791,7 @@ fn every_value_refused_carries_its_reason_typed() {
         ("cached", "yes", Accepted::Boolean, "a Boolean is true or false"),
         ("limit", "-1", Accepted::UnlimitedNatural, "an UnlimitedNatural is a whole number of 0 or more"),
         ("fetch", "never", Accepted::Literals(vec!["lazy".into(), "eager".into()]), "one of its literals: lazy, eager"),
+        ("phase", "x", Accepted::NoLiterals { enumeration: "Bare".into() }, "the enumeration Bare has no literals yet"),
     ] {
         check(&mut s, set_value, set(property, json!([value])), "values", values(property, unread(value, accepted)), english);
     }

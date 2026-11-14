@@ -568,6 +568,7 @@ fn values_said(values: &Values) -> String {
                 Accepted::UnlimitedNatural => tr("A whole number of 0 or more, or *."),
                 Accepted::Text => tr("Any text."),
                 Accepted::Literals(names) => fmt(&tr("One of {literals}."), &[("literals", &names.join(", "))]),
+                Accepted::NoLiterals { enumeration } => fmt(&tr("The enumeration {name} has no literals yet."), &[("name", enumeration)]),
             };
             fmt(&tr("{value} is no value of {name}. {accepted}"), &[("value", value), ("name", p_name), ("accepted", &accepted)])
         }

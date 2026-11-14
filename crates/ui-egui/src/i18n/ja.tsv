@@ -1302,6 +1302,7 @@ str		true or false.	true または false です。
 str		A whole number of 0 or more, or *.	0 以上の整数、または * です。
 str		Any text.	任意のテキストです。
 str		One of {literals}.	{literals} のいずれかです。
+str		The enumeration {name} has no literals yet.	列挙 {name} にはまだリテラルがありません。
 str		{name} holds at most {n} values.	{name} が持てる値は最大 {n} 個です。
 str		{name} holds each value once, and {value} is there twice.	{name} は各値を一度だけ持ちますが、{value} が二度あります。
 str		A value is empty. Clear the field to show the default.	空の値があります。既定値を表示するにはフィールドを空にしてください。

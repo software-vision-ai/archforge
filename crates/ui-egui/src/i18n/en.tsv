@@ -1301,6 +1301,7 @@ str		true or false.	true or false.
 str		A whole number of 0 or more, or *.	A whole number of 0 or more, or *.
 str		Any text.	Any text.
 str		One of {literals}.	One of {literals}.
+str		The enumeration {name} has no literals yet.	The enumeration {name} has no literals yet.
 str		{name} holds at most {n} values.	{name} holds at most {n} values.
 str		{name} holds each value once, and {value} is there twice.	{name} holds each value once, and {value} is there twice.
 str		A value is empty. Clear the field to show the default.	A value is empty. Clear the field to show the default.
