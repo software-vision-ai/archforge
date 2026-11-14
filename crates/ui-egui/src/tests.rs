@@ -4350,9 +4350,35 @@ fn the_menus_keys_stay_from_the_window_behind_and_esc_returns_the_focus() {
     }
 }
 
-/// The groups and rows are named; a row off is disabled, and says why only on hover.
+/// A menu closed by a click on its own title gives the keyboard back to the field it was opened
+/// on, as Esc does; a menu opened on no field asks for no focus.
+#[test]
+fn a_menu_closed_by_its_title_gives_the_keyboard_back() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = table_harness();
+        (h.state_mut().state.theme, h.state_mut().in_window_menu) = (theme, true);
+        h.run();
+        click_id(&mut h, "workspace.properties.columns.add");
+        click_id(&mut h, "workspace.properties.column.name");
+        let field = h.ctx.memory(egui::Memory::focused);
+        assert!(field.is_some() && h.ctx.text_edit_focused(), "{theme:?}");
+        click_menu(&mut h, "strip.menu.view");
+        assert_eq!(h.state().menu_bar.open, Some("view"), "{theme:?}");
+        click_menu(&mut h, "strip.menu.view");
+        assert_eq!((h.state().menu_bar.open, h.ctx.memory(egui::Memory::focused)), (None, field), "{theme:?}");
+        assert!(h.state().panels.column.is_some(), "{theme:?}: the editor it was in is still open");
+        let mut h = menu_harness(theme, true);
+        click_menu(&mut h, "strip.menu.view");
+        click_menu(&mut h, "strip.menu.view");
+        assert_eq!((h.state().menu_bar.open, h.ctx.memory(egui::Memory::focused)), (None, None), "{theme:?}");
+    }
+}
+
+/// The groups and rows are named menu items, the open group marked as open; a row off is disabled,
+/// and says why only on hover.
 #[test]
 fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {
+    use egui::accesskit::Role::MenuItem;
     use egui_kittest::kittest::{NodeT, Queryable};
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
@@ -4361,6 +4387,11 @@ fn rows_are_named_and_a_row_off_says_why_when_pointed_at() {
         let off = "Close a project to open another";
         let data = h.get_by_label("New project…").accesskit_node().data().clone();
         assert!(data.is_disabled() && data.description() == Some(off), "{theme:?}");
+        let said = |name: &str| h.get_by_label(name).accesskit_node().data().clone();
+        let roles = ["File", "Help", "New project…", "Quit Archforge"].map(|name| said(name).role());
+        assert_eq!(roles, [MenuItem; 4], "{theme:?}: titles and rows, on or off");
+        assert_eq!((said("File").is_expanded(), said("Help").is_expanded()), (Some(true), Some(false)), "{theme:?}");
+        assert!(!said("Quit Archforge").is_disabled(), "{theme:?}");
         assert!(h.get_by_label("Quit Archforge").accesskit_node().data().description().is_none(), "{theme:?}");
         assert!(
             h.query_by_label("File").is_some() && h.query_by_label("Help").is_some() && h.query_by_label(off).is_none(),

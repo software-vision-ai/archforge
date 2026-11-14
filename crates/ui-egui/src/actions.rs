@@ -312,6 +312,9 @@ pub(crate) fn free(shell: &Shell) -> bool {
     window && shell.explorer.delete.is_none() && shell.chat_panel.ask.is_none() && shell.diagrams.new.is_none()
 }
 
+/// Redo's second key, ⌘Y (Ctrl Y), which no menu shows.
+const REDO_TOO: Keys = Keys { modifiers: Modifiers::COMMAND, key: Key::Y };
+
 /// Whether `keys` were pressed in this frame, and takes them. Matched exactly: `consume_key` lets an
 /// extra Shift through, which would make ⇧⌘S save with Save version… off, and ⇧⌘Z undo with Redo off.
 fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {
@@ -321,7 +324,7 @@ fn pressed(ctx: &egui::Context, keys: &Keys) -> bool {
 
 /// Runs the actions whose keys were pressed in this frame, on every platform, while each is
 /// available. A field reads the Edit menu's keys itself, so they stay in the input while it has the
-/// keyboard. ⌘Y (Ctrl Y) is Redo's second key.
+/// keyboard. ⌘Y (Ctrl Y) is Redo's second key, matched as exactly as the table's.
 pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     let field = edit_menu::on_field(shell);
     for (action, keys) in ACTIONS.iter().filter_map(|a| Some((a, a.keys.as_ref()?))) {
@@ -329,7 +332,7 @@ pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
             (action.run)(shell);
         }
     }
-    if !field && available(shell, REDO) && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Y)) {
+    if !field && available(shell, REDO) && pressed(ctx, &REDO_TOO) {
         run(shell, REDO);
     }
 }
@@ -582,6 +585,21 @@ pub(crate) mod tests {
         shell.state.recent_sort = RecentSort::Name;
         let flipped = [APPEARANCE, VIEW, SORT].map(|id| label(&shell, id));
         assert_eq!(flipped, ["Switch to the light appearance", "Show recent projects as a list", "Sort recent projects by last opened"]);
+    }
+
+    /// No two rows of any menu share their keys but History and Back to current work, which are
+    /// never on together; and none has Redo's second key.
+    #[test]
+    fn only_history_and_back_share_their_keys() {
+        let keyed: Vec<(&str, &Keys)> =
+            ACTIONS.iter().chain(model_menu::rows()).chain(view_menu::ROWS).filter_map(|a| Some((a.id, a.keys.as_ref()?))).collect();
+        let same = |a: &Keys, b: &Keys| a.key == b.key && a.modifiers == b.modifiers;
+        let mut shared = Vec::new();
+        for (n, (first, keys)) in keyed.iter().enumerate() {
+            shared.extend(keyed[n + 1..].iter().filter(|(_, other)| same(keys, other)).map(|(second, _)| (*first, *second)));
+        }
+        assert_eq!(shared, [(VERSIONS, BACK)]);
+        assert!(keyed.iter().all(|(_, keys)| !same(keys, &REDO_TOO)));
     }
 
     /// Presses `key` with `modifiers`, the only input of a frame.

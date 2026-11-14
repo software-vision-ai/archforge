@@ -148,7 +148,8 @@ fn the_pointer_on_the_in_window_menu_reaches_the_field_it_was_opened_on() {
     }
 }
 
-/// With no field the rows and keys step the model; ⇧⌘Z is never Undo, and Ctrl Y is Redo's second key.
+/// With no field the rows and keys step the model; ⇧⌘Z is never Undo, and Ctrl Y is Redo's second
+/// key, alone: with Shift it is nothing.
 #[test]
 fn with_no_field_the_keys_step_the_model() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -170,6 +171,8 @@ fn with_no_field_the_keys_step_the_model() {
         key(&mut h, Key::Z, Modifiers::COMMAND);
         let undone = revision(&h);
         assert_ne!(undone, start);
+        key(&mut h, Key::Y, Modifiers::COMMAND | Modifiers::SHIFT);
+        assert_eq!(revision(&h), undone, "Shift makes it another chord, which redoes nothing");
         key(&mut h, Key::Y, Modifiers::COMMAND);
         assert_ne!(revision(&h), undone, "Ctrl Y redoes");
         assert!(!actions::available(h.state(), REDO));
