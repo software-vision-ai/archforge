@@ -12,9 +12,10 @@
 //! diagram. The rules are the model's (`archforge_uml::applications`): the shell asks them and says
 //! their answers in the user's words.
 
+use archforge_engine::{Accepted, ValueMisfit, Values};
 use archforge_mof::{Obj, Store, Uuid};
 use archforge_uml::applications::{self, Offer, ValueProblem};
-use archforge_uml::modifiers::{DefaultError, DefaultForm};
+use archforge_uml::modifiers::DefaultForm;
 use archforge_uml::profiles;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 use serde_json::json;
@@ -200,6 +201,18 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         }
         Reason::Unextended(u) => unextended(&u.stereotype, u.metaclass, &u.extends),
         Reason::ProfileOutOfScope { profile, package } => out_of_scope(profile, package),
+        Reason::Values(values) => values_said(values),
+        Reason::ValuesMisfit { name, elements, bounds } => {
+            let n = u64::try_from(*elements).ok()?;
+            fmt(
+                &trn("Values on {n} element don't fit {name} [{bounds}].", "Values on {n} elements don't fit {name} [{bounds}].", n),
+                &[("name", name), ("bounds", bounds)],
+            )
+        }
+        Reason::LiteralValued(v) => fmt(
+            &tr("The literal {literal} is the value of {property} in «{stereotype}» on {element}. Set another value there first."),
+            &[("literal", &v.literal), ("property", &v.property), ("stereotype", &v.stereotype), ("element", &v.element)],
+        ),
         _ => return None,
     })
 }
@@ -535,38 +548,39 @@ fn value_line(
     below
 }
 
-/// Why typed values do not fit, in the user's words.
+/// Why typed values do not fit, in the user's words: as the engine's refusal of them says it.
 fn value_refusal(store: &Store, property: Obj, problem: &ValueProblem) -> String {
-    let p_name = name(store, property);
-    match problem {
-        ValueProblem::TooMany => fmt(&tr("{name} holds at most {n} values."), &[("name", &p_name), ("n", &applications::MAX_VALUES.to_string())]),
-        ValueProblem::Empty => tr("A value is empty. Clear the field to show the default."),
-        ValueProblem::Malformed(DefaultError::TooLong) => {
-            fmt(&tr("A value is longer than {n} characters."), &[("n", &archforge_uml::modifiers::MAX_DEFAULT.to_string())])
-        }
-        ValueProblem::Malformed(DefaultError::Malformed(v, form)) => {
-            let accepted = match form {
-                DefaultForm::Integer => tr("A whole number, such as 42 or -7."),
-                DefaultForm::Real => tr("A number, such as 2.5 or -1e3."),
-                DefaultForm::Boolean => tr("true or false."),
-                DefaultForm::UnlimitedNatural => tr("A whole number of 0 or more, or *."),
-                DefaultForm::String | DefaultForm::Opaque => tr("Any text."),
-                DefaultForm::Enumeration(e) => {
-                    let names: Vec<String> = archforge_uml::commands::literals(store, *e).into_iter().map(|l| name(store, l)).collect();
-                    fmt(&tr("One of {literals}."), &[("literals", &names.join(", "))])
-                }
+    values_said(&problem.typed(store, property))
+}
+
+/// Values that do not fit their stereotype property, in the user's words.
+fn values_said(values: &Values) -> String {
+    let p_name = values.property.as_str();
+    match &values.misfit {
+        ValueMisfit::TooMany { max } => fmt(&tr("{name} holds at most {n} values."), &[("name", p_name), ("n", &max.to_string())]),
+        ValueMisfit::Empty => tr("A value is empty. Clear the field to show the default."),
+        ValueMisfit::TooLong { max } => fmt(&tr("A value is longer than {n} characters."), &[("n", &max.to_string())]),
+        ValueMisfit::Unread { value, accepted } => {
+            let accepted = match accepted {
+                Accepted::Integer => tr("A whole number, such as 42 or -7."),
+                Accepted::Real => tr("A number, such as 2.5 or -1e3."),
+                Accepted::Boolean => tr("true or false."),
+                Accepted::UnlimitedNatural => tr("A whole number of 0 or more, or *."),
+                Accepted::Text => tr("Any text."),
+                Accepted::Literals(names) => fmt(&tr("One of {literals}."), &[("literals", &names.join(", "))]),
+                Accepted::NoLiterals { enumeration } => fmt(&tr("The enumeration {name} has no literals yet."), &[("name", enumeration)]),
             };
-            fmt(&tr("{value} is no value of {name}. {accepted}"), &[("value", v), ("name", &p_name), ("accepted", &accepted)])
+            fmt(&tr("{value} is no value of {name}. {accepted}"), &[("value", value), ("name", p_name), ("accepted", &accepted)])
         }
-        ValueProblem::Count(n, lower, upper) => {
+        ValueMisfit::Count { given, lower, upper } => {
             let bounds = applications::bounds_text(*lower, *upper);
-            let given = u64::try_from(*n).unwrap_or(u64::MAX);
+            let given = u64::try_from(*given).unwrap_or(u64::MAX);
             fmt(
                 &trn("{name} holds [{bounds}] values; {n} is given.", "{name} holds [{bounds}] values; {n} are given.", given),
-                &[("name", &p_name), ("bounds", &bounds)],
+                &[("name", p_name), ("bounds", &bounds)],
             )
         }
-        ValueProblem::Twice(v) => fmt(&tr("{name} holds each value once, and {value} is there twice."), &[("name", &p_name), ("value", v)]),
+        ValueMisfit::Twice { value } => fmt(&tr("{name} holds each value once, and {value} is there twice."), &[("name", p_name), ("value", value)]),
     }
 }
 

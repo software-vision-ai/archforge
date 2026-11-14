@@ -757,6 +757,68 @@ fn a_stranding_move_and_the_last_profile_refusals_carry_their_reasons_typed() {
     );
 }
 
+/// Values that do not fit their stereotype property, a property reshaped so the values set would
+/// not fit, and a literal a value names removed, refused, carry their reason typed beside the
+/// unchanged English, under the parameter each is about (AR-458).
+#[test]
+fn every_value_refused_carries_its_reason_typed() {
+    use archforge_engine::{Accepted, EngineError, LiteralValued, Reason, ValueMisfit, Values};
+    let mut s = session();
+    let [commerce, order, _, _, _, entity, ..] = applied_shop(&mut s);
+    let fetch = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Fetch" }));
+    let lazy = run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "lazy" }));
+    run(&mut s, "uml.literal.add", json!({ "enumeration": fetch, "name": "eager" }));
+    let tags = run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": "tags", "type": "String", "multiplicity": "0..2" }));
+    let bare = run(&mut s, "uml.enumeration.add", json!({ "package": commerce, "name": "Bare" }));
+    for (name, ty) in [("fetch", fetch.as_str()), ("rows", "Integer"), ("ratio", "Real"), ("limit", "UnlimitedNatural"), ("phase", bare.as_str())] {
+        run(&mut s, "uml.attribute.add", json!({ "class": entity, "name": name, "type": ty }));
+    }
+    run(&mut s, "uml.stereotype.apply", json!({ "element": order, "stereotype": entity }));
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{p}: {}", error.message);
+        assert!(error.message.contains(english), "{p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{p} changed nothing");
+    };
+    let set = |property: &str, values: Json| json!({ "element": order, "stereotype": entity, "property": property, "values": values });
+    let values = |property: &str, misfit| Reason::Values(Box::new(Values { property: property.into(), misfit }));
+    let set_value = "uml.stereotype.set-value";
+    let unread = |value: &str, accepted| ValueMisfit::Unread { value: value.into(), accepted };
+    for (property, value, accepted, english) in [
+        ("rows", "many", Accepted::Integer, "\"many\" is no value of rows: an Integer is a whole number"),
+        ("ratio", "NaN", Accepted::Real, "a Real is a number"),
+        ("cached", "yes", Accepted::Boolean, "a Boolean is true or false"),
+        ("limit", "-1", Accepted::UnlimitedNatural, "an UnlimitedNatural is a whole number of 0 or more"),
+        ("fetch", "never", Accepted::Literals(vec!["lazy".into(), "eager".into()]), "one of its literals: lazy, eager"),
+        ("phase", "x", Accepted::NoLiterals { enumeration: "Bare".into() }, "the enumeration Bare has no literals yet"),
+    ] {
+        check(&mut s, set_value, set(property, json!([value])), "values", values(property, unread(value, accepted)), english);
+    }
+    check(&mut s, set_value, set("tags", json!(["  "])), "values", values("tags", ValueMisfit::Empty), "a value is empty");
+    let long = "x".repeat(archforge_uml::modifiers::MAX_DEFAULT + 1);
+    check(&mut s, set_value, set("tags", json!([long])), "values", values("tags", ValueMisfit::TooLong { max: 1000 }), "longer than 1000");
+    let count = ValueMisfit::Count { given: 3, lower: 0, upper: Some(2) };
+    check(&mut s, set_value, set("tags", json!(["a", "b", "c"])), "values", values("tags", count), "[0..2], does not allow 3 values");
+    let twice = ValueMisfit::Twice { value: "a".into() };
+    check(&mut s, set_value, set("tags", json!(["a", "a"])), "values", values("tags", twice), "tags is unique and holds \"a\" twice");
+    // More than the most is refused as the list is read, before the property; typed all the same.
+    let st = s.doc();
+    let tags_p = obj(st, &tags);
+    let most = applications::read_values(st, tags_p, &vec![String::new(); applications::MAX_VALUES + 1]).unwrap_err().typed(st, tags_p);
+    assert_eq!(most, Values { property: "tags".into(), misfit: ValueMisfit::TooMany { max: 256 } });
+    // A property reshaped so the values set would not fit, and a literal a value names.
+    run(&mut s, set_value, set("tags", json!(["a", "b"])));
+    run(&mut s, set_value, set("fetch", json!(["lazy"])));
+    let retyped = Reason::ValuesSet { name: "tags".into(), elements: 1 };
+    check(&mut s, "uml.attribute.set", json!({ "attribute": tags, "type": "Integer" }), "type", retyped, "clear them before giving it another type");
+    let narrower = Reason::ValuesMisfit { name: "tags".into(), elements: 1, bounds: "0..1".into() };
+    check(&mut s, "uml.attribute.set", json!({ "attribute": tags, "multiplicity": "0..1" }), "multiplicity", narrower, "do not fit tags [0..1]");
+    let valued = LiteralValued { literal: "lazy".into(), property: "fetch".into(), stereotype: "Entity".into(), element: "Order".into() };
+    let valued = Reason::LiteralValued(Box::new(valued));
+    check(&mut s, "element.remove", json!({ "ids": [lazy] }), "ids", valued, "the literal lazy is the value of fetch in «Entity» on Order");
+}
+
 /// The session `s` with the package `package` moved to the model's top level, as a project made
 /// before the root package keeps one: removed, it takes what it holds along.
 fn at_top(s: &S, package: &str) -> S {
