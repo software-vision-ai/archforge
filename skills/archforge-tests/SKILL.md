@@ -47,6 +47,13 @@ description: "Use when writing, placing or running tests in Archforge: a regress
   and finds controls by automation id (`harness` and `click` in `crates/ui-egui/src/tests.rs`).
   Every harness pins the language with `set_language`; `every_harness_pins_the_language` fails a
   harness that does not.
+- A screen test scrolls to a control before it presses it, at the design's window height, and never
+  makes the window taller to reach it. A panel's scrolled body lists a control only while part of it
+  is inside the body (`record_visible` in `crates/ui-egui/src/widgets.rs`), so a control under the
+  fold is not found, and one the fold cuts is found with a centre no press reaches. What a click
+  adds above a control (a refusal under a field) moves it too: find it again after every press.
+  `reached_in_properties` in `crates/ui-egui/src/tests.rs` wheels the Properties body until the
+  control's centre is inside it.
 - A test that touches the disk works in its own folder in the temporary directory, named with the
   process id, and removes it at the end.
 - Every crash fix ships a regression test that failed before the fix
