@@ -5,7 +5,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 use crate::Error;
@@ -41,15 +41,54 @@ pub(crate) fn command(program: &Path, env: &[(OsString, OsString)]) -> Command {
     c
 }
 
-/// Held while a child starts.
-static STARTING: Mutex<()> = Mutex::new(());
+/// Held while a child starts: shared by every start but a watchdog's, which holds it alone.
+static STARTING: RwLock<()> = RwLock::new(());
+/// The longest a start waits for its turn. A start takes a moment, so a longer wait means one
+/// has stalled.
+pub(crate) const START_WAIT: Duration = Duration::from_millis(500);
 
-/// Starts `c`, one start of this crate at a time: where a pipe's close-on-exec mark is set only
-/// after the pipe is made (macOS), a child started in between would inherit the pipe and hold it
-/// open, so a helper's output or a watchdog's input would not end when it should. A start that
-/// hangs holds the others up meanwhile.
-pub(crate) fn spawn(c: &mut Command) -> std::io::Result<Child> {
-    let _one = STARTING.lock().unwrap_or_else(PoisonError::into_inner);
+/// A start's hold on [`STARTING`], shared or alone.
+type Turn = (Option<RwLockReadGuard<'static, ()>>, Option<RwLockWriteGuard<'static, ()>>);
+
+/// Waits at most [`START_WAIT`] for a turn to start a child, `alone` or beside other starts;
+/// `None` when a stalled start still holds it then. A poisoned lock is taken all the same: it
+/// guards no data.
+fn turn(alone: bool) -> Option<Turn> {
+    let asked = Instant::now();
+    loop {
+        let got = if alone {
+            match STARTING.try_write() {
+                Ok(g) => Some((None, Some(g))),
+                Err(TryLockError::Poisoned(p)) => Some((None, Some(p.into_inner()))),
+                Err(TryLockError::WouldBlock) => None,
+            }
+        } else {
+            match STARTING.try_read() {
+                Ok(g) => Some((Some(g), None)),
+                Err(TryLockError::Poisoned(p)) => Some((Some(p.into_inner()), None)),
+                Err(TryLockError::WouldBlock) => None,
+            }
+        };
+        if got.is_some() || asked.elapsed() >= START_WAIT {
+            return got;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// Starts `c`. Where a pipe's close-on-exec mark is set only after the pipe is made (macOS), a
+/// child started in between inherits the pipe and holds it open. For a helper's output that ends
+/// with the child. For a watchdog's input it must not happen, so a watchdog starts `alone`, with
+/// no other start of this crate under way, and every other start only keeps out of a watchdog's.
+/// No start waits longer than [`START_WAIT`] for that: a stalled one never holds up a stop or a
+/// recovery elsewhere. A start that goes ahead without its turn is logged; it may inherit, or as
+/// a watchdog's let inherit, the pipe of a watchdog starting then, which delays that watchdog as
+/// [`crate::watchdog`] says.
+pub(crate) fn spawn(c: &mut Command, alone: bool) -> std::io::Result<Child> {
+    let turn = turn(alone);
+    if turn.is_none() {
+        log::warn!("another start of a database program has stalled; {:?} starts beside it", c.get_program());
+    }
     c.spawn()
 }
 
@@ -58,10 +97,11 @@ pub(crate) fn run(program: &Path, args: &[&OsStr], env: &[(OsString, OsString)],
     let name = program.display().to_string();
     let mut c = command(program, env);
     c.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = spawn(&mut c).map_err(|e| Error::io("cannot run", program, e))?;
+    // The wait for a turn to start counts against the budget.
+    let started = Instant::now();
+    let mut child = spawn(&mut c, false).map_err(|e| Error::io("cannot run", program, e))?;
     let out = child.stdout.take().map(|s| std::thread::spawn(move || drain(s)));
     let err = child.stderr.take().map(|s| std::thread::spawn(move || drain(s)));
-    let started = Instant::now();
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
@@ -129,6 +169,25 @@ mod tests {
         // The environment is cleared but for the kept variables.
         let env = run(Path::new("/usr/bin/env"), &[], &[(OsString::from("ONLY"), OsString::from("this"))], HELPER_BUDGET).unwrap();
         assert_eq!(env.stdout, "ONLY=this\n");
+    }
+
+    /// A watchdog's start that has stalled holds its turn alone: a stop's helper elsewhere waits
+    /// no longer than [`START_WAIT`] and runs; and starts that share never keep each other out.
+    #[test]
+    fn a_stalled_start_never_holds_up_another_projects_helper() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let stalled = STARTING.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        std::thread::spawn(move || tx.send(run(Path::new("/bin/sh"), &[OsStr::new("-c"), OsStr::new("echo ran")], &base_env(), HELPER_BUDGET)));
+        let out = rx.recv_timeout(START_WAIT + HELPER_BUDGET).expect("the helper ran though a start is stalled").unwrap();
+        assert_eq!(out.stdout, "ran\n");
+        drop(stalled);
+        let ordinary = STARTING.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(matches!(turn(false), Some((Some(_), None))), "a stalled ordinary start shares its turn with other starts");
+        assert!(turn(true).is_none(), "and a watchdog waits its limit for it, no longer");
+        drop(ordinary);
+        // Other tests' starts share the turn meanwhile, each for a moment.
+        let alone = std::iter::repeat_with(|| turn(true)).take(20).flatten().next();
+        assert!(matches!(alone, Some((None, Some(_)))) && STARTING.try_read().is_err(), "a watchdog starts alone");
     }
 
     #[test]

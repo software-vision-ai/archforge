@@ -9,10 +9,13 @@
 //! Who holds the write end decides when that is. The standard library marks it close-on-exec, so
 //! no program started later inherits it, and the server is started before its watchdog. On Linux
 //! the mark is set as the pipe is made. On macOS it is set just after, so a program another thread
-//! starts in between would inherit the write end: [`runner::spawn`](crate::runner::spawn) keeps
-//! this crate's own starts apart, and a start elsewhere in the application that hits that moment
-//! delays the watchdog until that program and everything it started have ended. The start-up sweep
-//! covers that case, as it does a system without `/bin/ps` or the UTF-8 locale named below, where
+//! starts in between would inherit the write end. [`runner::spawn`](crate::runner::spawn) starts a
+//! watchdog with no other start of this crate under way, unless one has stalled: nothing waits for
+//! a stalled start past a short limit, so that a stop or a recovery elsewhere is never held up. A
+//! program started in that moment all the same, beside a stalled start or elsewhere in the
+//! application, delays the watchdog until it and everything it started have ended: a helper for
+//! its few seconds at most, a server for as long as it runs. The start-up sweep covers that case,
+//! as it does a system without `/bin/ps` or the UTF-8 locale named below, where
 //! the watchdog proves nothing and so sends nothing.
 
 use std::process::Child;
@@ -55,7 +58,7 @@ impl Watchdog {
         let mut c = crate::runner::command(sh, &env);
         c.args(["-c", SCRIPT, NAME]).arg(server.to_string());
         c.current_dir("/").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
-        match crate::runner::spawn(&mut c) {
+        match crate::runner::spawn(&mut c, true) {
             Ok(child) => Watchdog(Some(child)),
             Err(e) => {
                 log::warn!("the database server {server} has no watchdog, so only the next start-up stops it if Archforge is killed: {e}");

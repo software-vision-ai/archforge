@@ -402,7 +402,7 @@ fn launch(
         env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
         let mut c = runner::command(dolt.path(), &env);
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
-        let mut child = runner::spawn(&mut c).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+        let mut child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
         // From here on a killed Archforge takes this server with it. The watchdog ends with this
         // turn of the loop or with the `Server`, in both after the attempt to stop the server.
         let watchdog = Watchdog::tie(child.id(), &command);

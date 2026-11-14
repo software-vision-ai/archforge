@@ -9,7 +9,9 @@ included, the watchdog stops the server politely at once, if the process is stil
 start-up sweep stays the backstop: for Windows, and for a watchdog that was killed too, could not
 start, could not prove the server (no `/bin/ps`, no `C.UTF-8` locale for a command line outside
 ASCII), or was held up by another program that inherited the pipe (possible on macOS only) until
-that program and everything it started ended.
+that program and everything it started ended. A watchdog starts with no other start of this crate
+under way, so none of them inherits its pipe; no start waits for another longer than half a second,
+so a stalled start never holds up a stop or a recovery of another project.
 
 **Layer.** Host services, layer 9: the application uses it, the interface never depends on it, and
 the portable-target check leaves it out. No toolkit.
