@@ -403,9 +403,6 @@ fn launch(
         let mut c = runner::command(dolt.path(), &env);
         c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
         let mut child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
-        // From here on a killed Archforge takes this server with it. The watchdog ends with this
-        // turn of the loop or with the `Server`, in both after the attempt to stop the server.
-        let watchdog = Watchdog::tie(child.id(), &command);
         let rec = Record {
             data_dir: data_text.to_string(),
             server_pid: child.id(),
@@ -418,6 +415,9 @@ fn launch(
         // Another start may have recorded a server since recovery looked: its record stays, and this
         // one gives way.
         match record::write_new(&opts.records, &rec) {
+            #[cfg(all(test, unix))]
+            Ok(true) => tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id()))),
+            #[cfg(not(all(test, unix)))]
             Ok(true) => {}
             Ok(false) => {
                 stop_quietly(&mut child, opts.stop_budget);
@@ -429,6 +429,11 @@ fn launch(
                 return Err(e);
             }
         }
+        // The record comes first: the watchdog may wait for its turn to start, and a server of an
+        // Archforge killed meanwhile is one the start-up sweep finds by its record. From here on a
+        // killed Archforge takes this server with it. The watchdog ends with this turn of the loop
+        // or with the `Server`, in both after the attempt to stop the server.
+        let watchdog = Watchdog::tie(child.id(), &command);
         match wait_ready(&mut child, data_dir, socket.as_deref(), port, &password, &log_path, opts.ready_budget) {
             Ok(()) => {
                 return Ok(Server {
@@ -558,6 +563,33 @@ fn tail(log: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    thread_local! {
+        /// Whether the watchdog of the server this thread last started ran when its record was written.
+        pub(super) static WATCHED_AT_RECORD: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// Whether the watchdog of the server `server` runs.
+    #[cfg(unix)]
+    pub(super) fn watched(server: u32) -> bool {
+        let watchdog = format!("archforge-server-watchdog {server}$");
+        std::process::Command::new("/usr/bin/pgrep").args(["-f", &watchdog]).stdout(Stdio::null()).status().is_ok_and(|s| s.success())
+    }
+
+    /// An Archforge killed between the two leaves a server the start-up sweep finds by its record.
+    /// Needs dolt, as the tests in `tests/server.rs` do.
+    #[cfg(unix)]
+    #[test]
+    fn a_server_is_recorded_before_its_watchdog_starts() {
+        let dir = crate::home::tests::Scratch::new("order");
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts = ServerOptions { ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        let server = Server::start(&dolt, &dir.0.join("data"), &opts).unwrap();
+        assert!(watched(server.pid()), "the watchdog runs once the server has started");
+        server.stop().unwrap();
+        assert_eq!(WATCHED_AT_RECORD.get(), Some(false));
+    }
 
     /// A record another start wrote after this one was read stays; the one read goes.
     #[test]
