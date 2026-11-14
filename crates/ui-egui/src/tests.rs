@@ -8,6 +8,7 @@ use crate::{Services, Shell, UiState};
 
 mod branches;
 mod edit_menu;
+mod editor_refusals;
 mod field_keys;
 mod model_menu;
 mod read_only;
@@ -5311,8 +5312,9 @@ fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos
 /// description too long; and braces with nothing to sit by are said under the editor's form
 /// buttons, any other refusal of Apply under it, with nothing written, and Cancel closes the
 /// editor. In a window of the design's height, where the German panel's Constraints section is cut
-/// by the fold and a refusal moves the editor's buttons under it, so the body is scrolled to each
-/// control before it is pressed (AR-467). In light and dark (AR-447).
+/// by the fold, so the body is scrolled to the section and the editor before they are pressed
+/// (AR-467); a refusal brings the editor's buttons back into view (AR-469). In light and dark
+/// (AR-447).
 #[test]
 fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr};
@@ -5370,24 +5372,26 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         assert!(braces.starts_with("Geschweifte Klammern") && painted(&h).contains(&braces), "{theme:?}: said in German in the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // Any other refusal of Apply is said under it, as a sentence: here the diagram as the element.
+        // The refusal brought the editor's foot into view (AR-469): Apply is pressed where it shows.
         let shown = h.state().canvas.active.unwrap();
         h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
         h.run();
-        let at = reached_in_properties(&mut h, "workspace.properties.constraint.apply");
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
         let edit = h.state().panels.constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
-        // A control above what shows is not listed either: it is found by wheeling up.
+        // A control above what shows is not listed either.
         let above = "workspace.properties.attributes.add";
         assert!(!ids(&h).iter().any(|i| i == above), "{theme:?}: Attributes is scrolled out above the editor's foot");
-        let at = reached_in_properties(&mut h, above);
-        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
-        // Cancel, under the refusal, closes the editor and writes nothing.
-        let at = reached_in_properties(&mut h, "workspace.properties.constraint.cancel");
+        // Cancel, under the refusal and in view with it, closes the editor and writes nothing.
+        let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
         click(&mut h, at);
         assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // The control above is found by wheeling up.
+        let at = reached_in_properties(&mut h, above);
+        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
     }
     crate::i18n::set_language("en");
 }
