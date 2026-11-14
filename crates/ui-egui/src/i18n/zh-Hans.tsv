@@ -1039,8 +1039,6 @@ str		Remove from recent projects	从最近的项目中移除
 str		Pick up in the exact view you left.	从你离开时的视图继续。
 str		Last view: {name}	上次的视图：{name}
 str		Just now	刚刚
-plural		{n} minute ago	{n} 分钟前
-plural		{n} hour ago	{n} 小时前
 str		Yesterday	昨天
 plural		{n} day ago	{n} 天前
 str		Last opened	上次打开

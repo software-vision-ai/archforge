@@ -1039,8 +1039,6 @@ str		Remove from recent projects	Retirer des projets récents
 str		Pick up in the exact view you left.	Reprenez exactement dans la vue où vous vous étiez arrêté.
 str		Last view: {name}	Dernière vue : {name}
 str		Just now	À l’instant
-plural		{n} minute ago	il y a {n} minute|il y a {n} minutes
-plural		{n} hour ago	il y a {n} heure|il y a {n} heures
 str		Yesterday	Hier
 plural		{n} day ago	il y a {n} jour|il y a {n} jours
 str		Last opened	Dernière ouverture

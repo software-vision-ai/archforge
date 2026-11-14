@@ -4,8 +4,9 @@
 //! string and embedded in the binary; the build script refuses a malformed row. Each row has four
 //! columns: kind, context, key, text. Kinds: `str` (a wrapped literal, with an optional context
 //! for ambiguous words) and `plural` (key is the English singular; text holds the plural forms
-//! separated by `|`). Every row is read by the shell or by the desktop app (its menu). Rows go
-//! beside related entries, never at the end of the file.
+//! separated by `|`). Every row is read by the shell or by the desktop app (its menu), and each key
+//! is in a catalogue once: a `str` row by its context and key, a `plural` row by its key alone, as
+//! `parse` reads them. Rows go beside related entries, never at the end of the file.
 //!
 //! Lookup happens at draw time, so a language change applies on the next frame; the
 //! language is a per-thread setting, and every test harness pins it.
