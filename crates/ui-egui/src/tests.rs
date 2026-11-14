@@ -5416,11 +5416,11 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
         let mut refused = |key: &str, list: serde_json::Value| {
             crate::panels::run(h.state_mut(), "uml.attribute.set", json!({ "attribute": lines, key: list })).err().unwrap_or_default()
         };
-        let most = |template: &str| fmt(&tr(template), &[("max", "32")]);
-        let subsets_most = most("A property subsets at most {max} properties.");
+        let most = |said: String| fmt(&said, &[("max", "32")]);
+        let subsets_most = most(tr("A property subsets at most {max} properties."));
         assert_eq!(subsets_most, "Eine Eigenschaft ist Teilmenge von höchstens 32 Eigenschaften.", "{theme:?}: the language is German");
         assert_eq!(refused("subsets", json!(vec![&all; 33])), subsets_most, "{theme:?}");
-        assert_eq!(refused("redefines", json!(vec![&all; 33])), most("A property redefines at most {max} properties."), "{theme:?}");
+        assert_eq!(refused("redefines", json!(vec![&all; 33])), most(tr("A property redefines at most {max} properties.")), "{theme:?}");
         let key = fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", "kind")]);
         assert_eq!(refused("subsets", json!([{ "id": all, "kind": "x" }])), key, "{theme:?}");
         assert_eq!(refused("redefines", json!([7])), tr("Give the properties as a list of ids."), "{theme:?}");
