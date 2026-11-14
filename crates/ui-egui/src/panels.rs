@@ -15,7 +15,7 @@ use egui::{Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 use serde_json::json;
 
 use crate::home::control;
-use crate::i18n::{fmt, tr, tr_ctx};
+use crate::i18n::{fmt, tr, tr_ctx, trn};
 use crate::notation_ui::Words;
 use crate::state::Panel;
 use crate::ux::{self, Palette, icons, types};
@@ -438,7 +438,7 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
             return Some(fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", name)]));
         }
         other => {
-            return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other));
+            return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other)).or_else(|| profile_said(other));
         }
     };
     let what = a_kind(kind)?;
@@ -446,6 +446,39 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
     let what =
         if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
     Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A profile's or a stereotype's rule broken; none for a reason or a kind the catalogues don't say.
+fn profile_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_engine::Reason;
+    let offered = || archforge_uml::profiles::METACLASSES.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ");
+    Some(match reason {
+        Reason::ProfileApplied { package, profile } => {
+            fmt(&tr("{package} applies {profile} already."), &[("package", package), ("profile", profile)])
+        }
+        Reason::ProfileNotApplied { package, profile } => {
+            fmt(&tr("{package} does not apply {profile}."), &[("package", package), ("profile", profile)])
+        }
+        Reason::TooMany { kind: "stereotype", max } => fmt(&tr("A profile holds at most {max} stereotypes."), &[("max", &max.to_string())]),
+        Reason::TooMany { kind: "metaclass", max } => fmt(&tr("A stereotype extends at most {max} metaclasses."), &[("max", &max.to_string())]),
+        Reason::MetaclassNotDrawn { name } => fmt(
+            &tr("{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}."),
+            &[("name", name), ("metaclasses", &offered())],
+        ),
+        Reason::NotAMetaclass { name } => {
+            fmt(&tr("{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}."), &[("name", name), ("metaclasses", &offered())])
+        }
+        Reason::NamedTwice { kind: "metaclass", name } => fmt(&tr("{name} is named twice. Name each metaclass once."), &[("name", name)]),
+        Reason::ExtensionEnd { name } => {
+            fmt(&tr("{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead."), &[("name", name)])
+        }
+        Reason::ValuesSet { name, elements } => {
+            let n = u64::try_from(*elements).ok()?;
+            let set = trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", n);
+            fmt(&set, &[("name", name)])
+        }
+        _ => return None,
+    })
 }
 
 /// A relationship's rule broken, in the words the canvas says it with; none for a reason or a kind

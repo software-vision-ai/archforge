@@ -1209,6 +1209,15 @@ str		Metaclasses carry no skills	元类不带技能
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	构造型所扩展的 UML 元类。它属于 UML 本身，不出现在模型和类型菜单中，也从不改变。
 str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML 库包含构造型所扩展的元类。它从不改变。
 str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} 是 UML 元类，保存在 UML 库中。它从不改变。
+str		{package} applies {profile} already.	{package} 已应用 {profile}。
+str		{package} does not apply {profile}.	{package} 未应用 {profile}。
+str		A profile holds at most {max} stereotypes.	一个配置文件最多包含 {max} 个构造型。
+str		A stereotype extends at most {max} metaclasses.	一个构造型最多扩展 {max} 个元类。
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} 是 Archforge 尚未绘制的 UML 元类。构造型可扩展 {metaclasses}。
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} 不是 Archforge 绘制的元类。构造型可扩展 {metaclasses}。
+str		{name} is named twice. Name each metaclass once.	{name} 被指定了两次。每个元类只指定一次。
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} 是构造型的扩展端。请改为从该构造型扩展的内容中去掉这个元类。
+plural		{name} has values on {n} element. Remove those first.	{name} 在 {n} 个元素上设有值。请先移除这些值。
 str		Stereotypes · {n}	构造型 · {n}
 str		Add stereotype	添加构造型
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。

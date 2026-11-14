@@ -5014,6 +5014,73 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A profile's and a stereotype's own rules, refused by the engine, are said in the chosen language:
+/// a profile applied twice or not applied, the metaclasses a stereotype may not extend, an
+/// extension end, a property whose values are set, and a full profile. In light and dark (AR-445).
+#[test]
+fn a_profile_rule_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, trn};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let id = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string()
+        };
+        let refused = |h: &mut egui_kittest::Harness<'_, crate::Shell>, cmd: &str, p: serde_json::Value| {
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        let [commerce, tools] = ["Commerce", "Tools"].map(|n| id(&mut h, "uml.package.add", json!({ "name": n })));
+        let [order, customer] = ["Order", "Customer"].map(|n| id(&mut h, "uml.class.add", json!({ "package": commerce, "name": n })));
+        let persistence = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": persistence, "name": "Entity", "extends": ["Class"] }));
+        let table = id(&mut h, "uml.attribute.add", json!({ "class": entity, "name": "table", "type": "String" }));
+        id(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence }));
+        let pair = |package: &str| [("package", package.to_string()), ("profile", "Persistence".to_string())];
+        let filled = |template: String, args: &[(&str, String)]| fmt(&template, &args.iter().map(|(k, v)| (*k, v.as_str())).collect::<Vec<_>>());
+        let already = filled(tr("{package} applies {profile} already."), &pair("Commerce"));
+        assert_eq!(already, "Commerce wendet Persistence bereits an.", "{theme:?}: the language is German");
+        assert_eq!(refused(&mut h, "uml.profile.apply", json!({ "package": commerce, "profile": persistence })), already, "{theme:?}");
+        let not_applied = filled(tr("{package} does not apply {profile}."), &pair("Tools"));
+        assert_eq!(refused(&mut h, "uml.profile.unapply", json!({ "package": tools, "profile": persistence })), not_applied, "{theme:?}");
+        // The metaclasses a stereotype may not extend, with the ones it may.
+        let offered = "Class, Interface, Enumeration, DataType, Property, Operation, Association, Generalization, Package".to_string();
+        let extends = |names: serde_json::Value| json!({ "stereotype": entity, "extends": names });
+        let named = |name: &str| [("name", name.to_string()), ("metaclasses", offered.clone())];
+        let not_drawn = filled(tr("{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}."), &named("Actor"));
+        assert_eq!(refused(&mut h, "uml.stereotype.set", extends(json!(["Actor"]))), not_drawn, "{theme:?}");
+        let none = filled(tr("{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}."), &named("Table"));
+        assert_eq!(refused(&mut h, "uml.stereotype.set", extends(json!(["Table"]))), none, "{theme:?}");
+        let twice = fmt(&tr("{name} is named twice. Name each metaclass once."), &[("name", "Class")]);
+        assert_eq!(refused(&mut h, "uml.stereotype.set", extends(json!(["Class", "Class"]))), twice, "{theme:?}");
+        let most = fmt(&tr("A stereotype extends at most {max} metaclasses."), &[("max", "9")]);
+        assert_eq!(refused(&mut h, "uml.stereotype.set", extends(json!(vec!["Class"; 10]))), most, "{theme:?}");
+        // An extension's end, and a property whose values are set on one element, then on two.
+        let base = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let stereotype = st.by_uuid(archforge_mof::Uuid::parse(&entity).unwrap()).unwrap();
+            st.uuid(archforge_uml::profiles::extensions(st, stereotype)[0].base).unwrap().to_string()
+        };
+        let end = tr("{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.");
+        assert_eq!(refused(&mut h, "element.remove", json!({ "ids": [base] })), fmt(&end, &[("name", "base_Class")]), "{theme:?}");
+        for (class, n) in [(&order, 1), (&customer, 2)] {
+            id(&mut h, "uml.stereotype.apply", json!({ "element": class, "stereotype": entity }));
+            id(&mut h, "uml.stereotype.set-value", json!({ "element": class, "stereotype": entity, "property": "table", "values": ["t"] }));
+            let set = trn("{name} has values on {n} element. Remove those first.", "{name} has values on {n} elements. Remove those first.", n);
+            let set = fmt(&set, &[("name", "table")]);
+            assert!(set.starts_with(&format!("table hat Werte an {n} Element")), "{theme:?}: {set}");
+            assert_eq!(refused(&mut h, "element.remove", json!({ "ids": [table] })), set, "{theme:?}");
+        }
+        // A full profile, which takes 256 stereotypes to reach, is said from its reason.
+        let full = crate::panels::said(&Reason::TooMany { kind: "stereotype", max: 256 });
+        assert_eq!(full, Some(fmt(&tr("A profile holds at most {max} stereotypes."), &[("max", "256")])), "{theme:?}");
+        assert_eq!(full.as_deref(), Some("Ein Profil fasst höchstens 256 Stereotypen."), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

@@ -1209,6 +1209,15 @@ str		Metaclasses carry no skills	Metaklassen tragen keine Skills
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	Eine UML-Metaklasse, die Stereotypen erweitern. Sie gehört UML selbst, erscheint weder in Modelle noch in den Typmenüs und ändert sich nie.
 str		The UML library holds the metaclasses that stereotypes extend. It never changes.	Die UML-Bibliothek enthält die Metaklassen, die Stereotypen erweitern. Sie ändert sich nie.
 str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} ist eine UML-Metaklasse aus der UML-Bibliothek. Sie ändert sich nie.
+str		{package} applies {profile} already.	{package} wendet {profile} bereits an.
+str		{package} does not apply {profile}.	{package} wendet {profile} nicht an.
+str		A profile holds at most {max} stereotypes.	Ein Profil fasst höchstens {max} Stereotypen.
+str		A stereotype extends at most {max} metaclasses.	Ein Stereotyp erweitert höchstens {max} Metaklassen.
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} ist eine UML-Metaklasse, die Archforge noch nicht zeichnet. Ein Stereotyp erweitert {metaclasses}.
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} ist keine Metaklasse, die Archforge zeichnet. Ein Stereotyp erweitert {metaclasses}.
+str		{name} is named twice. Name each metaclass once.	{name} ist zweimal genannt. Jede Metaklasse nur einmal nennen.
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} ist das Erweiterungsende eines Stereotyps. Stattdessen die Metaklasse aus dem entfernen, was der Stereotyp erweitert.
+plural		{name} has values on {n} element. Remove those first.	{name} hat Werte an {n} Element. Diese zuerst entfernen.|{name} hat Werte an {n} Elementen. Diese zuerst entfernen.
 str		Stereotypes · {n}	Stereotypen · {n}
 str		Add stereotype	Stereotyp hinzufügen
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	Noch keiner. Hier hinzufügen oder in Modelle ▸ Neu ▸ Stereotyp.

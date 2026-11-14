@@ -1209,6 +1209,15 @@ str		Metaclasses carry no skills	メタクラスにはスキルを付けられ�
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	ステレオタイプが拡張する UML のメタクラスです。これは UML 自身のもので、モデルや型メニューには表示されず、変更されることもありません。
 str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML ライブラリには、ステレオタイプが拡張するメタクラスが入っています。変更されることはありません。
 str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} は UML ライブラリにある UML のメタクラスです。変更されることはありません。
+str		{package} applies {profile} already.	{package} はすでに {profile} を適用しています。
+str		{package} does not apply {profile}.	{package} は {profile} を適用していません。
+str		A profile holds at most {max} stereotypes.	プロファイルが持てるステレオタイプは最大 {max} 個です。
+str		A stereotype extends at most {max} metaclasses.	ステレオタイプが拡張できるメタクラスは最大 {max} 個です。
+str		{name} is a UML metaclass Archforge does not draw yet. A stereotype extends {metaclasses}.	{name} は Archforge がまだ描画しない UML のメタクラスです。ステレオタイプが拡張できるのは {metaclasses} です。
+str		{name} is not a metaclass Archforge draws. A stereotype extends {metaclasses}.	{name} は Archforge が描画するメタクラスではありません。ステレオタイプが拡張できるのは {metaclasses} です。
+str		{name} is named twice. Name each metaclass once.	{name} が 2 回指定されています。メタクラスはそれぞれ 1 回だけ指定してください。
+str		{name} is a stereotype's extension end. Drop the metaclass from what the stereotype extends instead.	{name} はステレオタイプの拡張端です。代わりに、ステレオタイプが拡張するものからそのメタクラスを外してください。
+plural		{name} has values on {n} element. Remove those first.	{name} には {n} 個の要素で値が設定されています。先にそれらを外してください。
 str		Stereotypes · {n}	ステレオタイプ · {n}
 str		Add stereotype	ステレオタイプを追加
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	まだありません。ここか、モデル ▸ 新規 ▸ ステレオタイプから追加できます。
