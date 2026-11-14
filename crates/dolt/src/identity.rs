@@ -172,7 +172,7 @@ pub(crate) fn scan_proc(proc: &std::path::Path, command: &[String], most: usize,
         let file = entry.path().join("cmdline");
         let mut bytes = Vec::new();
         match std::fs::File::open(&file).and_then(|f| f.take(CMDLINE_CAP + 1).read_to_end(&mut bytes)) {
-            Ok(_) if !command.is_empty() && parse_cmdline(&bytes) == command => pids.push(pid),
+            Ok(_) if !command.is_empty() && parse_cmdline(&bytes).is_some_and(|line| line == command) => pids.push(pid),
             Ok(_) => {}
             // ESRCH: the process ended between the open and the read.
             Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied) || e.raw_os_error() == Some(3) => {}
@@ -194,7 +194,9 @@ pub(crate) fn parse_cim_list(json: &str, command: &[String]) -> Option<Vec<u32>>
     let mut pids = Vec::new();
     for process in &all {
         let pid = process.get("ProcessId")?.as_u64().and_then(|p| u32::try_from(p).ok())?;
-        if process.get("CommandLine")?.as_str().is_some_and(|line| split_windows(line) == command) && crate::recovery::valid_pid(pid) {
+        if process.get("CommandLine")?.as_str().is_some_and(|line| comparable(line) && split_windows(line) == command)
+            && crate::recovery::valid_pid(pid)
+        {
             pids.push(pid);
         }
     }
@@ -227,7 +229,7 @@ mod platform {
         let args = match read_bytes(&dir.join("cmdline"))? {
             None => return Ok(None),
             Some(bytes) if bytes.len() as u64 > CAP => Args::Unknown,
-            Some(bytes) => Args::List(parse_cmdline(&bytes)),
+            Some(bytes) => parse_cmdline(&bytes).map_or(Args::Unknown, Args::List),
         };
         Ok(Some(Identity { started, args }))
     }
@@ -408,14 +410,23 @@ pub(crate) fn parse_stat(stat: &str) -> Option<(char, String)> {
     Some((state, (*started).to_string()))
 }
 
-/// `/proc/<pid>/cmdline`: NUL-separated arguments.
+/// `/proc/<pid>/cmdline`: NUL-separated arguments. `None` for one that is not UTF-8: read with
+/// the bytes that are not replaced, it would be the line of a command that holds the replacement
+/// character there, and no command this crate starts is anything but UTF-8.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub(crate) fn parse_cmdline(bytes: &[u8]) -> Vec<String> {
-    let mut args: Vec<String> = bytes.split(|b| *b == 0).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+pub(crate) fn parse_cmdline(bytes: &[u8]) -> Option<Vec<String>> {
+    let mut args = bytes.split(|b| *b == 0).map(|a| std::str::from_utf8(a).ok().map(String::from)).collect::<Option<Vec<String>>>()?;
     if args.last().is_some_and(String::is_empty) {
         args.pop();
     }
-    args
+    Some(args)
+}
+
+/// Whether a Windows command line may be compared: one that holds the replacement character may
+/// have held something else there (half a surrogate pair, which cannot be written in UTF-8).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn comparable(line: &str) -> bool {
+    !line.contains(char::REPLACEMENT_CHARACTER)
 }
 
 /// What PowerShell's answer means: absent only for a clean exit with nothing on either stream (a
@@ -438,7 +449,7 @@ pub(crate) fn parse_cim(json: &str) -> Option<Identity> {
     let v: serde_json::Value = serde_json::from_str(json.trim()).ok()?;
     let started = v.get("CreationDate")?.to_string();
     let args = match v.get("CommandLine")? {
-        serde_json::Value::String(s) => Args::List(split_windows(s)),
+        serde_json::Value::String(s) if comparable(s) => Args::List(split_windows(s)),
         _ => Args::Unknown,
     };
     Some(Identity { started, args })
@@ -624,6 +635,12 @@ mod tests {
             std::fs::write(dir.0.join(name).join("cmdline"), cmdline).unwrap();
         }
         std::fs::create_dir(dir.0.join("47")).unwrap();
+        // A command that holds the replacement character, and a process with a byte that is no
+        // UTF-8 in its place, which a lossy reading would turn into that character.
+        for (name, cmdline) in [("51", "/r/\u{fffd}/dolt\0".as_bytes()), ("52", b"/r/\xff/dolt\0")] {
+            std::fs::create_dir(dir.0.join(name)).unwrap();
+            std::fs::write(dir.0.join(name).join("cmdline"), cmdline).unwrap();
+        }
         // A process that may not be read is passed over (when this test's user is not one who may).
         std::fs::create_dir(dir.0.join("49")).unwrap();
         std::fs::write(dir.0.join("49/cmdline"), exact).unwrap();
@@ -635,6 +652,7 @@ mod tests {
         let long = std::time::Duration::from_secs(60);
         assert_eq!(scan(&command, 100, long).unwrap(), [41]);
         assert_eq!(scan(&[], 100, long).unwrap(), Vec::<u32>::new());
+        assert_eq!(scan(&["/r/\u{fffd}/dolt".to_string()], 100, long).unwrap(), [51]);
         assert!(matches!(scan(&["a".to_string(), "y".repeat(4095)], 100, long), Err(Error::HelperFailed { status, .. }) if status == "too long"));
         assert!(matches!(scan(&command, 9, long), Err(Error::HelperFailed { status, .. }) if status == "too long"));
         assert!(matches!(scan(&command, 100, std::time::Duration::ZERO), Err(Error::HelperTimedOut { .. })));
@@ -670,6 +688,9 @@ mod tests {
         assert_eq!(parse_cim_list(&format!("[{}]", rows.join(",")), &command), Some(vec![7]));
         assert_eq!(parse_cim_list(&rows[0], &command), Some(vec![7]), "one process comes as one object");
         assert_eq!(parse_cim_list(&format!("[{}]", row("4", "null")), &command), Some(Vec::new()));
+        // A line with the replacement character may have held something else there: never found.
+        assert_eq!(parse_cim_list(&row("7", "\"C:\\\\\u{fffd}.exe\""), &["C:\\\u{fffd}.exe".to_string()]), Some(Vec::new()));
+        assert_eq!(parse_cim_list(&row("7", "\"C:\\\\x.exe\""), &["C:\\x.exe".to_string()]), Some(vec![7]));
         for bad in [
             "",
             "not json",
@@ -690,11 +711,18 @@ mod tests {
         assert_eq!(parse_stat("4242 (x) Z 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 555").map(|s| s.0), Some('Z'));
         assert_eq!(parse_stat("no brackets"), None);
         assert_eq!(
-            parse_cmdline(b"/usr/bin/dolt\0sql-server\0--config\0/r/server.yaml\0"),
+            parse_cmdline(b"/usr/bin/dolt\0sql-server\0--config\0/r/server.yaml\0").unwrap(),
             ["/usr/bin/dolt", "sql-server", "--config", "/r/server.yaml"]
         );
         let outside = list(&["/é ü/dolt", "sql-server"]);
-        assert_eq!(Args::List(parse_cmdline("/é ü/dolt\0sql-server\0".as_bytes())), outside.args, "Linux reads the bytes themselves");
+        assert_eq!(
+            parse_cmdline("/é ü/dolt\0sql-server\0".as_bytes()).map(Args::List),
+            Some(outside.args.clone()),
+            "Linux reads the bytes themselves"
+        );
+        // A byte that is no UTF-8 is not read as the replacement character a command may hold.
+        assert_eq!(parse_cmdline("/r/\u{fffd}/x\0".as_bytes()), Some(vec!["/r/\u{fffd}/x".to_string()]));
+        assert_eq!(parse_cmdline(b"/r/\xff/x\0"), None);
         assert!(outside.is(&["/é ü/dolt".into(), "sql-server".into()]) && outside.is_dolt_server());
     }
 
@@ -722,6 +750,8 @@ mod tests {
         assert_eq!(cim_answer(&out(0, "not json", "")), None);
         let other = parse_cim(r#"{"ParentProcessId":4,"CreationDate":"x","CommandLine":null}"#).unwrap();
         assert!(!other.is_dolt_server() && !other.is(&["x".into()]));
+        let replaced = parse_cim("{\"CreationDate\":\"x\",\"CommandLine\":\"C:\\\\\u{fffd}\\\\dolt.exe sql-server\"}").unwrap();
+        assert_eq!(replaced.args, Args::Unknown, "a line with the replacement character may have held something else");
     }
 
     #[test]
