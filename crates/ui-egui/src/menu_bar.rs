@@ -2,6 +2,7 @@
 //! of rows from the table of actions. macOS keeps its native menu, so `Shell::in_window_menu` is false
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
 //! F10 reaches the bar from the keys: the arrows walk groups and live rows, wrapping, Enter or Space runs the row.
+//! A press away from the bar and its open menu only closes the menu, and so does the window losing the focus.
 
 use egui::text_edit::TextEditState;
 use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
@@ -65,9 +66,14 @@ pub(crate) struct Bar {
     closed_by_title: bool,
 }
 
-/// Once a frame: runs the row chosen, then closes a menu a dialog now covers or the bar no longer draws.
+/// Once a frame: runs the row chosen, then closes a menu the window lost the focus under, as Esc
+/// closes it, and one a dialog now covers or the bar no longer draws.
 pub(crate) fn keep_valid(shell: &mut Shell, ctx: &egui::Context) {
     shell.menu_bar.pressed = false;
+    let unfocused = ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false))));
+    if unfocused && shell.menu_bar.open.take().is_some() {
+        give_back(shell, ctx);
+    }
     if let Some(id) = shell.menu_bar.chosen.take() {
         // A pointer's click on the row took the keyboard, and its selection, from the field the
         // menu was opened on.
@@ -207,8 +213,8 @@ pub(crate) fn chord(keys: &Keys) -> String {
     parts.join("+")
 }
 
-/// Draws the bar in `strip` from `start` and the open group's menu; a press elsewhere closes it, and
-/// so does a click on the open menu's own title, which gives the keyboard back.
+/// Draws the bar in `strip` from `start` and the open group's menu; a press elsewhere closes it and
+/// reaches nothing else, and a click on the open menu's own title closes it too, giving the keyboard back.
 pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, start: f32) {
     if !shell.in_window_menu {
         return;
@@ -259,7 +265,21 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
     }
 }
 
+/// The four parts of `window` around `bar`, which together leave out the bar alone.
+fn around(window: Rect, bar: Rect) -> [Rect; 4] {
+    let (above, below) =
+        (Rect::from_min_max(window.min, pos2(window.right(), bar.top())), Rect::from_min_max(pos2(window.left(), bar.bottom()), window.max));
+    let (left, right) = (
+        Rect::from_min_max(pos2(window.left(), bar.top()), bar.left_bottom()),
+        Rect::from_min_max(bar.right_top(), pos2(window.right(), bar.bottom())),
+    );
+    [above, below, left, right]
+}
+
 /// The menu of `group` at `at`, kept inside the window: its rectangle and the row picked this frame.
+/// Its layer covers the window around the bar, under the rows, so a press away from both lands on
+/// the layer: nothing behind the menu is pressed, dragged or pointed at, and the release that
+/// follows finds the layer gone and reaches nothing either.
 fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui::Pos2) -> (Rect, Option<&'static str>) {
     let sections = (group.sections)(shell);
     let window = ui.ctx().content_rect();
@@ -277,6 +297,10 @@ fn popup(shell: &mut Shell, ui: &egui::Ui, p: &Palette, group: &Group, at: egui:
         ux::shadow(&paint, m, 8.0, p.shadow);
         paint.rect_filled(m, 8.0, p.surface);
         paint.rect_stroke(m, 8.0, Stroke::new(1.0, p.border), StrokeKind::Inside);
+        // Sensing both, so it wins over what lies behind at its parts' edges too; never the keyboard.
+        for (n, part) in around(window, shell.menu_bar.rect.unwrap_or(Rect::NOTHING)).into_iter().enumerate() {
+            ui.interact(part, widgets::egui_id(&format!("strip.menu.away.{n}")), Sense::CLICK | Sense::DRAG);
+        }
         let mut picked = None;
         let mut y = m.top() + MENU_PAD;
         for (n, section) in sections.iter().enumerate() {
@@ -402,6 +426,16 @@ mod tests {
         assert_eq!(text(GENERATE).as_deref(), Some("Ctrl+Shift+G"));
         assert_eq!(text(SETTINGS).as_deref(), Some("Ctrl+,"));
         assert_eq!(text(NEW), None);
+    }
+
+    /// The parts around the bar cover every point of the window but the bar's own.
+    #[test]
+    fn the_parts_around_the_bar_leave_out_the_bar_alone() {
+        let (window, bar) = (Rect::from_min_max(pos2(0.0, 0.0), pos2(800.0, 600.0)), Rect::from_min_max(pos2(200.0, 4.0), pos2(500.0, 28.0)));
+        let covered = |x: f32, y: f32| around(window, bar).iter().filter(|part| part.contains(pos2(x, y))).count();
+        let outside = [(350.0, 2.0), (350.0, 300.0), (100.0, 16.0), (650.0, 16.0), (1.0, 1.0), (799.0, 599.0), (100.0, 2.0), (650.0, 30.0)];
+        assert_eq!(outside.map(|(x, y)| covered(x, y)), [1; 8], "each point beside the bar lies on one part");
+        assert_eq!([(201.0, 5.0), (350.0, 16.0), (499.0, 27.0)].map(|(x, y)| covered(x, y)), [0; 3], "the bar's own points on none");
     }
 
     /// Each row off names the first thing that keeps it off, falling back to the general words.
