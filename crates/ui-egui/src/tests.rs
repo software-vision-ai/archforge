@@ -4954,9 +4954,9 @@ fn a_use_that_refuses_is_said_in_the_chosen_language() {
         }
         let on = |elements: &str| fmt(&tr("«{stereotype}» on {elements}"), &[("stereotype", "Entity"), ("elements", elements)]);
         let two = on(&fmt(&tr("{first} and {second}"), &[("first", "Order"), ("second", "Customer")]));
-        let in_use = "{name} is in use: {uses}. Remove those first.";
-        assert_ne!(tr(in_use), in_use, "{theme:?}: the language is German");
-        let named = fmt(&tr(in_use), &[("name", "Entity"), ("uses", &two)]);
+        let in_use = tr("{name} is in use: {uses}. Remove those first.");
+        assert_ne!(in_use, "{name} is in use: {uses}. Remove those first.", "{theme:?}: the language is German");
+        let named = fmt(&in_use, &[("name", "Entity"), ("uses", &two)]);
         let unapply = json!({ "package": commerce, "profile": persistence });
         let extension = tr("«{stereotype}» on {metaclass} is in use: {uses}. Remove those first.");
         let on_class = fmt(&extension, &[("stereotype", "Entity"), ("metaclass", "Class"), ("uses", &two)]);
