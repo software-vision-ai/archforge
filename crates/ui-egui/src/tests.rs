@@ -5274,18 +5274,52 @@ fn an_application_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The centre of the Properties control `id`, the panel's body wheeled until that centre is inside
+/// it: a control under the fold or above the body is not listed, and one an edge cuts is listed
+/// with a centre no press reaches. It is looked for down to the body's end, then up to its top,
+/// and it is a failure when neither way has it (AR-467).
+fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos2 {
+    let mut down = true;
+    for _ in 0..120 {
+        let body = h.state().panels.body.expect("the Properties body");
+        let at = h.state().widgets().iter().find(|w| w.id == id).map(|w| egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0));
+        if let Some(at) = at.filter(|at| body.contains(*at)) {
+            return at;
+        }
+        let before = h.state().panels.scroll;
+        h.event(egui::Event::PointerMoved(body.center()));
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, if down { -120.0 } else { 120.0 }),
+            modifiers: egui::Modifiers::NONE,
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+        });
+        h.run();
+        // At an end of the body: the search turns at its foot and gives up at its top.
+        if (h.state().panels.scroll - before).abs() < 0.5 {
+            assert!(down, "no control {id} in reach of the wheel in Properties");
+            down = false;
+        }
+    }
+    panic!("no control {id} in reach of the wheel in Properties");
+}
+
 /// A constraint's and a description's own rules, refused by the engine, are said in the chosen
 /// language: an expression that states no rule, a context that owns none, an element no constraint
 /// names or one named twice, too many elements, an element that takes no description and a
 /// description too long; and braces with nothing to sit by are said under the editor's form
-/// buttons, any other refusal of Apply under it, with nothing written. In light and dark (AR-447).
+/// buttons, any other refusal of Apply under it, with nothing written, and Cancel closes the
+/// editor. In a window of the design's height, where the German panel's Constraints section is cut
+/// by the fold and a refusal moves the editor's buttons under it, so the body is scrolled to each
+/// control before it is pressed (AR-467). In light and dark (AR-447).
 #[test]
 fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr};
     use archforge_engine::Reason;
     use serde_json::json;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
-        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1800.0));
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
         h.state_mut().state.language = "de".into();
         h.run();
         let refused =
@@ -5318,18 +5352,17 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         let comments = tr("This element owns {max} comments or more, so its description can't be found. Remove some in the file first.");
         assert_eq!(crate::panels::said(&Reason::TooManyComments { max: 64 }), Some(fmt(&comments, &[("max", "64")])), "{theme:?}");
         // Braces picked in the editor for a class the diagram no longer shows: said under the form.
-        // The window is tall, so the German panel's Constraints section is in reach of the pointer.
         crate::panels::run(h.state_mut(), "diagram.unplace", json!({ "nodes": [node] })).unwrap();
         crate::panels::run(h.state_mut(), "view.select", json!({ "ids": [order] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
-        let at = rect_of(&h, "workspace.properties.constraints.add").center();
+        let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
         click(&mut h, at);
         let edit = h.state_mut().panels.constraint.as_mut().expect("the editor");
         (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
         h.run();
         let revision = h.state().session.as_ref().unwrap().revision();
-        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        let at = reached_in_properties(&mut h, "workspace.properties.constraint.apply");
         click(&mut h, at);
         let braces = tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note.");
         let edit = h.state().panels.constraint.clone().expect("the editor stays open");
@@ -5340,10 +5373,20 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         let shown = h.state().canvas.active.unwrap();
         h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
         h.run();
-        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
+        let at = reached_in_properties(&mut h, "workspace.properties.constraint.apply");
         click(&mut h, at);
         let edit = h.state().panels.constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // A control above what shows is not listed either: it is found by wheeling up.
+        let above = "workspace.properties.attributes.add";
+        assert!(!ids(&h).iter().any(|i| i == above), "{theme:?}: Attributes is scrolled out above the editor's foot");
+        let at = reached_in_properties(&mut h, above);
+        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
+        // Cancel, under the refusal, closes the editor and writes nothing.
+        let at = reached_in_properties(&mut h, "workspace.properties.constraint.cancel");
+        click(&mut h, at);
+        assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
     }
     crate::i18n::set_language("en");
