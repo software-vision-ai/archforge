@@ -967,16 +967,19 @@ fn a_press_outside_an_open_menu_only_closes_it() {
         let address = st.uuid(st.alive().find(|o| archforge_core::name_of(st, *o) == "Address").unwrap()).unwrap();
         let node = format!("workspace.canvas.node.{}", node_of(&h, address));
         let (on_box, empty) = (rect_of(&h, &node).center(), rect_of(&h, "workspace.canvas").center() + egui::vec2(0.0, 150.0));
-        // Select: a press on a box, a drag and a release, each a frame of its own.
+        // Select: a press on a box, a drag and a release, each a frame of its own. Under a menu, as
+        // it was before the press, no frame of them begins a drag; with none the drag is under way.
         let pull = |h: &mut Harness<'static, Shell>| {
             h.event(Event::PointerMoved(on_box));
             h.step();
+            let under = h.state().menu_bar.open.is_some();
             button(h, on_box, true);
             let open = h.state().menu_bar.open;
+            assert!(h.state().canvas.gesture.is_none(), "{theme:?}: the press alone begins no drag, menu {under}");
             for dx in [40.0, 80.0] {
                 h.event(Event::PointerMoved(on_box + egui::vec2(dx, 0.0)));
                 h.step();
-                assert!(h.state().canvas.gesture.is_none() || open.is_none(), "{theme:?}: no drag begins under the menu");
+                assert_eq!(h.state().canvas.gesture.is_none(), under, "{theme:?}: a drag begins only with no menu, at {dx}");
             }
             button(h, on_box + egui::vec2(80.0, 0.0), false);
             h.run();
