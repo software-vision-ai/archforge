@@ -308,8 +308,9 @@ impl Notation for UmlNotation {
 
     /// Sets a UML element's description, kept as a Comment the element owns (AR-186).
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), archforge_engine::CommandError> {
-        if let Some(why) = profiles::library_problem(store, obj) {
-            return Err(archforge_engine::CommandError::new(why));
+        // UML's own library and its metaclasses carry none; the refusal names no parameter.
+        if let Some(refused) = profiles::library_refusal(store, "element", obj) {
+            return Err(archforge_engine::CommandError { key: None, ..refused });
         }
         descriptions::describe_element(store, obj, text)
     }

@@ -1207,6 +1207,8 @@ str		This metaclass	此元类
 str		On this metaclass · {n}	此元类上 · {n}
 str		Metaclasses carry no skills	元类不带技能
 str		A UML metaclass, which stereotypes extend. It is UML's own, kept out of Models and the type menus, and never changes.	构造型所扩展的 UML 元类。它属于 UML 本身，不出现在模型和类型菜单中，也从不改变。
+str		The UML library holds the metaclasses that stereotypes extend. It never changes.	UML 库包含构造型所扩展的元类。它从不改变。
+str		{name} is a UML metaclass, kept in the UML library. It never changes.	{name} 是 UML 元类，保存在 UML 库中。它从不改变。
 str		Stereotypes · {n}	构造型 · {n}
 str		Add stereotype	添加构造型
 str		None yet. Add one here or from Models ▸ New ▸ Stereotype.	尚无。可在此处或通过 模型 ▸ 新建 ▸ 构造型 添加。

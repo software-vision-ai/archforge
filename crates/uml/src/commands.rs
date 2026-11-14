@@ -74,8 +74,8 @@ pub(crate) fn id_of(store: &Store, p: &Params, key: &str, class: ClassId, what: 
         return Err(refuse(key, format!("{} is not {what}", text(p, key))));
     }
     // A metaclass of the hidden UML library is UML's own, never the model's (AR-134).
-    if let Some(why) = crate::profiles::library_problem(store, obj) {
-        return Err(refuse(key, why));
+    if let Some(refused) = crate::profiles::library_refusal(store, key, obj) {
+        return Err(refused);
     }
     Ok(obj)
 }
@@ -97,8 +97,8 @@ pub(crate) fn classifier_of(store: &Store, p: &Params, key: &str) -> Result<Obj,
             format!("{} is not a class, an interface, an enumeration, a data type, a primitive type or an association class", text(p, key)),
         ));
     }
-    if let Some(why) = crate::profiles::library_problem(store, obj) {
-        return Err(refuse(key, why));
+    if let Some(refused) = crate::profiles::library_refusal(store, key, obj) {
+        return Err(refused);
     }
     Ok(obj)
 }

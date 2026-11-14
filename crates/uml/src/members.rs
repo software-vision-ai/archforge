@@ -371,8 +371,8 @@ pub(crate) fn resolve_type(store: &mut Store, key: &str, value: &str, within: Op
         return Err(refuse(key, why));
     }
     // UML's own metaclasses and the stereotypes type nothing of the model (AR-134).
-    if let Some(why) = crate::profiles::library_problem(store, t) {
-        return Err(refuse(key, why));
+    if let Some(refused) = crate::profiles::library_refusal(store, key, t) {
+        return Err(refused);
     }
     if class == crate::STEREOTYPE || class == crate::EXTENSION {
         return Err(refuse(key, format!("{value} is {}, which types nothing; it is applied to elements", crate::commands::a_what(store, t))));

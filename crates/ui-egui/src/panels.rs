@@ -433,6 +433,10 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::ControlCharacter => return Some(tr("It can't hold a control or hidden character.")),
         Reason::EdgeSpace => return Some(tr("It can't start or end with a space.")),
         Reason::InUse(used) => return Some(crate::uml_profiles::in_use(used)),
+        Reason::UmlOwn { metaclass: None } => return Some(tr("The UML library holds the metaclasses that stereotypes extend. It never changes.")),
+        Reason::UmlOwn { metaclass: Some(name) } => {
+            return Some(fmt(&tr("{name} is a UML metaclass, kept in the UML library. It never changes."), &[("name", name)]));
+        }
         other => {
             return relationship_said(other).or_else(|| template_said(other)).or_else(|| set_and_end_said(other));
         }

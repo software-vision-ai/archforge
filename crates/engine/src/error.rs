@@ -190,6 +190,9 @@ pub enum Reason {
     /// A profile, a stereotype, one of its extensions or a package's profile applications stays
     /// while stereotype applications need it: what is in use, and the uses.
     InUse(Box<InUse>),
+    /// The element is UML's own and never changes: the UML library that holds the metaclasses
+    /// stereotypes extend, or its metaclass of this name.
+    UmlOwn { metaclass: Option<String> },
 }
 
 /// What a [`Reason::InUse`] names; boxed in the reason, so the error stays small.

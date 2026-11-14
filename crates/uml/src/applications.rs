@@ -549,6 +549,10 @@ fn application_param(store: &Store, p: &Params) -> Result<(Obj, Obj, Obj), Comma
 fn apply_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let element = element_param(ctx.doc, p, "element")?;
     let stereotype = stereotype_param(ctx.doc, p, "stereotype")?;
+    // UML's own library and its metaclasses take none: said with the reason typed (AR-444).
+    if let Some(refused) = profiles::library_refusal(ctx.doc, "element", element) {
+        return Err(refused);
+    }
     if let Some(why) = element_problem(ctx.doc, element) {
         return Err(refuse("element", why));
     }
