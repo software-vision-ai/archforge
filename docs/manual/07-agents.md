@@ -425,6 +425,10 @@ first, with when, the agent and how many messages. Click one to open it again, r
 allow changes; this holds for the conversation already shown too. **New conversation** (+) starts
 another.
 
+With the keyboard, Tab and Shift+Tab move through the conversations and the list follows, so every
+one can be reached. While one of them has the keyboard, Page Up and Page Down move it by what shows,
+and Home and End to the first conversation and the last; each comes whole into view.
+
 <!-- picture: workspace-chat-history light | The project's conversations, newest first, saved with the project -->
 
 Conversations are kept in the project: they travel with it and its copies, and never show in a

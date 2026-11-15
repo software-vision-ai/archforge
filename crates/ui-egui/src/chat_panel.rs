@@ -348,8 +348,9 @@ pub struct Panel {
     /// last drawn (AR-477).
     pub area: Option<egui::Rect>,
     pub held: Option<egui::Id>,
-    /// The history's scroll position.
+    /// The history's scroll position, and what had the keyboard when it was last drawn (AR-482).
     pub history_scroll: f32,
+    pub history_held: Option<egui::Id>,
     /// Why the history's conversations cannot be changed: a re-read of the list failed, and the
     /// rows read before stay shown (AR-217).
     pub writing_off: Option<String>,
