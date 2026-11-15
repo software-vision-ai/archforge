@@ -1,8 +1,9 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
 //! system's Hide), File, Edit, View, Model and Versions, in the design's order, then Window with the
-//! system's own Minimise and Zoom. Each item from the table is enabled while its action can act, and
-//! its keys are the table's. Choosing an item wakes the window, so it acts with the pointer and
-//! keyboard still. When it cannot be built, the window works without it.
+//! system's own Minimise and Zoom, made the application's windows menu so macOS adds its own rows
+//! below them. Each item from the table is enabled while its action can act, and its keys are the
+//! table's. Choosing an item wakes the window, so it acts with the pointer and keyboard still. When
+//! it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
 
 use std::str::FromStr;
@@ -127,20 +128,33 @@ fn submenu(shell: &Shell, title: Title, model: &Submenu, items: &mut Items) -> R
     }
 }
 
+/// Makes the bar the application's with `install`, then hands the Window menu among `menus` to
+/// `register`, which makes it the application's windows menu: muda finds that menu only through the
+/// bar the application already shows, and macOS then adds its own rows below Minimise and Zoom.
+fn install_and_register<M>(menus: &[(Title, M)], install: impl FnOnce(), register: impl FnOnce(&M)) {
+    install();
+    if let Some((_, window)) = menus.iter().find(|(title, _)| *title == Title::Window) {
+        register(window);
+    }
+}
+
 /// Builds the menu bar and installs it for the application; `ctx` is the window a chosen item wakes.
 pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
     let mut items = Items::default();
     let model = Submenu::new(tr("Model"), true);
+    let mut menus = Vec::with_capacity(BAR.len());
     for title in BAR {
-        menu.append(&submenu(shell, title, &model, &mut items).map_err(err)?).map_err(err)?;
+        let built = submenu(shell, title, &model, &mut items).map_err(err)?;
+        menu.append(&built).map_err(err)?;
+        menus.push((title, built));
     }
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
-    menu.init_for_nsapp();
+    install_and_register(&menus, || menu.init_for_nsapp(), Submenu::set_as_windows_menu_for_nsapp);
     Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new(), failing: false })
 }
 
@@ -346,6 +360,17 @@ mod tests {
             assert!(archforge_ui_egui::i18n::set_language(code), "{code}");
             assert_eq!(window_items().map(|item| item.text()), words, "{code}");
         }
+    }
+
+    /// The bar is the application's before Window becomes its windows menu, as muda finds that menu
+    /// only through the bar the application shows, and Window is found by its title wherever it
+    /// stands; the rows macOS then adds are seen by hand (release checklist item 5).
+    #[test]
+    fn window_becomes_the_windows_menu_once_the_bar_is_installed() {
+        let menus = [(Title::Versions, 1), (Title::Window, 2), (Title::Model, 3)];
+        let steps = std::cell::RefCell::new(Vec::new());
+        install_and_register(&menus, || steps.borrow_mut().push(None), |menu| steps.borrow_mut().push(Some(*menu)));
+        assert_eq!(steps.into_inner(), vec![None, Some(2)]);
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read
