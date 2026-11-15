@@ -252,7 +252,7 @@ fn every_session_a_project_makes_holds_its_notations() {
         panic!("a view without notations adds no diagram")
     };
     assert!(error.message.contains("holds no notation"), "{}", error.message);
-    let none = archforge_engine::NotOneOf { what: "diagram kind", word: "er".into(), known: Vec::new() };
+    let none = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "er".into(), known: Vec::new() };
     assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotOneOf(Box::new(none))), Some("kind")));
 }
 

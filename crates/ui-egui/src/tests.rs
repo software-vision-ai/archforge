@@ -6229,7 +6229,7 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
         let none = fmt(&tr("This line has no label text {word}. It has none."), &[("word", "name")]);
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
-        let bare = archforge_engine::NotOneOf { what: "diagram kind", word: "uml.class".into(), known: Vec::new() };
+        let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known: Vec::new() };
         let no_notation = crate::panels::said(&archforge_engine::Reason::NotOneOf(Box::new(bare)));
         assert_eq!(no_notation, Some(tr("This project holds no notation, so it knows no diagram kind.")), "{theme:?}");
     }

@@ -565,13 +565,14 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
 /// A word none of its place's words: a diagram kind no notation knows, with the kinds there are,
 /// and a label's text a line's element lacks, with those it has; none for another place.
 fn not_one_of_said(no: &archforge_engine::NotOneOf) -> Option<String> {
+    use archforge_engine::WordPlace;
     let known = no.known.join(", ");
     let args = [("word", no.word.as_str()), ("kinds", known.as_str()), ("slots", known.as_str())];
     Some(match (no.what, no.known.is_empty()) {
-        ("diagram kind", false) => fmt(&tr("{word} is not a diagram kind. The kinds are {kinds}."), &args),
-        ("diagram kind", true) => tr("This project holds no notation, so it knows no diagram kind."),
-        ("text slot", false) => fmt(&tr("This line has no label text {word}. It has {slots}."), &args),
-        ("text slot", true) => fmt(&tr("This line has no label text {word}. It has none."), &args),
+        (WordPlace::DiagramKind, false) => fmt(&tr("{word} is not a diagram kind. The kinds are {kinds}."), &args),
+        (WordPlace::DiagramKind, true) => tr("This project holds no notation, so it knows no diagram kind."),
+        (WordPlace::TextSlot, false) => fmt(&tr("This line has no label text {word}. It has {slots}."), &args),
+        (WordPlace::TextSlot, true) => fmt(&tr("This line has no label text {word}. It has none."), &args),
         _ => return None,
     })
 }

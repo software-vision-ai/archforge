@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -121,9 +121,9 @@ fn check_kind(key: &str, word: &str, what: &str) -> Result<(), CommandError> {
     }
 }
 
-/// A refusal under `key` of `word`, none of the words `known` its place takes, `what` such as
-/// `"diagram kind"`; `said` in English, the reason typed.
-fn not_one_of(key: &str, said: String, what: &'static str, word: &str, known: &[&str]) -> CommandError {
+/// A refusal under `key` of `word`, none of the words `known` its place `what` takes; `said` in
+/// English, the reason typed.
+fn not_one_of(key: &str, said: String, what: WordPlace, word: &str, known: &[&str]) -> CommandError {
     let known = known.iter().map(|k| k.to_string()).collect();
     refuse(key, said).because(Reason::NotOneOf(Box::new(NotOneOf { what, word: word.to_string(), known })))
 }
@@ -198,10 +198,10 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kinds = ctx.view.kinds();
     if kinds.is_empty() {
         let said = "the project's view holds no notation, so it knows no diagram kind".to_string();
-        return Err(not_one_of("kind", said, "diagram kind", kind, &[]));
+        return Err(not_one_of("kind", said, WordPlace::DiagramKind, kind, &[]));
     }
     if !kinds.contains(&kind) {
-        return Err(not_one_of("kind", format!("{kind:?} is not one of {}", kinds.join(", ")), "diagram kind", kind, &kinds));
+        return Err(not_one_of("kind", format!("{kind:?} is not one of {}", kinds.join(", ")), WordPlace::DiagramKind, kind, &kinds));
     }
     let name = str_of(p, "name");
     check_text("name", name, MAX_NAME)?;
@@ -709,7 +709,7 @@ fn diagram_label<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let slots = ctx.view.text_slots(class);
     if !slots.contains(&kind) {
         let said = format!("a {} has no text slot {kind:?}; it has {}", class_name(ctx.doc, class).to_lowercase(), slots.join(", "));
-        return Err(not_one_of("kind", said, "text slot", kind, slots));
+        return Err(not_one_of("kind", said, WordPlace::TextSlot, kind, slots));
     }
     let labels = ctx.doc.list(e, edge::LABEL).map_err(fail)?;
     if labels.len() >= MAX_LABELS {

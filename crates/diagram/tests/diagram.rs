@@ -413,12 +413,12 @@ fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
         let known = known.iter().map(|k| k.to_string()).collect();
         Reason::NotOneOf(Box::new(archforge_engine::NotOneOf { what, word: word.into(), known }))
     };
-    let unknown = not_one_of("diagram kind", "uml.class", &["toy.class"]);
+    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "uml.class", &["toy.class"]);
     check(&mut s, "diagram.add", json!({ "kind": "uml.class" }), "kind", unknown, "\"uml.class\" is not one of toy.class");
     check(&mut s, "diagram.place", place(d, &c, json!({ "kind": "Port" })), "kind", Reason::NotAPlainWord, plain);
     let label = |kind: &str| json!({ "edge": sm.edge, "kind": kind });
     check(&mut s, "diagram.label", label("Name"), "kind", Reason::NotAPlainWord, plain);
-    let no_slot = not_one_of("text slot", "name", &["general"]);
+    let no_slot = not_one_of(archforge_engine::WordPlace::TextSlot, "name", &["general"]);
     check(&mut s, "diagram.label", label("name"), "kind", no_slot, "has no text slot \"name\"; it has general");
     let style = json!({ "ids": [sm.a], "name": "Accent Style" });
     check(&mut s, "diagram.style", style, "name", Reason::NotAPlainWord, "the style name is not a plain identifier");
