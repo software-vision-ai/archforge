@@ -255,8 +255,12 @@ fn has_contexts(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| is_context(f.doc, o)) { Ok(()) } else { Err(NO_CONTEXTS) }
 }
 
+/// Why a command that changes a constraint is not available.
+pub const NO_CONSTRAINTS: &str = "There is no constraint yet.";
+
+/// Whether a constraint exists.
 fn has_constraints(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| is_constraint(f.doc, o)) { Ok(()) } else { Err("There is no constraint yet.") }
+    if f.doc.alive().any(|o| is_constraint(f.doc, o)) { Ok(()) } else { Err(NO_CONSTRAINTS) }
 }
 
 /// The live object `id`, given under `key` as the id of an element of `kind`; refused with its

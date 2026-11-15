@@ -945,12 +945,12 @@ fn has_templates(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> 
     if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(can_be_template)) { Ok(()) } else { Err(NO_TEMPLATES) }
 }
 
+/// Why a command that changes a template parameter is not available.
+pub const NO_PARAMETERS: &str = "There is no template parameter yet.";
+
+/// Whether a template parameter exists.
 fn has_parameters(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASSIFIER_TEMPLATE_PARAMETER)) {
-        Ok(())
-    } else {
-        Err("There is no template parameter yet.")
-    }
+    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASSIFIER_TEMPLATE_PARAMETER)) { Ok(()) } else { Err(NO_PARAMETERS) }
 }
 
 /// The parameter lines the add and set commands share.

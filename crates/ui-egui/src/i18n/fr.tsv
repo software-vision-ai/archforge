@@ -603,6 +603,36 @@ str		{name} follows no column.	{name} ne suit aucune colonne.
 plural		The table has {n} column.	La table a {n} colonne.|La table a {n} colonnes.
 str		A package cannot go into itself or a package it holds.	Un paquetage ne peut aller ni dans lui-même ni dans un paquetage qu’il contient.
 str		The model cannot be changed at the moment; nothing was changed.	Le modèle ne peut pas être modifié pour le moment ; rien n’a été modifié.
+str		There is nothing to undo.	Il n’y a rien à annuler.
+str		There is nothing to redo.	Il n’y a rien à rétablir.
+str		The project has no model root yet.	Le projet n’a pas encore de racine de modèle.
+str		There is no skill yet.	Il n’y a pas encore de compétence.
+str		There is no diagram yet.	Il n’y a pas encore de diagramme.
+str		There is nothing to remove or describe yet.	Il n’y a encore rien à supprimer ni à décrire.
+str		There is no schema yet.	Il n’y a pas encore de schéma.
+str		There is no entity yet.	Il n’y a pas encore de table.
+str		There is no package yet.	Il n’y a pas encore de paquetage.
+str		There is no class, interface, enumeration, data type or primitive type yet.	Il n’y a pas encore de classe, d’interface, d’énumération, de type de données ni de type primitif.
+str		There is no class yet.	Il n’y a pas encore de classe.
+str		There is no enumeration yet.	Il n’y a pas encore d’énumération.
+str		There is no class or interface yet.	Il n’y a pas encore de classe ni d’interface.
+str		There is no association or association class yet.	Il n’y a pas encore d’association ni de classe d’association.
+str		There is no n-ary association yet.	Il n’y a pas encore d’association n-aire.
+str		There is no generalization yet.	Il n’y a pas encore de généralisation.
+str		There is no generalization set yet.	Il n’y a pas encore d’ensemble de généralisations.
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	Il n’y a pas encore de classe, d’interface, d’énumération, de type de données, de type primitif, de classe d’association ni de paquetage.
+str		There is no constraint yet.	Il n’y a pas encore de contrainte.
+str		There is no class, interface or data type yet.	Il n’y a pas encore de classe, d’interface ni de type de données.
+str		There is no template parameter yet.	Il n’y a pas encore de paramètre de modèle.
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	Il n’y a pas encore de modèle : donnez d’abord un paramètre de modèle à une classe, une interface ou un type de données.
+str		There is no template binding yet.	Il n’y a pas encore de liaison de modèle.
+str		There is no profile yet.	Il n’y a pas encore de profil.
+str		There is no stereotype yet.	Il n’y a pas encore de stéréotype.
+str		No stereotype is applied yet.	Aucun stéréotype n’est encore appliqué.
+str		Another change is still under way. Try again once it ends.	Une autre modification est encore en cours. Réessayez une fois qu’elle est terminée.
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	Le modèle n’a pas pu être remis dans son état après un échec. Rouvrez le projet pour continuer.
+str		Undo and redo cannot run as part of another change.	Annuler et rétablir ne peuvent pas faire partie d’une autre modification.
+str		This could not be done because of an internal error. Nothing was changed.	Cela n’a pas pu être fait à cause d’une erreur interne. Rien n’a été modifié.
 str		The text can't be empty.	Le texte ne peut pas être vide.
 str		It can't be longer than {max} characters.	{max} caractères au maximum.
 str		It can't hold a control or hidden character.	Les caractères de contrôle ou invisibles ne sont pas autorisés.

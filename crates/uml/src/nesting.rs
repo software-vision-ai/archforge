@@ -381,9 +381,12 @@ fn owners_list(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "classifier": uuid_of(store, c)?, "owner": owner, "qualified_name": qualified_name(store, c), "owners": items }))
 }
 
+/// Why a command for nesting is not available: no classifier that owns nested ones.
+pub const NO_OWNERS: &str = "There is no class or interface yet.";
+
 /// Whether a classifier that owns nested ones exists.
 fn has_owners(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(can_own)) { Ok(()) } else { Err("There is no class or interface yet.") }
+    if f.doc.alive().any(|o| f.doc.class_of(o).is_ok_and(can_own)) { Ok(()) } else { Err(NO_OWNERS) }
 }
 
 /// Whether a classifier exists.

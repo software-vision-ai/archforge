@@ -603,6 +603,36 @@ str		{name} follows no column.	{name} no sigue a ninguna columna.
 plural		The table has {n} column.	La tabla tiene {n} columna.|La tabla tiene {n} columnas.
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
+str		There is nothing to undo.	No hay nada que deshacer.
+str		There is nothing to redo.	No hay nada que rehacer.
+str		The project has no model root yet.	El proyecto aún no tiene raíz de modelo.
+str		There is no skill yet.	Aún no hay ninguna habilidad.
+str		There is no diagram yet.	Aún no hay ningún diagrama.
+str		There is nothing to remove or describe yet.	Aún no hay nada que quitar ni describir.
+str		There is no schema yet.	Aún no hay ningún esquema.
+str		There is no entity yet.	Aún no hay ninguna tabla.
+str		There is no package yet.	Aún no hay ningún paquete.
+str		There is no class, interface, enumeration, data type or primitive type yet.	Aún no hay ninguna clase, interfaz, enumeración, tipo de datos ni tipo primitivo.
+str		There is no class yet.	Aún no hay ninguna clase.
+str		There is no enumeration yet.	Aún no hay ninguna enumeración.
+str		There is no class or interface yet.	Aún no hay ninguna clase ni interfaz.
+str		There is no association or association class yet.	Aún no hay ninguna asociación ni clase de asociación.
+str		There is no n-ary association yet.	Aún no hay ninguna asociación n-aria.
+str		There is no generalization yet.	Aún no hay ninguna generalización.
+str		There is no generalization set yet.	Aún no hay ningún conjunto de generalización.
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	Aún no hay ninguna clase, interfaz, enumeración, tipo de datos, tipo primitivo, clase de asociación ni paquete.
+str		There is no constraint yet.	Aún no hay ninguna restricción.
+str		There is no class, interface or data type yet.	Aún no hay ninguna clase, interfaz ni tipo de datos.
+str		There is no template parameter yet.	Aún no hay ningún parámetro de plantilla.
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	Aún no hay ninguna plantilla: primero dé un parámetro de plantilla a una clase, una interfaz o un tipo de datos.
+str		There is no template binding yet.	Aún no hay ninguna vinculación de plantilla.
+str		There is no profile yet.	Aún no hay ningún perfil.
+str		There is no stereotype yet.	Aún no hay ningún estereotipo.
+str		No stereotype is applied yet.	Aún no se ha aplicado ningún estereotipo.
+str		Another change is still under way. Try again once it ends.	Otro cambio sigue en curso. Vuelva a intentarlo cuando termine.
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	No se pudo devolver el modelo a su estado anterior tras un fallo. Vuelva a abrir el proyecto para continuar.
+str		Undo and redo cannot run as part of another change.	Deshacer y rehacer no pueden formar parte de otro cambio.
+str		This could not be done because of an internal error. Nothing was changed.	No se pudo hacer por un error interno. No se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.
 str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
 str		It can't hold a control or hidden character.	No se admiten caracteres de control ni ocultos.

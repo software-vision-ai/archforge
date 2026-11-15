@@ -28,6 +28,7 @@ pub mod control;
 pub mod diagrams;
 mod edit_menu;
 pub mod editing;
+mod engine_said;
 mod er_kind;
 mod er_said;
 mod er_ui;

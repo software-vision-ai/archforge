@@ -602,6 +602,36 @@ str		{name} follows no column.	{name} follows no column.
 plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
+str		There is nothing to undo.	There is nothing to undo.
+str		There is nothing to redo.	There is nothing to redo.
+str		The project has no model root yet.	The project has no model root yet.
+str		There is no skill yet.	There is no skill yet.
+str		There is no diagram yet.	There is no diagram yet.
+str		There is nothing to remove or describe yet.	There is nothing to remove or describe yet.
+str		There is no schema yet.	There is no schema yet.
+str		There is no entity yet.	There is no entity yet.
+str		There is no package yet.	There is no package yet.
+str		There is no class, interface, enumeration, data type or primitive type yet.	There is no class, interface, enumeration, data type or primitive type yet.
+str		There is no class yet.	There is no class yet.
+str		There is no enumeration yet.	There is no enumeration yet.
+str		There is no class or interface yet.	There is no class or interface yet.
+str		There is no association or association class yet.	There is no association or association class yet.
+str		There is no n-ary association yet.	There is no n-ary association yet.
+str		There is no generalization yet.	There is no generalization yet.
+str		There is no generalization set yet.	There is no generalization set yet.
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	There is no class, interface, enumeration, data type, primitive type, association class or package yet.
+str		There is no constraint yet.	There is no constraint yet.
+str		There is no class, interface or data type yet.	There is no class, interface or data type yet.
+str		There is no template parameter yet.	There is no template parameter yet.
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	There is no template yet: give a class, an interface or a data type a template parameter first.
+str		There is no template binding yet.	There is no template binding yet.
+str		There is no profile yet.	There is no profile yet.
+str		There is no stereotype yet.	There is no stereotype yet.
+str		No stereotype is applied yet.	No stereotype is applied yet.
+str		Another change is still under way. Try again once it ends.	Another change is still under way. Try again once it ends.
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	The model could not be put back as it was after a failure. Reopen the project to go on.
+str		Undo and redo cannot run as part of another change.	Undo and redo cannot run as part of another change.
+str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
 str		It can't hold a control or hidden character.	It can't hold a control or hidden character.
