@@ -354,6 +354,71 @@ fn an_index_column_word_none_of_the_words_carries_its_reason_typed() {
     assert!(matches!(kind, Err(EngineError::NotAChoice { .. })), "{kind:?}");
 }
 
+/// A key's columns refused carry their reason typed beside the English sentence, which stays as it
+/// was: none, for a primary key and a unique constraint, and a column of another table; a key
+/// column a foreign key needs, by the foreign key and the key's table; and no primary key to
+/// remove. The rules type the problems the commands find first themselves: too many columns, one
+/// twice and one that may be null in a primary key (AR-492).
+#[test]
+fn a_keys_columns_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    use archforge_er::rules::{KeyColumnsProblem, MAX_KEY_COLUMNS, key_columns_problem};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let fk_col = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "customer_id", "type": "BIGINT", "nullable": "no" }));
+    run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [fk_col], "name": "fk_order_customer" }));
+    let unique = run(&mut s, "er.unique.add", json!({ "entity": sm.order, "columns": [sm.total] }));
+    let none = || Some(Reason::TooFew { kind: "key column", min: 1 });
+    let other = || Some(Reason::NotColumnOf { column: "id".into(), table: "Order".into() });
+    let set = |columns: Json| json!({ "unique": unique, "columns": columns, "name": "", "nulls_distinct": true });
+    let in_use = Reason::KeyInUse { foreign_key: "fk_order_customer".into(), table: "Customer".into() };
+    let flags = json!({ "attribute": sm.key, "primary_key": false, "nullable": "auto", "unique": false });
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.primary-key.set",
+            json!({ "entity": sm.order, "columns": [], "name": "" }),
+            "columns",
+            none(),
+            "a primary key needs at least one column; remove it instead",
+        ),
+        ("er.primary-key.set", json!({ "entity": sm.order, "columns": [sm.key], "name": "" }), "columns", other(), "id is not an attribute of Order"),
+        ("er.unique.add", json!({ "entity": sm.order, "columns": [] }), "columns", none(), "a key needs at least one column"),
+        ("er.unique.add", json!({ "entity": sm.order, "columns": [sm.key] }), "columns", other(), "id is not an attribute of Order"),
+        ("er.unique.set", set(json!([])), "columns", none(), "a key needs at least one column"),
+        ("er.unique.set", set(json!([sm.key])), "columns", other(), "id is not an attribute of Order"),
+        (
+            "er.attribute.set-flags",
+            flags,
+            "primary_key",
+            Some(in_use),
+            "the foreign key fk_order_customer points at the key of Customer; change or remove it first",
+        ),
+        (
+            "er.primary-key.remove",
+            json!({ "entity": sm.order }),
+            "entity",
+            Some(Reason::NoPrimaryKey { table: "Order".into() }),
+            "Order has no primary key",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (reason, message, Some(key)), "{cmd} {p}");
+    }
+    let nullable = run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "note", "type": "TEXT", "nullable": "yes" }));
+    let (st, customer) = (s.doc(), obj(s.doc(), &sm.customer));
+    let (id, note) = (obj(st, &sm.key), obj(st, &nullable));
+    for (columns, primary, reason, said) in [
+        (vec![id; MAX_KEY_COLUMNS + 1], false, Reason::TooMany { kind: "key column", max: MAX_KEY_COLUMNS }, "a key has at most 32 columns"),
+        (vec![id, id], false, Reason::NamedTwice { kind: "key column", name: "id".into() }, "id appears twice in the key"),
+        (vec![note], true, Reason::NullableKeyColumn { name: "note".into() }, "note is nullable, and a primary key column cannot be"),
+    ] {
+        let problem = key_columns_problem(st, customer, &columns, primary).map(|p| (p.reason(), p.said()));
+        assert_eq!(problem, Some((reason, said.to_string())), "{columns:?}");
+    }
+    assert_eq!(key_columns_problem(st, customer, &[note], false), None, "a unique constraint's column may be null");
+    assert!(matches!(key_columns_problem(st, customer, &[], true), Some(KeyColumnsProblem::NoColumn)));
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.

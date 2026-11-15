@@ -1027,25 +1027,68 @@ pub fn keys_onto(store: &Store, k: Obj) -> Vec<Obj> {
     store.referrers(k).into_iter().filter(|(_, prop)| *prop == foreign_key::REFERENCES).map(|(fk, _)| fk).collect()
 }
 
-/// Why `columns` cannot be a key of `entity`, as a sentence; None when they can. A primary key's
-/// columns are never nullable.
-pub fn key_columns_problem(store: &Store, entity: Obj, columns: &[Obj], primary: bool) -> Option<String> {
+/// Why columns cannot be a key of a table ([`key_columns_problem`]), each column and table by its
+/// label: said as an English sentence ([`KeyColumnsProblem::said`]) or typed
+/// ([`KeyColumnsProblem::reason`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyColumnsProblem {
+    /// The key has no column.
+    NoColumn,
+    /// The key has more than [`MAX_KEY_COLUMNS`] columns.
+    TooMany,
+    /// The element `column` is no column of the table `table`.
+    NotColumnOf { column: String, table: String },
+    /// The column `column` is in the key twice.
+    Twice { column: String },
+    /// The column `column` may be null, in a primary key.
+    Nullable { column: String },
+}
+
+impl KeyColumnsProblem {
+    /// The problem as an English sentence, as "a key needs at least one column".
+    pub fn said(&self) -> String {
+        match self {
+            Self::NoColumn => "a key needs at least one column".into(),
+            Self::TooMany => format!("a key has at most {MAX_KEY_COLUMNS} columns"),
+            Self::NotColumnOf { column, table } => format!("{column} is not an attribute of {table}"),
+            Self::Twice { column } => format!("{column} appears twice in the key"),
+            Self::Nullable { column } => format!("{column} is nullable, and a primary key column cannot be"),
+        }
+    }
+
+    /// The problem typed, for an interface to say in its own words; a key's columns are of the kind
+    /// `"key column"`.
+    pub fn reason(&self) -> Reason {
+        const KIND: &str = "key column";
+        match self {
+            Self::NoColumn => Reason::TooFew { kind: KIND, min: 1 },
+            Self::TooMany => Reason::TooMany { kind: KIND, max: MAX_KEY_COLUMNS },
+            Self::NotColumnOf { column, table } => Reason::NotColumnOf { column: column.as_str().into(), table: table.as_str().into() },
+            Self::Twice { column } => Reason::NamedTwice { kind: KIND, name: column.clone() },
+            Self::Nullable { column } => Reason::NullableKeyColumn { name: column.clone() },
+        }
+    }
+}
+
+/// Why `columns` cannot be a key of `entity`; None when they can. A primary key's columns are never
+/// nullable.
+pub fn key_columns_problem(store: &Store, entity: Obj, columns: &[Obj], primary: bool) -> Option<KeyColumnsProblem> {
     if columns.is_empty() {
-        return Some("a key needs at least one column".into());
+        return Some(KeyColumnsProblem::NoColumn);
     }
     if columns.len() > MAX_KEY_COLUMNS {
-        return Some(format!("a key has at most {MAX_KEY_COLUMNS} columns"));
+        return Some(KeyColumnsProblem::TooMany);
     }
     let mut seen = BTreeSet::new();
     for a in columns {
         if store.class_of(*a).ok() != Some(ATTRIBUTE) || entity_of(store, *a) != Some(entity) {
-            return Some(format!("{} is not an attribute of {}", label(store, *a), label(store, entity)));
+            return Some(KeyColumnsProblem::NotColumnOf { column: label(store, *a), table: label(store, entity) });
         }
         if !seen.insert(*a) {
-            return Some(format!("{} appears twice in the key", label(store, *a)));
+            return Some(KeyColumnsProblem::Twice { column: label(store, *a) });
         }
         if primary && is_nullable(store, *a) {
-            return Some(format!("{} is nullable, and a primary key column cannot be", label(store, *a)));
+            return Some(KeyColumnsProblem::Nullable { column: label(store, *a) });
         }
     }
     None
@@ -1259,7 +1302,7 @@ pub fn problems(store: &Store) -> Vec<String> {
             match entity_of(store, o) {
                 Some(e) => {
                     if let Some(p) = key_columns_problem(store, e, &key_columns(store, o), class == PRIMARY_KEY) {
-                        out.push(format!("the key {}: {p}", label(store, o)));
+                        out.push(format!("the key {}: {}", label(store, o), p.said()));
                     }
                 }
                 None => out.push(format!("the key {} belongs to no entity", label(store, o))),

@@ -581,6 +581,11 @@ str		No id is given. Give the id of {what}.	Não foi indicado nenhum identificad
 str		{name} is not {what}.	{name} não é {what}.
 str		Give the key's columns as a list of ids.	Indique as colunas da chave como uma lista de identificadores.
 str		A key holds at most {max} columns.	Uma chave tem no máximo {max} colunas.
+str		A key needs at least one column.	Uma chave precisa de pelo menos uma coluna.
+str		{column} is not a column of {table}.	{column} não é uma coluna de {table}.
+str		{name} may be null, which a primary key column never is.	{name} admite nulos, e uma coluna de chave primária nunca os admite.
+str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	A chave estrangeira {foreign_key} aponta para esta chave de {table}. Altere-a ou remova-a primeiro.
+str		{table} has no primary key.	{table} não tem chave primária.
 str		A package cannot go into itself or a package it holds.	Um pacote não pode ir para dentro de si próprio nem de um pacote que contém.
 str		The model cannot be changed at the moment; nothing was changed.	O modelo não pode ser alterado de momento; nada foi alterado.
 str		The text can't be empty.	O texto não pode estar vazio.

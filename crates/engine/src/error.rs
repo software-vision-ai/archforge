@@ -329,6 +329,15 @@ pub enum Reason {
     NotAPlainWord,
     /// A word is none of the words its place takes, as a diagram kind no notation knows.
     NotOneOf(Box<NotOneOf>),
+    /// The element `column` is no column of the table `table`, whose keys take only its own.
+    NotColumnOf { column: Box<str>, table: Box<str> },
+    /// The column `name` may be null, which a primary key's column never is.
+    NullableKeyColumn { name: String },
+    /// The foreign key `foreign_key` points at a key of the table `table`, so the key keeps its
+    /// columns while it does.
+    KeyInUse { foreign_key: Box<str>, table: Box<str> },
+    /// The table `table` has no primary key.
+    NoPrimaryKey { table: String },
 }
 
 /// What a [`Reason::NotOneOf`] names; boxed in the reason, so the error stays small.
