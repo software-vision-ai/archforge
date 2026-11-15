@@ -6843,7 +6843,8 @@ fn selected(h: &Harness<'static, Shell>, id: &str) -> bool {
 /// From the filter field, Tab lands on the tree, then on every row of Models with its arrow or drag
 /// handle in turn, and Shift+Tab from the last back to the filter field, each row brought whole into
 /// view, past a row the wheel left cut by an edge too; the page keys move the keyboard. While the tree holds the keys, after a click on a row,
-/// they move the selection instead, and the arrows still move it a row; not with the control key.
+/// they move the selection instead, and the arrows still move it a row; not with the control key,
+/// nor in the frame a screen reader's click opens the in-window menu bar in.
 /// With nothing selected they select the first row, or the last for End.
 #[test]
 fn models_follows_the_keyboard() {
@@ -6869,6 +6870,12 @@ fn models_follows_the_keyboard() {
         key(&mut h, egui::Key::End, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND));
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         assert!(selected(&h, &rows[1]) && h.state().explorer.scroll.offset == 0.0, "{theme:?}: not with the control key");
+        // Nor in the frame of the click that opens the in-window menu bar (AR-518).
+        h.state_mut().in_window_menu = true;
+        h.run();
+        open_file_with(&mut h, egui::Key::End, false);
+        assert!(selected(&h, &rows[1]) && h.state().explorer.scroll.offset == 0.0, "{theme:?}: with the click that opens the menu bar");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // With nothing selected, End selects the last row and Home, Page Up and Page Down the first.
         for (key_, to) in [(egui::Key::End, 60), (egui::Key::Home, 0), (egui::Key::PageDown, 0), (egui::Key::End, 60), (egui::Key::PageUp, 0)] {
             crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [] })).unwrap();
