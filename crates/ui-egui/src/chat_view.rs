@@ -29,6 +29,8 @@ const ROW: f32 = 48.0;
 const ROW_PITCH: f32 = 50.0;
 /// Why a control waits while a reply runs.
 const WAIT: &str = "Stop the reply first";
+/// The transcript's own Tab stop (AR-487).
+const TRANSCRIPT: &str = "workspace.chat.transcript";
 
 /// What the person asked for while the panel was drawn.
 #[derive(Debug, Clone, PartialEq)]
@@ -580,6 +582,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     let mut y = top;
     let branch_empty = crate::chat_panel::branch_empty(shell, panel);
     let Some(chat) = panel.chat.as_mut() else { return };
+    let stop = transcript_stop(shell, &clip, area);
     shell.registry.reach_from(top);
     if chat.turns.is_empty() && branch_empty {
         y += branch_note(shell, &clip, p, pos2(left, y), width, true);
@@ -698,19 +701,36 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
         let thumb = Rect::from_min_size(pos2(area.right() - 6.0, track.top() + at * (track.height() - h)), vec2(4.0, h));
         paint.rect_filled(thumb, 2.0, p.scroll_thumb);
     }
+    crate::settings::focus_ring(&paint, p, area.shrink(3.0), 6.0, &stop);
+}
+
+/// The transcript's own Tab stop over `area`, before its links (AR-487): it takes the keyboard for
+/// the page keys with no link or button in it, never a click, and a screen reader hears it as the
+/// conversation's log.
+fn transcript_stop(shell: &mut Shell, ui: &egui::Ui, area: Rect) -> egui::Response {
+    crate::widgets::record_visible(ui, &mut shell.registry, TRANSCRIPT, "panel", area);
+    let resp = ui.interact(area, crate::widgets::egui_id(TRANSCRIPT), egui::Sense::FOCUSABLE);
+    ui.ctx().accesskit_node_builder(resp.id, |node| {
+        node.set_role(egui::accesskit::Role::Log);
+        node.set_label(tr("Conversation"));
+    });
+    resp
 }
 
 /// The conversation follows the keyboard (AR-477), laid out at the scroll `drawn` in `area` with
-/// `room` to scroll. While one of its controls has the keyboard and no link's confirmation is open,
-/// Page Up and Page Down scroll it by what shows less a line, Home and End to either end (the
-/// composer keeps its keys); a control the keyboard has just come to, by Tab or a screen reader, is
-/// brought into view from there. Off its end, what comes in after leaves the place.
+/// `room` to scroll. While it or one of its controls has the keyboard and no link's confirmation
+/// is open, Page Up and Page Down scroll it by what shows less a line, Home and End to either end
+/// (the composer keeps its keys); a control the keyboard has just come to, by Tab or a screen
+/// reader, is brought into view from there. Off its end, what comes in after leaves the place.
 fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), panel: &mut Panel, drawn: f32) {
-    let now = ui.memory(|m| m.focused()).and_then(|id| Some((id, shell.registry.laid_out(id)?)));
-    let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id));
+    let focused = ui.memory(|m| m.focused());
+    // The transcript's own stop is no control of it to bring into view (AR-487).
+    let own = focused.filter(|id| *id == crate::widgets::egui_id(TRANSCRIPT));
+    let now = focused.and_then(|id| Some((id, shell.registry.laid_out(id)?)));
+    let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id).or(own));
     panel.area = Some(area);
     let before = panel.scroll;
-    if now.is_some() && panel.link.is_none() {
+    if (now.is_some() || own.is_some()) && panel.link.is_none() {
         crate::version_details::page_keys(ui, &mut panel.scroll, (area.height() - types::UI.line).max(types::UI.line));
     }
     // End's far offset becomes the real end before any place is worked out from it.
