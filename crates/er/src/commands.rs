@@ -3223,13 +3223,16 @@ fn relationship_remove(ctx: &mut C<'_>, p: &Params) -> R {
 /// Removes schemas, entities, attributes, relationships, keys and foreign keys at once: the
 /// selection's delete (`element.remove`, through [`crate::ErNotation`]). Foreign keys, keys,
 /// relationships and attributes first, then entities, then schemas, so a cascade finds nothing
-/// missing; what an earlier removal already took is skipped. How many went.
+/// missing; what an earlier removal already took is skipped. How many went. An element of another
+/// kind, removed where it is edited, is refused as such ([`Reason::RemovedWhereEdited`]), and a
+/// part of a subtype's key without its subtype as that part ([`Reason::SubtypeKeyPart`]); a
+/// refusal found inside a cascade keeps its reason ([`refused_as`]).
 pub fn remove_elements(store: &mut Store, ids: &[Obj]) -> Result<usize, CommandError> {
     let mut by_class: Vec<(ClassId, Obj)> = Vec::new();
     for o in ids {
         let class = store.class_of(*o).map_err(fail)?;
         if ![GENERALIZATION, FOREIGN_KEY, PRIMARY_KEY, UNIQUE_CONSTRAINT, RELATIONSHIP, ATTRIBUTE, ENTITY, SEQUENCE, VIEW, SCHEMA].contains(&class) {
-            return Err(refuse("ids", format!("{} is not an ER element", uuid_of(store, *o)?)));
+            return Err(refuse("ids", format!("{} is not an ER element", uuid_of(store, *o)?)).because(Reason::RemovedWhereEdited));
         }
         by_class.push((class, *o));
     }
@@ -3241,7 +3244,7 @@ pub fn remove_elements(store: &mut Store, ids: &[Obj]) -> Result<usize, CommandE
             let schema = rules::schema_of(store, g);
             let covered = ids.iter().any(|x| Some(*x) == Some(g) || Some(*x) == sup || Some(*x) == sub || Some(*x) == schema);
             if !covered {
-                return Err(refuse("ids", "a part of a subtype's key goes only with its generalization"));
+                return Err(refuse("ids", "a part of a subtype's key goes only with its generalization").because(Reason::SubtypeKeyPart));
             }
         }
     }

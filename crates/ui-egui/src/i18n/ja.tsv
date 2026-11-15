@@ -610,6 +610,8 @@ str		Identifying relationships would run in a cycle between {child} and {parent}
 str		The foreign key points at this key already. Name the columns to change them.	外部キーはすでにこのキーを参照しています。変更するには列を指定してください。
 str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
+str		This element is removed where it is edited.	この要素は、編集する場所で削除します。
+str		This is part of a subtype's key, which goes only with its subtype.	これはサブタイプのキーの一部で、そのサブタイプと一緒にのみ削除されます。
 str		Only a computed column takes an expression.	式を持てるのは計算列だけです。
 str		A computed column needs an expression.	計算列には式が必要です。
 str		A computed column takes no default.	計算列は既定値を持てません。

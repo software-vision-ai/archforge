@@ -609,6 +609,8 @@ str		Identifying relationships would run in a cycle between {child} and {parent}
 str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
 str		The key {name} would break: {why}	The key {name} would break: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
+str		This element is removed where it is edited.	This element is removed where it is edited.
+str		This is part of a subtype's key, which goes only with its subtype.	This is part of a subtype's key, which goes only with its subtype.
 str		Only a computed column takes an expression.	Only a computed column takes an expression.
 str		A computed column needs an expression.	A computed column needs an expression.
 str		A computed column takes no default.	A computed column takes no default.

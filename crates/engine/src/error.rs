@@ -349,6 +349,12 @@ pub enum Reason {
     ArrangedTooFar,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
+    /// The element is of a kind its notation removes where it is edited, not with the selection, as
+    /// an ER domain, enum type, check or index.
+    RemovedWhereEdited,
+    /// The element is a part of a subtype's key, which goes only with its subtype, one of the
+    /// subtype's two tables or their schema.
+    SubtypeKeyPart,
     /// The elements of `notation` are not described yet.
     NotDescribable { notation: &'static str },
     /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's

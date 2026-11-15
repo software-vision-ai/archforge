@@ -610,6 +610,8 @@ str		Identifying relationships would run in a cycle between {child} and {parent}
 str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
 str		The key {name} would break: {why}	键 {name} 将失效：{why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
+str		This element is removed where it is edited.	此元素需在编辑它的地方删除。
+str		This is part of a subtype's key, which goes only with its subtype.	这是子类型键的一部分，只能随其子类型一起删除。
 str		Only a computed column takes an expression.	只有计算列才能有表达式。
 str		A computed column needs an expression.	计算列需要表达式。
 str		A computed column takes no default.	计算列不能有默认值。
