@@ -97,42 +97,6 @@ pub fn walk(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(out)
 }
 
-/// The files git tracks, or every file under the root when git is unavailable; an error when that
-/// walk fails.
-pub fn tracked() -> Result<Vec<PathBuf>, String> {
-    let out = Command::new("git").args(["ls-files", "--cached", "--others", "--exclude-standard"]).current_dir(root()).output();
-    match out {
-        Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).lines().map(PathBuf::from).collect()),
-        _ => Ok(walk(&root())?.into_iter().filter(|p| !p.starts_with("target") && !p.starts_with(".git")).collect()),
-    }
-}
-
-/// The variable that names the trademark list: names the project must not use, from a list
-/// maintainers keep outside the repository.
-pub const BRANDS_VAR: &str = "FORGE_BRANDS";
-/// Set to `1` where the trademark list must be there, so a missing list fails the gate.
-pub const BRANDS_REQUIRED_VAR: &str = "FORGE_BRANDS_REQUIRED";
-
-/// The trademark list's path: the file `FORGE_BRANDS` names, when that file is there. Without the
-/// list the trademark check is skipped.
-pub fn brand_list_path() -> Option<PathBuf> {
-    let path = root().join(std::env::var_os(BRANDS_VAR).filter(|v| !v.is_empty())?);
-    path.is_file().then_some(path)
-}
-
-/// Whether the trademark list must be there (`FORGE_BRANDS_REQUIRED=1`).
-pub fn brand_list_required() -> bool {
-    std::env::var(BRANDS_REQUIRED_VAR).is_ok_and(|v| v == "1")
-}
-
-/// Lines of the trademark list, lower-cased, without comments. A list that is named but cannot be read
-/// is an error, so the check never passes for want of its list.
-pub fn brands() -> Result<Vec<String>, String> {
-    let path = brand_list_path().ok_or_else(|| format!("no trademark list to check against: {BRANDS_VAR} names no file that is here"))?;
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("the trademark list {}: {e}", path.display()))?;
-    Ok(text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(str::to_lowercase).collect())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
