@@ -1,7 +1,7 @@
 //! Coverage tests: every wrapped literal in the shell's and the desktop app's source, and every
-//! start card text, has a row in every complete catalogue, and every row is read; a partial
-//! catalogue reports its gaps without failing. The catalogues are screened for hidden characters,
-//! addresses and instructions.
+//! start card text, has a row in every complete catalogue, every row is read, and no catalogue
+//! holds a key twice; a partial catalogue reports its gaps without failing. The catalogues are
+//! screened for hidden characters, addresses and instructions.
 
 use std::path::{Path, PathBuf};
 
@@ -115,10 +115,50 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     (strings, plurals)
 }
 
+/// The keys a catalogue holds twice, each named with the file and both line numbers. Two rows are
+/// one key when `parse` reads them into the same entry, so the later row silently replaces the
+/// earlier: a `str` row by its context and key (a `tr_ctx` context makes a row of its own), a
+/// `plural` row by its key alone, whatever its context.
+fn duplicates(catalogue: &str, text: &str) -> Vec<String> {
+    let mut first_line = HashMap::new();
+    let mut found = Vec::new();
+    for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.is_empty() && !l.starts_with('#')) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let [kind, context, key, _] = cols.as_slice() else { continue };
+        let context = if *kind == "plural" { "" } else { context };
+        let first = *first_line.entry((kind.to_string(), context.to_string(), key.to_string())).or_insert(n + 1);
+        if first != n + 1 {
+            let within = if context.is_empty() { String::new() } else { format!(" in context {context:?}") };
+            found.push(format!("{catalogue} lines {first} and {}: {kind} {key:?}{within}", n + 1));
+        }
+    }
+    found
+}
+
+/// A key twice in one catalogue is named with both lines; a context makes a `str` row of its own,
+/// a `plural` row is one key whatever its context, and the two kinds never share a key.
+#[test]
+fn a_key_twice_in_a_catalogue_is_named_with_both_lines() {
+    let text = "# A header\nstr\t\tFile\tFile\nstr\tmacOS\tFile\tFile\nplural\t\t{n} day ago\ta|b\nstr\t\tFile\tDatei\nplural\tx\t{n} day ago\ta|b\nplural\t\tFile\ta|b\nstr\tmacOS\tFile\tAblage\n";
+    let found = duplicates("xx.tsv", text);
+    assert_eq!(
+        found,
+        [
+            "xx.tsv lines 2 and 5: str \"File\"",
+            "xx.tsv lines 4 and 6: plural \"{n} day ago\"",
+            "xx.tsv lines 3 and 8: str \"File\" in context \"macOS\""
+        ]
+    );
+}
+
+/// Every complete catalogue has a row for every literal the source wraps, and no catalogue holds a
+/// key twice, which the loader would read as the later row alone.
 #[test]
 fn every_complete_catalogue_has_every_row() {
     let (strings, plurals) = required();
     assert!(!strings.is_empty(), "the scan found nothing; the scanner is broken");
+    let twice: Vec<String> = LANGUAGES.iter().flat_map(|lang| duplicates(lang.catalogue, &catalogue_text(lang))).collect();
+    assert!(twice.is_empty(), "{} key(s) are in a catalogue twice; keep one row of each:\n{}", twice.len(), twice.join("\n"));
     for lang in LANGUAGES {
         let c = parse(&catalogue_text(lang));
         assert!(!c.strings.is_empty(), "{} unpacked empty", lang.code);

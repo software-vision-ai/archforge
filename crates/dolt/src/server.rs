@@ -90,7 +90,7 @@ impl Server {
         let left = Arc::new(AtomicBool::new(false));
         let launched = launch(dolt, &data_dir, &data_text, &run_root, &run_dir, uid, &owner.started, opts, &left);
         // A server that would not stop may still run on its run folder, which recovery removes
-        // with the server's record, if it has one, once it is stopped or gone.
+        // with the server's record once it is stopped or gone.
         if launched.is_err() && !left.load(Ordering::Relaxed) {
             run_dir::remove(&run_root, &run_dir, uid);
         }
@@ -183,6 +183,8 @@ impl Started {
     fn stop_within(&mut self, budget: Duration) -> Result<(), Error> {
         self.tried = true;
         #[cfg(all(test, unix))]
+        tests::at_stop();
+        #[cfg(all(test, unix))]
         let stopped = if tests::STOP_FAILS.take() { Err(Error::StillRunning { pid: self.id(), waited: budget }) } else { Ok(()) };
         #[cfg(not(all(test, unix)))]
         let stopped = Ok(());
@@ -273,13 +275,10 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // start. Linux's parent-death signal would not do instead: it follows the thread that started the
 // server, and servers start on worker threads that end once a project is open. Windows' job objects
 // kill without a polite stop and need unsafe calls. So this sweep stays the backstop everywhere.
-// What neither covers: an Archforge killed between a server's start and its record. The record
-// holds the server's process id, so it cannot come first; a start that fails there stops its
-// server (`Started`), but a kill runs no code. That moment is the record's write to disk, measured
-// at 5 to 10 ms on macOS. A server left so has no record for a sweep to find, and its run folder
-// stays. Recovery treats it as any server it did not record: once it holds the project's lock, and
-// if its program's file is named `dolt`, the project is refused as open elsewhere, naming the
-// server's process id, until that process is stopped.
+// What neither covers yet: an Archforge killed after its server started and before its record,
+// written before the start, names the server's process id (the record's completion: a write to
+// disk). This sweep leaves a record without a process id alone; the opening of its project
+// settles it, finding the server by the command line recorded (`settle_pending`).
 /// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
 /// forgets the records of servers that are gone: for a start-up, so a project never opened again
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
@@ -489,11 +488,17 @@ fn stop_child(child: &mut Child, budget: Duration) -> Result<(), Error> {
     child.wait().map(|_| ()).map_err(|e| Error::io("cannot wait for the database server", format!("process {}", child.id()), e))
 }
 
-/// Writes the configuration, starts the server, records it, and waits until it is ready; a lost
-/// race for the port starts it again. Every step that can fail without the server comes before
-/// its start; what can fail after it (the record, the wait) returns through [`Started`], whose
-/// drop stops the server. `left` says afterwards whether a server was started that would not
-/// stop: the caller then leaves the run folder to it.
+/// Records the start, writes the configuration, starts the server, completes the record with the
+/// server's process id, and waits until the server is ready; a lost race for the port starts it
+/// again. The record is written, without a process id, before a port is probed for the server,
+/// and its lock is held from before it is written until it is complete: a record that names no
+/// process while its lock can be had is that of a start that will never go on. Every step that
+/// can fail without the server comes before its start, and a failure there removes the record;
+/// what can fail after it (completing the record, the wait) returns through [`Started`], whose
+/// drop stops the server, and a failure to complete the record stops the server and removes the
+/// record, all still under the lock; never the record of a server that would not stop. `left` says
+/// afterwards whether a server was started that would not stop: the caller then leaves the run
+/// folder to it.
 fn launch(
     dolt: &Dolt,
     data_dir: &Path,
@@ -533,55 +538,72 @@ fn launch(
     let mut attempt = 0;
     loop {
         // The record's lock comes first: a wait for it leaves no server behind and no port to lose.
-        // Nothing added between the server's start and `drop(held)` may return: the lock would be
-        // held while the server is stopped (the tests' hook does that, in tests only).
+        // It is held until the record names the server. Nothing between the server's start and
+        // `drop(held)` may return but through the stop below.
         let held = record::hold(&record::path(&opts.records, data_text), record::LOCK_WAIT)?;
-        let port = free_port()?;
-        let yaml =
-            config::server_yaml(&config::Settings { port, socket: socket_text, data_dir: data_text, cfg_dir: cfg_text, no_files: no_files_text });
-        std::fs::write(&yaml_path, yaml).map_err(|e| Error::io("cannot write", &yaml_path, e))?;
-        let log = std::fs::File::create(&log_path).map_err(|e| Error::io("cannot create", &log_path, e))?;
-        let log_err = log.try_clone().map_err(|e| Error::io("cannot open", &log_path, e))?;
-        let mut env = dolt.env();
-        env.push(("DOLT_ROOT_PASSWORD".into(), password.expose().into()));
-        env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
-        let mut c = runner::command(dolt.path(), &env);
-        c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
-        let child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
-        // From here to the `Server`, no return leaves the server running: see `Started`.
-        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false, left: left.clone() };
-        #[cfg(all(test, unix))]
-        tests::after_spawn(child.id())?;
-        let rec = Record {
+        let pending = Record {
             data_dir: data_text.to_string(),
-            server_pid: Some(child.id()),
+            server_pid: None,
             run_root: run_root_text.clone(),
             run_dir: run_text.clone(),
             command: command.clone(),
             owner_pid: std::process::id(),
             owner_started: owner_started.to_string(),
         };
-        // Another start may have recorded a server since recovery looked: its record stays, and this
-        // one gives way.
-        let written = record::write_new(&held, &rec);
-        drop(held);
-        match written {
-            #[cfg(all(test, unix))]
-            Ok(true) => tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id()))),
-            #[cfg(not(all(test, unix)))]
-            Ok(true) => {}
-            Ok(false) => {
-                child.stop();
-                let pid = record::read(&opts.records, data_text).ok().flatten().map_or(0, |r| r.server_pid.unwrap_or(r.owner_pid));
-                return Err(Error::OpenElsewhere { pid });
-            }
-            // Dropping `child` stops the server.
-            Err(e) => return Err(e),
+        // Another start may have recorded itself since recovery looked: its record stays, and this
+        // one gives way before it probes a port or writes the configuration. That record is read
+        // without the lock, which setting a damaged one aside would wait for.
+        if !record::write_new(&held, &pending)? {
+            drop(held);
+            let other = record::read(&opts.records, data_text).ok().flatten();
+            return Err(Error::OpenElsewhere { pid: other.map_or(0, |r| r.server_pid.unwrap_or(r.owner_pid)) });
         }
-        // The record comes first: the watchdog may wait for its turn to start, and a server of an
-        // Archforge killed meanwhile is one the start-up sweep finds by its record. From here on a
-        // killed Archforge takes this server with it. The watchdog ends with this turn of the loop
-        // or with the `Server`, in both after the attempt to stop the server.
+        let spawned = free_port().and_then(|port| {
+            let settings = config::Settings { port, socket: socket_text, data_dir: data_text, cfg_dir: cfg_text, no_files: no_files_text };
+            std::fs::write(&yaml_path, config::server_yaml(&settings)).map_err(|e| Error::io("cannot write", &yaml_path, e))?;
+            let log = std::fs::File::create(&log_path).map_err(|e| Error::io("cannot create", &log_path, e))?;
+            let log_err = log.try_clone().map_err(|e| Error::io("cannot open", &log_path, e))?;
+            let mut env = dolt.env();
+            env.push(("DOLT_ROOT_PASSWORD".into(), password.expose().into()));
+            env.push(("DOLT_ROOT_HOST".into(), "localhost".into()));
+            let mut c = runner::command(dolt.path(), &env);
+            c.args(command.iter().skip(1)).current_dir(run).stdout(Stdio::from(log)).stderr(Stdio::from(log_err));
+            #[cfg(all(test, unix))]
+            tests::at_spawn(&held, data_text);
+            let child = runner::spawn(&mut c, false).map_err(|e| Error::io("cannot start", dolt.path(), e))?;
+            Ok((port, child))
+        });
+        let (port, child) = match spawned {
+            Ok(spawned) => spawned,
+            Err(e) => {
+                // No server runs: the record goes, under the lock still held.
+                record::remove_held(&held, |r| *r == pending);
+                return Err(e);
+            }
+        };
+        // From here to the `Server`, no return leaves the server running: see `Started`.
+        let mut child = Started { child, stop_budget: opts.stop_budget, tried: false, left: left.clone() };
+        #[cfg(all(test, unix))]
+        let completed = tests::after_spawn(child.id()).and_then(|()| record::complete(&held, &pending, child.id()));
+        #[cfg(not(all(test, unix)))]
+        let completed = record::complete(&held, &pending, child.id());
+        if let Err(e) = completed {
+            // Still under the lock: no opening takes the record for that of a start that ended
+            // while its server is being stopped. The record of a server that would not stop is not
+            // removed: recovery finds the server by it.
+            if child.stop() {
+                record::remove_held(&held, |r| *r == pending);
+            }
+            drop(held);
+            return Err(e);
+        }
+        drop(held);
+        #[cfg(all(test, unix))]
+        tests::WATCHED_AT_RECORD.set(Some(tests::watched(child.id())));
+        // The complete record comes first: the watchdog may wait for its turn to start, and a
+        // server of an Archforge killed meanwhile is one the start-up sweep finds by its record.
+        // From here on a killed Archforge takes this server with it. The watchdog ends with this
+        // turn of the loop or with the `Server`, in both after the attempt to stop the server.
         let watchdog = Watchdog::tie(child.id(), &command);
         #[cfg(all(test, unix))]
         let before = tests::before_ready();
@@ -740,14 +762,39 @@ mod tests {
         /// Whether this thread's next stop of a server it started fails without trying: a server
         /// that would not stop, which a polite signal, a kill and a wait all but rule out on unix.
         pub(super) static STOP_FAILS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        /// The record of the server this thread last started, as it was just before the start.
+        static RECORD_AT_SPAWN: std::cell::RefCell<Option<Record>> = const { std::cell::RefCell::new(None) };
+        /// A file and what this thread's next start writes into it just before its server starts,
+        /// without the record's lock, as a build without that lock would.
+        static WRITE_AT_SPAWN: std::cell::RefCell<Option<(PathBuf, Vec<u8>)>> = const { std::cell::RefCell::new(None) };
+        /// What a test does when this thread next tries to stop a server it started: once.
+        static AT_STOP: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Notes the record under the lock `held` just before the server of the project at
+    /// `data_text` starts, then writes what a test asked for.
+    #[cfg(unix)]
+    pub(super) fn at_spawn(held: &record::Held, data_text: &str) {
+        RECORD_AT_SPAWN.set(record::look(held, data_text).ok().flatten());
+        if let Some((file, bytes)) = WRITE_AT_SPAWN.take() {
+            let _ = std::fs::write(file, bytes);
+        }
     }
 
     /// Notes the server just started and, once when a test asked for it, fails in the place of
-    /// whatever step may fail between a server's start and its `Server`.
+    /// completing its record.
     #[cfg(unix)]
     pub(super) fn after_spawn(server: u32) -> Result<(), Error> {
         SPAWNED.set(Some(server));
         if FAIL_AFTER_SPAWN.take() { Err(Error::BadPath { what: "test", path: String::new() }) } else { Ok(()) }
+    }
+
+    /// Runs the hook a test set for the next stop of a server this thread started, once.
+    #[cfg(unix)]
+    pub(super) fn at_stop() {
+        if let Some(hook) = AT_STOP.take() {
+            hook();
+        }
     }
 
     /// Fails, once when a test asked for it, in the place of a server that does not get ready.
@@ -764,7 +811,8 @@ mod tests {
     }
 
     /// An Archforge killed between the two leaves a server the start-up sweep finds by its record.
-    /// Needs dolt, as the tests in `tests/server.rs` do.
+    /// Before the server started its record was there, whole but for the process id, which the
+    /// record names once the server runs. Needs dolt, as the tests in `tests/server.rs` do.
     #[cfg(unix)]
     #[test]
     fn a_server_is_recorded_before_its_watchdog_starts() {
@@ -773,32 +821,70 @@ mod tests {
         std::fs::create_dir(dir.0.join("data")).unwrap();
         let opts = ServerOptions { ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
         let server = Server::start(&dolt, &dir.0.join("data"), &opts).unwrap();
-        assert!(watched(server.pid()), "the watchdog runs once the server has started");
+        let (pid, complete) = (server.pid(), record::all(&opts.records).unwrap().pop().map(|(_, r)| r));
+        assert!(watched(pid), "the watchdog runs once the server has started");
         server.stop().unwrap();
         assert_eq!(WATCHED_AT_RECORD.get(), Some(false));
+        let pending = RECORD_AT_SPAWN.take().unwrap();
+        assert_eq!((pending.server_pid, complete), (None, Some(Record { server_pid: Some(pid), ..pending })));
     }
 
-    /// The failure is put there by the test, since a test cannot make the record's write fail
-    /// from outside. The server is stopped and reaped before the start returns, and the folder
-    /// opens again. Needs dolt.
+    /// The failure is put there by the test, in the place of completing the record, since a test
+    /// cannot make that write fail from outside. The server is stopped and reaped before the start
+    /// returns, with the record's lock still held and its record still there, which then goes;
+    /// and the folder opens again. Needs dolt.
     #[cfg(unix)]
     #[test]
     fn a_start_that_fails_once_its_server_runs_stops_the_server() {
-        let dir = crate::home::tests::Scratch::new("failed-start");
+        let (dir, root) = (crate::home::tests::Scratch::new("failed-start"), crate::home::tests::Scratch::new("f"));
         let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
         std::fs::create_dir(dir.0.join("data")).unwrap();
-        let opts = ServerOptions { ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        let opts =
+            ServerOptions { run_root: Some(root.0.clone()), ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        let project = dir.0.join("data").canonicalize().unwrap().display().to_string();
+        let (records, at_stop) = (opts.records.clone(), std::rc::Rc::new(std::cell::Cell::new(None)));
+        let seen = at_stop.clone();
+        AT_STOP.set(Some(Box::new(move || {
+            let held = record::hold(&record::path(&records, &project), Duration::ZERO).is_err();
+            seen.set(Some((held, record::read(&records, &project).ok().flatten().map(|r| r.server_pid))));
+        })));
         FAIL_AFTER_SPAWN.set(true);
         let failed = Server::start(&dolt, &dir.0.join("data"), &opts);
         assert!(matches!(failed, Err(Error::BadPath { what: "test", .. })), "{failed:?}");
-        let pid = SPAWNED.get().unwrap();
-        let left = identity(pid).ok().flatten().is_some_and(|i| i.is_dolt_server());
+        let (pid, line) = (SPAWNED.get().unwrap(), RECORD_AT_SPAWN.take().map(|r| r.command).unwrap_or_default());
+        let left = identity(pid).ok().flatten().is_some_and(|i| i.is(&line));
         if left {
             let _ = std::process::Command::new("/bin/kill").args(["-KILL", &pid.to_string()]).status();
         }
         assert!(!left, "the server {pid} ran on after its start had failed");
         assert!(!watched(pid), "and no watchdog is left for it");
+        assert_eq!(at_stop.get(), Some((true, Some(None))), "stopped under the lock, its record there and not complete");
+        assert_eq!(record::all(&opts.records).unwrap(), Vec::new(), "and its record went");
         Server::start(&dolt, &dir.0.join("data"), &opts).unwrap().stop().unwrap();
+    }
+
+    /// Another record was put under the name while a start held its lock, by something that does
+    /// not take it (a build without the lock): the start does not complete it, stops its server,
+    /// and leaves that record as it is. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_whose_record_was_replaced_stops_its_server_and_leaves_that_record() {
+        let (dir, root) = (crate::home::tests::Scratch::new("replaced"), crate::home::tests::Scratch::new("r"));
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        std::fs::create_dir(dir.0.join("data")).unwrap();
+        let opts =
+            ServerOptions { run_root: Some(root.0.clone()), ready_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+        let other = record::tests::rec(&dir.0.join("data").canonicalize().unwrap().display().to_string());
+        WRITE_AT_SPAWN.set(Some((record::path(&opts.records, &other.data_dir), serde_json::to_vec(&other).unwrap())));
+        let failed = Server::start(&dolt, &dir.0.join("data"), &opts);
+        let (pid, line) = (SPAWNED.get().unwrap(), RECORD_AT_SPAWN.take().map(|r| r.command).unwrap_or_default());
+        let left = identity(pid).ok().flatten().is_some_and(|i| i.is(&line));
+        if left {
+            let _ = std::process::Command::new("/bin/kill").args(["-KILL", &pid.to_string()]).status();
+        }
+        assert!(matches!(&failed, Err(Error::Io { what, .. }) if what == "cannot complete"), "{failed:?}");
+        assert!(!left, "the server {pid} ran on after its start had failed");
+        assert_eq!(record::read(&opts.records, &other.data_dir).unwrap(), Some(other));
     }
 
     /// With the record's lock held elsewhere a start fails before it comes to its server, here a
@@ -820,12 +906,61 @@ mod tests {
         assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot lock");
         drop(held);
         assert_eq!(what(Server::start(&dolt, &project, &opts)), "cannot start", "with the lock it comes to the server");
+        assert_eq!(RECORD_AT_SPAWN.take().map(|r| r.server_pid), Some(None), "its record was written first");
+        assert_eq!(record::all(&opts.records).unwrap(), Vec::new(), "and went, as no server started");
+    }
+
+    /// Another start recorded itself, completely or not yet, after this one's recovery looked:
+    /// this one gives way before it probes a port, writes the configuration or starts a server
+    /// (here a link to dolt that is gone by then), and the other's record stays. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_that_finds_a_record_gives_way_before_it_starts_a_server() {
+        let (dir, root) = (crate::home::tests::Scratch::new("give-way"), crate::home::tests::Scratch::new("g"));
+        let home = crate::Home::prepare(&dir.0.join("home")).unwrap();
+        std::os::unix::fs::symlink(Dolt::find(&home).unwrap().path(), dir.0.join("dolt")).unwrap();
+        let dolt = Dolt::at(&dir.0.join("dolt"), &home).unwrap();
+        std::fs::remove_file(dir.0.join("dolt")).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        private_records(&opts.records).unwrap();
+        let (root, uid) = run_dir::checked_root(&root.0).unwrap();
+        for (other, named) in [(record::tests::rec("/p/a"), 7), (Record { server_pid: None, ..record::tests::rec("/p/a") }, 8)] {
+            assert!(record::tests::write_new(&opts.records, &other).unwrap());
+            let run = run_dir::create(&root, uid).unwrap();
+            let refused = launch(&dolt, &dir.0, "/p/a", &root, &run, uid, "x", &opts, &Arc::new(AtomicBool::new(false)));
+            assert!(matches!(refused, Err(Error::OpenElsewhere { pid }) if pid == named), "{refused:?}");
+            assert!(!run.join("server.yaml").exists(), "nothing was written for a server");
+            assert_eq!(record::read(&opts.records, "/p/a").unwrap(), Some(other));
+            record::remove(&record::path(&opts.records, "/p/a"));
+        }
+    }
+
+    /// A project whose record would be larger than a record may be, once it names the server, is
+    /// refused before anything is written for it or started. Its path, as a start is given it, is
+    /// one Linux could hold (macOS cannot make a folder that deep). Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_whose_record_would_be_too_large_starts_nothing() {
+        let (dir, root) = (crate::home::tests::Scratch::new("too-large"), crate::home::tests::Scratch::new("t"));
+        let dolt = Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+        let opts = ServerOptions::new(dir.0.join("records"));
+        private_records(&opts.records).unwrap();
+        let (root, uid) = run_dir::checked_root(&root.0).unwrap();
+        let (run, project) = (run_dir::create(&root, uid).unwrap(), format!("/p{}", "/deep".repeat(800)));
+        let refused = launch(&dolt, &dir.0, &project, &root, &run, uid, "x", &opts, &Arc::new(AtomicBool::new(false)));
+        assert!(matches!(&refused, Err(Error::RecordTooLarge { project: named, .. }) if *named == project), "{refused:?}");
+        assert_eq!(SPAWNED.get(), None, "no server was started");
+        let names: Vec<_> = std::fs::read_dir(&opts.records).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().all(|n| n.ends_with(".lock")), "no record and no temporary file: {names:?}");
+        assert!(!run.join("server.yaml").exists());
+        assert!(record::hold(&record::path(&opts.records, &project), Duration::ZERO).is_ok(), "the lock went with the start");
     }
 
     /// A start fails once its server runs, and the server would not stop: its run folder stays
     /// with its record, since the server may still run on them, and the project is refused as
-    /// open elsewhere, naming it. Once it is gone the next start clears both, and a failed start
-    /// whose server did stop leaves neither. Needs dolt.
+    /// open elsewhere, naming it, also where the record was not complete yet, by the command line
+    /// it recorded. Once it is gone the next start clears both, and a failed start whose server
+    /// did stop leaves neither. Needs dolt.
     #[cfg(unix)]
     #[test]
     fn a_failed_start_keeps_the_run_folder_of_a_server_that_would_not_stop() {
@@ -854,15 +989,24 @@ mod tests {
                 std::thread::sleep(Duration::from_millis(20));
             }
         };
-        // Before its record, where only the drop of the start's hold on it stops the server.
+        // Before its record is complete: only the command line it recorded finds the server, once
+        // the server shows it.
         FAIL_AFTER_SPAWN.set(true);
         STOP_FAILS.set(true);
-        let unrecorded = Server::start(&dolt, &dir.0.join("data"), &opts);
-        end(SPAWNED.get().unwrap());
-        let (unrecorded_kept, no_record) = (run_folders(), records());
-        assert!(matches!(unrecorded, Err(Error::BadPath { what: "test", .. })), "{unrecorded:?}");
-        assert_eq!((unrecorded_kept.len(), no_record), (1, Vec::new()), "the folder stays, with no record to stay with it");
-        std::fs::remove_dir_all(&unrecorded_kept[0]).unwrap();
+        let unfinished = Server::start(&dolt, &dir.0.join("data"), &opts);
+        let (pid, pending, unfinished_kept) = (SPAWNED.get().unwrap(), records(), run_folders());
+        let until = Instant::now() + Duration::from_secs(5);
+        while !pending.iter().all(|(_, r)| identity(pid).ok().flatten().is_some_and(|i| i.is(&r.command))) && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let (refused, still) = (start(), records());
+        end(pid);
+        assert!(matches!(unfinished, Err(Error::BadPath { what: "test", .. })), "{unfinished:?}");
+        let pending_runs: Vec<_> = pending.iter().map(|(_, r)| (r.server_pid, PathBuf::from(&r.run_dir))).collect();
+        assert_eq!((unfinished_kept.len(), pending_runs), (1, vec![(None, unfinished_kept[0].clone())]), "the folder stays with its record");
+        // Refused by that record, which stays, not by the project's lock the server holds.
+        assert!(matches!(refused, Err(Error::OpenElsewhere { pid: open }) if open == pid), "{refused:?}");
+        assert_eq!(still, pending, "nothing went");
         STOP_FAILS.set(true);
         let failed = start();
         let pid = SPAWNED.get().unwrap();
