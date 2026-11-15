@@ -1457,6 +1457,7 @@ str		A property chosen here is gone; choose again.	Una propiedad elegida aquí y
 str		A property subsets at most {max} properties.	Una propiedad es subconjunto de como máximo {max} propiedades.
 str		A property redefines at most {max} properties.	Una propiedad redefine como máximo {max} propiedades.
 str		Give the properties as a list of ids.	Indique las propiedades como una lista de identificadores.
+str		An item in the list has no id. Give each property's id.	Un elemento de la lista no tiene identificador. Indique el identificador de cada propiedad.
 str		{key} is not a key here. An item holds an id and a name.	{key} no es una clave aquí. Una entrada contiene un identificador y un nombre.
 str		There is no element with the id {id}.	No hay ningún elemento con el identificador {id}.
 str		A default value is at most {n} characters.	Un valor predeterminado tiene como máximo {n} caracteres.

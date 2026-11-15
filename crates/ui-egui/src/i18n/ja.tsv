@@ -1457,6 +1457,7 @@ str		A property chosen here is gone; choose again.	ここで選んだプロパ�
 str		A property subsets at most {max} properties.	プロパティがサブセット元にできるプロパティは最大 {max} 個です。
 str		A property redefines at most {max} properties.	プロパティが再定義できるプロパティは最大 {max} 個です。
 str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
+str		An item in the list has no id. Give each property's id.	リストの項目に ID がありません。各プロパティの ID を指定してください。
 str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。

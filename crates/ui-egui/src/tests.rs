@@ -5756,7 +5756,8 @@ fn a_refused_attribute_keeps_its_buttons_in_view() {
 /// The lists of properties a property subsets and redefines, refused by the engine, are said in
 /// the chosen language: too many for each list, an object with another key, an item that is no id,
 /// no such element and a property named twice, with nothing written; so is leaf refused for a
-/// built-in type and for a property something redefines. In light and dark (AR-466).
+/// built-in type and for a property something redefines. In light and dark (AR-466). An empty id
+/// is said as no id given, never as no element with the id (AR-480).
 #[test]
 fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr};
@@ -5786,6 +5787,10 @@ fn a_target_list_or_leaf_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("redefines", json!([7])), tr("Give the properties as a list of ids."), "{theme:?}");
         let none = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
         assert_eq!(refused("subsets", json!(["nope"])), none, "{theme:?}");
+        let empty = tr("An item in the list has no id. Give each property's id.");
+        assert_ne!(empty, fmt(&tr("There is no element with the id {id}."), &[("id", "")]), "{theme:?}");
+        assert_eq!(refused("subsets", json!([""])), empty, "{theme:?}");
+        assert_eq!(refused("redefines", json!([{ "id": "" }])), empty, "{theme:?}");
         assert_eq!(refused("redefines", json!([all, all])), tr("An element is named twice. Name each element once."), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // Made leaf: refused for a built-in type, and for a property something redefines.
