@@ -230,8 +230,12 @@ fn a_removal_one_notation_refuses_changes_nothing_in_any() {
     let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
     let before = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
     // ER removes its table first, then the second notation refuses: the table comes back.
-    let e = s.execute("element.remove", &json!({ "ids": [table, pkg] })).unwrap_err();
-    assert!(e.to_string().contains("cannot be removed"), "{e}");
+    // The refusal carries its reason typed beside the unchanged English (AR-439).
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute("element.remove", &json!({ "ids": [table, pkg] })) else {
+        panic!("the removal is refused")
+    };
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotRemovable { notation: "Stubborn" }), Some("ids")));
+    assert_eq!(error.message, "Stubborn elements cannot be removed yet");
     assert_eq!(rows::snapshot(s.doc(), &tables, &junctions).unwrap(), before);
 }
 

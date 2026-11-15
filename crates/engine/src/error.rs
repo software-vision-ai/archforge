@@ -301,6 +301,22 @@ pub enum Reason {
     /// The property `name` breaks `rule` as a property this one would subset, or, `redefining`,
     /// redefine.
     TargetBreaks { name: Box<str>, rule: TargetRule, redefining: bool },
+    /// A box's `side`, `"width"` or `"height"`, is not between the least and the most a box takes.
+    SizeOutOfRange { side: &'static str },
+    /// A diagram of its kind does not show the element `name`, by the element's kind.
+    NotShown { name: String },
+    /// The element `name` is outside what the diagram shows, such as another package's.
+    OutsideDiagram { name: String },
+    /// The diagram shows the element `name` already.
+    ShownAlready { name: String },
+    /// The node named is in another diagram than the one the command is about.
+    OtherDiagram,
+    /// The node shows an element and draws its text, so it takes no text of its own.
+    ShowsElement,
+    /// A note's link is a straight line, so it takes no waypoints.
+    StraightLink,
+    /// The elements of `notation`, such as `"ER"`, are not removed yet.
+    NotRemovable { notation: &'static str },
 }
 
 /// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.

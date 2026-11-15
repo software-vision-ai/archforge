@@ -515,7 +515,8 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 .or_else(|| set_and_end_said(other))
                 .or_else(|| profile_said(other))
                 .or_else(|| constraint_said(other))
-                .or_else(|| target_said(other));
+                .or_else(|| target_said(other))
+                .or_else(|| diagram_said(other));
         }
     };
     let what = a_kind(kind)?;
@@ -523,6 +524,38 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
     let what =
         if template.starts_with("{what}") { what.chars().take(1).flat_map(char::to_uppercase).chain(what.chars().skip(1)).collect() } else { what };
     Some(fmt(&template, &[("what", &what), ("name", name)]))
+}
+
+/// A diagram command's refusal: an id or an element of the wrong kind where a diagram, a box, a line
+/// or a label is taken, a box's size, an element a diagram does not show or shows already, a box on
+/// another diagram or nested too deep, a note's text or link, too many bends, and elements a
+/// notation does not remove yet; none for another reason. A coordinate is said as a constraint's is.
+fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
+    use archforge_engine::Reason;
+    let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
+    Some(match reason {
+        Reason::IdEmpty { kind: "diagram" } => tr("No diagram is given. Give its id."),
+        Reason::IdEmpty { kind: "node" } => tr("No box is given. Give its id."),
+        Reason::IdEmpty { kind: "edge" } => tr("No line is given. Give its id."),
+        Reason::IdEmpty { kind: "label" } => tr("No label is given. Give its id."),
+        Reason::NotA { kind: "diagram", name } => fmt(&tr("{name} is not a diagram."), &[("name", name)]),
+        Reason::NotA { kind: "node", name } => fmt(&tr("{name} is not a box on a diagram."), &[("name", name)]),
+        Reason::NotA { kind: "edge", name } => fmt(&tr("{name} is not a line on a diagram."), &[("name", name)]),
+        Reason::NotA { kind: "label", name } => fmt(&tr("{name} is not a label on a line."), &[("name", name)]),
+        Reason::SizeOutOfRange { side: "width" } => between(tr("The width is not between {min} and {max}.")),
+        Reason::SizeOutOfRange { side: "height" } => between(tr("The height is not between {min} and {max}.")),
+        Reason::NotShown { name } => fmt(&tr("A diagram of this kind does not show {name}."), &[("name", name)]),
+        Reason::OutsideDiagram { name } => fmt(&tr("{name} is outside what this diagram shows."), &[("name", name)]),
+        Reason::ShownAlready { name } => fmt(&tr("This diagram shows {name} already."), &[("name", name)]),
+        Reason::OtherDiagram => tr("That box is on another diagram."),
+        Reason::TooMany { kind: "nesting level", max } => fmt(&tr("Boxes nest at most {max} deep."), &[("max", &max.to_string())]),
+        Reason::ShowsElement => tr("This box shows an element and draws its text. Only a note takes a text of its own."),
+        Reason::StraightLink => tr("A note's link is a straight line and does not bend."),
+        Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
+        Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
+        _ => return None,
+    })
 }
 
 /// A constraint's or a description's rule broken, or a constraint command's parameter refused, in
