@@ -790,6 +790,20 @@ fn the_native_close_finds_the_name_typed_in_place_committed() {
     }
 }
 
+/// ⌘W with a name typed in place in Models or on the canvas: the field lets go and commits the name
+/// first, as for the native bar's row, so Close asks about it and keeps the project open (AR-488).
+#[test]
+fn the_close_key_finds_the_name_typed_in_place_committed() {
+    for (theme, on_canvas) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = renaming_a_saved_project(theme, on_canvas);
+        key(&mut h, Key::W, Modifiers::MAC_CMD.plus(Modifiers::COMMAND));
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}, on the canvas {on_canvas}: the name is in the model");
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{theme:?}: Close asks about the unsaved name");
+        assert_eq!(h.state().tabs.len(), 1, "{theme:?}: the project is still open");
+    }
+}
+
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
 #[test]

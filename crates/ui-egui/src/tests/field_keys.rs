@@ -33,21 +33,25 @@ fn after(theme: ThemeKind, at: Key, chord: Key, modifiers: Modifiers) -> String 
     name(&h)
 }
 
-/// Each chord with the cursor where its deletion would show, and what a Mac's control key leaves.
-const CHORDS: [(Key, Key, &str); 4] = [(Key::Home, Key::K, ""), (Key::End, Key::H, "column_"), (Key::End, Key::U, ""), (Key::End, Key::W, "")];
+/// Each chord with the cursor where its deletion would show, and what a Mac's control key leaves,
+/// alone and with its command key.
+const CHORDS: [(Key, Key, &str, &str); 4] =
+    [(Key::Home, Key::K, "", ""), (Key::End, Key::H, "column_", "column_"), (Key::End, Key::U, "", ""), (Key::End, Key::W, "", "column_1")];
 
 /// On Windows and Linux no chord of the control key and H, K, U or W changes a field's text, with
 /// Shift or without; a Mac's control key deletes as its system's text keys do, with its command
-/// key or without.
+/// key or without, but for ⌃⌘W: ⌘W is Close project's chord, so with Control more it is nobody's
+/// and is taken, deleting nothing and closing nothing.
 #[test]
 fn the_control_chords_delete_nothing_in_a_field_on_windows_and_linux() {
     in_both_appearances(|theme| {
-        for (at, chord, mac) in CHORDS {
+        for (at, chord, alone, with_command) in CHORDS {
             for modifiers in [CONTROL, CONTROL.plus(Modifiers::SHIFT)] {
                 assert_eq!(after(theme, at, chord, modifiers), "column_1", "{theme:?}: {chord:?} with {modifiers:?}");
             }
-            for modifiers in [Modifiers::CTRL, Modifiers::CTRL.plus(Modifiers::MAC_CMD).plus(Modifiers::COMMAND)] {
-                assert_eq!(after(theme, at, chord, modifiers), mac, "{theme:?}: a Mac's control key and {chord:?} with {modifiers:?}");
+            let mac = [(Modifiers::CTRL, alone), (Modifiers::CTRL.plus(Modifiers::MAC_CMD).plus(Modifiers::COMMAND), with_command)];
+            for (modifiers, left) in mac {
+                assert_eq!(after(theme, at, chord, modifiers), left, "{theme:?}: a Mac's control key and {chord:?} with {modifiers:?}");
             }
         }
     });
@@ -91,6 +95,11 @@ fn the_chords_still_run_their_actions() {
         h.run();
         key(&mut h, Key::H, CONTROL.plus(Modifiers::SHIFT));
         assert_eq!(host.version_reads.lock().unwrap().len(), 1, "{theme:?}: Ctrl+Shift+H opens History");
+        key(&mut h, Key::K, CONTROL);
+        h.event(egui::Event::Text("order".into()));
+        h.run();
+        key(&mut h, Key::W, CONTROL);
+        assert!(h.state().project.is_none(), "{theme:?}: Ctrl+W closes the project from the search's field");
     });
 }
 

@@ -98,7 +98,7 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   Ablage in the native bar (`actions::file_title`) and Datei in the window's. A row that opens
   something asking for more ends in an ellipsis: History…, Switch branch…, Open project….
 - The File menu (`actions::FILE_MENU`, AR-454) has the same groups on every system: New project…, Open
-  project…, Close project | Save | Generate…. The window's bar ends it with Settings… | Exit; the native
+  project…, Close project (⌘W, Ctrl+W in the window's bar; AR-488) | Save | Generate…. The window's bar ends it with Settings… | Exit; the native
   bar has those two in its application menu, and `actions::file_menu` drops them without leaving an
   empty group, so no divider stands at the menu's end.
 - The Model menu (`crates/ui-egui/src/model_menu.rs`) arms the toolbar's own tools, so a row makes

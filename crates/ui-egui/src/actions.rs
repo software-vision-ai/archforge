@@ -129,7 +129,8 @@ pub static ACTIONS: &[Action] = &[
         label: |_| tr("Close project"),
         available: |s| free(s) && s.active.and_then(|i| s.tabs.get(i)).is_some_and(|t| t.closing.is_none()),
         run: close,
-        keys: None,
+        // Each system's close key (AR-454): ⌘W, and Ctrl+W on Windows and Linux.
+        keys: command(Key::W),
         search: None,
     },
     Action {
@@ -415,9 +416,9 @@ fn shown(shell: &Shell) -> Option<&std::path::Path> {
     shell.active.and_then(|i| shell.tabs.get(i)).map(|t| t.path.as_path())
 }
 
-/// Closes the project shown. With a text field holding the keyboard, as when the native bar's row
-/// is chosen while a name is typed in place, the field lets go first and Close runs a frame later
-/// (`follow_close`), so it finds the name committed and asks about it.
+/// Closes the project shown. With a text field holding the keyboard, as when ⌘W or the native bar's
+/// row is chosen while a name is typed in place, the field lets go first and Close runs a frame
+/// later (`follow_close`), so it finds the name committed and asks about it.
 fn close(shell: &mut Shell) {
     match shown(shell).map(std::path::Path::to_path_buf) {
         Some(path) if edit_menu::on_field(shell) => shell.edit.closing = Some(Closing::Asked(path)),
@@ -737,11 +738,16 @@ pub(crate) mod tests {
         assert!(keyed.iter().all(|(_, keys)| !same(keys, &REDO_TOO)));
     }
 
-    /// Presses `key` with `modifiers`, the only input of a frame.
-    fn press(shell: &mut Shell, modifiers: Modifiers, key: Key) {
+    /// Presses `key` with `modifiers`, the only input of a frame; what the shortcuts left of it.
+    fn press(shell: &mut Shell, modifiers: Modifiers, key: Key) -> Vec<egui::Event> {
         let input = egui::RawInput { events: vec![down(modifiers, key)], ..Default::default() };
-        let mut output = egui::Context::default().run_ui(input, |ui| run_shortcuts(shell, ui.ctx()));
+        let mut left = Vec::new();
+        let mut output = egui::Context::default().run_ui(input, |ui| {
+            run_shortcuts(shell, ui.ctx());
+            left = ui.input(|i| i.events.clone());
+        });
         output.textures_delta.clear();
+        left
     }
 
     /// A press of `key` with `modifiers`.
@@ -768,7 +774,7 @@ pub(crate) mod tests {
     #[test]
     fn every_chord_is_matched_exactly_in_both_shapes() {
         let chords: Vec<(&str, &Keys)> = ACTIONS.iter().filter_map(|a| Some((a.id, a.keys.as_ref()?))).chain([("⌘Y", &REDO_TOO)]).collect();
-        assert_eq!(chords.len(), 19, "every row with keys, and Redo's second key");
+        assert_eq!(chords.len(), 20, "every row with keys, and Redo's second key");
         for (id, keys) in chords {
             let own = keys.modifiers;
             assert!(own.command && !own.ctrl && !own.mac_cmd, "{id}: a chord of the command key, which both shapes hold");
@@ -881,6 +887,24 @@ pub(crate) mod tests {
             frame(&mut shell);
             assert!(ctx.repaint_causes().iter().any(|c| c.file.ends_with("actions.rs")), "{what}: the letting go asked for the next frame");
             assert_eq!((shell.project.is_none(), shell.edit.closing.is_none()), (what == "nothing", true), "{what}");
+        }
+    }
+
+    /// ⌘W (Ctrl+W) closes the project shown, in both shapes, and takes the press. On Home, with
+    /// the project parked in its tab or with none open, Close project is off: the press closes
+    /// nothing and stays in the input.
+    #[test]
+    fn the_close_key_closes_the_project_shown_and_nothing_on_home() {
+        for (system, cmd) in SHAPES {
+            let (mut shown, saves, picks) = shell();
+            assert_eq!(press(&mut shown, cmd, Key::W), [], "{system}: the press is taken");
+            assert_eq!(effects(&shown, &saves, &picks), [CLOSE], "{system}");
+            let (mut parked, ..) = shell();
+            parked.go_home();
+            for (home, mut on_home, tabs) in [("a project parked", parked, 1), ("nothing open", Shell::new(Services::default()), 0)] {
+                assert_eq!(press(&mut on_home, cmd, Key::W), [down(cmd, Key::W)], "{system}, {home}: the press stays");
+                assert!(on_home.tabs.len() == tabs && on_home.tabs.iter().all(|t| t.closing.is_none()), "{system}, {home}: no tab closes");
+            }
         }
     }
 }

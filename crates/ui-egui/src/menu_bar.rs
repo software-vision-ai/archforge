@@ -496,6 +496,7 @@ mod tests {
         let text = |id: &str| actions::keys(id).map(chord);
         assert_eq!(text(GENERATE).as_deref(), Some("Ctrl+Shift+G"));
         assert_eq!(text(SETTINGS).as_deref(), Some("Ctrl+,"));
+        assert_eq!(text(CLOSE).as_deref(), Some("Ctrl+W"));
         assert_eq!(text(NEW), None);
     }
 
