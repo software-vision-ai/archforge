@@ -5639,6 +5639,39 @@ fn a_refused_card_taller_than_the_body_shows_its_foot() {
     });
 }
 
+/// Two editors opened before one draw, the first key's above the body and a new check's below it:
+/// each reveal counts the scroll the one before it moved, so the check's card, drawn last, ends in
+/// view.
+#[test]
+fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
+        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Orders" }));
+        for i in 0..30 {
+            let column = id("er.attribute.add", serde_json::json!({ "entity": table, "name": format!("c{i}"), "type": "TEXT" }));
+            id("er.unique.add", serde_json::json!({ "entity": table, "columns": [column], "name": format!("u{i}") }));
+        }
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [table] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let entity = archforge_mof::Uuid::parse(&table).unwrap();
+        let first = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            crate::keys::rows(st, st.by_uuid(entity).unwrap()).remove(0)
+        };
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.key.row.{}", first.id));
+        let above = h.state().panels.body.unwrap().top() - at.y;
+        wheel_properties(&mut h, above - 200.0);
+        assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.check")), "{theme:?}: Checks under the fold");
+        crate::keys::open(h.state_mut(), entity, Some(&first));
+        crate::checks::open(h.state_mut(), entity, None);
+        h.run();
+        assert!(in_view(&h, "workspace.properties.check.apply").is_some(), "{theme:?}: the check's Apply in view");
+    });
+}
+
 /// A member's editor shares the card: an attribute added at the foot of a long list, refused for a
 /// name another attribute has, keeps its refusal and buttons in view.
 #[test]

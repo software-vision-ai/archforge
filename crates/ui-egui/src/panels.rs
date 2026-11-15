@@ -112,13 +112,14 @@ pub struct State {
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame with the refusal each showed, the editors that just opened or were refused
-    /// and are still to be brought into view (true for a refusal), the body's visible rectangle,
-    /// and the control of the body that had the keyboard last frame.
+    /// and are still to be brought into view (true for a refusal), the scroll the body is drawn at,
+    /// the body's visible rectangle, and the control of the body that had the keyboard last frame.
     pub scroll: f32,
     pub content: f32,
     pub scrolled_for: Option<(Panel, Option<Uuid>)>,
     pub(crate) open_editors: Vec<(Editor, OpenEditor)>,
     pub(crate) reveal: Vec<(Editor, bool)>,
+    pub(crate) drawn: f32,
     pub body: Option<Rect>,
     pub held: Option<egui::Id>,
 }
@@ -199,13 +200,14 @@ pub(crate) fn editing(s: &State) -> bool {
 
 /// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
 /// card's foot if it fits, else its top; a refused card's foot, with its Apply, Cancel and refusal,
-/// also when the card is taller than the body.
+/// also when the card is taller than the body. A card drawn after another's reveal counts the scroll
+/// that one moved, so the last reveal of a draw is the one in view.
 pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
     let Some(body) = shell.panels.body else { return };
     let Some(at) = shell.panels.reveal.iter().position(|(e, _)| *e == editor) else { return };
     let (_, refused) = shell.panels.reveal.remove(at);
     let part = if refused { Rect::from_min_max(pos2(card.left(), card.top().max(card.bottom() - body.height() + 16.0)), card.max) } else { card };
-    shell.panels.scroll += into_view(body, part);
+    shell.panels.scroll += into_view(body, part.translate(vec2(0.0, shell.panels.drawn - shell.panels.scroll)));
     ui.ctx().request_repaint();
 }
 
@@ -2772,6 +2774,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     shell.panels.scroll = shell.panels.scroll.clamp(0.0, room);
     shell.panels.body = Some(body);
     let drawn = shell.panels.scroll;
+    shell.panels.drawn = drawn;
     let top = body_y - drawn;
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(body));
     clip.set_clip_rect(body);
