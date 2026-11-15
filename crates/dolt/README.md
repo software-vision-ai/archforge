@@ -76,7 +76,7 @@ than its start's, so that a live start's run folder could go with it. That file 
 nothing is signalled. A server the sweep stops this way counts among those it returns.
 
 A record of the earlier format, with a process id always, is a complete record and is read as one;
-nothing is migrated, since the application is not released.
+nothing is migrated, as none is needed.
 
 Every change of a server record (writing one, removing one, setting a damaged one aside) holds
 that record's lock, an operating-system lock on a file of its own beside the record (the record's
@@ -86,9 +86,20 @@ Archforge or another of a build that has this lock. A record is never moved from
 compared, so no start finds a name free that is not. Reading takes no lock: a record appears and
 goes whole. The lock goes with its holder, so an Archforge killed in a change leaves the lock file
 and no lock; the lock files stay, one empty file for each record name ever used. An Archforge
-killed while it writes a record, before the record's temporary file has been renamed or removed,
-leaves that file (`.record-` and a random name, a few hundred bytes) in the records folder too,
-and nothing removes it.
+killed while it writes a record, before it has linked or renamed the record's temporary file and
+removed it, leaves that file in the records folder too: `.record-`, the record's name, `-`, a
+random name and `.tmp`, a few hundred bytes, or a second name of the record once it is linked. So
+does a writer whose removal of the file fails, which its log says. The start-up sweep removes
+such a file after the records. A writer holds the record's lock from before it makes the file
+until it has linked or renamed it and tried to remove it, so a file whose record's lock can be
+had, taken without a wait, belongs to no write under way; it goes while the sweep holds that
+lock. One under a lock held stays for the next start-up, since its writer may be under way, and
+so does anything under such a name that is not a plain file when the sweep looks: a folder, or a
+link, which goes no more than what it points to. The log names each such file that stays, and
+says so when the folder could not be listed in full. Temporary files of the earlier name
+(`.record-` and a random name alone) stay: builds before this one make them, releases 0.13.0 and
+earlier among them, which take no record lock, and the name ties them to no record whose lock
+could show that no write is under way.
 
 A start takes the lock before it writes its record, and so before its server, and holds it until
 the record is complete: a wait for the lock, or a start that cannot have it, comes before there is
@@ -123,7 +134,7 @@ removed. The password never shows in a log, an error or a debug print.
 | `ServerOptions::new` | `pub fn new(records: impl Into<PathBuf>) -> ServerOptions` (records folder; run root, budgets) |
 | `Server::start` | `pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error>` |
 | `Server::connect` | `pub fn connect(&self) -> Result<mysql::Conn, Error>` (socket on unix, loopback on Windows) |
-| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone, settles a record without a process id as an opening does, taking its lock without a wait; returns how many it stopped) |
+| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone, settles a record without a process id as an opening does, taking its lock without a wait; then removes the temporary files of record writes no longer under way; returns how many it stopped) |
 | `Server::stop` | `pub fn stop(self) -> Result<(), Error>` (dropping a server stops it too) |
 | `Server::{port, socket, password, data_dir, pid}` | the running server's facts |
 | `Error` | one enum; every variant names the value it is about |
