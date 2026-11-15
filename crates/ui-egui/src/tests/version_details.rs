@@ -1314,7 +1314,7 @@ fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
 /// were (AR-518), whether a related link or nothing has the keyboard (AR-486).
 #[test]
 fn a_page_key_with_the_click_that_opens_the_menu_bar_leaves_the_cards() {
-    for linked in [true, false] {
+    for linked in [false, true] {
         in_both(|h, host| {
             let (links, top) = many_related(h, host);
             let at = (links.as_slice(), rect_of(h, &links[0]).top() - 28.0);
