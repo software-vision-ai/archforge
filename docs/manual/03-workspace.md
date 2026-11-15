@@ -40,7 +40,8 @@ opens it or moves to it. **File** has the same groups on every system: **New pro
 project…** and **Close project** (⌘W, `Ctrl+W`), then **Save**, then **Generate…**; in the strip **Settings…** and
 **Exit** follow at its end, where macOS has them in its application menu. A few words follow the
 system: the last row of **File** is **Exit** there and **Quit Archforge** in the application menu on
-macOS, whose **Edit** menu writes **Select All**. On macOS a **Window** menu follows **Versions**, with
+macOS, whose **Edit** menu writes **Select All**. That application menu also holds the system's own
+**Services**, **Hide Archforge** (⌘H), **Hide Others** (⌥⌘H) and **Show All**. On macOS a **Window** menu follows **Versions**, with
 **Minimise** (⌘M) and **Zoom** for the window itself, and below them the rows macOS adds to every
 application's Window menu, such as **Bring All to Front**; on Windows and Linux the window's own frame
 minimises and maximises it. A row that cannot act now is greyed out and says why when you point at

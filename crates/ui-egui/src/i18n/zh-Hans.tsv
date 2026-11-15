@@ -1,6 +1,10 @@
 # 简体中文目录。列：kind、context、key、text（参见 i18n/mod.rs）。各行与相关条目放在一起。
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # 应用程序菜单
+str		Services	服务
+str		Hide Archforge	隐藏 Archforge
+str		Hide Others	隐藏其他
+str		Show All	全部显示
 str		Quit Archforge	退出 Archforge
 str		Exit	退出
 str		File	文件

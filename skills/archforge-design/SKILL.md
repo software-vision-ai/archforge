@@ -65,7 +65,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
-  and Home's search rows share each action's availability; after Versions its Window menu holds the system's
+  and Home's search rows share each action's availability; its application menu adds the system's own Services,
+  Hide Archforge (⌘H), Hide Others (⌥⌘H) and Show All in the system's usual order (AR-489); after Versions its Window menu holds the system's
   own Minimise (⌘M) and Zoom (AR-463) and, as the application's windows menu, the rows macOS adds below them
   (AR-509); the window's frame does that on Windows and Linux. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by

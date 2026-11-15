@@ -1,5 +1,9 @@
 # English catalogue. Columns: kind, context, key, text (see i18n/mod.rs). Rows go beside related entries.
 # Application menu
+str		Services	Services
+str		Hide Archforge	Hide Archforge
+str		Hide Others	Hide Others
+str		Show All	Show All
 str		Quit Archforge	Quit Archforge
 str		Exit	Exit
 str		File	File
