@@ -887,8 +887,9 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
 }
 
 /// The host's answer on `rx` within [`WAIT`]. A failure names `step`, whether the answer was late
-/// or will never come (the host's thread ended without one), and how long it waited, so a log that
-/// keeps only the panic still says which step failed and how; the panic points at the caller's line.
+/// or will never come (its channel closed without one: the host's thread ended or never started),
+/// and how long it waited, so a log that keeps only the panic still says which step failed and how;
+/// the panic points at the caller's line.
 #[track_caller]
 fn answer_of<T>(rx: &Receiver<T>, step: &str) -> T {
     let asked = Instant::now();
@@ -896,7 +897,7 @@ fn answer_of<T>(rx: &Receiver<T>, step: &str) -> T {
     match rx.recv_timeout(WAIT) {
         Ok(answer) => answer,
         Err(RecvTimeoutError::Timeout) => panic!("{step}: no answer within {WAIT:?}"),
-        Err(RecvTimeoutError::Disconnected) => panic!("{step}: the host's thread ended without an answer after {:?}", asked.elapsed()),
+        Err(RecvTimeoutError::Disconnected) => panic!("{step}: the answer channel closed without an answer after {:?}", asked.elapsed()),
     }
 }
 
