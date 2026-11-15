@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
 # 聊天面板
+str		Conversation	对话
 str		Conversations	对话
 str		New conversation	新对话
 str		Stop the reply first	请先停止回复

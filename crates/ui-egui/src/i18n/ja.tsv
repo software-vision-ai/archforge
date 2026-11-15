@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
 # チャットパネル
+str		Conversation	会話
 str		Conversations	会話
 str		New conversation	新しい会話
 str		Stop the reply first	先に返答を停止してください

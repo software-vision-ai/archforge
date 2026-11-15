@@ -300,6 +300,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
 # Chat panel
+str		Conversation	Conversation
 str		Conversations	Conversations
 str		New conversation	New conversation
 str		Stop the reply first	Stop the reply first

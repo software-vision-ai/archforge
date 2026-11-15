@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Discussion utilise le modèle
 str		Agent access off	Accès des agents désactivé
 # Panneau Discussion
+str		Conversation	Conversation
 str		Conversations	Conversations
 str		New conversation	Nouvelle conversation
 str		Stop the reply first	Arrêtez d’abord la réponse
