@@ -554,9 +554,10 @@ impl Projects {
     }
 
     /// Stops, on a thread of its own, the database servers a crashed or killed Archforge left
-    /// running for any project, and logs what it stopped: for the start-up. It holds the job lock,
-    /// so no opening or creation meets a record while it is swept. `None` when the thread could not
-    /// start; the next opening of each project still recovers its own server.
+    /// running for any project whose record the sweep can list (a listing cut short is logged), and
+    /// logs what it stopped: for the start-up. It holds the job lock, so no opening or creation
+    /// meets a record while it is swept. `None` when the thread could not start; the next opening
+    /// of each project still recovers its own server.
     pub fn stop_orphans(&self) -> Option<std::thread::JoinHandle<()>> {
         let inner = self.inner.clone();
         let sweep = move || {

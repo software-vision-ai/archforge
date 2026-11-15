@@ -3,15 +3,15 @@
 **Purpose.** The project database's server: runs `dolt sql-server` for one project folder beside the
 application, reachable only by this user with a password made for each start, connects to it, stops
 it, and recovers a server a crashed Archforge left behind: at the next opening of its project, and
-for every project at the application's start-up. On unix each server also has a watchdog, a small
-`/bin/sh` child that reads a pipe only Archforge holds open: when Archforge is gone, a kill
-included, the watchdog stops the server politely at once, if the process is still that server. The
-start-up sweep stays the backstop: for Windows, and for a watchdog that was killed too, could not
-start, could not prove the server (no `/bin/ps`, no `C.UTF-8` locale for a command line outside
-ASCII), or was held up by another program that inherited the pipe (possible on macOS only) until
-that program and everything it started ended. A watchdog starts with no other start of this crate
-under way, so none of them inherits its pipe; no start waits for another longer than half a second,
-so a stalled start never holds up a stop or a recovery of another project.
+at the application's start-up for every project whose record it can list. On unix each server also
+has a watchdog, a small `/bin/sh` child that reads a pipe only Archforge holds open: when Archforge
+is gone, a kill included, the watchdog stops the server politely at once, if the process is still
+that server. The start-up sweep stays the backstop: for Windows, and for a watchdog that was killed
+too, could not start, could not prove the server (no `/bin/ps`, no `C.UTF-8` locale for a command
+line outside ASCII), or was held up by another program that inherited the pipe (possible on macOS
+only) until that program and everything it started ended. A watchdog starts with no other start of
+this crate under way, so none of them inherits its pipe; no start waits for another longer than half
+a second, so a stalled start never holds up a stop or a recovery of another project.
 
 Every start writes its server's record, without the server's process id, before it probes a port,
 writes the server's configuration or starts the server, and completes the record with the process
@@ -73,7 +73,10 @@ failure is logged and leaves the record and its run folder for the next start-up
 the sweep goes on with the next record. Every start writes its record under its project's own
 name: a record under another name is a stray copy, which settling would check under another lock
 than its start's, so that a live start's run folder could go with it. That file alone goes, and
-nothing is signalled. A server the sweep stops this way counts among those it returns.
+nothing is signalled. A server the sweep stops this way counts among those it returns. A records
+folder that cannot be listed in full is swept as far as it was listed, and the log says so: the
+records not listed, and their servers, are left to a later sweep that lists them or to the opening
+of their project, and to the opening alone where the failure comes back each time before them.
 
 A record of the earlier format, with a process id always, is a complete record and is read as one;
 nothing is migrated, as none is needed.
@@ -134,7 +137,7 @@ removed. The password never shows in a log, an error or a debug print.
 | `ServerOptions::new` | `pub fn new(records: impl Into<PathBuf>) -> ServerOptions` (records folder; run root, budgets) |
 | `Server::start` | `pub fn start(dolt: &Dolt, data_dir: &Path, opts: &ServerOptions) -> Result<Server, Error>` |
 | `Server::connect` | `pub fn connect(&self) -> Result<mysql::Conn, Error>` (socket on unix, loopback on Windows) |
-| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone, settles a record without a process id as an opening does, taking its lock without a wait; then removes the temporary files of record writes no longer under way; returns how many it stopped) |
+| `stop_orphans` | `pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error>` (at start-up, as far as the records folder can be listed, which the log says when it cannot in full: stops every recorded server whose Archforge is gone, forgets the records of servers that are gone, settles a record without a process id as an opening does, taking its lock without a wait; then removes the temporary files of record writes no longer under way; returns how many it stopped) |
 | `Server::stop` | `pub fn stop(self) -> Result<(), Error>` (dropping a server stops it too) |
 | `Server::{port, socket, password, data_dir, pid}` | the running server's facts |
 | `Error` | one enum; every variant names the value it is about |

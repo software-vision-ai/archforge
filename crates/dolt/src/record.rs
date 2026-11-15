@@ -132,17 +132,33 @@ pub(crate) fn read(records: &Path, data_dir: &str) -> Result<Option<Record>, Err
     read_file(&path(records, data_dir), Some(data_dir))
 }
 
-/// Every record in `records`, for the sweep at start. A file that cannot be read, or holds no
-/// record and cannot be set aside, is left out and logged: the sweep goes on with the others.
+/// The records in `records`, for a sweep, as [`listed`] reads them. A folder that is not there
+/// holds none; one that cannot be listed at all is an error.
 pub(crate) fn all(records: &Path) -> Result<Vec<(PathBuf, Record)>, Error> {
     let entries = match std::fs::read_dir(records) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(e) => return Err(Error::io("cannot list", records, e)),
     };
+    Ok(listed(records, entries.map(|e| e.map(|e| e.path()))))
+}
+
+/// The records among `files`, the listing of `records`. A file that cannot be read, or holds no
+/// record and cannot be set aside, is left out and logged: the sweep goes on with the others. A
+/// listing that fails part way ends at the failure, which the log says: the files not listed by
+/// then are left out of this sweep, and left to a later one that lists them or to the opening of
+/// their project.
+fn listed(records: &Path, files: impl IntoIterator<Item = std::io::Result<PathBuf>>) -> Vec<(PathBuf, Record)> {
     let mut out = Vec::new();
-    for e in entries.flatten() {
-        let p = e.path();
+    for file in files {
+        let p = match file {
+            Ok(p) => p,
+            // The standard library does not promise that a listing ends after an error.
+            Err(e) => {
+                log::warn!("the server records in {} were not all listed, so the sweep leaves out the rest: {e}", records.display());
+                break;
+            }
+        };
         if p.extension().is_some_and(|x| x == "json") {
             match read_file(&p, None) {
                 Ok(Some(r)) => out.push((p, r)),
@@ -151,7 +167,7 @@ pub(crate) fn all(records: &Path) -> Result<Vec<(PathBuf, Record)>, Error> {
             }
         }
     }
-    Ok(out)
+    out
 }
 
 /// The record in `file`, if it holds one. A file that holds none that can be used is set aside:
@@ -346,7 +362,9 @@ fn temporary_of(file: &std::ffi::OsStr) -> Option<&str> {
 /// lock can be had, without a wait, belongs to no write under way, and goes under that lock. One
 /// under a lock held is left, since its writer may be under way. Only what is a plain file when
 /// looked at goes, a second name of a record too (the record keeps its own); a link or a folder
-/// stays, and no removal follows a link. What is left is logged.
+/// stays, and no removal follows a link. What is left is logged. A listing that fails part way
+/// ends at the failure, which the log says: the files not listed by then stay for the next
+/// start-up.
 pub(crate) fn clear_temporaries(records: &Path) {
     let entries = match std::fs::read_dir(records) {
         Ok(entries) => entries,
@@ -358,7 +376,7 @@ pub(crate) fn clear_temporaries(records: &Path) {
     for entry in entries {
         let entry = match entry {
             Ok(entry) => entry,
-            // On Windows a listing does not end after an error, which could come back each time.
+            // The standard library does not promise that a listing ends after an error.
             Err(e) => {
                 log::warn!("the temporary server records in {} were not all looked at: {e}", records.display());
                 break;
@@ -473,7 +491,7 @@ pub(crate) mod tests {
         bad.server_pid = Some(0);
         std::fs::write(path(&dir, "/p/e"), serde_json::to_vec(&bad).unwrap()).unwrap();
         assert_eq!(read(&dir, "/p/e").unwrap(), None);
-        let aside = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".damaged-")).count();
+        let aside = std::fs::read_dir(&dir).unwrap().map(Result::unwrap).filter(|e| e.file_name().to_string_lossy().contains(".damaged-")).count();
         assert_eq!(aside, 4);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -505,7 +523,8 @@ pub(crate) mod tests {
         remove_if(&dir.0, "/p/a", 99);
         assert!(IN_CHANGE.with(|h| h.borrow_mut().take()).is_some(), "nothing was removed");
         assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
-        let names: Vec<String> = std::fs::read_dir(&dir.0).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let names: Vec<String> =
+            std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         assert_eq!(names.len(), 2, "the record and the lock file: {names:?}");
     }
 
@@ -517,13 +536,13 @@ pub(crate) mod tests {
         assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
         std::fs::write(path(&dir.0, "/p/b"), "{ damaged").unwrap();
         let (a, b) = (hold(&path(&dir.0, "/p/a"), LOCK_WAIT).unwrap(), hold(&path(&dir.0, "/p/b"), LOCK_WAIT).unwrap());
-        let before = std::fs::read_dir(&dir.0).unwrap().count();
+        let before = std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count();
         assert!(matches!(hold(&path(&dir.0, "/p/a"), LOCK_WAIT), Err(Error::Io { .. })));
         assert!(!remove_if(&dir.0, "/p/a", 7));
         assert!(read(&dir.0, "/p/b").is_err(), "the damaged record is not moved");
         assert_eq!(all(&dir.0).unwrap(), vec![(path(&dir.0, "/p/a"), rec("/p/a"))]);
         assert!(write_new(&dir.0, &rec("/p/c")).unwrap() && remove_if(&dir.0, "/p/c", 7), "another project's goes on");
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), before + 1, "nothing was added but the other project's lock");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count(), before + 1, "nothing was added but the other project's lock");
         // The holder lets go only once the next change has found the lock held.
         WAITING.with(|h| *h.borrow_mut() = Some(Box::new(move || drop(a))));
         assert!(remove_if(&dir.0, "/p/a", 7));
@@ -541,7 +560,7 @@ pub(crate) mod tests {
         assert!(matches!(&refused, Err(Error::Io { source, .. }) if source.to_string() == "it is not a plain file"), "{refused:?}");
         let other = super::write_new(&hold(&path(&dir.0, "/p/b"), LOCK_WAIT).unwrap(), &rec("/p/c"));
         assert!(matches!(&other, Err(Error::Io { source, .. }) if source.to_string() == "the lock held is another record's"), "{other:?}");
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the two locks: no record, no temporary file");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count(), 2, "the two locks: no record, no temporary file");
     }
 
     /// A damaged record that cannot be set aside fails the read: it still holds the name. A
@@ -579,7 +598,7 @@ pub(crate) mod tests {
         assert!(!remove_held(&held, |r| *r == pending), "the name holds another record");
         assert_eq!(look(&held, "/p/a").unwrap(), Some(rec("/p/a")));
         assert!(remove_held(&held, |r| *r == rec("/p/a")) && look(&held, "/p/a").unwrap().is_none());
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the lock and the second name: no temporary file");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count(), 2, "the lock and the second name: no temporary file");
     }
 
     /// The writer and the reader take the same sizes. The record of a real canonical project
@@ -634,7 +653,7 @@ pub(crate) mod tests {
         assert!(remove_held(&held, |r| *r == done) && !file.exists(), "the record at the limit is removed");
         let refused = super::write_new(&held, &at(1));
         assert!(matches!(&refused, Err(Error::RecordTooLarge { len, max: CAP, .. }) if *len == 4097), "{refused:?}");
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1, "the lock alone: nothing of the longer record");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count(), 1, "the lock alone: nothing of the longer record");
     }
 
     /// A record of the earlier format, with a process id always, reads as a complete record; one
@@ -666,7 +685,7 @@ pub(crate) mod tests {
         let names = seen.clone();
         IN_CHANGE.with(|h| {
             *h.borrow_mut() = Some(Box::new(move |_: &Path| {
-                let all = std::fs::read_dir(&records).unwrap().flatten().map(|e| e.file_name().into_string().unwrap());
+                let all = std::fs::read_dir(&records).unwrap().map(Result::unwrap).map(|e| e.file_name().into_string().unwrap());
                 names.borrow_mut().extend(all.filter(|n| n.starts_with(".record-")));
                 // A name the writer will not remove, as one killed before the removal leaves it.
                 std::fs::hard_link(records.join(&names.borrow()[0]), temporary(&records, "/p/a", "zzzzzzzz")).unwrap();
@@ -680,7 +699,7 @@ pub(crate) mod tests {
         assert_eq!(std::fs::read(temporary(&dir.0, "/p/a", "zzzzzzzz")).unwrap(), std::fs::read(path(&dir.0, "/p/a")).unwrap());
         clear_temporaries(&dir.0);
         assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
-        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the record and its lock: no temporary file");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().map(Result::unwrap).count(), 2, "the record and its lock: no temporary file");
     }
 
     /// A temporary file goes only while its record's lock can be had, taken without a wait, and
@@ -726,5 +745,19 @@ pub(crate) mod tests {
         IN_CHANGE.with(|h| *h.borrow_mut() = Some(Box::new(|file: &Path| std::fs::write(file, serde_json::to_vec(&rec("/p/a")).unwrap()).unwrap())));
         assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
         assert_eq!(all(&dir.0).unwrap().len(), 1);
+    }
+
+    /// A listing of the records that fails part way ends at the failure, though a listing could go
+    /// on after it: the records listed before it are read, and none after it.
+    #[test]
+    fn a_listing_that_fails_part_way_ends_at_the_failure() {
+        let dir = crate::home::tests::Scratch::new("listing");
+        for project in ["/p/a", "/p/b"] {
+            assert!(write_new(&dir.0, &rec(project)).unwrap());
+        }
+        let (a, b) = ((path(&dir.0, "/p/a"), rec("/p/a")), (path(&dir.0, "/p/b"), rec("/p/b")));
+        assert_eq!(listed(&dir.0, [Ok(a.0.clone()), Ok(b.0.clone())]), vec![a.clone(), b.clone()], "a listing that does not fail reads both");
+        let listing = [Ok(a.0.clone()), Err(std::io::Error::other("the listing failed")), Ok(b.0)];
+        assert_eq!(listed(&dir.0, listing), vec![a]);
     }
 }

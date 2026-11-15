@@ -36,7 +36,7 @@ impl Drop for Folder {
 
 /// How many entries of `dir` have a name `keep` accepts.
 fn count(dir: &Path, keep: &dyn Fn(&str) -> bool) -> usize {
-    std::fs::read_dir(dir).map(|e| e.flatten().filter(|x| keep(&x.file_name().to_string_lossy())).count()).unwrap_or(0)
+    std::fs::read_dir(dir).map(|e| e.map(Result::unwrap).filter(|x| keep(&x.file_name().to_string_lossy())).count()).unwrap_or(0)
 }
 
 /// A server whose run root holds "é ü", an upper-case umlaut and a sign beyond the basic plane is
@@ -57,7 +57,8 @@ fn start_up_stops_an_orphan_whose_run_root_holds_characters_outside_ascii() {
     assert_eq!(left(), (1, 1), "its record and run folder stay");
 
     // The record's Archforge is gone: its process id is this test's, but its start time is not.
-    let file = std::fs::read_dir(&records).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "json")).unwrap();
+    let file =
+        std::fs::read_dir(&records).unwrap().map(Result::unwrap).map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "json")).unwrap();
     let mut record: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
     assert!(record["command"][3].as_str().unwrap().contains(" é ü Ä😀/af-"), "the recorded command line names the run root");
     record["owner_started"] = "Thu Jan  1 00:00:00 1970".into();

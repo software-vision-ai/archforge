@@ -59,7 +59,7 @@ impl Env {
     /// The records and run folders left behind.
     fn leftovers(&self) -> (usize, usize) {
         let count = |d: &Path, f: &dyn Fn(&str) -> bool| {
-            std::fs::read_dir(d).map(|e| e.flatten().filter(|x| f(&x.file_name().to_string_lossy())).count()).unwrap_or(0)
+            std::fs::read_dir(d).map(|e| e.map(Result::unwrap).filter(|x| f(&x.file_name().to_string_lossy())).count()).unwrap_or(0)
         };
         (count(&self.base.join("records"), &|n| n.ends_with(".json")), count(&self.run_root, &|n| n.starts_with("af-")))
     }
@@ -203,17 +203,19 @@ fn no_usage_events_and_no_version_check_and_the_users_own_dolt_home_is_untouched
     server.stop().unwrap();
     let dot = env.home.path().join(".dolt");
     let events: Vec<String> = std::fs::read_dir(dot.join("eventsData"))
-        .map(|e| e.flatten().map(|x| x.file_name().to_string_lossy().into_owned()).collect())
+        .map(|e| e.map(Result::unwrap).map(|x| x.file_name().to_string_lossy().into_owned()).collect())
         .unwrap_or_default();
     assert!(events.iter().all(|n| n == "dolt.lock"), "usage events were recorded: {events:?}");
     assert!(walk(&dot).iter().all(|p| !p.ends_with("version_check.txt")), "dolt checked its version online");
     assert_eq!(snapshot(&own), before, "the user's own ~/.dolt changed");
 }
 
+/// Every file under the folder `d`, through its folders, linked ones included: none for a folder
+/// that cannot be opened. An entry that cannot be listed fails the test.
 fn walk(d: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(entries) = std::fs::read_dir(d) {
-        for e in entries.flatten() {
+        for e in entries.map(Result::unwrap) {
             let p = e.path();
             if p.is_dir() { out.extend(walk(&p)) } else { out.push(p) }
         }
@@ -383,7 +385,7 @@ fn a_run_root_too_long_for_a_socket_is_refused_before_anything_starts() {
     std::fs::create_dir_all(&long).unwrap();
     let opts = ServerOptions { run_root: Some(long.clone()), ..env.opts() };
     assert!(matches!(Server::start(&env.dolt, &env.data(), &opts), Err(Error::SocketPathTooLong { .. })));
-    assert_eq!(std::fs::read_dir(&long).unwrap().count(), 0, "no run folder stays");
+    assert_eq!(std::fs::read_dir(&long).unwrap().map(Result::unwrap).count(), 0, "no run folder stays");
     assert_eq!(env.leftovers().0, 0, "no record was written");
     assert!(!env.data().join(".dolt").exists(), "no server ran");
 }
