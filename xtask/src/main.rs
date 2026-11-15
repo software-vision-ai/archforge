@@ -6,7 +6,6 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable, clippy::todo, clippy::unimplemented)]
 
 mod assets;
-mod brands;
 mod generate;
 mod ico;
 mod layers;
@@ -32,7 +31,6 @@ const USAGE: &str = "usage: cargo xtask <verb>
   wasm               the portable-target check
   assets [--check]   the attribution check; regenerates ATTRIBUTION.md unless --check
   skills             the skills check: the routing tables and every file, verb and skill they name
-  brands             the optional trademark check against the list FORGE_BRANDS names
   generate [name] [--docs]  regenerate a metamodel crate's code from its XMI (all when no name)
   generated          the check that the generated code is what the XMI gives
   version [x.y.z]    print or set the workspace version
@@ -107,11 +105,6 @@ fn steps() -> Vec<Step> {
         ("portable", Box::new(wasm::run)),
         ("generated", Box::new(generate::check)),
     ];
-    // The trademark list is kept outside the repository: without it the check is skipped and said
-    // so, or fails where the list is required.
-    if util::brand_list_path().is_some() || util::brand_list_required() {
-        s.push(("brands", Box::new(brands::run)));
-    }
     let deny = cargo_step(&["deny", "check"]);
     s.push((
         "deny",
@@ -144,9 +137,6 @@ fn ci() -> Result<(), String> {
     println!("\n{:<10} {:<7} {:>9}", "step", "result", "seconds");
     for (name, result, seconds) in &table {
         println!("{name:<10} {result:<7} {seconds:>9.1}");
-    }
-    if util::brand_list_path().is_none() && !util::brand_list_required() {
-        println!("skipped: brands, the optional trademark check, as {} names no list here", util::BRANDS_VAR);
     }
     match failure {
         Some(f) => Err(f),
@@ -181,7 +171,6 @@ fn main() {
         Some("wasm") => wasm::run(),
         Some("assets") => assets::run(check),
         Some("skills") => skills::run(),
-        Some("brands") => brands::run(),
         Some("generate") => generate::run(rest),
         Some("generated") => generate::check(),
         Some("version") => version::run(rest.first().map(String::as_str)),

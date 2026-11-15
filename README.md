@@ -123,8 +123,7 @@ build for `wasm32-unknown-unknown` and cargo-deny. It needs that target
 (`rustup target add wasm32-unknown-unknown`) and cargo-deny 0.20.2
 (`cargo install --locked cargo-deny@0.20.2`), which fetches the RustSec advisory database, so the
 gate needs the network. The project database's tests need dolt 2.6 or later within major version 2 on
-the PATH, or its absolute path in `ARCHFORGE_DOLT`. Maintainers also run an optional trademark check; without its list
-(`FORGE_BRANDS`) the gate skips it and says so. `cargo xtask shot` renders the window offscreen to
+the PATH, or its absolute path in `ARCHFORGE_DOLT`. `cargo xtask shot` renders the window offscreen to
 `plan/shots/`; `cargo xtask screens` renders every screen in both appearances to `plan/screens/`,
 with a contact sheet for each (`light.html`, `dark.html`), the evidence to look over before a
 release.

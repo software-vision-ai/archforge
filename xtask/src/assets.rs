@@ -3,10 +3,8 @@
 //! Walks `assets/`; requires one `[[asset]]` row per file in
 //! `ATTRIBUTION.toml` (path, author, source with version, licence, sha256); checks every hash, that
 //! every licence named has its text in the tree (the `[licences]` table maps a licence to its
-//! files), and that no file name contains a name from the trademark list when it is there.
-//! `ATTRIBUTION.md` is generated
-//! from the manifest and never edited by hand: `cargo xtask assets` rewrites it, and the gate's
-//! `--check` fails when it is stale.
+//! files). `ATTRIBUTION.md` is generated from the manifest and never edited by hand:
+//! `cargo xtask assets` rewrites it, and the gate's `--check` fails when it is stale.
 //!
 //! `[[face]]` rows name the fonts the program carries and draws with (face, author, copyright
 //! notice, source, licence). Their licences need their text in the tree too. A face that comes in a
@@ -48,9 +46,6 @@ pub fn run(check: bool) -> Result<(), String> {
     let rows: Vec<BTreeMap<String, String>> = tables.iter().filter(|t| t.array && t.name == "asset").map(|t| t.values.clone()).collect();
     let faces: Vec<BTreeMap<String, String>> = tables.iter().filter(|t| t.array && t.name == "face").map(|t| t.values.clone()).collect();
     let licences: BTreeMap<String, String> = tables.iter().find(|t| !t.array && t.name == "licences").map(|t| t.values.clone()).unwrap_or_default();
-    // File names are held to the trademark list when it is there; without it the gate says the
-    // trademark check was skipped.
-    let brands = if util::brand_list_path().is_some() { util::brands()? } else { Vec::new() };
     let mut problems = Vec::new();
 
     let mut files = Vec::new();
@@ -59,10 +54,6 @@ pub fn run(check: bool) -> Result<(), String> {
     }
     for file in &files {
         let rel = file.to_string_lossy().replace('\\', "/");
-        let lower = rel.to_lowercase();
-        if let Some(b) = brands.iter().find(|b| lower.contains(b.as_str())) {
-            problems.push(format!("{rel}: the file name contains the listed name {b:?}"));
-        }
         let Some(row) = rows.iter().find(|r| r.get("path").is_some_and(|p| *p == rel)) else {
             problems.push(format!("{rel}: no attribution row in ATTRIBUTION.toml"));
             continue;

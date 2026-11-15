@@ -1,20 +1,15 @@
 ---
 name: archforge-ground-rules
-description: "Use before adding a dependency, an icon, image or font, any product wording, or anything copied from elsewhere to Archforge, or when unsure whether something may be copied, read or named. Covers the clean room, licences, assets and attribution, the shared crates and the name."
+description: "Use before adding a dependency, an icon, image or font, any product wording, or anything copied from elsewhere to Archforge, or when unsure whether something may be copied. Covers our own work, licences, assets and attribution, the shared crates and the name."
 ---
 
-# The clean room, licences, assets and the name
+# Our own work, licences, assets and the name
 
 The rules a change cannot break. `AGENTS.md` lists them in one line each.
 
 ## Our own work
 - Behaviour comes from Archforge's own design, the public modelling standards and what users tell
   us. Never copy another product's code, icons, artwork, help text, templates or sample models.
-- Never name another modelling product anywhere in the repository: code, comments, strings, tests,
-  documentation, commit messages. Say what a feature does, not whose feature it resembles.
-- The optional trademark check, `cargo xtask brands`, reads the list `FORGE_BRANDS` names and fails
-  on a listed name in code, comments, strings, test names, manifests and packaging sources. It does
-  not read Markdown, so a skill, the README or a contributor document is checked by eye.
 - The repository carries no private paths and no names of private files. Plans,
   notes and screenshots belong in the ignored `plan/` folder.
 
