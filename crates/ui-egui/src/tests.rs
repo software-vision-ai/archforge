@@ -5422,6 +5422,60 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The constraint commands' parameters, refused by the engine, are said in the chosen language: an
+/// id missing, as the id of what the parameter takes, or of no element, an element listed as no id,
+/// an element that is no constraint or no class diagram, a place past the last, one coordinate
+/// alone or one too far; so are a coordinate that is no number and a constraint among no element's
+/// constraints. In a window of the design's height, in light and dark (AR-476).
+#[test]
+fn a_constraint_parameter_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let refused =
+            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let diagram = h.state().canvas.active.unwrap().to_string();
+        let c = crate::panels::run(h.state_mut(), "uml.constraint.add", json!({ "context": order, "expression": "x" })).unwrap()["id"].clone();
+        let no_constraint = tr("No constraint is given. Give its id.");
+        assert_eq!(no_constraint, "Es ist keine Einschränkung angegeben. Geben Sie ihre ID an.", "{theme:?}: the language is German");
+        assert_eq!(refused(&mut h, "uml.constraint.set", json!({ "constraint": "", "name": "n" })), no_constraint, "{theme:?}");
+        let no_element = tr("No element is given. Give its id.");
+        assert_eq!(refused(&mut h, "uml.constraint.add", json!({ "context": "", "expression": "x" })), no_element, "{theme:?}");
+        let no_diagram = refused(&mut h, "uml.constraint.show", json!({ "diagram": "", "constraint": c }));
+        assert_eq!(no_diagram, tr("No class diagram is given. Give its id."), "{theme:?}");
+        let nope = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
+        assert_eq!(refused(&mut h, "uml.constraint.set", json!({ "constraint": c, "constrained": ["nope"] })), nope, "{theme:?}");
+        let listed = refused(&mut h, "uml.constraint.set", json!({ "constraint": c, "constrained": [7] }));
+        assert_eq!(listed, tr("Give the elements as a list of ids."), "{theme:?}");
+        let not_one = fmt(&tr("{name} is not a constraint of this model."), &[("name", "Order")]);
+        assert_eq!(refused(&mut h, "uml.constraint.set", json!({ "constraint": order, "name": "n" })), not_one, "{theme:?}");
+        let not_diagram = fmt(&tr("{name} is not a class diagram."), &[("name", "Order")]);
+        assert_eq!(refused(&mut h, "uml.constraint.show", json!({ "diagram": order, "constraint": c })), not_diagram, "{theme:?}");
+        // A place past the last, one coordinate alone and one too far.
+        let place = tr("There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.");
+        assert_eq!(
+            refused(&mut h, "uml.constraint.move", json!({ "constraint": c, "at": 3 })),
+            fmt(&place, &[("at", "3"), ("last", "0")]),
+            "{theme:?}"
+        );
+        let alone = refused(&mut h, "uml.constraint.show", json!({ "diagram": diagram, "constraint": c, "x": 10 }));
+        assert_eq!(alone, tr("Give both x and y, or neither to place it where it reads."), "{theme:?}");
+        let far = refused(&mut h, "uml.constraint.show", json!({ "diagram": diagram, "constraint": c, "x": 0, "y": 2e6 }));
+        assert_eq!(far, fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", "y"), ("max", "1000000")]), "{theme:?}");
+        // No number and a constraint outside any element's constraints, which only a file or a caller gives.
+        let nan = crate::panels::said(&Reason::CoordinateNotANumber { axis: "x" });
+        assert_eq!(nan, Some(fmt(&tr("The {axis} is not a number."), &[("axis", "x")])), "{theme:?}");
+        let unlisted = crate::panels::said(&Reason::NoContext);
+        assert_eq!(unlisted, Some(tr("This constraint is among no element's constraints.")), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The constraint editor's Apply and Cancel.
 const CONSTRAINT_APPLY: &str = "workspace.properties.constraint.apply";
 const CONSTRAINT_CANCEL: &str = "workspace.properties.constraint.cancel";

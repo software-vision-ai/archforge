@@ -259,15 +259,20 @@ fn has_constraints(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str
     if f.doc.alive().any(|o| is_constraint(f.doc, o)) { Ok(()) } else { Err("There is no constraint yet.") }
 }
 
-/// The live object the id under `key` names, or, for one given as `id` alone, that.
-fn object(store: &Store, key: &str, id: &str) -> Result<Obj, CommandError> {
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {} in this model", short(id))))
+/// The live object `id`, given under `key` as the id of an element of `kind`; refused with its
+/// reason typed: no id, or one malformed or of no element.
+fn object(store: &Store, key: &str, id: &str, kind: &'static str) -> Result<Obj, CommandError> {
+    let refused = |said: String| {
+        let reason = if id.is_empty() { Reason::IdEmpty { kind } } else { Reason::NoElement { id: short(id) } };
+        refuse(key, said).because(reason)
+    };
+    let Some(uuid) = Uuid::parse(id) else { return Err(refused(format!("{:?} is not an id", short(id)))) };
+    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refused(format!("there is no element {} in this model", short(id))))
 }
 
 /// The context under `key`.
 fn context_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
-    let o = object(store, key, text(p, key))?;
+    let o = object(store, key, text(p, key), "element")?;
     if !is_context(store, o) {
         return Err(refuse(key, format!("{} owns no constraint; {CONTEXTS} does", text(p, key))).because(Reason::NotAContext));
     }
@@ -276,11 +281,17 @@ fn context_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandErr
 
 /// The constraint under `key`.
 fn constraint_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
-    let o = object(store, key, text(p, key))?;
+    let o = object(store, key, text(p, key), "constraint")?;
     if !is_constraint(store, o) || !in_model(store, o) {
-        return Err(refuse(key, format!("{} is not a constraint of this model", text(p, key))));
+        let reason = Reason::NotA { kind: "constraint", name: crate::applications::name_or_id(store, o) };
+        return Err(refuse(key, format!("{} is not a constraint of this model", text(p, key))).because(reason));
     }
     Ok(o)
+}
+
+/// The context of the constraint `c`, refused when it has none.
+fn owner(store: &Store, c: Obj) -> Result<Obj, CommandError> {
+    context_of(store, c).ok_or_else(|| refuse("constraint", "the constraint has no context").because(Reason::NoContext))
 }
 
 /// The elements under `key`, an array of ids, each in the model, none twice, at most
@@ -296,8 +307,9 @@ fn constrained_param(store: &Store, p: &Params, key: &str, context: Obj) -> Resu
     }
     let mut out: Vec<Obj> = Vec::with_capacity(items.len());
     for item in &items {
-        let id = item.as_str().ok_or_else(|| refuse(key, "every element is an id, as a string"))?;
-        let o = object(store, key, id)?;
+        let expected = || refuse(key, "every element is an id, as a string").because(Reason::IdsExpected { kind: "constrained element" });
+        let id = item.as_str().ok_or_else(expected)?;
+        let o = object(store, key, id, "element")?;
         if !is_constrainable(store, o) {
             return Err(
                 refuse(key, format!("{} is outside this model; a constraint names {CONSTRAINABLE}", short(id))).because(Reason::NotConstrainable)
@@ -432,7 +444,8 @@ pub fn show(store: &mut Store, d: Obj, c: Obj, form: Form, at: Option<(f64, f64)
     let (x, y) = at.unwrap_or(place);
     for (key, v) in [("x", x), ("y", y)] {
         if let Some(why) = archforge_diagram::rules::coord_problem(v) {
-            return Err(refuse(key, format!("the {key} {why}")));
+            let reason = if v.is_finite() { Reason::CoordinateTooFar { axis: key } } else { Reason::CoordinateNotANumber { axis: key } };
+            return Err(refuse(key, format!("the {key} {why}")).because(reason));
         }
     }
     // The same form where it is already, with no place asked: nothing changes.
@@ -494,9 +507,11 @@ fn constraint_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
+/// `uml.constraint.set`: a constraint's expression, name, language or elements changed, each kept
+/// when left out.
 fn constraint_set(ctx: &mut C<'_>, p: &Params) -> R {
     let c = constraint_param(ctx.doc, p, "constraint")?;
-    let context = context_of(ctx.doc, c).ok_or_else(|| refuse("constraint", "the constraint has no context"))?;
+    let context = owner(ctx.doc, c)?;
     let expression = match p.str("expression") {
         Some(_) => Some(expression_param(p, "expression")?.to_string()),
         None => None,
@@ -528,35 +543,42 @@ fn constraint_set(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
+/// `uml.constraint.move`: a constraint moved to another place among its context's, a place past
+/// the last refused.
 fn constraint_move(ctx: &mut C<'_>, p: &Params) -> R {
     let c = constraint_param(ctx.doc, p, "constraint")?;
-    let context = context_of(ctx.doc, c).ok_or_else(|| refuse("constraint", "the constraint has no context"))?;
+    let context = owner(ctx.doc, c)?;
     let all: Vec<Obj> = ctx.doc.list(context, namespace::OWNED_RULE).unwrap_or_default().iter().filter_map(Value::as_ref).collect();
     let last = all.len().saturating_sub(1);
-    let from = all.iter().position(|x| *x == c).ok_or_else(|| refuse("constraint", "the constraint is not among its context's"))?;
+    let unlisted = || refuse("constraint", "the constraint is not among its context's").because(Reason::NoContext);
+    let from = all.iter().position(|x| *x == c).ok_or_else(unlisted)?;
     // -1, the default, is the last place, as a member's place is the end; any other place is one
     // of the list's, from 0, and anything else is refused, never clamped.
     let at = p.integer("at").unwrap_or(-1);
+    let nowhere = |said: String| refuse("at", said).because(Reason::NoPlace { kind: "constraint", at, last });
     let to = match at {
         -1 => last,
         _ => match usize::try_from(at) {
             Ok(i) if i <= last => i,
-            Ok(_) => return Err(refuse("at", format!("{at} is past the last constraint; a place from 0 to {last}, or -1 for the last"))),
-            Err(_) => return Err(refuse("at", format!("{at} is no place; a place from 0 to {last}, or -1 for the last"))),
+            Ok(_) => return Err(nowhere(format!("{at} is past the last constraint; a place from 0 to {last}, or -1 for the last"))),
+            Err(_) => return Err(nowhere(format!("{at} is no place; a place from 0 to {last}, or -1 for the last"))),
         },
     };
     let (Ok(from), Ok(to)) = (u32::try_from(from), u32::try_from(to)) else {
-        return Err(refuse("at", format!("{at} is too far; a place from 0 to {last}")));
+        return Err(nowhere(format!("{at} is too far; a place from 0 to {last}")));
     };
     ctx.doc.move_item(context, namespace::OWNED_RULE, from, to).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, c)? }))
 }
 
+/// `uml.constraint.show`: a constraint shown on a class diagram as braces or a note, at both
+/// coordinates given or where it reads.
 fn constraint_show(ctx: &mut C<'_>, p: &Params) -> R {
-    let d = object(ctx.doc, "diagram", text(p, "diagram"))?;
+    let d = object(ctx.doc, "diagram", text(p, "diagram"), "class diagram")?;
     let kind = ctx.doc.get(d, diagram::KIND).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
     if ctx.doc.class_of(d).ok() != Some(archforge_diagram::DIAGRAM) || kind != crate::CLASS_DIAGRAM {
-        return Err(refuse("diagram", format!("{} is not a class diagram", text(p, "diagram"))));
+        let reason = Reason::NotA { kind: "class diagram", name: crate::applications::name_or_id(ctx.doc, d) };
+        return Err(refuse("diagram", format!("{} is not a class diagram", text(p, "diagram"))).because(reason));
     }
     let c = constraint_param(ctx.doc, p, "constraint")?;
     let form = match text(p, "as") {
@@ -566,7 +588,7 @@ fn constraint_show(ctx: &mut C<'_>, p: &Params) -> R {
     let at = match (p.number("x"), p.number("y")) {
         (Some(x), Some(y)) => Some((x, y)),
         (None, None) => None,
-        _ => return Err(refuse("x", "give both x and y, or neither for where it reads")),
+        _ => return Err(refuse("x", "give both x and y, or neither for where it reads").because(Reason::OneCoordinate)),
     };
     let n = show(ctx.doc, d, c, form, at)?;
     ctx.view.selection = vec![n];

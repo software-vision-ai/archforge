@@ -76,7 +76,8 @@ association class's line an association's and its card a class's under `Associat
 in_model, expression_problem, suggested_form, form_for, shown_on, form_of, linked_nodes, show, dropped_by, Dropped, Form, BRACES, NOTE,
 MAX_CONSTRAINED}` (AR-133: `uml.constraint.{add, set, move, show, list}`; a Constraint owned by a classifier of the model's own
 or a package, naming the elements it constrains in order and stating its rule as an OpaqueExpression of one body and at most one
-language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model;
+language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model,
+each with its reason typed for an interface to say, as is every parameter of these commands refused (AR-447, AR-476);
 shown per diagram as a node of the kind `uml.constraint.braces`, nested in its element's node, or `uml.constraint.note`, linked
 to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
 with it in the same step), `generalization_sets::{specs, is_set, is_generalization, members, sets_of, general, specific,
