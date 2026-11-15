@@ -233,6 +233,7 @@ str		{type} takes no scale.	{type} não tem escala.
 str		A BINARY holds at most 255 bytes, not {value}.	Um BINARY guarda no máximo 255 bytes, não {value}.
 str		The scale {value} is more than the precision.	A escala {value} é maior do que a precisão.
 str		A scale needs a precision.	Uma escala precisa de uma precisão.
+str		A type name holds no size; give the length, precision or scale instead.	Um nome de tipo não leva tamanho; indique antes o comprimento, a precisão ou a escala.
 str		Default	Predefinição
 str		Generation	Geração
 str		Expression	Expressão
@@ -619,8 +620,13 @@ str		An identity column takes no default.	Uma coluna de identidade não aceita p
 str		An identity column takes no expression.	Uma coluna de identidade não aceita expressão.
 str		A key or identity column may never be null.	Uma coluna de chave ou de identidade nunca admite nulos.
 str		The column {name} would break: {why}	A coluna {name} deixaria de ser válida: {why}
+str		A column takes a domain or an enum type, not both.	Uma coluna usa um domínio ou um tipo enumerado, não ambos.
+str		A column on a domain takes the domain's type.	Uma coluna sobre um domínio usa o tipo do domínio.
+str		A column on a domain takes the domain's size.	Uma coluna sobre um domínio usa o tamanho do domínio.
 str		A column on a domain takes the domain's default.	Uma coluna sobre um domínio usa a predefinição do domínio.
 str		A column on a domain takes the domain's collation.	Uma coluna sobre um domínio usa a colação do domínio.
+str		A column of an enum type takes no type name of its own.	Uma coluna de um tipo enumerado não tem nome de tipo próprio.
+str		A column of an enum type takes no size.	Uma coluna de um tipo enumerado não tem tamanho.
 str		{name} follows no column.	{name} não segue nenhuma coluna.
 plural		The table has {n} column.	A tabela tem {n} coluna.|A tabela tem {n} colunas.
 str		A package cannot go into itself or a package it holds.	Um pacote não pode ir para dentro de si próprio nem de um pacote que contém.

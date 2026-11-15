@@ -233,6 +233,7 @@ str		{type} takes no scale.	{type} には小数桁を指定できません。
 str		A BINARY holds at most 255 bytes, not {value}.	BINARY は最大 255 バイトです。{value} は指定できません。
 str		The scale {value} is more than the precision.	小数桁 {value} が精度を超えています。
 str		A scale needs a precision.	小数桁には精度が必要です。
+str		A type name holds no size; give the length, precision or scale instead.	型名にはサイズを含めません。代わりに長さ、精度、または小数桁を指定してください。
 str		Default	既定値
 str		Generation	生成
 str		Expression	式
@@ -619,8 +620,13 @@ str		An identity column takes no default.	識別列は既定値を持てませ�
 str		An identity column takes no expression.	識別列は式を持てません。
 str		A key or identity column may never be null.	キーの列や識別列は NULL を許可できません。
 str		The column {name} would break: {why}	列 {name} が成り立たなくなります: {why}
+str		A column takes a domain or an enum type, not both.	列にはドメインか列挙型のどちらか一方を指定します。両方は指定できません。
+str		A column on a domain takes the domain's type.	ドメイン上の列はドメインの型を使います。
+str		A column on a domain takes the domain's size.	ドメイン上の列はドメインのサイズを使います。
 str		A column on a domain takes the domain's default.	ドメイン上の列はドメインの既定値を使います。
 str		A column on a domain takes the domain's collation.	ドメイン上の列はドメインの照合順序を使います。
+str		A column of an enum type takes no type name of its own.	列挙型の列には独自の型名を指定できません。
+str		A column of an enum type takes no size.	列挙型の列にはサイズを指定できません。
 str		{name} follows no column.	{name} はどの列にも従っていません。
 plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。

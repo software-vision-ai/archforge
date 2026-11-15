@@ -232,6 +232,7 @@ str		{type} takes no scale.	{type} takes no scale.
 str		A BINARY holds at most 255 bytes, not {value}.	A BINARY holds at most 255 bytes, not {value}.
 str		The scale {value} is more than the precision.	The scale {value} is more than the precision.
 str		A scale needs a precision.	A scale needs a precision.
+str		A type name holds no size; give the length, precision or scale instead.	A type name holds no size; give the length, precision or scale instead.
 str		Default	Default
 str		Generation	Generation
 str		Expression	Expression
@@ -618,8 +619,13 @@ str		An identity column takes no default.	An identity column takes no default.
 str		An identity column takes no expression.	An identity column takes no expression.
 str		A key or identity column may never be null.	A key or identity column may never be null.
 str		The column {name} would break: {why}	The column {name} would break: {why}
+str		A column takes a domain or an enum type, not both.	A column takes a domain or an enum type, not both.
+str		A column on a domain takes the domain's type.	A column on a domain takes the domain's type.
+str		A column on a domain takes the domain's size.	A column on a domain takes the domain's size.
 str		A column on a domain takes the domain's default.	A column on a domain takes the domain's default.
 str		A column on a domain takes the domain's collation.	A column on a domain takes the domain's collation.
+str		A column of an enum type takes no type name of its own.	A column of an enum type takes no type name of its own.
+str		A column of an enum type takes no size.	A column of an enum type takes no size.
 str		{name} follows no column.	{name} follows no column.
 plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.

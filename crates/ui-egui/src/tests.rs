@@ -6834,7 +6834,33 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
         ] {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::DomainGives { what: "size" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(&Reason::DomainGives { what: "check" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// What a column is typed by, refused, is said in the chosen language: a type name that holds its
+/// own size, a domain and an enum type together, and a type name or a size beside a domain or an
+/// enum type; a part neither knows is left to the engine's English. In light and dark (AR-497).
+#[test]
+fn what_an_er_column_is_typed_by_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (reason, said) in [
+            (Reason::SizeInTypeName, "Ein Typname enthält keine Größe; geben Sie stattdessen Länge, Genauigkeit oder Nachkommastellen an."),
+            (Reason::DomainAndEnum, "Eine Spalte hat eine Domäne oder einen Aufzählungstyp, nicht beides."),
+            (Reason::DomainGives { what: "type" }, "Eine Spalte auf einer Domäne übernimmt den Typ der Domäne."),
+            (Reason::DomainGives { what: "size" }, "Eine Spalte auf einer Domäne übernimmt die Größe der Domäne."),
+            (Reason::EnumTypeTakesNo { what: "type" }, "Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen."),
+            (Reason::EnumTypeTakesNo { what: "size" }, "Eine Spalte eines Aufzählungstyps hat keine Größe."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        assert_eq!(crate::panels::said(&Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

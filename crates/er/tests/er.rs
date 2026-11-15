@@ -751,6 +751,54 @@ fn a_size_out_of_range_is_typed_by_the_rule_though_no_command_reaches_it() {
     }
 }
 
+/// What a column is typed by, refused, carries its reason typed beside the English, which stays as
+/// it was: a column's or a domain's type name that holds its own size, a domain and an enum type
+/// together, with or without a type name, and a type name beside either, from attribute add and
+/// set-type and domain add and set (AR-497).
+#[test]
+fn what_a_column_is_typed_by_refused_is_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "money", "base_type": "NUMERIC", "precision": 10 }));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "status", "literals": ["open", "shut"] }));
+    const SIZED: &str = "carries its own size; give length, precision or scale instead";
+    const BOTH: &str = "a column takes a domain or an enum type, not both";
+    let add = json!({ "entity": sm.order, "name": "n", "domain": dom, "enum": en });
+    let retype = |extra: Json| {
+        let mut p = json!({ "attribute": sm.total });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    for (cmd, p, key, reason, message) in [
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "n", "type": "VARCHAR(20)" }), "type", Reason::SizeInTypeName, SIZED),
+        ("er.attribute.set-type", retype(json!({ "type": "DECIMAL(10,2)" })), "type", Reason::SizeInTypeName, SIZED),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "CHAR(3)" }), "base_type", Reason::SizeInTypeName, SIZED),
+        ("er.domain.set", json!({ "domain": dom, "name": "money", "base_type": "NUMERIC(10)" }), "base_type", Reason::SizeInTypeName, SIZED),
+        ("er.attribute.add", add, "enum", Reason::DomainAndEnum, BOTH),
+        ("er.attribute.set-type", retype(json!({ "type": "TEXT", "domain": dom, "enum": en })), "enum", Reason::DomainAndEnum, BOTH),
+        (
+            "er.attribute.set-type",
+            retype(json!({ "type": "TEXT", "domain": dom })),
+            "type",
+            Reason::DomainGives { what: "type" },
+            "a column on a domain takes no type name of its own",
+        ),
+        (
+            "er.attribute.add",
+            json!({ "entity": sm.order, "name": "n", "type": "TEXT", "enum": en }),
+            "type",
+            Reason::EnumTypeTakesNo { what: "type" },
+            "a column of an enum type takes no type name of its own",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    run(&mut s, "er.attribute.set-type", retype(json!({ "domain": dom })));
+    run(&mut s, "er.attribute.set-type", retype(json!({ "enum": en })));
+}
+
 /// A column's own default, collation, place and link refused carry their reason typed beside the
 /// English, which stays as it was: a default none of its enum type's literals, before the step and
 /// inside it, and a column whose enum type loses its default's literal, as that column; a default

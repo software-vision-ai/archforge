@@ -233,6 +233,7 @@ str		{type} takes no scale.	{type} hat keine Nachkommastellen.
 str		A BINARY holds at most 255 bytes, not {value}.	Ein BINARY fasst höchstens 255 Bytes, nicht {value}.
 str		The scale {value} is more than the precision.	Die Nachkommastellen ({value}) übersteigen die Genauigkeit.
 str		A scale needs a precision.	Nachkommastellen brauchen eine Genauigkeit.
+str		A type name holds no size; give the length, precision or scale instead.	Ein Typname enthält keine Größe; geben Sie stattdessen Länge, Genauigkeit oder Nachkommastellen an.
 str		Default	Standardwert
 str		Generation	Erzeugung
 str		Expression	Ausdruck
@@ -619,8 +620,13 @@ str		An identity column takes no default.	Eine Identitätsspalte hat keinen Stan
 str		An identity column takes no expression.	Eine Identitätsspalte hat keinen Ausdruck.
 str		A key or identity column may never be null.	Eine Schlüssel- oder Identitätsspalte darf nie leer sein.
 str		The column {name} would break: {why}	Die Spalte {name} wäre danach ungültig: {why}
+str		A column takes a domain or an enum type, not both.	Eine Spalte hat eine Domäne oder einen Aufzählungstyp, nicht beides.
+str		A column on a domain takes the domain's type.	Eine Spalte auf einer Domäne übernimmt den Typ der Domäne.
+str		A column on a domain takes the domain's size.	Eine Spalte auf einer Domäne übernimmt die Größe der Domäne.
 str		A column on a domain takes the domain's default.	Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne.
 str		A column on a domain takes the domain's collation.	Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne.
+str		A column of an enum type takes no type name of its own.	Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen.
+str		A column of an enum type takes no size.	Eine Spalte eines Aufzählungstyps hat keine Größe.
 str		{name} follows no column.	{name} folgt keiner Spalte.
 plural		The table has {n} column.	Die Tabelle hat {n} Spalte.|Die Tabelle hat {n} Spalten.
 str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.

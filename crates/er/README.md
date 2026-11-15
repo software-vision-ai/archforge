@@ -238,8 +238,17 @@ names as `SizeMisfit`, with the type, the size and the `SizeRule` it breaks, as
 `rules::SizeProblem::reason` types it; the English stays as it was. A column on a domain or an enum
 type has no type name of its own, so a size beside one is refused this way first: the two
 refusals of `size_allowed`, and their twins in `set_column_type`'s step, are reached by no command
-and stay in English. A size outside 1 to 65535 is refused by the engine before the handler runs (0
-is none); the rule types it all the same.
+(they are typed all the same, below). A size outside 1 to 65535 is refused by the engine before the
+handler runs (0 is none); the rule types it all the same.
+
+**Refusals of what a column is typed by** (AR-497). A column's type name or a domain's base type
+that holds its own size in parentheses, from `attribute.add`, `attribute.set-type`, `domain.add`
+and `domain.set`, is refused under `type` or `base_type` as `SizeInTypeName`; a domain and an enum
+type together, under `enum`, as `DomainAndEnum`; and a type name beside a domain or an enum type,
+under `type`, as `DomainGives` of `"type"` or `EnumTypeTakesNo` of `"type"`. A size beside one,
+which no command reaches (see above), is typed as `DomainGives` or `EnumTypeTakesNo` of `"size"`,
+before the step (`size_allowed`) and inside it (`set_column_type`), and tested on those two
+directly. The English stays as it was.
 
 **Tests.** `tests/er.rs`: the registry and the metamodel; every command's round trip on the store;
 refusals that name their key and change nothing; removing an entity with a core folder, comment and

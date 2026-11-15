@@ -233,6 +233,7 @@ str		{type} takes no scale.	{type} 不能指定小数位数。
 str		A BINARY holds at most 255 bytes, not {value}.	BINARY 最多容纳 255 字节，而不是 {value}。
 str		The scale {value} is more than the precision.	小数位数 {value} 大于精度。
 str		A scale needs a precision.	小数位数需要精度。
+str		A type name holds no size; give the length, precision or scale instead.	类型名不能包含大小；请改为指定长度、精度或小数位数。
 str		Default	默认值
 str		Generation	生成方式
 str		Expression	表达式
@@ -619,8 +620,13 @@ str		An identity column takes no default.	标识列不能有默认值。
 str		An identity column takes no expression.	标识列不能有表达式。
 str		A key or identity column may never be null.	键列或标识列绝不允许为空。
 str		The column {name} would break: {why}	列 {name} 将失效：{why}
+str		A column takes a domain or an enum type, not both.	列只能使用域或枚举类型之一，不能同时使用两者。
+str		A column on a domain takes the domain's type.	基于域的列使用域的类型。
+str		A column on a domain takes the domain's size.	基于域的列使用域的大小。
 str		A column on a domain takes the domain's default.	基于域的列使用域的默认值。
 str		A column on a domain takes the domain's collation.	基于域的列使用域的排序规则。
+str		A column of an enum type takes no type name of its own.	枚举类型的列不能有自身的类型名。
+str		A column of an enum type takes no size.	枚举类型的列不能指定大小。
 str		{name} follows no column.	{name} 未跟随任何列。
 plural		The table has {n} column.	该表有 {n} 个列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。

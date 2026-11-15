@@ -233,6 +233,7 @@ str		{type} takes no scale.	{type} n'a pas d'échelle.
 str		A BINARY holds at most 255 bytes, not {value}.	Un BINARY contient au plus 255 octets, pas {value}.
 str		The scale {value} is more than the precision.	L'échelle {value} est supérieure à la précision.
 str		A scale needs a precision.	Une échelle a besoin d'une précision.
+str		A type name holds no size; give the length, precision or scale instead.	Un nom de type ne contient pas de taille ; indiquez plutôt la longueur, la précision ou l'échelle.
 str		Default	Valeur par défaut
 str		Generation	Génération
 str		Expression	Expression
@@ -619,8 +620,13 @@ str		An identity column takes no default.	Une colonne d’identité ne prend pas
 str		An identity column takes no expression.	Une colonne d’identité ne prend pas d’expression.
 str		A key or identity column may never be null.	Une colonne de clé ou d’identité n’est jamais nulle.
 str		The column {name} would break: {why}	La colonne {name} ne serait plus valide : {why}
+str		A column takes a domain or an enum type, not both.	Une colonne prend un domaine ou un type énuméré, pas les deux.
+str		A column on a domain takes the domain's type.	Une colonne sur un domaine prend le type du domaine.
+str		A column on a domain takes the domain's size.	Une colonne sur un domaine prend la taille du domaine.
 str		A column on a domain takes the domain's default.	Une colonne sur un domaine prend la valeur par défaut du domaine.
 str		A column on a domain takes the domain's collation.	Une colonne sur un domaine prend la collation du domaine.
+str		A column of an enum type takes no type name of its own.	Une colonne d'un type énuméré n'a pas de nom de type propre.
+str		A column of an enum type takes no size.	Une colonne d'un type énuméré n'a pas de taille.
 str		{name} follows no column.	{name} ne suit aucune colonne.
 plural		The table has {n} column.	La table a {n} colonne.|La table a {n} colonnes.
 str		A package cannot go into itself or a package it holds.	Un paquetage ne peut aller ni dans lui-même ni dans un paquetage qu’il contient.
