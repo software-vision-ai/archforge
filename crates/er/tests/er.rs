@@ -563,6 +563,108 @@ fn a_loaded_identity_column_with_a_default_is_refused_with_its_rule_typed() {
     assert_eq!((error.message.as_str(), error.key.as_deref()), ("an identity column takes no default", Some("attribute")));
 }
 
+/// A column's or a domain's size that does not fit its type, from attribute add and set-type and
+/// domain add and set, is refused under the part it names with the rule typed beside the English,
+/// which stays as it was; a column on a domain has no type name of its own. A size that fits is
+/// taken, at each rule's edge (AR-496).
+#[test]
+fn a_size_that_does_not_fit_its_type_is_refused_with_its_rule_typed() {
+    use archforge_engine::{Reason, SizeRule as R};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "money", "base_type": "NUMERIC", "precision": 10 }));
+    let misfit = |rule, ty: &str, value| Reason::SizeMisfit { rule, ty: ty.into(), value };
+    let column = |extra: Json| {
+        let mut p = json!({ "entity": sm.order, "name": "n" });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let retype = |extra: Json| {
+        let mut p = json!({ "attribute": sm.total });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let domain = |cmd: &str, extra: Json| {
+        let mut p = if cmd == "er.domain.add" { json!({ "schema": sm.schema, "name": "d" }) } else { json!({ "domain": dom, "name": "money" }) };
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    for (cmd, p, key, reason, message) in [
+        ("er.attribute.add", column(json!({ "type": "INT", "length": 4 })), "length", misfit(R::TakesNoLength, "INT", 4), "INT takes no length"),
+        (
+            "er.attribute.add",
+            column(json!({ "domain": dom, "precision": 4 })),
+            "precision",
+            misfit(R::TakesNoPrecision, "", 4),
+            "a type without a name takes no precision",
+        ),
+        (
+            "er.attribute.set-type",
+            retype(json!({ "type": "binary", "length": 256 })),
+            "length",
+            misfit(R::BinaryTooLong, "binary", 256),
+            "256 is more than the 255 bytes a BINARY holds",
+        ),
+        (
+            "er.attribute.set-type",
+            retype(json!({ "type": "VARCHAR", "precision": 3 })),
+            "precision",
+            misfit(R::TakesNoPrecision, "VARCHAR", 3),
+            "VARCHAR takes no precision",
+        ),
+        (
+            "er.domain.add",
+            domain("er.domain.add", json!({ "base_type": "TIMESTAMP", "precision": 3, "scale": 2 })),
+            "scale",
+            misfit(R::TakesNoScale, "TIMESTAMP", 2),
+            "TIMESTAMP takes no scale",
+        ),
+        (
+            "er.domain.add",
+            domain("er.domain.add", json!({ "base_type": "NUMERIC", "precision": 4, "scale": 5 })),
+            "scale",
+            misfit(R::ScaleOverPrecision, "NUMERIC", 5),
+            "the scale is more than the precision",
+        ),
+        (
+            "er.domain.set",
+            domain("er.domain.set", json!({ "base_type": "NUMERIC", "scale": 2 })),
+            "scale",
+            misfit(R::ScaleWithoutPrecision, "NUMERIC", 2),
+            "a scale needs a precision",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    for p in [
+        retype(json!({ "type": "binary", "length": 255 })),
+        retype(json!({ "type": "VARBINARY", "length": 256 })),
+        retype(json!({ "type": "NUMERIC", "precision": 5, "scale": 5 })),
+        retype(json!({ "type": "TIMESTAMP", "precision": 3 })),
+    ] {
+        run(&mut s, "er.attribute.set-type", p);
+    }
+}
+
+/// A size outside 1 to 65535, which the engine refuses before a command's handler sees it (0 is
+/// none), is typed by the rule all the same, under the part it names and ahead of whether the type
+/// takes it (AR-496).
+#[test]
+fn a_size_out_of_range_is_typed_by_the_rule_though_no_command_reaches_it() {
+    use archforge_engine::{Reason, SizeRule};
+    let problem = archforge_er::rules::size_problem("VARCHAR", Some(1), Some(0), None).expect("0 is out of range");
+    let reason = Reason::SizeMisfit { rule: SizeRule::OutOfRange, ty: "VARCHAR".into(), value: 0 };
+    assert_eq!((problem.key, problem.said().as_str(), problem.reason()), ("precision", "0 is not between 1 and 65535", reason));
+    let mut s = session();
+    let sm = sample(&mut s);
+    for length in [-1, 65_536] {
+        let p = json!({ "entity": sm.order, "name": "n", "type": "VARCHAR", "length": length });
+        let refused = s.execute("er.attribute.add", &p);
+        assert!(matches!(&refused, Err(EngineError::OutOfRange { key, .. }) if key == "length"), "{length}: {refused:?}");
+    }
+}
+
 /// A column's own default, collation, place and link refused carry their reason typed beside the
 /// English, which stays as it was: a default none of its enum type's literals, before the step and
 /// inside it, and a column whose enum type loses its default's literal, as that column; a default

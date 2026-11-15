@@ -22,8 +22,8 @@ pub mod testing;
 
 pub use cmd::{CommandInfo, CommandSpec, Ctx, Facts, Handler, ParamInfo, Registry, always};
 pub use error::{
-    Accepted, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, NoProperty, NotOneOf, Parameter, Reason, TargetRule,
-    Unextended, Used, ValueMisfit, Values, WordPlace,
+    Accepted, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, NoProperty, NotOneOf, Parameter, Reason, SizeRule,
+    TargetRule, Unextended, Used, ValueMisfit, Values, WordPlace,
 };
 pub use params::{ParamDoc, Params, parse_params};
 pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session};

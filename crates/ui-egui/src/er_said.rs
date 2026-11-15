@@ -7,9 +7,10 @@
 //! on each other too deep. A column's generation (AR-494): the rule it breaks, also for a column on
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
-//! a place past its table's last; a default none of an enum type's literals is UML's row.
+//! a place past its table's last; a default none of an enum type's literals is UML's row. A
+//! column's or a domain's size (AR-496): the rule it breaks, with the type and the size.
 
-use archforge_engine::{GenerationRule, NotOneOf, Reason, WordPlace};
+use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
 use crate::i18n::{fmt, tr, trn};
 
@@ -64,6 +65,7 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::Generation(rule) => generation_said(*rule),
         Reason::NotNullable => tr("A key or identity column may never be null."),
+        Reason::SizeMisfit { rule, ty, value } => size_said(*rule, ty, *value),
         Reason::DomainGives { what: "default" } => tr("A column on a domain takes the domain's default."),
         Reason::DomainGives { what: "collation" } => tr("A column on a domain takes the domain's collation."),
         Reason::FollowsNoColumn { name } => fmt(&tr("{name} follows no column."), &[("name", name)]),
@@ -83,6 +85,25 @@ fn generation_said(rule: GenerationRule) -> String {
         GenerationRule::IdentityNotNullable => tr("An identity column may never be null."),
         GenerationRule::IdentityTakesNoDefault => tr("An identity column takes no default."),
         GenerationRule::IdentityTakesNoExpression => tr("An identity column takes no expression."),
+    }
+}
+
+/// A size that does not fit its type, by the rule it breaks, in the user's words (AR-496); a column
+/// without a type name of its own takes no size at all.
+fn size_said(rule: SizeRule, ty: &str, value: i64) -> String {
+    let value = value.to_string();
+    let args = [("type", ty), ("value", value.as_str())];
+    match rule {
+        SizeRule::OutOfRange => fmt(&tr("The size {value} is not between 1 and 65535."), &args),
+        SizeRule::TakesNoLength | SizeRule::TakesNoPrecision | SizeRule::TakesNoScale if ty.is_empty() => {
+            tr("A column without a type name of its own takes no size.")
+        }
+        SizeRule::TakesNoLength => fmt(&tr("{type} takes no length."), &args),
+        SizeRule::TakesNoPrecision => fmt(&tr("{type} takes no precision."), &args),
+        SizeRule::TakesNoScale => fmt(&tr("{type} takes no scale."), &args),
+        SizeRule::BinaryTooLong => fmt(&tr("A BINARY holds at most 255 bytes, not {value}."), &args),
+        SizeRule::ScaleOverPrecision => fmt(&tr("The scale {value} is more than the precision."), &args),
+        SizeRule::ScaleWithoutPrecision => tr("A scale needs a precision."),
     }
 }
 

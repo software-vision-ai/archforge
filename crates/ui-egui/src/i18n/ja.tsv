@@ -215,6 +215,14 @@ str		Unique	一意
 str		Length	長さ
 str		Precision	精度
 str		Scale	小数桁
+str		The size {value} is not between 1 and 65535.	サイズ {value} は 1 から 65535 の範囲外です。
+str		A column without a type name of its own takes no size.	独自の型名のない列にはサイズを指定できません。
+str		{type} takes no length.	{type} には長さを指定できません。
+str		{type} takes no precision.	{type} には精度を指定できません。
+str		{type} takes no scale.	{type} には小数桁を指定できません。
+str		A BINARY holds at most 255 bytes, not {value}.	BINARY は最大 255 バイトです。{value} は指定できません。
+str		The scale {value} is more than the precision.	小数桁 {value} が精度を超えています。
+str		A scale needs a precision.	小数桁には精度が必要です。
 str		Default	既定値
 str		Generation	生成
 str		Expression	式

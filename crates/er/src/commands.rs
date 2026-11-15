@@ -1077,12 +1077,13 @@ fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
-/// The size parameters of a type command, checked against the type: 0 means none.
+/// The size parameters of a type command, checked against the type: 0 means none. A size that does
+/// not fit is refused under its part, typed by the rule it breaks ([`Reason::SizeMisfit`]).
 fn size_params(p: &Params, kind: &str) -> Result<(Option<i64>, Option<i64>, Option<i64>), CommandError> {
     let read = |key: &str| p.integer(key).filter(|v| *v != 0);
     let size = (read("length"), read("precision"), read("scale"));
-    if let Some((key, problem)) = rules::size_problem(kind, size.0, size.1, size.2) {
-        return Err(refuse(key, problem));
+    if let Some(problem) = rules::size_problem(kind, size.0, size.1, size.2) {
+        return Err(refuse(problem.key, problem.said()).because(problem.reason()));
     }
     Ok(size)
 }

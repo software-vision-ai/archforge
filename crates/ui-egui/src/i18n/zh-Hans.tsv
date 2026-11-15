@@ -215,6 +215,14 @@ str		Unique	唯一
 str		Length	长度
 str		Precision	精度
 str		Scale	小数位数
+str		The size {value} is not between 1 and 65535.	大小 {value} 不在 1 到 65535 之间。
+str		A column without a type name of its own takes no size.	没有自身类型名的列不能指定大小。
+str		{type} takes no length.	{type} 不能指定长度。
+str		{type} takes no precision.	{type} 不能指定精度。
+str		{type} takes no scale.	{type} 不能指定小数位数。
+str		A BINARY holds at most 255 bytes, not {value}.	BINARY 最多容纳 255 字节，而不是 {value}。
+str		The scale {value} is more than the precision.	小数位数 {value} 大于精度。
+str		A scale needs a precision.	小数位数需要精度。
 str		Default	默认值
 str		Generation	生成方式
 str		Expression	表达式
