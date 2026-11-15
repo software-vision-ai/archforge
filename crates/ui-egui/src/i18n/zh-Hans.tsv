@@ -1419,6 +1419,7 @@ str		The {axis} is not a number.	{axis} 的值不是数字。
 str		The {axis} is farther than {max} from the origin.	{axis} 的值离原点超过 {max}。
 str		An element is named twice. Name each element once.	有元素被指定了两次。每个元素只指定一次。
 str		{field}: {word} is not one of the choices. The choices are {words}.	{field}：{word} 不是可选项。可选项有 {words}。
+str		{field}: no choice is given. The choices are {words}.	{field}：未给出选项。可选项有 {words}。
 str		a constraint	一个约束
 str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
 str		{constraint} now constrains {elements} only	{constraint} 现在只约束 {elements}

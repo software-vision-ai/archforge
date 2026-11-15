@@ -6356,8 +6356,8 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
 }
 
 /// An index column's direction or nulls order that is none of the words, or no word, is said in
-/// the chosen language under the choice's label, with the words taken; a word of another place is
-/// not ER's to say. In a window of the design's height, in light and dark (AR-491).
+/// the chosen language under the choice's label, with the words taken, one of only spaces as no
+/// choice given; a word of another place is not ER's to say. In a window of the design's height, in light and dark (AR-491).
 #[test]
 fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
     use serde_json::json;
@@ -6377,6 +6377,8 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(refused("direction", json!("up")), up, "{theme:?}");
         let array = "Nullwerte: [1] ist keine der Möglichkeiten. Möglich sind default, first, last.";
         assert_eq!(refused("nulls", json!([1])), array, "{theme:?}");
+        let none = "Richtung: Es ist keine Möglichkeit angegeben. Möglich sind ascending, descending.";
+        assert_eq!(refused("direction", json!(" ")), none, "{theme:?}");
         let diagram = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "x".into(), known: vec!["er".into()] };
         assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
         h.run();

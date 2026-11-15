@@ -45,14 +45,18 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
 }
 
 /// A word that is none of an ER choice's words, under the label the interface shows the choice by,
-/// with the words it takes: an index column's direction or nulls (AR-491); none for a place that is
-/// not ER's.
+/// with the words it takes: an index column's direction or nulls (AR-491), a word of only spaces
+/// or none said as no choice given; none for a place that is not ER's.
 fn not_one_of_said(no: &NotOneOf) -> Option<String> {
     let field = match no.what {
         WordPlace::IndexDirection => tr("Direction"),
         WordPlace::IndexNulls => tr("Nulls"),
         _ => return None,
     };
-    let (word, words) = (no.word.as_str(), no.known.join(", "));
-    Some(fmt(&tr("{field}: {word} is not one of the choices. The choices are {words}."), &[("field", &field), ("word", word), ("words", &words)]))
+    let words = no.known.join(", ");
+    let args = [("field", field.as_str()), ("word", no.word.as_str()), ("words", words.as_str())];
+    if no.word.trim().is_empty() {
+        return Some(fmt(&tr("{field}: no choice is given. The choices are {words}."), &args));
+    }
+    Some(fmt(&tr("{field}: {word} is not one of the choices. The choices are {words}."), &args))
 }

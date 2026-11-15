@@ -327,6 +327,7 @@ fn an_index_column_word_none_of_the_words_carries_its_reason_typed() {
             not_one_of(WordPlace::IndexDirection, "up", &direction),
             "\"up\" is not one of ascending, descending".into(),
         ),
+        (column("direction", json!("")), not_one_of(WordPlace::IndexDirection, "", &direction), "\"\" is not one of ascending, descending".into()),
         (column("direction", json!(5)), not_one_of(WordPlace::IndexDirection, "5", &direction), "direction is 5, not a word".into()),
         (
             column("nulls", json!("middle")),
