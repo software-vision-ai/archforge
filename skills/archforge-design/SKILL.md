@@ -476,6 +476,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   the design has it, and sends nothing while the composer is empty.
 - While a reply runs, typing works; Enter, the badge, the switch, New conversation and the history
   wait and say "Stop the reply first".
+- The conversation follows the keyboard (AR-477): a link or button of it that Tab, Shift+Tab or a
+  screen reader comes to is scrolled into view (a click moves nothing), and while one has the
+  keyboard and no link's confirmation is open, Page Up and Page Down scroll it by what shows less a
+  line (a line at least), Home and End to either end; the composer keeps those keys. Every link is
+  laid out, in view or not, so Tab reaches each in turn; only what shows is listed. A reply coming
+  in keeps the end in view only while the conversation was shown to its end, so a page key or Tab
+  away from the end keeps the place.
 - The context chips (the project, the open diagram, the selection; several selected elements are
   one chip, "{n} elements") go with a question as a line after it, by name and id; a removed chip
   stays removed for that conversation.

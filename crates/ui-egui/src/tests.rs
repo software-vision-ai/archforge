@@ -14552,6 +14552,272 @@ fn only_a_web_link_in_a_reply_opens_and_only_after_its_confirmation() {
     assert_eq!(h.state().chat_panel.link, None);
 }
 
+/// The Chat transcript and the keyboard (AR-477): the page keys scroll it while a link has the
+/// keyboard, Tab reaches every link and it follows, and a reply coming in leaves the place.
+mod chat_keys {
+    use egui::{Key, Modifiers};
+
+    use super::*;
+    use crate::chat::{ChatEvent, TurnEnd};
+
+    /// Six answered questions, three links in each reply, at the design's window height: the
+    /// transcript shown at its end, its first links far above the fold.
+    fn long_chat(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+        long_chat_in(theme, false)
+    }
+
+    /// The same, in wider fonts given before the first question when `wider`.
+    fn long_chat_in(theme: ThemeKind, wider: bool) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+        let (mut h, rig) = chat_harness(theme, true);
+        if wider {
+            widen(&mut h);
+        }
+        let filler = "The order keeps its lines, and each line names a product and how many. ".repeat(6);
+        for n in 0..6 {
+            ask_in_chat(&mut h, &format!("Question {n}"));
+            let text = format!(
+                "See [a](https://example.org/{n}/a) first.\n\n{filler}\n\nThen [b](https://example.org/{n}/b) and [c](https://example.org/{n}/c)."
+            );
+            chat_event(&mut h, &rig, ChatEvent::Message { text });
+            chat_event(&mut h, &rig, ChatEvent::TurnEnded(TurnEnd::Completed));
+        }
+        assert!(h.state().chat_panel.at_end && scroll(&h) > 0.0 && !has_id(&h, &link(0)), "{theme:?}: at the end, the first link out of view");
+        (h, rig)
+    }
+
+    /// The id of the `n`th link of the transcript.
+    fn link(n: usize) -> String {
+        format!("workspace.chat.link.{n}")
+    }
+
+    /// How far the transcript is scrolled.
+    fn scroll(h: &Harness<'static, Shell>) -> f32 {
+        h.state().chat_panel.scroll
+    }
+
+    /// Whether the control `id` is listed and drawn whole in the transcript.
+    fn whole(h: &Harness<'static, Shell>, id: &str) -> bool {
+        has_id(h, id) && h.state().chat_panel.area.unwrap().contains_rect(rect_of(h, id))
+    }
+
+    /// Presses `key_` and asserts that the transcript went to `to`, the keyboard still on `id`.
+    fn press_to(h: &mut Harness<'static, Shell>, key_: Key, to: f32, id: &str) {
+        key(h, key_, Modifiers::NONE);
+        assert_eq!(scroll(h), to, "{key_:?}");
+        assert!(focused_on(h, id), "{key_:?} left the keyboard on {id}");
+    }
+
+    /// While a link has the keyboard, the page keys scroll the transcript, in a frame the key asks
+    /// for; not with the keyboard nowhere, with the control key, with a link's confirmation or the
+    /// menu bar open, nor from the composer, which keeps its keys.
+    #[test]
+    fn the_page_keys_scroll_the_transcript_while_a_link_has_the_keyboard() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_chat(theme);
+            let room = scroll(&h);
+            let page = h.state().chat_panel.area.unwrap().height() - crate::ux::types::UI.line;
+            key(&mut h, Key::PageUp, Modifiers::NONE);
+            assert_eq!(scroll(&h), room, "{theme:?}: with the keyboard nowhere");
+            let last = link(17);
+            focus_on(&mut h, &last);
+            assert!(whole(&h, &last) && scroll(&h) == room, "{theme:?}: the last link shows, nothing moved");
+            h.key_down(Key::PageUp);
+            h.step();
+            // The frame after the key's was drawn because the key's frame asked for it.
+            h.step();
+            let asked = h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("chat_view.rs"));
+            assert!(asked, "{theme:?}: Page Up asks for the frame that draws it: {:?}", h.ctx.repaint_causes());
+            h.key_up(Key::PageUp);
+            h.run();
+            assert_eq!(scroll(&h), room - page, "{theme:?}: Page Up");
+            press_to(&mut h, Key::PageUp, (room - 2.0 * page).max(0.0), &last);
+            press_to(&mut h, Key::Home, 0.0, &last);
+            press_to(&mut h, Key::PageDown, page, &last);
+            press_to(&mut h, Key::End, room, &last);
+            key(&mut h, Key::Home, Modifiers::CTRL.plus(Modifiers::COMMAND));
+            assert_eq!(scroll(&h), room, "{theme:?}: not with the control key as Windows and Linux send it");
+            key(&mut h, Key::Enter, Modifiers::NONE);
+            assert!(h.state().chat_panel.link.is_some() && focused_on(&h, &last), "{theme:?}: Enter asks before the link opens");
+            key(&mut h, Key::Home, Modifiers::NONE);
+            assert_eq!(scroll(&h), room, "{theme:?}: not while the link's confirmation is open");
+            key(&mut h, Key::Escape, Modifiers::NONE);
+            assert!(h.state().chat_panel.link.is_none(), "{theme:?}: Escape closes it");
+            focus_on(&mut h, &last);
+            press_to(&mut h, Key::Home, 0.0, &last);
+            // The in-window menu bar opened by F10 leaves the keyboard on the link; its keys are its own.
+            h.state_mut().in_window_menu = true;
+            key(&mut h, Key::F10, Modifiers::NONE);
+            assert!(h.state().menu_bar.open.is_some() && focused_on(&h, &last), "{theme:?}: F10 opens the bar's first menu");
+            for key_ in [Key::PageDown, Key::End] {
+                key(&mut h, key_, Modifiers::NONE);
+                assert_eq!(scroll(&h), 0.0, "{theme:?}: {key_:?} with the menu bar open");
+            }
+            key(&mut h, Key::Escape, Modifiers::NONE);
+            h.state_mut().in_window_menu = false;
+            focus_on(&mut h, &last);
+            key(&mut h, Key::End, Modifiers::NONE);
+            assert_eq!(scroll(&h), room, "{theme:?}: End with the menu bar closed");
+            // The composer keeps Home and End: what is typed after them lands at its ends.
+            let at = rect_of(&h, "workspace.chat.composer").center();
+            click(&mut h, at);
+            h.event(egui::Event::Text("abc".into()));
+            for (key_, typed, reads) in [(Key::Home, "x", "xabc"), (Key::End, "y", "xabcy"), (Key::PageUp, "", "xabcy")] {
+                key(&mut h, key_, Modifiers::NONE);
+                h.event(egui::Event::Text(typed.into()));
+                h.run();
+                assert_eq!((h.state().chat_panel.draft.as_str(), scroll(&h)), (reads, room), "{theme:?}: {key_:?} in the composer");
+            }
+        });
+    }
+
+    /// The shell gives egui wider fonts in the next frame, where a face that loads is given.
+    fn widen(h: &mut Harness<'static, Shell>) {
+        let mut fonts = h.ctx.fonts(|f| f.definitions().clone());
+        fonts.families.entry(egui::FontFamily::Name("ux-regular".into())).or_default().insert(0, "Hack".into());
+        h.state_mut().fonts.give_next(fonts);
+        h.step();
+        let first = |h: &Harness<'static, Shell>| h.ctx.fonts(|f| f.definitions().families[&egui::FontFamily::Name("ux-regular".into())][0].clone());
+        assert_ne!(first(h), "Hack", "the pass they are given in draws with the fonts before");
+        h.run();
+        assert_eq!(first(h), "Hack");
+    }
+
+    /// Replies laid out before the fonts change are laid out again in the new ones, shown or not:
+    /// from the end, the first reply's second link, which a screen reader moves to, comes into view
+    /// where it sits, as in a conversation laid out in the new fonts from the start.
+    #[test]
+    fn replies_are_laid_out_again_when_the_fonts_change() {
+        in_both_appearances(|theme| {
+            let reached = |wider_first: bool| {
+                let (mut h, _rig) = long_chat_in(theme, wider_first);
+                if !wider_first {
+                    widen(&mut h);
+                }
+                focus_on(&mut h, &link(17));
+                key(&mut h, Key::End, Modifiers::NONE);
+                focus_on(&mut h, &link(1));
+                assert!(whole(&h, &link(1)), "{theme:?}: the link is in view");
+                let links = ids(&h).into_iter().filter(|i| i.starts_with("workspace.chat.link.")).map(|i| (rect_of(&h, &i), i));
+                (scroll(&h), links.collect::<Vec<_>>())
+            };
+            assert_eq!(reached(false), reached(true), "{theme:?}: as laid out in the new fonts from the start");
+        });
+    }
+
+    /// In a window so short, under a composer of six lines, that the transcript shows less than two
+    /// lines, Page Up still moves it a line.
+    #[test]
+    fn a_page_key_moves_at_least_a_line_in_a_short_transcript() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_chat(theme);
+            h.state_mut().chat_panel.draft = "1\n2\n3\n4\n5\n6".into();
+            let line = crate::ux::types::UI.line;
+            let short = |h: &Harness<'static, Shell>| h.state().chat_panel.area.unwrap().height() < 2.0 * line;
+            for height in (400..1000).rev().step_by(8) {
+                h.set_size(egui::vec2(1600.0, height as f32));
+                h.run_steps(2);
+                if short(&h) {
+                    break;
+                }
+            }
+            assert!(short(&h), "{theme:?}: a short transcript, {:?}", h.state().chat_panel.area);
+            focus_on(&mut h, &link(17));
+            let at = scroll(&h);
+            assert!(at > line, "{theme:?}: room to move up ({at})");
+            key(&mut h, Key::PageUp, Modifiers::NONE);
+            assert_eq!(at - scroll(&h), line, "{theme:?}: Page Up moved a line");
+        });
+    }
+
+    /// From the first link, out of view, Tab lands on every link in turn and Shift+Tab from the last
+    /// on each back, none skipped, and the transcript brings each whole into view.
+    #[test]
+    fn tab_and_shift_tab_reach_every_link_and_the_transcript_follows() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_chat(theme);
+            let order = (0..18).map(link).collect::<Vec<_>>();
+            for back in [false, true] {
+                let order: Vec<&String> = if back { order.iter().rev().collect() } else { order.iter().collect() };
+                focus_on(&mut h, order[0]);
+                assert!(whole(&h, order[0]), "{theme:?}: {} followed", order[0]);
+                let mut landed = vec![order[0].clone()];
+                while landed.len() < order.len() {
+                    key(&mut h, Key::Tab, if back { Modifiers::SHIFT } else { Modifiers::NONE });
+                    let on = order.iter().find(|id| focused_on(&h, id));
+                    landed.push(on.map_or_else(|| format!("{:?}", h.ctx.memory(|m| m.focused())), |id| (*id).clone()));
+                    if let Some(on) = on {
+                        assert!(whole(&h, on), "{theme:?}: {on} in view, after {:?}", &landed[..landed.len() - 1]);
+                    }
+                }
+                assert_eq!(landed.iter().collect::<Vec<_>>(), order, "{theme:?}: every link in turn");
+            }
+        });
+    }
+
+    /// Tab and End in one frame: the transcript goes to its end and brings the link Tab moved to into
+    /// view from there, never back to its start.
+    #[test]
+    fn tab_and_end_in_one_frame_bring_the_link_into_view_from_the_end() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_chat(theme);
+            let room = scroll(&h);
+            focus_on(&mut h, &link(16));
+            press_to(&mut h, Key::Home, 0.0, &link(16));
+            // The harness gives each queued event a frame of its own: both go into the next frame's input.
+            for pressed in [true, false] {
+                for key_ in [Key::Tab, Key::End] {
+                    let event = egui::Event::Key { key: key_, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
+                    h.input_mut().events.push(event);
+                }
+                h.step();
+            }
+            h.run();
+            assert!(focused_on(&h, &link(17)) && whole(&h, &link(17)), "{theme:?}: the link Tab moved to is in view");
+            assert!(scroll(&h) > room / 2.0, "{theme:?}: near the end, not the start ({} of {room})", scroll(&h));
+        });
+    }
+
+    /// A reply coming in while a link has the keyboard and the transcript is paged up leaves the
+    /// place; back at the end by End, the end stays in view as the reply grows. A long piece that
+    /// comes in the frame Tab is pressed takes the transcript to its new end, and the link the
+    /// keyboard goes to is brought into view from there.
+    #[test]
+    fn a_reply_coming_in_leaves_the_place_the_keys_paged_to() {
+        in_both_appearances(|theme| {
+            let (mut h, rig) = long_chat(theme);
+            ask_in_chat(&mut h, "Question 6");
+            chat_event(&mut h, &rig, ChatEvent::Text { delta: "Reading the model.".into() });
+            let last = link(17);
+            focus_on(&mut h, &last);
+            let more = "\n\nThe order keeps its lines, and each line names a product and how many.";
+            // A piece comes in the frame right after Page Up's.
+            h.key_down(Key::PageUp);
+            h.step();
+            let paged = scroll(&h);
+            assert!(rig.agents.emit(&crate::chat_fixture::key(h.state()), ChatEvent::Text { delta: more.into() }));
+            h.key_up(Key::PageUp);
+            h.run();
+            assert!(!h.state().chat_panel.at_end, "{theme:?}: paged up off the end");
+            assert!(scroll(&h) == paged && focused_on(&h, &last), "{theme:?}: the place stays as the reply grows");
+            key(&mut h, Key::End, Modifiers::NONE);
+            let end = scroll(&h);
+            assert!(end > paged && h.state().chat_panel.at_end && focused_on(&h, &last), "{theme:?}: End went to the end");
+            chat_event(&mut h, &rig, ChatEvent::Text { delta: more.into() });
+            assert!(scroll(&h) > end && h.state().chat_panel.at_end, "{theme:?}: at the end, the end stays in view");
+            focus_on(&mut h, &link(16));
+            key(&mut h, Key::End, Modifiers::NONE);
+            assert!(h.state().chat_panel.at_end && focused_on(&h, &link(16)), "{theme:?}: on link 16 at the end");
+            // Tab moves the keyboard in the frame it is pressed, the frame the long piece comes in.
+            assert!(rig.agents.emit(&crate::chat_fixture::key(h.state()), ChatEvent::Text { delta: more.repeat(30) }));
+            h.key_down(Key::Tab);
+            h.step();
+            h.key_up(Key::Tab);
+            h.run();
+            assert!(focused_on(&h, &link(17)) && whole(&h, &link(17)), "{theme:?}: the link is in view after the long piece");
+        });
+    }
+}
+
 /// Undo this turn's changes takes back exactly the turn's changes, keeps the person's, and says when it cannot.
 #[test]
 fn undo_this_turns_changes_takes_back_exactly_the_turns_changes_and_keeps_the_persons() {

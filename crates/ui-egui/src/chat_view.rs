@@ -560,9 +560,9 @@ fn branch_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, wi
 }
 
 /// The conversation's timeline in `area`, scrolled; it follows the end while the person has not
-/// scrolled up.
+/// scrolled up, by the wheel or the keys.
 fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel: &mut Panel, acts: &mut Vec<Act>) {
-    let dark = shell.state.theme.is_dark();
+    let look = (shell.state.theme.is_dark(), shell.fonts.drawn());
     let left = area.left() + PAD;
     let width = (area.width() - 2.0 * PAD).max(0.0);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(area));
@@ -572,10 +572,12 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     let project = shell.project.as_ref().map(|p| p.name.clone()).unwrap_or_default();
     let now = crate::chat_panel::clock(shell).now;
     // Laid out in content coordinates from the top, then moved by the scroll.
-    let top = area.top() - panel.scroll;
+    let drawn = panel.scroll;
+    let top = area.top() - drawn;
     let mut y = top;
     let branch_empty = crate::chat_panel::branch_empty(shell, panel);
     let Some(chat) = panel.chat.as_mut() else { return };
+    shell.registry.reach_from(top);
     if chat.turns.is_empty() && branch_empty {
         y += branch_note(shell, &clip, p, pos2(left, y), width, true);
     } else if chat.turns.is_empty() {
@@ -620,14 +622,14 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             if streaming_at == Some(i) {
                 y += ENTRY_GAP;
                 let text = turn.streaming.as_ref().map(|(_, t)| format!("{t}▍")).unwrap_or_default();
-                y += reply(shell, &clip, p, pos2(left, y), width, &text, &mut turn.laid, dark, &mut link_n, acts);
+                y += reply(shell, &clip, p, pos2(left, y), width, &text, &mut turn.laid, look, &mut link_n, acts);
             }
             let Some(item) = turn.items.get_mut(i) else { continue };
             y += ENTRY_GAP;
             match item {
                 Item::Tool(facts) => y += tool_row(&paint, p, pos2(left, y), width, facts),
                 Item::Text { text, shortened, laid, .. } => {
-                    y += reply(shell, &clip, p, pos2(left, y), width, text, laid, dark, &mut link_n, acts);
+                    y += reply(shell, &clip, p, pos2(left, y), width, text, laid, look, &mut link_n, acts);
                     if *shortened {
                         y += 4.0
                             + ux::text(&paint, pos2(left, y + 4.0), &tr("The reply was shortened to fit."), types::SMALL, p.text_muted, Some(width))
@@ -670,6 +672,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             TurnState::Running | TurnState::Completed => {}
         }
     }
+    shell.registry.reach_end();
     let content = y - top + 8.0;
     let room = (content - area.height()).max(0.0);
     if panel.follow {
@@ -682,6 +685,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             panel.scroll -= dy;
         }
     }
+    transcript_keys(shell, &clip, (area, room), panel, drawn);
     panel.scroll = panel.scroll.clamp(0.0, room);
     panel.at_end = panel.scroll >= room - 1.0;
     if room > 0.0 {
@@ -693,8 +697,32 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     }
 }
 
-/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width or the
-/// appearance changes; its links are controls that ask before they open. Gives its height.
+/// The conversation follows the keyboard (AR-477), laid out at the scroll `drawn` in `area` with
+/// `room` to scroll. While one of its controls has the keyboard and no link's confirmation is open,
+/// Page Up and Page Down scroll it by what shows less a line, Home and End to either end (the
+/// composer keeps its keys); a control the keyboard has just come to, by Tab or a screen reader, is
+/// brought into view from there. Off its end, what comes in after leaves the place.
+fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), panel: &mut Panel, drawn: f32) {
+    let now = ui.memory(|m| m.focused()).and_then(|id| Some((id, shell.registry.laid_out(id)?)));
+    let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id));
+    panel.area = Some(area);
+    let before = panel.scroll;
+    if now.is_some() && panel.link.is_none() {
+        crate::version_details::page_keys(ui, &mut panel.scroll, (area.height() - types::UI.line).max(types::UI.line));
+    }
+    // End's far offset becomes the real end before any place is worked out from it.
+    panel.scroll = panel.scroll.clamp(0.0, room);
+    if let Some((_, at)) = now.filter(|(id, _)| Some(*id) != was) {
+        panel.scroll += crate::panels::into_view(area, at.translate(vec2(0.0, drawn - panel.scroll)));
+    }
+    if panel.scroll != before {
+        ui.ctx().request_repaint();
+    }
+}
+
+/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width, appearance or
+/// fonts (`look`) change; its links are controls that ask before they open, laid out where it does
+/// not show too, so Tab reaches them and the transcript follows (AR-477). Gives its height.
 #[allow(clippy::too_many_arguments)]
 fn reply(
     shell: &mut Shell,
@@ -704,34 +732,26 @@ fn reply(
     width: f32,
     text: &str,
     laid: &mut Option<Laid>,
-    dark: bool,
+    look: (bool, u64),
     link_n: &mut usize,
     acts: &mut Vec<Act>,
 ) -> f32 {
-    let fresh = laid.as_ref().is_none_or(|l| (l.width - width).abs() > 0.5 || l.dark != dark);
+    let fresh = laid.as_ref().is_none_or(|l| (l.width - width).abs() > 0.5 || l.look != look);
     // A streaming reply's layout is dropped with each piece of text that comes in.
     if fresh {
         let r = crate::chat_markdown::render(text, p, width);
         let job = std::sync::Arc::new(r.job);
-        let height = ui.painter().layout_job((*job).clone()).size().y;
-        *laid = Some(Laid { width, dark, job, height, links: r.links });
+        let galley = ui.painter().layout_job((*job).clone());
+        let links = r.links.into_iter().map(|(range, url)| (link_rect(&galley, range), url)).collect();
+        *laid = Some(Laid { width, look, job, height: galley.size().y, links });
     }
     let Some(l) = laid.as_ref() else { return 0.0 };
-    // Laid out and drawn only while it shows; its height is known either way.
-    let shows = ui.clip_rect().intersects(Rect::from_min_size(at, vec2(width, l.height)));
-    if !shows {
-        return l.height;
+    // Its text is drawn only while it shows; its links are controls either way.
+    if ui.clip_rect().intersects(Rect::from_min_size(at, vec2(width, l.height))) {
+        ui.painter().galley(at, ui.painter().layout_job((*l.job).clone()), p.text);
     }
-    let galley = ui.painter().layout_job((*l.job).clone());
-    let paint = ui.painter();
-    paint.galley(at, galley.clone(), p.text);
-    for (range, url) in &l.links {
-        let char_at = |byte: usize| galley.job.text.get(..byte).map_or(0, |s| s.chars().count());
-        let a = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.start)));
-        let b = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.end)));
-        // The link's first row, as far as it goes on it.
-        let right = if (a.min.y - b.min.y).abs() < 1.0 { b.min.x } else { galley.rect.right() };
-        let hit = Rect::from_min_max(at + a.min.to_vec2(), at + vec2(right.max(a.min.x + 4.0), a.max.y));
+    for (hit, url) in &l.links {
+        let hit = hit.translate(at.to_vec2());
         let id = format!("workspace.chat.link.{}", *link_n);
         *link_n += 1;
         let resp = control(shell, ui, &id, "link", hit, true).on_hover_text(url);
@@ -741,6 +761,16 @@ fn reply(
         }
     }
     l.height
+}
+
+/// Where the link over the bytes `range` of a reply laid out as `galley` is, from its top-left
+/// corner: its first row, as far as it goes on it.
+fn link_rect(galley: &egui::Galley, range: std::ops::Range<usize>) -> Rect {
+    let char_at = |byte: usize| galley.job.text.get(..byte).map_or(0, |s| s.chars().count());
+    let a = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.start)));
+    let b = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.end)));
+    let right = if (a.min.y - b.min.y).abs() < 1.0 { b.min.x } else { galley.rect.right() };
+    Rect::from_min_max(a.min, pos2(right.max(a.min.x + 4.0), a.max.y))
 }
 
 /// A tool row: its icon, its words and its detail. Gives its height.
