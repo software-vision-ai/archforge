@@ -1333,10 +1333,12 @@ str		No diagram is given. Give its id.	図が指定されていません。そ�
 str		No box is given. Give its id.	ボックスが指定されていません。その ID を指定してください。
 str		No line is given. Give its id.	線が指定されていません。その ID を指定してください。
 str		No label is given. Give its id.	ラベルが指定されていません。その ID を指定してください。
+str		No diagram, box or line is given. Give its id.	図、ボックス、線のいずれも指定されていません。その ID を指定してください。
 str		{name} is not a diagram.	{name} は図ではありません。
 str		{name} is not a box on a diagram.	{name} は図上のボックスではありません。
 str		{name} is not a line on a diagram.	{name} は図上の線ではありません。
 str		{name} is not a label on a line.	{name} は線のラベルではありません。
+str		{name} is not a diagram, a box or a line.	{name} は図でもボックスでも線でもありません。
 str		The width is not between {min} and {max}.	幅が {min} から {max} の範囲にありません。
 str		The height is not between {min} and {max}.	高さが {min} から {max} の範囲にありません。
 str		{name} cannot have a diagram of this kind.	{name} にはこの種類の図を作成できません。
@@ -1344,6 +1346,10 @@ str		A diagram of this kind does not show {name}.	この種類の図には {name
 str		{name} is outside what this diagram shows.	{name} はこの図が表示する範囲の外にあります。
 str		This diagram shows {name} already.	この図にはすでに {name} が表示されています。
 str		That box is on another diagram.	そのボックスは別の図にあります。
+str		Give at least one box.	ボックスを 1 つ以上指定してください。
+str		Give at least one diagram, box or line.	図、ボックス、線のいずれかを 1 つ以上指定してください。
+str		Give the boxes as a list of ids.	ボックスは ID のリストで指定してください。
+str		Give the diagrams, boxes and lines as a list of ids.	図、ボックス、線は ID のリストで指定してください。
 str		Boxes nest at most {max} deep.	ボックスの入れ子は最大 {max} 階層までです。
 str		This box shows an element and draws its text. Only a note takes a text of its own.	このボックスは要素を表示し、その要素のテキストを描画します。独自のテキストを持てるのはノートだけです。
 str		A note's link is a straight line and does not bend.	ノートのリンクは直線で、折れ曲がりません。

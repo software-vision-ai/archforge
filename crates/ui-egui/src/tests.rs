@@ -6288,6 +6288,41 @@ fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A list of boxes moved or taken off, or of what a style is set on, that a diagram command refuses
+/// is said in the chosen language: an empty list, no list of ids, an empty id, an element of the
+/// wrong kind and a box named twice. In light and dark (AR-514).
+#[test]
+fn a_node_list_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let card = nodes["Order"].clone();
+        let mut refused = |cmd: &str, list: serde_json::Value| {
+            let p = match cmd {
+                "diagram.move" => json!({ "nodes": list, "dx": 1, "dy": 1 }),
+                "diagram.unplace" => json!({ "nodes": list }),
+                _ => json!({ "ids": list }),
+            };
+            crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default()
+        };
+        assert_eq!(refused("diagram.move", json!([])), "Geben Sie mindestens einen Kasten an.", "{theme:?}");
+        assert_eq!(refused("diagram.unplace", json!([7])), "Geben Sie die Kästen als Liste von IDs an.", "{theme:?}");
+        assert_eq!(refused("diagram.move", json!([&order])), "Order ist kein Kasten in einem Diagramm.", "{theme:?}");
+        let twice = "Ein Element ist zweimal genannt. Jedes Element nur einmal nennen.";
+        assert_eq!(refused("diagram.unplace", json!([&card, &card])), twice, "{theme:?}");
+        assert_eq!(refused("diagram.style", json!([])), "Geben Sie mindestens ein Diagramm, einen Kasten oder eine Linie an.", "{theme:?}");
+        assert_eq!(refused("diagram.style", json!([7])), "Geben Sie die Diagramme, Kästen und Linien als Liste von IDs an.", "{theme:?}");
+        let empty = "Es ist kein Diagramm, kein Kasten und keine Linie angegeben. Geben Sie die ID an.";
+        assert_eq!(refused("diagram.style", json!([""])), empty, "{theme:?}");
+        assert_eq!(refused("diagram.style", json!([&order])), "Order ist weder ein Diagramm noch ein Kasten noch eine Linie.", "{theme:?}");
+        assert_eq!(refused("diagram.style", json!([&card, &card])), twice, "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

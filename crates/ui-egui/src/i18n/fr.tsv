@@ -1333,10 +1333,12 @@ str		No diagram is given. Give its id.	Aucun diagramme n’est indiqué. Indique
 str		No box is given. Give its id.	Aucune boîte n’est indiquée. Indiquez son identifiant.
 str		No line is given. Give its id.	Aucune ligne n’est indiquée. Indiquez son identifiant.
 str		No label is given. Give its id.	Aucune étiquette n’est indiquée. Indiquez son identifiant.
+str		No diagram, box or line is given. Give its id.	Aucun diagramme, aucune boîte ni aucune ligne n’est indiqué. Indiquez son identifiant.
 str		{name} is not a diagram.	{name} n’est pas un diagramme.
 str		{name} is not a box on a diagram.	{name} n’est pas une boîte d’un diagramme.
 str		{name} is not a line on a diagram.	{name} n’est pas une ligne d’un diagramme.
 str		{name} is not a label on a line.	{name} n’est pas une étiquette d’une ligne.
+str		{name} is not a diagram, a box or a line.	{name} n’est ni un diagramme, ni une boîte, ni une ligne.
 str		The width is not between {min} and {max}.	La largeur n’est pas comprise entre {min} et {max}.
 str		The height is not between {min} and {max}.	La hauteur n’est pas comprise entre {min} et {max}.
 str		{name} cannot have a diagram of this kind.	{name} ne peut pas avoir de diagramme de ce type.
@@ -1344,6 +1346,10 @@ str		A diagram of this kind does not show {name}.	Un diagramme de ce type n’af
 str		{name} is outside what this diagram shows.	{name} est hors de ce que ce diagramme affiche.
 str		This diagram shows {name} already.	Ce diagramme affiche déjà {name}.
 str		That box is on another diagram.	Cette boîte est sur un autre diagramme.
+str		Give at least one box.	Indiquez au moins une boîte.
+str		Give at least one diagram, box or line.	Indiquez au moins un diagramme, une boîte ou une ligne.
+str		Give the boxes as a list of ids.	Indiquez les boîtes sous forme de liste d’identifiants.
+str		Give the diagrams, boxes and lines as a list of ids.	Indiquez les diagrammes, les boîtes et les lignes sous forme de liste d’identifiants.
 str		Boxes nest at most {max} deep.	Les boîtes s’imbriquent sur {max} niveaux au plus.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	Cette boîte affiche un élément et dessine son texte. Seule une note a un texte propre.
 str		A note's link is a straight line and does not bend.	Le lien d’une note est une ligne droite et ne se plie pas.
