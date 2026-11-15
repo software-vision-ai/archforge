@@ -6355,6 +6355,35 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
     crate::i18n::set_language("en");
 }
 
+/// An index column's direction or nulls order that is none of the words, or no word, is said in
+/// the chosen language under the choice's label, with the words taken; a word of another place is
+/// not ER's to say. In a window of the design's height, in light and dark (AR-491).
+#[test]
+fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
+        let mut refused = |field: &str, value: serde_json::Value| {
+            let p = json!({ "entity": table, "columns": [{ "attribute": column, field: value }] });
+            crate::panels::run(h.state_mut(), "er.index.add", p).err().unwrap_or_default()
+        };
+        let up = "Richtung: up ist keine der Möglichkeiten. Möglich sind ascending, descending.";
+        assert_eq!(refused("direction", json!("up")), up, "{theme:?}");
+        let array = "Nullwerte: [1] ist keine der Möglichkeiten. Möglich sind default, first, last.";
+        assert_eq!(refused("nulls", json!([1])), array, "{theme:?}");
+        let diagram = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "x".into(), known: vec!["er".into()] };
+        assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

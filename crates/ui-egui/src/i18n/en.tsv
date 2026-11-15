@@ -1417,6 +1417,7 @@ str		Give both x and y, or neither to place it where it reads.	Give both x and y
 str		The {axis} is not a number.	The {axis} is not a number.
 str		The {axis} is farther than {max} from the origin.	The {axis} is farther than {max} from the origin.
 str		An element is named twice. Name each element once.	An element is named twice. Name each element once.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} is not one of the choices. The choices are {words}.
 str		a constraint	a constraint
 str		{constraint} constrained nothing else and went with it	{constraint} constrained nothing else and went with it
 str		{constraint} now constrains {elements} only	{constraint} now constrains {elements} only

@@ -184,8 +184,12 @@ say in its own words, beside the English sentence, which stays as it was; a kind
 interface's word for it (`commands::kind_of`: a table, a column, a key column, a check, ...),
 never one UML uses. Typed so far (AR-438): an id not given, malformed or of no element, and an
 element of another kind; a key's columns too many, no ids, one twice or no column; a constraint
-name the schema has. The rest follow ticket by ticket, except these, which no command a person
-gives reaches, so they stay in English: a place converted to `u32` after it was checked
+name the schema has; and (AR-491) an index column's direction or nulls order that is none of the
+words, or no word, as `NotOneOf` with the words taken. The rest follow ticket by ticket, except
+these, which no command a person gives reaches, so they stay in English: a word a parameter's
+documented choices hold back, as the engine refuses any other before the handler runs
+(`generation_params`, `nullable`, `cardinality` twice, `entity_set_subtyping`, `action`,
+`match_type`, `deferrability`, `entity_set_kind`); a place converted to `u32` after it was checked
 (`attribute_add`, `attribute_move` twice, `grow_foreign_keys`, `set_key_columns`, `set_literals`,
 `foreign_key_set_key`); an element that belongs to no model, schema or entity, which containment
 never leaves (`schema_rename`, `attribute_set_type`, `attribute_set_flags`, `attribute_move`,

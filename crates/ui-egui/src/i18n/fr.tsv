@@ -1418,6 +1418,7 @@ str		Give both x and y, or neither to place it where it reads.	Indiquez à la fo
 str		The {axis} is not a number.	La valeur {axis} n’est pas un nombre.
 str		The {axis} is farther than {max} from the origin.	La valeur {axis} est à plus de {max} de l’origine.
 str		An element is named twice. Name each element once.	Un élément est nommé deux fois. Nommez chaque élément une seule fois.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field} : {word} ne fait pas partie des choix. Les choix sont {words}.
 str		a constraint	une contrainte
 str		{constraint} constrained nothing else and went with it	{constraint} ne contraignait rien d'autre et a été supprimée avec
 str		{constraint} now constrains {elements} only	{constraint} ne contraint plus que {elements}

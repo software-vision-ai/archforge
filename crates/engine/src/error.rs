@@ -350,6 +350,10 @@ pub enum WordPlace {
     DiagramKind,
     /// A text slot a label shows, which the line's element has.
     TextSlot,
+    /// The sort direction of an ER index column.
+    IndexDirection,
+    /// Where an ER index column sorts its nulls.
+    IndexNulls,
 }
 
 /// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.
