@@ -377,8 +377,10 @@ turn did. Only `state` moves.
 
 When this was written, `FORMAT` was 2; since 0.13.0 it is 3, as proposed below. `create` writes it;
 `read_settings` refuses `format > FORMAT` with `Error::NewerFormat` ("the project is in format 4;
-this Archforge reads up to format 3"). Formats 1 to 3 open as they are, and opening a project that
-holds no conversation never rewrites its format. Model-table changes are handled
+this Archforge reads up to format 3"). Formats 1 to 3 open as they are, except that opening a
+project of format 1 or 2 that holds a conversation raises it to 3 (committed at once when the
+settings hold no other change, otherwise at the next Save, as below); opening a project that holds
+no conversation never rewrites its format. Model-table changes are handled
 separately by the fingerprint (`EARLIER_MODELS`) and leave the format alone. The fingerprint has
 not changed since 0.12.0.
 
