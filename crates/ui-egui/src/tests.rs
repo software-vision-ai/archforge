@@ -14275,6 +14275,29 @@ mod chat_keys {
         });
     }
 
+    /// Tab and End in one frame: the transcript goes to its end and brings the link Tab moved to into
+    /// view from there, never back to its start.
+    #[test]
+    fn tab_and_end_in_one_frame_bring_the_link_into_view_from_the_end() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_chat(theme);
+            let room = scroll(&h);
+            focus(&mut h, &link(16));
+            press_to(&mut h, Key::Home, 0.0, &link(16));
+            // The harness gives each queued event a frame of its own: both go into the next frame's input.
+            for pressed in [true, false] {
+                for key_ in [Key::Tab, Key::End] {
+                    let event = egui::Event::Key { key: key_, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE };
+                    h.input_mut().events.push(event);
+                }
+                h.step();
+            }
+            h.run();
+            assert!(holds(&h, &link(17)) && whole(&h, &link(17)), "{theme:?}: the link Tab moved to is in view");
+            assert!(scroll(&h) > room / 2.0, "{theme:?}: near the end, not the start ({} of {room})", scroll(&h));
+        });
+    }
+
     /// A reply coming in while a link has the keyboard and the transcript is paged up leaves the
     /// place; back at the end by End, the end stays in view as the reply grows. A long piece that
     /// comes in the frame Tab is pressed takes the transcript to its new end, and the link the
@@ -14287,11 +14310,15 @@ mod chat_keys {
             chat_event(&mut h, &rig, ChatEvent::Text { delta: "Reading the model.".into() });
             let last = link(17);
             focus(&mut h, &last);
-            key(&mut h, Key::PageUp, Modifiers::NONE);
-            let paged = scroll(&h);
-            assert!(!h.state().chat_panel.at_end, "{theme:?}: paged up off the end");
             let more = "\n\nThe order keeps its lines, and each line names a product and how many.";
-            chat_event(&mut h, &rig, ChatEvent::Text { delta: more.into() });
+            // A piece comes in the frame right after Page Up's.
+            h.key_down(Key::PageUp);
+            h.step();
+            let paged = scroll(&h);
+            assert!(rig.agents.emit(&crate::chat_fixture::key(h.state()), ChatEvent::Text { delta: more.into() }));
+            h.key_up(Key::PageUp);
+            h.run();
+            assert!(!h.state().chat_panel.at_end, "{theme:?}: paged up off the end");
             assert!(scroll(&h) == paged && holds(&h, &last), "{theme:?}: the place stays as the reply grows");
             key(&mut h, Key::End, Modifiers::NONE);
             let end = scroll(&h);

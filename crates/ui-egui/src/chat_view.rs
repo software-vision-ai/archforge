@@ -685,7 +685,7 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             panel.scroll -= dy;
         }
     }
-    transcript_keys(shell, &clip, area, panel, drawn);
+    transcript_keys(shell, &clip, (area, room), panel, drawn);
     panel.scroll = panel.scroll.clamp(0.0, room);
     panel.at_end = panel.scroll >= room - 1.0;
     if room > 0.0 {
@@ -698,12 +698,12 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
 }
 
 /// The conversation follows the keyboard (AR-477), after it was laid out at the scroll `drawn` in
-/// `area`. While one of its controls has the keyboard and no link's confirmation is open, Page Up
+/// `area`, with `room` to scroll. While one of its controls has the keyboard and no link's confirmation is open, Page Up
 /// and Page Down scroll it by what shows less a line, Home and End to either end; the composer is
 /// not one of them and keeps its keys. A control of it that the keyboard has just come to, by Tab
-/// or a screen reader (a click gives them none), is brought into view. Off its end, what comes in
-/// after leaves the place; at its end, the end stays in view.
-fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, area: Rect, panel: &mut Panel, drawn: f32) {
+/// or a screen reader (a click gives them none), is brought into view, from where the keys took
+/// it. Off its end, what comes in after leaves the place; at its end, the end stays in view.
+fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), panel: &mut Panel, drawn: f32) {
     let now = ui.memory(|m| m.focused()).and_then(|id| Some((id, shell.registry.laid_out(id)?)));
     let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id));
     panel.area = Some(area);
@@ -711,6 +711,8 @@ fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, area: Rect, panel: &mut Pan
     if now.is_some() && panel.link.is_none() {
         crate::version_details::page_keys(ui, &mut panel.scroll, (area.height() - types::UI.line).max(types::UI.line));
     }
+    // End's far offset becomes the real end before any place is worked out from it.
+    panel.scroll = panel.scroll.clamp(0.0, room);
     if let Some((_, at)) = now.filter(|(id, _)| Some(*id) != was) {
         panel.scroll += crate::panels::into_view(area, at.translate(vec2(0.0, drawn - panel.scroll)));
     }
