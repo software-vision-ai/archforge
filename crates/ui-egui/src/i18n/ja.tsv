@@ -1422,6 +1422,8 @@ str		Give both x and y, or neither to place it where it reads.	x と y を両方
 str		The {axis} is not a number.	{axis} の値が数値ではありません。
 str		The {axis} is farther than {max} from the origin.	{axis} の値が原点から {max} より離れています。
 str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} は選択肢にありません。選択肢は {words} です。
+str		{field}: no choice is given. The choices are {words}.	{field}: 選択肢が指定されていません。選択肢は {words} です。
 str		a constraint	制約
 str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました
 str		{constraint} now constrains {elements} only	{constraint} が制約するのは {elements} だけになりました

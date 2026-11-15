@@ -1422,6 +1422,8 @@ str		Give both x and y, or neither to place it where it reads.	Indique x e y em 
 str		The {axis} is not a number.	O valor {axis} não é um número.
 str		The {axis} is farther than {max} from the origin.	O valor {axis} está a mais de {max} da origem.
 str		An element is named twice. Name each element once.	Um elemento é indicado duas vezes. Indique cada elemento uma só vez.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} não é uma das opções. As opções são {words}.
+str		{field}: no choice is given. The choices are {words}.	{field}: não foi indicada nenhuma opção. As opções são {words}.
 str		a constraint	uma restrição
 str		{constraint} constrained nothing else and went with it	{constraint} não restringia mais nada e foi eliminada com ele
 str		{constraint} now constrains {elements} only	{constraint} agora só restringe {elements}

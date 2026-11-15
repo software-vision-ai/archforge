@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -2826,17 +2826,28 @@ fn shown(value: &Json) -> String {
 /// The keys an index column object takes.
 const INDEX_COLUMN_KEYS: [&str; 4] = ["attribute", "expression", "direction", "nulls"];
 
-/// A word from a table, or the default when the field is missing.
-fn word_of<T: Copy>(item: &Json, field: &str, words: &[(T, &str)], default: T, key: &str) -> Result<T, CommandError> {
+/// A word from a table, or the default when the field is missing; a word none of the table's, or a
+/// value that is no word, refused under `key` with its reason typed ([`not_one_of`]), the place
+/// `what`, such a value as its JSON.
+fn word_of<T: Copy>(item: &Json, field: &str, words: &[(T, &str)], default: T, key: &str, what: WordPlace) -> Result<T, CommandError> {
+    let known: Vec<&str> = words.iter().map(|(_, w)| *w).collect();
     match item.get(field) {
         None | Some(Json::Null) => Ok(default),
         Some(Json::String(s)) => words
             .iter()
             .find(|(_, w)| w == s)
             .map(|(v, _)| *v)
-            .ok_or_else(|| refuse(key, format!("{s:?} is not one of {}", words.iter().map(|(_, w)| *w).collect::<Vec<_>>().join(", ")))),
-        Some(other) => Err(refuse(key, format!("{field} is {}, not a word", shown(other)))),
+            .ok_or_else(|| not_one_of(key, format!("{s:?} is not one of {}", known.join(", ")), what, s, &known)),
+        Some(other) => Err(not_one_of(key, format!("{field} is {}, not a word", shown(other)), what, &other.to_string(), &known)),
     }
+}
+
+/// A refusal under `key` of `word`, none of the words `known` its place `what` takes: `said` in
+/// English, the reason typed with the word trimmed and then cut to its first 40 characters, so a
+/// word typed is blank only when the word given was.
+fn not_one_of(key: &str, said: String, what: WordPlace, word: &str, known: &[&str]) -> CommandError {
+    let (word, known) = (word.trim().chars().take(40).collect(), known.iter().map(|k| k.to_string()).collect());
+    refuse(key, said).because(Reason::NotOneOf(Box::new(NotOneOf { what, word, known })))
 }
 
 /// The index columns the array parameter `key` gives: objects with `attribute` (an id) or
@@ -2872,8 +2883,8 @@ fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Resul
                         Some(Json::String(s)) => s.clone(),
                         Some(other) => return Err(refuse(key, format!("expression is {}, not text", shown(other)))),
                     },
-                    word_of(item, "direction", &DIRECTION_WORDS, SortDirection::Ascending, key)?,
-                    word_of(item, "nulls", &NULLS_WORDS, NullsOrder::Default, key)?,
+                    word_of(item, "direction", &DIRECTION_WORDS, SortDirection::Ascending, key, WordPlace::IndexDirection)?,
+                    word_of(item, "nulls", &NULLS_WORDS, NullsOrder::Default, key, WordPlace::IndexNulls)?,
                 )
             }
             other => return Err(refuse(key, format!("{} is not a column", shown(other)))),
