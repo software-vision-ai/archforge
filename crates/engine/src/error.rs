@@ -227,6 +227,25 @@ pub enum Reason {
     /// No package around the element applies the stereotype's `profile`; `package` is the one the
     /// element sits in.
     ProfileOutOfScope { profile: Box<str>, package: Box<str> },
+    /// The stereotype is not applied to the element, so it has no values there to set or take off.
+    NotApplied { stereotype: Box<str>, element: Box<str> },
+    /// The stereotype has no property of the name or id asked for; it has others.
+    NoProperty(Box<NoProperty>),
+    /// The stereotype has no property `name`, as asked for and cut to its first characters, nor any
+    /// other yet.
+    NoProperties { stereotype: Box<str>, name: Box<str> },
+    /// The element `name` is not of `kind`, as `"stereotype"` or `"class diagram"`, which the
+    /// parameter takes.
+    NotA { kind: &'static str, name: String },
+    /// A stereotype property's values, each as text, are no list or hold something else.
+    ValuesExpected,
+    /// No id is given where the id of an element of `kind` is taken, as `"stereotype"`, or, for a
+    /// `"property"`, its id or name.
+    IdEmpty { kind: &'static str },
+    /// The element is gone from the model.
+    Gone,
+    /// The element `name` is a template parameter of `template`, which it types alone.
+    ParameterElement { name: Box<str>, template: Box<str> },
     /// A constraint's expression is empty or holds only spaces, so it states no rule.
     NoExpression,
     /// The element owns no constraint: a classifier of the model's own or a package does.
@@ -374,6 +393,18 @@ pub enum TargetRule {
     Composite,
     /// It is leaf: nothing redefines it.
     Leaf,
+}
+
+/// What a [`Reason::NoProperty`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoProperty {
+    /// The stereotype's name.
+    pub stereotype: String,
+    /// The property's name or id as asked for, cut to its first characters.
+    pub name: String,
+    /// The names of the stereotype's properties; never empty, as [`Reason::NoProperties`] says a
+    /// stereotype without any.
+    pub has: Vec<String>,
 }
 
 /// What a [`Reason::Unextended`] names; boxed in the reason, so the error stays small.

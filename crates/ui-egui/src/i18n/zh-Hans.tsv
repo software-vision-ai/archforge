@@ -1294,6 +1294,18 @@ str		This is no element of the model, so no stereotype applies to it.	这不是�
 str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} 属于某个配置文件；配置文件用来定义构造型，本身不带构造型。
 str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} 不能带构造型。构造型扩展 {metaclasses}。
 str		«{stereotype}» is applied to {name} already.	«{stereotype}» 已应用于 {name}。
+str		«{stereotype}» is not applied to {name}.	«{stereotype}» 未应用于 {name}。
+str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» 没有属性 {name}。它有 {properties}。
+str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» 没有属性 {name}。它还没有任何属性。
+str		{name} is not a stereotype.	{name} 不是构造型。
+str		{name} is not a class diagram.	{name} 不是类图。
+str		Give the values as a list of texts.	请以文本列表的形式给出值。
+str		No element is given. Give its id.	未给出元素。请给出其 ID。
+str		No stereotype is given. Give its id.	未给出构造型。请给出其 ID。
+str		No class diagram is given. Give its id.	未给出类图。请给出其 ID。
+str		No property is given. Give its name or id.	未给出属性。请给出其名称或 ID。
+str		This element is gone.	此元素已不存在。
+str		{name} is a template parameter of {template} and types only its members.	{name} 是 {template} 的模板参数，只能作为其成员的类型。
 str		An element carries at most {max} stereotypes.	一个元素最多带 {max} 个构造型。
 str		{value} is no value of {name}. {accepted}	{value} 不是 {name} 的值。{accepted}
 str		A whole number, such as 42 or -7.	整数，例如 42 或 -7。
