@@ -14609,7 +14609,8 @@ mod chat_keys {
 
     /// While a link has the keyboard, the page keys scroll the transcript, in a frame the key asks
     /// for; not with the keyboard nowhere, with the control key, with a link's confirmation or the
-    /// menu bar open, nor from the composer, which keeps its keys.
+    /// menu bar open, also in the frame a click of the pointer or a screen reader opens it in, nor
+    /// from the composer, which keeps its keys.
     #[test]
     fn the_page_keys_scroll_the_transcript_while_a_link_has_the_keyboard() {
         in_both_appearances(|theme| {
@@ -14653,6 +14654,18 @@ mod chat_keys {
                 assert_eq!(scroll(&h), 0.0, "{theme:?}: {key_:?} with the menu bar open");
             }
             key(&mut h, Key::Escape, Modifiers::NONE);
+            // Nor in the frame of the click that opens the bar, by the pointer or a screen reader (AR-522).
+            // The pointer's click also takes the keyboard from the link as the link is drawn, before
+            // the transcript reads the keys; the screen reader's leaves it there.
+            for pointer in [true, false] {
+                // The keyboard given back to the link brings it into view: Home leaves room to page down.
+                press_to(&mut h, Key::Home, 0.0, &last);
+                open_file_with(&mut h, Key::PageDown, Modifiers::NONE, pointer);
+                assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
+                key(&mut h, Key::Escape, Modifiers::NONE);
+                assert!(h.state().menu_bar.open.is_none(), "{theme:?}: Escape closed the menu bar, by the pointer: {pointer}");
+                assert!(focused_on(&h, &last), "{theme:?}: back on the link");
+            }
             h.state_mut().in_window_menu = false;
             focus_on(&mut h, &last);
             key(&mut h, Key::End, Modifiers::NONE);
