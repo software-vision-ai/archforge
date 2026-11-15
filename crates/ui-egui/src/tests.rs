@@ -8,6 +8,7 @@ use crate::{Services, Shell, UiState};
 
 mod branches;
 mod edit_menu;
+mod explorer_keys;
 mod field_keys;
 mod model_menu;
 mod properties_keys;

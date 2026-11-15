@@ -475,16 +475,25 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let follow = active.and_then(|a| rows.iter().position(|row| row.id == a).zip(Some(a)));
     let tail = if cut { 40.0 } else { 12.0 };
     let wheel = shell.diagrams.new.is_none();
+    // The rows and a group's + take the keyboard, and the tree follows it (AR-478).
+    let ids = rows.iter().map(|row| widgets::egui_id(&row_id(row))).collect::<Vec<_>>();
+    let parts =
+        rows.iter().enumerate().filter_map(|(i, row)| if let Kind::Group(k) = row.kind { Some((widgets::egui_id(&add_id(k)), i)) } else { None });
+    let parts = parts.collect::<Vec<_>>();
+    crate::explorer::follow_keys(ui, &ids, &parts, (tree, r.top() + FIRST_ROW, ROW), &mut shell.diagrams.scroll);
     let offset = crate::explorer::scroll_tree(ui, p, tree, r.top() + FIRST_ROW, rows.len(), ROW, tail, wheel, follow, &mut shell.diagrams.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     for (i, row) in rows.iter().enumerate() {
         let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
-        if y + ROW_HEIGHT < tree.top() || y - 7.0 > tree.bottom() {
+        // A row past either edge is laid out too, so that Tab and Shift+Tab reach it; only what
+        // shows is listed.
+        if y + ROW_HEIGHT + ROW < tree.top() || y - 7.0 - ROW > tree.bottom() {
             continue;
         }
         tree_row(shell, &mut clip, p, r, y, row, active == Some(row.id));
     }
+    crate::explorer::keys_moved(ui, &shell.diagrams.scroll);
     if cut {
         let y = r.top() + FIRST_ROW + rows.len() as f32 * ROW - offset;
         ux::text(
@@ -551,6 +560,21 @@ fn group_key(kind: &str) -> &str {
     if kind.is_empty() { "other" } else { kind }
 }
 
+/// The automation id of the `+` of the group of diagrams of `kind`.
+pub(crate) fn add_id(kind: &str) -> String {
+    format!("workspace.diagrams.group.{}.add", group_key(kind))
+}
+
+/// The automation id of a row's own control.
+pub(crate) fn row_id(row: &Row) -> String {
+    match row.kind {
+        Kind::Group(kind) => format!("workspace.diagrams.group.{}", group_key(kind)),
+        // A folder may show in two groups: each row its own control.
+        Kind::Folder(kind) => format!("workspace.diagrams.group.{}.folder.{}", group_key(kind), row.id),
+        Kind::Diagram => format!("workspace.diagrams.row.{}", row.id),
+    }
+}
+
 /// One row: its chevron, icon and name; a click on a diagram opens it, on a folder or a group
 /// folds it. A group also shows how many diagrams it holds and, for a kind the shell knows, a `+`
 /// that opens the New diagram dialog on that kind; a diagram's hover text says where what it is of
@@ -562,12 +586,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
     if is_active {
         paint.rect_filled(hit, 6.0, p.accent_tint);
     }
-    let id = match row.kind {
-        Kind::Group(kind) => format!("workspace.diagrams.group.{}", group_key(kind)),
-        // A folder may show in two groups: each row its own control.
-        Kind::Folder(kind) => format!("workspace.diagrams.group.{}.folder.{}", group_key(kind), row.id),
-        Kind::Diagram => format!("workspace.diagrams.row.{}", row.id),
-    };
+    let id = row_id(row);
     let mut resp = control(shell, ui, &id, "row", hit, true);
     if row.kind == Kind::Diagram
         && let Some(s) = shell.session.as_ref()
@@ -603,7 +622,7 @@ fn tree_row(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, column: Rect, y: 
             let plus = Rect::from_center_size(pos2(column.right() - 29.0, mid), Vec2::splat(24.0));
             ux::icon_in(&paint, Rect::from_center_size(plus.center(), Vec2::splat(16.0)), &icons::PLUS, p.text_secondary);
             let live = shell.session.is_some() && !shell.looking_only();
-            let key = format!("workspace.diagrams.group.{}.add", group_key(kind));
+            let key = add_id(kind);
             if control(shell, ui, &key, "button", plus, live).on_hover_text(tr("New diagram")).clicked() {
                 add = Some(k);
             }

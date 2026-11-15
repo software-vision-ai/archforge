@@ -66,11 +66,73 @@ pub struct State {
 
 /// A tree's scroll: how far its rows are moved up, and the row last brought into view, so a row
 /// newly selected (by the keys, on the canvas or in Properties) is shown once, and the wheel is
-/// free again after.
+/// free again after; and, for a tree whose rows take the keyboard, what had it when the tree last
+/// drew (AR-478).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TreeScroll {
     pub offset: f32,
     pub followed: Option<Uuid>,
+    pub held: Option<egui::Id>,
+}
+
+/// How much of a tree shows, below its first row at `first`: what `scroll_tree` scrolls by.
+fn tree_view(tree: Rect, first: f32, pitch: f32) -> f32 {
+    (tree.bottom() - first - 8.0).max(pitch)
+}
+
+/// Scrolls `state` so that the row `i` of rows `pitch` apart shows whole in a `view` as tall.
+fn into_view(state: &mut TreeScroll, i: usize, pitch: f32, view: f32) {
+    let top = i as f32 * pitch;
+    if top < state.offset {
+        state.offset = top;
+    } else if top + pitch > state.offset + view {
+        state.offset = top + pitch - view;
+    }
+}
+
+/// The row of `rows` rows `pitch` apart that Page Up, Page Down, Home or End moves to from the row
+/// `at` (AR-478): the last row whose top is at or above where [`crate::version_details::page_keys`]
+/// takes `at`'s top, going down, or the first at or below it, going up; a page is the `view` less a
+/// row, and at least a row. None when no such key was pressed.
+fn paged(ui: &egui::Ui, at: usize, rows: usize, pitch: f32, view: f32) -> Option<usize> {
+    let top = |i: usize| i as f32 * pitch;
+    let mut to = top(at);
+    crate::version_details::page_keys(ui, &mut to, (view - pitch).max(pitch));
+    if to > top(at) {
+        (0..rows).rposition(|i| top(i) <= to)
+    } else if to < top(at) {
+        (0..rows).position(|i| top(i) >= to)
+    } else {
+        None
+    }
+}
+
+/// A tree whose rows take the keyboard follows it (AR-478), before the rows are drawn: while the
+/// row `rows[i]` has the keyboard, Page Up, Page Down, Home and End move it to another row, and the
+/// row, or a control of it (`parts`, each with its row), that the keyboard has come to since the
+/// tree last drew, by these keys, Tab or a screen reader, is brought whole into view. A click gives
+/// a row no keyboard. The rows are `pitch` apart, from `first` in `tree`.
+pub(crate) fn follow_keys(ui: &egui::Ui, rows: &[egui::Id], parts: &[(egui::Id, usize)], place: (Rect, f32, f32), state: &mut TreeScroll) {
+    let ((tree, first, pitch), mut now) = (place, ui.memory(|m| m.focused()));
+    let view = tree_view(tree, first, pitch);
+    if let Some(to) = rows.iter().position(|id| Some(*id) == now).and_then(|at| paged(ui, at, rows.len(), pitch, view)) {
+        ui.memory_mut(|m| m.request_focus(rows[to]));
+        now = Some(rows[to]);
+    }
+    if now != std::mem::replace(&mut state.held, now) {
+        let row = rows.iter().position(|id| Some(*id) == now).or_else(|| parts.iter().find(|(id, _)| Some(*id) == now).map(|(_, i)| *i));
+        if let Some(i) = row {
+            into_view(state, i, pitch, view);
+        }
+    }
+}
+
+/// After a tree's rows have drawn: Tab hands the keyboard on as the rows are laid out, so when it
+/// moved during the frame the next one is asked for, in which [`follow_keys`] brings it into view.
+pub(crate) fn keys_moved(ui: &egui::Ui, state: &TreeScroll) {
+    if ui.memory(|m| m.focused()) != state.held {
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Scrolls a tree of `rows` rows `pitch` apart whose first row sits at `first` inside `tree`,
@@ -89,7 +151,7 @@ pub(crate) fn scroll_tree(
     follow: Option<(usize, Uuid)>,
     state: &mut TreeScroll,
 ) -> f32 {
-    let view = (tree.bottom() - first - 8.0).max(pitch);
+    let view = tree_view(tree, first, pitch);
     let content = rows as f32 * pitch + tail;
     let room = (content - view).max(0.0);
     if wheel && ui.rect_contains_pointer(tree) {
@@ -99,12 +161,7 @@ pub(crate) fn scroll_tree(
     match follow {
         Some((i, id)) if state.followed != Some(id) => {
             state.followed = Some(id);
-            let top = i as f32 * pitch;
-            if top < state.offset {
-                state.offset = top;
-            } else if top + pitch > state.offset + view {
-                state.offset = top + pitch - view;
-            }
+            into_view(state, i, pitch, view);
         }
         Some(_) => {}
         None => state.followed = None,
@@ -587,16 +644,24 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let follow = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o).map(|i| (i, rows[i].id)));
     let tail = if rows.len() >= MAX_ROWS { 40.0 } else { 12.0 };
     let wheel = !shell.explorer.menu_open && shell.explorer.dragging.is_none();
+    // A row, its arrow and its drag handle take the keyboard too, and the tree follows it (AR-478).
+    let id = |row: &Row, part: &str| widgets::egui_id(&format!("workspace.explorer.row.{}{part}", row.id));
+    let ids = rows.iter().map(|row| id(row, "")).collect::<Vec<_>>();
+    let parts = rows.iter().enumerate().flat_map(|(i, row)| [(id(row, ".fold"), i), (id(row, ".drag"), i)]).collect::<Vec<_>>();
+    follow_keys(ui, &ids, &parts, (tree, r.top() + FIRST_ROW, ROW), &mut shell.explorer.scroll);
     let offset = scroll_tree(ui, p, tree, r.top() + FIRST_ROW, rows.len(), ROW, tail, wheel, follow, &mut shell.explorer.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     for (i, row) in rows.iter().enumerate() {
         let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
-        if y + ROW_HEIGHT < tree.top() || y - 7.0 > tree.bottom() {
+        // A row past either edge is laid out too, so that Tab and Shift+Tab reach it; only what
+        // shows is listed.
+        if y + ROW_HEIGHT + ROW < tree.top() || y - 7.0 - ROW > tree.bottom() {
             continue;
         }
         tree_row(shell, &mut clip, p, r, y, row, selected_obj == Some(row.obj));
     }
+    keys_moved(ui, &shell.explorer.scroll);
     // A row dragged onto another row: what the drop means there (a class into a package), its
     // target ringed while it is held over it.
     let row_at = |at: egui::Pos2| -> Option<&Row> {
@@ -682,7 +747,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     }
     // The Stereotypes picker takes typing, Backspace, the arrows and Enter (AR-135).
     if tree_keys && shell.explorer.context.is_none() && shell.panels.menu != Some(crate::panels::Menu::StereotypePick) {
-        keyboard(shell, ui, &rows, selected_obj);
+        keyboard(shell, ui, &rows, selected_obj, tree_view(tree, r.top() + FIRST_ROW, ROW));
     }
     if shell.explorer.menu_open {
         add_menu(shell, ui, p, add);
@@ -877,9 +942,10 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 }
 
 /// The keys when the tree has them: up and down move the selection, left folds or goes to the
-/// parent, right unfolds (the arrows plain or with Shift, never as part of a chord), Enter and F2
-/// rename, Delete removes.
-fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option<Obj>) {
+/// parent, right unfolds (the arrows plain or with Shift, never as part of a chord), Page Up and
+/// Page Down move it by the `view` that shows and Home and End to the first and the last row
+/// (AR-478), Enter and F2 rename, Delete removes. The tree follows the selection.
+fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option<Obj>, view: f32) {
     let (up, down, left, right, rename, delete) = ui.input(|i| {
         (
             crate::actions::plain_press(i, egui::Key::ArrowUp),
@@ -891,7 +957,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
         )
     });
     let at = rows.iter().position(|r| Some(r.obj) == selected_obj);
-    if down {
+    if let Some(to) = at.and_then(|i| paged(ui, i, rows.len(), ROW, view)) {
+        select(shell, Some(rows[to].id));
+    } else if down {
         let next = at.map_or(0, |i| (i + 1).min(rows.len().saturating_sub(1)));
         if let Some(row) = rows.get(next) {
             select(shell, Some(row.id));
