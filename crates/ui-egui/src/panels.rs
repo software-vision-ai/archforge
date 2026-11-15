@@ -111,13 +111,15 @@ pub struct State {
     pub nary_remove: Option<crate::uml_nary::RemoveAsk>,
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
-    /// open last frame, whether an editor that just opened is still to be brought into view, the
-    /// body's visible rectangle, and the control of the body that had the keyboard last frame.
+    /// open last frame with the refusal each showed, the editors that just opened or were refused
+    /// and are still to be brought into view (true for a refusal), the scroll the body is drawn at,
+    /// the body's visible rectangle, and the control of the body that had the keyboard last frame.
     pub scroll: f32,
     pub content: f32,
     pub scrolled_for: Option<(Panel, Option<Uuid>)>,
-    pub open_editors: Vec<Option<Option<Uuid>>>,
-    pub reveal: bool,
+    pub(crate) open_editors: Vec<(Editor, OpenEditor)>,
+    pub(crate) reveal: Vec<(Editor, bool)>,
+    pub(crate) drawn: f32,
     pub body: Option<Rect>,
     pub held: Option<egui::Id>,
 }
@@ -125,22 +127,61 @@ pub struct State {
 /// What is left under the last control of a scrolled body, for its trailing text.
 const SCROLL_TAIL: f32 = 48.0;
 
-/// The editors open, by what they edit, to tell when one opens.
-fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
+/// A Properties editor whose card [`reveal`] brings into view: several can be open at once, and
+/// each card answers only for its own editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Editor {
+    Column,
+    Key,
+    Check,
+    Index,
+    Type,
+    Object,
+    Member,
+    Constraint,
+    Qualifier,
+    Template,
+    Profile,
+    NaryEnd,
+}
+
+/// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
+/// kind of member, type, object or key, or an association's end), so a move to either is new.
+type Place = (Option<Uuid>, usize);
+
+/// An open editor: where it edits, and the refusal its card shows.
+type OpenEditor = Option<(Place, Option<String>)>;
+
+/// The editors open, by where they edit, with their refusals, to tell when one opens, moves or is
+/// refused.
+fn open_editors(s: &State) -> Vec<(Editor, OpenEditor)> {
     vec![
-        s.column.as_ref().map(|e| e.target),
-        s.key.as_ref().map(|e| e.target),
-        s.check.as_ref().map(|e| e.target),
-        s.index.as_ref().map(|e| e.target),
-        s.type_edit.as_ref().map(|e| e.target),
-        s.object_edit.as_ref().map(|e| e.target),
-        s.member.as_ref().map(|e| e.target),
-        s.constraint.as_ref().map(|e| e.target),
-        s.qualifier.as_ref().map(|e| e.target),
-        s.template.as_ref().map(|e| e.target),
-        s.profile_edit.as_ref().map(|e| e.target.as_deref().and_then(Uuid::parse)),
-        s.nary_end.as_ref().map(|e| Some(e.association)),
+        (Editor::Column, s.column.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Key, s.key.as_ref().map(|e| ((e.target, usize::from(e.primary)), e.refused.clone()))),
+        (Editor::Check, s.check.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Index, s.index.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Type, s.type_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Object, s.object_edit.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Member, s.member.as_ref().map(|e| ((e.target, e.kind as usize), e.refused.clone()))),
+        (Editor::Constraint, s.constraint.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Qualifier, s.qualifier.as_ref().map(|e| ((e.target, e.end), e.refused.clone()))),
+        (Editor::Template, s.template.as_ref().map(|e| ((e.target, 0), e.refused.clone()))),
+        (Editor::Profile, s.profile_edit.as_ref().map(|e| ((e.target.as_deref().and_then(Uuid::parse), 0), None))),
+        (Editor::NaryEnd, s.nary_end.as_ref().map(|e| ((Some(e.association), e.end), e.refused.as_ref().map(|(_, why)| why.clone())))),
     ]
+}
+
+/// The editors of `now` to bring into view: one opened or moved to another place since `was`, or,
+/// true beside it, one whose card shows a new refusal (AR-469). A refusal that goes or stays, and an
+/// editor that changed nothing, bring nothing into view, so a body scrolled away stays put.
+fn to_reveal(now: &[(Editor, OpenEditor)], was: &[(Editor, OpenEditor)]) -> Vec<(Editor, bool)> {
+    let before = |editor: Editor| was.iter().find(|(e, _)| *e == editor).and_then(|(_, open)| open.as_ref());
+    let reveal = |(editor, now): &(Editor, OpenEditor)| match (now, before(*editor)) {
+        (Some((place, why)), Some((was, said))) if place == was => (why.is_some() && why != said).then_some((*editor, true)),
+        (Some(_), _) => Some((*editor, false)),
+        (None, _) => None,
+    };
+    now.iter().filter_map(reveal).collect()
 }
 
 /// Whether something being typed or an editor card is open in `s`: the fields that only show what is
@@ -148,7 +189,7 @@ fn open_editors(s: &State) -> Vec<Option<Option<Uuid>>> {
 /// so an open Modifiers fold stops nothing; a selection moved on has ended them
 /// ([`crate::uml_relate::finish_ends`]).
 pub(crate) fn editing(s: &State) -> bool {
-    open_editors(s).iter().any(Option::is_some)
+    open_editors(s).iter().any(|(_, open)| open.is_some())
         || s.name.is_some()
         || s.role.is_some()
         || s.binding.is_some()
@@ -157,12 +198,16 @@ pub(crate) fn editing(s: &State) -> bool {
         || s.ends.as_ref().is_some_and(crate::uml_relate::EndsEdit::unwritten)
 }
 
-/// Brings an editor card that just opened into the scrolled body's view: its foot if it fits,
-/// else its top. Editors call it with their card once drawn.
-pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, card: Rect) {
-    let Some(body) = shell.panels.body.filter(|_| shell.panels.reveal) else { return };
-    shell.panels.reveal = false;
-    shell.panels.scroll += into_view(body, card);
+/// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
+/// card's foot if it fits, else its top; a refused card's foot, with its Apply, Cancel and refusal,
+/// also when the card is taller than the body. A card drawn after another's reveal counts the scroll
+/// that one moved, so the last reveal of a draw is the one in view.
+pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
+    let Some(body) = shell.panels.body else { return };
+    let Some(at) = shell.panels.reveal.iter().position(|(e, _)| *e == editor) else { return };
+    let (_, refused) = shell.panels.reveal.remove(at);
+    let part = if refused { Rect::from_min_max(pos2(card.left(), card.top().max(card.bottom() - body.height() + 16.0)), card.max) } else { card };
+    shell.panels.scroll += into_view(body, part.translate(vec2(0.0, shell.panels.drawn - shell.panels.scroll)));
     ui.ctx().request_repaint();
 }
 
@@ -2040,7 +2085,7 @@ fn column_editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: 
     let card = Rect::from_min_size(pos2(r.left() + PAD, y), vec2(width.max(0.0), height));
     paint.rect_filled(card, 8.0, p.surface);
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    reveal(shell, ui, card);
+    reveal(shell, ui, Editor::Column, card);
     let inner = (width - 24.0).max(0.0);
     let at = |x: f32, dy: f32| card.min + vec2(12.0 + x, dy);
     let take = std::mem::take(&mut edit.opened);
@@ -2704,8 +2749,8 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
         body_y += 17.0 + FIELD + 14.0;
     }
     // The body scrolls under the pinned heading and description: a new panel
-    // or selection starts at the top, an editor that opens is brought into view, the wheel over
-    // the body moves it within its content.
+    // or selection starts at the top, an editor that opens or is refused is brought into view, the
+    // wheel over the body moves it within its content.
     let body = Rect::from_min_max(pos2(r.left(), body_y), r.max);
     // A column shows its table's page, so moving between a table and its columns keeps the scroll.
     let page = match (s.class, shell.session.as_ref(), s.obj) {
@@ -2721,8 +2766,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     let open = open_editors(&shell.panels);
     if open != shell.panels.open_editors {
-        let opened = open.iter().zip(shell.panels.open_editors.iter().chain(std::iter::repeat(&None))).any(|(now, was)| now.is_some() && now != was);
-        shell.panels.reveal |= opened;
+        shell.panels.reveal.extend(to_reveal(&open, &shell.panels.open_editors));
         shell.panels.open_editors = open;
     }
     let room = (shell.panels.content - body.height()).max(0.0);
@@ -2730,6 +2774,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     shell.panels.scroll = shell.panels.scroll.clamp(0.0, room);
     shell.panels.body = Some(body);
     let drawn = shell.panels.scroll;
+    shell.panels.drawn = drawn;
     let top = body_y - drawn;
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(body));
     clip.set_clip_rect(body);
@@ -2741,13 +2786,18 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     shell.registry.reach_end();
     shell.panels.content = (shell.registry.reach() - top + SCROLL_TAIL).max(0.0);
-    shell.panels.reveal = false;
+    shell.panels.reveal.clear();
     follow_keys(shell, ui, body, drawn);
     if ui.rect_contains_pointer(body) && shell.panels.menu.is_none() {
         let dy = ui.input(|i| i.smooth_scroll_delta.y);
         if dy != 0.0 {
             shell.panels.scroll = (shell.panels.scroll - dy).clamp(0.0, (shell.panels.content - body.height()).max(0.0));
         }
+    }
+    // Content that shrank under the scroll, as a card does when its refusal goes, is followed on the
+    // next frame, not on the next input: until then the body would show past its end.
+    if shell.panels.scroll > (shell.panels.content - body.height()).max(0.0) {
+        ui.ctx().request_repaint();
     }
     // A thin thumb at the right edge while the content overflows (the design has no scroll bar;
     // owner-delegated UX).

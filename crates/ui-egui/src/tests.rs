@@ -5338,8 +5338,9 @@ fn reached_in_properties(h: &mut Harness<'static, Shell>, id: &str) -> egui::Pos
 /// description too long; and braces with nothing to sit by are said under the editor's form
 /// buttons, any other refusal of Apply under it, with nothing written, and Cancel closes the
 /// editor. In a window of the design's height, where the German panel's Constraints section is cut
-/// by the fold and a refusal moves the editor's buttons under it, so the body is scrolled to each
-/// control before it is pressed (AR-467). In light and dark (AR-447).
+/// by the fold, so the body is scrolled to the section and the editor before they are pressed
+/// (AR-467); a refusal brings the editor's buttons back into view (AR-469). In light and dark
+/// (AR-447).
 #[test]
 fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     use crate::i18n::{fmt, tr};
@@ -5397,26 +5398,304 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
         assert!(braces.starts_with("Geschweifte Klammern") && painted(&h).contains(&braces), "{theme:?}: said in German in the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
         // Any other refusal of Apply is said under it, as a sentence: here the diagram as the element.
+        // The refusal brought the editor's foot into view (AR-469): Apply is pressed where it shows.
         let shown = h.state().canvas.active.unwrap();
         h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
         h.run();
-        let at = reached_in_properties(&mut h, "workspace.properties.constraint.apply");
+        let at = rect_of(&h, "workspace.properties.constraint.apply").center();
         click(&mut h, at);
         let edit = h.state().panels.constraint.clone().expect("the editor stays open");
         assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
-        // A control above what shows is not listed either: it is found by wheeling up.
+        // A control above what shows is not listed either.
         let above = "workspace.properties.attributes.add";
         assert!(!ids(&h).iter().any(|i| i == above), "{theme:?}: Attributes is scrolled out above the editor's foot");
-        let at = reached_in_properties(&mut h, above);
-        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
-        // Cancel, under the refusal, closes the editor and writes nothing.
-        let at = reached_in_properties(&mut h, "workspace.properties.constraint.cancel");
+        // Cancel, under the refusal and in view with it, closes the editor and writes nothing.
+        let at = rect_of(&h, "workspace.properties.constraint.cancel").center();
         click(&mut h, at);
         assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), revision, "{theme:?}: nothing written");
+        // The control above is found by wheeling up.
+        let at = reached_in_properties(&mut h, above);
+        assert!(h.state().panels.body.is_some_and(|b| b.contains(at)) && rect_of(&h, above).center() == at, "{theme:?}: reached by wheeling up");
     }
     crate::i18n::set_language("en");
+}
+
+/// The constraint editor's Apply and Cancel.
+const CONSTRAINT_APPLY: &str = "workspace.properties.constraint.apply";
+const CONSTRAINT_CANCEL: &str = "workspace.properties.constraint.cancel";
+
+/// The sample class model in `theme` with Order's Properties shown; gives Order and its node.
+fn order_properties(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
+    let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+    let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+    crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+    h.state_mut().state.show_panel(crate::state::Panel::Properties);
+    h.run();
+    (h, order, nodes["Order"].clone())
+}
+
+/// The centre of the Properties control `id` while it is inside the body as drawn, with no wheel.
+fn in_view(h: &Harness<'static, Shell>, id: &str) -> Option<egui::Pos2> {
+    let body = h.state().panels.body?;
+    let w = h.state().widgets().iter().find(|w| w.id == id)?;
+    Some(egui::pos2((w.rect[0] + w.rect[2]) / 2.0, (w.rect[1] + w.rect[3]) / 2.0)).filter(|at| body.contains(*at))
+}
+
+/// Whether the text `said` was painted inside the Properties body in the last frame.
+fn said_in_view(h: &Harness<'static, Shell>, said: &str) -> bool {
+    /// The rectangles of the texts `said` in the shape `s` and the shapes it holds.
+    fn walk(s: &egui::Shape, said: &str, out: &mut Vec<egui::Rect>) {
+        match s {
+            egui::Shape::Text(t) if t.galley.text() == said => out.push(t.galley.rect.translate(t.pos.to_vec2())),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, said, out)),
+            _ => {}
+        }
+    }
+    let Some(body) = h.state().panels.body else { return false };
+    let mut rects = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, said, &mut rects));
+    rects.iter().any(|r| body.contains_rect(*r))
+}
+
+/// The body wheeled by `dy` points with the pointer over it, as a person scrolls it.
+fn wheel_properties(h: &mut Harness<'static, Shell>, dy: f32) {
+    let body = h.state().panels.body.expect("the Properties body");
+    h.event(egui::Event::PointerMoved(body.center()));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, dy),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Wheel,
+    });
+    h.run();
+}
+
+/// Order's constraint editor opened from its section, at the foot of the body, with braces picked
+/// for a class the diagram no longer shows: Apply is refused above the buttons.
+fn constraint_refused(theme: ThemeKind) -> Harness<'static, Shell> {
+    let (mut h, _, node) = order_properties(theme);
+    crate::panels::run(h.state_mut(), "diagram.unplace", serde_json::json!({ "nodes": [node] })).unwrap();
+    h.run();
+    let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
+    click(&mut h, at);
+    let edit = h.state_mut().panels.constraint.as_mut().expect("the editor");
+    (edit.expression, edit.form, edit.form_chosen) = ("total > 0".into(), archforge_uml::constraints::Form::Braces, true);
+    h.run();
+    let before = in_view(&h, CONSTRAINT_APPLY).expect("the editor opened in view");
+    click(&mut h, before);
+    let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+    assert_eq!(edit.refused_at, Some("show"), "{theme:?}: refused above the buttons");
+    h
+}
+
+/// A constraint's Apply refused above its buttons, then under them: each time the refusal and both
+/// buttons are in view, and Apply and Cancel are pressed where they show, with no wheel.
+#[test]
+fn a_refused_constraint_keeps_its_buttons_in_view() {
+    in_both_appearances(|theme| {
+        let mut h = constraint_refused(theme);
+        let braces = h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()).unwrap_or_default();
+        assert!(said_in_view(&h, &braces), "{theme:?}: the refusal is in view");
+        let at = in_view(&h, CONSTRAINT_APPLY).expect("Apply in view after the refusal");
+        assert!(in_view(&h, CONSTRAINT_CANCEL).is_some(), "{theme:?}: Cancel in view after the refusal");
+        // The diagram as the element: refused under the buttons, which stay in view with it.
+        let shown = h.state().canvas.active.unwrap();
+        h.state_mut().panels.constraint.as_mut().expect("the editor").elements = vec![shown];
+        click(&mut h, at);
+        let edit = h.state().panels.constraint.clone().expect("the editor stays open");
+        let outside = crate::i18n::tr("A constraint names only elements of this model.");
+        assert_eq!((edit.refused.as_deref(), edit.refused_at), (Some(outside.as_str()), None), "{theme:?}");
+        assert!(said_in_view(&h, &outside), "{theme:?}: the refusal under the buttons is in view");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_some(), "{theme:?}: Apply in view after the second refusal");
+        let at = in_view(&h, CONSTRAINT_CANCEL).expect("Cancel in view after the second refusal");
+        click(&mut h, at);
+        assert!(h.state().panels.constraint.is_none(), "{theme:?}: Cancel closes the editor");
+    });
+}
+
+/// The body scrolled away from a refused editor stays where it was put: the refusal brought the
+/// editor into view once, not on every frame, and its going brings nothing into view either.
+#[test]
+fn a_body_scrolled_away_from_a_refusal_stays_put() {
+    in_both_appearances(|theme| {
+        let mut h = constraint_refused(theme);
+        wheel_properties(&mut h, 240.0);
+        let put = h.state().panels.scroll;
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: Apply scrolled out of view");
+        h.run_steps(3);
+        assert_eq!(h.state().panels.scroll, put, "{theme:?}: nothing pulls the body back");
+        // A linked note picked instead: the refusal goes, the card shrinks, and the body stays.
+        let at = in_view(&h, "workspace.properties.constraint.show.note").expect("Linked note in view");
+        click(&mut h, at);
+        assert_eq!(h.state().panels.constraint.as_ref().and_then(|e| e.refused.clone()), None, "{theme:?}: the refusal went");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: Apply is still out of view");
+        assert_eq!(h.state().panels.scroll, put, "{theme:?}: the refusal's going moved nothing");
+    });
+}
+
+/// Two editors open at once, an attribute's drawn above a constraint's: a refusal in the
+/// constraint's alone brings the constraint's card into view, not the attribute's, which changed
+/// nothing.
+#[test]
+fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        for i in 0..16 {
+            crate::panels::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") })).unwrap();
+        }
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.constraints.add");
+        click(&mut h, at);
+        let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_some() && h.state().panels.constraint.is_some(), "{theme:?}: both editors open");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: the attribute's editor in view");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: the constraint's editor under the fold");
+        let why = crate::i18n::tr("A constraint names only elements of this model.");
+        h.state_mut().panels.constraint.as_mut().expect("the editor").refused = Some(why.clone());
+        h.run();
+        assert!(said_in_view(&h, &why), "{theme:?}: the constraint's refusal is in view");
+        assert!(in_view(&h, CONSTRAINT_APPLY).is_some() && in_view(&h, CONSTRAINT_CANCEL).is_some(), "{theme:?}: its buttons too");
+    });
+}
+
+/// An n-ary association's end editor moved to another end, with no refusal, is a new place: the
+/// body was wheeled up from the last end's editor until the end above it sits at the fold, and that
+/// end's editor, opened there, comes into view with its Apply.
+#[test]
+fn an_end_editor_moved_to_another_end_comes_into_view() {
+    in_both_appearances(|theme| {
+        let (mut h, ids) = nary_sample_in(theme, true, egui::vec2(1600.0, 1000.0));
+        let a = ids["recommends"].clone();
+        for _ in 0..24 {
+            crate::panels::run(h.state_mut(), "uml.association.add-end", serde_json::json!({ "association": a, "class": ids["Customer"] })).unwrap();
+        }
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [a] })).unwrap();
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let last = archforge_uml::nary::ends(st, st.by_uuid(archforge_mof::Uuid::parse(&a).unwrap()).unwrap()).len() - 1;
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.end.{last}.edit"));
+        click(&mut h, at);
+        let above = format!("workspace.properties.end.{}.edit", last - 1);
+        let row = rect_of(&h, &above).center().y;
+        let body = h.state().panels.body.expect("the Properties body");
+        wheel_properties(&mut h, body.bottom() - 20.0 - row);
+        let at = in_view(&h, &above).expect("the end above at the fold");
+        let apply = format!("workspace.properties.end.{}.apply", last - 1);
+        click(&mut h, at);
+        assert_eq!(h.state().panels.nary_end.as_ref().map(|e| e.end), Some(last - 1), "{theme:?}: the editor moved");
+        assert!(in_view(&h, &apply).is_some(), "{theme:?}: its Apply in view");
+    });
+}
+
+/// A member's editor moved from a new attribute to a new operation is a new place, though neither
+/// has an item yet: the operation's editor, opened under a long list of operations, comes into
+/// view with its Apply.
+#[test]
+fn a_member_editor_moved_to_another_list_comes_into_view() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        for i in 0..16 {
+            crate::panels::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": format!("run{i}") })).unwrap();
+        }
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
+        click(&mut h, at);
+        let at = reached_in_properties(&mut h, "workspace.properties.operations.add");
+        click(&mut h, at);
+        let kind = h.state().panels.member.as_ref().map(|e| (e.kind, e.target));
+        assert_eq!(kind, Some((crate::uml_panel::MemberKind::Operation, None)), "{theme:?}: a new operation's editor");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: its Apply in view");
+    });
+}
+
+/// An operation of 30 parameters has a card taller than the body: opened, it shows its top;
+/// refused at its foot, two parameters named alike, it shows its foot with the refusal, Apply and
+/// Cancel, not its top.
+#[test]
+fn a_refused_card_taller_than_the_body_shows_its_foot() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        let params: Vec<_> = (0..30).map(|i| serde_json::json!({ "name": format!("p{i}"), "type": "" })).collect();
+        let op = crate::panels::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": "plan", "parameters": params }));
+        let op = op.unwrap()["id"].as_str().unwrap().to_string();
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+        h.run();
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.operation.{op}.edit"));
+        click(&mut h, at);
+        let top = in_view(&h, "workspace.properties.member.name").is_some();
+        assert!(top && in_view(&h, "workspace.properties.member.apply").is_none(), "{theme:?}: opened, the card shows its top");
+        h.state_mut().panels.member.as_mut().expect("the editor").params[1].name = "p0".into();
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.member.apply");
+        click(&mut h, at);
+        let why = h.state().panels.member.as_ref().and_then(|e| e.refused.clone().filter(|_| e.refused_at.is_none())).expect("refused");
+        assert!(said_in_view(&h, &why), "{theme:?}: the refusal is in view: {why}");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: Apply in view");
+        assert!(in_view(&h, "workspace.properties.member.cancel").is_some(), "{theme:?}: Cancel in view");
+    });
+}
+
+/// Two editors opened before one draw, the first key's above the body and a new check's below it:
+/// each reveal counts the scroll the one before it moved, so the check's card, drawn last, ends in
+/// view.
+#[test]
+fn two_editors_opened_before_one_draw_leave_the_last_in_view() {
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", serde_json::json!({ "name": "Shop" }));
+        let table = id("er.entity.add", serde_json::json!({ "schema": schema, "name": "Orders" }));
+        for i in 0..30 {
+            let column = id("er.attribute.add", serde_json::json!({ "entity": table, "name": format!("c{i}"), "type": "TEXT" }));
+            id("er.unique.add", serde_json::json!({ "entity": table, "columns": [column], "name": format!("u{i}") }));
+        }
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [table] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let entity = archforge_mof::Uuid::parse(&table).unwrap();
+        let first = {
+            let st = h.state().session.as_ref().unwrap().doc();
+            crate::keys::rows(st, st.by_uuid(entity).unwrap()).remove(0)
+        };
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.key.row.{}", first.id));
+        let above = h.state().panels.body.unwrap().top() - at.y;
+        wheel_properties(&mut h, above - 200.0);
+        assert!(!ids(&h).iter().any(|i| i.starts_with("workspace.properties.check")), "{theme:?}: Checks under the fold");
+        crate::keys::open(h.state_mut(), entity, Some(&first));
+        crate::checks::open(h.state_mut(), entity, None);
+        h.run();
+        assert!(in_view(&h, "workspace.properties.check.apply").is_some(), "{theme:?}: the check's Apply in view");
+    });
+}
+
+/// A member's editor shares the card: an attribute added at the foot of a long list, refused for a
+/// name another attribute has, keeps its refusal and buttons in view.
+#[test]
+fn a_refused_attribute_keeps_its_buttons_in_view() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        for i in 0..16 {
+            crate::panels::run(h.state_mut(), "uml.attribute.add", serde_json::json!({ "class": order, "name": format!("note{i}") })).unwrap();
+        }
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.attributes.add");
+        click(&mut h, at);
+        h.state_mut().panels.member.as_mut().expect("the editor").name = "note0".into();
+        h.run();
+        let at = in_view(&h, "workspace.properties.member.apply").expect("the editor opened in view");
+        click(&mut h, at);
+        let why = h.state().panels.member.as_ref().and_then(|e| e.refused.clone()).expect("the name is refused");
+        assert!(why.contains("note0"), "{theme:?}: {why}");
+        assert!(said_in_view(&h, &why), "{theme:?}: the refusal is in view");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: Apply in view");
+        let at = in_view(&h, "workspace.properties.member.cancel").expect("Cancel in view");
+        click(&mut h, at);
+        assert!(h.state().panels.member.is_none(), "{theme:?}: Cancel closes the editor");
+    });
 }
 
 /// The lists of properties a property subsets and redefines, refused by the engine, are said in
@@ -24143,7 +24422,12 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
 /// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
 /// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
 fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1200.0));
+    nary_sample_in(theme, drawn, egui::vec2(1600.0, 1200.0))
+}
+
+/// [`nary_sample`] in a window of `size`.
+fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, size);
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
     h.run();
     let ids = crate::uml_nary::put_recommends(h.state_mut(), drawn).unwrap();
