@@ -1441,6 +1441,8 @@ fn enum_remove(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// A sequence's numbers, owner and flag from the parameters; the bounds kept as their numbers.
 /// `current` is the owner the sequence has: kept as it is, it needs no whole-number type again.
+/// Numbers that break the rules ([`Reason::Sequence`]) and an owner that cannot own the sequence
+/// are refused typed.
 fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Result<(rules::SequenceNumbers, Option<Obj>), CommandError> {
     let mut n = rules::SequenceNumbers {
         start: p.integer("start").unwrap_or(1),
@@ -1449,8 +1451,8 @@ fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Res
         maximum: text(p, "maximum").to_string(),
         cycle: p.bool("cycle").unwrap_or(false),
     };
-    if let Some((key, why)) = rules::sequence_problem(&n) {
-        return Err(refuse(key, why));
+    if let Some((key, problem)) = rules::sequence_problem(&n) {
+        return Err(refuse(key, problem.to_string()).because(problem.reason));
     }
     // A bound is kept as its number: "+5" and "05" become "5".
     for bound in [&mut n.minimum, &mut n.maximum] {
@@ -1463,8 +1465,9 @@ fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Res
     } else {
         let a = id_of(ctx, p, "owned_by", ATTRIBUTE)?;
         let new_owner = Some(a) != current;
-        if let Some(why) = rules::owned_by_problem(ctx.doc, s, a).or_else(|| if new_owner { rules::owner_type_problem(ctx.doc, a) } else { None }) {
-            return Err(refuse("owned_by", why));
+        if let Some(problem) = rules::owned_by_problem(ctx.doc, s, a).or_else(|| if new_owner { rules::owner_type_problem(ctx.doc, a) } else { None })
+        {
+            return Err(refuse("owned_by", problem.to_string()).because(problem.reason));
         }
         Some(a)
     };
@@ -1513,11 +1516,12 @@ fn sequence_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
-/// A view's query from the parameters: SQL text, not parsed.
+/// A view's query from the parameters: SQL text, not parsed; one the rules refuse is refused with
+/// the text rules' reason.
 fn query_param(p: &Params) -> Result<&str, CommandError> {
     let query = text(p, "query");
     match rules::query_problem(query) {
-        Some(why) => Err(refuse("query", why)),
+        Some(problem) => Err(refuse("query", problem.to_string()).because(problem.reason)),
         None => Ok(query),
     }
 }

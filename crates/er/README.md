@@ -134,7 +134,14 @@ reach into it (`commands::remove_schema`). A `Sequence` (start, increment never 
 maximum as whole numbers kept as text, cycle, owned by a column of its schema) and a `View` (its
 SQL query as text, not parsed, materialized) are owned by a schema; tables, domains, enum types,
 sequences and views share one name namespace per schema. A sequence is owned by a whole-number
-column of its schema and forgets it when the column goes. A column may take a domain or enum type
+column of its schema and forgets it when the column goes. Their refusals are typed (AR-507): a
+sequence's numbers that do not fit each other as `Sequence` with the `SequenceRule` they break; an
+owner of another schema, of no table or of no whole-number type as `ColumnOfOtherSchema`,
+`InNoTable` and `NotIntegerType` (and what is no column at all as `NotA` of `"column"`, which the id
+check refuses first); a view's query empty, with a hidden character or against the text rules as
+`TextEmpty`, `ControlCharacter` or the text rule's reason. The rules (`sequence_problem`,
+`owned_by_problem`, `owner_type_problem`, `query_problem`) give each as a `Problem`, displayed in
+the English it always had. A column may take a domain or enum type
 of another schema, as a key column following its target does; when that schema goes, the column
 keeps the domain's base type and size, or text for an enum type.
 
