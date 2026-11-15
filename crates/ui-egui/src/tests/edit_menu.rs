@@ -683,7 +683,24 @@ fn the_note_and_member_editors_stay_open_through_the_in_window_edit_menu() {
 /// A saved project with Customer's name being typed as "Item" in Models, or on the canvas when
 /// `on_canvas`, the in-window menu shown.
 fn renaming_a_saved_project(theme: ThemeKind, on_canvas: bool) -> Harness<'static, Shell> {
+    renaming(drawn(theme).0, theme, on_canvas)
+}
+
+/// `renaming_a_saved_project` with a second project, Other, open in a tab of its own behind it.
+fn renaming_beside_another(theme: ThemeKind, on_canvas: bool) -> Harness<'static, Shell> {
     let (mut h, _) = drawn(theme);
+    h.state_mut().open_project(crate::Opened { name: "Other".into(), path: OTHER.into(), ..Default::default() });
+    h.run();
+    h.state_mut().activate(0);
+    h.run();
+    renaming(h, theme, on_canvas)
+}
+
+/// The second project's path.
+const OTHER: &str = "/tmp/Other.archforge";
+
+/// The project of `h`, saved, with its selection's name typed in place in Models or on the canvas.
+fn renaming(mut h: Harness<'static, Shell>, theme: ThemeKind, on_canvas: bool) -> Harness<'static, Shell> {
     (h.state_mut().in_window_menu, h.state_mut().explorer.focused) = (true, !on_canvas);
     h.state_mut().session.as_mut().unwrap().mark_saved().unwrap();
     h.run();
@@ -801,6 +818,82 @@ fn the_close_key_finds_the_name_typed_in_place_committed() {
         assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}, on the canvas {on_canvas}: the name is in the model");
         assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{theme:?}: Close asks about the unsaved name");
         assert_eq!(h.state().tabs.len(), 1, "{theme:?}: the project is still open");
+    }
+}
+
+/// Every pairing of appearance and place the name is typed in: Models or the canvas.
+const BOTH: [(ThemeKind, bool); 4] = [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)];
+
+/// Whether `st` holds the name typed in place.
+fn has_item(st: &archforge_mof::Store) -> bool {
+    st.alive().any(|o| archforge_core::name_of(st, o) == "Item")
+}
+
+/// Quit with a name typed in place, by the native bar's row, ⌘Q or the window's close button: the
+/// field lets go and commits the name first, so quitting asks about it and the window stays.
+#[test]
+fn quitting_finds_the_name_typed_in_place_committed() {
+    let ways: [(&str, fn(&mut Harness<'static, Shell>)); 3] = [
+        ("the native row", |h| actions::run(h.state_mut(), actions::QUIT)),
+        ("⌘Q", |h| key(h, Key::Q, Modifiers::MAC_CMD.plus(Modifiers::COMMAND))),
+        ("the close button", |h| h.input_mut().viewports.entry(ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close)),
+    ];
+    for ((theme, on_canvas), (way, quit)) in BOTH.into_iter().flat_map(|b| ways.map(|w| (b, w))) {
+        let mut h = renaming_a_saved_project(theme, on_canvas);
+        h.state_mut().in_window_menu = false;
+        quit(&mut h);
+        h.run();
+        let what = format!("{theme:?}, on the canvas {on_canvas}, {way}");
+        assert!(has_item(h.state().session.as_ref().unwrap().doc()), "{what}: the name is in the model");
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{what}: quitting asks about the unsaved name");
+        assert!(h.state().quitting() && !h.state().quit_confirmed(), "{what}: the window stays");
+    }
+}
+
+/// A click on Home or on another project's tab with a name typed in place: the field lets go and
+/// commits the name before the project is parked, so it is in the model behind its tab and no
+/// longer open for typing; the shown tab's close button asks about it as Close project does.
+#[test]
+fn the_tabs_find_the_name_typed_in_place_committed() {
+    for ((theme, on_canvas), at) in BOTH.into_iter().flat_map(|b| ["workspace.header.home", "workspace.header.project.1"].map(|at| (b, at))) {
+        let mut h = renaming_beside_another(theme, on_canvas);
+        let point = rect_of(&h, at).center();
+        click(&mut h, point);
+        let what = format!("{theme:?}, on the canvas {on_canvas}, {at}");
+        assert_eq!(h.state().active, (at != "workspace.header.home").then_some(1), "{what}: it went");
+        let parked = h.state().tabs[0].parked.as_ref().unwrap();
+        assert!(has_item(parked.session.as_ref().unwrap().doc()), "{what}: the name is in the model");
+        assert!(parked.explorer.rename.is_none() && parked.canvas.rename.is_none(), "{what}: and no longer being typed");
+    }
+    for (theme, on_canvas) in BOTH {
+        let mut h = renaming_beside_another(theme, on_canvas);
+        let point = rect_of(&h, "workspace.header.project.0.close").center();
+        click(&mut h, point);
+        assert!(has_item(h.state().session.as_ref().unwrap().doc()), "{theme:?}, on the canvas {on_canvas}: the name is in the model");
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{theme:?}: the close button asks about it");
+        assert_eq!((h.state().tabs.len(), h.state().active), (2, Some(0)), "{theme:?}: the project is still open");
+    }
+}
+
+/// Open project…, by ⌘O or the native bar's row, with a name typed in place: the field lets go and
+/// commits the name before the picker is asked, so the project picked shows and the one left holds
+/// the name.
+#[test]
+fn open_finds_the_name_typed_in_place_committed() {
+    let ways: [(&str, fn(&mut Harness<'static, Shell>)); 2] =
+        [("the native row", |h| actions::run(h.state_mut(), actions::OPEN)), ("⌘O", |h| key(h, Key::O, Modifiers::MAC_CMD.plus(Modifiers::COMMAND)))];
+    for ((theme, on_canvas), (way, open)) in BOTH.into_iter().flat_map(|b| ways.map(|w| (b, w))) {
+        let mut h = renaming_beside_another(theme, on_canvas);
+        h.state_mut().services.projects = Some(std::sync::Arc::new(SavingHost::default()));
+        h.state_mut().services.pick_project = Some(std::sync::Arc::new(|_| Some(OTHER.into())));
+        h.state_mut().in_window_menu = false;
+        open(&mut h);
+        h.run();
+        let what = format!("{theme:?}, on the canvas {on_canvas}, {way}");
+        assert_eq!(h.state().active, Some(1), "{what}: the project picked shows");
+        let parked = h.state().tabs[0].parked.as_ref().unwrap();
+        assert!(has_item(parked.session.as_ref().unwrap().doc()), "{what}: the name is in the model");
+        assert!(parked.explorer.rename.is_none() && parked.canvas.rename.is_none(), "{what}: and no longer being typed");
     }
 }
 

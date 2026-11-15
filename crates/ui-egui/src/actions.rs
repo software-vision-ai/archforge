@@ -120,7 +120,7 @@ pub static ACTIONS: &[Action] = &[
         id: OPEN,
         label: |_| tr("Open project…"),
         available: |s| free(s) && s.can_open_project(),
-        run: Shell::open_from_picker,
+        run: open,
         keys: Some(Keys { modifiers: Modifiers::COMMAND, key: Key::O }),
         search: Some(InSearch { icon: |_| &icons::FOLDER, label: None }),
     },
@@ -403,12 +403,27 @@ pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     }
 }
 
-/// Close project asked for while a text field had the keyboard, with the project it was asked on.
+/// An action that leaves the work shown, asked for while a text field had the keyboard: each but
+/// Quit with the project shown when it was asked.
+pub(crate) enum Then {
+    /// Close project.
+    Close(std::path::PathBuf),
+    /// Open project…, which shows the project picked in place of this one.
+    Open(std::path::PathBuf),
+    /// Home, from the bar's tabs.
+    Home(std::path::PathBuf),
+    /// Another project's tab, by its path.
+    Show(std::path::PathBuf, std::path::PathBuf),
+    /// Quit, by the menu, its key or the window's close button.
+    Quit,
+}
+
+/// An action asked for while a text field had the keyboard.
 pub(crate) enum Closing {
     /// Asked in this frame: the field lets go of the keyboard as it is drawn.
-    Asked(std::path::PathBuf),
-    /// The field has let go, committing a name typed in place as a click elsewhere does: Close runs.
-    LetGo(std::path::PathBuf),
+    Asked(Then),
+    /// The field has let go, committing a name typed in place as a click elsewhere does: it runs.
+    LetGo(Then),
 }
 
 /// The path of the project shown.
@@ -416,26 +431,55 @@ fn shown(shell: &Shell) -> Option<&std::path::Path> {
     shell.active.and_then(|i| shell.tabs.get(i)).map(|t| t.path.as_path())
 }
 
-/// Closes the project shown. With a text field holding the keyboard, as when ⌘W or the native bar's
-/// row is chosen while a name is typed in place, the field lets go first and Close runs a frame
-/// later (`follow_close`), so it finds the name committed and asks about it.
-fn close(shell: &mut Shell) {
+/// Runs `now`, or, with a text field holding the keyboard on a project shown, as when a chord or
+/// the native bar's row is chosen while a name is typed in place, asks for `then` on that project:
+/// the field lets go first and it runs a frame later (`follow_close`), finding the name committed.
+pub(crate) fn after_field(shell: &mut Shell, then: impl FnOnce(std::path::PathBuf) -> Then, now: impl FnOnce(&mut Shell)) {
     match shown(shell).map(std::path::Path::to_path_buf) {
-        Some(path) if edit_menu::on_field(shell) => shell.edit.closing = Some(Closing::Asked(path)),
-        _ => shell.close_project(),
+        Some(path) if edit_menu::on_field(shell) => shell.edit.closing = Some(Closing::Asked(then(path))),
+        _ => now(shell),
     }
 }
 
-/// Once a frame, after the menus and the keys: a Close asked on a field takes the keyboard from it
-/// and asks for the next frame, in which it runs while its project still shows and Close can act.
+/// Closes the project shown, after the field with the keyboard lets go, so Close asks about a name
+/// typed in place.
+fn close(shell: &mut Shell) {
+    after_field(shell, Then::Close, Shell::close_project);
+}
+
+/// Open project…, after the field with the keyboard lets go, so the project shown is parked with
+/// a name typed in place committed.
+fn open(shell: &mut Shell) {
+    after_field(shell, Then::Open, Shell::open_from_picker);
+}
+
+/// Takes the keyboard from the field that has it and asks for the next frame, in which `then` runs.
+pub(crate) fn let_go(shell: &mut Shell, ctx: &egui::Context, then: Then) {
+    ctx.memory_mut(egui::Memory::stop_text_input);
+    ctx.request_repaint();
+    shell.edit.closing = Some(Closing::LetGo(then));
+}
+
+/// Once a frame, after the menus and the keys: an action asked on a field takes the keyboard from
+/// it, and runs in the next frame while the project it was asked on still shows and it can act.
+/// Quit only asks again: whether it goes ahead is decided where every quit is.
 pub(crate) fn follow_close(shell: &mut Shell, ctx: &egui::Context) {
-    match shell.edit.closing.take() {
-        Some(Closing::Asked(path)) => {
-            ctx.memory_mut(egui::Memory::stop_text_input);
-            ctx.request_repaint();
-            shell.edit.closing = Some(Closing::LetGo(path));
+    let Some(closing) = shell.edit.closing.take() else { return };
+    let then = match closing {
+        Closing::Asked(then) => return let_go(shell, ctx, then),
+        Closing::LetGo(then) => then,
+    };
+    let on = |path: &std::path::Path| shown(shell) == Some(path);
+    match then {
+        Then::Quit => shell.quit_requested = true,
+        Then::Close(path) if on(&path) && available(shell, CLOSE) => shell.close_project(),
+        Then::Open(path) if on(&path) && available(shell, OPEN) => shell.open_from_picker(),
+        Then::Home(path) if on(&path) && free(shell) => shell.go_home(),
+        Then::Show(path, to) if on(&path) && free(shell) => {
+            if let Some(i) = shell.tab_of(&to) {
+                shell.activate(i);
+            }
         }
-        Some(Closing::LetGo(path)) if shown(shell) == Some(path.as_path()) && available(shell, CLOSE) => shell.close_project(),
         _ => {}
     }
 }
@@ -905,6 +949,50 @@ pub(crate) mod tests {
                 assert_eq!(press(&mut on_home, cmd, Key::W), [down(cmd, Key::W)], "{system}, {home}: the press stays");
                 assert!(on_home.tabs.len() == tabs && on_home.tabs.iter().all(|t| t.closing.is_none()), "{system}, {home}: no tab closes");
             }
+        }
+    }
+
+    /// Open project…, Home and another project's tab, asked on a field, wait for it to let go and run
+    /// a frame later only while the project they were asked on still shows and nothing is up over
+    /// it; Quit is asked again then, where every quit is decided.
+    #[test]
+    fn a_switch_or_a_quit_asked_on_a_field_runs_a_frame_later() {
+        let ctx = egui::Context::default();
+        let frame = |shell: &mut Shell| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| follow_close(shell, ui.ctx()));
+            output.textures_delta.clear();
+        };
+        // Settings, which Open project…'s own picker check lets through: only the row's rule stops it.
+        let meanwhile: [(&str, fn(&mut Shell)); 3] = [
+            ("nothing", |_| {}),
+            ("another project shows", |s| s.tabs[0].path = "/other.archforge".into()),
+            ("a dialog is up", crate::settings::open),
+        ];
+        let asks: [(&str, fn(&mut Shell)); 4] = [
+            ("open", |s| run(s, OPEN)),
+            ("home", |s| after_field(s, Then::Home, Shell::go_home)),
+            ("tab", |s| after_field(s, |from| Then::Show(from, "/next.archforge".into()), |s| s.activate(1))),
+            ("quit", |s| s.edit.closing = Some(Closing::Asked(Then::Quit))),
+        ];
+        for ((asked, ask), (what, change)) in asks.into_iter().flat_map(|a| meanwhile.map(|m| (a, m))) {
+            let (mut shell, _, picks) = shell();
+            shell.open_project(Opened { name: "Next".into(), path: "/next.archforge".into(), ..Default::default() });
+            shell.activate(0);
+            shell.edit.keyboard = edit_menu::Keyboard::Field;
+            ask(&mut shell);
+            frame(&mut shell);
+            let now = |s: &Shell| (picks.load(Ordering::SeqCst), s.active, s.quit_requested);
+            assert_eq!(now(&shell), (0, Some(0), false), "{asked}, {what}: the field lets go first");
+            change(&mut shell);
+            frame(&mut shell);
+            let ran = match asked {
+                "open" => (1, Some(0), false),
+                "home" => (0, None, false),
+                "tab" => (0, Some(1), false),
+                _ => (0, Some(0), true),
+            };
+            let wanted = if what == "nothing" || asked == "quit" { ran } else { (0, Some(0), false) };
+            assert_eq!((now(&shell), shell.edit.closing.is_none()), (wanted, true), "{asked}, {what}");
         }
     }
 }

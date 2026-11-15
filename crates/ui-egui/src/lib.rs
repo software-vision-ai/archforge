@@ -2016,7 +2016,13 @@ impl Shell {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
         if (std::mem::take(&mut self.quit_requested) || closing_window) && !self.quit_confirmed && self.quitting.is_none() && self.ask.is_none() {
-            self.start_quit(ctx);
+            // A field with the keyboard lets go first, so a name typed in place is committed and
+            // asked about; the quit is asked again in the next frame (`actions::follow_close`).
+            if edit_menu::on_field(self) {
+                actions::let_go(self, ctx, actions::Then::Quit);
+            } else {
+                self.start_quit(ctx);
+            }
         }
         self.continue_quit(ctx);
         self.drive_loads();

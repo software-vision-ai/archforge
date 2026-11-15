@@ -292,9 +292,17 @@ pub(crate) fn project_tabs(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rec
         x = chip.right() + GAP;
     }
     let changed = click.is_some();
+    // The strip is drawn before the project's fields, so a click that leaves the project shown waits
+    // for a field with the keyboard to let go and commit a name typed in place first.
+    use crate::actions::{Then, after_field};
     match click {
-        Some(TabClick::Home) => shell.go_home(),
-        Some(TabClick::Show(i)) => shell.activate(i),
+        Some(TabClick::Home) => after_field(shell, Then::Home, Shell::go_home),
+        Some(TabClick::Show(i)) => {
+            if let Some(to) = shell.tabs.get(i).map(|t| t.path.clone()) {
+                after_field(shell, |from| Then::Show(from, to), |s| s.activate(i));
+            }
+        }
+        Some(TabClick::Close(i)) if shell.active == Some(i) => after_field(shell, Then::Close, Shell::close_project),
         Some(TabClick::Close(i)) => shell.close_tab(i),
         None => {}
     }
