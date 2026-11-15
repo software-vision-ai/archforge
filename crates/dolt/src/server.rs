@@ -275,18 +275,20 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // start. Linux's parent-death signal would not do instead: it follows the thread that started the
 // server, and servers start on worker threads that end once a project is open. Windows' job objects
 // kill without a polite stop and need unsafe calls. So this sweep stays the backstop everywhere.
-// What neither covers yet: an Archforge killed after its server started and before its record,
-// written before the start, names the server's process id (the record's completion: a write to
-// disk). This sweep leaves a record without a process id alone; the opening of its project
-// settles it, finding the server by the command line recorded (`settle_pending`).
+// An Archforge killed after its server started and before its record, written before the start,
+// names the server's process id (the record's completion: a write to disk) leaves a server with no
+// watchdog and a record with no process id: this sweep settles that record as the opening of its
+// project does (`settle_pending`), finding the server by the command line recorded.
 /// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
 /// forgets the records of servers that are gone: for a start-up, so a project never opened again
 /// does not keep its server running. A server whose Archforge still runs, this one or another, is
 /// left alone, and a process is signalled only while its command line, checked before each signal,
 /// is exactly the recorded one, whose configuration lies in a run folder with a random name made
 /// for that start: a process id another program took gets no signal. A record without a process
-/// id is left to its project's opening for now (AR-459), so a server of a start its Archforge did
-/// not finish runs on until then. Returns how many servers were stopped.
+/// id, of a start that will not go on, is settled as the opening of its project settles it; one
+/// whose lock is held (a start under way) is left to the next start-up or opening, without a wait,
+/// and a copy under a name not its project's only goes itself. For a start-up: with no start of
+/// this process under way. Returns how many servers were stopped.
 pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     private_records(&opts.records)?;
     let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
@@ -295,7 +297,8 @@ pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
 
 /// Goes through the records of every project but `except`: forgets those whose server is gone and,
 /// given a stop budget, stops the servers whose Archforge is gone, as recovery does, then forgets
-/// them. Returns how many it stopped.
+/// them, and settles the records that name no process, which it leaves alone without a budget.
+/// Returns how many it stopped.
 fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Duration>) -> usize {
     let all = match record::all(records) {
         Ok(a) => a,
@@ -304,9 +307,14 @@ fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Du
             return 0;
         }
     };
-    let mut stopped = 0;
+    let mut stopped: usize = 0;
     for (file, r) in all.into_iter().filter(|(_, r)| except != Some(r.data_dir.as_str())) {
-        let Some(server) = r.server_pid else { continue };
+        let Some(server) = r.server_pid else {
+            if let Some(budget) = stop {
+                stopped = stopped.saturating_add(sweep_pending(records, &file, &r, budget, uid));
+            }
+            continue;
+        };
         match (classify(server, Some(&r)), stop) {
             (Ok(Proc::Gone | Proc::Other | Proc::OtherDoltServer), _) => forget(&file, &r, uid),
             (Ok(Proc::OursOwnerDead), Some(budget)) => {
@@ -314,7 +322,7 @@ fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Du
                 match stop_foreign(server, &r.command, budget) {
                     Ok(()) => {
                         forget(&file, &r, uid);
-                        stopped += 1;
+                        stopped = stopped.saturating_add(1);
                     }
                     Err(e) => log::warn!("the database server {server} left running for {} stays: {e}", r.data_dir),
                 }
@@ -322,6 +330,31 @@ fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Du
             (Ok(_), _) => {}
             (Err(e), _) => log::warn!("the server record {} stays: {e}", file.display()),
         }
+    }
+    stopped
+}
+
+/// Settles, for the start-up sweep, the record `r` in `file`, which names no process, as the
+/// opening of its project would, but taking its lock without a wait: the application holds its
+/// job lock for the whole sweep, so a lock held is a start under way elsewhere (in another
+/// Archforge, or the child of a start between its fork and its exec) or another change of that
+/// record, which the next start-up or opening settles. That record, one whose server's Archforge
+/// still runs and one completed meanwhile are left alone; a failure is logged and leaves the
+/// record. A record under a name not its project's is a stray copy: settled, it would be checked
+/// under another lock than its start's, and a live start's run folder could go with it. It goes
+/// alone, and nothing is signalled. Returns how many servers it stopped.
+fn sweep_pending(records: &Path, file: &Path, r: &Record, budget: Duration, uid: Option<u32>) -> usize {
+    if *file != record::path(records, &r.data_dir) {
+        log::warn!("the server record {} is filed under a name not its project's; only it goes", file.display());
+        record::remove_while(file, |found| found == r);
+        return 0;
+    }
+    #[cfg(test)]
+    tests::before_settle(file);
+    let mut stopped = 0;
+    match settle_pending(file, &r.data_dir, r, Duration::ZERO, budget, uid, &mut stopped) {
+        Ok(_) | Err(Error::OpenElsewhere { .. }) => {}
+        Err(e) => log::warn!("the server record {} stays: {e}", file.display()),
     }
     stopped
 }
@@ -342,7 +375,7 @@ fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u
     let file = record::path(&opts.records, data_text);
     let mut record = record::read(&opts.records, data_text)?;
     if let Some(seen) = record.clone().filter(|r| r.server_pid.is_none()) {
-        record = settle_pending(&file, data_text, &seen, opts, uid)?;
+        record = settle_pending(&file, data_text, &seen, record::LOCK_WAIT, opts.stop_budget, uid, &mut 0)?;
     }
     let lock = recovery::read_lock(data_dir)?;
     let holder = match lock {
@@ -383,13 +416,24 @@ fn recover(data_dir: &Path, data_text: &str, opts: &ServerOptions, uid: Option<u
 /// makes the line that start's alone; each process listed is proven again before anything is done
 /// about it. One whose Archforge still runs refuses the project, naming the server, and nothing
 /// goes; one whose Archforge is gone is stopped, its configuration removed first (a removal that
-/// fails fails the opening, and nothing more goes): where a child
+/// fails fails the settling, and nothing more goes): where a child
 /// cut between its fork and its exec does not keep the lock (a lock a file system emulates per
 /// process), it then finds no configuration once it runs dolt, and a dolt started without its
 /// configuration exits at once (measured with dolt 2.7.3). Only then do the run folder and the
-/// record go. Returns the record there now, if it is a complete one.
-fn settle_pending(file: &Path, data_text: &str, seen: &Record, opts: &ServerOptions, uid: Option<u32>) -> Result<Option<Record>, Error> {
-    let held = match record::hold(file, record::LOCK_WAIT) {
+/// record go. Returns the record there now, if it is a complete one, and counts in `stopped` each
+/// server it stopped, a later step failing or not. It waits at most `wait` to take the lock (its
+/// removals afterwards wait as every change does), and `budget` for a server to stop after each
+/// signal.
+fn settle_pending(
+    file: &Path,
+    data_text: &str,
+    seen: &Record,
+    wait: Duration,
+    budget: Duration,
+    uid: Option<u32>,
+    stopped: &mut usize,
+) -> Result<Option<Record>, Error> {
+    let held = match record::hold(file, wait) {
         Ok(held) => held,
         Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::TimedOut => return Err(Error::OpenElsewhere { pid: seen.owner_pid }),
         Err(e) => return Err(e),
@@ -409,7 +453,7 @@ fn settle_pending(file: &Path, data_text: &str, seen: &Record, opts: &ServerOpti
         return Ok(None);
     }
     // A link under that name goes itself, never what it points to. A configuration that stays
-    // could still start a server nothing lists yet: the opening fails, and the record stays.
+    // could still start a server nothing lists yet: the settling fails, and the record stays.
     if !owner
         && let Err(e) = std::fs::remove_file(&yaml)
         && e.kind() != std::io::ErrorKind::NotFound
@@ -430,7 +474,8 @@ fn settle_pending(file: &Path, data_text: &str, seen: &Record, opts: &ServerOpti
             return Err(Error::OpenElsewhere { pid });
         }
         log::info!("stopping the database server {pid} that a start a closed Archforge did not finish left running for {data_text}");
-        stop_foreign(pid, &r.command, opts.stop_budget)?;
+        stop_foreign(pid, &r.command, budget)?;
+        *stopped = stopped.saturating_add(1);
     }
     forget(file, &r, uid);
     Ok(None)
@@ -737,6 +782,16 @@ mod tests {
         /// A process a test adds to the next list of processes, as one a list may propose that is
         /// not, or no longer, the server looked for.
         static DECOY: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+        /// What a test does when the start-up sweep next comes to settle a record, before it
+        /// takes the record's lock: once, with the record's file.
+        static BEFORE_SETTLE: std::cell::RefCell<Option<Box<dyn FnOnce(&Path)>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// Runs the hook a test set for the sweep's next settling, once, with the record's `file`.
+    pub(super) fn before_settle(file: &Path) {
+        if let Some(hook) = BEFORE_SETTLE.take() {
+            hook(file);
+        }
     }
 
     /// The list `pids`, with the process a test added to it.
@@ -1062,16 +1117,18 @@ mod tests {
     }
 
     /// While its start is under way, which holds the record's lock, a record without a process id
-    /// refuses the project, naming that Archforge. The start-up sweep leaves it alone.
+    /// refuses the project, naming that Archforge. The start-up sweep leaves it alone, without a
+    /// wait for the lock: a holder that let go once waited for would have it settled.
     #[test]
     fn a_start_under_way_refuses_its_project() {
         let dir = crate::home::tests::Scratch::new("under-way");
         let (opts, data, r) = left(&dir.0, &["dolt"], true).unwrap();
         let held = record::hold(&record::path(&opts.records, &r.data_dir), record::LOCK_WAIT).unwrap();
         let refused = recover_only(&data, &opts);
-        drop(held);
         assert!(matches!(refused, Err(Error::OpenElsewhere { pid }) if pid == std::process::id()), "{refused:?}");
+        record::tests::WAITING.with(|h| *h.borrow_mut() = Some(Box::new(move || drop(held))));
         assert_eq!(stop_orphans(&opts).unwrap(), 0);
+        assert!(record::tests::WAITING.with(|h| h.borrow_mut().take()).is_some(), "the sweep did not wait for the lock");
         assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
         assert!(Path::new(&r.run_dir).join("server.yaml").exists());
     }
@@ -1204,6 +1261,123 @@ mod tests {
             assert!(mine.join("server.yaml").exists() && Path::new(&r.run_dir).join("server.yaml").exists());
             assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), None);
         }
+    }
+
+    /// The start-up sweep settles a record without a process id as an opening does, and the opening
+    /// of another project leaves it alone. With its Archforge gone, a server found by the exact
+    /// command line recorded is stopped politely, after its configuration was removed, and
+    /// counted; a process whose line differs in one character, or that the list proposed and is
+    /// not the server, gets no signal; then the record and the run folder go. With its Archforge
+    /// running, a server found leaves everything as it was.
+    #[cfg(unix)]
+    #[test]
+    fn the_start_up_sweep_settles_a_record_without_a_process_id() {
+        use std::os::unix::process::ExitStatusExt;
+        let unique = format!("é ü {}", crate::secret::random_name(12).unwrap());
+        let mut decoy = stand_in(&["/bin/sh", "-c", "read x", "decoy"].map(String::from));
+        // Its Archforge runs; a server runs, on a line one character off; its signal; the count.
+        for (alive, runs, other, signal, count) in
+            [(false, true, false, Some(15), 1), (false, true, true, None, 0), (true, true, false, None, 0), (false, false, false, None, 0)]
+        {
+            let dir = crate::home::tests::Scratch::new("sweep-pending");
+            let (opts, _, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &unique], alive).unwrap();
+            let kept = || (record::read(&opts.records, &r.data_dir).unwrap(), Path::new(&r.run_dir).join("server.yaml").exists());
+            std::fs::create_dir(dir.0.join("other")).unwrap();
+            recover_only(&dir.0.join("other"), &opts).unwrap();
+            assert_eq!(kept(), (Some(r.clone()), true), "the opening of another project leaves it alone");
+            let line: Vec<String> = r.command.iter().map(|a| if other && *a == unique { a.replace('ü', "u") } else { a.clone() }).collect();
+            let mut server = runs.then(|| stand_in(&line));
+            CONFIG_AT_LIST.set(None);
+            DECOY.set(Some(decoy.id()));
+            let stopped = stop_orphans(&opts);
+            // Its input closes here, so it ends by itself unless a signal ended it before.
+            if let Some(s) = server.as_mut() {
+                drop(s.stdin.take());
+                assert_eq!(s.wait().unwrap().signal(), signal, "{line:?}");
+            }
+            assert_eq!(stopped.unwrap(), count, "{line:?}");
+            let settled = if alive { ((Some(r.clone()), true), true, Some(true)) } else { ((None, false), false, Some(false)) };
+            assert_eq!((kept(), Path::new(&r.run_dir).exists(), CONFIG_AT_LIST.get()), settled, "{line:?}");
+        }
+        drop(decoy.stdin.take());
+        assert_eq!(decoy.wait().unwrap().signal(), None, "the decoy got no signal");
+    }
+
+    /// A copy of a record without a process id under a name not its project's goes, and nothing
+    /// else does: its project's own record, whose lock a start holds (the test here, as a child
+    /// between its fork and its exec does), stays with its run folder and configuration, and the
+    /// server the copy names gets no signal.
+    #[cfg(unix)]
+    #[test]
+    fn the_sweep_removes_a_stray_copy_of_a_record_alone() {
+        use std::os::unix::process::ExitStatusExt;
+        let dir = crate::home::tests::Scratch::new("stray");
+        let (opts, _, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())], false).unwrap();
+        let mut server = stand_in(&r.command);
+        let (own, copy) = (record::path(&opts.records, &r.data_dir), opts.records.join("0000000000000000.json"));
+        std::fs::copy(&own, &copy).unwrap();
+        let held = record::hold(&own, record::LOCK_WAIT).unwrap();
+        let stopped = stop_orphans(&opts);
+        drop(held);
+        drop(server.stdin.take());
+        assert_eq!(server.wait().unwrap().signal(), None, "nothing was signalled");
+        assert_eq!((stopped.unwrap(), copy.exists()), (0, false));
+        assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
+        assert!(Path::new(&r.run_dir).join("server.yaml").exists());
+    }
+
+    /// A record the sweep cannot settle, its configuration not removable (its run folder may not be
+    /// written), stays with that configuration, and the sweep goes on with the next record, which
+    /// it settles.
+    #[cfg(unix)]
+    #[test]
+    fn the_sweep_goes_on_past_a_record_it_cannot_settle() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::home::tests::Scratch::new("sweep-on");
+        let (opts, _, a) = left(&dir.0.join("a"), &["nothing runs this"], false).unwrap();
+        let (b_opts, _, b) = left(&dir.0.join("b"), &["nothing runs this"], false).unwrap();
+        std::fs::rename(record::path(&b_opts.records, &b.data_dir), record::path(&opts.records, &b.data_dir)).unwrap();
+        // The one the sweep comes to first, in the order the folder lists them, is stuck.
+        let first = record::all(&opts.records).unwrap().first().map(|(_, r)| r.clone());
+        let (stuck, next) = if first.as_ref() == Some(&a) { (a, b) } else { (b, a) };
+        let run = Path::new(&stuck.run_dir);
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o500)).unwrap();
+        // A user who may write anyway (root) removes it: the case cannot be made then.
+        let writable = std::fs::File::create(run.join("probe")).is_ok();
+        let settled_first = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = settled_first.clone();
+        BEFORE_SETTLE.set(Some(Box::new(move |file: &Path| seen.set(Some(file.to_path_buf())))));
+        let stopped = stop_orphans(&opts);
+        std::fs::set_permissions(run, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(settled_first.take(), Some(record::path(&opts.records, &stuck.data_dir)), "the stuck record was settled first");
+        assert_eq!(stopped.unwrap(), 0);
+        if !writable {
+            assert_eq!(record::read(&opts.records, &stuck.data_dir).unwrap(), Some(stuck.clone()));
+            assert!(run.join("server.yaml").is_file());
+        }
+        assert_eq!((record::read(&opts.records, &next.data_dir).unwrap(), Path::new(&next.run_dir).exists()), (None, false));
+    }
+
+    /// A record completed between the sweep's read and its settling (its start went on meanwhile)
+    /// is left as it is, and its server gets no signal.
+    #[cfg(unix)]
+    #[test]
+    fn the_sweep_leaves_a_record_completed_meanwhile() {
+        use std::os::unix::process::ExitStatusExt;
+        let dir = crate::home::tests::Scratch::new("completed");
+        let (opts, _, r) = left(&dir.0, &["/bin/sh", "-c", "read x", &format!("é ü {}", crate::secret::random_name(12).unwrap())], false).unwrap();
+        let mut server = stand_in(&r.command);
+        let done = Record { server_pid: Some(server.id()), ..r.clone() };
+        let (file, bytes) = (record::path(&opts.records, &r.data_dir), serde_json::to_vec(&done).unwrap());
+        BEFORE_SETTLE.set(Some(Box::new(move |_: &Path| {
+            let _ = std::fs::write(file, bytes);
+        })));
+        let stopped = stop_orphans(&opts);
+        drop(server.stdin.take());
+        assert_eq!(server.wait().unwrap().signal(), None, "nothing was signalled");
+        assert_eq!(stopped.unwrap(), 0);
+        assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(done));
+        assert!(Path::new(&r.run_dir).join("server.yaml").exists());
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
