@@ -152,6 +152,16 @@ str		On this sequence · {n}	このシーケンスに · {n}
 str		from {start} by {increment}	{start} から {increment} ずつ
 str		cycles	循環
 str		owned by {column}	{column} が所有
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} は別のスキーマの列です。シーケンスの所有者はそのスキーマの列です。
+str		The column {column} belongs to no table.	列 {column} はどのテーブルにも属していません。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} には型がありません。シーケンスの所有者は整数型の列です。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} の型は {type} です。シーケンスの所有者は整数型の列です。
+str		The increment can't be 0. A sequence moves by at least 1.	増分を 0 にはできません。シーケンスは少なくとも 1 ずつ進みます。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大値 {maximum} が最小値 {minimum} より大きくありません。
+str		The start {start} is below the minimum {minimum}.	開始値 {start} が最小値 {minimum} を下回っています。
+str		The start {start} is above the maximum {maximum}.	開始値 {start} が最大値 {maximum} を上回っています。
 str	sequence	Start	開始値
 str		Increment	増分
 str		Minimum	最小値

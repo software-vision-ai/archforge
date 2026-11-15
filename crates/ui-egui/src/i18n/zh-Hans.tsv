@@ -152,6 +152,16 @@ str		On this sequence · {n}	此序列上 · {n}
 str		from {start} by {increment}	从 {start} 起，步长 {increment}
 str		cycles	循环
 str		owned by {column}	属于 {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} 是另一个架构的列。序列的所属列须是其所在架构的列。
+str		The column {column} belongs to no table.	列 {column} 不属于任何表。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} 没有类型。序列的所属列须为整数类型。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} 的类型为 {type}。序列的所属列须为整数类型。
+str		The increment can't be 0. A sequence moves by at least 1.	增量不能为 0。序列每次至少前进 1。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大值 {maximum} 不大于最小值 {minimum}。
+str		The start {start} is below the minimum {minimum}.	起始值 {start} 低于最小值 {minimum}。
+str		The start {start} is above the maximum {maximum}.	起始值 {start} 高于最大值 {maximum}。
 str	sequence	Start	起始值
 str		Increment	增量
 str		Minimum	最小值

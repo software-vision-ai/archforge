@@ -69,7 +69,8 @@ pub trait SkillHost: View<Store> {
 // Rules.
 
 /// What is wrong with a name or a text: the end of the English sentence "the name ...", which
-/// it displays as, and the same as a typed reason, for an interface to say in its own words.
+/// it displays as, or, for another rule's problem, a whole sentence; and the same as a typed reason,
+/// for an interface to say in its own words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
     /// The problem typed.
@@ -78,7 +79,8 @@ pub struct Problem {
 }
 
 impl Problem {
-    /// The problem `reason`, said in English as `words`, the end of a sentence "the name ...".
+    /// The problem `reason`, said in English as `words`, the end of a sentence "the name ..." or a
+    /// whole sentence.
     pub fn new(reason: Reason, words: impl Into<String>) -> Problem {
         Problem { reason, words: words.into() }
     }

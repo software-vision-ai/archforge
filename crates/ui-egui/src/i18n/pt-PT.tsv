@@ -152,6 +152,16 @@ str		On this sequence · {n}	Nesta sequência · {n}
 str		from {start} by {increment}	a partir de {start}, passo {increment}
 str		cycles	cíclica
 str		owned by {column}	pertence a {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} é uma coluna de outro esquema. Uma sequência pertence a uma coluna do seu esquema.
+str		The column {column} belongs to no table.	A coluna {column} não pertence a nenhuma tabela.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} não tem tipo. Uma sequência pertence a uma coluna de tipo inteiro.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} é do tipo {type}. Uma sequência pertence a uma coluna de tipo inteiro.
+str		The increment can't be 0. A sequence moves by at least 1.	O incremento não pode ser 0. Uma sequência avança pelo menos 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	O mínimo «{value}» não é um número inteiro entre {min} e {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	O máximo «{value}» não é um número inteiro entre {min} e {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	O máximo {maximum} não é maior do que o mínimo {minimum}.
+str		The start {start} is below the minimum {minimum}.	O valor inicial {start} está abaixo do mínimo {minimum}.
+str		The start {start} is above the maximum {maximum}.	O valor inicial {start} está acima do máximo {maximum}.
 str	sequence	Start	Valor inicial
 str		Increment	Incremento
 str		Minimum	Mínimo

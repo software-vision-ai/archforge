@@ -353,73 +353,86 @@ pub fn bound_of(text: &str) -> Result<Option<i64>, String> {
     })
 }
 
-/// Why a sequence's numbers break the rules: the parameter it concerns and a sentence; none when
-/// they keep them.
-pub fn sequence_problem(n: &SequenceNumbers) -> Option<(&'static str, String)> {
+/// Why a sequence's numbers break the rules: the parameter it concerns and the problem, which
+/// displays as a sentence after the parameter and is typed by the rule it breaks
+/// ([`Reason::Sequence`]); none when they keep them.
+pub fn sequence_problem(n: &SequenceNumbers) -> Option<(&'static str, Problem)> {
+    use archforge_engine::SequenceRule;
+    let broken = |key, rule, said: String| Some((key, Problem::new(Reason::Sequence(rule), said)));
     if n.increment == 0 {
-        return Some(("increment", "is 0; a sequence moves by at least 1".into()));
+        return broken("increment", SequenceRule::IncrementZero, "is 0; a sequence moves by at least 1".into());
     }
     let minimum = match bound_of(&n.minimum) {
         Ok(m) => m,
-        Err(why) => return Some(("minimum", why)),
+        Err(why) => return broken("minimum", SequenceRule::MinimumUnread { value: n.minimum.chars().take(40).collect() }, why),
     };
     let maximum = match bound_of(&n.maximum) {
         Ok(m) => m,
-        Err(why) => return Some(("maximum", why)),
+        Err(why) => return broken("maximum", SequenceRule::MaximumUnread { value: n.maximum.chars().take(40).collect() }, why),
     };
     if let (Some(lo), Some(hi)) = (minimum, maximum)
         && lo >= hi
     {
-        return Some(("maximum", format!("{hi} is not greater than the minimum {lo}")));
+        return broken("maximum", SequenceRule::MaximumNotAbove { maximum: hi, minimum: lo }, format!("{hi} is not greater than the minimum {lo}"));
     }
     if let Some(lo) = minimum
         && n.start < lo
     {
-        return Some(("start", format!("{} is below the minimum {lo}", n.start)));
+        return broken("start", SequenceRule::StartBelow { start: n.start, minimum: lo }, format!("{} is below the minimum {lo}", n.start));
     }
     if let Some(hi) = maximum
         && n.start > hi
     {
-        return Some(("start", format!("{} is above the maximum {hi}", n.start)));
+        return broken("start", SequenceRule::StartAbove { start: n.start, maximum: hi }, format!("{} is above the maximum {hi}", n.start));
     }
     None
 }
 
 /// Why `column` cannot own a sequence of schema `s`: it is no table's column, or a table's of
 /// another schema. Setting an owner also wants a whole-number column (`owner_type_problem`); a
-/// column retyped later keeps its sequence.
-pub fn owned_by_problem(store: &Store, s: Obj, column: Obj) -> Option<String> {
+/// column retyped later keeps its sequence. The problem displays as a sentence and is typed with
+/// the column's [`label`]: as no column ([`Reason::NotA`]), [`Reason::ColumnOfOtherSchema`] or
+/// [`Reason::InNoTable`].
+pub fn owned_by_problem(store: &Store, s: Obj, column: Obj) -> Option<Problem> {
+    let name = label(store, column);
     if store.class_of(column).ok() != Some(ATTRIBUTE) {
-        return Some(format!("{} is not a column", label(store, column)));
+        return Some(Problem::new(Reason::NotA { kind: "column", name: name.clone() }, format!("{name} is not a column")));
     }
     match entity_of(store, column) {
         Some(e) if schema_of(store, e) == Some(s) => None,
-        Some(e) => Some(format!("{}.{} is a column of another schema", name_of(store, e), name_of(store, column))),
-        None => Some(format!("{} belongs to no table", label(store, column))),
+        Some(e) => Some(Problem::new(
+            Reason::ColumnOfOtherSchema { column: format!("{}.{name}", label(store, e)).into() },
+            format!("{}.{} is a column of another schema", name_of(store, e), name_of(store, column)),
+        )),
+        None => Some(Problem::new(Reason::InNoTable { column: name.as_str().into() }, format!("{name} belongs to no table"))),
     }
 }
 
-/// Why `column` cannot be made the owner of a sequence: it is not of a whole-number type.
-pub fn owner_type_problem(store: &Store, column: Obj) -> Option<String> {
+/// Why `column` cannot be made the owner of a sequence: it is not of a whole-number type; the
+/// problem displays as a sentence and is typed with the column's [`label`] and its type, cut short
+/// ([`Reason::NotIntegerType`]).
+pub fn owner_type_problem(store: &Store, column: Obj) -> Option<Problem> {
     let kind = type_of(store, column);
     if is_integer_type(&kind) {
         None
     } else {
-        let shown: String = kind.chars().take(40).collect();
-        Some(format!("{} is {:?}, not a whole-number type", label(store, column), shown))
+        let (name, shown): (String, String) = (label(store, column), kind.chars().take(40).collect());
+        let said = format!("{name} is {shown:?}, not a whole-number type");
+        Some(Problem::new(Reason::NotIntegerType { column: name.into(), ty: shown.into() }, said))
     }
 }
 
 /// Why a view's query is not acceptable: it is SQL text, not parsed, never empty, with no hidden
-/// direction or zero-width characters a DDL export would carry.
-pub fn query_problem(query: &str) -> Option<String> {
+/// direction or zero-width characters a DDL export would carry. The problem displays as a sentence
+/// and is typed as an empty text, a hidden character or the text rule's reason.
+pub fn query_problem(query: &str) -> Option<Problem> {
     if query.trim().is_empty() {
-        return Some("a view needs its query".into());
+        return Some(Problem::new(Reason::TextEmpty, "a view needs its query"));
     }
     if query.chars().any(|c| matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}')) {
-        return Some("the query holds a hidden direction or zero-width character".into());
+        return Some(Problem::new(Reason::ControlCharacter, "the query holds a hidden direction or zero-width character"));
     }
-    text_problem(query, MAX_QUERY).map(|p| format!("the query {p}"))
+    text_problem(query, MAX_QUERY).map(|p| Problem::new(p.reason.clone(), format!("the query {p}")))
 }
 
 /// The columns that take a domain or an enum type.

@@ -151,6 +151,16 @@ str		On this sequence · {n}	On this sequence · {n}
 str		from {start} by {increment}	from {start} by {increment}
 str		cycles	cycles
 str		owned by {column}	owned by {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} is a column of another schema. A sequence's owner is a column of its schema.
+str		The column {column} belongs to no table.	The column {column} belongs to no table.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} has no type. A sequence's owner has a whole-number type.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} is of type {type}. A sequence's owner has a whole-number type.
+str		The increment can't be 0. A sequence moves by at least 1.	The increment can't be 0. A sequence moves by at least 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	The minimum "{value}" is not a whole number between {min} and {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	The maximum "{value}" is not a whole number between {min} and {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	The maximum {maximum} is not greater than the minimum {minimum}.
+str		The start {start} is below the minimum {minimum}.	The start {start} is below the minimum {minimum}.
+str		The start {start} is above the maximum {maximum}.	The start {start} is above the maximum {maximum}.
 str	sequence	Start	Start
 str		Increment	Increment
 str		Minimum	Minimum

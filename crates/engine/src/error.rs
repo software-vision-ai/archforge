@@ -378,6 +378,14 @@ pub enum Reason {
     /// What of `kind` is built on each other (keys, as `"key"`) runs deeper than `max` levels, or
     /// in a loop.
     TooDeep { kind: &'static str, max: u32 },
+    /// A sequence's numbers do not fit each other, by the rule they break.
+    Sequence(SequenceRule),
+    /// The column `column`, as `table.column`, is of another schema than the sequence it would own.
+    ColumnOfOtherSchema { column: Box<str> },
+    /// The column `column` belongs to no table.
+    InNoTable { column: Box<str> },
+    /// The column `column` is of the type `ty`, empty for none, which is no whole-number type.
+    NotIntegerType { column: Box<str>, ty: Box<str> },
     /// A column's generation does not fit it, by the rule it breaks.
     Generation(GenerationRule),
     /// A key or identity column is asked to be nullable, which it never is.
@@ -392,6 +400,23 @@ pub enum Reason {
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.
     PastLastColumn { columns: usize },
+}
+
+/// The rule a sequence's numbers break, in a [`Reason::Sequence`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SequenceRule {
+    /// The increment is 0, where a sequence moves by at least 1.
+    IncrementZero,
+    /// The minimum, as given and cut short, is no whole number of 64 bits.
+    MinimumUnread { value: Box<str> },
+    /// The maximum, as given and cut short, is no whole number of 64 bits.
+    MaximumUnread { value: Box<str> },
+    /// The maximum is not greater than the minimum.
+    MaximumNotAbove { maximum: i64, minimum: i64 },
+    /// The start is below the minimum.
+    StartBelow { start: i64, minimum: i64 },
+    /// The start is above the maximum.
+    StartAbove { start: i64, maximum: i64 },
 }
 
 /// The rule a column's generation breaks, in a [`Reason::Generation`].
