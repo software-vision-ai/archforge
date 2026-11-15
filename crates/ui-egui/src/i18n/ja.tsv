@@ -1294,6 +1294,18 @@ str		This is no element of the model, so no stereotype applies to it.	これは�
 str		{name} belongs to a profile, which defines stereotypes and takes none.	{name} はプロファイルに属しています。プロファイルはステレオタイプを定義するもので、ステレオタイプは付けられません。
 str		{name} takes no stereotype. A stereotype extends {metaclasses}.	{name} にはステレオタイプを付けられません。ステレオタイプが拡張するのは {metaclasses} です。
 str		«{stereotype}» is applied to {name} already.	«{stereotype}» はすでに {name} に適用されています。
+str		«{stereotype}» is not applied to {name}.	«{stereotype}» は {name} に適用されていません。
+str		«{stereotype}» has no property {name}. It has {properties}.	«{stereotype}» にはプロパティ {name} がありません。あるのは {properties} です。
+str		«{stereotype}» has no property {name}. It has no properties yet.	«{stereotype}» にはプロパティ {name} がありません。プロパティはまだありません。
+str		{name} is not a stereotype.	{name} はステレオタイプではありません。
+str		{name} is not a class diagram.	{name} はクラス図ではありません。
+str		Give the values as a list of texts.	値はテキストのリストで指定してください。
+str		No element is given. Give its id.	要素が指定されていません。その ID を指定してください。
+str		No stereotype is given. Give its id.	ステレオタイプが指定されていません。その ID を指定してください。
+str		No class diagram is given. Give its id.	クラス図が指定されていません。その ID を指定してください。
+str		No property is given. Give its name or id.	プロパティが指定されていません。その名前か ID を指定してください。
+str		This element is gone.	この要素はもうありません。
+str		{name} is a template parameter of {template} and types only its members.	{name} は {template} のテンプレートパラメーターで、そのメンバーの型にだけ使えます。
 str		An element carries at most {max} stereotypes.	1 つの要素に付けられるステレオタイプは最大 {max} 個です。
 str		{value} is no value of {name}. {accepted}	{value} は {name} の値ではありません。{accepted}
 str		A whole number, such as 42 or -7.	42 や -7 のような整数です。
