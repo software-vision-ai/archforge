@@ -588,6 +588,15 @@ str		The foreign key {foreign_key} points at this key of {table}. Change or remo
 str		{table} has no primary key.	{table} 没有主键。
 str		The key {name} would break: {why}	键 {name} 将失效：{why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
+str		Only a computed column takes an expression.	只有计算列才能有表达式。
+str		A computed column needs an expression.	计算列需要表达式。
+str		A computed column takes no default.	计算列不能有默认值。
+str		An identity column needs an integer type.	标识列需要整数类型。
+str		An identity column may never be null.	标识列绝不允许为空。
+str		An identity column takes no default.	标识列不能有默认值。
+str		An identity column takes no expression.	标识列不能有表达式。
+str		A key or identity column may never be null.	键列或标识列绝不允许为空。
+str		The column {name} would break: {why}	列 {name} 将失效：{why}
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		The text can't be empty.	文本不能为空。

@@ -353,12 +353,35 @@ pub enum Reason {
     KeyInUse { foreign_key: Box<str>, table: Box<str> },
     /// The table `table` has no primary key.
     NoPrimaryKey { table: String },
-    /// The key `name`, of `kind` (as `"primary key"`), would break if the step went ahead; `why`
-    /// says how, boxed so the error stays small.
+    /// The key or column `name`, of `kind` (as `"primary key"` or `"column"`), would break if the
+    /// step went ahead; `why` says how, boxed so the error stays small.
     WouldBreak { kind: &'static str, name: Box<str>, why: Box<Reason> },
     /// What of `kind` is built on each other (keys, as `"key"`) runs deeper than `max` levels, or
     /// in a loop.
     TooDeep { kind: &'static str, max: u32 },
+    /// A column's generation does not fit it, by the rule it breaks.
+    Generation(GenerationRule),
+    /// A key or identity column is asked to be nullable, which it never is.
+    NotNullable,
+}
+
+/// The rule a column's generation breaks, in a [`Reason::Generation`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GenerationRule {
+    /// An expression is given to a column whose value is not computed.
+    ExpressionNeedsComputed,
+    /// A computed column has no expression.
+    ComputedNeedsExpression,
+    /// A computed column has a default.
+    ComputedTakesNoDefault,
+    /// An identity column's type is not an integer type.
+    IdentityNeedsInteger,
+    /// An identity column may be null.
+    IdentityNotNullable,
+    /// An identity column has a default.
+    IdentityTakesNoDefault,
+    /// An identity column has an expression.
+    IdentityTakesNoExpression,
 }
 
 /// What a [`Reason::NotOneOf`] names; boxed in the reason, so the error stays small.

@@ -587,6 +587,15 @@ str		The foreign key {foreign_key} points at this key of {table}. Change or remo
 str		{table} has no primary key.	{table} has no primary key.
 str		The key {name} would break: {why}	The key {name} would break: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
+str		Only a computed column takes an expression.	Only a computed column takes an expression.
+str		A computed column needs an expression.	A computed column needs an expression.
+str		A computed column takes no default.	A computed column takes no default.
+str		An identity column needs an integer type.	An identity column needs an integer type.
+str		An identity column may never be null.	An identity column may never be null.
+str		An identity column takes no default.	An identity column takes no default.
+str		An identity column takes no expression.	An identity column takes no expression.
+str		A key or identity column may never be null.	A key or identity column may never be null.
+str		The column {name} would break: {why}	The column {name} would break: {why}
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		The text can't be empty.	The text can't be empty.

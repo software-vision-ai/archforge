@@ -4,9 +4,10 @@
 //! words is said under the choice's label. A key's columns (AR-492): none, a column of another
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
 //! Found inside a step (AR-493): a key that would break, with why in the same words, and keys built
-//! on each other too deep.
+//! on each other too deep. A column's generation (AR-494): the rule it breaks, also for a column on
+//! a domain that would break, and a key or identity column asked to be nullable.
 
-use archforge_engine::{NotOneOf, Reason, WordPlace};
+use archforge_engine::{GenerationRule, NotOneOf, Reason, WordPlace};
 
 use crate::i18n::{fmt, tr};
 
@@ -56,9 +57,27 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::TooDeep { kind: "key", max } => {
             fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
         }
+        Reason::WouldBreak { kind: "column", name, why } => {
+            fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+        }
+        Reason::Generation(rule) => generation_said(*rule),
+        Reason::NotNullable => tr("A key or identity column may never be null."),
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })
+}
+
+/// The rule a column's generation breaks, in the user's words (AR-494).
+fn generation_said(rule: GenerationRule) -> String {
+    match rule {
+        GenerationRule::ExpressionNeedsComputed => tr("Only a computed column takes an expression."),
+        GenerationRule::ComputedNeedsExpression => tr("A computed column needs an expression."),
+        GenerationRule::ComputedTakesNoDefault => tr("A computed column takes no default."),
+        GenerationRule::IdentityNeedsInteger => tr("An identity column needs an integer type."),
+        GenerationRule::IdentityNotNullable => tr("An identity column may never be null."),
+        GenerationRule::IdentityTakesNoDefault => tr("An identity column takes no default."),
+        GenerationRule::IdentityTakesNoExpression => tr("An identity column takes no expression."),
+    }
 }
 
 /// A word that is none of an ER choice's words, under the label the interface shows the choice by,
