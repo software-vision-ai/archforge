@@ -297,7 +297,10 @@ impl NotationUi for ErUi {
                 }
                 for c in r::checks_of(store, o) {
                     if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
-                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &p)]) });
+                        out.push(Problem {
+                            element: o,
+                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &p.said())]),
+                        });
                     }
                 }
                 for ix in r::indexes_of(store, o) {

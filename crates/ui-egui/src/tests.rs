@@ -6840,6 +6840,36 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
     crate::i18n::set_language("en");
 }
 
+/// A check's expression and a domain's checks refused are said in the chosen language: no
+/// expression in a constraint's words, too many checks, one named twice, an item of another shape,
+/// and an item's key the list does not take, also one without a name. In light and dark (AR-499).
+#[test]
+fn an_er_checks_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let takes = &["expression", "name"];
+        for (reason, said) in [
+            (Reason::NoExpression, "Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest."),
+            (Reason::TooMany { kind: "check", max: 32 }, "Geben Sie höchstens 32 Prüfbedingungen an."),
+            (
+                Reason::NamedTwice { kind: "check", name: "pos".into() },
+                "Zwei Prüfbedingungen heißen pos. Geben Sie jeder Prüfbedingung einen eigenen Namen.",
+            ),
+            (Reason::ItemsExpected { kind: "check" }, "Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen."),
+            (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
+            (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "index column" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

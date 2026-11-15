@@ -1559,6 +1559,11 @@ str		A property redefines at most {max} properties.	Une propriété redéfinit a
 str		Give the properties as a list of ids.	Indiquez les propriétés sous forme de liste d’identifiants.
 str		An item in the list has no id. Give each property's id.	Un élément de la liste n’a pas d’identifiant. Indiquez l’identifiant de chaque propriété.
 str		{key} is not a key here. An item holds an id and a name.	{key} n’est pas une clé ici. Une entrée contient un identifiant et un nom.
+str		Give at most {max} checks.	Indiquez au plus {max} contrôles.
+str		Two checks are named {name}. Give each check its own name.	Deux contrôles s’appellent {name}. Donnez à chaque contrôle son propre nom.
+str		Give each check as text, or as an object with an expression and a name.	Indiquez chaque contrôle sous forme de texte ou d’objet avec une expression et un nom.
+str		An item takes no {key}. It takes {takes}.	Une entrée n’accepte pas {key}. Elle accepte {takes}.
+str		An item holds a key without a name. It takes {takes}.	Une entrée contient une clé sans nom. Elle accepte {takes}.
 str		There is no element with the id {id}.	Il n’existe aucun élément ayant l’identifiant {id}.
 str		A default value is at most {n} characters.	Une valeur par défaut compte au plus {n} caractères.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} n’est pas un nombre entier, ce qu’est la valeur par défaut d’un Integer, comme 42.

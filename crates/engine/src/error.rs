@@ -217,6 +217,9 @@ pub enum Reason {
     InNoProfile,
     /// A list that takes names of `kind`, each as text, is no list or holds something else.
     NamesExpected { kind: &'static str },
+    /// A list that takes items of `kind`, each as text or as an object of its keys, holds something
+    /// else, or an object whose key holds a value of another type.
+    ItemsExpected { kind: &'static str },
     /// The element is a stereotype application, which takes no stereotype itself.
     IsApplication,
     /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
@@ -283,6 +286,9 @@ pub enum Reason {
     IdsExpected { kind: &'static str },
     /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
     NotAnItemKey { key: String },
+    /// An item of a list, given as an object, holds `key`, cut to its first characters, where it
+    /// takes only the keys `takes`.
+    UnknownKey { key: String, takes: &'static [&'static str] },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },
     /// The built-in type `name` is never made leaf.

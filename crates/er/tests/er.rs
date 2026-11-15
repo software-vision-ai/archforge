@@ -1931,6 +1931,99 @@ fn checks_and_indexes_are_named_constraints_of_a_table_and_go_with_their_columns
     all_rules_hold(s.doc());
 }
 
+/// A check's expression refused, of a table's check and of a domain's, and a domain's list of
+/// checks refused, carry their reason typed beside the English, which stays as it was: no
+/// expression, a text rule broken, too many checks, an item's key the list does not take, an item
+/// or an item's value of another shape, and a name twice (AR-499).
+#[test]
+fn a_checks_expression_and_a_domains_checks_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let check = run(&mut s, "er.check.add", json!({ "entity": sm.order, "expression": "total >= 0" }));
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "label", "base_type": "TEXT" }));
+    let domain = |checks: Json| json!({ "schema": sm.schema, "name": "d", "base_type": "TEXT", "checks": checks });
+    let long = "x".repeat(4097);
+    let (items, takes) = (Reason::ItemsExpected { kind: "check" }, &["expression", "name"]);
+    let twice = json!([{ "expression": "a", "name": "Pos" }, { "expression": "b", "name": "pos" }]);
+    for (cmd, p, key, reason, message) in [
+        ("er.check.add", json!({ "entity": sm.order, "expression": "   " }), "expression", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.check.set",
+            json!({ "check": check, "expression": " a" }),
+            "expression",
+            Reason::EdgeSpace,
+            "the expression starts or ends with a space",
+        ),
+        (
+            "er.check.add",
+            json!({ "entity": sm.order, "expression": long }),
+            "expression",
+            Reason::TooLong { max: 4096 },
+            "the expression is longer than 4096 characters",
+        ),
+        ("er.domain.add", domain(json!([" "])), "checks", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": ["a\u{7}"] }),
+            "checks",
+            Reason::ControlCharacter,
+            "the expression holds a control character",
+        ),
+        ("er.domain.add", domain(json!(vec!["a"; 33])), "checks", Reason::TooMany { kind: "check", max: 32 }, "at most 32 checks"),
+        (
+            "er.domain.add",
+            domain(json!([{ "expresion": "1 = 1" }])),
+            "checks",
+            Reason::UnknownKey { key: "expresion".into(), takes },
+            r#"a check takes no "expresion"; it takes expression, name"#,
+        ),
+        ("er.domain.add", domain(json!([{ "expression": 1 }])), "checks", items.clone(), "expression is 1, not text"),
+        ("er.domain.add", domain(json!([{ "expression": "a", "name": true }])), "checks", items.clone(), "name is true, not text"),
+        ("er.domain.add", domain(json!([7])), "checks", items, "7 is not a check"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": twice }),
+            "checks",
+            Reason::NamedTwice { kind: "check", name: "pos".into() },
+            "two checks are named pos",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    let empty = domain(json!([{ "": "1 = 1" }]));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.domain.add", &empty) else { panic!("a key without a name is refused") };
+    assert_eq!(error.reason, Some(Reason::UnknownKey { key: String::new(), takes }));
+}
+
+/// A loaded document's check without an expression and domain check with a control character,
+/// which no command makes, are named in the project's check in the English it had (AR-499).
+#[test]
+fn a_loaded_checks_expression_problem_keeps_its_english() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let c = st.create(CHECK_CONSTRAINT).unwrap();
+    st.set(c, check_constraint::NAME, Value::str("ck")).unwrap();
+    st.set(c, check_constraint::EXPRESSION, Value::str(" ")).unwrap();
+    st.push(e, entity::CHECK_CONSTRAINT, Value::Ref(c)).unwrap();
+    let d = st.create(DOMAIN).unwrap();
+    st.set(d, named_element::NAME, Value::str("D")).unwrap();
+    st.set(d, domain::BASE_TYPE, Value::str("TEXT")).unwrap();
+    st.push(s, schema::DOMAIN, Value::Ref(d)).unwrap();
+    let dc = st.create(DOMAIN_CHECK).unwrap();
+    st.set(dc, domain_check::EXPRESSION, Value::str("a\u{7}")).unwrap();
+    st.push(d, domain::CHECK, Value::Ref(dc)).unwrap();
+    let found = problems(&st);
+    for said in ["the check ck: a check needs an expression", "the domain D: the expression holds a control character"] {
+        assert!(found.iter().any(|p| p == said), "{said} in {found:?}");
+    }
+}
+
 #[test]
 fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_collapse() {
     let mut s = session();
