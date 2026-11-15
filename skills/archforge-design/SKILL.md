@@ -290,6 +290,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   Home and End to the first and the last row; and a row, a row's button or the button under the list
   that Tab or Shift+Tab comes to is brought whole into view. A row past either edge is laid out, so
   Tab reaches it; only what shows is listed.
+- An element's change cards scroll under the keyboard as Properties does (AR-481): a related link
+  that Tab comes to is brought into view, and while one has the keyboard and no menu is open, Page
+  Up and Page Down scroll the cards by what shows less a row (at least a row), and Home and End to
+  their ends (`version_details::page_keys`).
 - A text field written in place (a name, a description, a role) keeps on Enter or when left, and
   Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
   sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
