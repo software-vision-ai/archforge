@@ -14,11 +14,14 @@ use crate::util;
 const DIR: &str = "skills";
 const README: &str = "skills/README.md";
 
+/// Checks that every skill folder is routed and every file, verb and skill the skills name is
+/// there. A listing of the skills folder that fails, part way too, is an error.
 pub fn run() -> Result<(), String> {
     let root = util::root();
     let mut folders = Vec::new();
     let entries = std::fs::read_dir(root.join(DIR)).map_err(|e| format!("{DIR}/: {e}"))?;
-    for e in entries.flatten() {
+    for e in entries {
+        let e = e.map_err(|e| format!("{DIR}/: the listing stopped part way: {e}"))?;
         if e.file_type().is_ok_and(|t| t.is_dir()) {
             folders.push(e.file_name().to_string_lossy().into_owned());
         }

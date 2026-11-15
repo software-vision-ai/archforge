@@ -75,8 +75,20 @@ fn is_font(path: &Path) -> bool {
 
 /// The font files under `dirs`, without loops (each directory and file once, by its canonical
 /// path), at most `MAX_DEPTH` deep, `MAX_FILES` many and `MAX_VISITED` entries looked at, none
-/// longer than `cap` by its length when listed; sorted.
+/// longer than `cap` by its length when listed; sorted. Each folder is listed by
+/// `std::fs::read_dir`, as [`listed_font_files`] walks it.
 fn font_files(dirs: &[PathBuf], cap: u64) -> Vec<PathBuf> {
+    listed_font_files(dirs, cap, |dir| std::fs::read_dir(dir).map(|entries| entries.map(|entry| entry.map(|e| e.path()))))
+}
+
+/// The font files under `dirs`, as [`font_files`] says, with each folder listed by `list`. Every
+/// entry listed counts against `MAX_VISITED`, a failed one too. A folder's listing that fails part
+/// way ends at the failure, which is logged: the entries listed before it are taken, those after it
+/// are not, and the walk goes on with the next folder.
+fn listed_font_files<I>(dirs: &[PathBuf], cap: u64, mut list: impl FnMut(&Path) -> std::io::Result<I>) -> Vec<PathBuf>
+where
+    I: Iterator<Item = std::io::Result<PathBuf>>,
+{
     let mut seen: BTreeSet<PathBuf> = BTreeSet::new();
     let mut files: Vec<PathBuf> = Vec::new();
     let mut visited = 0usize;
@@ -87,14 +99,21 @@ fn font_files(dirs: &[PathBuf], cap: u64) -> Vec<PathBuf> {
         if !seen.insert(dir.clone()) {
             continue;
         }
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for entry in entries.flatten() {
+        let Ok(entries) = list(&dir) else { continue };
+        for entry in entries {
             visited += 1;
             if files.len() >= MAX_FILES || visited > MAX_VISITED {
                 limited = Some(if files.len() >= MAX_FILES { "font files" } else { "directory entries" });
                 break 'walk;
             }
-            let path = entry.path();
+            // The standard library does not promise that a listing ends after an error.
+            let path = match entry {
+                Ok(path) => path,
+                Err(e) => {
+                    log::warn!("the fonts in {} were not all listed, so the scan leaves out the rest: {e}", dir.display());
+                    break;
+                }
+            };
             // Followed through a link: a loop is caught by the seen set.
             let Ok(meta) = std::fs::metadata(&path) else { continue };
             if meta.is_dir() {
@@ -254,6 +273,35 @@ mod tests {
         assert!(fonts.read(hack, 100).unwrap_err().contains("longer than 100 bytes"));
         // A file past the face limit is not scanned at all.
         assert!(fonts.scan(1000).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A folder's listing that fails part way ends at the failure, though a listing could go on
+    /// after it: the font listed before it is taken, the one after it is not, and the folder listed
+    /// before it is still walked.
+    #[test]
+    fn a_listing_that_fails_part_way_ends_at_the_failure() {
+        let dir = fixture().canonicalize().unwrap();
+        let (hack, truncated, nested) = (dir.join("Hack-Regular.ttf"), dir.join("truncated.ttf"), dir.join("nested"));
+        // The top folder lists the nested folder and one font, then fails if `failing`, then lists
+        // another font; the nested folder is listed as it is.
+        let list = |failing: bool| {
+            let (top, before, after) = (dir.clone(), [nested.clone(), hack.clone()], truncated.clone());
+            move |d: &Path| -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<PathBuf>>>> {
+                if d != top {
+                    return Ok(Box::new(std::fs::read_dir(d)?.map(|e| e.map(|e| e.path()))));
+                }
+                let failure = failing.then(|| Err(std::io::Error::other("the listing failed")));
+                Ok(Box::new(before.clone().into_iter().map(Ok).chain(failure).chain([Ok(after.clone())])))
+            }
+        };
+        let ubuntu = nested.join("Ubuntu-Light.TTF");
+        assert_eq!(
+            listed_font_files(std::slice::from_ref(&dir), 64 << 20, list(false)),
+            [hack.as_path(), &ubuntu, &truncated],
+            "a listing that does not fail"
+        );
+        assert_eq!(listed_font_files(std::slice::from_ref(&dir), 64 << 20, list(true)), [hack.as_path(), &ubuntu]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -314,7 +314,7 @@ fn a_failing_or_hanging_version_probe_is_refused() {
     assert!(matches!(find(RuntimeKind::Claude, &env, &ws).unwrap(), Discovery::Unsupported { reason: Unsupported::ProbeTimedOut { .. }, .. }));
     assert!(started.elapsed() < Duration::from_secs(10));
     // Every probe folder is gone again.
-    let left: Vec<_> = std::fs::read_dir(ws.root()).unwrap().filter_map(Result::ok).map(|e| e.file_name()).collect();
+    let left: Vec<_> = std::fs::read_dir(ws.root()).unwrap().map(Result::unwrap).map(|e| e.file_name()).collect();
     assert!(left.is_empty(), "{left:?}");
     std::fs::remove_dir_all(&base).unwrap();
 }
@@ -399,7 +399,7 @@ fn conversation_folders_are_private_and_removed() {
         assert_eq!(mode(dir), 0o700, "{}", dir.display());
         assert!(dir.starts_with(ws.root()));
     }
-    assert_eq!(std::fs::read_dir(folder.work()).unwrap().count(), 0, "the working folder starts empty");
+    assert_eq!(std::fs::read_dir(folder.work()).unwrap().map(Result::unwrap).count(), 0, "the working folder starts empty");
     std::fs::write(folder.config().join("transcript.jsonl"), "{}").unwrap();
     // Opening it again keeps what the runtime wrote, for a resume.
     let again = ws.conversation(&id).unwrap();

@@ -55,7 +55,7 @@ pub fn run(check: bool) -> Result<(), String> {
 
     let mut files = Vec::new();
     for folder in FOLDERS {
-        files.extend(util::walk(&root.join(folder)));
+        files.extend(util::walk(&root.join(folder))?);
     }
     for file in &files {
         let rel = file.to_string_lossy().replace('\\', "/");

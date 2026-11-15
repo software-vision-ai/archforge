@@ -45,10 +45,14 @@ pub fn picture(line: &str) -> Option<Result<Picture, String>> {
     Some(Ok(Picture { screen: screen.to_string(), theme, alt: alt.to_string() }))
 }
 
-/// The manual's chapters, in order.
+/// The manual's chapters, in order. A listing that fails, part way too, is an error.
 pub fn chapters(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let mut files: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "md")).collect();
+    let listed = entries
+        .map(|e| e.map(|e| e.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("{}: the listing stopped part way: {e}", dir.display()))?;
+    let mut files: Vec<PathBuf> = listed.into_iter().filter(|p| p.extension().is_some_and(|x| x == "md")).collect();
     files.sort();
     Ok(files)
 }

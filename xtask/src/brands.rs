@@ -12,7 +12,7 @@ pub fn run() -> Result<(), String> {
         return Ok(());
     }
     let mut hits = Vec::new();
-    for file in util::tracked() {
+    for file in util::tracked()? {
         let rel = file.to_string_lossy().replace('\\', "/");
         if rel.ends_with(".md") {
             continue;

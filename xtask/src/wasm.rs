@@ -49,7 +49,7 @@ mod tests {
         let mut offenders = Vec::new();
         for krate in portable_crates() {
             let short = krate.strip_prefix(layers::PREFIX).unwrap_or(&krate).to_string();
-            for file in util::walk(&root.join("crates").join(&short).join("src")) {
+            for file in util::walk(&root.join("crates").join(&short).join("src")).unwrap() {
                 let rel = file.to_string_lossy().replace('\\', "/");
                 if rel.ends_with("tests.rs") || rel.contains("/tests/") {
                     continue;

@@ -8,13 +8,26 @@ use std::path::{Path, PathBuf};
 /// it uses.
 const FACES: &[(&str, &str)] = &[("Inter", "Regular"), ("Inter", "SemiBold")];
 
+/// Writes the faces, then fails the build at a catalogue row that does not have four columns, or at
+/// a listing of the catalogues that fails part way.
 fn main() {
     faces();
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
     let i18n = Path::new(&manifest).join("src").join("i18n");
     println!("cargo:rerun-if-changed={}", i18n.display());
     let Ok(entries) = std::fs::read_dir(&i18n) else { return };
-    for path in entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "tsv")) {
+    for entry in entries {
+        // The standard library does not promise that a listing ends after an error.
+        let path = match entry {
+            Ok(entry) => entry.path(),
+            Err(e) => {
+                println!("cargo:warning={}: the catalogues were not all listed, so they cannot all be checked: {e}", i18n.display());
+                std::process::exit(1);
+            }
+        };
+        if path.extension().is_none_or(|e| e != "tsv") {
+            continue;
+        }
         let text = std::fs::read_to_string(&path).unwrap_or_default();
         for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.is_empty() && !l.starts_with('#')) {
             let cols = line.split('\t').count();

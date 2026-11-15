@@ -257,7 +257,8 @@ pub struct Found {
 /// is plain text, that are not a creation that did not finish. Every entry read spends one of
 /// `budget`, shared by the calls of one search; when it runs out the walk stops. Links are not
 /// followed; hidden folders, folders whose path is not plain text and projects' own folders are
-/// not entered.
+/// not entered. A folder that cannot be listed counts as unreadable, and so does one whose listing
+/// fails part way: that listing ends at the failure, and the folders listed before it are searched.
 pub fn find(folder: &Path, depth: usize, limit: usize, budget: &mut usize) -> Found {
     let mut found = Found::default();
     find_in(folder, depth, limit, budget, &mut found);
@@ -276,7 +277,11 @@ fn find_in(folder: &Path, depth: usize, limit: usize, budget: &mut usize, found:
             break;
         }
         *budget -= 1;
-        let Ok(entry) = entry else { continue };
+        // The standard library does not promise that a listing ends after an error.
+        let Ok(entry) = entry else {
+            found.unreadable += 1;
+            break;
+        };
         let path = entry.path();
         let shown = path.file_name().and_then(|n| n.to_str()).is_some_and(|n| !n.starts_with('.'));
         if shown && entry.file_type().is_ok_and(|t| t.is_dir()) && text(&path, "folder").is_ok() {
