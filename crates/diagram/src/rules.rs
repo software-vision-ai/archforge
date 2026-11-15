@@ -1,6 +1,8 @@
 //! The diagram rules the MOF core cannot know, checked by the commands before they change anything
 //! and available over a whole store.
 
+use archforge_core::skills::Problem;
+use archforge_engine::Reason;
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{DIAGRAM, EDGE, LABEL, NODE, POINT, STYLE, diagram, diagram_of, edge, label, node, node_tree, point, style};
@@ -42,16 +44,17 @@ pub fn kind_problem(kind: &str) -> Option<String> {
     None
 }
 
-/// Why a name or a note's text is not acceptable, as the end of the sentence "the name ...".
-pub fn text_problem(text: &str, max: usize) -> Option<String> {
+/// Why a name or a note's text is not acceptable, displayed as the end of the sentence "the name
+/// ...", and typed for an interface to say.
+pub fn text_problem(text: &str, max: usize) -> Option<Problem> {
     if text.chars().count() > max {
-        return Some(format!("is longer than {max} characters"));
+        return Some(Problem::too_long(max));
     }
     if text.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
-        return Some("holds a control character".into());
+        return Some(Problem::new(Reason::ControlCharacter, "holds a control character"));
     }
     if text.trim() != text {
-        return Some("starts or ends with a space".into());
+        return Some(Problem::edge_space());
     }
     None
 }

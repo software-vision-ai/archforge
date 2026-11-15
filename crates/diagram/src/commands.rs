@@ -54,18 +54,37 @@ fn uuid_json(store: &Store, obj: Obj) -> Json {
     store.uuid(obj).map(|u| Json::String(u.to_string())).unwrap_or(Json::Null)
 }
 
-/// The live element the id under `key` names.
-fn any_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
-    let id = str_of(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{id:?} is not an id"))) };
-    store.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {id}")))
+/// The element `obj`'s name, or, for one without, its id.
+fn name_or_id(store: &Store, obj: Obj) -> String {
+    let name = archforge_core::name_of(store, obj);
+    if name.is_empty() { uuid_json(store, obj).as_str().unwrap_or_default().to_string() } else { name }
 }
 
-/// The element the id under `key` names, of `class` (`what` names it in the refusal).
-fn one_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &str) -> Result<Obj, CommandError> {
-    let obj = any_of(store, p, key)?;
+/// The live element the id under `key` names; refused with its reason typed.
+fn any_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+    id_of(store, p, key, "element")
+}
+
+/// The live element the id under `key` names, the id of an element of `kind`; refused with its
+/// reason typed: no id, or one malformed or of no element.
+fn id_of(store: &Store, p: &Params, key: &str, kind: &'static str) -> Result<Obj, CommandError> {
+    let id = str_of(p, key);
+    let refused = |said: String| {
+        let short: String = id.chars().take(40).collect();
+        refuse(key, said).because(if id.is_empty() { Reason::IdEmpty { kind } } else { Reason::NoElement { id: short } })
+    };
+    let Some(uuid) = Uuid::parse(id) else { return Err(refused(format!("{id:?} is not an id"))) };
+    store.by_uuid(uuid).ok_or_else(|| refused(format!("there is no element {id}")))
+}
+
+/// The element the id under `key` names, of `class`, `what` such as `"a node"`; refused with its
+/// reason typed, its kind `what` without the article.
+fn one_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &'static str) -> Result<Obj, CommandError> {
+    let kind = what.strip_prefix("an ").or_else(|| what.strip_prefix("a ")).unwrap_or(what);
+    let obj = id_of(store, p, key, kind)?;
     if store.class_of(obj).ok() != Some(class) {
-        return Err(refuse(key, format!("{} is not {what}", str_of(p, key))));
+        let not_a = Reason::NotA { kind, name: name_or_id(store, obj) };
+        return Err(refuse(key, format!("{} is not {what}", str_of(p, key))).because(not_a));
     }
     Ok(obj)
 }
@@ -100,12 +119,25 @@ fn check(key: &str, problem: Option<String>, what: &str) -> Result<(), CommandEr
     }
 }
 
-fn check_coord(key: &str, v: f64) -> Result<(), CommandError> {
-    check(key, rules::coord_problem(v), key)
+/// The name or text `s` under `key`, at most `max` characters; refused with its reason typed.
+fn check_text(key: &str, s: &str, max: usize) -> Result<(), CommandError> {
+    match rules::text_problem(s, max) {
+        Some(p) => Err(refuse(key, format!("the {key} {p}")).because(p.reason)),
+        None => Ok(()),
+    }
 }
 
-fn check_size(key: &str, v: f64) -> Result<(), CommandError> {
-    check(key, rules::size_problem(v), key)
+/// The coordinate `v` under `key`, along `axis`; refused with its reason typed.
+fn check_coord(key: &str, axis: &'static str, v: f64) -> Result<(), CommandError> {
+    let Some(problem) = rules::coord_problem(v) else { return Ok(()) };
+    let reason = if v.is_finite() { Reason::CoordinateTooFar { axis } } else { Reason::CoordinateNotANumber { axis } };
+    Err(refuse(key, format!("the {axis} {problem}")).because(reason))
+}
+
+/// A box's `side`, its width or height, given under its name; refused with its reason typed.
+fn check_size(side: &'static str, v: f64) -> Result<(), CommandError> {
+    let Some(problem) = rules::size_problem(v) else { return Ok(()) };
+    Err(refuse(side, format!("the {side} {problem}")).because(Reason::SizeOutOfRange { side }))
 }
 
 fn class_name(store: &Store, class: ClassId) -> String {
@@ -124,11 +156,11 @@ fn set_text(store: &mut Store, obj: Obj, prop: PropId, s: &str) -> Result<(), Co
     store.set(obj, prop, if s.is_empty() { Value::Null } else { Value::str(s) }).map_err(fail)
 }
 
-/// A node of the diagram `d`, named under `key`.
+/// A node of the diagram `d`, named under `key`; refused with its reason typed.
 fn node_in(store: &Store, p: &Params, key: &str, d: Obj) -> Result<Obj, CommandError> {
     let n = one_of(store, p, key, NODE, "a node")?;
     if diagram_of(store, n) != Some(d) {
-        return Err(refuse(key, "the node is in another diagram"));
+        return Err(refuse(key, "the node is in another diagram").because(Reason::OtherDiagram));
     }
     Ok(n)
 }
@@ -160,7 +192,7 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         return Err(refuse("kind", format!("{kind:?} is not one of {}", kinds.join(", "))));
     }
     let name = str_of(p, "name");
-    check("name", rules::text_problem(name, MAX_NAME), "name")?;
+    check_text("name", name, MAX_NAME)?;
     let element = if str_of(p, "element").is_empty() {
         if ctx.view.needs_element(kind) {
             return Err(refuse("element", format!("a {kind} diagram is of an element; name it")));
@@ -206,10 +238,12 @@ pub fn new_diagram(store: &mut Store, kind: &str, name: &str, element: Option<Ob
     })
 }
 
+/// `diagram.rename`: a diagram's name changed, or cleared when empty; a name past the limit or
+/// with a control character or an edge space refused with its reason typed.
 fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let name = str_of(p, "name");
-    check("name", rules::text_problem(name, MAX_NAME), "name")?;
+    check_text("name", name, MAX_NAME)?;
     set_text(ctx.doc, d, diagram::NAME, name)?;
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
@@ -236,7 +270,8 @@ fn parent_in(store: &Store, p: &Params, d: Obj) -> Result<(Obj, PropId), Command
     let parent = node_in(store, p, "parent", d)?;
     let depth = rules::depth_of(store, parent).ok_or_else(|| refuse("parent", "the node belongs to no diagram"))?;
     if depth.saturating_add(1) > MAX_DEPTH {
-        return Err(refuse("parent", format!("nodes nest at most {MAX_DEPTH} deep")));
+        let deep = Reason::TooMany { kind: "nesting level", max: MAX_DEPTH };
+        return Err(refuse("parent", format!("nodes nest at most {MAX_DEPTH} deep")).because(deep));
     }
     Ok((parent, node::CHILD))
 }
@@ -244,8 +279,8 @@ fn parent_in(store: &Store, p: &Params, d: Obj) -> Result<(Obj, PropId), Command
 /// Creates a node at the parameters' place with the kind and size given, under `parent`.
 fn new_node(store: &mut Store, p: &Params, parent: (Obj, PropId), element: Option<Obj>, kind: &str, size: (f64, f64)) -> Result<Obj, CommandError> {
     let (x, y) = (num(p, "x"), num(p, "y"));
-    check_coord("x", x)?;
-    check_coord("y", y)?;
+    check_coord("x", "x", x)?;
+    check_coord("y", "y", y)?;
     let width = if num(p, "width") == 0.0 { size.0 } else { num(p, "width") };
     let height = if num(p, "height") == 0.0 { size.1 } else { num(p, "height") };
     check_size("width", width)?;
@@ -272,19 +307,23 @@ fn new_node(store: &mut Store, p: &Params, parent: (Obj, PropId), element: Optio
         .map_err(fail)
 }
 
+/// `diagram.place`: a box for an element on a diagram, nested in a box when a parent is named; an
+/// element the diagram does not show, is outside it or shows already refused with its reason typed.
 fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let kind = kind_of(ctx.doc, d);
     let e = any_of(ctx.doc, p, "element")?;
     let class = ctx.doc.class_of(e).map_err(fail)?;
+    let name = || name_or_id(ctx.doc, e);
     if !ctx.view.shows(&kind, class) {
-        return Err(refuse("element", format!("a {kind} diagram does not show a {}", class_name(ctx.doc, class).to_lowercase())));
+        let said = format!("a {kind} diagram does not show a {}", class_name(ctx.doc, class).to_lowercase());
+        return Err(refuse("element", said).because(Reason::NotShown { name: name() }));
     }
     if !ctx.view.may_show(ctx.doc, d, e) {
-        return Err(refuse("element", "the element is outside what this diagram shows"));
+        return Err(refuse("element", "the element is outside what this diagram shows").because(Reason::OutsideDiagram { name: name() }));
     }
     if !nodes_showing(ctx.doc, d, e).is_empty() {
-        return Err(refuse("element", "the diagram shows this element already"));
+        return Err(refuse("element", "the diagram shows this element already").because(Reason::ShownAlready { name: name() }));
     }
     let role = str_of(p, "kind");
     if !role.is_empty() {
@@ -303,7 +342,7 @@ fn diagram_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     if text.is_empty() {
         return Err(refuse("text", "the text is empty").because(Reason::TextEmpty));
     }
-    check("text", rules::text_problem(text, MAX_TEXT), "text")?;
+    check_text("text", text, MAX_TEXT)?;
     let parent = parent_in(ctx.doc, p, d)?;
     let n = new_node(ctx.doc, p, parent, None, NOTE, NOTE_SIZE)?;
     select(ctx, vec![n]);
@@ -314,13 +353,13 @@ fn diagram_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 fn diagram_set_text<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let n = one_of(ctx.doc, p, "node", NODE, "a node")?;
     if element_of(ctx.doc, n, node::ELEMENT).is_some() {
-        return Err(refuse("node", "the node shows an element and draws its text"));
+        return Err(refuse("node", "the node shows an element and draws its text").because(Reason::ShowsElement));
     }
     let text = str_of(p, "text");
     if text.is_empty() {
         return Err(refuse("text", "the text is empty").because(Reason::TextEmpty));
     }
-    check("text", rules::text_problem(text, MAX_TEXT), "text")?;
+    check_text("text", text, MAX_TEXT)?;
     set_text(ctx.doc, n, node::TEXT, text)?;
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
@@ -583,21 +622,27 @@ fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
+/// `diagram.route`: an edge's waypoints replaced by the points given, in order; a note's link,
+/// too many points and a point without a number or too far refused with their reasons typed.
 fn diagram_route<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
     if element_of(ctx.doc, e, edge::ELEMENT).is_none() {
-        return Err(refuse("edge", "a note link is straight"));
+        return Err(refuse("edge", "a note link is straight").because(Reason::StraightLink));
     }
     let items = p.get("points").and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > MAX_WAYPOINTS {
-        return Err(refuse("points", format!("at most {MAX_WAYPOINTS} waypoints")));
+        let most = Reason::TooMany { kind: "waypoint", max: MAX_WAYPOINTS };
+        return Err(refuse("points", format!("at most {MAX_WAYPOINTS} waypoints")).because(most));
     }
     let mut points = Vec::with_capacity(items.len());
     for item in &items {
-        let coord = |k: &str| item.get(k).and_then(Json::as_f64).ok_or_else(|| refuse("points", format!("every point needs a number {k}")));
+        let coord = |axis: &'static str| {
+            let none = || refuse("points", format!("every point needs a number {axis}")).because(Reason::CoordinateNotANumber { axis });
+            item.get(axis).and_then(Json::as_f64).ok_or_else(none)
+        };
         let (x, y) = (coord("x")?, coord("y")?);
-        check("points", rules::coord_problem(x), "x")?;
-        check("points", rules::coord_problem(y), "y")?;
+        check_coord("points", "x", x)?;
+        check_coord("points", "y", y)?;
         points.push((x, y));
     }
     let old: Vec<Obj> = ctx.doc.list(e, edge::WAYPOINT).map_err(fail)?.iter().filter_map(Value::as_ref).collect();
@@ -661,8 +706,8 @@ fn diagram_label<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     }
     let at = place(p)?;
     let (dx, dy) = (num(p, "dx"), num(p, "dy"));
-    check_coord("dx", dx)?;
-    check_coord("dy", dy)?;
+    check_coord("dx", "dx", dx)?;
+    check_coord("dy", "dy", dy)?;
     let l = ctx
         .doc
         .transaction(|st| {

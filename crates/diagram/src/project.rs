@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use archforge_core::skills::SkillHost;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid};
 use serde_json::{Value as Json, json};
 
@@ -123,10 +123,12 @@ pub trait Notation: Send + Sync + 'static {
         None
     }
     /// Removes `objs`, live elements of its metamodel, with everything that goes with them; how
-    /// many went. Refused, changing nothing the command keeps, when one of them cannot go.
+    /// many went. Refused, changing nothing the command keeps, when one of them cannot go; by
+    /// default every one, the reason typed.
     fn remove(&self, store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
         let _ = (store, objs);
-        Err(CommandError::about("ids", format!("{} elements cannot be removed yet", self.name())))
+        let notation = self.name();
+        Err(CommandError::about("ids", format!("{notation} elements cannot be removed yet")).because(Reason::NotRemovable { notation }))
     }
     /// Sets the description of `obj`, an element of its metamodel; an empty text clears it.
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), CommandError> {

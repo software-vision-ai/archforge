@@ -6112,6 +6112,73 @@ fn an_application_parameter_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The diagram commands' refusals are said in the chosen language: placing with no diagram, an
+/// element a class diagram does not show, one outside it and one shown already, a text set on a box
+/// that shows an element or on an element that is no box, and a note's link routed; so are the
+/// other ids and kinds, places, sizes, nesting, bends and a notation's elements it does not remove.
+/// In a window of the design's height, in light and dark (AR-439).
+#[test]
+fn a_diagram_refusal_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
+        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
+        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let d = h.state().canvas.active.unwrap().to_string();
+        let place = |element: &str| json!({ "diagram": d, "element": element, "x": 0, "y": 0 });
+        let no_diagram = refused(&mut h, "diagram.place", json!({ "diagram": "", "element": order }));
+        assert_eq!(no_diagram, "Es ist kein Diagramm angegeben. Geben Sie seine ID an.", "{theme:?}: the language is German");
+        let status = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "status" }));
+        let unshown = fmt(&tr("A diagram of this kind does not show {name}."), &[("name", "status")]);
+        assert_eq!(refused(&mut h, "diagram.place", place(&status)), unshown, "{theme:?}");
+        let profile = id(&mut h, "uml.profile.add", json!({ "name": "Persistence" }));
+        let entity = id(&mut h, "uml.stereotype.add", json!({ "profile": profile, "name": "Entity", "extends": ["Class"] }));
+        let outside = fmt(&tr("{name} is outside what this diagram shows."), &[("name", "Entity")]);
+        assert_eq!(refused(&mut h, "diagram.place", place(&entity)), outside, "{theme:?}");
+        let shown = fmt(&tr("This diagram shows {name} already."), &[("name", "Order")]);
+        assert_eq!(refused(&mut h, "diagram.place", place(&order)), shown, "{theme:?}");
+        let own = tr("This box shows an element and draws its text. Only a note takes a text of its own.");
+        assert_eq!(refused(&mut h, "diagram.set-text", json!({ "node": nodes["Order"], "text": "x" })), own, "{theme:?}");
+        let not_box = fmt(&tr("{name} is not a box on a diagram."), &[("name", "Order")]);
+        assert_eq!(refused(&mut h, "diagram.set-text", json!({ "node": order, "text": "x" })), not_box, "{theme:?}");
+        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
+        let link = id(&mut h, "diagram.link-note", json!({ "diagram": d, "note": note, "target": nodes["Order"] }));
+        let straight = tr("A note's link is a straight line and does not bend.");
+        assert_eq!(refused(&mut h, "diagram.route", json!({ "edge": link, "points": [] })), straight, "{theme:?}");
+        // The rest, which a file or a caller gives, said from the reason alone.
+        let said = |r: Reason| crate::panels::said(&r).unwrap_or_default();
+        let size = [("min", "20"), ("max", "10000")];
+        for (reason, words) in [
+            (Reason::IdEmpty { kind: "node" }, tr("No box is given. Give its id.")),
+            (Reason::IdEmpty { kind: "edge" }, tr("No line is given. Give its id.")),
+            (Reason::IdEmpty { kind: "label" }, tr("No label is given. Give its id.")),
+            (Reason::NotA { kind: "diagram", name: "N".into() }, fmt(&tr("{name} is not a diagram."), &[("name", "N")])),
+            (Reason::NotA { kind: "edge", name: "N".into() }, fmt(&tr("{name} is not a line on a diagram."), &[("name", "N")])),
+            (Reason::NotA { kind: "label", name: "N".into() }, fmt(&tr("{name} is not a label on a line."), &[("name", "N")])),
+            (Reason::CoordinateNotANumber { axis: "x" }, fmt(&tr("The {axis} is not a number."), &[("axis", "x")])),
+            (
+                Reason::CoordinateTooFar { axis: "y" },
+                fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", "y"), ("max", "1000000")]),
+            ),
+            (Reason::SizeOutOfRange { side: "width" }, fmt(&tr("The width is not between {min} and {max}."), &size)),
+            (Reason::SizeOutOfRange { side: "height" }, fmt(&tr("The height is not between {min} and {max}."), &size)),
+            (Reason::OtherDiagram, tr("That box is on another diagram.")),
+            (Reason::TooMany { kind: "nesting level", max: 16 }, fmt(&tr("Boxes nest at most {max} deep."), &[("max", "16")])),
+            (Reason::TooMany { kind: "waypoint", max: 256 }, fmt(&tr("A line bends at most {max} times."), &[("max", "256")])),
+            (Reason::NotRemovable { notation: "ER" }, fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", "ER")])),
+        ] {
+            assert_eq!(said(reason), words, "{theme:?}");
+        }
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
