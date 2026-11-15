@@ -586,6 +586,10 @@ str		{column} is not a column of {table}.	{column} は {table} の列ではあ�
 str		{name} may be null, which a primary key column never is.	{name} は NULL を許可していますが、主キーの列は NULL を許可できません。
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外部キー {foreign_key} が {table} のこのキーを参照しています。先に外部キーを変更または削除してください。
 str		{table} has no primary key.	{table} に主キーがありません。
+str		The key is not one of {table}'s keys.	このキーは {table} のキーではありません。
+str		The key of {table} has no columns to refer to.	{table} のキーには参照できる列がありません。
+str		Identifying relationships would run in a cycle between {child} and {parent}.	識別リレーションシップが {child} と {parent} の間で循環します。
+str		The foreign key points at this key already. Name the columns to change them.	外部キーはすでにこのキーを参照しています。変更するには列を指定してください。
 str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
 str		Only a computed column takes an expression.	式を持てるのは計算列だけです。

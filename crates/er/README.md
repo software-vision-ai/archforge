@@ -205,7 +205,13 @@ which `rules::EnumDefaultProblem::reason` types, a column whose enum type loses 
 `DomainGives`, a place past a table's last column as `PastLastColumn` with its count, an unlink of
 a column that follows none as `FollowsNoColumn` (named by its id when it has no name), and, from `commands::describe_element`, what is no
 ER element as `TakesNoDescription` (`element.describe` hands ER only its own elements, all of which
-take one). The rest follow ticket by ticket, except
+take one); and (AR-501) the key a foreign key points at: a key of another table than `references`
+as `KeyNotOf`, a referenced table without a primary key as `NoPrimaryKey`, the key it points at
+already, with no columns named, as `Again` of `"foreign key"`, identifying relationships that would
+run in a cycle, from adding a foreign key and from pointing one elsewhere, as `IdentifyingCycle`
+with the child and the parent, and, inside the step, a key without columns to copy, which only a
+loaded document holds, as `NoKeyColumns`, each table named by its id when it has no name. The rest
+follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
 (`generation_params`, `nullable`, `cardinality` twice, `entity_set_subtyping`, `action`,

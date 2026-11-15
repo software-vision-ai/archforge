@@ -585,6 +585,10 @@ str		{column} is not a column of {table}.	{column} is not a column of {table}.
 str		{name} may be null, which a primary key column never is.	{name} may be null, which a primary key column never is.
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	The foreign key {foreign_key} points at this key of {table}. Change or remove it first.
 str		{table} has no primary key.	{table} has no primary key.
+str		The key is not one of {table}'s keys.	The key is not one of {table}'s keys.
+str		The key of {table} has no columns to refer to.	The key of {table} has no columns to refer to.
+str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifying relationships would run in a cycle between {child} and {parent}.
+str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
 str		The key {name} would break: {why}	The key {name} would break: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
 str		Only a computed column takes an expression.	Only a computed column takes an expression.
