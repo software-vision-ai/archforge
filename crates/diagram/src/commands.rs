@@ -238,6 +238,8 @@ pub fn new_diagram(store: &mut Store, kind: &str, name: &str, element: Option<Ob
     })
 }
 
+/// `diagram.rename`: a diagram's name changed, or cleared when empty; a name past the limit or
+/// with a control character or an edge space refused with its reason typed.
 fn diagram_rename<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let name = str_of(p, "name");
@@ -305,6 +307,8 @@ fn new_node(store: &mut Store, p: &Params, parent: (Obj, PropId), element: Optio
         .map_err(fail)
 }
 
+/// `diagram.place`: a box for an element on a diagram, nested in a box when a parent is named; an
+/// element the diagram does not show, is outside it or shows already refused with its reason typed.
 fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let kind = kind_of(ctx.doc, d);
@@ -618,6 +622,8 @@ fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
+/// `diagram.route`: an edge's waypoints replaced by the points given, in order; a note's link,
+/// too many points and a point without a number or too far refused with their reasons typed.
 fn diagram_route<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
     if element_of(ctx.doc, e, edge::ELEMENT).is_none() {
