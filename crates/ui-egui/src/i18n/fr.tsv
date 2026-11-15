@@ -143,6 +143,13 @@ str		complete	complète
 str		disjoint	disjointe
 str		overlapping	chevauchante
 str		Add a literal	Ajouter un littéral
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} colonne utilise {name} : {columns}. Changez d’abord son type.|{n} colonnes utilisent {name} : {columns}. Changez d’abord leur type.
+str		Give the literals as a list of names.	Indiquez les littéraux sous forme de liste de noms.
+str		An enum type needs at least one literal.	Un type énuméré a besoin d’au moins un littéral.
+str		An enum type has at most {max} literals.	Un type énuméré a au plus {max} littéraux.
+str		A literal can't be empty.	Un littéral ne peut pas être vide.
+str		The literal "{name}" is not a valid name. {why}	Le littéral « {name} » n’est pas un nom valide. {why}
+str		The literal "{name}" is given twice. Give each literal once.	Le littéral « {name} » est indiqué deux fois. Indiquez chaque littéral une seule fois.
 str		Sequences · {n}	Séquences · {n}
 str		Add sequence	Ajouter une séquence
 str		Sequence	Séquence

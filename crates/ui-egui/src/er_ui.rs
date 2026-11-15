@@ -329,7 +329,7 @@ impl NotationUi for ErUi {
             if class == archforge_er::ENUM_TYPE
                 && let Some(p) = r::literals_problem(&r::literals_of(store, o))
             {
-                out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &p)]) });
+                out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &p.to_string())]) });
             }
             if class == archforge_er::RELATIONSHIP {
                 let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();

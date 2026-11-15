@@ -241,6 +241,16 @@ refusals of `size_allowed`, and their twins in `set_column_type`'s step, are rea
 and stay in English. A size outside 1 to 65535 is refused by the engine before the handler runs (0
 is none); the rule types it all the same.
 
+**Refusals of a domain or an enum type** (AR-498). Removing a domain or an enum type that columns
+still take (`domain.remove`, `enum.remove`) is refused as `TypeInUse`, with the type, the first five
+columns as `table.column` and how many in all, each named by `rules::label`. An enum type's
+literals, from `enum.add` and `enum.set`, are refused under `literals` as `TooFew`, `TooMany`,
+`NamesExpected` and `NamedTwice` of `"enum literal"`, and a literal that is no name as
+`LiteralName` with the name rule's reason, as `rules::literals_problem` types it; the English stays
+as it was. The engine refuses `literals` that is no array, or left out, before the handler runs, so
+the handler's own refusal of it stays in English. The column rules a changed type would break inside
+the step were typed by AR-494 and AR-495.
+
 **Tests.** `tests/er.rs`: the registry and the metamodel; every command's round trip on the store;
 refusals that name their key and change nothing; removing an entity with a core folder, comment and
 link around it, and the mixed delete through the engine; foreign keys (round trips, refusals that

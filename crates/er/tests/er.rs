@@ -2120,6 +2120,118 @@ fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_o
     all_rules_hold(s.doc());
 }
 
+/// An enum type's literals refused, from enum add and set, are typed of the kind `"enum literal"`
+/// beside the English, which stays as it was: none, too many, one that is no text, no name (cut
+/// to its first 40 characters, the empty one too) or given twice (AR-498).
+#[test]
+fn an_enum_types_literals_refused_are_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "state", "literals": ["open"] }));
+    let long = "x".repeat(129);
+    let named = |name: &str, why| Reason::LiteralName { name: name.into(), why: Box::new(why) };
+    let most = Reason::TooMany { kind: "enum literal", max: 256 };
+    for (cmd, literals, reason, message) in [
+        ("er.enum.add", json!([]), Reason::TooFew { kind: "enum literal", min: 1 }, "an enum type needs at least one literal".to_string()),
+        ("er.enum.set", json!(vec!["a"; 257]), most, "at most 256 literals".into()),
+        ("er.enum.add", json!(["a", 3]), Reason::NamesExpected { kind: "enum literal" }, "3 is not a literal".into()),
+        ("er.enum.set", json!(["a", " b"]), named(" b", Reason::EdgeSpace), r#"the literal " b" starts or ends with a space"#.into()),
+        ("er.enum.add", json!(["a", ""]), named("", Reason::NameEmpty), r#"the literal "" is empty"#.into()),
+        (
+            "er.enum.add",
+            json!([long]),
+            named(&long[..40], Reason::TooLong { max: 128 }),
+            format!("the literal {:?} is longer than 128 characters", &long[..40]),
+        ),
+        (
+            "er.enum.set",
+            json!(["open", "shut", "OPEN"]),
+            Reason::NamedTwice { kind: "enum literal", name: "OPEN".into() },
+            r#"the literal "OPEN" appears twice"#.into(),
+        ),
+    ] {
+        let p = if cmd == "er.enum.add" {
+            json!({ "schema": sm.schema, "name": "e", "literals": literals })
+        } else {
+            json!({ "enum": en, "name": "state", "literals": literals })
+        };
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message, error.key.as_deref()), (Some(reason), message, Some("literals")), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    }
+    // Too many is refused before each literal is read, so the rule's own count, which a loaded
+    // document's Problems reach, is typed alike.
+    let problem = archforge_er::rules::literals_problem(&vec![String::from("a"); 257]).expect("257 are too many");
+    assert_eq!(
+        (problem.to_string(), problem.reason),
+        ("an enum type has at most 256 literals".to_string(), Reason::TooMany { kind: "enum literal", max: 256 })
+    );
+    // At each rule's edge the literals are taken: 256 of them, and one of 128 characters.
+    let most: Vec<String> = (0..256).map(|n| format!("l{n}")).collect();
+    run(&mut s, "er.enum.set", json!({ "enum": en, "name": "state", "literals": most }));
+    run(&mut s, "er.enum.set", json!({ "enum": en, "name": "state", "literals": [&long[..128]] }));
+}
+
+/// A domain or an enum type that columns take stays, typed with its name, the first five columns as
+/// `table.column` and how many take it in all; the English stays as it was (AR-498).
+#[test]
+fn removing_a_type_columns_take_is_refused_typed_with_the_columns() {
+    use archforge_engine::{Reason, TypeInUse};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "money", "base_type": "NUMERIC", "precision": 10 }));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "state", "literals": ["open"] }));
+    for n in 1..=6 {
+        run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": format!("m{n}"), "domain": dom }));
+    }
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.customer, "name": "status", "enum": en }));
+    let columns = (1..=5).map(|n| format!("Order.m{n}")).collect();
+    let in_use = |name: &str, columns, count| Some(Reason::TypeInUse(Box::new(TypeInUse { name: name.into(), columns, count })));
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.domain.remove",
+            json!({ "domain": dom }),
+            "domain",
+            in_use("money", columns, 6),
+            "6 columns take money: Order.m1, Order.m2, Order.m3, Order.m4, Order.m5; retype them first",
+        ),
+        (
+            "er.enum.remove",
+            json!({ "enum": en }),
+            "enum",
+            in_use("state", vec!["Customer.status".into()], 1),
+            "1 columns take state: Customer.status; retype them first",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (reason, message, Some(key)), "{cmd} {p}");
+    }
+}
+
+/// A loaded document's enum type, table and column without names, which no command makes, are
+/// named by their ids in the typed refusal to remove the type, never as empty names (AR-498).
+#[test]
+fn an_unnamed_type_in_use_is_named_by_its_id() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let t = st.create(ENUM_TYPE).unwrap();
+    st.push(t, enum_type::LITERAL, Value::str("open")).unwrap();
+    st.push(s, schema::ENUM_TYPE, Value::Ref(t)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, attribute::ENUM_TYPE, Value::Ref(t)).unwrap();
+    st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let [t, e, a] = [t, e, a].map(|o| st.uuid(o).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.enum.remove", &json!({ "enum": t })) else { panic!("a column takes it") };
+    let used = archforge_engine::TypeInUse { name: t, columns: vec![format!("{e}.{a}")], count: 1 };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::TypeInUse(Box::new(used))));
+}
+
 #[test]
 fn domains_and_enum_types_type_columns_under_the_schemas_rules() {
     let mut s = session();
