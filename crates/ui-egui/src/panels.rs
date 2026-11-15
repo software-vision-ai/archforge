@@ -535,10 +535,13 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// takes, a list of boxes, or of what a style is set on, that is empty, no list of ids or names
 /// one twice, a line connected against a relationship's rules, a note's link refused, a label on a
 /// note's link or shown already, a style's colour not of the form #rrggbb, and a diagram arranged
-/// that shows no box or would put one out of reach; none for another reason. A coordinate is said as
-/// a constraint's is.
+/// that shows no box or would put one out of reach; and the shared commands' list of elements that
+/// is empty, no list of ids or names one twice, an element of no notation, and a notation's elements
+/// it does not describe yet; none for another reason. A coordinate is said as a constraint's is, and
+/// an id of no element or none given as the other commands' are.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
+    use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
     use archforge_diagram::rules::{MAX_COORD, MAX_SIZE, MIN_SIZE};
     use archforge_engine::{End, Reason};
     let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
@@ -589,6 +592,11 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         }
         Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
         Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
+        Reason::NotDescribable { notation } => fmt(&tr("{notation} elements cannot be described yet."), &[("notation", notation)]),
+        Reason::TooFew { kind: ELEMENT, min: 1 } => tr("Give at least one element."),
+        Reason::IdsExpected { kind: ELEMENT } => tr("Give the elements as a list of ids."),
+        Reason::NamedTwice { kind: ELEMENT, .. } => tr("An element is named twice. Name each element once."),
+        Reason::NotA { kind: NOTATION_ELEMENT, name } => fmt(&tr("{name} is not an element of any notation in this project."), &[("name", name)]),
         Reason::NotAPlainWord => tr("Use a plain word: lower case letters, digits, _, - and ., starting with a letter."),
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,

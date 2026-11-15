@@ -46,7 +46,7 @@ tables.
 | `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
 | `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost`: a diagram carries skills too and inherits those of the element it shows |
 | `figure::{Card, Row, Line, End, EndMark, Text, Tone, CARD_HEADER, CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP, CARD_FOOT}` | what a notation draws, without a toolkit: a node's card (eyebrow, name, compartments of rows, `Card::height` the height that shows them all by the card layout the canvas draws by, its tone: tinted, plain, tabbed, a constraint note, braces or an n-ary association's diamond, and a template's signature rows, drawn in a dashed box over its top-right corner), an edge's line (end marks and texts, roles, dashes, status, a note); `Notation::card`, `line` and `slot_text` give them and the canvas draws them alike; `Notation::links` gives the nodes a node is tied to by dashed links worked out from the model, never stored (a constraint note's); `Notation::nested_in` the element a node's element is nested in, whose node the canvas ties it to by a line ending in ⊕, never stored (a nested classifier's owner) |
-| `project::specs` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe` |
+| `project::specs`, `project::{ELEMENT, NOTATION_ELEMENT}` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe`; the kinds their typed refusals name |
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |
@@ -89,6 +89,13 @@ text colour not of the form `#rrggbb` (`NotAColour` with its part), a diagram th
 (`TooFew` of `commands::ARRANGED`), and boxes that, arranged, would land farther from the origin
 than `rules::MAX_COORD`. The engine refuses a line width outside 0 to `rules::MAX_LINE` and a
 routing none of the four before the command runs, so those two refusals stay untyped.
+The shared commands carry theirs typed too (AR-517), of the kind `project::ELEMENT`: the lists of
+`view.select` and `element.remove` with an item that is no string (`IdsExpected`), no id
+(`IdEmpty`), of no element (`NoElement`) or given twice (`NamedTwice`), and an empty list to remove
+(`TooFew`); `element.describe`'s id none or of no element likewise; an element of no notation the
+project holds, as a diagram, removed or described (`NotA` a `project::NOTATION_ELEMENT`); and a
+notation's elements it does not describe yet (`NotDescribable`). A list longer than the store's
+limit stays untyped, as the engine's limit on a call's size refuses one that long first.
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name

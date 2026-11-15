@@ -1363,6 +1363,7 @@ str		This diagram shows {name} already.	この図にはすでに {name} が表�
 str		That box is on another diagram.	そのボックスは別の図にあります。
 str		Give at least one box.	ボックスを 1 つ以上指定してください。
 str		Give at least one diagram, box or line.	図、ボックス、線のいずれかを 1 つ以上指定してください。
+str		Give at least one element.	要素を 1 つ以上指定してください。
 str		Give the boxes as a list of ids.	ボックスは ID のリストで指定してください。
 str		Give the diagrams, boxes and lines as a list of ids.	図、ボックス、線は ID のリストで指定してください。
 str		Boxes nest at most {max} deep.	ボックスの入れ子は最大 {max} 階層までです。
@@ -1386,6 +1387,8 @@ str		This diagram shows no box to arrange.	この図には整列するボック�
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	整列すると、ボックスが原点から {max} より離れた位置に置かれます。先にボックスを原点に近づけてください。
 str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
 str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
+str		{notation} elements cannot be described yet.	{notation} の要素はまだ説明を付けられません。
+str		{name} is not an element of any notation in this project.	{name} はこのプロジェクトのどの表記法の要素でもありません。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。
 str		{word} is not a diagram kind. The kinds are {kinds}.	{word} は図の種類ではありません。種類は {kinds} です。
 str		This project holds no notation, so it knows no diagram kind.	このプロジェクトには表記法がないため、図の種類がありません。

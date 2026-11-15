@@ -63,7 +63,7 @@ fn uuid_json(store: &Store, obj: Obj) -> Json {
 }
 
 /// The element `obj`'s name, or, for one without, its id.
-fn name_or_id(store: &Store, obj: Obj) -> String {
+pub(crate) fn name_or_id(store: &Store, obj: Obj) -> String {
     let name = archforge_core::name_of(store, obj);
     if name.is_empty() { uuid_json(store, obj).as_str().unwrap_or_default().to_string() } else { name }
 }

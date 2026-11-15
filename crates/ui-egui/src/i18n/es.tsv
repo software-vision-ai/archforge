@@ -1363,6 +1363,7 @@ str		This diagram shows {name} already.	Este diagrama ya muestra {name}.
 str		That box is on another diagram.	Esa caja está en otro diagrama.
 str		Give at least one box.	Indica al menos una caja.
 str		Give at least one diagram, box or line.	Indica al menos un diagrama, una caja o una línea.
+str		Give at least one element.	Indica al menos un elemento.
 str		Give the boxes as a list of ids.	Indica las cajas como una lista de identificadores.
 str		Give the diagrams, boxes and lines as a list of ids.	Indica los diagramas, las cajas y las líneas como una lista de identificadores.
 str		Boxes nest at most {max} deep.	Las cajas se anidan como máximo {max} niveles.
@@ -1386,6 +1387,8 @@ str		This diagram shows no box to arrange.	Este diagrama no muestra ninguna caja
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Al organizar, una caja quedaría a más de {max} del origen. Acerca primero las cajas a él.
 str		A line bends at most {max} times.	Una línea se dobla como máximo {max} veces.
 str		{notation} elements cannot be removed yet.	Los elementos {notation} aún no se pueden eliminar.
+str		{notation} elements cannot be described yet.	Los elementos {notation} aún no se pueden describir.
+str		{name} is not an element of any notation in this project.	{name} no es un elemento de ninguna notación de este proyecto.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Usa una palabra simple: letras minúsculas, dígitos, _, - y ., empezando por una letra.
 str		{word} is not a diagram kind. The kinds are {kinds}.	{word} no es un tipo de diagrama. Los tipos son {kinds}.
 str		This project holds no notation, so it knows no diagram kind.	Este proyecto no contiene ninguna notación, así que no conoce ningún tipo de diagrama.
