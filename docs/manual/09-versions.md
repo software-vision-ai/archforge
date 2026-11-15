@@ -189,9 +189,9 @@ details show:
 - **View this version**, which [shows it in the window](#view-an-earlier-version);
 - under **Changed items**, what changed since the version before it, model elements first, then
   diagrams, then skills. While no button and not the Explorer has the keyboard (Esc lets it go),
-  and no dialog is open, the arrow keys scroll the list by an item, Page Up and Page Down by a
-  page, and Home and End to either end. The first version says *First version: there is nothing
-  earlier to compare it with.*;
+  and no menu or dialog is open, the arrow keys scroll the list by an item, Page Up and Page Down
+  by a page, and Home and End to either end. The first version says *First version: there is
+  nothing earlier to compare it with.*;
 - under **Previous version**, the version before it, which opens its details the same way.
 
 Versions are compared one at a time, so when you click through History quickly, the changes of the
@@ -374,8 +374,8 @@ In the example, with *Added Customer* as Before and your current work as After, 
 **What the page says.** Under the selects, the page counts the differences, such as *1 difference*,
 says how they divide, such as *1 model element*, and lists them in their groups. With current work
 on one side, it keeps up as you work. While no button and not the Explorer has the keyboard (Escape
-lets it go), and no dialog is open, the arrow keys scroll the list by a difference, Page Up and
-Page Down by a page, and Home and End to either end.
+lets it go), and no menu or dialog is open, the arrow keys scroll the list by a difference, Page Up
+and Page Down by a page, and Home and End to either end.
 
 | The page says | What it means | What to do |
 |---|---|---|
