@@ -61,7 +61,10 @@ project.
 
 ## 5. The menu bar
 
-**Do:** with a project open, look through the **Archforge** and **File** menus; choose
+**Do:** with a project open, look through the **Archforge** and **File** menus and point at
+**Archforge ▸ Services**. With another application's window showing, choose **Archforge ▸ Hide Others**, then
+**Archforge ▸ Show All**; type into a name field and, with the field still active, press ⌥⌘H, then choose
+**Show All** again. Choose
 **File ▸ Generate…**, take your hand off the mouse and keyboard, and watch; close the dialog; choose
 **Archforge ▸ About Archforge…** and keep still again; with About open, look at **File** again. Close
 About, type into a name field and, with the field still active, press ⌘Z and then ⇧⌘Z, and choose
@@ -79,12 +82,18 @@ choose **Versions ▸ Save version…** and cancel; choose **Older version**, th
 click the canvas and press ⌘K. Look through **Window** and choose **Window ▸ Minimise**; bring the window back
 by choosing its own row in **Window**, press ⌘M and bring it back from the Dock. Choose **Window ▸ Zoom**, then
 **Window ▸ Zoom** once more.
-With **Generate…** open, look at **Window** again, then close the dialog. With the project showing, press ⌘W;
+With **Generate…** open, look at **Window** and the **Archforge** menu again, then close the dialog. With the project showing, press ⌘W;
 open it again and press ⌘S, so nothing is unsaved. Select an element in **Models**, press F2, type a new name
 and, still typing, press ⌘W; choose **Cancel**, then press ⌘S. Rename it the same way and, still typing,
 choose **File ▸ Close project**; choose **Cancel** again. Go to Home, look at **File** and press ⌘W.
 
-**Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
+**Expect:** the application menu offers **About Archforge…**, **Settings…** (⌘,), **Services**, **Hide Archforge** (⌘H),
+**Hide Others** (⌥⌘H), **Show All** and **Quit Archforge** (⌘Q) in that order, with a divider after About Archforge…,
+after Settings…, after Services and after Show All. Services opens the system's own list of services, whose rows
+depend on what is installed and what is selected. Hide Others and ⌥⌘H each hide every other application's windows
+and leave Archforge's showing; the name field's text does not change. Show All brings the others back. With the dialog
+up, Services, Hide Archforge and Hide Others are enabled as before; Show All is the system's to grey out, for
+instance while nothing is hidden. File offers
 **New project…**, **Open project…** (⌘O), **Close project** (⌘W), **Save** (⌘S) and **Generate…** (⇧⌘G), with a divider after
 Close project and after Save and none at the end, each enabled while it can act: Save, Close project and Generate… need an open project, and Save is disabled while a
 save runs. Each dialog opens within a second of choosing it, with the pointer still. While any dialog

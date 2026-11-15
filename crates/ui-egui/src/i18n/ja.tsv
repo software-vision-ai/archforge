@@ -1,6 +1,10 @@
 # 日本語カタログ。列: kind、context、key、text（i18n/mod.rs を参照）。行は関連する項目の隣に置きます。
 # Provenance: translated by an AI model, Claude Opus 5.5 (claude-opus-5-5), on 2026-10-27, from the meaning of the English source in en.tsv; screened by the catalogue screen test; not yet reviewed by a native speaker. Rows added later carry their provenance in their own commit. The words for what the metamodel names (AR-361) were translated by the same model on 2026-11-10, likewise from the English source; they are not yet reviewed by a native speaker either.
 # アプリケーションメニュー
+str		Services	サービス
+str		Hide Archforge	Archforge を非表示
+str		Hide Others	ほかを非表示
+str		Show All	すべてを表示
 str		Quit Archforge	Archforge を終了
 str		Exit	終了
 str		File	ファイル

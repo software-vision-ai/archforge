@@ -1,7 +1,7 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File, Edit, View, Model and Versions, in the design's order, then Window with the
-//! system's own Minimise and Zoom, made the application's windows menu so macOS adds its own rows
-//! below them. Each item from the table is enabled while its action can act, and its keys are the
+//! system's Services, Hide, Hide Others and Show All), File, Edit, View, Model and Versions, in the
+//! design's order, then Window with the system's own Minimise and Zoom, made the application's
+//! windows menu so macOS adds its own rows below them. Each item from the table is enabled while its action can act, and its keys are the
 //! table's. Choosing an item wakes the window, so it acts with the pointer and keyboard still. When
 //! it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -40,7 +40,32 @@ enum Title {
 }
 
 const BAR: [Title; 7] = [Title::App, Title::File, Title::Edit, Title::View, Title::Model, Title::Versions, Title::Window];
-const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
+/// A row of the application menu: an action of the table, or one of the system's own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AppRow {
+    Table(&'static str),
+    System(System),
+}
+
+/// The system's own rows of the application menu, which act without the table of actions and which
+/// Archforge never turns off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum System {
+    Services,
+    Hide,
+    HideOthers,
+    ShowAll,
+}
+
+/// The application menu in the system's usual order, a separator between groups: About, Settings,
+/// Services, the three that hide and show applications, Quit.
+const APP: [&[AppRow]; 5] = [
+    &[AppRow::Table(ABOUT)],
+    &[AppRow::Table(SETTINGS)],
+    &[AppRow::System(System::Services)],
+    &[AppRow::System(System::Hide), AppRow::System(System::HideOthers), AppRow::System(System::ShowAll)],
+    &[AppRow::Table(QUIT)],
+];
 const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 
 pub struct NativeMenu {
@@ -93,6 +118,35 @@ fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups
     Ok(())
 }
 
+/// The system's own item `row`, in the catalogues' words, with the keys muda gives it: ⌘H for
+/// Hide and ⌥⌘H for Hide Others. Services is the submenu macOS fills with its services.
+fn system_item(row: System) -> PredefinedMenuItem {
+    match row {
+        System::Services => PredefinedMenuItem::services(Some(&tr("Services"))),
+        System::Hide => PredefinedMenuItem::hide(Some(&tr("Hide Archforge"))),
+        System::HideOthers => PredefinedMenuItem::hide_others(Some(&tr("Hide Others"))),
+        System::ShowAll => PredefinedMenuItem::show_all(Some(&tr("Show All"))),
+    }
+}
+
+/// `APP`'s rows from the top, `None` for the separator between two groups.
+fn app_rows() -> impl Iterator<Item = Option<AppRow>> {
+    APP.iter().enumerate().flat_map(|(n, group)| (n > 0).then_some(None).into_iter().chain(group.iter().map(|&row| Some(row))))
+}
+
+/// The application menu with `APP`'s rows, those of the table recorded in `items`.
+fn app_menu(shell: &Shell, items: &mut Items) -> Result<Submenu, muda::Error> {
+    let menu = Submenu::new("Archforge", true);
+    for row in app_rows() {
+        match row {
+            None => menu.append(&PredefinedMenuItem::separator())?,
+            Some(AppRow::Table(id)) => menu.append(&item(shell, id, items))?,
+            Some(AppRow::System(system)) => menu.append(&system_item(system))?,
+        }
+    }
+    Ok(menu)
+}
+
 /// The Window menu's items, in its order: the system's own, which act on the window without the
 /// table of actions, Minimise with the system's ⌘M.
 fn window_items() -> [PredefinedMenuItem; 2] {
@@ -106,12 +160,7 @@ fn submenu(shell: &Shell, title: Title, model: &Submenu, items: &mut Items) -> R
         append_groups(shell, &menu, groups, items).map(|()| menu)
     };
     match title {
-        Title::App => {
-            let app = filled("Archforge".to_string(), &APP, items)?;
-            let quit = item(shell, QUIT, items);
-            app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])?;
-            Ok(app)
-        }
+        Title::App => app_menu(shell, items),
         Title::File => {
             let menu = Submenu::new(actions::file_title(shell), true);
             append_groups(shell, &menu, &actions::file_menu(shell), items).map(|()| menu)
@@ -300,7 +349,8 @@ mod tests {
         let (shell, ..) = shell_with_project();
         let file = actions::file_menu(&shell);
         let file: Vec<&[&str]> = file.iter().map(Vec::as_slice).collect();
-        let listed: Vec<&str> = [&APP[..], &[&[QUIT]], &file[..], &EDIT[..], &VIEW_MENU[..], &VERSIONS_MENU[..]].concat().concat();
+        let app: Vec<&str> = APP.concat().into_iter().filter_map(|row| if let AppRow::Table(id) = row { Some(id) } else { None }).collect();
+        let listed: Vec<&str> = [&[&app[..]][..], &file[..], &EDIT[..], &VIEW_MENU[..], &VERSIONS_MENU[..]].concat().concat();
         let mut sorted_items = [&ITEMS[..], &VERSION_ITEMS[..], &VIEW_ITEMS[..]].concat();
         sorted_items.sort_unstable();
         let mut sorted = listed.clone();
@@ -348,6 +398,25 @@ mod tests {
         let (rows, mut failing) = (vec![vec!["model.note", "model.link"]], false);
         assert_eq!((settle(rows.clone(), Err(muda::Error::NotAChildOfThisMenu), &mut failing), failing), (vec![], true));
         assert_eq!((settle(rows.clone(), Ok(()), &mut failing), failing), (rows, false));
+    }
+
+    /// The application menu holds About, Settings…, Services, Hide Archforge, Hide Others, Show All
+    /// and Quit Archforge in the system's usual order and groups, the system's rows in the
+    /// catalogues' words; what each does is seen by hand (release checklist item 5).
+    #[test]
+    fn the_application_menu_has_the_systems_rows_in_their_usual_order() {
+        use AppRow::{System as Own, Table};
+        let own = [System::Services, System::Hide, System::HideOthers, System::ShowAll];
+        let [services, hide, others, all] = own.map(|row| Some(Own(row)));
+        let rows = [Some(Table(ABOUT)), None, Some(Table(SETTINGS)), None, services, None, hide, others, all, None, Some(Table(QUIT))];
+        assert_eq!(app_rows().collect::<Vec<_>>(), rows);
+        for (code, words) in [
+            ("en", ["Services", "Hide Archforge", "Hide Others", "Show All"]),
+            ("de", ["Dienste", "Archforge ausblenden", "Andere ausblenden", "Alle einblenden"]),
+        ] {
+            assert!(archforge_ui_egui::i18n::set_language(code), "{code}");
+            assert_eq!(own.map(|row| system_item(row).text()), words, "{code}");
+        }
     }
 
     /// The bar ends in the Window menu, after Versions, and Window holds the system's Minimise and
