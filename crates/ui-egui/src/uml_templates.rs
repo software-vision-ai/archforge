@@ -361,7 +361,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, k:
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, card);
+    crate::panels::reveal(shell, ui, crate::panels::Editor::Template, card);
     // The menus last, over the card; Escape with one open closes the menu alone.
     let menu_open = shell.panels.menu.is_some();
     if shell.panels.menu == Some(Menu::TemplateKind)
