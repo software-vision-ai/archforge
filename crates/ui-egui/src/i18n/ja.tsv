@@ -1369,6 +1369,14 @@ str		Braces sit by an element they constrain, and this diagram shows none of the
 str		Only a classifier of the model's own or a package owns constraints.	制約を所有できるのは、モデル自身の分類子かパッケージだけです。
 str		A constraint names only elements of this model.	制約が指定できるのは、このモデルの要素だけです。
 str		A constraint names at most {max} elements.	制約が指定できる要素は最大 {max} 個です。
+str		No constraint is given. Give its id.	制約が指定されていません。その ID を指定してください。
+str		{name} is not a constraint of this model.	{name} はこのモデルの制約ではありません。
+str		Give the elements as a list of ids.	要素は ID のリストで指定してください。
+str		This constraint is among no element's constraints.	この制約は、どの要素の制約にも含まれていません。
+str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	制約の中に位置 {at} はありません。0 から {last} までの位置か、最後を表す -1 を指定してください。
+str		Give both x and y, or neither to place it where it reads.	x と y を両方指定するか、読みやすい位置に置く場合はどちらも指定しないでください。
+str		The {axis} is not a number.	{axis} の値が数値ではありません。
+str		The {axis} is farther than {max} from the origin.	{axis} の値が原点から {max} より離れています。
 str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
 str		a constraint	制約
 str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました

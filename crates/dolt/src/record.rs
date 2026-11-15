@@ -330,7 +330,7 @@ pub(crate) mod tests {
 
     thread_local! {
         /// What a test does in the middle of the next change, with the lock held: once.
-        static IN_CHANGE: RefCell<Option<Box<dyn FnOnce(&Path)>>> = const { RefCell::new(None) };
+        pub(crate) static IN_CHANGE: RefCell<Option<Box<dyn FnOnce(&Path)>>> = const { RefCell::new(None) };
         /// What a test does once the next change finds the lock held and starts to wait: once.
         pub(crate) static WAITING: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
     }

@@ -1369,6 +1369,14 @@ str		Braces sit by an element they constrain, and this diagram shows none of the
 str		Only a classifier of the model's own or a package owns constraints.	Solo un clasificador propio del modelo o un paquete posee restricciones.
 str		A constraint names only elements of this model.	Una restricción solo nombra elementos de este modelo.
 str		A constraint names at most {max} elements.	Una restricción nombra como máximo {max} elementos.
+str		No constraint is given. Give its id.	No se ha indicado ninguna restricción. Indica su identificador.
+str		{name} is not a constraint of this model.	{name} no es una restricción de este modelo.
+str		Give the elements as a list of ids.	Indica los elementos como una lista de identificadores.
+str		This constraint is among no element's constraints.	Esta restricción no está entre las restricciones de ningún elemento.
+str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	No hay ninguna posición {at} entre las restricciones. Indica una posición de 0 a {last}, o -1 para la última.
+str		Give both x and y, or neither to place it where it reads.	Indica x e y a la vez, o ninguna de las dos para colocarlo donde se lea bien.
+str		The {axis} is not a number.	El valor {axis} no es un número.
+str		The {axis} is farther than {max} from the origin.	El valor {axis} está a más de {max} del origen.
 str		An element is named twice. Name each element once.	Un elemento aparece dos veces. Nombra cada elemento una sola vez.
 str		a constraint	una restricción
 str		{constraint} constrained nothing else and went with it	{constraint} no restringía nada más y se eliminó con él

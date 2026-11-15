@@ -1368,6 +1368,14 @@ str		Braces sit by an element they constrain, and this diagram shows none of the
 str		Only a classifier of the model's own or a package owns constraints.	Only a classifier of the model's own or a package owns constraints.
 str		A constraint names only elements of this model.	A constraint names only elements of this model.
 str		A constraint names at most {max} elements.	A constraint names at most {max} elements.
+str		No constraint is given. Give its id.	No constraint is given. Give its id.
+str		{name} is not a constraint of this model.	{name} is not a constraint of this model.
+str		Give the elements as a list of ids.	Give the elements as a list of ids.
+str		This constraint is among no element's constraints.	This constraint is among no element's constraints.
+str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.
+str		Give both x and y, or neither to place it where it reads.	Give both x and y, or neither to place it where it reads.
+str		The {axis} is not a number.	The {axis} is not a number.
+str		The {axis} is farther than {max} from the origin.	The {axis} is farther than {max} from the origin.
 str		An element is named twice. Name each element once.	An element is named twice. Name each element once.
 str		a constraint	a constraint
 str		{constraint} constrained nothing else and went with it	{constraint} constrained nothing else and went with it

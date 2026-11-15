@@ -187,7 +187,7 @@ fn in_model(store: &Store, o: Obj) -> bool {
 }
 
 /// An element's name, or its id when it has none (a generalization).
-fn name_or_id(store: &Store, o: Obj) -> String {
+pub(crate) fn name_or_id(store: &Store, o: Obj) -> String {
     let n = name_of(store, o);
     if n.is_empty() { uuid_of(store, o).unwrap_or_default() } else { n }
 }
