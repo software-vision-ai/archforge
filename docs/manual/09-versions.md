@@ -74,7 +74,8 @@ Do this when you want to look over your changes and say what they are.
 1. In the left rail, choose **Versions**. A number on its icon says how many things have changed.
    **Working changes** lists them in groups: model elements, then diagrams, then skills, which sit
    under **Skills** of their own. Click a change, or press Enter on it, to see how it differs from
-   your last version; ↑ and ↓ move between them, across the groups.
+   your last version; ↑ and ↓ move between them, across the groups, Page Up and Page Down by a page,
+   and Home and End to the first and the last.
 2. Choose **Save version…**, at the right of the **Working changes** heading. The **Save version**
    dialog opens and says how many model elements, diagrams and skills changed since your last
    version, such as *3 model elements, 1 diagram and 1 skill changed since 8 Nov 14:02.*
@@ -180,7 +181,9 @@ here*, sits above the first shared version once the list has reached it. It says
 have in common, not which branch this one was made from. On `main` there is no divider.
 
 Click a version, or press Enter on it, to open its details in the centre; ↑ and ↓ move between
-versions:
+versions, Page Up and Page Down by a page, and Home and End to the newest and the oldest listed.
+In each list of the panel, a row that Tab reaches at the list's edge scrolls whole into view. The
+details show:
 
 - its description, when it was saved and, where that is recorded, by whom;
 - **View this version**, which [shows it in the window](#view-an-earlier-version);
@@ -539,7 +542,8 @@ differ, [compare](#choose-what-to-compare) with the other branch's latest versio
 **Branches**, at the top of **Versions**, lists the project's branches by name, each with when its
 latest version was saved. It stays folded while the project has only `main`. The branch you are on
 says *Current*, and a dot marks a branch with unsaved changes to the model; conversations don't
-count. ↑ and ↓ move between branches. A branch's **More** menu holds **Switch**, **Rename…** and
+count. ↑ and ↓ move between branches, Page Up and Page Down by a page, and Home and End to the
+first and the last. A branch's **More** menu holds **Switch**, **Rename…** and
 **Delete…**. A project with more than 200 branches lists the first 200, and says so. If the list
 can't be read, it says *The branches couldn't be read.*, with **Retry**.
 

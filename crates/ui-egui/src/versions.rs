@@ -123,6 +123,10 @@ pub struct State {
     history_folded: bool,
     scroll: TreeScroll,
     branches_scroll: TreeScroll,
+    /// What had the keyboard when the panel was last drawn, and what it has just moved to, which
+    /// the list holding it brings into view (AR-474).
+    held: Option<egui::Id>,
+    follow: Option<egui::Id>,
 }
 
 /// A read of a version that failed in a way that may pass: what Retry asks for again.
@@ -449,6 +453,19 @@ pub(crate) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     y = working(shell, ui, p, r, y);
     rule(ui, p, r, y);
     history(shell, ui, p, r, y);
+    follow_keys(shell, ui);
+}
+
+/// After the panel has drawn: the control the keyboard has just moved to, by Tab or a screen
+/// reader (a click gives the lists' controls none), is the one its list brings into view in the
+/// next frame, which this asks for.
+fn follow_keys(shell: &mut Shell, ui: &egui::Ui) {
+    let now = ui.memory(|m| m.focused());
+    let was = std::mem::replace(&mut shell.versions.held, now);
+    shell.versions.follow = now.filter(|id| Some(*id) != was);
+    if shell.versions.follow.is_some() {
+        ui.ctx().request_repaint();
+    }
 }
 
 /// Branches from `y`: its header, folded while there is only `main`, each branch's row, scrolling
@@ -492,14 +509,18 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     let least = LEAST_BRANCHES.min(above + rows);
     let height = (above + rows + tail + 8.0).min(r.height() * 0.3).min((r.bottom() - y - UNDER_BRANCHES).max(least));
     let tree = Rect::from_min_size(pos2(r.left(), y), vec2(r.width() - 1.0, height));
-    // The row the keys moved to comes whole into view, under the banner too.
-    let ids = listed.iter().map(|b| widgets::egui_id(&format!("workspace.versions.branch.row.{}", b.name))).collect::<Vec<_>>();
-    let scroll = &mut shell.versions.branches_scroll;
-    if let Some(i) = key_rows(&shell.panels, ui, &ids, Some(widgets::egui_id("workspace.versions.branches.retry"))) {
-        let top = above + i as f32 * BRANCH_PITCH;
-        bring(scroll, (top, top + BRANCH), height);
+    // The row the keys moved to comes whole into view, under the banner too, as does a row's menu
+    // button or the banner's Retry that Tab comes to.
+    let span = |i: usize| (above + i as f32 * BRANCH_PITCH, above + i as f32 * BRANCH_PITCH + BRANCH);
+    let ids = |part: &'static str| {
+        listed.iter().enumerate().map(move |(i, b)| (widgets::egui_id(&format!("workspace.versions.branch.{part}.{}", b.name)), span(i)))
+    };
+    let retry = widgets::egui_id("workspace.versions.branches.retry");
+    let parts = ids("more").chain([(retry, (0.0, 44.0))]).collect::<Vec<_>>();
+    if let Some(span) = key_rows(shell, ui, &ids("row").collect::<Vec<_>>(), &parts, Some(retry), (height - BRANCH).max(BRANCH_PITCH)) {
+        bring(&mut shell.versions.branches_scroll, span, height);
     }
-    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, above + tail, true, None, scroll);
+    let offset = scroll_tree(ui, p, tree, y, listed.len(), BRANCH_PITCH, above + tail, true, None, &mut shell.versions.branches_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
     if let Some(why) = failed {
@@ -508,7 +529,8 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     }
     for (i, b) in listed.iter().enumerate() {
         let area = Rect::from_min_size(pos2(r.left() + 8.0, y + above + i as f32 * BRANCH_PITCH - offset), vec2(r.width() - 16.0, BRANCH));
-        if area.intersects(tree) {
+        // A row past either edge is laid out too, so that Tab reaches it and the list follows.
+        if area.intersects(tree.expand2(vec2(0.0, BRANCH_PITCH))) {
             branch_row(shell, &clip, p, (area, i), b);
         }
     }
@@ -518,29 +540,53 @@ fn branches(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) 
     tree.bottom() + 8.0
 }
 
-/// ↑ and ↓ on a focused row of a list, `rows` in order, move the focus to the next or previous
-/// one, out of view too, and ↓ on `entry` to the first; gives the row moved to, which the caller
-/// scrolls into view. While a menu is open the arrows are its own, and the row keeps its focus.
-fn key_rows(panels: &crate::panels::State, ui: &egui::Ui, rows: &[egui::Id], entry: Option<egui::Id>) -> Option<usize> {
+/// Where a part of a list spans in its content, from its top to its foot.
+type Span = (f32, f32);
+
+/// ↑ and ↓ on a focused row of a list, `rows` in order with their spans, move the focus to the
+/// next or previous one, out of view too, and ↓ on `entry` to the first; Page Up and Page Down move
+/// it by the `page` that shows, and Home and End to the first and the last (AR-474). While a menu is
+/// open the keys are its own, and the row keeps its focus. Gives what the caller brings into view:
+/// the row moved to, or the row or other part of the list (`parts`) the keyboard has just come to.
+fn key_rows(shell: &Shell, ui: &egui::Ui, rows: &[(egui::Id, Span)], parts: &[(egui::Id, Span)], entry: Option<egui::Id>, page: f32) -> Option<Span> {
     let on_entry = entry.filter(|&id| ui.memory(|m| m.has_focus(id)));
-    let at = rows.iter().position(|&id| ui.memory(|m| m.has_focus(id)));
+    let at = rows.iter().position(|&(id, _)| ui.memory(|m| m.has_focus(id)));
     let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
     let next = match at {
-        _ if panels.menu.is_some() => None,
+        _ if shell.panels.menu.is_some() => None,
         _ if on_entry.is_some() && pressed(egui::Key::ArrowDown) => (!rows.is_empty()).then_some(0),
         Some(at) if pressed(egui::Key::ArrowDown) => (at + 1 < rows.len()).then_some(at + 1),
         Some(at) if pressed(egui::Key::ArrowUp) => at.checked_sub(1),
+        Some(at) => paged(ui, rows, at, page),
         _ => None,
     };
     if let Some(i) = next {
-        ui.memory_mut(|m| m.request_focus(rows[i]));
+        ui.memory_mut(|m| m.request_focus(rows[i].0));
     }
     // The keys are the list's, not egui's to move focus by place; only what has focus takes this.
     let arrows = egui::EventFilter { vertical_arrows: true, ..Default::default() };
-    if let Some(id) = next.or(at).map(|i| rows[i]).or(on_entry) {
+    if let Some(id) = next.or(at).map(|i| rows[i].0).or(on_entry) {
         ui.memory_mut(|m| m.set_focus_lock_filter(id, arrows));
     }
-    next
+    let followed = rows.iter().chain(parts).find(|(id, _)| shell.versions.follow == Some(*id));
+    next.map(|i| rows[i].1).or(followed.map(|(_, span)| *span))
+}
+
+/// The row Page Up, Page Down, Home or End moves the focus to from the row `at`, by where the keys
+/// take `at`'s top ([`crate::version_details::page_keys`]): going down, the last row whose top is at
+/// or above it, going up, the first at or below it, and at least the next row that way, as a page
+/// can be shorter than a group's heading and first row; none when no such key was pressed.
+fn paged(ui: &egui::Ui, rows: &[(egui::Id, Span)], at: usize, page: f32) -> Option<usize> {
+    let from = rows.get(at)?.1.0;
+    let mut to = from;
+    crate::version_details::page_keys(ui, &mut to, page);
+    if to > from {
+        rows.iter().rposition(|(_, (top, _))| *top <= to).map(|i| i.max((at + 1).min(rows.len() - 1)))
+    } else if to < from {
+        rows.iter().position(|(_, (top, _))| *top >= to).map(|i| i.min(at.saturating_sub(1)))
+    } else {
+        None
+    }
 }
 
 /// Scrolls `scroll` so that what spans `from` to `to` in a list's content comes whole into a view
@@ -732,9 +778,9 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
         }
         below += GROUP + group.len() as f32 * CHANGE_PITCH;
     }
-    let ids = spans.iter().map(|(id, _, _)| widgets::egui_id(id)).collect::<Vec<_>>();
-    if let Some((_, from, to)) = key_rows(&shell.panels, ui, &ids, None).and_then(|i| spans.get(i)) {
-        bring(&mut shell.versions.changes_scroll, (*from, *to), height - 8.0);
+    let rows = spans.iter().map(|(id, from, to)| (widgets::egui_id(id), (*from, *to))).collect::<Vec<_>>();
+    if let Some(span) = key_rows(shell, ui, &rows, &[], None, (height - 8.0 - CHANGE).max(CHANGE_PITCH)) {
+        bring(&mut shell.versions.changes_scroll, span, height - 8.0);
     }
     let offset = scroll_tree(ui, p, tree, top, content as usize, 1.0, 0.0, true, None, &mut shell.versions.changes_scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
@@ -798,9 +844,10 @@ pub(crate) fn path_words(d: &Difference) -> String {
 
 /// One change in `area`, registered as `id`: its name, where it is, and a letter for what happened
 /// to it; `live` makes it open the element in the centre and marks the open one as selected.
-/// Nothing out of sight is drawn or registered.
+/// Nothing further out of sight than the next row is laid out, and only what shows is registered:
+/// Tab reaches a row past either edge, and the list follows.
 pub(crate) fn change_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, area: Rect, id: &str, d: &Difference, live: bool) {
-    if !area.intersects(ui.clip_rect()) {
+    if !area.intersects(ui.clip_rect().expand2(vec2(0.0, CHANGE_PITCH))) {
         return;
     }
     let name = d.name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| tr("Unnamed"));
@@ -945,9 +992,18 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom()));
     // The rows from the split on sit under the divider.
     let below = |i: usize| i as f32 * PITCH + if split.is_some_and(|s| i >= s) { SHARED_PITCH } else { 0.0 };
-    let ids = shown.iter().map(|v| widgets::egui_id(&format!("workspace.versions.row.{}", v.hash))).collect::<Vec<_>>();
-    if let Some(i) = key_rows(&shell.panels, ui, &ids, None) {
-        bring(&mut shell.versions.scroll, (below(i), below(i) + ROW), tree.height() - 8.0);
+    // A row's Why? and the button under the list come into view with the keyboard too.
+    let ids = |part: &'static str| {
+        shown
+            .iter()
+            .enumerate()
+            .map(move |(i, v)| (widgets::egui_id(&format!("workspace.versions.row.{}{part}", v.hash)), (below(i), below(i) + ROW)))
+    };
+    let end = shown.len().max(1) as f32 * PITCH + divider;
+    let under = ["workspace.versions.more", "workspace.versions.more.retry"].map(|id| (widgets::egui_id(id), (end, end + 36.0)));
+    let parts = ids(".why").chain(under).collect::<Vec<_>>();
+    if let Some(span) = key_rows(shell, ui, &ids("").collect::<Vec<_>>(), &parts, None, (tree.height() - 8.0 - ROW).max(PITCH)) {
+        bring(&mut shell.versions.scroll, span, tree.height() - 8.0);
     }
     let offset = scroll_tree(ui, p, tree, top, shown.len(), PITCH, footer + divider, true, None, &mut shell.versions.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
@@ -959,7 +1015,8 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, ro
     }
     for (i, v) in shown.iter().enumerate() {
         let y = at(i);
-        if y + ROW >= tree.top() && y <= tree.bottom() {
+        // A row past either edge is laid out too, so that Tab reaches it and the list follows.
+        if y + ROW + PITCH >= tree.top() && y - PITCH <= tree.bottom() {
             row(shell, &clip, p, (r, y), v, clock);
         }
     }
