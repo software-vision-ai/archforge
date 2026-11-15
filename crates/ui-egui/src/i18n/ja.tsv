@@ -588,6 +588,15 @@ str		The foreign key {foreign_key} points at this key of {table}. Change or remo
 str		{table} has no primary key.	{table} に主キーがありません。
 str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
+str		Only a computed column takes an expression.	式を持てるのは計算列だけです。
+str		A computed column needs an expression.	計算列には式が必要です。
+str		A computed column takes no default.	計算列は既定値を持てません。
+str		An identity column needs an integer type.	識別列には整数型が必要です。
+str		An identity column may never be null.	識別列は NULL を許可できません。
+str		An identity column takes no default.	識別列は既定値を持てません。
+str		An identity column takes no expression.	識別列は式を持てません。
+str		A key or identity column may never be null.	キーの列や識別列は NULL を許可できません。
+str		The column {name} would break: {why}	列 {name} が成り立たなくなります: {why}
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。

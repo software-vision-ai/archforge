@@ -588,6 +588,15 @@ str		The foreign key {foreign_key} points at this key of {table}. Change or remo
 str		{table} has no primary key.	{table} no tiene clave primaria.
 str		The key {name} would break: {why}	La clave {name} dejaría de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Las claves construidas unas sobre otras superan aquí los {max} niveles o forman un ciclo.
+str		Only a computed column takes an expression.	Solo una columna calculada admite una expresión.
+str		A computed column needs an expression.	Una columna calculada necesita una expresión.
+str		A computed column takes no default.	Una columna calculada no admite valor por defecto.
+str		An identity column needs an integer type.	Una columna de identidad necesita un tipo entero.
+str		An identity column may never be null.	Una columna de identidad nunca admite nulos.
+str		An identity column takes no default.	Una columna de identidad no admite valor por defecto.
+str		An identity column takes no expression.	Una columna de identidad no admite expresión.
+str		A key or identity column may never be null.	Una columna de clave o de identidad nunca admite nulos.
+str		The column {name} would break: {why}	La columna {name} dejaría de ser válida: {why}
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.

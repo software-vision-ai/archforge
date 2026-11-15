@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
-use archforge_engine::Reason;
+use archforge_engine::{GenerationRule, Reason};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
@@ -633,37 +633,63 @@ pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, sca
     None
 }
 
+/// What a column's generation breaks ([`generation_problem`]): said as an English sentence
+/// ([`GenerationProblem::said`]) or typed ([`GenerationProblem::reason`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GenerationProblem(pub GenerationRule);
+
+impl GenerationProblem {
+    /// The problem as an English sentence, as "a computed column needs its expression".
+    pub fn said(self) -> &'static str {
+        match self.0 {
+            GenerationRule::ExpressionNeedsComputed => "an expression needs a computed generation",
+            GenerationRule::ComputedNeedsExpression => "a computed column needs its expression",
+            GenerationRule::ComputedTakesNoDefault => "a computed column takes no default",
+            GenerationRule::IdentityNeedsInteger => "an identity column needs an integer type",
+            GenerationRule::IdentityNotNullable => "an identity column cannot be nullable",
+            GenerationRule::IdentityTakesNoDefault => "an identity column takes no default",
+            GenerationRule::IdentityTakesNoExpression => "an identity column takes no expression",
+        }
+    }
+
+    /// The problem typed, for an interface to say in its own words.
+    pub fn reason(self) -> Reason {
+        Reason::Generation(self.0)
+    }
+}
+
 /// Why a column's generation does not fit, or none: a computed column has an expression and no
 /// default; an identity column is an integer type, not nullable, and has no default.
-pub fn generation_problem(store: &Store, a: Obj) -> Option<String> {
+pub fn generation_problem(store: &Store, a: Obj) -> Option<GenerationProblem> {
     let generation = generation_of(store, a);
     let expression = text_of(store, a, attribute::EXPRESSION);
     let default = text_of(store, a, attribute::DEFAULT);
-    match generation {
-        Generation::NoneKind => (!expression.is_empty()).then(|| "an expression needs a computed generation".to_string()),
+    let rule = match generation {
+        Generation::NoneKind => (!expression.is_empty()).then_some(GenerationRule::ExpressionNeedsComputed),
         Generation::ComputedStored | Generation::ComputedVirtual => {
             if expression.is_empty() {
-                Some("a computed column needs its expression".into())
+                Some(GenerationRule::ComputedNeedsExpression)
             } else if !default.is_empty() {
-                Some("a computed column takes no default".into())
+                Some(GenerationRule::ComputedTakesNoDefault)
             } else {
                 None
             }
         }
         Generation::IdentityAlways | Generation::IdentityByDefault => {
             if !is_integer_type(&type_of(store, a)) {
-                Some("an identity column needs an integer type".into())
+                Some(GenerationRule::IdentityNeedsInteger)
             } else if is_nullable(store, a) {
-                Some("an identity column cannot be nullable".into())
+                Some(GenerationRule::IdentityNotNullable)
             } else if !default.is_empty() {
-                Some("an identity column takes no default".into())
+                Some(GenerationRule::IdentityTakesNoDefault)
             } else if !expression.is_empty() {
-                Some("an identity column takes no expression".into())
+                Some(GenerationRule::IdentityTakesNoExpression)
             } else {
                 None
             }
         }
-    }
+    };
+    rule.map(GenerationProblem)
 }
 
 /// The entity an attribute, key or foreign key belongs to.
@@ -1290,7 +1316,7 @@ pub fn problems(store: &Store) -> Vec<String> {
                 out.push(format!("the size of {o}: {p}"));
             }
             if let Some(p) = generation_problem(store, o) {
-                out.push(format!("the generation of {o}: {p}"));
+                out.push(format!("the generation of {o}: {}", p.said()));
             }
             if let Some(t) = store.get(o, attribute::TYPE).ok().and_then(|v| v.as_str().map(str::to_string))
                 && let Some(p) = name_problem(&t, MAX_TYPE)

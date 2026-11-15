@@ -6578,6 +6578,39 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A column's generation refused is said in the chosen language by the rule it breaks, a column on
+/// a domain that would break with why in the same words, and a key or identity column asked to be
+/// nullable; a reason inside it this can't say leaves the whole to the engine's English. In light
+/// and dark (AR-494).
+#[test]
+fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::{GenerationRule as G, Reason};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (rule, said) in [
+            (G::ExpressionNeedsComputed, "Nur eine berechnete Spalte hat einen Ausdruck."),
+            (G::ComputedNeedsExpression, "Eine berechnete Spalte braucht einen Ausdruck."),
+            (G::ComputedTakesNoDefault, "Eine berechnete Spalte hat keinen Standardwert."),
+            (G::IdentityNeedsInteger, "Eine Identitätsspalte braucht einen Ganzzahltyp."),
+            (G::IdentityNotNullable, "Eine Identitätsspalte darf nie leer sein."),
+            (G::IdentityTakesNoDefault, "Eine Identitätsspalte hat keinen Standardwert."),
+            (G::IdentityTakesNoExpression, "Eine Identitätsspalte hat keinen Ausdruck."),
+        ] {
+            assert_eq!(crate::panels::said(&Reason::Generation(rule)).as_deref(), Some(said), "{rule:?} {theme:?}");
+        }
+        let breaks = |why| crate::panels::said(&Reason::WouldBreak { kind: "column", name: "nummer".into(), why: Box::new(why) });
+        let said = "Die Spalte nummer wäre danach ungültig: Eine Identitätsspalte braucht einen Ganzzahltyp.";
+        assert_eq!(breaks(Reason::Generation(G::IdentityNeedsInteger)).as_deref(), Some(said), "{theme:?}");
+        assert_eq!(breaks(Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
+        let null = crate::panels::said(&Reason::NotNullable);
+        assert_eq!(null.as_deref(), Some("Eine Schlüssel- oder Identitätsspalte darf nie leer sein."), "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

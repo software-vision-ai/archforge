@@ -456,6 +456,113 @@ fn a_key_a_step_would_break_carries_its_reason_typed() {
     );
 }
 
+/// A column's generation refused carries the rule it breaks typed beside the English, which stays
+/// as it was, from every command that checks it inside its step; a column on a domain that would
+/// break, as that column; and a key or identity column asked to be nullable (AR-494).
+#[test]
+fn a_columns_generation_refused_carries_its_rule_typed() {
+    use archforge_engine::{GenerationRule as G, Reason};
+    const NO_DEFAULT: &str = "a computed column takes no default";
+    const INTEGER: &str = "an identity column needs an integer type";
+    const NULLABLE: &str = "a key or identity column cannot be nullable";
+    let mut s = session();
+    let sm = sample(&mut s);
+    let add = |extra: Json| {
+        let mut p = json!({ "entity": sm.order, "name": "x", "type": "INTEGER" });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let qty = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "qty", "type": "INTEGER", "nullable": "yes" }));
+    let price = run(
+        &mut s,
+        "er.attribute.add",
+        json!({ "entity": sm.order, "name": "price", "type": "INTEGER", "generation": "computed-stored", "expression": "1" }),
+    );
+    let serial = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "serial", "type": "INTEGER", "generation": "identity-always" }));
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "counter", "base_type": "INTEGER" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "n", "domain": dom, "generation": "identity-always" }));
+    let generation = |a: &str, g: &str, expression: &str| json!({ "attribute": a, "generation": g, "expression": expression });
+    for (cmd, p, key, rule, message) in [
+        ("add", add(json!({ "expression": "1" })), "primary_key", G::ExpressionNeedsComputed, "an expression needs a computed generation"),
+        (
+            "set-generation",
+            generation(&qty, "computed-stored", ""),
+            "generation",
+            G::ComputedNeedsExpression,
+            "a computed column needs its expression",
+        ),
+        (
+            "add",
+            add(json!({ "generation": "computed-virtual", "expression": "1", "default": "0" })),
+            "primary_key",
+            G::ComputedTakesNoDefault,
+            NO_DEFAULT,
+        ),
+        ("set-default", json!({ "attribute": price, "default": "0" }), "default", G::ComputedTakesNoDefault, NO_DEFAULT),
+        ("add", add(json!({ "type": "TEXT", "generation": "identity-always" })), "primary_key", G::IdentityNeedsInteger, INTEGER),
+        ("set-type", json!({ "attribute": serial, "type": "TEXT" }), "type", G::IdentityNeedsInteger, INTEGER),
+        (
+            "set-generation",
+            generation(&qty, "identity-by-default", ""),
+            "generation",
+            G::IdentityNotNullable,
+            "an identity column cannot be nullable",
+        ),
+        (
+            "add",
+            add(json!({ "generation": "identity-always", "default": "0" })),
+            "primary_key",
+            G::IdentityTakesNoDefault,
+            "an identity column takes no default",
+        ),
+        (
+            "set-generation",
+            generation(&serial, "identity-always", "1"),
+            "generation",
+            G::IdentityTakesNoExpression,
+            "an identity column takes no expression",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(&format!("er.attribute.{cmd}"), &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(Reason::Generation(rule)), message, Some(key)), "{cmd} {p}");
+    }
+    let breaks = Reason::WouldBreak { kind: "column", name: "n".into(), why: Box::new(Reason::Generation(G::IdentityNeedsInteger)) };
+    let flags = json!({ "attribute": serial, "primary_key": false, "nullable": "yes", "unique": false });
+    for (cmd, p, key, reason, message) in [
+        ("er.domain.set", json!({ "domain": dom, "name": "counter", "base_type": "TEXT" }), "base_type", breaks, format!("n: {INTEGER}")),
+        ("er.attribute.add", add(json!({ "primary_key": true, "nullable": "yes" })), "nullable", Reason::NotNullable, NULLABLE.into()),
+        ("er.attribute.set-flags", flags, "nullable", Reason::NotNullable, NULLABLE.into()),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message, error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+}
+
+/// A loaded document's identity column with a default, which no command makes, breaks its
+/// generation on a change of its flags, and the refusal carries the rule typed (AR-494).
+#[test]
+fn a_loaded_identity_column_with_a_default_is_refused_with_its_rule_typed() {
+    use archforge_engine::{GenerationRule, Reason};
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, named_element::NAME, Value::str("id")).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    st.set(a, attribute::GENERATION, Value::Enum(Generation::IdentityAlways.index())).unwrap();
+    st.set(a, attribute::DEFAULT, Value::str("0")).unwrap();
+    st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let id = st.uuid(a).unwrap().to_string();
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let flags = json!({ "attribute": id, "primary_key": false, "nullable": "auto", "unique": true });
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.attribute.set-flags", &flags) else { panic!("the generation breaks") };
+    assert_eq!(error.reason, Some(Reason::Generation(GenerationRule::IdentityTakesNoDefault)));
+    assert_eq!((error.message.as_str(), error.key.as_deref()), ("an identity column takes no default", Some("attribute")));
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.

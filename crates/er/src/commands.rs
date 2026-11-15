@@ -613,13 +613,30 @@ fn is_identity(g: Generation) -> bool {
     matches!(g, Generation::IdentityAlways | Generation::IdentityByDefault)
 }
 
-/// The nullable parameter: `auto` follows the column (a key or identity column is not nullable).
+/// Inside a step: the column `a` keeps its generation's rules ([`rules::generation_problem`]), or
+/// the step is refused with the rule typed ([`Reason::Generation`]).
+fn generation_holds(st: &Store, a: Obj) -> Result<(), Invalid> {
+    match rules::generation_problem(st, a) {
+        Some(problem) => Err(refused(problem.reason(), problem.said().into())),
+        None => Ok(()),
+    }
+}
+
+/// Inside a step: the column `a` keeps its generation's rules ([`generation_holds`]), then its enum
+/// type's default ([`rules::enum_default_problem`]).
+fn column_holds(st: &Store, a: Obj) -> Result<(), Invalid> {
+    generation_holds(st, a)?;
+    rules::enum_default_problem(st, a).map_or(Ok(()), |problem| Err(Invalid::Refused(problem)))
+}
+
+/// The nullable parameter: `auto` follows the column (a key or identity column is not nullable,
+/// and `yes` for one is refused as [`Reason::NotNullable`]).
 fn nullable(p: &Params, held_not_null: bool) -> Result<bool, CommandError> {
     match text(p, "nullable") {
         "auto" | "" => Ok(!held_not_null),
         "yes" => {
             if held_not_null {
-                return Err(refuse("nullable", "a key or identity column cannot be nullable"));
+                return Err(refuse("nullable", "a key or identity column cannot be nullable").because(Reason::NotNullable));
             }
             Ok(true)
         }
@@ -680,9 +697,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
             st.set(a, attribute::GENERATION, Value::Enum(generation.index()))?;
             st.set(a, attribute::EXPRESSION, text_or_null(expression))?;
             st.set(a, attribute::COLLATION, text_or_null(collation))?;
-            if let Some(problem) = rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
-                return Err(Invalid::Refused(problem));
-            }
+            column_holds(st, a)?;
             st.insert(e, entity::ATTRIBUTE, at, Value::Ref(a))?;
             if key {
                 // A new key column grows the primary key that foreign keys elsewhere point at.
@@ -1040,9 +1055,7 @@ fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
                 clear_link(st, a)?;
                 follow_type(st, a)?;
             }
-            if let Some(problem) = rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
-                return Err(Invalid::Refused(problem));
-            }
+            column_holds(st, a)?;
             keys_still_hold(st, &keys, &entities)
         })
         .map_err(|e| refusal("type", e))?;
@@ -1252,13 +1265,19 @@ fn set_domain(st: &mut Store, d: Obj, name: &str, f: &DomainFields) -> Result<()
 }
 
 /// After a domain changed: the columns on it keep every rule (keys pair types, identity needs an
-/// integer).
+/// integer); a column's generation with the reason typed, as the column that would break
+/// ([`Reason::WouldBreak`]).
 fn columns_still_hold(st: &Store, t: Obj) -> Result<(), Invalid> {
     let columns = rules::type_columns(st, t);
     let mut fks: BTreeSet<Obj> = BTreeSet::new();
     let mut entities: BTreeSet<Obj> = BTreeSet::new();
     for a in &columns {
-        if let Some(problem) = rules::generation_problem(st, *a).or_else(|| rules::enum_default_problem(st, *a)) {
+        if let Some(problem) = rules::generation_problem(st, *a) {
+            let name = rules::label(st, *a);
+            let said = format!("{name}: {}", problem.said());
+            return Err(refused(Reason::WouldBreak { kind: kind_of(ATTRIBUTE), name: name.into(), why: Box::new(problem.reason()) }, said));
+        }
+        if let Some(problem) = rules::enum_default_problem(st, *a) {
             return Err(Invalid::Refused(format!("{}: {problem}", rules::label(st, *a))));
         }
         let (k, e) = keys_around(st, *a)?;
@@ -1536,10 +1555,7 @@ fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
             if old != default {
                 clear_link(st, a)?;
             }
-            match rules::generation_problem(st, a).or_else(|| rules::enum_default_problem(st, a)) {
-                Some(problem) => Err(Invalid::Refused(problem)),
-                None => Ok(()),
-            }
+            column_holds(st, a)
         })
         .map_err(|e| refusal("default", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
@@ -1566,10 +1582,7 @@ fn attribute_set_generation(ctx: &mut C<'_>, p: &Params) -> R {
             if (generation, expression.to_string()) != old {
                 clear_link(st, a)?;
             }
-            match rules::generation_problem(st, a) {
-                Some(problem) => Err(Invalid::Refused(problem)),
-                None => Ok(()),
-            }
+            generation_holds(st, a)
         })
         .map_err(|e| refusal("generation", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
@@ -1653,9 +1666,7 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
                     archforge_core::destroy_with_links(st, *u)?;
                 }
             }
-            if let Some(problem) = rules::generation_problem(st, a) {
-                return Err(Invalid::Refused(problem));
-            }
+            generation_holds(st, a)?;
             keys_still_hold(st, &fks, &entities)?;
             subtypes_hold(st, e)
         })
