@@ -410,7 +410,7 @@ fn failed(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, (words, why): 
 }
 
 /// How many differences there are, by area, and the cards in their groups (model elements, diagrams,
-/// then skills), scrolling under that.
+/// then skills), scrolling under that, by the keys too while no dialog is up.
 fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Difference]) {
     let (left, width) = column(r);
     let count = |area| items.iter().filter(|d| d.area == area).count();
@@ -429,9 +429,12 @@ fn list(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, items: &[Dif
     let content: f32 = groups.iter().filter(|g| g.2 > 0).map(|g| GROUP + g.2 as f32 * PITCH).sum();
     let top = r.top() + LIST_TOP;
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
-    // What shows of the list, as scroll_tree measures it.
-    let explorer = shell.explorer.focused;
-    scroll_keys(ui, explorer, &mut shell.versions.compare_results.scroll, PITCH, (tree.bottom() - top - 8.0).max(1.0));
+    // What shows of the list, as scroll_tree measures it; the keys are the list's while no dialog is
+    // up, since one that holds no keys from the window leaves the keyboard nowhere (AR-523).
+    if crate::actions::free(shell) {
+        let explorer = shell.explorer.focused;
+        scroll_keys(ui, explorer, &mut shell.versions.compare_results.scroll, PITCH, (tree.bottom() - top - 8.0).max(1.0));
+    }
     let offset = scroll_tree(ui, p, tree, top, content as usize, 1.0, 0.0, true, None, &mut shell.versions.compare_results.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);

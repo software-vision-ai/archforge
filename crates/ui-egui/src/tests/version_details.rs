@@ -336,9 +336,30 @@ fn details_list_what_changed_since_the_version_before() {
     });
 }
 
+/// With a list at its top and the explorer's delete dialog up, which holds no keys from the window
+/// and leaves the keyboard nowhere, the arrows, Page Down and End leave the list where it was
+/// (AR-523); with the dialog gone, the arrow moves it a card of `card` again, and Home takes it back.
+fn behind_a_dialog(h: &mut Harness<'static, Shell>, offset: impl Fn(&Harness<'static, Shell>) -> f32, card: f32) {
+    use egui::Key::{ArrowDown, End, Home, PageDown};
+    assert_eq!(offset(h), 0.0, "the list starts at its top");
+    h.state_mut().explorer.delete = Some(Default::default());
+    h.run();
+    assert!(h.ctx.memory(|m| m.focused().is_none()), "the dialog leaves the keyboard nowhere");
+    for key_ in [ArrowDown, PageDown, End] {
+        key(h, key_, egui::Modifiers::NONE);
+        assert_eq!(offset(h), 0.0, "a dialog open: {key_:?}");
+    }
+    h.state_mut().explorer.delete = None;
+    h.run();
+    key(h, ArrowDown, egui::Modifiers::NONE);
+    assert_eq!(offset(h), card, "the arrow scrolls again with the dialog gone");
+    key(h, Home, egui::Modifiers::NONE);
+    assert_eq!(offset(h), 0.0, "and Home takes it back");
+}
+
 /// With no control and not the explorer holding the keys, they scroll the changed items: the
 /// arrows by a card, Page Down and Page Up by what shows, End to the last card and Home to the top.
-/// A focused control keeps them.
+/// A focused control keeps them, and so does a dialog that leaves the keyboard nowhere (AR-523).
 #[test]
 fn the_keys_scroll_the_changed_items() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -379,6 +400,7 @@ fn the_keys_scroll_the_changed_items() {
         key(h, End, egui::Modifiers::NONE);
         assert_eq!(offset(h), 0.0, "the explorer has the keys");
         h.state_mut().explorer.focused = false;
+        behind_a_dialog(h, offset, 60.0);
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(COMPARE)));
         h.run();
         key(h, End, egui::Modifiers::NONE);
@@ -2656,7 +2678,8 @@ fn a_new_pair_lists_from_the_top() {
 }
 
 /// With no control and not the explorer holding the keys, they scroll the list: the arrows by a
-/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them.
+/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them,
+/// and so does a dialog that leaves the keyboard nowhere (AR-523).
 #[test]
 fn the_keys_scroll_the_list() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -2689,6 +2712,7 @@ fn the_keys_scroll_the_list() {
         key(h, End, egui::Modifiers::NONE);
         assert_eq!(offset(h), 0.0, "the explorer has the keys");
         h.state_mut().explorer.focused = false;
+        behind_a_dialog(h, offset, 56.0);
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(SWAP)));
         h.run();
         key(h, End, egui::Modifiers::NONE);
