@@ -6266,6 +6266,28 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A new diagram's element a diagram command refuses is said in the chosen language: none given for
+/// a class diagram, which is always of an element, an id of no element, and a class, which no class
+/// diagram is of. In light and dark (AR-513).
+#[test]
+fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let mut refused = |element: &str| {
+            let p = json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": element, "name": "Neu" });
+            crate::panels::run(h.state_mut(), "diagram.add", p).err().unwrap_or_default()
+        };
+        assert_eq!(refused(""), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
+        assert_eq!(refused("nope"), "Es gibt kein Element mit der ID nope.", "{theme:?}");
+        assert_eq!(refused(&order), "Order kann kein Diagramm dieser Art haben.", "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

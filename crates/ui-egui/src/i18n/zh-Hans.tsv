@@ -1333,6 +1333,7 @@ str		{name} is not a line on a diagram.	{name} 不是图上的线。
 str		{name} is not a label on a line.	{name} 不是线上的标签。
 str		The width is not between {min} and {max}.	宽度不在 {min} 到 {max} 之间。
 str		The height is not between {min} and {max}.	高度不在 {min} 到 {max} 之间。
+str		{name} cannot have a diagram of this kind.	{name} 不能拥有此类图。
 str		A diagram of this kind does not show {name}.	此类图不显示 {name}。
 str		{name} is outside what this diagram shows.	{name} 超出了此图显示的范围。
 str		This diagram shows {name} already.	此图已显示 {name}。

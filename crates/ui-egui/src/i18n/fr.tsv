@@ -1333,6 +1333,7 @@ str		{name} is not a line on a diagram.	{name} n’est pas une ligne d’un diag
 str		{name} is not a label on a line.	{name} n’est pas une étiquette d’une ligne.
 str		The width is not between {min} and {max}.	La largeur n’est pas comprise entre {min} et {max}.
 str		The height is not between {min} and {max}.	La hauteur n’est pas comprise entre {min} et {max}.
+str		{name} cannot have a diagram of this kind.	{name} ne peut pas avoir de diagramme de ce type.
 str		A diagram of this kind does not show {name}.	Un diagramme de ce type n’affiche pas {name}.
 str		{name} is outside what this diagram shows.	{name} est hors de ce que ce diagramme affiche.
 str		This diagram shows {name} already.	Ce diagramme affiche déjà {name}.
