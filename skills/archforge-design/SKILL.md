@@ -295,7 +295,9 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - An element's change cards scroll under the keyboard as Properties does (AR-481): a related link
   that Tab comes to is brought into view, and while one has the keyboard and no menu is open, Page
   Up and Page Down scroll the cards by what shows less a row (at least a row), and Home and End to
-  their ends (`version_details::page_keys`).
+  their ends (`version_details::page_keys`). While nothing and not the explorer has the keyboard,
+  and no menu or dialog is up, they and the arrows scroll the cards as they scroll a version's
+  changed items (`version_details::scroll_keys`, AR-486).
 - A text field written in place (a name, a description, a role) keeps on Enter or when left, and
   Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
   sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's

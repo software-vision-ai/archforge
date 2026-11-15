@@ -1202,9 +1202,8 @@ fn cards_scroll(h: &Harness<'static, Shell>, top: f32, (links, first): (&[String
 }
 
 /// While a related link has the keyboard, Page Down and Page Up scroll the cards by what shows less
-/// a row and End and Home to their ends, the link keeping the keyboard; not with the keyboard
-/// nowhere, with a menu open, the in-window menu bar's too, or with the control key as Windows and
-/// Linux send it.
+/// a row and End and Home to their ends, the link keeping the keyboard; not with a menu open, the
+/// in-window menu bar's too, or with the control key as Windows and Linux send it.
 #[test]
 fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
     use egui::Key::{End, Home, PageDown, PageUp};
@@ -1217,9 +1216,6 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
             key(h, key_, modifiers);
             assert_eq!(cards_scroll(h, top, at), was, "{why}: {key_:?}");
         };
-        for key_ in [PageDown, End] {
-            still(h, key_, egui::Modifiers::NONE, "the keyboard nowhere");
-        }
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
         h.run();
         for (key_, reaches) in [(PageDown, page), (PageDown, 2.0 * page), (PageUp, page), (Home, 0.0)] {
@@ -1249,20 +1245,89 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
     });
 }
 
-/// A Page Down let go in the frame of the click that opens a menu of the in-window bar finds the
-/// frame's keys held from the window, as the bar opens over the cards, and leaves them where they
-/// were (AR-518).
+/// With nothing holding the keyboard, the keys scroll the cards as they scroll a version's changed
+/// items (AR-486): the arrows by a row, Page Down and Page Up by what shows less a row, End to the
+/// last link and Home to the top, each drawn in the frame that reads it. Not while the explorer,
+/// another control or a dialog has them, with a menu open, the in-window menu bar's too, or with
+/// the control key as Windows and Linux send it.
 #[test]
-fn a_page_key_with_the_click_that_opens_the_menu_bar_leaves_the_cards() {
+fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
+    use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
+    const NONE: egui::Modifiers = egui::Modifiers::NONE;
     in_both(|h, host| {
         let (links, top) = many_related(h, host);
         let at = (links.as_slice(), rect_of(h, &links[0]).top() - 28.0);
-        h.state_mut().in_window_menu = true;
-        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
+        let page = rect_of(h, "workspace.explorer.resize").bottom() - top - 8.0 - 28.0;
+        let still = |h: &mut Harness<'static, Shell>, key_, modifiers, why: &str| {
+            let was = cards_scroll(h, top, at);
+            key(h, key_, modifiers);
+            assert_eq!(cards_scroll(h, top, at), was, "{why}: {key_:?}");
+        };
+        assert!(h.ctx.memory(|m| m.focused().is_none()), "nothing has the keyboard");
+        // One frame for the press and the release: the frame that reads the key draws where it went.
+        let once = |h: &mut Harness<'static, Shell>, key_| {
+            let press = |pressed| egui::Event::Key { key: key_, physical_key: None, pressed, repeat: false, modifiers: NONE };
+            h.input_mut().events.extend([press(true), press(false)]);
+            h.step();
+        };
+        for (key_, reaches) in [(ArrowDown, 28.0), (ArrowUp, 0.0), (PageDown, page), (PageDown, 2.0 * page), (PageUp, page), (Home, 0.0)] {
+            once(h, key_);
+            assert_eq!(cards_scroll(h, top, at), reaches, "{key_:?}");
+        }
+        once(h, End);
+        let end = cards_scroll(h, top, at);
+        assert!(has_id(h, &links[119]) && !has_id(h, &links[0]) && end > 2.0 * page, "End went to the last link ({end})");
+        for key_ in [ArrowDown, PageDown] {
+            still(h, key_, NONE, "at the end");
+        }
+        key(h, Home, NONE);
+        still(h, PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), "the control key");
+        h.state_mut().explorer.focused = true;
+        still(h, End, NONE, "the explorer has the keys");
+        h.state_mut().explorer.focused = false;
+        h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
+        still(h, End, NONE, "a menu open");
+        h.state_mut().panels.menu = None;
+        h.state_mut().explorer.delete = Some(Default::default());
         h.run();
-        open_file_with(h, egui::Key::PageDown, egui::Modifiers::NONE, true);
-        assert_eq!(cards_scroll(h, top, at), 0.0, "the cards stayed where they were");
+        assert!(h.ctx.memory(|m| m.focused().is_none()), "the dialog leaves the keyboard nowhere");
+        still(h, End, NONE, "a dialog open");
+        h.state_mut().explorer.delete = None;
+        h.state_mut().in_window_menu = true;
+        key(h, egui::Key::F10, NONE);
+        assert!(h.state().menu_bar.open.is_some() && h.ctx.memory(|m| m.focused().is_none()), "F10 opens the bar's first menu");
+        still(h, PageDown, NONE, "the menu bar open");
+        key(h, egui::Key::Escape, NONE);
+        assert!(h.state().menu_bar.open.is_none(), "Escape closes it");
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id("workspace.change-view.close")));
+        h.run();
+        still(h, End, NONE, "the way back has the keys");
+        h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.change-view.close")));
+        h.run();
+        key(h, PageDown, NONE);
+        assert_eq!(cards_scroll(h, top, at), page, "the cards take Page Down again");
     });
+}
+
+/// A Page Down let go in the frame of the click that opens a menu of the in-window bar finds the
+/// frame's keys held from the window, as the bar opens over the cards, and leaves them where they
+/// were (AR-518), whether a related link or nothing has the keyboard (AR-486).
+#[test]
+fn a_page_key_with_the_click_that_opens_the_menu_bar_leaves_the_cards() {
+    for linked in [false, true] {
+        in_both(|h, host| {
+            let (links, top) = many_related(h, host);
+            let at = (links.as_slice(), rect_of(h, &links[0]).top() - 28.0);
+            h.state_mut().in_window_menu = true;
+            if linked {
+                h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
+            }
+            h.run();
+            assert_eq!(h.ctx.memory(|m| m.focused().is_some()), linked, "the keyboard on a link: {linked}");
+            open_file_with(h, egui::Key::PageDown, egui::Modifiers::NONE, true);
+            assert_eq!(cards_scroll(h, top, at), 0.0, "the cards stayed where they were, linked: {linked}");
+        });
+    }
 }
 
 /// In a window of the least height, under a refusal long enough that the cards show less than two rows, Page

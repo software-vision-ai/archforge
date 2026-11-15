@@ -406,9 +406,11 @@ comparison engine feeds the lists, element cards and diagram cards, so counts ag
 Under an element's cards, related changes link to the other model elements connected to it that the
 same comparison lists: what it or its members refer to on either side, what refers to them, and its
 owner. What it contains is on its cards instead. A link moves along the list held, so the pair stays
-and nothing is read. Tab reaching a link out of sight brings it into view, and while a link has the
-keyboard and no menu is open, Page Up and Page Down scroll the cards by what shows less a row, never
-less than a row, and Home and End to their ends.
+and nothing is read. Tab reaching a link out of sight brings it into view. While a link has the
+keyboard, or no control and not the explorer has it, and no menu or dialog is open, Page Up and Page
+Down scroll the cards by what shows less a row, never less than a row, and Home and End to their
+ends; with nothing holding the keyboard, the arrows scroll them by a row too, as they scroll a
+version's changed items (AR-486).
 
 Differences are found by comparing rows by identity, not from Dolt's diff output:
 
