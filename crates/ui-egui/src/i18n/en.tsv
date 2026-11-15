@@ -607,7 +607,15 @@ str		The key is not one of {table}'s keys.	The key is not one of {table}'s keys.
 str		The key of {table} has no columns to refer to.	The key of {table} has no columns to refer to.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifying relationships would run in a cycle between {child} and {parent}.
 str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
+str		A foreign key needs at least one column.	A foreign key needs at least one column.
+str		A foreign key holds at most {max} columns.	A foreign key holds at most {max} columns.
+str		{name} appears twice in the foreign key.	{name} appears twice in the foreign key.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	The foreign key needs as many columns as the key of {table}, which has {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} is of type {type}, but {target} is of type {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} has no type, but {target} is of type {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} is of type {type}, but {target} has no type.
 str		The key {name} would break: {why}	The key {name} would break: {why}
+str		The foreign key {name} would break: {why}	The foreign key {name} would break: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
 str		Only a computed column takes an expression.	Only a computed column takes an expression.
 str		A computed column needs an expression.	A computed column needs an expression.

@@ -354,6 +354,12 @@ pub enum Reason {
     NotColumnOf { column: Box<str>, table: Box<str> },
     /// The column `name` may be null, which a primary key's column never is.
     NullableKeyColumn { name: String },
+    /// A foreign key has `columns` columns, where the key of the table `table` it points at has
+    /// `key`; they match by position.
+    ColumnCount { columns: usize, table: Box<str>, key: usize },
+    /// A foreign key's column `column` and the key's column `target` it matches by position differ
+    /// in type; `types` holds the column's type and the target's, none for a column without one.
+    TypesDiffer { column: Box<str>, target: Box<str>, types: Box<[Option<Box<str>>; 2]> },
     /// The foreign key `foreign_key` points at a key of the table `table`, so the key keeps its
     /// columns while it does.
     KeyInUse { foreign_key: Box<str>, table: Box<str> },

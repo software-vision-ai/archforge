@@ -937,7 +937,8 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused; a key's columns with the reason typed ([`Reason::WouldBreak`]).
+/// the rules, or the edit is refused; a key's columns and a foreign key's with the reason typed
+/// ([`Reason::WouldBreak`]).
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
@@ -952,9 +953,12 @@ fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Resu
     for fk in fks {
         let parts = rules::key_parts(store, *fk);
         if let (Some(e), Some(k)) = (parts.entity, parts.key)
-            && let Some((_, problem)) = rules::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
+            && let Some(problem) = rules::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
         {
-            return Err(Invalid::Refused(format!("the foreign key {} would break: {problem}", rules::label(store, *fk))));
+            let name = rules::label(store, *fk);
+            let said = format!("the foreign key {name} would break: {}", problem.said());
+            let Some(why) = problem.reason() else { return Err(Invalid::Refused(said)) };
+            return Err(refused(Reason::WouldBreak { kind: kind_of(FOREIGN_KEY), name: name.into(), why: Box::new(why) }, said));
         }
     }
     for e in entities {
@@ -2564,6 +2568,21 @@ pub fn deferrability_name(d: Deferrability) -> &'static str {
     }
 }
 
+/// A foreign key's columns that break the rules, refused under the parameter the problem concerns,
+/// with the reason typed where [`rules::KeyProblem::reason`] has one.
+fn key_refused(problem: &rules::KeyProblem) -> CommandError {
+    CommandError { reason: problem.reason(), ..refuse(problem.key(), problem.said()) }
+}
+
+/// A foreign key's columns that break the rules, found inside a step: refused through the step's
+/// carrier ([`refused`]) where [`rules::KeyProblem::reason`] types the problem, else in English.
+fn key_broken(problem: &rules::KeyProblem) -> Invalid {
+    match problem.reason() {
+        Some(reason) => refused(reason, problem.said()),
+        None => Invalid::Refused(problem.said()),
+    }
+}
+
 /// The key a foreign key command names: `key`, or the primary key of the entity `references`. A key
 /// of another entity than `references` ([`Reason::KeyNotOf`]) and an entity without a primary key
 /// ([`Reason::NoPrimaryKey`]) are refused typed.
@@ -2598,9 +2617,9 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (matching, deferrable) = (match_type(p)?, deferrability(p)?);
     let rel = if text(p, "relationship").is_empty() { None } else { Some(id_of(ctx, p, "relationship", RELATIONSHIP)?) };
     if !given.is_empty()
-        && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, rel)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &given, actions, rel)
     {
-        return Err(refuse(param, problem));
+        return Err(key_refused(&problem));
     }
     // New columns follow the relationship: in the key when it identifies, nullable when the end it
     // points at is optional.
@@ -2619,8 +2638,8 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
         .doc
         .transaction(|st| {
             let columns = if given.is_empty() { new_key_columns(st, e, k, &parent_role, in_key, optional)? } else { given.clone() };
-            if let Some((_, problem)) = rules::key_problem(st, e, k, &columns, actions, rel) {
-                return Err(Invalid::Refused(problem));
+            if let Some(problem) = rules::key_problem(st, e, k, &columns, actions, rel) {
+                return Err(key_broken(&problem));
             }
             let fk = new_foreign_key(st, e, k, &columns, &name, actions, rel)?;
             st.set(fk, foreign_key::MATCH, Value::Enum(matching.index()))?;
@@ -2637,9 +2656,9 @@ fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
     let parts = rules::key_parts(ctx.doc, fk);
     if let (Some(e), Some(k)) = (parts.entity, parts.key)
-        && let Some((_, problem)) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
     {
-        return Err(refuse("on_delete", problem));
+        return Err(refuse("on_delete", problem.said()));
     }
     ctx.doc
         .transaction(|st| {
@@ -2680,9 +2699,9 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("key", "the foreign key points at this key already; name the columns to change them").because(again));
     }
     if !given.is_empty()
-        && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, parts.relationship)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &given, actions, parts.relationship)
     {
-        return Err(refuse(param, problem));
+        return Err(key_refused(&problem));
     }
     // New columns follow the relationship: in the key when it identifies, nullable when the end it
     // points at is optional.

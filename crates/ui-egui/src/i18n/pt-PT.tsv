@@ -608,7 +608,15 @@ str		The key is not one of {table}'s keys.	A chave não é uma das chaves de {ta
 str		The key of {table} has no columns to refer to.	A chave de {table} não tem colunas a que fazer referência.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	As relações identificadoras formariam um ciclo entre {child} e {parent}.
 str		The foreign key points at this key already. Name the columns to change them.	A chave estrangeira já aponta para esta chave. Indique as colunas para as alterar.
+str		A foreign key needs at least one column.	Uma chave estrangeira precisa de pelo menos uma coluna.
+str		A foreign key holds at most {max} columns.	Uma chave estrangeira tem no máximo {max} colunas.
+str		{name} appears twice in the foreign key.	{name} aparece duas vezes na chave estrangeira.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	A chave estrangeira precisa de tantas colunas como a chave de {table}, ou seja, {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} é do tipo {type}, mas {target} é do tipo {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} não tem tipo, mas {target} é do tipo {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} é do tipo {type}, mas {target} não tem tipo.
 str		The key {name} would break: {why}	A chave {name} deixaria de ser válida: {why}
+str		The foreign key {name} would break: {why}	A chave estrangeira {name} deixaria de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	As chaves construídas umas sobre as outras ultrapassam aqui os {max} níveis ou formam um ciclo.
 str		Only a computed column takes an expression.	Só uma coluna calculada aceita uma expressão.
 str		A computed column needs an expression.	Uma coluna calculada precisa de uma expressão.

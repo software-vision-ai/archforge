@@ -217,7 +217,15 @@ as `KeyNotOf`, a referenced table without a primary key as `NoPrimaryKey`, the k
 already, with no columns named, as `Again` of `"foreign key"`, identifying relationships that would
 run in a cycle, from adding a foreign key and from pointing one elsewhere, as `IdentifyingCycle`
 with the child and the parent, and, inside the step, a key without columns to copy, which only a
-loaded document holds, as `NoKeyColumns`, each table named by its id when it has no name. The rest
+loaded document holds, as `NoKeyColumns`, each table named by its id when it has no name; and
+(AR-502) a foreign key's columns, as `rules::KeyProblem::reason` types them, from adding a foreign
+key and from pointing one elsewhere: not as many as the key's as `ColumnCount`, a column of another
+table as `NotColumnOf`, and a column whose type differs from the key column it matches as
+`TypesDiffer`, a column without a type as having none; inside the step, a foreign key that an edit
+of a column would break as `WouldBreak` of `"foreign key"` with that reason, and a new foreign
+key's columns copied from a loaded key of more than 32 as `TooMany` of `"foreign key column"`; no
+columns and one twice, which only a loaded document holds, are `TooFew` and `NamedTwice` of that
+kind. The rest
 follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs

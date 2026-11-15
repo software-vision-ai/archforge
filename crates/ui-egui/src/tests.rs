@@ -6715,6 +6715,70 @@ fn the_key_a_foreign_key_points_at_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A foreign key's columns, refused, are said in the chosen language, never in the engine's
+/// English: not as many as the key's, types that differ, a column without a type on either side,
+/// and a column's new type that would break a foreign key; none, too many and one twice, which
+/// only a loaded document holds, too. In light and dark (AR-502).
+#[test]
+fn a_foreign_keys_columns_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let [kunde, auftrag, notiz] = ["Kunde", "Auftrag", "Notiz"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        id("er.attribute.add", json!({ "entity": notiz, "name": "code", "primary_key": true }));
+        let mut column = |name: &str, ty: &str| id("er.attribute.add", json!({ "entity": auftrag, "name": name, "type": ty }));
+        let (kaeufer, haendler, titel, frei) =
+            (column("kaeufer", "BIGINT"), column("haendler", "BIGINT"), column("titel", "TEXT"), column("frei", ""));
+        let fk = id("er.foreign-key.add", json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "name": "fk_kaeufer" }));
+        let notiz_pk = crate::panels::run(h.state_mut(), "er.entity.get", json!({ "entity": notiz })).unwrap()["primary_key"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let add = |columns: serde_json::Value| json!({ "entity": auftrag, "references": kunde, "columns": columns });
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        for (cmd, p, said) in [
+            (
+                "er.foreign-key.add",
+                add(json!([kaeufer, haendler])),
+                "Der Fremdschlüssel braucht so viele Spalten wie der Schlüssel von Kunde, also 1.",
+            ),
+            ("er.foreign-key.add", add(json!([titel])), "titel hat den Typ TEXT, aber nummer hat den Typ BIGINT."),
+            ("er.foreign-key.add", add(json!([frei])), "frei hat keinen Typ, aber nummer hat den Typ BIGINT."),
+            (
+                "er.foreign-key.set-key",
+                json!({ "foreign_key": fk, "key": notiz_pk, "columns": [haendler] }),
+                "haendler hat den Typ BIGINT, aber code hat keinen Typ.",
+            ),
+            (
+                "er.attribute.set-type",
+                json!({ "attribute": kaeufer, "type": "TEXT" }),
+                "Der Fremdschlüssel fk_kaeufer wäre danach ungültig: kaeufer hat den Typ TEXT, aber nummer hat den Typ BIGINT.",
+            ),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        let kind = "foreign key column";
+        for (reason, said) in [
+            (Reason::TooFew { kind, min: 1 }, "Ein Fremdschlüssel braucht mindestens eine Spalte."),
+            (Reason::TooMany { kind, max: 32 }, "Ein Fremdschlüssel umfasst höchstens 32 Spalten."),
+            (Reason::NamedTwice { kind, name: "c0".into() }, "c0 kommt im Fremdschlüssel zweimal vor."),
+        ] {
+            assert_eq!(crate::er_said::said(&reason).as_deref(), Some(said), "{theme:?}");
+        }
+        // Two columns without a type never differ: that is left to the engine's English.
+        let untyped = Reason::TypesDiffer { column: "a".into(), target: "b".into(), types: Box::new([None, None]) };
+        assert_eq!(crate::er_said::said(&untyped), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A key a step would break is said in the chosen language with why in the same words, and keys built
 /// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
 /// English. In light and dark (AR-493).
@@ -6732,7 +6796,7 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
         let other = "Der Schlüssel pk_kunde wäre danach ungültig: nummer ist keine Spalte von Bestellung.";
         let not_column = Reason::NotColumnOf { column: "nummer".into(), table: "Bestellung".into() };
         assert_eq!(breaks("unique constraint", not_column).as_deref(), Some(other), "{theme:?}");
-        assert_eq!(breaks("foreign key", nullable()), None, "{theme:?}");
+        assert_eq!(breaks("check", nullable()), None, "{theme:?}");
         assert_eq!(breaks("primary key", Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
         let deep = crate::panels::said(&Reason::TooDeep { kind: "key", max: 32 });
         assert_eq!(
