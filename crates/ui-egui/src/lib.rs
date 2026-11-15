@@ -1991,6 +1991,7 @@ impl Shell {
         if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
             actions::run_shortcuts(self, ctx);
         }
+        actions::follow_close(self, ctx);
         // A skill's text is kept once its typing pauses, and all of it before quitting.
         skill_tab::sync(self, now, self.quit_requested, None);
         if skill_tab::waiting(self) {

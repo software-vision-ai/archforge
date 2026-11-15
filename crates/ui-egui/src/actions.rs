@@ -128,7 +128,7 @@ pub static ACTIONS: &[Action] = &[
         id: CLOSE,
         label: |_| tr("Close project"),
         available: |s| free(s) && s.active.and_then(|i| s.tabs.get(i)).is_some_and(|t| t.closing.is_none()),
-        run: Shell::close_project,
+        run: close,
         keys: None,
         search: None,
     },
@@ -399,6 +399,43 @@ pub(crate) fn run_shortcuts(shell: &mut Shell, ctx: &egui::Context) {
     }
     if !field && available(shell, REDO) && pressed(ctx, &REDO_TOO) {
         run(shell, REDO);
+    }
+}
+
+/// Close project asked for while a text field had the keyboard, with the project it was asked on.
+pub(crate) enum Closing {
+    /// Asked in this frame: the field lets go of the keyboard as it is drawn.
+    Asked(std::path::PathBuf),
+    /// The field has let go, committing a name typed in place as a click elsewhere does: Close runs.
+    LetGo(std::path::PathBuf),
+}
+
+/// The path of the project shown.
+fn shown(shell: &Shell) -> Option<&std::path::Path> {
+    shell.active.and_then(|i| shell.tabs.get(i)).map(|t| t.path.as_path())
+}
+
+/// Closes the project shown. With a text field holding the keyboard, as when the native bar's row
+/// is chosen while a name is typed in place, the field lets go first and Close runs a frame later
+/// (`follow_close`), so it finds the name committed and asks about it.
+fn close(shell: &mut Shell) {
+    match shown(shell).map(std::path::Path::to_path_buf) {
+        Some(path) if edit_menu::on_field(shell) => shell.edit.closing = Some(Closing::Asked(path)),
+        _ => shell.close_project(),
+    }
+}
+
+/// Once a frame, after the menus and the keys: a Close asked on a field takes the keyboard from it
+/// and asks for the next frame, in which it runs while its project still shows and Close can act.
+pub(crate) fn follow_close(shell: &mut Shell, ctx: &egui::Context) {
+    match shell.edit.closing.take() {
+        Some(Closing::Asked(path)) => {
+            ctx.memory_mut(egui::Memory::stop_text_input);
+            ctx.request_repaint();
+            shell.edit.closing = Some(Closing::LetGo(path));
+        }
+        Some(Closing::LetGo(path)) if shown(shell) == Some(path.as_path()) && available(shell, CLOSE) => shell.close_project(),
+        _ => {}
     }
 }
 
@@ -817,6 +854,33 @@ pub(crate) mod tests {
         for (modifiers, key) in [(control, Key::S), (control, Key::O), (control, Key::Comma), (control | shift, Key::G)] {
             press(&mut shell, modifiers, key);
             assert_eq!(effects(&shell, &saves, &picks), Vec::<&str>::new(), "a Mac's Control with ⌘ and {key:?} is nobody's chord");
+        }
+    }
+
+    /// Close project asked on a field lets the field go in that frame, asking for the next, and runs
+    /// in the next only while the project it was asked on still shows and Close can act.
+    #[test]
+    fn a_close_asked_on_a_field_runs_a_frame_later_on_its_own_project() {
+        let ctx = egui::Context::default();
+        let frame = |shell: &mut Shell| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| follow_close(shell, ui.ctx()));
+            output.textures_delta.clear();
+        };
+        let meanwhile: [(&str, fn(&mut Shell)); 3] = [
+            ("nothing", |_| {}),
+            ("another project shows", |s| s.tabs[0].path = "/other.archforge".into()),
+            ("a dialog is up", crate::support::open),
+        ];
+        for (what, change) in meanwhile {
+            let (mut shell, ..) = shell();
+            shell.edit.keyboard = edit_menu::Keyboard::Field;
+            run(&mut shell, CLOSE);
+            frame(&mut shell);
+            assert!(shell.project.is_some(), "{what}: the field lets go first");
+            change(&mut shell);
+            frame(&mut shell);
+            assert!(ctx.repaint_causes().iter().any(|c| c.file.ends_with("actions.rs")), "{what}: the letting go asked for the next frame");
+            assert_eq!((shell.project.is_none(), shell.edit.closing.is_none()), (what == "nothing", true), "{what}");
         }
     }
 }
