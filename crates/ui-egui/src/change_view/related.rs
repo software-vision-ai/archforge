@@ -74,9 +74,7 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
     let heading = trn("Related change", "Related changes", links.len() as u64);
     let head = ux::text_mid(&paint, left, card.top() + HEAD_MID, &heading, types::SMALL, p.text_secondary, Some((right - left).max(0.0)));
     let _ = control(shell, clip, "workspace.change-view.related", "status", head, false).accessible_name(&heading);
-    let (room, view, keys) = ((right - left - BETWEEN).max(0.0), clip.clip_rect(), clip.ctx().memory(|m| m.focused()));
-    // Ids are made only while something has the keys, to keep the link that has them and its neighbours.
-    let keyed = keys.and_then(|k| links.iter().position(|(at, _)| shell.versions.changes.get(*at).is_some_and(|d| k == egui_id(&link_id(d.id)))));
+    let (room, view, keyed) = ((right - left - BETWEEN).max(0.0), clip.clip_rect(), keyed(shell, clip.ctx(), links));
     for (i, (at, kind)) in links.iter().enumerate() {
         let mid = card.top() + FIRST_MID + i as f32 * ROW;
         let line = Rect::from_min_max(pos2(left, mid - ROW / 2.0), pos2(right, mid + ROW / 2.0));
@@ -102,6 +100,13 @@ pub(super) fn draw(shell: &mut Shell, clip: &egui::Ui, p: &Palette, universe: &U
             super::open(shell, row);
         }
     }
+}
+
+/// Which of `links` has the keyboard, if one does. Ids are made only while something has it, so a
+/// long list costs a frame nothing while nothing does.
+pub(super) fn keyed(shell: &Shell, ctx: &egui::Context, links: &[Link]) -> Option<usize> {
+    let keys = ctx.memory(|m| m.focused())?;
+    links.iter().position(|(at, _)| shell.versions.changes.get(*at).is_some_and(|d| keys == egui_id(&link_id(d.id))))
 }
 
 /// The automation id of the link to the element `id`.

@@ -412,7 +412,9 @@ scrolls with the cards.
 Under the cards, **Related change** names the other model elements connected to this one that also
 differ: what it or its members refer to, what refers to them, and its owner. Point at one to read,
 for example, *Order was changed in this comparison.*, and choose **Go to** and its name to open it
-the same way.
+the same way. Tab and Shift+Tab move through the links and the cards follow; while a link has the
+keyboard and no menu is open, Page Up and Page Down scroll the cards by a page, and Home and End go
+to their top and their end.
 
 In the example, save *Added email*, then rename *email* to *contact*. The summary says
 *1 value changed* and *The name changed from email to contact.*, the Before card shows *email*
