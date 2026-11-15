@@ -5421,10 +5421,6 @@ fn a_constraint_rule_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
-// A refusal in a Properties editor brings the editor back into view, its refusal, Cancel and
-// Apply with it, once, as its opening does: no press needs the body scrolled by hand after it, and
-// a body scrolled away afterwards stays where it was put (AR-469). At the design's window height.
-
 /// The constraint editor's Apply and Cancel.
 const CONSTRAINT_APPLY: &str = "workspace.properties.constraint.apply";
 const CONSTRAINT_CANCEL: &str = "workspace.properties.constraint.cancel";
@@ -5528,9 +5524,7 @@ fn a_body_scrolled_away_from_a_refusal_stays_put() {
         wheel_properties(&mut h, 240.0);
         let put = h.state().panels.scroll;
         assert!(in_view(&h, CONSTRAINT_APPLY).is_none(), "{theme:?}: Apply scrolled out of view");
-        for _ in 0..3 {
-            h.run();
-        }
+        h.run_steps(3);
         assert_eq!(h.state().panels.scroll, put, "{theme:?}: nothing pulls the body back");
         // A linked note picked instead: the refusal goes, the card shrinks, and the body stays.
         let at = in_view(&h, "workspace.properties.constraint.show.note").expect("Linked note in view");
@@ -5573,11 +5567,10 @@ fn a_refusal_brings_its_own_editor_into_view_when_two_are_open() {
 #[test]
 fn an_end_editor_moved_to_another_end_comes_into_view() {
     in_both_appearances(|theme| {
-        let (mut h, ids) = nary_sample(theme, true);
+        let (mut h, ids) = nary_sample_in(theme, true, egui::vec2(1600.0, 1000.0));
         let a = ids["recommends"].clone();
         for _ in 0..24 {
-            let add = serde_json::json!({ "association": a, "class": ids["Customer"] });
-            crate::panels::run(h.state_mut(), "uml.association.add-end", add).unwrap();
+            crate::panels::run(h.state_mut(), "uml.association.add-end", serde_json::json!({ "association": a, "class": ids["Customer"] })).unwrap();
         }
         crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [a] })).unwrap();
         h.run();
@@ -5615,6 +5608,33 @@ fn a_member_editor_moved_to_another_list_comes_into_view() {
         let kind = h.state().panels.member.as_ref().map(|e| (e.kind, e.target));
         assert_eq!(kind, Some((crate::uml_panel::MemberKind::Operation, None)), "{theme:?}: a new operation's editor");
         assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: its Apply in view");
+    });
+}
+
+/// An operation of 30 parameters has a card taller than the body: opened, it shows its top;
+/// refused at its foot, two parameters named alike, it shows its foot with the refusal, Apply and
+/// Cancel, not its top.
+#[test]
+fn a_refused_card_taller_than_the_body_shows_its_foot() {
+    in_both_appearances(|theme| {
+        let (mut h, order, _) = order_properties(theme);
+        let params: Vec<_> = (0..30).map(|i| serde_json::json!({ "name": format!("p{i}"), "type": "" })).collect();
+        let op = crate::panels::run(h.state_mut(), "uml.operation.add", serde_json::json!({ "class": order, "name": "plan", "parameters": params }));
+        let op = op.unwrap()["id"].as_str().unwrap().to_string();
+        crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [order] })).unwrap();
+        h.run();
+        let at = reached_in_properties(&mut h, &format!("workspace.properties.operation.{op}.edit"));
+        click(&mut h, at);
+        let top = in_view(&h, "workspace.properties.member.name").is_some();
+        assert!(top && in_view(&h, "workspace.properties.member.apply").is_none(), "{theme:?}: opened, the card shows its top");
+        h.state_mut().panels.member.as_mut().expect("the editor").params[1].name = "p0".into();
+        h.run();
+        let at = reached_in_properties(&mut h, "workspace.properties.member.apply");
+        click(&mut h, at);
+        let why = h.state().panels.member.as_ref().and_then(|e| e.refused.clone().filter(|_| e.refused_at.is_none())).expect("refused");
+        assert!(said_in_view(&h, &why), "{theme:?}: the refusal is in view: {why}");
+        assert!(in_view(&h, "workspace.properties.member.apply").is_some(), "{theme:?}: Apply in view");
+        assert!(in_view(&h, "workspace.properties.member.cancel").is_some(), "{theme:?}: Cancel in view");
     });
 }
 
@@ -24295,7 +24315,12 @@ fn profiles_are_made_in_models_edited_in_properties_and_applied_to_packages() {
 /// Catalog under them; `drawn`, the n-ary association recommends between them. In `theme`, in a
 /// window tall enough for an end's editor. Gives the ids by name, as `put_recommends` does.
 fn nary_sample(theme: ThemeKind, drawn: bool) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
-    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1200.0));
+    nary_sample_in(theme, drawn, egui::vec2(1600.0, 1200.0))
+}
+
+/// [`nary_sample`] in a window of `size`.
+fn nary_sample_in(theme: ThemeKind, drawn: bool, size: egui::Vec2) -> (Harness<'static, Shell>, std::collections::BTreeMap<&'static str, String>) {
+    let mut h = workspace_harness(theme, size);
     crate::uml_ui::open_sample(h.state_mut()).unwrap();
     h.run();
     let ids = crate::uml_nary::put_recommends(h.state_mut(), drawn).unwrap();

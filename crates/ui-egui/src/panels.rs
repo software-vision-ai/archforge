@@ -112,13 +112,13 @@ pub struct State {
     /// The body's scroll: how far it is scrolled, how tall its content was last
     /// frame, what it was scrolled for (a new panel or selection starts at the top), the editors
     /// open last frame with the refusal each showed, the editors that just opened or were refused
-    /// and are still to be brought into view, the body's visible rectangle, and the control of the
-    /// body that had the keyboard last frame.
+    /// and are still to be brought into view (true for a refusal), the body's visible rectangle,
+    /// and the control of the body that had the keyboard last frame.
     pub scroll: f32,
     pub content: f32,
     pub scrolled_for: Option<(Panel, Option<Uuid>)>,
     pub(crate) open_editors: Vec<(Editor, OpenEditor)>,
-    pub(crate) reveal: Vec<Editor>,
+    pub(crate) reveal: Vec<(Editor, bool)>,
     pub body: Option<Rect>,
     pub held: Option<egui::Id>,
 }
@@ -144,9 +144,8 @@ pub(crate) enum Editor {
     NaryEnd,
 }
 
-/// Where an open editor edits: the item, or none for one being added, and the list of the selected
-/// element it belongs to (a kind of member, type, object or key, or the end of an association), so
-/// a move to another item or another list counts as a new place.
+/// Where an open editor edits: the item, or none for one being added, and the list it belongs to (a
+/// kind of member, type, object or key, or an association's end), so a move to either is new.
 type Place = (Option<Uuid>, usize);
 
 /// An open editor: where it edits, and the refusal its card shows.
@@ -171,19 +170,17 @@ fn open_editors(s: &State) -> Vec<(Editor, OpenEditor)> {
     ]
 }
 
-/// The editors of `now` to bring into view: each one opened, or moved to another place, since
-/// `was`, or whose card shows a new refusal, so the refusal and the card's Cancel and Apply are in
-/// view, as on opening (AR-469). A refusal that goes, or stays, moves nothing, so a body scrolled
-/// away from it stays put; and an editor that changed nothing is not brought into view because
-/// another one did.
-fn to_reveal(now: &[(Editor, OpenEditor)], was: &[(Editor, OpenEditor)]) -> Vec<Editor> {
+/// The editors of `now` to bring into view: one opened or moved to another place since `was`, or,
+/// true beside it, one whose card shows a new refusal (AR-469). A refusal that goes or stays, and an
+/// editor that changed nothing, bring nothing into view, so a body scrolled away stays put.
+fn to_reveal(now: &[(Editor, OpenEditor)], was: &[(Editor, OpenEditor)]) -> Vec<(Editor, bool)> {
     let before = |editor: Editor| was.iter().find(|(e, _)| *e == editor).and_then(|(_, open)| open.as_ref());
-    let changed = |(editor, now): &(Editor, OpenEditor)| match (now, before(*editor)) {
-        (Some((place, why)), Some((was, said))) => place != was || (why.is_some() && why != said),
-        (Some(_), None) => true,
-        (None, _) => false,
+    let reveal = |(editor, now): &(Editor, OpenEditor)| match (now, before(*editor)) {
+        (Some((place, why)), Some((was, said))) if place == was => (why.is_some() && why != said).then_some((*editor, true)),
+        (Some(_), _) => Some((*editor, false)),
+        (None, _) => None,
     };
-    now.iter().filter(|open| changed(open)).map(|(editor, _)| *editor).collect()
+    now.iter().filter_map(reveal).collect()
 }
 
 /// Whether something being typed or an editor card is open in `s`: the fields that only show what is
@@ -200,13 +197,15 @@ pub(crate) fn editing(s: &State) -> bool {
         || s.ends.as_ref().is_some_and(crate::uml_relate::EndsEdit::unwritten)
 }
 
-/// Brings the card of `editor`, when it just opened or shows a new refusal ([`to_reveal`]), into the
-/// scrolled body's view: its foot if it fits, else its top. Editors call it with their card once
-/// drawn.
+/// Brings the card of `editor`, once drawn, into the body's view when [`to_reveal`] asks: an opened
+/// card's foot if it fits, else its top; a refused card's foot, with its Apply, Cancel and refusal,
+/// also when the card is taller than the body.
 pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rect) {
-    let Some(body) = shell.panels.body.filter(|_| shell.panels.reveal.contains(&editor)) else { return };
-    shell.panels.reveal.retain(|e| *e != editor);
-    shell.panels.scroll += into_view(body, card);
+    let Some(body) = shell.panels.body else { return };
+    let Some(at) = shell.panels.reveal.iter().position(|(e, _)| *e == editor) else { return };
+    let (_, refused) = shell.panels.reveal.remove(at);
+    let part = if refused { Rect::from_min_max(pos2(card.left(), card.top().max(card.bottom() - body.height() + 16.0)), card.max) } else { card };
+    shell.panels.scroll += into_view(body, part);
     ui.ctx().request_repaint();
 }
 
@@ -2765,8 +2764,7 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32, 
     }
     let open = open_editors(&shell.panels);
     if open != shell.panels.open_editors {
-        let opened = to_reveal(&open, &shell.panels.open_editors);
-        shell.panels.reveal.extend(opened);
+        shell.panels.reveal.extend(to_reveal(&open, &shell.panels.open_editors));
         shell.panels.open_editors = open;
     }
     let room = (shell.panels.content - body.height()).max(0.0);
