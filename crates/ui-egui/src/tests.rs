@@ -14816,6 +14816,199 @@ mod chat_keys {
             assert!(focused_on(&h, &link(17)) && whole(&h, &link(17)), "{theme:?}: the link is in view after the long piece");
         });
     }
+
+    /// The history of B7 with 19 older conversations under its five, 24 rows at the design's window
+    /// height, the open one first: its later rows under the fold.
+    fn long_history(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+        use crate::chat_store::{Row, fake::Kept};
+        let (mut h, rig) = chat_harness(theme, true);
+        for n in 0..19_u64 {
+            let id = (h.state().services.ids.clone().unwrap())();
+            let (origin, title) = (format!("Chat {}", n + 6), format!("An older question {n}"));
+            let row = Row {
+                id,
+                origin,
+                title,
+                provider: crate::ai_agents::Provider::Claude,
+                model: "sonnet".into(),
+                updated_at: 1_793_000_000 - n * 3600,
+                messages: 2,
+                removed: Default::default(),
+            };
+            rig.store.hold(Kept { row, turns: Vec::new(), messages: Vec::new(), calls: Vec::new(), ends: Vec::new() });
+        }
+        crate::chat_fixture::history(h.state_mut(), &rig).unwrap();
+        h.run();
+        assert!(has_id(&h, &row(0)) && !has_id(&h, &row(23)), "{theme:?}: the last row under the fold");
+        (h, rig)
+    }
+
+    /// The id of the history's row `i`.
+    fn row(i: usize) -> String {
+        format!("workspace.chat.history.{i}")
+    }
+
+    /// Whether the history's row `i` is listed and shows whole: inside the list, from where its
+    /// first row starts unscrolled to the panel's foot, where its resize handle ends.
+    fn row_whole(h: &Harness<'static, Shell>, i: usize) -> bool {
+        let (r, foot) = (rect_of(h, &row(i)), rect_of(h, "workspace.panel.resize").bottom());
+        let first = r.top() - i as f32 * 50.0 + h.state().chat_panel.history_scroll;
+        r.top() >= first && r.bottom() <= foot
+    }
+
+    /// Presses `key_` and asserts that the keyboard went to the row `to`, which shows whole.
+    fn press_to_row(h: &mut Harness<'static, Shell>, key_: Key, to: usize) {
+        key(h, key_, Modifiers::NONE);
+        assert!(focused_on(h, &row(to)) && row_whole(h, to), "{key_:?}: on {:?}, not row {to}", focused(h));
+    }
+
+    /// While a row of the history has the keyboard, Page Down and Page Up move it by what shows less
+    /// a row, End and Home to the last row and the first, each brought whole into view, Home's own
+    /// frame drawing the list from its top; not with the keyboard nowhere, with the control key as
+    /// Windows and Linux send it, under the row's menu or the confirmation (a screen reader can put
+    /// the keyboard on a row there), or with the in-window menu bar open, also in the frame a click
+    /// opens it in.
+    #[test]
+    fn the_page_keys_move_the_keyboard_through_the_history() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_history(theme);
+            let scroll = |h: &Harness<'static, Shell>| h.state().chat_panel.history_scroll;
+            key(&mut h, Key::End, Modifiers::NONE);
+            assert!(scroll(&h) == 0.0 && focused(&h).is_none(), "{theme:?}: with the keyboard nowhere");
+            let top = rect_of(&h, &row(0)).top();
+            focus_on(&mut h, &row(0));
+            // 780 points show: a page is 730, fourteen rows on.
+            for (key_, to) in [(Key::PageDown, 14), (Key::PageDown, 23), (Key::Home, 0), (Key::End, 23), (Key::PageUp, 9), (Key::PageUp, 0)] {
+                press_to_row(&mut h, key_, to);
+            }
+            assert_eq!(scroll(&h), 0.0, "{theme:?}: back at the top");
+            // The frame Home is pressed in draws the first row at the list's top: none comes after.
+            press_to_row(&mut h, Key::End, 23);
+            h.key_down(Key::Home);
+            h.step();
+            assert_eq!(rect_of(&h, &row(0)).top(), top, "{theme:?}: Home's own frame draws the list from its top");
+            h.key_up(Key::Home);
+            h.run();
+            key(&mut h, Key::End, Modifiers::CTRL.plus(Modifiers::COMMAND));
+            assert!(focused_on(&h, &row(0)) && scroll(&h) == 0.0, "{theme:?}: not with the control key");
+            // ⇧F10 opens the row's menu and ⌫ the confirmation, each taking the keyboard; a screen
+            // reader can still put it on a row under them.
+            for (key_, modifiers, menu) in [(Key::F10, Modifiers::SHIFT, true), (Key::Backspace, Modifiers::NONE, false)] {
+                key(&mut h, key_, modifiers);
+                focus_on(&mut h, &row(0));
+                let open = if menu { h.state().chat_panel.row_menu.is_some() } else { h.state().chat_panel.ask.is_some() };
+                assert!(open, "{theme:?}: {key_:?} opens over the row, the keyboard on {:?}", focused(&h));
+                key(&mut h, Key::End, Modifiers::NONE);
+                assert!(scroll(&h) == 0.0 && !has_id(&h, &row(23)), "{theme:?}: not with what {key_:?} opened");
+                key(&mut h, Key::Escape, Modifiers::NONE);
+                h.run();
+                let closed = h.state().chat_panel.row_menu.is_none() && h.state().chat_panel.ask.is_none();
+                assert!(closed && focused_on(&h, &row(0)), "{theme:?}: Escape gives the row the keyboard back");
+            }
+            // F10's menu bar leaves the keyboard on the row, and holds the keys.
+            h.state_mut().in_window_menu = true;
+            key(&mut h, Key::F10, Modifiers::NONE);
+            assert!(h.state().menu_bar.open.is_some() && focused_on(&h, &row(0)), "{theme:?}: F10 opens the bar's first menu");
+            key(&mut h, Key::End, Modifiers::NONE);
+            assert_eq!(scroll(&h), 0.0, "{theme:?}: not with the menu bar open");
+            key(&mut h, Key::Escape, Modifiers::NONE);
+            focus_on(&mut h, &row(0));
+            for pointer in [true, false] {
+                open_file_with(&mut h, Key::End, Modifiers::NONE, pointer);
+                assert_eq!(scroll(&h), 0.0, "{theme:?}: not in the frame of the click that opens the bar, by the pointer: {pointer}");
+                key(&mut h, Key::Escape, Modifiers::NONE);
+                focus_on(&mut h, &row(0));
+            }
+            press_to_row(&mut h, Key::End, 23);
+        });
+    }
+
+    /// From the first row, Tab lands on each row in turn, and Shift+Tab from the last on each back,
+    /// none skipped, each brought whole into view; the frame Tab moves the keyboard in asks for the
+    /// next, which brings it there. The wheel moves the list from the row with the keyboard; Home
+    /// and End bring the first and the last row back whole, the keyboard on them already; and a row
+    /// the wheel left just past either edge is reached all the same.
+    #[test]
+    fn tab_and_shift_tab_reach_every_row_of_the_history_and_it_follows() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_history(theme);
+            focus_on(&mut h, &row(0));
+            h.key_down(Key::Tab);
+            h.step();
+            h.step();
+            let asked = h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("chat_view.rs"));
+            assert!(asked, "{theme:?}: Tab asks for the frame that follows it: {:?}", h.ctx.repaint_causes());
+            h.key_up(Key::Tab);
+            h.run();
+            let forth = (0..24).map(row).collect::<Vec<_>>();
+            let back = (0..24).rev().map(row).collect::<Vec<_>>();
+            for (order, shift) in [(&forth, false), (&back, true)] {
+                focus_on(&mut h, &order[0]);
+                let mut landed = vec![order[0].clone()];
+                while landed.len() < order.len() {
+                    key(&mut h, Key::Tab, if shift { Modifiers::SHIFT } else { Modifiers::NONE });
+                    let on = focused(&h).unwrap_or_default();
+                    let at = (0..24).find(|&i| on == row(i));
+                    assert!(at.is_some_and(|i| row_whole(&h, i)), "{theme:?}: {on} in view, after {landed:?}");
+                    landed.push(on);
+                }
+                assert_eq!(&landed, order, "{theme:?}: every row in turn, Shift: {shift}");
+            }
+            // The wheel leaves the first row or the last cut, the keyboard still on it, and the list
+            // stays there; Home or End brings it whole into view, though the keyboard stays.
+            for (to, dy, key_) in [(0, -20.0, Key::Home), (23, 20.0, Key::End)] {
+                press_to_row(&mut h, key_, to);
+                let at = rect_of(&h, &row(to)).center();
+                h.event(egui::Event::PointerMoved(at));
+                let (unit, phase, source) = (egui::MouseWheelUnit::Point, egui::TouchPhase::Move, egui::MouseWheelSource::Wheel);
+                h.event(egui::Event::MouseWheel { unit, delta: egui::vec2(0.0, dy), modifiers: Modifiers::NONE, phase, source });
+                // The wheel's scroll eases in over a few frames.
+                h.run_steps(12);
+                h.run();
+                assert!(focused_on(&h, &row(to)) && !row_whole(&h, to), "{theme:?}: the wheel cut row {to}, the keyboard on it");
+                press_to_row(&mut h, key_, to);
+            }
+            // The wheel can leave the next row just past either edge: Tab and Shift+Tab reach it. The
+            // pointer leaves, so no row shows its bin for it.
+            h.event(egui::Event::PointerMoved(egui::pos2(10.0, 600.0)));
+            for (from, scroll, shift, to) in [(15, 19.0, false, 16), (5, 249.0, true, 4)] {
+                focus_on(&mut h, &row(from));
+                h.state_mut().chat_panel.history_scroll = scroll;
+                h.run();
+                assert!(row_whole(&h, from) && !has_id(&h, &row(to)), "{theme:?}: row {to} just out of view");
+                key(&mut h, Key::Tab, if shift { Modifiers::SHIFT } else { Modifiers::NONE });
+                assert!(focused_on(&h, &row(to)) && row_whole(&h, to), "{theme:?}: Tab reached row {to}, Shift: {shift}");
+            }
+        });
+    }
+
+    /// In the smallest window the history shows three rows whole and cuts the fourth: Tab from the
+    /// third reaches the fourth and the fifth, each brought whole into view, and End and Home its
+    /// ends. A page key moves at least to the next row that can be read, past rows that cannot.
+    #[test]
+    fn in_the_smallest_window_tab_and_the_page_keys_reach_every_row_of_the_history() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig, _) = chat_history(theme);
+            h.set_size(egui::vec2(1600.0, 400.0));
+            h.run();
+            assert!(row_whole(&h, 2) && !row_whole(&h, 3) && !has_id(&h, &row(4)), "{theme:?}: the fourth row cut, the fifth out of view");
+            focus_on(&mut h, &row(2));
+            press_to_row(&mut h, Key::Tab, 3);
+            press_to_row(&mut h, Key::Tab, 4);
+            press_to_row(&mut h, Key::Home, 0);
+            press_to_row(&mut h, Key::End, 4);
+            press_to_row(&mut h, Key::Home, 0);
+            // A page is 130 points: Page Down from the first row goes past the two under it, which
+            // cannot be read, to the fourth; Page Up from there back to the first.
+            if let Some(Ok(rows)) = h.state_mut().chat_panel.history.as_mut() {
+                rows[1].entry = Err("its provider is not one Archforge knows".into());
+                rows[2].entry = Err("its provider is not one Archforge knows".into());
+            }
+            h.run();
+            press_to_row(&mut h, Key::PageDown, 3);
+            press_to_row(&mut h, Key::PageUp, 0);
+        });
+    }
 }
 
 /// Undo this turn's changes takes back exactly the turn's changes, keeps the person's, and says when it cannot.

@@ -532,6 +532,13 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   title, then when, the agent and how many messages; the open one is marked. Times use the local
   offset the host gives ("Today 14:02", "Yesterday", "3 Nov"), months short and translated; without
   an offset a time says UTC.
+- The history follows the keyboard (AR-482): a row past either edge is laid out, so Tab and
+  Shift+Tab reach every row (only what shows is listed), and the row the keyboard comes to by them
+  or a screen reader is brought whole into view; the wheel can still cut the row that has it. While
+  a row has the keyboard, Page Up and Page Down move it by what shows less a row, at least to the
+  next row that can be read, and Home and End to the first row and the last, each brought whole
+  into view, also when the keyboard was there already; not while a row's menu or the confirmation
+  is open.
 - A reply's links open only through the link confirmation, and only a web address with a host and
   no user part; an image shows its alt text, HTML its plain text.
 - Leaving a project's tab stops its running turn; closing the project ends its conversation.

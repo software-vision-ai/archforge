@@ -24,6 +24,9 @@ const TURN_GAP: f32 = 12.0;
 /// The composer's lines: two at least, six at most.
 const MIN_LINES: usize = 2;
 const MAX_LINES: usize = 6;
+/// A history row's height, and how far apart the rows are.
+const ROW: f32 = 48.0;
+const ROW_PITCH: f32 = 50.0;
 /// Why a control waits while a reply runs.
 const WAIT: &str = "Stop the reply first";
 
@@ -1069,17 +1072,23 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
             clip.set_clip_rect(area.intersect(ui.clip_rect()));
             let paint = clip.painter().clone();
             let top = y;
+            // The confirmation holds the keyboard on a modal layer. A row's menu gives it up, and a
+            // screen reader can still put it on a row under the menu.
+            let free = panel.row_menu.is_none();
+            history_keys(&clip, (&mut panel.history_held, &mut panel.history_scroll), free, rows, area);
             y -= panel.history_scroll;
             let mut focus_found = false;
             for (i, listed) in rows.iter().enumerate() {
-                let r = Rect::from_min_size(pos2(left, y), vec2(width, 48.0));
-                y += 50.0;
+                let r = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
+                y += ROW_PITCH;
                 let wanted = match panel.focus {
                     Some(crate::chat_delete::FocusTo::Row(at)) => at == i,
                     Some(crate::chat_delete::FocusTo::Chat(id)) => id == listed.id,
                     _ => false,
                 };
-                if !clip.clip_rect().intersects(r) && !wanted {
+                // A row past either edge is laid out too, so that Tab and Shift+Tab reach it; only
+                // what shows is listed.
+                if !clip.clip_rect().expand2(vec2(0.0, ROW_PITCH)).intersects(r) && !wanted {
                     continue;
                 }
                 let row_id = format!("workspace.chat.history.{i}");
@@ -1166,6 +1175,10 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                     }
                 }
             }
+            // Tab hands the keyboard on as the rows are laid out: the next frame brings it into view.
+            if clip.memory(|m| m.focused()) != panel.history_held {
+                clip.ctx().request_repaint();
+            }
             // A row the keyboard was to go to that the list no longer holds: it goes nowhere.
             let target = panel.focus.is_some_and(|f| match f {
                 crate::chat_delete::FocusTo::Row(at) => at < rows.len(),
@@ -1198,4 +1211,51 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
     }
     let foot = tr("Conversations are kept in the project, so they travel with it and never show in another project.");
     crate::settings::wrapped(&paint, pos2(left + 10.0, y + 10.0), width - 20.0, &foot, types::CAPTION, p.text_muted, 4);
+}
+
+/// The history's `rows` follow the keyboard (AR-482), before they are laid out in `area` from its
+/// top, scrolled by `scroll`: while a row has the keyboard and the keys are `free` (no row's menu is
+/// open), Page Up and Page Down move it by what shows less a row and Home and End to the first row
+/// and the last; the row these keys went to, at either end too, or the row the keyboard has come
+/// to since the list last drew (`held`), by Tab or a screen reader, is brought whole into view. A
+/// row that cannot be read takes no keyboard.
+fn history_keys(ui: &egui::Ui, (held, scroll): (&mut Option<egui::Id>, &mut f32), free: bool, rows: &[crate::chat_store::Listed], area: Rect) {
+    let id = |i: usize| crate::widgets::egui_id(&format!("workspace.chat.history.{i}"));
+    let live = rows.iter().enumerate().filter(|(_, l)| l.entry.is_ok()).map(|(i, _)| i).collect::<Vec<_>>();
+    let mut now = ui.memory(|m| m.focused());
+    let at = live.iter().position(|&i| Some(id(i)) == now).filter(|_| free);
+    let to = at.and_then(|at| paged(ui, &live, at, area.height())).and_then(|k| live.get(k).copied());
+    if let Some(i) = to {
+        ui.memory_mut(|m| m.request_focus(id(i)));
+        now = Some(id(i));
+    }
+    let moved = now != std::mem::replace(held, now);
+    let came = live.iter().copied().find(|&i| Some(id(i)) == now).filter(|_| moved);
+    if let Some(i) = to.or(came) {
+        let r = Rect::from_min_size(pos2(area.left(), area.top() + i as f32 * ROW_PITCH - *scroll), vec2(area.width(), ROW));
+        // The first row starts at the list's top edge, where the scroll ends.
+        *scroll = (*scroll + crate::panels::into_view(area, r)).max(0.0);
+    }
+}
+
+/// The place in `live`, the readable rows' places in the history, that Page Up, Page Down, Home or
+/// End moves the keyboard to from `live[at]`, by where [`crate::version_details::page_keys`] takes
+/// its top in a list showing `view`: going down, the last row whose top is at or above it, going
+/// up, the first at or below it, and at least the next readable row that way; a key that goes
+/// nowhere, Home on the first row, gives `at`. None when no such key was pressed.
+fn paged(ui: &egui::Ui, live: &[usize], at: usize, view: f32) -> Option<usize> {
+    let top = |i: usize| i as f32 * ROW_PITCH;
+    let from = top(*live.get(at)?);
+    let (mut to, events) = (from, ui.input(|i| i.events.len()));
+    crate::version_details::page_keys(ui, &mut to, (view - ROW_PITCH).max(ROW_PITCH));
+    let last = live.len().saturating_sub(1);
+    if ui.input(|i| i.events.len()) == events {
+        None
+    } else if to > from {
+        live.iter().rposition(|&i| top(i) <= to).map(|k| k.max(at + 1).min(last))
+    } else if to < from {
+        live.iter().position(|&i| top(i) >= to).map(|k| k.min(at.saturating_sub(1)))
+    } else {
+        Some(at)
+    }
 }
