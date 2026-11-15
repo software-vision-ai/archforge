@@ -615,6 +615,7 @@ str	refusal	a unique constraint	唯一约束
 str	refusal	a foreign key	外键
 str	refusal	a check	检查约束
 str	refusal	an index	索引
+str	refusal	a subtype	子类型
 str	refusal	a key column	键列
 str	refusal	a skill	技能
 str	refusal	an association end	关联端

@@ -765,6 +765,7 @@ pub(crate) fn a_kind(kind: &str) -> Option<String> {
         "foreign key" => tr_ctx("refusal", "a foreign key"),
         "check" => tr_ctx("refusal", "a check"),
         "index" => tr_ctx("refusal", "an index"),
+        "subtype" => tr_ctx("refusal", "a subtype"),
         "key column" => tr_ctx("refusal", "a key column"),
         "skill" => tr_ctx("refusal", "a skill"),
         "association end" => tr_ctx("refusal", "an association end"),

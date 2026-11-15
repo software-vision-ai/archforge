@@ -6149,7 +6149,7 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
 
 /// An ER command's id, key columns and constraint name refused are said in the chosen language,
 /// never in the engine's English: no id, as the id of what the parameter takes, or of no element,
-/// an element of another kind by its name, a key's columns too many, no ids or given twice, and a
+/// an element of another kind by its name, a subtype's among them, a key's columns too many, no ids or given twice, and a
 /// constraint name the schema has; a kind ER does not name is left to the other rows. In a window
 /// of the design's height, in light and dark (AR-438).
 #[test]
@@ -6179,6 +6179,11 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
         assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": column, "name": "X" })), not_table, "{theme:?}");
         let not_key = fmt(&not_a, &[("name", "Kunde"), ("what", &tr_ctx("refusal", "a key"))]);
         assert_eq!(refused(&mut h, "er.foreign-key.add", json!({ "entity": table, "key": table })), not_key, "{theme:?}");
+        // A subtype link, the interface's word for the link from a subtype to its supertype.
+        let no_subtype = fmt(&no_id, &[("what", &tr_ctx("refusal", "a subtype"))]);
+        assert_eq!(refused(&mut h, "er.generalization.remove", json!({ "generalization": "" })), no_subtype, "{theme:?}");
+        let not_subtype = fmt(&not_a, &[("name", "Kunde"), ("what", &tr_ctx("refusal", "a subtype"))]);
+        assert_eq!(refused(&mut h, "er.generalization.remove", json!({ "generalization": table })), not_subtype, "{theme:?}");
         let columns = |given: serde_json::Value| json!({ "entity": table, "columns": given, "name": "uq_x" });
         let many = vec![column.as_str(); archforge_er::rules::MAX_KEY_COLUMNS + 1];
         let most = fmt(&tr("A key holds at most {max} columns."), &[("max", "32")]);

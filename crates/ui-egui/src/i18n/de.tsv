@@ -615,6 +615,7 @@ str	refusal	a unique constraint	eine Eindeutigkeitsbedingung
 str	refusal	a foreign key	ein Fremdschlüssel
 str	refusal	a check	eine Prüfbedingung
 str	refusal	an index	ein Index
+str	refusal	a subtype	ein Untertyp
 str	refusal	a key column	eine Schlüsselspalte
 str	refusal	a skill	ein Skill
 str	refusal	an association end	ein Assoziationsende

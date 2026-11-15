@@ -614,6 +614,7 @@ str	refusal	a unique constraint	a unique constraint
 str	refusal	a foreign key	a foreign key
 str	refusal	a check	a check
 str	refusal	an index	an index
+str	refusal	a subtype	a subtype
 str	refusal	a key column	a key column
 str	refusal	a skill	a skill
 str	refusal	an association end	an association end

@@ -51,7 +51,7 @@ fn text<'a>(p: &'a Params, key: &str) -> &'a str {
 }
 
 /// The kinds of ER element as the interface names them, by class.
-const KINDS: [(ClassId, &str); 13] = [
+const KINDS: [(ClassId, &str); 14] = [
     (SCHEMA, "schema"),
     (ENTITY, "table"),
     (ATTRIBUTE, "column"),
@@ -65,6 +65,7 @@ const KINDS: [(ClassId, &str); 13] = [
     (FOREIGN_KEY, "foreign key"),
     (CHECK_CONSTRAINT, "check"),
     (TABLE_INDEX, "index"),
+    (GENERALIZATION, "subtype"),
 ];
 
 /// The kind of an element of `class` as a typed refusal names it: the word the interface uses

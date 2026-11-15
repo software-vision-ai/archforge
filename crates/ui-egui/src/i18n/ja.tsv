@@ -615,6 +615,7 @@ str	refusal	a unique constraint	一意制約
 str	refusal	a foreign key	外部キー
 str	refusal	a check	チェック制約
 str	refusal	an index	インデックス
+str	refusal	a subtype	サブタイプ
 str	refusal	a key column	キー列
 str	refusal	a skill	スキル
 str	refusal	an association end	関連端

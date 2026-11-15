@@ -7,7 +7,7 @@ use archforge_engine::Reason;
 use crate::i18n::{fmt, tr};
 
 /// The kinds of ER element a refusal names, as `archforge_er`'s commands type them.
-const KINDS: [&str; 15] = [
+const KINDS: [&str; 16] = [
     "schema",
     "table",
     "column",
@@ -21,6 +21,7 @@ const KINDS: [&str; 15] = [
     "foreign key",
     "check",
     "index",
+    "subtype",
     "key",
     "key column",
 ];
