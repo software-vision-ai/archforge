@@ -572,6 +572,10 @@ str		A name has to be one line.	名称必须只有一行。
 str		A name can't be empty.	名称不能为空。
 str		There is {what} named {name} already.	已有名为 {name} 的{what}。
 str		{what} cannot depend on itself.	{what}不能依赖自身。
+str		No id is given. Give the id of {what}.	未给出 ID。请给出{what}的 ID。
+str		{name} is not {what}.	{name} 不是{what}。
+str		Give the key's columns as a list of ids.	请以 ID 列表的形式给出键的列。
+str		A key holds at most {max} columns.	一个键最多包含 {max} 列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		The text can't be empty.	文本不能为空。
@@ -604,6 +608,15 @@ str	refusal	a domain	域
 str	refusal	an enum type	枚举类型
 str	refusal	a sequence	序列
 str	refusal	a view	视图
+str	refusal	a constraint	约束
+str	refusal	a key	键
+str	refusal	a primary key	主键
+str	refusal	a unique constraint	唯一约束
+str	refusal	a foreign key	外键
+str	refusal	a check	检查约束
+str	refusal	an index	索引
+str	refusal	a subtype	子类型
+str	refusal	a key column	键列
 str	refusal	a skill	技能
 str	refusal	an association end	关联端
 str		A name can't start or end with a space.	名称不能以空格开头或结尾。

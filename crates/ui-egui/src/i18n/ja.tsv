@@ -572,6 +572,10 @@ str		A name has to be one line.	名前は 1 行にしてください。
 str		A name can't be empty.	名前は空にできません。
 str		There is {what} named {name} already.	{name} という名前の{what}はすでにあります。
 str		{what} cannot depend on itself.	{what}は自分自身に依存できません。
+str		No id is given. Give the id of {what}.	ID が指定されていません。{what}の ID を指定してください。
+str		{name} is not {what}.	{name} は{what}ではありません。
+str		Give the key's columns as a list of ids.	キーの列は ID のリストで指定してください。
+str		A key holds at most {max} columns.	キーに含められる列は最大 {max} 個です。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
@@ -604,6 +608,15 @@ str	refusal	a domain	ドメイン
 str	refusal	an enum type	列挙型
 str	refusal	a sequence	シーケンス
 str	refusal	a view	ビュー
+str	refusal	a constraint	制約
+str	refusal	a key	キー
+str	refusal	a primary key	主キー
+str	refusal	a unique constraint	一意制約
+str	refusal	a foreign key	外部キー
+str	refusal	a check	チェック制約
+str	refusal	an index	インデックス
+str	refusal	a subtype	サブタイプ
+str	refusal	a key column	キー列
 str	refusal	a skill	スキル
 str	refusal	an association end	関連端
 str		A name can't start or end with a space.	名前の先頭や末尾に空白は使えません。
