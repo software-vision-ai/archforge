@@ -1,7 +1,8 @@
 //! The ER commands' typed refusals in the user's words (AR-438): `panels::said` asks here last, so
 //! a reason UML says too keeps UML's row. Only the ER kinds are matched, by the words the interface
 //! uses for them; a kind not listed is left to the engine's English. A word none of a choice's
-//! words is said under the choice's label.
+//! words is said under the choice's label. A key's columns (AR-492): none, a column of another
+//! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
 
 use archforge_engine::{NotOneOf, Reason, WordPlace};
 
@@ -39,6 +40,14 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::IdsExpected { kind: KEY_COLUMN } => tr("Give the key's columns as a list of ids."),
         Reason::TooMany { kind: KEY_COLUMN, max } => fmt(&tr("A key holds at most {max} columns."), &[("max", &max.to_string())]),
         Reason::NamedTwice { kind: KEY_COLUMN, .. } => tr("An element is named twice. Name each element once."),
+        Reason::TooFew { kind: KEY_COLUMN, min: 1 } => tr("A key needs at least one column."),
+        Reason::NotColumnOf { column, table } => fmt(&tr("{column} is not a column of {table}."), &[("column", column), ("table", table)]),
+        Reason::NullableKeyColumn { name } => fmt(&tr("{name} may be null, which a primary key column never is."), &[("name", name)]),
+        Reason::KeyInUse { foreign_key, table } => fmt(
+            &tr("The foreign key {foreign_key} points at this key of {table}. Change or remove it first."),
+            &[("foreign_key", foreign_key), ("table", table)],
+        ),
+        Reason::NoPrimaryKey { table } => fmt(&tr("{table} has no primary key."), &[("table", table)]),
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })

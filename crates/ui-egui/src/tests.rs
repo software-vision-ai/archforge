@@ -6410,6 +6410,44 @@ fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A key's columns refused are said in the chosen language, never in the engine's English: none,
+/// for a primary key and a unique constraint, a column of another table, a key column a foreign key
+/// needs and no primary key to remove; a column that may be null in a primary key, which the rules
+/// type, too. In a window of the design's height, in light and dark (AR-492).
+#[test]
+fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let kunde = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let order = id("er.entity.add", json!({ "schema": schema, "name": "Bestellung" }));
+        let nummer = id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        let column = id("er.attribute.add", json!({ "entity": order, "name": "kunde_nummer", "type": "BIGINT", "nullable": "no" }));
+        id("er.foreign-key.add", json!({ "entity": order, "references": kunde, "columns": [column], "name": "fk_kunde" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let none = "Ein Schlüssel braucht mindestens eine Spalte.";
+        assert_eq!(refused("er.primary-key.set", json!({ "entity": order, "columns": [], "name": "" })), none, "{theme:?}");
+        assert_eq!(refused("er.unique.add", json!({ "entity": order, "columns": [] })), none, "{theme:?}");
+        let other = "nummer ist keine Spalte von Bestellung.";
+        assert_eq!(refused("er.unique.add", json!({ "entity": order, "columns": [nummer] })), other, "{theme:?}");
+        let flags = json!({ "attribute": nummer, "primary_key": false, "nullable": "auto", "unique": false });
+        let in_use = "Der Fremdschlüssel fk_kunde verweist auf diesen Schlüssel von Kunde. Ändern oder entfernen Sie ihn zuerst.";
+        assert_eq!(refused("er.attribute.set-flags", flags), in_use, "{theme:?}");
+        assert_eq!(refused("er.primary-key.remove", json!({ "entity": order })), "Bestellung hat keinen Primärschlüssel.", "{theme:?}");
+        let nullable = crate::er_said::said(&Reason::NullableKeyColumn { name: "notiz".into() });
+        assert_eq!(nullable.as_deref(), Some("notiz darf leer sein, was eine Primärschlüsselspalte nie darf."), "{theme:?}");
+        // At least two columns is no rule of a key's.
+        assert_eq!(crate::er_said::said(&Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

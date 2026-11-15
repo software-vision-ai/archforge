@@ -880,7 +880,7 @@ fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Resu
     for e in entities {
         for k in rules::keys_of(store, *e) {
             if let Some(problem) = rules::key_columns_problem(store, *e, &rules::key_columns(store, k), store.class_of(k)? == PRIMARY_KEY) {
-                return Err(Invalid::Refused(format!("the key {} would break: {problem}", rules::label(store, k))));
+                return Err(Invalid::Refused(format!("the key {} would break: {}", rules::label(store, k), problem.said())));
             }
         }
     }
@@ -903,17 +903,21 @@ fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Resu
 }
 
 /// Refuses under `param` when foreign keys point at key `k`: their columns follow the key's, so the
-/// key's columns stay as they are while one does.
+/// key's columns stay as they are while one does; the reason typed with the first foreign key and
+/// the key's table.
 fn key_is_free(store: &Store, k: Obj, param: &str) -> Result<(), CommandError> {
-    match rules::keys_onto(store, k).first() {
-        Some(fk) => Err(refuse(
-            param,
-            format!(
-                "the foreign key {} points at the key of {}; change or remove it first",
-                rules::label(store, *fk),
-                rules::entity_of(store, k).map(|e| rules::label(store, e)).unwrap_or_default()
-            ),
-        )),
+    let Some(fk) = rules::keys_onto(store, k).first().copied() else { return Ok(()) };
+    let foreign_key = rules::label(store, fk);
+    let table = rules::entity_of(store, k).map(|e| rules::label(store, e)).unwrap_or_default();
+    let message = format!("the foreign key {foreign_key} points at the key of {table}; change or remove it first");
+    Err(refuse(param, message).because(Reason::KeyInUse { foreign_key: foreign_key.into(), table: table.into() }))
+}
+
+/// Refuses under `columns` when `columns` cannot be a key of `e` ([`rules::key_columns_problem`]),
+/// with its reason typed.
+fn key_columns_fit(store: &Store, e: Obj, columns: &[Obj]) -> Result<(), CommandError> {
+    match rules::key_columns_problem(store, e, columns, false) {
+        Some(problem) => Err(refuse("columns", problem.said()).because(problem.reason())),
         None => Ok(()),
     }
 }
@@ -2662,11 +2666,10 @@ fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
     let existing = rules::primary_key_of(ctx.doc, e);
     let name = constraint_name(ctx, p, e, existing)?;
     if columns.is_empty() {
-        return Err(refuse("columns", "a primary key needs at least one column; remove it instead"));
+        let none = Reason::TooFew { kind: "key column", min: 1 };
+        return Err(refuse("columns", "a primary key needs at least one column; remove it instead").because(none));
     }
-    if let Some(problem) = rules::key_columns_problem(ctx.doc, e, &columns, false) {
-        return Err(refuse("columns", problem));
-    }
+    key_columns_fit(ctx.doc, e, &columns)?;
     let (fks, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     let pk = ctx
         .doc
@@ -2694,7 +2697,10 @@ fn primary_key_remove(ctx: &mut C<'_>, p: &Params) -> R {
     if let Some(pk) = rules::primary_key_of(ctx.doc, e) {
         not_piece(ctx.doc, pk, "entity")?;
     }
-    let pk = rules::primary_key_of(ctx.doc, e).ok_or_else(|| refuse("entity", format!("{} has no primary key", name_of(ctx.doc, e))))?;
+    let pk = rules::primary_key_of(ctx.doc, e).ok_or_else(|| {
+        let table = name_of(ctx.doc, e);
+        refuse("entity", format!("{table} has no primary key")).because(Reason::NoPrimaryKey { table })
+    })?;
     let gone = remove_element(ctx.doc, pk).map_err(refused_as("entity"))?;
     Ok(json!({ "removed": gone }))
 }
@@ -2707,9 +2713,7 @@ fn unique_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let columns = attribute_list(ctx, p, "columns")?;
     let name = constraint_name(ctx, p, e, None)?;
-    if let Some(problem) = rules::key_columns_problem(ctx.doc, e, &columns, false) {
-        return Err(refuse("columns", problem));
-    }
+    key_columns_fit(ctx.doc, e, &columns)?;
     let distinct = nulls_distinct(p);
     let u = ctx.doc.transaction(|st| new_unique(st, e, &columns, &name, distinct)).map_err(fail)?;
     select(ctx, vec![u]);
@@ -2721,9 +2725,7 @@ fn unique_set(ctx: &mut C<'_>, p: &Params) -> R {
     let e = rules::entity_of(ctx.doc, u).ok_or_else(|| refuse("unique", "the constraint belongs to no entity"))?;
     let columns = attribute_list(ctx, p, "columns")?;
     let name = constraint_name(ctx, p, u, Some(u))?;
-    if let Some(problem) = rules::key_columns_problem(ctx.doc, e, &columns, false) {
-        return Err(refuse("columns", problem));
-    }
+    key_columns_fit(ctx.doc, e, &columns)?;
     let distinct = nulls_distinct(p);
     let (fks, entities) = keys_near(ctx.doc, e).map_err(fail)?;
     ctx.doc

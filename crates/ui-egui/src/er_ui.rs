@@ -281,7 +281,7 @@ impl NotationUi for ErUi {
                 for k in r::primary_key_of(store, o).into_iter().chain(r::unique_constraints(store, o)) {
                     let primary = store.class_of(k).ok() == Some(archforge_er::PRIMARY_KEY);
                     if let Some(p) = r::key_columns_problem(store, o, &r::key_columns(store, k), primary) {
-                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p)]) });
+                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p.said())]) });
                     }
                 }
                 if !r::subtype_links(store, o).is_empty()
