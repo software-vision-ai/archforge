@@ -150,7 +150,7 @@ fn the_body_follows_the_keyboard_only_and_asks_for_its_frame() {
 /// Page Down and Page Up move the body by a page and End and Home to its ends, while a control of
 /// the body has the keyboard: not from a text field, which keeps its keys, nor with the keyboard
 /// elsewhere or nowhere, with a menu open, the in-window menu bar's too, also in the frame a click
-/// opens it in, or with the control key held.
+/// of the pointer or a screen reader opens it in, or with the control key held.
 #[test]
 fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
     in_both_appearances(|theme| {
@@ -195,8 +195,12 @@ fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
             key(&mut h, key_, Modifiers::NONE);
             assert_eq!(scroll(&h), reaches, "{theme:?}: {key_:?} with the keyboard on a check box of the body");
         }
-        // Nor in the frame of the click that opens the bar (AR-518).
-        open_file_with(&mut h, Key::End);
-        assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar");
+        // Nor in the frame of the click that opens the bar, by the pointer or a screen reader (AR-518).
+        for pointer in [true, false] {
+            open_file_with(&mut h, Key::End, pointer);
+            assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
+            key(&mut h, Key::Escape, Modifiers::NONE);
+            assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(ABSTRACT))), "{theme:?}: back on the check box");
+        }
     });
 }

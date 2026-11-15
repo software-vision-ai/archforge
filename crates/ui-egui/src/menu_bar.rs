@@ -136,12 +136,11 @@ pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: b
 /// its menu opens, or closes, as the strip is drawn. Known as the frame starts, so that `Shell::ui`
 /// holds the frame's keys before anything behind the bar reads them (AR-518). A title that has the
 /// keyboard opens on its own Space or Enter, which a hold would take from it; there nothing behind
-/// the bar has the keyboard.
-pub(crate) fn clicked(shell: &Shell, ctx: &egui::Context) -> bool {
+/// the bar has the keyboard. Only a bar drawn has titles to click.
+pub(crate) fn clicked(ctx: &egui::Context) -> bool {
     let pointer = ctx.interaction_snapshot(|s| s.clicked);
     let title = |g: &Group| widgets::egui_id(&format!("strip.menu.{}", g.id));
-    shell.in_window_menu
-        && GROUPS.iter().map(title).any(|t| pointer == Some(t) || ctx.input(|i| i.has_accesskit_action_request(t, egui::accesskit::Action::Click)))
+    GROUPS.iter().map(title).any(|t| pointer == Some(t) || ctx.input(|i| i.has_accesskit_action_request(t, egui::accesskit::Action::Click)))
 }
 
 /// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.

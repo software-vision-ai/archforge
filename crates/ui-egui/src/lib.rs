@@ -2068,7 +2068,7 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
-            || menu_bar::clicked(self, ui.ctx())
+            || menu_bar::clicked(ui.ctx())
             || matches!(
                 self.ask,
                 Some(

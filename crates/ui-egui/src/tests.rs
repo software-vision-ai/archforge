@@ -4030,17 +4030,24 @@ fn click_menu(h: &mut Harness<'static, Shell>, id: &str) {
     click(h, at);
 }
 
-/// Clicks the in-window bar's File title with `key` pressed and let go in the frame of the release,
-/// as both can arrive together, and asserts that the click opened File (AR-518).
-fn open_file_with(h: &mut Harness<'static, Shell>, key: egui::Key) {
+/// Clicks the in-window bar's File title, by the pointer or else as a screen reader does, with `key`
+/// pressed and let go in the frame of the click, as both can arrive together, and asserts that the
+/// click opened File (AR-518).
+fn open_file_with(h: &mut Harness<'static, Shell>, key: egui::Key, pointer: bool) {
     let (at, primary, none) = (rect_of(h, "strip.menu.file").center(), egui::PointerButton::Primary, egui::Modifiers::NONE);
-    h.event(egui::Event::PointerMoved(at));
-    h.event(egui::Event::PointerButton { pos: at, button: primary, pressed: true, modifiers: none });
-    h.step();
-    // kittest runs a frame per event it queues, so the release and the key go in by hand, together.
+    let click = if pointer {
+        h.event(egui::Event::PointerMoved(at));
+        h.event(egui::Event::PointerButton { pos: at, button: primary, pressed: true, modifiers: none });
+        h.step();
+        egui::Event::PointerButton { pos: at, button: primary, pressed: false, modifiers: none }
+    } else {
+        let (action, target_tree) = (egui::accesskit::Action::Click, egui::accesskit::TreeId::ROOT);
+        let target_node = crate::widgets::egui_id("strip.menu.file").accesskit_id();
+        egui::Event::AccessKitActionRequest(egui::accesskit::ActionRequest { action, target_tree, target_node, data: None })
+    };
+    // kittest runs a frame per event it queues, so the click and the key go in by hand, together.
     let press = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: none };
-    let release = egui::Event::PointerButton { pos: at, button: primary, pressed: false, modifiers: none };
-    h.input_mut().events.extend([release, press(true), press(false)]);
+    h.input_mut().events.extend([click, press(true), press(false)]);
     h.step();
     assert_eq!(h.state().menu_bar.open, Some("file"), "the click opened the bar's File menu");
 }
@@ -6789,7 +6796,7 @@ fn diagrams_follows_the_keyboard() {
         assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]), "{theme:?}: with the menu bar open");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // Nor in the frame of the click that opens the bar (AR-518).
-        open_file_with(&mut h, egui::Key::End);
+        open_file_with(&mut h, egui::Key::End, true);
         let still = !holds(&h, &rows[rows.len() - 1]) && h.state().diagrams.scroll.offset == 0.0;
         assert!(still, "{theme:?}: with the click that opens the menu bar");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);

@@ -73,7 +73,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   long menu would leave the window, each row off saying why on hover. Choosing
   a row runs at the next frame's start, Esc closes, a press elsewhere closes and reaches nothing
   behind the menu (its release neither; AR-452), the window losing the focus closes as Esc does, and while a menu is
-  open the frame's keys are held from the window behind, as under a dialog. F10 with no modifier
+  open the frame's keys are held from the window behind, as under a dialog, from the start of the frame a
+  click of the pointer or a screen reader on a title opens it in (AR-518, `menu_bar::clicked`). F10 with no modifier
   opens the first menu and closes it again (Shift+F10 stays with the row
   menus); Left and Right go between the groups and Up and Down through every row, off or not, all wrapping;
   a menu opens on its first live row, or on its first row when none is live;

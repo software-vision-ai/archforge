@@ -90,8 +90,8 @@ fn the_page_keys_move_the_keyboard_through_each_list() {
         // Nor in the frame of the click that opens the in-window menu bar (AR-518).
         h.state_mut().in_window_menu = true;
         h.run();
-        open_file_with(&mut h, Key::End);
-        assert!(!holds(&h, &row(49)) && rect_of(&h, &row(0)).top() == bounds.0, "{theme:?}: with the click that opens the menu bar");
+        open_file_with(&mut h, Key::End, true);
+        assert!(!holds(&h, &row(49)) && whole(&h, &row(0), bounds), "{theme:?}: with the click that opens the menu bar");
 
         let mut h = many_changes(theme);
         let rows = change_rows(&h);
