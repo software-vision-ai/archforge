@@ -306,8 +306,8 @@ fn ids_key_columns_and_constraint_names_carry_their_reason_typed() {
 }
 
 /// An index column's direction or nulls order that is none of the words, or no word at all,
-/// carries `NotOneOf` typed with its place and the words taken, the word cut to 40 characters and
-/// a value given as its JSON, beside the English, which stays as it was; a word a parameter's
+/// carries `NotOneOf` typed with its place and the words taken, the word trimmed and then cut to
+/// 40 characters, so a word after 40 spaces is kept, and a value given as its JSON, beside the English, which stays as it was; a word a parameter's
 /// documented choices hold back is refused by the engine before the handler (AR-491).
 #[test]
 fn an_index_column_word_none_of_the_words_carries_its_reason_typed() {
@@ -321,6 +321,7 @@ fn an_index_column_word_none_of_the_words_carries_its_reason_typed() {
     };
     let (direction, nulls) = (["ascending", "descending"], ["default", "first", "last"]);
     let long = "a".repeat(41);
+    let padded = format!("{}up", " ".repeat(40));
     for (p, reason, message) in [
         (
             column("direction", json!("up")),
@@ -328,6 +329,11 @@ fn an_index_column_word_none_of_the_words_carries_its_reason_typed() {
             "\"up\" is not one of ascending, descending".into(),
         ),
         (column("direction", json!("")), not_one_of(WordPlace::IndexDirection, "", &direction), "\"\" is not one of ascending, descending".into()),
+        (
+            column("direction", json!(padded)),
+            not_one_of(WordPlace::IndexDirection, "up", &direction),
+            format!("{padded:?} is not one of ascending, descending"),
+        ),
         (column("direction", json!(5)), not_one_of(WordPlace::IndexDirection, "5", &direction), "direction is 5, not a word".into()),
         (
             column("nulls", json!("middle")),

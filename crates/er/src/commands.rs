@@ -2843,9 +2843,10 @@ fn word_of<T: Copy>(item: &Json, field: &str, words: &[(T, &str)], default: T, k
 }
 
 /// A refusal under `key` of `word`, none of the words `known` its place `what` takes: `said` in
-/// English, the reason typed with the word cut to its first 40 characters.
+/// English, the reason typed with the word trimmed and then cut to its first 40 characters, so a
+/// word typed is blank only when the word given was.
 fn not_one_of(key: &str, said: String, what: WordPlace, word: &str, known: &[&str]) -> CommandError {
-    let (word, known) = (word.chars().take(40).collect(), known.iter().map(|k| k.to_string()).collect());
+    let (word, known) = (word.trim().chars().take(40).collect(), known.iter().map(|k| k.to_string()).collect());
     refuse(key, said).because(Reason::NotOneOf(Box::new(NotOneOf { what, word, known })))
 }
 
