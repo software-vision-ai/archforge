@@ -2580,6 +2580,99 @@ fn view_queries_sequence_owners_and_types_of_another_schema_keep_their_limits() 
     all_rules_hold(s.doc());
 }
 
+/// A sequence's numbers and owner and a view's query refused carry their reason typed beside the
+/// English, which stays as it was, under the parameter's key (AR-507).
+#[test]
+fn sequence_numbers_owners_and_view_queries_refused_carry_their_reason_typed() {
+    use archforge_engine::{Reason as R, SequenceRule::*};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
+    let foreign = run(&mut s, "er.attribute.add", json!({ "entity": contact, "name": "id", "type": "BIGINT" }));
+    let note = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "note", "type": "TEXT" }));
+    let bare = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "bare" }));
+    let q = run(&mut s, "er.sequence.add", json!({ "schema": sm.schema, "name": "q" }));
+    let v = run(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "v", "query": "select 1" }));
+    let with = |mut p: Json, extra: Json| {
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let (sq, qs) = (|e| with(json!({ "schema": sm.schema, "name": "s" }), e), |e| with(json!({ "sequence": q, "name": "q" }), e));
+    let vw = |query: &str| json!({ "schema": sm.schema, "name": "w", "query": query });
+    let (add, set, va, max) = ("er.sequence.add", "er.sequence.set", "er.view.add", rules::MAX_QUERY);
+    let unread = |value: &str| format!("{value:?} is not a whole number between -9223372036854775808 and 9223372036854775807");
+    let (big, typed) = ("99999999999999999999", |column: &str, ty: &str| R::NotIntegerType { column: column.into(), ty: ty.into() });
+    for (cmd, p, key, reason, message) in [
+        (add, sq(json!({ "increment": 0 })), "increment", R::Sequence(IncrementZero), "is 0; a sequence moves by at least 1".into()),
+        (add, sq(json!({ "minimum": "one" })), "minimum", R::Sequence(MinimumUnread { value: "one".into() }), unread("one")),
+        (add, sq(json!({ "maximum": big })), "maximum", R::Sequence(MaximumUnread { value: big.into() }), unread(big)),
+        (
+            add,
+            sq(json!({ "minimum": "10", "maximum": "9" })),
+            "maximum",
+            R::Sequence(MaximumNotAbove { maximum: 9, minimum: 10 }),
+            "9 is not greater than the minimum 10".into(),
+        ),
+        (
+            add,
+            sq(json!({ "start": 5, "minimum": "9" })),
+            "start",
+            R::Sequence(StartBelow { start: 5, minimum: 9 }),
+            "5 is below the minimum 9".into(),
+        ),
+        (
+            set,
+            qs(json!({ "start": 50, "minimum": "1", "maximum": "9" })),
+            "start",
+            R::Sequence(StartAbove { start: 50, maximum: 9 }),
+            "50 is above the maximum 9".into(),
+        ),
+        (
+            add,
+            sq(json!({ "owned_by": foreign })),
+            "owned_by",
+            R::ColumnOfOtherSchema { column: "Contact.id".into() },
+            "Contact.id is a column of another schema".into(),
+        ),
+        (add, sq(json!({ "owned_by": note })), "owned_by", typed("note", "TEXT"), r#"note is "TEXT", not a whole-number type"#.into()),
+        (set, qs(json!({ "owned_by": bare })), "owned_by", typed("bare", ""), r#"bare is "", not a whole-number type"#.into()),
+        ("er.view.set", json!({ "view": v, "name": "v", "query": " " }), "query", R::TextEmpty, "a view needs its query".into()),
+        (va, vw("select 1\u{202E}"), "query", R::ControlCharacter, "the query holds a hidden direction or zero-width character".into()),
+        (va, vw(" select 1"), "query", R::EdgeSpace, "the query starts or ends with a space".into()),
+        (va, vw(&"x".repeat(max + 1)), "query", R::TooLong { max }, format!("the query is longer than {max} characters")),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {key} is refused") };
+        assert_eq!((error.reason, error.message, error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {key}");
+    }
+}
+
+/// A loaded document's column that belongs to no table, which no command makes, cannot own a
+/// sequence, named by its id when it has no name; what is no column at all, which the command's
+/// id check refuses first, is typed by the rule as no column (AR-507).
+#[test]
+fn a_column_of_no_table_or_no_column_cannot_own_a_sequence_typed() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    let not_column = rules::owned_by_problem(&st, s, e).expect("a table is no column");
+    assert_eq!(
+        (not_column.reason.clone(), not_column.to_string()),
+        (archforge_engine::Reason::NotA { kind: "column", name: "T".into() }, "T is not a column".into())
+    );
+    let (schema_id, id) = (st.uuid(s).unwrap().to_string(), st.uuid(a).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let p = json!({ "schema": schema_id, "name": "q", "owned_by": id });
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.sequence.add", &p) else { panic!("it belongs to no table") };
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::InNoTable { column: id.as_str().into() }), Some("owned_by")));
+    assert_eq!(error.message, format!("{id} belongs to no table"));
+}
+
 #[test]
 fn a_schema_never_holds_two_relationships_of_one_name() {
     let mut s = session();
