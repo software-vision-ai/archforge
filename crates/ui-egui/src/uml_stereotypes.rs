@@ -214,7 +214,10 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::NotA { kind: "stereotype", name } => fmt(&tr("{name} is not a stereotype."), &[("name", name)]),
         Reason::NotA { kind: "class diagram", name } => fmt(&tr("{name} is not a class diagram."), &[("name", name)]),
         Reason::ValuesExpected => tr("Give the values as a list of texts."),
-        Reason::IdEmpty => tr("No id is given. Give the element's id."),
+        Reason::IdEmpty { kind: "element" } => tr("No element is given. Give its id."),
+        Reason::IdEmpty { kind: "stereotype" } => tr("No stereotype is given. Give its id."),
+        Reason::IdEmpty { kind: "class diagram" } => tr("No class diagram is given. Give its id."),
+        Reason::IdEmpty { kind: "property" } => tr("No property is given. Give its name or id."),
         Reason::Gone => tr("This element is gone."),
         Reason::ParameterElement { name, template } => {
             fmt(&tr("{name} is a template parameter of {template} and types only its members."), &[("name", name), ("template", template)])

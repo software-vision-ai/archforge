@@ -821,9 +821,10 @@ fn every_value_refused_carries_its_reason_typed() {
 }
 
 /// The applications' parameters refused carry their reason typed beside the unchanged English,
-/// under the parameter each is about: an id missing, malformed or of no element, an element of the
-/// wrong kind, a stereotype not applied, a property not named or one it lacks, with or without
-/// others, and values that are no list of texts or too many; so does an element gone (AR-473).
+/// under the parameter each is about: an id missing, as what the parameter takes, malformed or of
+/// no element, an element of the wrong kind, a stereotype not applied, a property not named or one
+/// it lacks, with or without others, and values that are no list of texts or too many; so does an
+/// element gone (AR-473).
 #[test]
 fn every_application_parameter_refused_carries_its_reason_typed() {
     use archforge_engine::{EngineError, NoProperty, Reason, ValueMisfit, Values};
@@ -840,7 +841,12 @@ fn every_application_parameter_refused_carries_its_reason_typed() {
     run(&mut s, "element.remove", json!({ "ids": [gone] }));
     let apply = "uml.stereotype.apply";
     let on = |element: &str| json!({ "element": element, "stereotype": entity });
-    check(&mut s, apply, on(""), "element", Reason::IdEmpty, "\"\" is not an id");
+    // An id missing is refused as the id of what the parameter takes.
+    let empty = |kind| Reason::IdEmpty { kind };
+    check(&mut s, apply, on(""), "element", empty("element"), "\"\" is not an id");
+    check(&mut s, apply, json!({ "element": order, "stereotype": "" }), "stereotype", empty("stereotype"), "\"\" is not an id");
+    let unnamed = json!({ "diagram": "", "show": true });
+    check(&mut s, "uml.stereotype.show-values", unnamed, "diagram", empty("class diagram"), "\"\" is not an id");
     check(&mut s, apply, on("nope"), "element", Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id");
     check(&mut s, apply, on(&gone), "element", Reason::NoElement { id: gone.clone() }, "there is no element");
     let not_a = |kind, name: &str| Reason::NotA { kind, name: name.into() };
@@ -857,7 +863,7 @@ fn every_application_parameter_refused_carries_its_reason_typed() {
     let has = vec!["table".to_string(), "cached".to_string()];
     let lacks = Reason::NoProperty(Box::new(NoProperty { stereotype: "Entity".into(), name: "colour".into(), has }));
     check(&mut s, set_value, set(&order, &entity, "colour", json!(["x"])), "property", lacks, "it has table, cached");
-    check(&mut s, set_value, set(&order, &entity, "", json!(["x"])), "property", Reason::IdEmpty, "has no property \"\"; it has table");
+    check(&mut s, set_value, set(&order, &entity, "", json!(["x"])), "property", empty("property"), "has no property \"\"; it has table");
     let none = Reason::NoProperties { stereotype: "Id".into(), name: "x".into() };
     check(&mut s, set_value, set(&id_attr, &id, "x", json!(["x"])), "property", none, "«Id» has no property \"x\"; it has none");
     check(&mut s, set_value, set(&order, &entity, "table", json!(["x", 1])), "values", Reason::ValuesExpected, "a list of values, each as text");

@@ -1301,7 +1301,10 @@ str		«{stereotype}» has no property {name}. It has no properties yet.	«{stere
 str		{name} is not a stereotype.	{name} is not a stereotype.
 str		{name} is not a class diagram.	{name} is not a class diagram.
 str		Give the values as a list of texts.	Give the values as a list of texts.
-str		No id is given. Give the element's id.	No id is given. Give the element's id.
+str		No element is given. Give its id.	No element is given. Give its id.
+str		No stereotype is given. Give its id.	No stereotype is given. Give its id.
+str		No class diagram is given. Give its id.	No class diagram is given. Give its id.
+str		No property is given. Give its name or id.	No property is given. Give its name or id.
 str		This element is gone.	This element is gone.
 str		{name} is a template parameter of {template} and types only its members.	{name} is a template parameter of {template} and types only its members.
 str		An element carries at most {max} stereotypes.	An element carries at most {max} stereotypes.

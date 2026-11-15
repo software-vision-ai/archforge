@@ -580,11 +580,12 @@ fn show_values(store: &mut Store, diagram: Obj, on: bool) -> Result<(), CommandE
 
 // Commands.
 
-/// The model's element the id under `key` names; refused with its reason typed.
-fn element_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
+/// The model's element the id under `key` names, an element of `kind` as the parameter asks for one;
+/// refused with its reason typed.
+fn element_param(store: &Store, p: &Params, key: &str, kind: &'static str) -> Result<Obj, CommandError> {
     let id = text(p, key);
     let Some(uuid) = Uuid::parse(id) else {
-        let reason = if id.is_empty() { Reason::IdEmpty } else { Reason::NoElement { id: short(id) } };
+        let reason = if id.is_empty() { Reason::IdEmpty { kind } } else { Reason::NoElement { id: short(id) } };
         return Err(refuse(key, format!("{:?} is not an id", short(id))).because(reason));
     };
     let none = || refuse(key, format!("there is no element {}", short(id))).because(Reason::NoElement { id: short(id) });
@@ -594,7 +595,7 @@ fn element_param(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandErr
 /// The element the id under `key` names, refused with its reason typed unless `is` says it is of
 /// `kind`: a stereotype or a class diagram.
 fn kind_param(store: &Store, p: &Params, key: &str, kind: &'static str, is: impl Fn(Obj) -> bool) -> Result<Obj, CommandError> {
-    let o = element_param(store, p, key)?;
+    let o = element_param(store, p, key, kind)?;
     if !is(o) {
         return Err(refuse(key, format!("{} is not a {kind}", text(p, key))).because(Reason::NotA { kind, name: name_or_id(store, o) }));
     }
@@ -619,7 +620,7 @@ fn property_param(store: &Store, p: &Params, key: &str, stereotype: Obj) -> Resu
         let (stereotype, name) = (name_of(store, stereotype), short(wanted));
         let said = format!("«{stereotype}» has no property {name:?}; {offered}");
         let reason = if name.is_empty() {
-            Reason::IdEmpty
+            Reason::IdEmpty { kind: "property" }
         } else if has.is_empty() {
             Reason::NoProperties { stereotype: stereotype.into(), name: name.into() }
         } else {
@@ -632,7 +633,7 @@ fn property_param(store: &Store, p: &Params, key: &str, stereotype: Obj) -> Resu
 /// The application of the stereotype under `stereotype` to the element under `element`, refused
 /// when it is not applied there, its reason typed.
 fn application_param(store: &Store, p: &Params) -> Result<(Obj, Obj, Obj), CommandError> {
-    let element = element_param(store, p, "element")?;
+    let element = element_param(store, p, "element", "element")?;
     let stereotype = stereotype_param(store, p, "stereotype")?;
     let instance = application(store, element, stereotype).ok_or_else(|| {
         let (s, e) = (name_of(store, stereotype), name_or_id(store, element));
@@ -643,7 +644,7 @@ fn application_param(store: &Store, p: &Params) -> Result<(Obj, Obj, Obj), Comma
 
 /// `uml.stereotype.apply`: a stereotype applied to an element (F3, F4).
 fn apply_cmd(ctx: &mut C<'_>, p: &Params) -> R {
-    let element = element_param(ctx.doc, p, "element")?;
+    let element = element_param(ctx.doc, p, "element", "element")?;
     let stereotype = stereotype_param(ctx.doc, p, "stereotype")?;
     if let Some(why) = element_why(ctx.doc, element) {
         return Err(refusal("element", why));
@@ -710,7 +711,7 @@ fn property_json(store: &Store, instance: Obj, property: Obj) -> Json {
 /// its properties' values, set or defaulted; with a diagram, whether it shows the values.
 fn list_applied(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
-    let element = element_param(store, p, "element")?;
+    let element = element_param(store, p, "element", "element")?;
     let items: Vec<Json> = applied_to(store, element)
         .into_iter()
         .map(|(s, i)| {
@@ -723,7 +724,7 @@ fn list_applied(ctx: &mut C<'_>, p: &Params) -> R {
         .collect();
     let mut out = json!({ "element": uuid_of(store, element)?, "keywords": keywords(store, element), "applied": items });
     if !text(p, "diagram").is_empty() {
-        let d = element_param(store, p, "diagram")?;
+        let d = element_param(store, p, "diagram", "class diagram")?;
         out["values_shown"] = json!(values_shown(store, d));
     }
     Ok(out)
@@ -733,7 +734,7 @@ fn list_applied(ctx: &mut C<'_>, p: &Params) -> R {
 /// element and why not, as the picker lists them (F4).
 fn applicable_cmd(ctx: &mut C<'_>, p: &Params) -> R {
     let store = &*ctx.doc;
-    let element = element_param(store, p, "element")?;
+    let element = element_param(store, p, "element", "element")?;
     if let Some(why) = element_problem(store, element) {
         return Ok(json!({ "element": uuid_of(store, element)?, "takes": false, "why": why, "stereotypes": [] }));
     }

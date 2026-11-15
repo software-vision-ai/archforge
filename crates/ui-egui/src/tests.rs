@@ -5705,7 +5705,7 @@ fn a_value_refused_is_said_in_the_chosen_language() {
 }
 
 /// The applications' parameters refused by the engine are said in the chosen language: an id
-/// missing or of no element, an element of the wrong kind, a template parameter's classifier, a
+/// missing, as what the parameter takes, or of no element, an element of the wrong kind, a template parameter's classifier, a
 /// stereotype not applied, a property it lacks, with or without others, and values that are no list
 /// of texts or too many; so is an element gone. In light and dark (AR-473).
 #[test]
@@ -5734,7 +5734,11 @@ fn an_application_parameter_refused_is_said_in_the_chosen_language() {
         id(&mut h, "uml.stereotype.apply", json!({ "element": count, "stereotype": key }));
         let apply = |element: &str, stereotype: &str| ("uml.stereotype.apply", json!({ "element": element, "stereotype": stereotype }));
         let (cmd, p) = apply("", &entity);
-        assert_eq!(refused(&mut h, cmd, p), "Es ist keine ID angegeben. Geben Sie die ID des Elements an.", "{theme:?}: the language is German");
+        assert_eq!(refused(&mut h, cmd, p), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}: the language is German");
+        let (cmd, p) = apply(&order, "");
+        assert_eq!(refused(&mut h, cmd, p), tr("No stereotype is given. Give its id."), "{theme:?}");
+        let unnamed = refused(&mut h, "uml.stereotype.show-values", json!({ "diagram": "", "show": true }));
+        assert_eq!(unnamed, tr("No class diagram is given. Give its id."), "{theme:?}");
         let (cmd, p) = apply("nope", &entity);
         assert_eq!(refused(&mut h, cmd, p), fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]), "{theme:?}");
         let (cmd, p) = apply(&order, &order);
@@ -5759,6 +5763,8 @@ fn an_application_parameter_refused_is_said_in_the_chosen_language() {
             &[("stereotype", "Entity"), ("name", "colour"), ("properties", "table")],
         );
         assert_eq!(refused(&mut h, cmd, p), lacks, "{theme:?}");
+        let (cmd, p) = set(&order, &entity, "", json!(["x"]));
+        assert_eq!(refused(&mut h, cmd, p), tr("No property is given. Give its name or id."), "{theme:?}");
         let (cmd, p) = set(&count, &key, "x", json!(["x"]));
         let none = fmt(&tr("«{stereotype}» has no property {name}. It has no properties yet."), &[("stereotype", "Key"), ("name", "x")]);
         assert_eq!(refused(&mut h, cmd, p), none, "{theme:?}");

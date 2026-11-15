@@ -1302,7 +1302,10 @@ str		«{stereotype}» has no property {name}. It has no properties yet.	«{stere
 str		{name} is not a stereotype.	{name} ist kein Stereotyp.
 str		{name} is not a class diagram.	{name} ist kein Klassendiagramm.
 str		Give the values as a list of texts.	Geben Sie die Werte als Liste von Texten an.
-str		No id is given. Give the element's id.	Es ist keine ID angegeben. Geben Sie die ID des Elements an.
+str		No element is given. Give its id.	Es ist kein Element angegeben. Geben Sie seine ID an.
+str		No stereotype is given. Give its id.	Es ist kein Stereotyp angegeben. Geben Sie seine ID an.
+str		No class diagram is given. Give its id.	Es ist kein Klassendiagramm angegeben. Geben Sie seine ID an.
+str		No property is given. Give its name or id.	Es ist keine Eigenschaft angegeben. Geben Sie ihren Namen oder ihre ID an.
 str		This element is gone.	Dieses Element gibt es nicht mehr.
 str		{name} is a template parameter of {template} and types only its members.	{name} ist ein Template-Parameter von {template} und typisiert nur dessen Member.
 str		An element carries at most {max} stereotypes.	Ein Element trägt höchstens {max} Stereotypen.

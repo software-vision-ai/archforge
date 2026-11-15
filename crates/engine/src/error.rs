@@ -239,8 +239,9 @@ pub enum Reason {
     NotA { kind: &'static str, name: String },
     /// A stereotype property's values, each as text, are no list or hold something else.
     ValuesExpected,
-    /// No id is given where an element's id is taken.
-    IdEmpty,
+    /// No id is given where the id of an element of `kind` is taken, as `"stereotype"`, or, for a
+    /// `"property"`, its id or name.
+    IdEmpty { kind: &'static str },
     /// The element is gone from the model.
     Gone,
     /// The element `name` is a template parameter of `template`, which it types alone.
