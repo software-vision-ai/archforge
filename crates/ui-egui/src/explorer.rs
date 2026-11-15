@@ -975,9 +975,9 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
     };
     if let Some(to) = went {
         select(shell, Some(rows[to].id));
-        // The tree reveals the row again, though it was selected already and the wheel took it away.
+        // The tree reveals the row again in the next frame, which the key's own event asks for,
+        // though it was selected already and the wheel took it away.
         shell.explorer.scroll.followed = None;
-        ui.ctx().request_repaint();
     } else if down {
         let next = at.map_or(0, |i| (i + 1).min(rows.len().saturating_sub(1)));
         if let Some(row) = rows.get(next) {

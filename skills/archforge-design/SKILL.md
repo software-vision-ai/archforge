@@ -202,7 +202,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   and while a row has the keyboard Page Up and Page Down move it a page (what shows less a row, at
   least a row) and Home and End to the first and the last row. A row past either edge is laid out,
   so Tab reaches it; only what shows is listed. While Models holds the keys itself (after a click on
-  a row), the same keys move the selection, as ↑ and ↓ do, and the tree follows the selection.
+  a row), the same keys move the selection, as ↑ and ↓ do, and the tree follows the selection;
+  with nothing selected End selects the last row and the others the first. A page key always
+  reveals the row it went to, even one that had the keyboard or the selection already; the wheel
+  never makes a tree follow.
 - Deleting from the explorer asks first when the element is on diagrams or takes other elements
   with it (for ER, keys).
 - The Models and Diagrams trees scroll under their filter (wheel or trackpad, a thin thumb at the

@@ -6306,6 +6306,13 @@ fn diagrams_follows_the_keyboard() {
         pages(&mut h, &rows, bounds, holds);
         key(&mut h, egui::Key::PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND));
         assert!(holds(&h, &rows[0]), "{theme:?}: not with the control key");
+        // The in-window menu bar opened by F10 leaves the keyboard on the row; its keys are its own.
+        h.state_mut().in_window_menu = true;
+        key(&mut h, egui::Key::F10, egui::Modifiers::NONE);
+        key(&mut h, egui::Key::PageDown, egui::Modifiers::NONE);
+        let offset = h.state().diagrams.scroll.offset;
+        assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]) && offset == 0.0, "{theme:?}: with the menu bar open");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // In the smallest window, over the open diagram's footer, not even a row shows whole: a
         // page key still moves a row.
         h.set_size(egui::vec2(1600.0, 400.0));
