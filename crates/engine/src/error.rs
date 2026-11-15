@@ -337,6 +337,10 @@ pub enum Reason {
     LinkUnlabelled,
     /// The line has a label that shows its element's text `slot` already.
     Labelled { slot: &'static str },
+    /// A style's colour `part`, `"fill"`, `"stroke"` or `"text"`, is not of the form `#rrggbb`.
+    NotAColour { part: &'static str },
+    /// Arranged, a box would land farther from the origin than a diagram reaches.
+    ArrangedTooFar,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
     /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's

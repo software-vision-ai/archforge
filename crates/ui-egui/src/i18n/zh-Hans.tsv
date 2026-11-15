@@ -1375,6 +1375,11 @@ str		What the note links to is on another diagram.	备注所链接的对象在�
 str		The note is linked to it already.	该备注已链接到它。
 str		A note's link shows no element, so it takes no label.	备注的链接不显示任何元素，因此不能添加标签。
 str		This line has the label text {slot} already.	这条线已有标签文本 {slot}。
+str		Give the fill colour as #rrggbb, such as #3366cc.	请以 #rrggbb 的形式给出填充颜色，例如 #3366cc。
+str		Give the border or line colour as #rrggbb, such as #3366cc.	请以 #rrggbb 的形式给出边框或线条颜色，例如 #3366cc。
+str		Give the text colour as #rrggbb, such as #3366cc.	请以 #rrggbb 的形式给出文字颜色，例如 #3366cc。
+str		This diagram shows no box to arrange.	此图中没有可排列的框。
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	排列后，某个框会离原点超过 {max}。请先将这些框移近原点。
 str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
 str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	请使用简单的词：以小写字母开头，只含小写字母、数字、_、- 和 .。

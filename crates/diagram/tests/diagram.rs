@@ -532,6 +532,36 @@ fn every_connect_link_and_label_rule_carries_its_reason_typed() {
     check(&mut s, "diagram.label", label(&sm.edge), "kind", Reason::Labelled { slot: "general" }, "has a general label already");
 }
 
+/// `diagram.style`'s colours and `diagram.arrange` refuse with their reason typed beside the
+/// unchanged English, under the parameter each is about: a fill, stroke or text colour not of the
+/// form #rrggbb, each alone, a diagram that shows no box, and boxes arranged beyond the reach of a
+/// diagram (AR-516).
+#[test]
+fn every_style_colour_and_arrange_refusal_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    let (a, c) = (id(s.doc(), m.a), id(s.doc(), m.c));
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    };
+    for part in ["fill", "stroke", "text"] {
+        let p = json!({ "ids": [&sm.a], part: "#12345" });
+        check(&mut s, "diagram.style", p, part, Reason::NotAColour { part }, "\"#12345\" is not a colour of the form #rrggbb");
+    }
+    let empty = run(&mut s, "diagram.add", json!({ "kind": "toy.class" }));
+    let none = Reason::TooFew { kind: commands::ARRANGED, min: 1 };
+    check(&mut s, "diagram.arrange", json!({ "diagram": empty }), "diagram", none, "the diagram shows nothing to arrange");
+    // Two boxes at the edge of the reach: arranged side by side, the second lands beyond it.
+    for element in [&a, &c] {
+        run(&mut s, "diagram.place", json!({ "diagram": empty, "element": element, "x": 1_000_000, "y": 1_000_000 }));
+    }
+    let far = "arranged, a box would land at a place that is farther than 1000000 from the origin";
+    check(&mut s, "diagram.arrange", json!({ "diagram": empty }), "diagram", Reason::ArrangedTooFar, far);
+}
+
 #[test]
 fn removing_an_element_takes_its_views_and_undo_brings_them_back() {
     let mut st = store();

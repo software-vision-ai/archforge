@@ -83,6 +83,12 @@ diagram; a label on a note's link, and one of a text a label of the line shows a
 labels are of distinct texts, never as many as `rules::MAX_LABELS`, and the engine refuses a place
 other than `source`, `middle` or `target` before the command runs, so those two refusals stay
 untyped.
+The colours of `diagram.style` and the rules of `diagram.arrange` carry their reasons typed too
+(AR-516), as the engine's `Reason::{NotAColour, ArrangedTooFar}` and `TooFew`: a fill, stroke or
+text colour not of the form `#rrggbb` (`NotAColour` with its part), a diagram that shows no box
+(`TooFew` of `commands::ARRANGED`), and boxes that, arranged, would land farther from the origin
+than `rules::MAX_COORD`. The engine refuses a line width outside 0 to `rules::MAX_LINE` and a
+routing none of the four before the command runs, so those two refusals stay untyped.
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name
