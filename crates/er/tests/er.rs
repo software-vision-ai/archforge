@@ -852,6 +852,31 @@ fn describing_what_is_no_er_element_is_refused_typed() {
     assert_eq!(error.message, format!("{} is not an element of the ER model", st.uuid(m).unwrap()));
 }
 
+/// The selection's removal refuses, typed, a domain or an index, which are removed where they are
+/// edited, and a part of a subtype's key without its subtype, with the English as it was (AR-508).
+#[test]
+fn removing_with_the_selection_what_goes_elsewhere_is_refused_typed() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "counter", "base_type": "INTEGER" }));
+    let index = run(&mut s, "er.index.add", json!({ "entity": sm.customer, "columns": [sm.key] }));
+    let party = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Party" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": party, "name": "party_id", "type": "BIGINT", "primary_key": true }));
+    let person = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Person" }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": person }));
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    for (ids, reason, said) in [
+        (json!([dom]), archforge_engine::Reason::RemovedWhereEdited, format!("{dom} is not an ER element")),
+        (json!([sm.order, index]), archforge_engine::Reason::RemovedWhereEdited, format!("{index} is not an ER element")),
+        (json!([follower]), archforge_engine::Reason::SubtypeKeyPart, "a part of a subtype's key goes only with its generalization".into()),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute("element.remove", &json!({ "ids": ids })) else { panic!("{ids} is refused") };
+        assert_eq!((error.reason, error.key.as_deref(), error.message), (Some(reason), Some("ids"), said), "{ids}");
+        assert_eq!(picture(s.doc()), before, "{ids}: nothing goes");
+    }
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.
@@ -2615,13 +2640,30 @@ fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
         }
         prev = Some((e, a, pk));
     }
+    let schema = st.uuid(s).unwrap().to_string();
+    let top = top.unwrap();
     let mut session = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let before = picture(session.doc());
-    let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
+    let e = session.execute("er.primary-key.remove", &json!({ "entity": top })).expect_err("too deep to cascade");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
     let EngineError::Failed { error, .. } = e else { panic!("refused by the handler") };
     assert_eq!(error.reason, Some(archforge_engine::Reason::TooDeep { kind: "key", max: 128 }), "typed from inside the step (AR-493)");
     assert_eq!(picture(session.doc()), before, "nothing of the attempt stays");
+    // Removing the table, its schema or the selection reaches as deep, and keeps the reason (AR-508).
+    for (cmd, p, key) in [
+        ("er.entity.remove", json!({ "entity": top }), "entity"),
+        ("er.schema.remove", json!({ "schema": schema }), "schema"),
+        ("element.remove", json!({ "ids": [top] }), "ids"),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = session.execute(cmd, &p) else { panic!("{cmd} is refused by the handler") };
+        let said = "the removal reaches deeper than 128 levels of keys built on each other";
+        assert_eq!(
+            (error.reason, error.key.as_deref(), error.message.as_str()),
+            (Some(archforge_engine::Reason::TooDeep { kind: "key", max: 128 }), Some(key), said),
+            "{cmd}"
+        );
+        assert_eq!(picture(session.doc()), before, "{cmd}: nothing of the attempt stays");
+    }
 }
 
 #[test]

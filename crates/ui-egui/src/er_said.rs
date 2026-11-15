@@ -14,6 +14,8 @@
 //! (AR-499): a domain's checks too many, one named twice, an item of another shape and an item's
 //! key the list does not take (said without a kind, for any list of items); an empty expression is
 //! a constraint's row.
+//! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
+//! without its subtype.
 //!
 //! Domains and enum types (AR-498): a type that columns still take, with the first of them (a list
 //! the engine cut ending in an ellipsis) and their count, and an enum type's literals: none, too
@@ -78,6 +80,8 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::TooDeep { kind: "key", max } => {
             fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
         }
+        Reason::RemovedWhereEdited => tr("This element is removed where it is edited."),
+        Reason::SubtypeKeyPart => tr("This is part of a subtype's key, which goes only with its subtype."),
         Reason::WouldBreak { kind: "column", name, why } => {
             fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }
