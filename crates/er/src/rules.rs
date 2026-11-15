@@ -489,7 +489,7 @@ pub fn domain_problem(store: &Store, d: Obj) -> Option<String> {
     }
     for c in domain_checks(store, d) {
         if let Some(p) = check_problem(&text_of(store, c, domain_check::EXPRESSION)) {
-            return Some(p);
+            return Some(p.said());
         }
     }
     None
@@ -1012,12 +1012,40 @@ pub fn index_columns_problem(store: &Store, entity: Obj, columns: &[IndexColumnS
     None
 }
 
-/// Why `expression` cannot be a check constraint's, as a sentence; None when it can.
-pub fn check_problem(expression: &str) -> Option<String> {
-    if expression.trim().is_empty() {
-        return Some("a check needs an expression".into());
+/// Why an expression cannot be a check's ([`check_problem`]): said as an English sentence
+/// ([`CheckProblem::said`]) or typed ([`CheckProblem::reason`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckProblem {
+    /// The expression is empty or holds only spaces.
+    NoExpression,
+    /// The expression breaks a rule of every text: too long, a control character, a space at an end.
+    Text(Problem),
+}
+
+impl CheckProblem {
+    /// The problem as an English sentence, as "a check needs an expression".
+    pub fn said(&self) -> String {
+        match self {
+            Self::NoExpression => "a check needs an expression".into(),
+            Self::Text(p) => format!("the expression {p}"),
+        }
     }
-    text_problem(expression, MAX_TEXT).map(|p| format!("the expression {p}"))
+
+    /// The problem typed, for an interface to say in its own words.
+    pub fn reason(&self) -> Reason {
+        match self {
+            Self::NoExpression => Reason::NoExpression,
+            Self::Text(p) => p.reason.clone(),
+        }
+    }
+}
+
+/// Why `expression` cannot be a check constraint's or a domain check's; None when it can.
+pub fn check_problem(expression: &str) -> Option<CheckProblem> {
+    if expression.trim().is_empty() {
+        return Some(CheckProblem::NoExpression);
+    }
+    text_problem(expression, MAX_TEXT).map(CheckProblem::Text)
 }
 
 /// A name in lower snake case for generated constraint names.
@@ -1499,7 +1527,7 @@ pub fn problems(store: &Store) -> Vec<String> {
                 out.push(format!("the check {} belongs to no entity", label(store, o)));
             }
             if let Some(p) = check_problem(&text_of(store, o, check_constraint::EXPRESSION)) {
-                out.push(format!("the check {}: {p}", label(store, o)));
+                out.push(format!("the check {}: {}", label(store, o), p.said()));
             }
         }
         if class == TABLE_INDEX {

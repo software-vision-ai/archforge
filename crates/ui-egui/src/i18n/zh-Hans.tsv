@@ -1576,6 +1576,11 @@ str		A property redefines at most {max} properties.	一个属性最多重定义 
 str		Give the properties as a list of ids.	请以 ID 列表的形式给出属性。
 str		An item in the list has no id. Give each property's id.	列表中有一项没有 ID。请给出每个属性的 ID。
 str		{key} is not a key here. An item holds an id and a name.	{key} 在此处不是有效的键。每一项包含一个 ID 和一个名称。
+str		Give at most {max} checks.	最多给出 {max} 个检查约束。
+str		Two checks are named {name}. Give each check its own name.	有两个检查约束都名为 {name}。请为每个检查约束取不同的名称。
+str		Give each check as text, or as an object with an expression and a name.	请将每个检查约束写成文本，或写成包含表达式和名称的对象。
+str		An item takes no {key}. It takes {takes}.	条目不接受 {key}。它接受 {takes}。
+str		An item holds a key without a name. It takes {takes}.	条目包含一个没有名称的键。它接受 {takes}。
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。
