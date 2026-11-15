@@ -528,11 +528,13 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 }
 
 /// A diagram command's refusal: an id or an element of the wrong kind where a diagram, a box, a line
-/// or a label is taken, a box's size, an element a diagram does not show or shows already, a box on
+/// or a label is taken, an element a diagram's kind cannot be of, a box's size, an element a diagram
+/// does not show or shows already, a box on
 /// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
 /// does not remove yet, a kind word that is no plain word, and a diagram kind or a label's text none
 /// takes; none for another reason. A coordinate is said as a constraint's is.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
+    use archforge_diagram::commands::DIAGRAM_ELEMENT;
     use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
     use archforge_engine::Reason;
     let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
@@ -545,6 +547,7 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::NotA { kind: "node", name } => fmt(&tr("{name} is not a box on a diagram."), &[("name", name)]),
         Reason::NotA { kind: "edge", name } => fmt(&tr("{name} is not a line on a diagram."), &[("name", name)]),
         Reason::NotA { kind: "label", name } => fmt(&tr("{name} is not a label on a line."), &[("name", name)]),
+        Reason::NotA { kind: DIAGRAM_ELEMENT, name } => fmt(&tr("{name} cannot have a diagram of this kind."), &[("name", name)]),
         Reason::SizeOutOfRange { side: "width" } => between(tr("The width is not between {min} and {max}.")),
         Reason::SizeOutOfRange { side: "height" } => between(tr("The height is not between {min} and {max}.")),
         Reason::NotShown { name } => fmt(&tr("A diagram of this kind does not show {name}."), &[("name", name)]),

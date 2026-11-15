@@ -1334,6 +1334,7 @@ str		{name} is not a line on a diagram.	{name} は図上の線ではありませ
 str		{name} is not a label on a line.	{name} は線のラベルではありません。
 str		The width is not between {min} and {max}.	幅が {min} から {max} の範囲にありません。
 str		The height is not between {min} and {max}.	高さが {min} から {max} の範囲にありません。
+str		{name} cannot have a diagram of this kind.	{name} にはこの種類の図を作成できません。
 str		A diagram of this kind does not show {name}.	この種類の図には {name} を表示できません。
 str		{name} is outside what this diagram shows.	{name} はこの図が表示する範囲の外にあります。
 str		This diagram shows {name} already.	この図にはすでに {name} が表示されています。

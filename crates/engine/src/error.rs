@@ -240,7 +240,8 @@ pub enum Reason {
     /// other yet.
     NoProperties { stereotype: Box<str>, name: Box<str> },
     /// The element `name` is not of `kind`, as `"stereotype"`, `"class diagram"` or, of the model,
-    /// `"constraint"`, which the parameter takes.
+    /// `"constraint"`, which the parameter takes; for a new diagram's element, of
+    /// `"element a diagram is of"`.
     NotA { kind: &'static str, name: String },
     /// A stereotype property's values, each as text, are no list or hold something else.
     ValuesExpected,

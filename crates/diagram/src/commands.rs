@@ -24,6 +24,8 @@ pub const NO_DIAGRAMS: &str = "There is no diagram yet.";
 pub const NOTE_SIZE: (f64, f64) = (160.0, 80.0);
 /// The node kind of a note.
 pub const NOTE: &str = "note";
+/// The kind a [`Reason::NotA`] names for an element a diagram's kind cannot be of.
+pub const DIAGRAM_ELEMENT: &str = "element a diagram is of";
 
 fn has_diagrams<V: DiagramView>(f: &Facts<'_, Store, V>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(DIAGRAM)) { Ok(()) } else { Err(NO_DIAGRAMS) }
@@ -191,7 +193,8 @@ fn select<V: DiagramView>(ctx: &mut C<'_, V>, objs: Vec<Obj>) {
 // Diagrams.
 
 /// `diagram.add`: a diagram of a kind a notation knows, named, of an element where its kind is; a
-/// kind that is no plain word or none the notations know refused with its reason typed.
+/// kind that is no plain word or none the notations know, an element missing where the kind needs
+/// one, and one the kind cannot be of, refused with its reason typed.
 fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kind = str_of(p, "kind");
     check_kind("kind", kind, "kind")?;
@@ -207,14 +210,16 @@ fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     check_text("name", name, MAX_NAME)?;
     let element = if str_of(p, "element").is_empty() {
         if ctx.view.needs_element(kind) {
-            return Err(refuse("element", format!("a {kind} diagram is of an element; name it")));
+            let none = Reason::IdEmpty { kind: "element" };
+            return Err(refuse("element", format!("a {kind} diagram is of an element; name it")).because(none));
         }
         None
     } else {
         let e = any_of(ctx.doc, p, "element")?;
         let class = ctx.doc.class_of(e).map_err(fail)?;
         if !ctx.view.is_of(kind, class) {
-            return Err(refuse("element", format!("a {kind} diagram is not of a {}", class_name(ctx.doc, class).to_lowercase())));
+            let said = format!("a {kind} diagram is not of a {}", class_name(ctx.doc, class).to_lowercase());
+            return Err(refuse("element", said).because(Reason::NotA { kind: DIAGRAM_ELEMENT, name: name_or_id(ctx.doc, e) }));
         }
         Some(e)
     };

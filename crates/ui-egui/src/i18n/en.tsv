@@ -1333,6 +1333,7 @@ str		{name} is not a line on a diagram.	{name} is not a line on a diagram.
 str		{name} is not a label on a line.	{name} is not a label on a line.
 str		The width is not between {min} and {max}.	The width is not between {min} and {max}.
 str		The height is not between {min} and {max}.	The height is not between {min} and {max}.
+str		{name} cannot have a diagram of this kind.	{name} cannot have a diagram of this kind.
 str		A diagram of this kind does not show {name}.	A diagram of this kind does not show {name}.
 str		{name} is outside what this diagram shows.	{name} is outside what this diagram shows.
 str		This diagram shows {name} already.	This diagram shows {name} already.
