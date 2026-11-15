@@ -6655,6 +6655,66 @@ fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The key a foreign key points at, refused, is said in the chosen language, never in the engine's
+/// English: a key of another table, a table without a primary key, the key it points at already
+/// and identifying relationships that would run in a cycle; a key without columns, which only a
+/// loaded document holds, too. In light and dark (AR-501).
+#[test]
+fn the_key_a_foreign_key_points_at_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let [kunde, posten, teil, notiz] =
+            ["Kunde", "Posten", "Teil", "Notiz"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        let hat = id("er.relationship.add", json!({ "from": kunde, "to": posten, "create_foreign_key": true, "identifying": true }));
+        id("er.relationship.add", json!({ "from": posten, "to": teil, "create_foreign_key": true, "identifying": true }));
+        let mut entity = |e: &str| run("er.entity.get", json!({ "entity": e }));
+        let key_of = |table: &serde_json::Value| table["primary_key"]["id"].as_str().unwrap().to_string();
+        let (kunde_pk, teil_pk) = (key_of(&entity(&kunde)), key_of(&entity(&teil)));
+        let posten_json = entity(&posten);
+        let (posten_pk, posten_fk) = (key_of(&posten_json), posten_json["foreign_keys"][0]["id"].as_str().unwrap().to_string());
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        for (cmd, p, said) in [
+            (
+                "er.foreign-key.add",
+                json!({ "entity": notiz, "key": kunde_pk, "references": posten }),
+                "Der Schlüssel ist keiner der Schlüssel von Posten.",
+            ),
+            ("er.foreign-key.add", json!({ "entity": kunde, "references": notiz }), "Notiz hat keinen Primärschlüssel."),
+            (
+                "er.foreign-key.set-key",
+                json!({ "foreign_key": posten_fk, "key": kunde_pk }),
+                "Der Fremdschlüssel verweist bereits auf diesen Schlüssel. Nennen Sie die Spalten, um sie zu ändern.",
+            ),
+            (
+                "er.foreign-key.add",
+                json!({ "entity": kunde, "key": posten_pk, "relationship": hat }),
+                "Identifizierende Beziehungen würden einen Zyklus zwischen Kunde und Posten bilden.",
+            ),
+            (
+                "er.foreign-key.set-key",
+                json!({ "foreign_key": posten_fk, "key": teil_pk }),
+                "Identifizierende Beziehungen würden einen Zyklus zwischen Posten und Teil bilden.",
+            ),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        let no_columns = crate::er_said::said(&Reason::NoKeyColumns { table: "Lager".into() });
+        assert_eq!(no_columns.as_deref(), Some("Der Schlüssel von Lager hat keine Spalten, auf die verwiesen werden kann."), "{theme:?}");
+        // Another kind pointed at again is not a foreign key's.
+        assert_eq!(crate::er_said::said(&Reason::Again { relationship: "index" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A key a step would break is said in the chosen language with why in the same words, and keys built
 /// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
 /// English. In light and dark (AR-493).

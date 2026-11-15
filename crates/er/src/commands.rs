@@ -1819,12 +1819,14 @@ fn add_key_columns(
 
 /// Adds one column to `child` for each column of key `k`, named `<role>_<column>`, or
 /// `<parent>_<column>` without a role, and typed like it; in the child's primary key when `in_key`,
-/// nullable when `optional` and not in the key.
+/// nullable when `optional` and not in the key. A key without columns, which only a loaded document
+/// holds, is refused typed through the step's carrier ([`Reason::NoKeyColumns`]).
 fn new_key_columns(store: &mut Store, child: Obj, k: Obj, role: &str, in_key: bool, optional: bool) -> Result<Vec<Obj>, Invalid> {
     let targets = rules::key_columns(store, k);
     let parent = rules::entity_of(store, k).ok_or_else(|| Invalid::Refused("the key belongs to no entity".into()))?;
     if targets.is_empty() {
-        return Err(Invalid::Refused(format!("{} has no key columns to refer to", name_of(store, parent))));
+        let because = Reason::NoKeyColumns { table: rules::label(store, parent).into() };
+        return Err(refused(because, format!("{} has no key columns to refer to", name_of(store, parent))));
     }
     let prefix = if role.is_empty() { snake(&name_of(store, parent)) } else { snake(role) };
     let mut columns = Vec::with_capacity(targets.len());
@@ -2557,21 +2559,31 @@ pub fn deferrability_name(d: Deferrability) -> &'static str {
     }
 }
 
-/// The key a foreign key command names: `key`, or the primary key of the entity `references`.
+/// The key a foreign key command names: `key`, or the primary key of the entity `references`. A key
+/// of another entity than `references` ([`Reason::KeyNotOf`]) and an entity without a primary key
+/// ([`Reason::NoPrimaryKey`]) are refused typed.
 fn target_key(ctx: &C<'_>, p: &Params) -> Result<Obj, CommandError> {
     if !text(p, "key").is_empty() {
         let k = key_id(ctx, p, "key")?;
-        if !text(p, "references").is_empty() && rules::entity_of(ctx.doc, k) != Some(id_of(ctx, p, "references", ENTITY)?) {
-            return Err(refuse("references", "the key is not one of the referenced entity's"));
+        if !text(p, "references").is_empty() {
+            let e = id_of(ctx, p, "references", ENTITY)?;
+            if rules::entity_of(ctx.doc, k) != Some(e) {
+                let because = Reason::KeyNotOf { table: rules::label(ctx.doc, e).into() };
+                return Err(refuse("references", "the key is not one of the referenced entity's").because(because));
+            }
         }
         return Ok(k);
     }
     let e = id_of(ctx, p, "references", ENTITY)?;
-    rules::primary_key_of(ctx.doc, e).ok_or_else(|| refuse("references", format!("{} has no primary key to refer to", name_of(ctx.doc, e))))
+    rules::primary_key_of(ctx.doc, e).ok_or_else(|| {
+        let because = Reason::NoPrimaryKey { table: rules::label(ctx.doc, e) };
+        refuse("references", format!("{} has no primary key to refer to", name_of(ctx.doc, e))).because(because)
+    })
 }
 
 /// Adds a foreign key: with `columns`, those columns hold it; without, new columns are added for
-/// the key's columns, named and typed as drawing a relationship names and types them.
+/// the key's columns, named and typed as drawing a relationship names and types them. A key that
+/// would close a cycle of identifying relationships is refused typed ([`cycle_refused`]).
 fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let k = target_key(ctx, p)?;
@@ -2591,7 +2603,7 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
         Some(r) => {
             let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
             if identifying && rules::identifying_cycle(ctx.doc, e, k) {
-                return Err(refuse("relationship", cycle_text(ctx.doc, e, k)));
+                return Err(cycle_refused(ctx.doc, e, k, "relationship"));
             }
             let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
             (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
@@ -2647,7 +2659,9 @@ fn foreign_key_set_options(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// Points a foreign key at another key: with `columns`, those columns hold it; without, new
 /// columns are added for the key's columns, as drawing a relationship adds them. The old columns
-/// stay.
+/// stay. The key it points at already, with no columns named, is refused as pointed at again
+/// ([`Reason::Again`] of a foreign key), and one that would close a cycle of identifying
+/// relationships typed ([`cycle_refused`]).
 fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
     not_subtype_key(ctx.doc, rules::key_parts(ctx.doc, fk).relationship, "foreign_key")?;
@@ -2657,7 +2671,8 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
     let e = parts.entity.ok_or_else(|| refuse("foreign_key", "the foreign key belongs to no entity"))?;
     let actions = [parts.on_delete, parts.on_update];
     if given.is_empty() && parts.key == Some(k) {
-        return Err(refuse("key", "the foreign key points at this key already; name the columns to change them"));
+        let again = Reason::Again { relationship: kind_of(FOREIGN_KEY) };
+        return Err(refuse("key", "the foreign key points at this key already; name the columns to change them").because(again));
     }
     if !given.is_empty()
         && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, parts.relationship)
@@ -2670,7 +2685,7 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
         Some(r) => {
             let identifying = ctx.doc.get(r, relationship::IDENTIFYING).ok().and_then(|v| v.as_bool()).unwrap_or(false);
             if identifying && rules::identifying_cycle(ctx.doc, e, k) {
-                return Err(refuse("key", cycle_text(ctx.doc, e, k)));
+                return Err(cycle_refused(ctx.doc, e, k, "key"));
             }
             let (end, role) = parent_end(ctx.doc, r, rules::entity_of(ctx.doc, k));
             (identifying, rules::cardinality_of(ctx.doc, r, end) == Some(Cardinality::ZeroOrOne), rules::role_of(ctx.doc, r, role))
@@ -3057,6 +3072,15 @@ fn entity_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
 fn cycle_text(store: &Store, child: Obj, k: Obj) -> String {
     let parent = rules::entity_of(store, k).map(|p| name_of(store, p)).unwrap_or_default();
     format!("the identifying relationships would form a cycle between {} and {parent}", name_of(store, child))
+}
+
+/// Key `k` refused under `key`, as it cannot identify `child` ([`cycle_text`]): typed with the
+/// child and the key's entity, each named by its id when it has no name
+/// ([`Reason::IdentifyingCycle`]).
+fn cycle_refused(store: &Store, child: Obj, k: Obj, key: &str) -> CommandError {
+    let parent = rules::entity_of(store, k).map(|p| rules::label(store, p)).unwrap_or_default();
+    let because = Reason::IdentifyingCycle { child: rules::label(store, child).into(), parent: parent.into() };
+    refuse(key, cycle_text(store, child, k)).because(because)
 }
 
 /// Sets a relationship's ends; the key columns of its foreign key follow the parent end: nullable

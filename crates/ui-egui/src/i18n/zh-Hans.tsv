@@ -586,6 +586,10 @@ str		{column} is not a column of {table}.	{column} 不是 {table} 的列。
 str		{name} may be null, which a primary key column never is.	{name} 允许为空，而主键列绝不允许为空。
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外键 {foreign_key} 指向 {table} 的这个键。请先更改或删除该外键。
 str		{table} has no primary key.	{table} 没有主键。
+str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
+str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
+str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
+str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
 str		The key {name} would break: {why}	键 {name} 将失效：{why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
 str		Only a computed column takes an expression.	只有计算列才能有表达式。

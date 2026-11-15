@@ -359,6 +359,13 @@ pub enum Reason {
     KeyInUse { foreign_key: Box<str>, table: Box<str> },
     /// The table `table` has no primary key.
     NoPrimaryKey { table: String },
+    /// The key named is not one of the table `table`'s, which a foreign key is said to refer to.
+    KeyNotOf { table: Box<str> },
+    /// The key a foreign key would point at, of the table `table`, has no columns to copy.
+    NoKeyColumns { table: Box<str> },
+    /// Identifying relationships would run in a cycle: `child` would be built on `parent`, which is
+    /// built on `child` already, or is `child` itself through its own primary key.
+    IdentifyingCycle { child: Box<str>, parent: Box<str> },
     /// The key or column `name`, of `kind` (as `"primary key"` or `"column"`), would break if the
     /// step went ahead; `why` says how, boxed so the error stays small.
     WouldBreak { kind: &'static str, name: Box<str>, why: Box<Reason> },

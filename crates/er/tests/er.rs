@@ -419,6 +419,92 @@ fn a_keys_columns_refused_carry_their_reason_typed() {
     assert!(matches!(key_columns_problem(st, customer, &[], true), Some(KeyColumnsProblem::NoColumn)));
 }
 
+/// The key a foreign key points at, refused, carries its reason typed beside the English, which
+/// stays as it was: a key of another table than the one referenced, a referenced table without a
+/// primary key, the key it points at already, and identifying relationships that would run in a
+/// cycle, from adding a foreign key and from pointing one elsewhere, child and parent apart
+/// (AR-501).
+#[test]
+fn the_key_a_foreign_key_points_at_refused_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    let item = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Item" }));
+    let identify = |from: &str, to: &str| json!({ "from": from, "to": to, "create_foreign_key": true, "identifying": true });
+    let owns = run(&mut s, "er.relationship.add", identify(&sm.customer, &line));
+    run(&mut s, "er.relationship.add", identify(&line, &item));
+    let st = s.doc();
+    let pk = |e: &str| st.uuid(rules::primary_key_of(st, obj(st, e)).unwrap()).unwrap().to_string();
+    let (customer_pk, line_pk, item_pk) = (pk(&sm.customer), pk(&line), pk(&item));
+    let line_fk = rules::keys_onto(st, obj(st, &customer_pk))[0];
+    let line_fk = st.uuid(line_fk).unwrap().to_string();
+    let cycle = |child: &str, parent: &str| Reason::IdentifyingCycle { child: child.into(), parent: parent.into() };
+    let (around, back) = (
+        "the identifying relationships would form a cycle between Customer and Line",
+        "the identifying relationships would form a cycle between Line and Item",
+    );
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "key": customer_pk, "references": sm.order }),
+            "references",
+            Reason::KeyNotOf { table: "Order".into() },
+            "the key is not one of the referenced entity's",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.customer, "references": sm.order }),
+            "references",
+            Reason::NoPrimaryKey { table: "Order".into() },
+            "Order has no primary key to refer to",
+        ),
+        (
+            "er.foreign-key.set-key",
+            json!({ "foreign_key": line_fk, "key": customer_pk }),
+            "key",
+            Reason::Again { relationship: "foreign key" },
+            "the foreign key points at this key already; name the columns to change them",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.customer, "key": line_pk, "relationship": owns }),
+            "relationship",
+            cycle("Customer", "Line"),
+            around,
+        ),
+        ("er.foreign-key.set-key", json!({ "foreign_key": line_fk, "key": item_pk }), "key", cycle("Line", "Item"), back),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+}
+
+/// A loaded document's primary key without columns, which no command makes, has none for a new
+/// foreign key's columns to copy: refused from inside the step with its reason typed, the table
+/// named by its id when it has no name, and the document as it was (AR-501).
+#[test]
+fn a_loaded_key_without_columns_gives_a_foreign_key_none_to_copy() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let parent = st.create(ENTITY).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(parent)).unwrap();
+    let pk = st.create(PRIMARY_KEY).unwrap();
+    st.set(parent, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+    let child = st.create(ENTITY).unwrap();
+    st.set(child, named_element::NAME, Value::str("Child")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(child)).unwrap();
+    let (parent, child) = (st.uuid(parent).unwrap().to_string(), st.uuid(child).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let before = picture(s.doc());
+    let refused = s.execute("er.foreign-key.add", &json!({ "entity": child, "references": parent }));
+    let Err(EngineError::Failed { error, .. }) = refused else { panic!("the key has no columns") };
+    let reason = archforge_engine::Reason::NoKeyColumns { table: parent.into() };
+    assert_eq!((error.reason, error.message.as_str(), error.key), (Some(reason), " has no key columns to refer to", None));
+    assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
+}
+
 /// A key a step would break, found inside the step, carries its reason typed beside the English: the
 /// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
 /// column that may be null breaks on any edit that checks the keys around it (AR-493).

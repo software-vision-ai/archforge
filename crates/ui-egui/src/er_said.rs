@@ -3,8 +3,10 @@
 //! uses for them; a kind not listed is left to the engine's English. A word none of a choice's
 //! words is said under the choice's label. A key's columns (AR-492): none, a column of another
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
-//! Found inside a step (AR-493): a key that would break, with why in the same words, and keys built
-//! on each other too deep. A column's generation (AR-494): the rule it breaks, also for a column on
+//! The key a foreign key points at (AR-501): one of another table, one without columns, one it
+//! points at already, and identifying relationships that would run in a cycle. Found inside a step
+//! (AR-493): a key that would break, with why in the same words, and keys built on each other too
+//! deep. A column's generation (AR-494): the rule it breaks, also for a column on
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
 //! a place past its table's last; a default none of an enum type's literals is UML's row.
@@ -53,6 +55,12 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             &[("foreign_key", foreign_key), ("table", table)],
         ),
         Reason::NoPrimaryKey { table } => fmt(&tr("{table} has no primary key."), &[("table", table)]),
+        Reason::KeyNotOf { table } => fmt(&tr("The key is not one of {table}'s keys."), &[("table", table)]),
+        Reason::NoKeyColumns { table } => fmt(&tr("The key of {table} has no columns to refer to."), &[("table", table)]),
+        Reason::IdentifyingCycle { child, parent } => {
+            fmt(&tr("Identifying relationships would run in a cycle between {child} and {parent}."), &[("child", child), ("parent", parent)])
+        }
+        Reason::Again { relationship: "foreign key" } => tr("The foreign key points at this key already. Name the columns to change them."),
         Reason::WouldBreak { kind: "primary key" | "unique constraint", name, why } => {
             fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }

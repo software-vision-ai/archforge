@@ -586,6 +586,10 @@ str		{column} is not a column of {table}.	{column} no es una columna de {table}.
 str		{name} may be null, which a primary key column never is.	{name} admite nulos, y una columna de clave primaria nunca los admite.
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	La clave foránea {foreign_key} apunta a esta clave de {table}. Cámbiala o elimínala primero.
 str		{table} has no primary key.	{table} no tiene clave primaria.
+str		The key is not one of {table}'s keys.	La clave no es una de las claves de {table}.
+str		The key of {table} has no columns to refer to.	La clave de {table} no tiene columnas a las que hacer referencia.
+str		Identifying relationships would run in a cycle between {child} and {parent}.	Las relaciones identificadoras formarían un ciclo entre {child} y {parent}.
+str		The foreign key points at this key already. Name the columns to change them.	La clave foránea ya apunta a esta clave. Indica las columnas para cambiarlas.
 str		The key {name} would break: {why}	La clave {name} dejaría de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Las claves construidas unas sobre otras superan aquí los {max} niveles o forman un ciclo.
 str		Only a computed column takes an expression.	Solo una columna calculada admite una expresión.
