@@ -1077,6 +1077,7 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
             let free = panel.row_menu.is_none();
             history_keys(&clip, (&mut panel.history_held, &mut panel.history_scroll), free, rows, area);
             y -= panel.history_scroll;
+            let past = past_edges(rows, clip.clip_rect(), y);
             let mut focus_found = false;
             for (i, listed) in rows.iter().enumerate() {
                 let r = Rect::from_min_size(pos2(left, y), vec2(width, ROW));
@@ -1086,9 +1087,9 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                     Some(crate::chat_delete::FocusTo::Chat(id)) => id == listed.id,
                     _ => false,
                 };
-                // A row past either edge is laid out too, so that Tab and Shift+Tab reach it; only
-                // what shows is listed.
-                if !clip.clip_rect().expand2(vec2(0.0, ROW_PITCH)).intersects(r) && !wanted {
+                // The readable row past either edge is laid out too, so that Tab and Shift+Tab reach
+                // it; only what shows is listed.
+                if !clip.clip_rect().intersects(r) && !wanted && !past.contains(&Some(i)) {
                     continue;
                 }
                 let row_id = format!("workspace.chat.history.{i}");
@@ -1211,6 +1212,16 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
     }
     let foot = tr("Conversations are kept in the project, so they travel with it and never show in another project.");
     crate::settings::wrapped(&paint, pos2(left + 10.0, y + 10.0), width - 20.0, &foot, types::CAPTION, p.text_muted, 4);
+}
+
+/// The rows of the history, laid out `ROW_PITCH` apart from `first`, that can be read and are the
+/// nearest past the top and the bottom of `clip`, across rows that cannot be read, which take no
+/// keyboard: Tab and Shift+Tab reach the next row there that does (AR-482).
+fn past_edges(rows: &[crate::chat_store::Listed], clip: Rect, first: f32) -> [Option<usize>; 2] {
+    let top = |i: usize| first + i as f32 * ROW_PITCH;
+    let readable = |i: &usize| rows.get(*i).is_some_and(|l| l.entry.is_ok());
+    let above = (0..rows.len()).rev().filter(readable).find(|&i| top(i) + ROW < clip.top());
+    [above, (0..rows.len()).filter(readable).find(|&i| top(i) > clip.bottom())]
 }
 
 /// The history's `rows` follow the keyboard (AR-482), before they are laid out in `area` from its

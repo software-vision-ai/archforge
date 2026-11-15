@@ -15009,6 +15009,30 @@ mod chat_keys {
             press_to_row(&mut h, Key::PageUp, 0);
         });
     }
+
+    /// In the smallest window, with the four rows under the third unreadable, Tab from the third row
+    /// lands on the eighth, the next that can be read, far past the list's foot, and Shift+Tab from
+    /// there back on the third, far past its top; each brought whole into view.
+    #[test]
+    fn tab_and_shift_tab_reach_the_next_readable_row_past_unreadable_ones() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = long_history(theme);
+            h.set_size(egui::vec2(1600.0, 400.0));
+            h.event(egui::Event::PointerMoved(egui::pos2(10.0, 600.0)));
+            if let Some(Ok(rows)) = h.state_mut().chat_panel.history.as_mut() {
+                for listed in &mut rows[3..7] {
+                    listed.entry = Err("its provider is not one Archforge knows".into());
+                }
+            }
+            h.run();
+            focus_on(&mut h, &row(2));
+            assert!(row_whole(&h, 2) && !has_id(&h, &row(7)), "{theme:?}: the eighth row far under the list's foot");
+            press_to_row(&mut h, Key::Tab, 7);
+            assert!(!has_id(&h, &row(2)), "{theme:?}: the third row far above the list's top");
+            key(&mut h, Key::Tab, Modifiers::SHIFT);
+            assert!(focused_on(&h, &row(2)) && row_whole(&h, 2), "{theme:?}: Shift+Tab is back on the third row, not {:?}", focused(&h));
+        });
+    }
 }
 
 /// Undo this turn's changes takes back exactly the turn's changes, keeps the person's, and says when it cannot.

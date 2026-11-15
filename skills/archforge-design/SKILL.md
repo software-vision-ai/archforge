@@ -532,7 +532,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   title, then when, the agent and how many messages; the open one is marked. Times use the local
   offset the host gives ("Today 14:02", "Yesterday", "3 Nov"), months short and translated; without
   an offset a time says UTC.
-- The history follows the keyboard (AR-482): a row past either edge is laid out, so Tab and
+- The history follows the keyboard (AR-482): the nearest row past either edge that can be read is
+  laid out, however many unreadable rows (which take no keyboard) lie between, so Tab and
   Shift+Tab reach every row (only what shows is listed), and the row the keyboard comes to by them
   or a screen reader is brought whole into view; the wheel can still cut the row that has it. While
   a row has the keyboard, Page Up and Page Down move it by what shows less a row, at least to the
