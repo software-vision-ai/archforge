@@ -4030,6 +4030,28 @@ fn click_menu(h: &mut Harness<'static, Shell>, id: &str) {
     click(h, at);
 }
 
+/// Clicks the in-window bar's File title, by the pointer or else as a screen reader does, with `key`
+/// and `modifiers` pressed and let go in the frame of the click, as both can arrive together, and
+/// asserts that the click opened File (AR-518).
+fn open_file_with(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifiers, pointer: bool) {
+    let (at, primary, none) = (rect_of(h, "strip.menu.file").center(), egui::PointerButton::Primary, egui::Modifiers::NONE);
+    let click = if pointer {
+        h.event(egui::Event::PointerMoved(at));
+        h.event(egui::Event::PointerButton { pos: at, button: primary, pressed: true, modifiers: none });
+        h.step();
+        egui::Event::PointerButton { pos: at, button: primary, pressed: false, modifiers: none }
+    } else {
+        let (action, target_tree) = (egui::accesskit::Action::Click, egui::accesskit::TreeId::ROOT);
+        let target_node = crate::widgets::egui_id("strip.menu.file").accesskit_id();
+        egui::Event::AccessKitActionRequest(egui::accesskit::ActionRequest { action, target_tree, target_node, data: None })
+    };
+    // kittest runs a frame per event it queues, so the click and the key go in by hand, together.
+    let press = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
+    h.input_mut().events.extend([click, press(true), press(false)]);
+    h.step();
+    assert_eq!(h.state().menu_bar.open, Some("file"), "the click opened the bar's File menu");
+}
+
 /// The bar's controls in the frame.
 fn menu_ids(h: &Harness<'static, Shell>) -> Vec<String> {
     ids(h).into_iter().filter(|i| i.starts_with("strip.menu.")).collect()
@@ -4126,8 +4148,8 @@ fn a_click_moves_the_menu_or_closes_it() {
     }
 }
 
-/// While a menu is open the keys stay from the window behind and the shortcuts; Esc closes it and
-/// stops there; a press elsewhere and a dialog over the window close it too.
+/// While a menu is open the keys stay from the window behind and the shortcuts, from the frame a click
+/// opens it in; Esc closes it and stops there; a press elsewhere and a dialog over the window close it too.
 #[test]
 fn an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it() {
     let press = |h: &mut Harness<'static, Shell>, key, modifiers| {
@@ -4136,6 +4158,12 @@ fn an_open_menu_holds_the_keys_and_escape_a_press_or_a_dialog_close_it() {
     };
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = menu_harness(theme, false);
+        // Settings' chord as Windows and Linux send it, in the frame of a pointer's or a screen reader's click.
+        for pointer in [true, false] {
+            open_file_with(&mut h, egui::Key::Comma, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), pointer);
+            assert!(h.state().settings.is_none(), "{theme:?}: nor the shortcuts in the frame of the click, by the pointer: {pointer}");
+            menu_press(&mut h, egui::Key::Escape);
+        }
         click_menu(&mut h, "strip.menu.file");
         press(&mut h, egui::Key::K, egui::Modifiers::COMMAND);
         assert!(!h.state().home_search.open, "{theme:?}: nothing behind reads it");
@@ -6747,7 +6775,7 @@ fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
 /// Tab and Shift+Tab land on every row of Diagrams and group's `+` in turn, each brought whole into
 /// view, past a row the wheel left cut too; the frame Tab moves the keyboard in asks for the next.
 /// The page keys move the keyboard: not with the control key (Windows, Linux) or the menu bar open,
-/// and by a row in the smallest window.
+/// also in the frame a click opens it in, and by a row in the smallest window.
 #[test]
 fn diagrams_follows_the_keyboard() {
     in_both_appearances(|theme| {
@@ -6777,6 +6805,11 @@ fn diagrams_follows_the_keyboard() {
         key(&mut h, egui::Key::F10, egui::Modifiers::NONE);
         key(&mut h, egui::Key::PageDown, egui::Modifiers::NONE);
         assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]), "{theme:?}: with the menu bar open");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Nor in the frame of the click that opens the bar (AR-518).
+        open_file_with(&mut h, egui::Key::End, egui::Modifiers::NONE, true);
+        let still = !holds(&h, &rows[rows.len() - 1]) && h.state().diagrams.scroll.offset == 0.0;
+        assert!(still, "{theme:?}: with the click that opens the menu bar");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // In the smallest window, over the open diagram's footer, not even a row shows whole: a
         // page key still moves a row.
@@ -6821,7 +6854,8 @@ fn selected(h: &Harness<'static, Shell>, id: &str) -> bool {
 /// From the filter field, Tab lands on the tree, then on every row of Models with its arrow or drag
 /// handle in turn, and Shift+Tab from the last back to the filter field, each row brought whole into
 /// view, past a row the wheel left cut by an edge too; the page keys move the keyboard. While the tree holds the keys, after a click on a row,
-/// they move the selection instead, and the arrows still move it a row; not with the control key.
+/// they move the selection instead, and the arrows still move it a row; not with the control key,
+/// nor in the frame a screen reader's click opens the in-window menu bar in.
 /// With nothing selected they select the first row, or the last for End.
 #[test]
 fn models_follows_the_keyboard() {
@@ -6847,6 +6881,12 @@ fn models_follows_the_keyboard() {
         key(&mut h, egui::Key::End, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND));
         key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
         assert!(selected(&h, &rows[1]) && h.state().explorer.scroll.offset == 0.0, "{theme:?}: not with the control key");
+        // Nor in the frame of the click that opens the in-window menu bar (AR-518).
+        h.state_mut().in_window_menu = true;
+        h.run();
+        open_file_with(&mut h, egui::Key::End, egui::Modifiers::NONE, false);
+        assert!(selected(&h, &rows[1]) && h.state().explorer.scroll.offset == 0.0, "{theme:?}: with the click that opens the menu bar");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // With nothing selected, End selects the last row and Home, Page Up and Page Down the first.
         for (key_, to) in [(egui::Key::End, 60), (egui::Key::Home, 0), (egui::Key::PageDown, 0), (egui::Key::End, 60), (egui::Key::PageUp, 0)] {
             crate::panels::run(h.state_mut(), "view.select", serde_json::json!({ "ids": [] })).unwrap();

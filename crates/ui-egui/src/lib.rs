@@ -1988,8 +1988,9 @@ impl Shell {
         let now = ctx.input(|i| i.time);
         edit_menu::deliver(self, ctx);
         version_details::compare::keep(self);
-        // An open menu or select list holds the keys, as a native one does.
-        if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
+        // An open menu or select list holds the keys, as a native one does; so does a menu a click on
+        // its title opens in this frame (AR-518).
+        if self.menu_bar.open.is_none() && !menu_bar::clicked(ctx) && version_details::compare::highlight(self).is_none() {
             actions::run_shortcuts(self, ctx);
         }
         actions::follow_close(self, ctx);
@@ -2059,7 +2060,9 @@ impl Shell {
         // While About, Settings, New project, Save version, a menu of the bar or Chat's question is over the
         // window, the one behind takes no keys: its tree, canvas and editors read keys directly, so the
         // frame's keys are held back while it is drawn and given back for the dialogs. A menu the keys
-        // closed this frame counts: Space's typed text arrives beside the key that ran the row.
+        // closed this frame counts: Space's typed text arrives beside the key that ran the row. So does
+        // one a click on its title opens: the strip reads that click only as it is drawn, after the
+        // keys were let through to whatever draws below it (AR-518).
         let dialog = self.about.is_some()
             || self.settings.is_some()
             || self.new_project.is_some()
@@ -2067,6 +2070,7 @@ impl Shell {
             || menu_was_open
             || choosing
             || self.menu_bar.open.is_some()
+            || menu_bar::clicked(ui.ctx())
             || matches!(
                 self.ask,
                 Some(

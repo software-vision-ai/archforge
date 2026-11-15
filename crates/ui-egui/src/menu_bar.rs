@@ -132,6 +132,17 @@ pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: b
     lost || (held && !focused)
 }
 
+/// Whether a title of the bar is clicked in this frame, by the pointer or by a screen reader, so that
+/// its menu opens, or closes, as the strip is drawn. Known as the frame starts, so that the shortcuts
+/// and `Shell::ui` hold the frame's keys before anything behind the bar reads them (AR-518). A title
+/// that has the keyboard opens on its own Space or Enter, which a hold would take from it; there
+/// nothing behind the bar has the keyboard. Only a bar drawn has titles to click.
+pub(crate) fn clicked(ctx: &egui::Context) -> bool {
+    let pointer = ctx.interaction_snapshot(|s| s.clicked);
+    let title = |g: &Group| widgets::egui_id(&format!("strip.menu.{}", g.id));
+    GROUPS.iter().map(title).any(|t| pointer == Some(t) || ctx.input(|i| i.has_accesskit_action_request(t, egui::accesskit::Action::Click)))
+}
+
 /// Takes a press of `key` with no modifier at all; a key held down counts again only when `repeats`.
 /// Not `consume_key`, which lets Shift through: Shift+F10 opens the row menus of the explorer and Chat.
 pub(crate) fn press(ctx: &egui::Context, key: egui::Key, repeats: bool) -> bool {

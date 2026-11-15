@@ -65,7 +65,8 @@ fn press_to(h: &mut Harness<'static, Shell>, key_: Key, to: &str, bounds: (f32, 
 
 /// In each list, Page Down and Page Up move the keyboard by what shows, End and Home to the last
 /// row and the first, each brought whole into view; not with the control key, as Windows and Linux
-/// send it, nor while a row's menu is open, and not from the filter field, which keeps its keys.
+/// send it, nor in the frame of the click that opens the menu bar, nor while a row's menu is open,
+/// and not from the filter field, which keeps its keys.
 #[test]
 fn the_page_keys_move_the_keyboard_through_each_list() {
     let row = |n: usize| format!("workspace.versions.row.v{n}");
@@ -86,6 +87,11 @@ fn the_page_keys_move_the_keyboard_through_each_list() {
         assert_eq!(rect_of(&h, &row(0)).top(), bounds.0, "{theme:?}: the list is back at its top");
         key(&mut h, Key::PageDown, Modifiers::CTRL.plus(Modifiers::COMMAND));
         assert!(holds(&h, &row(0)), "{theme:?}: not with the control key");
+        // Nor in the frame of the click that opens the in-window menu bar (AR-518).
+        h.state_mut().in_window_menu = true;
+        h.run();
+        open_file_with(&mut h, Key::End, Modifiers::NONE, true);
+        assert!(!holds(&h, &row(49)) && whole(&h, &row(0), bounds), "{theme:?}: with the click that opens the menu bar");
 
         let mut h = many_changes(theme);
         let rows = change_rows(&h);
