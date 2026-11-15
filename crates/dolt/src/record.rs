@@ -1,6 +1,7 @@
 //! A record per running server, in the user's settings: which process serves which project, in
 //! which run folder, started by which Archforge. Recovery recognises a leftover server by it. A
-//! record without the server's process id is one a start wrote before its server ran.
+//! start writes it before its server starts, without the server's process id, and completes it
+//! once the server runs, holding the record's lock from before the one to after the other.
 //!
 //! Every change of a record (writing, removing, setting a damaged one aside) holds that record's
 //! lock, an operating-system lock on a file of its own beside the record, so a change that looks
@@ -18,8 +19,16 @@ use serde::{Deserialize, Serialize};
 use crate::Error;
 use crate::recovery::valid_pid;
 
-/// The most of a record read; a larger file is set aside.
+/// The most of a record read; a larger file is set aside. No record is written that would be
+/// larger once it names a process id, whichever.
 const CAP: u64 = 4096;
+
+/// Whether a record of `len` bytes is within [`CAP`]: the one test of size, for reading and for
+/// writing.
+fn fits(len: usize) -> bool {
+    u64::try_from(len).is_ok_and(|n| n <= CAP)
+}
+
 /// The longest a change waits for the lock: two seconds, less in this crate's own tests. A longer
 /// wait means the holder has stalled, and the change fails instead of hanging with it.
 pub(crate) const LOCK_WAIT: Duration = Duration::from_millis(if cfg!(test) { 100 } else { 2000 });
@@ -83,8 +92,8 @@ enum Found {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Record {
     pub data_dir: String,
-    /// The server's process id; none in the record of a start written before its server ran (no
-    /// start writes one yet: AR-457). A record of the earlier format always has one.
+    /// The server's process id; none while its start is under way, and in the record of a start
+    /// that ended before it completed it. A record of the earlier format always has one.
     pub server_pid: Option<u32>,
     /// The checked run root the run folder was made in, and the run folder.
     pub run_root: String,
@@ -167,7 +176,7 @@ fn load(file: &Path, project: Option<&str>) -> Result<Found, Error> {
     };
     let mut bytes = Vec::new();
     f.take(CAP + 1).read_to_end(&mut bytes).map_err(|e| Error::io("cannot read", file, e))?;
-    if bytes.len() as u64 > CAP {
+    if !fits(bytes.len()) {
         return Ok(Found::Bad("it is too large"));
     }
     Ok(match serde_json::from_slice::<Record>(&bytes) {
@@ -188,30 +197,71 @@ fn set_aside(file: &Path, why: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// The records folder of `held`, if it is the lock of `r`'s own record.
+fn own_folder<'a>(held: &'a Held, r: &Record) -> Result<&'a Path, Error> {
+    let file = &held.record;
+    let own = file.parent().filter(|d| path(d, &r.data_dir) == *file);
+    own.ok_or_else(|| Error::io("cannot write", file, std::io::Error::other("the lock held is another record's")))
+}
+
+/// Writes `r` in full under a new temporary name in `records` and synchronises it. Returns that
+/// name. The name is made exclusively, so nothing under it, a link included, is written through.
+/// A record the reader would refuse for its size once it names the largest process id there is
+/// is refused first, and nothing is written.
+fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
+    use std::io::Write;
+    let json = |r: &Record| serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", records, std::io::Error::other(e)));
+    let largest = json(&Record { server_pid: Some(u32::MAX), ..r.clone() })?.len();
+    if !fits(largest) {
+        return Err(Error::RecordTooLarge { project: r.data_dir.clone(), len: largest, max: CAP });
+    }
+    let bytes = json(r)?;
+    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
+    // A name that is taken is another file's: only one this call made is removed again.
+    let mut f = std::fs::File::create_new(&tmp).map_err(|e| Error::io("cannot write", &tmp, e))?;
+    match f.write_all(&bytes).and_then(|()| f.sync_all()) {
+        Ok(()) => Ok(tmp),
+        Err(e) => {
+            remove(&tmp);
+            Err(Error::io("cannot write", &tmp, e))
+        }
+    }
+}
+
 /// Writes a project's record unless one is there already, atomically and exclusively: the record
 /// is written in full under a temporary name, then linked to its own name, which fails if another
 /// start got there first. The caller holds the record's lock, `held`, taken before the server
 /// the record is about was started. Returns whether it was written.
 pub(crate) fn write_new(held: &Held, r: &Record) -> Result<bool, Error> {
-    use std::io::Write;
     let file = &held.record;
-    let own = file.parent().filter(|d| path(d, &r.data_dir) == *file);
-    let records = own.ok_or_else(|| Error::io("cannot write", file, std::io::Error::other("the lock held is another record's")))?;
-    let bytes = serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", file, std::io::Error::other(e)))?;
-    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
-    let written = std::fs::File::create_new(&tmp).and_then(|mut f| {
-        f.write_all(&bytes)?;
-        f.sync_all()
-    });
+    let tmp = write_tmp(own_folder(held, r)?, r)?;
     #[cfg(test)]
     tests::in_change(file);
-    let linked = written.and_then(|()| std::fs::hard_link(&tmp, file));
-    let _ = std::fs::remove_file(&tmp);
+    let linked = std::fs::hard_link(&tmp, file);
+    remove(&tmp);
     match linked {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
         Err(e) => Err(Error::io("cannot write", file, e)),
     }
+}
+
+/// Completes the record `pending`, which a start wrote before its server ran, with the server's
+/// process id `server_pid`, under the lock `held` the start has held since. Only while the name
+/// still holds `pending`, read in place: the complete record is written in full under a temporary
+/// name and renamed over it, so a reader finds the one or the other whole, and no link under the
+/// name is written through. Anything else under the name fails the completion and stays.
+pub(crate) fn complete(held: &Held, pending: &Record, server_pid: u32) -> Result<(), Error> {
+    let file = &held.record;
+    if !matches!(load(file, Some(&pending.data_dir))?, Found::Good(r) if r == *pending) {
+        return Err(Error::io("cannot complete", file, std::io::Error::other("it is no longer this start's record")));
+    }
+    let done = Record { server_pid: Some(server_pid), ..pending.clone() };
+    let tmp = write_tmp(own_folder(held, &done)?, &done)?;
+    std::fs::rename(&tmp, file).map_err(|e| {
+        remove(&tmp);
+        Error::io("cannot write", file, e)
+    })
 }
 
 /// The record under the lock `held`, as it is: read only, nothing set aside. A file that holds no
@@ -236,7 +286,25 @@ pub(crate) fn remove_if(records: &Path, data_dir: &str, server_pid: u32) -> bool
 /// looked at stays, which the log says. Returns whether the name is free afterwards: not with
 /// another record or a damaged file under it, nor when that could not be found out.
 pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) -> bool {
-    let gone = locked(file, LOCK_WAIT, || match load(file, None)? {
+    let gone = locked(file, LOCK_WAIT, || remove_looked(file, &is_it));
+    gone.and_then(|looked| looked).unwrap_or_else(|e| {
+        log::warn!("the server record {} stays: {e}", file.display());
+        false
+    })
+}
+
+/// As [`remove_while`], for the record under the lock `held`, which the caller holds already: a
+/// second take of that lock would wait for the caller itself.
+pub(crate) fn remove_held(held: &Held, is_it: impl Fn(&Record) -> bool) -> bool {
+    remove_looked(&held.record, &is_it).unwrap_or_else(|e| {
+        log::warn!("the server record {} stays: {e}", held.record.display());
+        false
+    })
+}
+
+/// The look and the removal of [`remove_while`], for a caller that holds the lock.
+fn remove_looked(file: &Path, is_it: &impl Fn(&Record) -> bool) -> Result<bool, Error> {
+    match load(file, None)? {
         Found::Good(r) if is_it(&r) => {
             #[cfg(test)]
             tests::in_change(file);
@@ -244,11 +312,7 @@ pub(crate) fn remove_while(file: &Path, is_it: impl Fn(&Record) -> bool) -> bool
             Ok(!file.exists())
         }
         found => Ok(matches!(found, Found::Absent)),
-    });
-    gone.and_then(|looked| looked).unwrap_or_else(|e| {
-        log::warn!("the server record {} stays: {e}", file.display());
-        false
-    })
+    }
 }
 
 pub(crate) fn remove(file: &Path) {
@@ -427,6 +491,82 @@ pub(crate) mod tests {
         assert!(!remove_if(&dir.0, "/p/a", 7), "the damaged file still holds the name");
         std::fs::create_dir(path(&dir.0, "/p/b")).unwrap();
         assert!(!remove_if(&dir.0, "/p/b", 7));
+    }
+
+    /// A start's record names no process until it is completed under the lock held since, and
+    /// completing puts a new file under the name: a second name for the first file still reads as
+    /// the first record. A name that no longer holds that record is not completed, and a removal
+    /// under the lock held takes only the record meant. No temporary file is left.
+    #[test]
+    fn a_record_is_completed_by_a_new_file_and_only_its_own() {
+        let dir = crate::home::tests::Scratch::new("complete");
+        let pending = Record { server_pid: None, ..rec("/p/a") };
+        let held = hold(&path(&dir.0, "/p/a"), LOCK_WAIT).unwrap();
+        assert!(super::write_new(&held, &pending).unwrap());
+        std::fs::hard_link(path(&dir.0, "/p/a"), dir.0.join("first")).unwrap();
+        complete(&held, &pending, 7).unwrap();
+        assert_eq!((look(&held, "/p/a").unwrap(), read_file(&dir.0.join("first"), None).unwrap()), (Some(rec("/p/a")), Some(pending.clone())));
+        let again = complete(&held, &pending, 9);
+        assert!(matches!(&again, Err(Error::Io { what, .. }) if what == "cannot complete"), "{again:?}");
+        assert!(!remove_held(&held, |r| *r == pending), "the name holds another record");
+        assert_eq!(look(&held, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert!(remove_held(&held, |r| *r == rec("/p/a")) && look(&held, "/p/a").unwrap().is_none());
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the lock and the second name: no temporary file");
+    }
+
+    /// The writer and the reader take the same sizes. The record of a real canonical project
+    /// folder, as long as this platform lets a test make one, takes exactly the most a record may
+    /// take once it names the largest process id there is. It is written without a process id,
+    /// read, completed with the largest valid one, read again and removed under the lock. One a
+    /// byte longer is refused before anything is written. Linux makes a folder that long; macOS
+    /// stops near 1,024 bytes (its PATH_MAX), so there another field makes up the rest. The path
+    /// is measured as the record holds it: its folder has a name JSON escapes where the platform
+    /// allows one, and on Windows its separators and verbatim prefix are escaped.
+    #[test]
+    fn a_record_at_the_limit_is_written_completed_read_and_removed_and_a_byte_more_is_refused() {
+        let (dir, deep) = (crate::home::tests::Scratch::new("size"), crate::home::tests::Scratch::new("deep"));
+        let root = deep.0.canonicalize().unwrap();
+        let pending =
+            Record { data_dir: String::new(), server_pid: None, run_root: root.to_str().unwrap().into(), owner_started: String::new(), ..rec("") };
+        let largest = |r: &Record| serde_json::to_vec_pretty(&Record { server_pid: Some(u32::MAX), ..r.clone() }).unwrap().len();
+        // What the limit leaves once the record names `data_dir` as written, escapes included.
+        let room = |data_dir: &str| usize::try_from(CAP).unwrap().checked_sub(largest(&Record { data_dir: data_dir.into(), ..pending.clone() }));
+        assert_eq!(room(&"\"".repeat(room("").unwrap())), None, "a path is measured as the record holds it");
+        // The deepest canonical folder whose record fits that can be made, below a name JSON
+        // escapes where the platform allows one.
+        let (mut project, mut name) = (root.join("q\"\\"), 255);
+        if std::fs::create_dir(&project).is_err() {
+            project = root.clone();
+        }
+        while name > 0 {
+            let next = project.join("d".repeat(name));
+            let made = next.to_str().is_some_and(|t| room(t).is_some()) && std::fs::create_dir(&next).is_ok();
+            if made && next.canonicalize().is_ok_and(|c| c == next) {
+                project = next;
+            } else {
+                if made {
+                    let _ = std::fs::remove_dir(&next);
+                }
+                name -= 1;
+            }
+        }
+        let data_dir = project.to_str().unwrap().to_string();
+        assert!(cfg!(windows) || data_dir.contains("q\"\\"), "a name JSON escapes is in the path: {data_dir}");
+        let at =
+            |extra: usize| Record { owner_started: "x".repeat(room(&data_dir).unwrap_or(0) + extra), data_dir: data_dir.clone(), ..pending.clone() };
+        let (edge, pid) = (at(0), u32::try_from(i32::MAX).unwrap());
+        assert_eq!(largest(&edge), 4096, "{} bytes of the path are a real folder's", data_dir.len());
+        let (file, done) = (path(&dir.0, &data_dir), Record { server_pid: Some(pid), ..edge.clone() });
+        let held = hold(&file, LOCK_WAIT).unwrap();
+        assert!(super::write_new(&held, &edge).unwrap());
+        assert_eq!(look(&held, &data_dir).unwrap(), Some(edge.clone()));
+        complete(&held, &edge, pid).unwrap();
+        assert_eq!((std::fs::metadata(&file).unwrap().len(), look(&held, &data_dir).unwrap()), (CAP, Some(done.clone())));
+        assert_eq!(read(&dir.0, &data_dir).unwrap(), Some(done.clone()));
+        assert!(remove_held(&held, |r| *r == done) && !file.exists(), "the record at the limit is removed");
+        let refused = super::write_new(&held, &at(1));
+        assert!(matches!(&refused, Err(Error::RecordTooLarge { len, max: CAP, .. }) if *len == 4097), "{refused:?}");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1, "the lock alone: nothing of the longer record");
     }
 
     /// A record of the earlier format, with a process id always, reads as a complete record; one

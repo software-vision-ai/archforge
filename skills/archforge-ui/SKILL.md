@@ -58,7 +58,9 @@ after every visible change, in both appearances, beside the design.
   test calls, as `home::start_texts` does.
 - The catalogues are `crates/ui-egui/src/i18n/<code>.tsv`, keyed by the English text, four
   tab-separated columns: kind, context, key, text. All seven are complete, so a new string needs
-  its row in every one. Rows go beside related entries, never at the end of the file.
+  its row in every one. Rows go beside related entries, never at the end of the file. A key is in
+  a catalogue once (a `str` row by context and key, a `plural` row by key alone): check that the
+  row is not there already, as the coverage test refuses a second one.
 - Translate the whole sentence with its punctuation; placeholders such as `{n}` may move. A row a
   model translated says so, as the catalogue header records its provenance.
 - The catalogue screen test refuses hidden characters, addresses and instructions in a row.
