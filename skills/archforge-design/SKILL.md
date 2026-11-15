@@ -274,6 +274,12 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   scrolled into view (a click moves nothing), and while one of its controls has the keyboard, no
   text field is being typed in and no menu is open, Page Up, Page Down, Home and End scroll it.
   The arrow keys stay with the canvas and the menus.
+- The lists of the Versions panel (Branches, Working changes, History) follow the keyboard too
+  (AR-474), by moving it rather than scrolling under it: while a row has the keyboard and no menu
+  is open, ↑ and ↓ move it a row, Page Up and Page Down a page (`version_details::page_keys`), and
+  Home and End to the first and the last row; and a row, a row's button or the button under the list
+  that Tab or Shift+Tab comes to is brought whole into view. A row past either edge is laid out, so
+  Tab reaches it; only what shows is listed.
 - A text field written in place (a name, a description, a role) keeps on Enter or when left, and
   Escape brings back what the model has, sending nothing (AR-417). A name an element needs is never
   sent empty: "A name can't be empty." shows at the panel's foot. A refusal there is the engine's
