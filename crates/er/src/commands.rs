@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, TypeInUse, WordPlace, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, MappingRule, NotOneOf, Params, Reason, TypeInUse, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -938,8 +938,9 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused; a key's columns and a foreign key with the reason typed
-/// ([`Reason::WouldBreak`]), except where the key or the foreign key belongs to no table or schema.
+/// the rules, or the edit is refused; a key's columns, a foreign key, and a mapping table's foreign
+/// keys within its primary key, with the reason typed ([`Reason::WouldBreak`]), except where the key
+/// or the foreign key belongs to no table or schema.
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
@@ -966,7 +967,8 @@ fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Resu
         if rules::kind_of(store, *e) == EntityKind::Associative
             && let Some(problem) = rules::associative_problem(store, *e)
         {
-            return Err(Invalid::Refused(problem));
+            let breaks = Reason::WouldBreak { kind: kind_of(ENTITY), name: rules::label(store, *e).into(), why: Box::new(problem.reason()) };
+            return Err(refused(breaks, problem.said()));
         }
     }
     Ok(())
@@ -2086,19 +2088,30 @@ fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+/// The refusal of a resolve or collapse step by the mapping rule it breaks, with the rule kept
+/// typed ([`refused`]) and the English of [`rules::MappingProblem::said`].
+fn mapping_refused(rule: MappingRule) -> Invalid {
+    let problem = rules::MappingProblem(rule);
+    refused(problem.reason(), problem.said())
+}
+
 /// Replaces a many-to-many relationship by a mapping table: an associative entity with the key
 /// columns of both ends as its primary key, a foreign key to each end, and two identifying
 /// one-to-many relationships; on every diagram that showed the relationship, the mapping table sits
-/// in the middle of the old line with the two new lines. One step.
+/// in the middle of the old line with the two new lines. One step. A refusal keeps its reason typed
+/// ([`Reason::Mapping`], or [`Reason::NoPrimaryKey`] of an end).
 pub fn resolve(store: &mut Store, r: Obj, name: &str) -> Result<Obj, Invalid> {
     if !rules::is_many_to_many(store, r) {
-        return Err(Invalid::Refused("only a many-to-many relationship becomes a mapping table".into()));
+        return Err(mapping_refused(MappingRule::NotManyToMany));
     }
-    let end = |p| store.get(r, p).ok().and_then(|v| v.as_ref()).ok_or_else(|| Invalid::Refused("the relationship lacks an end".into()));
+    let end = |p| store.get(r, p).ok().and_then(|v| v.as_ref()).ok_or_else(|| mapping_refused(MappingRule::LacksEnd));
     let (from, to) = (end(relationship::FROM)?, end(relationship::TO)?);
     let s = rules::schema_of(store, r).ok_or_else(|| Invalid::Refused("the relationship belongs to no schema".into()))?;
-    let pk =
-        |e: Obj| rules::primary_key_of(store, e).ok_or_else(|| Invalid::Refused(format!("{} has no primary key to refer to", name_of(store, e))));
+    let pk = |e: Obj| {
+        let none =
+            || refused(Reason::NoPrimaryKey { table: rules::label(store, e) }, format!("{} has no primary key to refer to", name_of(store, e)));
+        rules::primary_key_of(store, e).ok_or_else(none)
+    };
     let (from_key, to_key) = (pk(from)?, pk(to)?);
     // Each end's role names its columns in the mapping table and goes to the new relationship.
     let (from_role, to_role) = (rules::role_of(store, r, relationship::FROM_ROLE), rules::role_of(store, r, relationship::TO_ROLE));
@@ -2197,10 +2210,10 @@ fn attribute_unlink(ctx: &mut C<'_>, p: &Params) -> R {
 /// Replaces a pure mapping table by the many-to-many relationship it stood for: one relationship
 /// between the two parents with the roles and the description carried over, drawn on every diagram
 /// between the two parents where the table was; the table, its two relationships and its views go.
-/// One step.
+/// One step. A refusal keeps its rule typed ([`Reason::Mapping`]).
 pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
     if let Some(problem) = rules::collapse_problem(store, m) {
-        return Err(Invalid::Refused(problem));
+        return Err(refused(problem.reason(), problem.said()));
     }
     let here = rules::schema_of(store, m).ok_or_else(|| Invalid::Refused("the table belongs to no schema".into()))?;
     let fks = rules::foreign_keys(store, m);
@@ -2208,7 +2221,7 @@ pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
     for fk in &fks {
         let parts = rules::key_parts(store, *fk);
         let (Some(r), Some(parent)) = (parts.relationship, parts.key.and_then(|k| rules::entity_of(store, k))) else {
-            return Err(Invalid::Refused("a foreign key lacks its relationship or its key".into()));
+            return Err(mapping_refused(MappingRule::NoKey { foreign_key: rules::label(store, *fk).into() }));
         };
         let (_, role) = parent_end(store, r, Some(parent));
         ends.push((r, parent, rules::role_of(store, r, role)));
@@ -3149,6 +3162,8 @@ fn index_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
+/// Makes an entity regular or associative; one that cannot be a mapping table is refused under
+/// `kind` with its rule typed ([`rules::associative_problem`]).
 fn entity_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let kind = match text(p, "kind") {
@@ -3159,7 +3174,7 @@ fn entity_set_kind(ctx: &mut C<'_>, p: &Params) -> R {
     if kind == EntityKind::Associative
         && let Some(problem) = rules::associative_problem(ctx.doc, e)
     {
-        return Err(refuse("kind", problem));
+        return Err(refuse("kind", problem.said()).because(problem.reason()));
     }
     ctx.doc.set(e, entity::KIND, Value::Enum(kind.index())).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))

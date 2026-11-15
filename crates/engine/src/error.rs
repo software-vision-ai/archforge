@@ -424,6 +424,9 @@ pub enum Reason {
     /// What of `kind` is built on each other (keys, as `"key"`) runs deeper than `max` levels, or
     /// in a loop.
     TooDeep { kind: &'static str, max: u32 },
+    /// A relationship that does not become a mapping table, or a table that is no mapping table or
+    /// does not collapse back into a relationship, by the rule it breaks.
+    Mapping(MappingRule),
     /// A sequence's numbers do not fit each other, by the rule they break.
     Sequence(SequenceRule),
     /// The column `column`, as `table.column`, is of another schema than the sequence it would own.
@@ -459,6 +462,36 @@ pub enum Reason {
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.
     PastLastColumn { columns: usize },
+}
+
+/// The rule a mapping table, or a relationship to become one, breaks, in a [`Reason::Mapping`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MappingRule {
+    /// Only a many-to-many relationship becomes a mapping table.
+    NotManyToMany,
+    /// The relationship lacks one of its two tables.
+    LacksEnd,
+    /// A mapping table has exactly two foreign keys.
+    TwoForeignKeys,
+    /// The foreign key `foreign_key` stands for no relationship.
+    NoRelationship { foreign_key: Box<str> },
+    /// The foreign key `foreign_key` points at no key.
+    NoKey { foreign_key: Box<str> },
+    /// The table has a relationship besides its two foreign keys' own.
+    OwnRelationship,
+    /// The table has columns besides its foreign keys'.
+    OwnColumns,
+    /// Not all of the table's columns are in its primary key.
+    ColumnsOutsideKey,
+    /// The table has a unique constraint.
+    UniqueConstraint,
+    /// The table has a check.
+    Check,
+    /// The table has an index.
+    Index,
+    /// The table `table` has only `keys` foreign keys (0 or 1) whose columns are all in its primary
+    /// key, where a mapping table has two.
+    KeysInPrimaryKey { table: Box<str>, keys: usize },
 }
 
 /// The rule a sequence's numbers break, in a [`Reason::Sequence`].

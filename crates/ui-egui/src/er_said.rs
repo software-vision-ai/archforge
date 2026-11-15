@@ -3,6 +3,9 @@
 //! uses for them; a kind not listed is left to the engine's English. A word none of a choice's
 //! words is said under the choice's label. A key's columns (AR-492): none, a column of another
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
+//! Mapping tables (AR-505): a relationship that does not resolve into one, a table that does not
+//! collapse back into a relationship, one that cannot be associative, by the rule it breaks, and
+//! a mapping table a step would break, with why in the same words.
 //! The key a foreign key points at (AR-501): one of another table, one without columns, one it
 //! points at already, and identifying relationships that would run in a cycle. A foreign key's
 //! columns (AR-502): none, too many, not as many as its key's, one twice and types that differ,
@@ -38,7 +41,7 @@
 //! one that follows an identifying relationship; a key that is none and one without columns are
 //! said by their own rows, also for a foreign key a step would break.
 
-use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
+use archforge_engine::{GenerationRule, MappingRule, NotOneOf, Reason, SizeRule, WordPlace};
 
 use crate::i18n::{fmt, tr, trn};
 
@@ -136,8 +139,12 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::RemovedWhereEdited => tr("This element is removed where it is edited."),
         Reason::SubtypeKeyPart => tr("This is part of a subtype's key, which goes only with its subtype."),
+        Reason::Mapping(rule) => mapping_said(rule),
         Reason::WouldBreak { kind: "column", name, why } => {
             fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+        }
+        Reason::WouldBreak { kind: "table", name, why } => {
+            fmt(&tr("The table {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }
         Reason::Sequence(rule) => sequence_said(rule),
         Reason::ColumnOfOtherSchema { column } => {
@@ -202,6 +209,32 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::NamedTwice { kind: LITERAL, name } => fmt(&tr("The literal \"{name}\" is given twice. Give each literal once."), &[("name", name)]),
         _ => return None,
     })
+}
+
+/// The rule a mapping table, or a relationship to become one, breaks, in the user's words (AR-505);
+/// a table with fewer than two foreign keys in its primary key has none or one.
+fn mapping_said(rule: &MappingRule) -> String {
+    match rule {
+        MappingRule::NotManyToMany => tr("Only a many-to-many relationship becomes a mapping table."),
+        MappingRule::LacksEnd => tr("The relationship lacks one of its two tables."),
+        MappingRule::TwoForeignKeys => tr("A mapping table has exactly two foreign keys."),
+        MappingRule::NoRelationship { foreign_key } => {
+            fmt(&tr("The foreign key {foreign_key} stands for no relationship."), &[("foreign_key", foreign_key)])
+        }
+        MappingRule::NoKey { foreign_key } => fmt(&tr("The foreign key {foreign_key} points at no key."), &[("foreign_key", foreign_key)]),
+        MappingRule::OwnRelationship => tr("The table has a relationship of its own, so it does not collapse into a relationship."),
+        MappingRule::OwnColumns => tr("The table has columns of its own, so it does not collapse into a relationship."),
+        MappingRule::ColumnsOutsideKey => tr("Not all of the table's columns are in its primary key, so it does not collapse into a relationship."),
+        MappingRule::UniqueConstraint => tr("The table has a unique constraint, so it does not collapse into a relationship."),
+        MappingRule::Check => tr("The table has a check, so it does not collapse into a relationship."),
+        MappingRule::Index => tr("The table has an index, so it does not collapse into a relationship."),
+        MappingRule::KeysInPrimaryKey { table, keys: 0 } => {
+            fmt(&tr("{table} has no foreign key within its primary key. A mapping table needs two."), &[("table", table)])
+        }
+        MappingRule::KeysInPrimaryKey { table, .. } => {
+            fmt(&tr("{table} has only one foreign key within its primary key. A mapping table needs two."), &[("table", table)])
+        }
+    }
 }
 
 /// The rule a sequence's numbers break, in the user's words (AR-507).

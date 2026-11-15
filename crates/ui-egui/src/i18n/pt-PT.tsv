@@ -225,6 +225,19 @@ str		Follows {target}	Segue {target}
 str		Unlink	Desligar
 str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} só contém as suas duas chaves, por isso pode voltar a ser a linha muitos-para-muitos entre {from} e {to}.
 str		Collapse into a relationship	Recolher numa relação
+str		Only a many-to-many relationship becomes a mapping table.	Só uma relação de muitos para muitos se torna uma tabela de associação.
+str		The relationship lacks one of its two tables.	Falta à relação uma das suas duas tabelas.
+str		A mapping table has exactly two foreign keys.	Uma tabela de associação tem exatamente duas chaves estrangeiras.
+str		The foreign key {foreign_key} stands for no relationship.	A chave estrangeira {foreign_key} não representa nenhuma relação.
+str		The foreign key {foreign_key} points at no key.	A chave estrangeira {foreign_key} não aponta para nenhuma chave.
+str		The table has a relationship of its own, so it does not collapse into a relationship.	A tabela tem uma relação própria, por isso não se recolhe numa relação.
+str		The table has columns of its own, so it does not collapse into a relationship.	A tabela tem colunas próprias, por isso não se recolhe numa relação.
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Nem todas as colunas da tabela estão na sua chave primária, por isso não se recolhe numa relação.
+str		The table has a unique constraint, so it does not collapse into a relationship.	A tabela tem uma restrição de unicidade, por isso não se recolhe numa relação.
+str		The table has a check, so it does not collapse into a relationship.	A tabela tem uma verificação, por isso não se recolhe numa relação.
+str		The table has an index, so it does not collapse into a relationship.	A tabela tem um índice, por isso não se recolhe numa relação.
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} não tem nenhuma chave estrangeira dentro da sua chave primária. Uma tabela de associação precisa de duas.
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} só tem uma chave estrangeira dentro da sua chave primária. Uma tabela de associação precisa de duas.
 str		Type	Tipo
 str		Primary key	Chave primária
 str		Not null	Não nulo
@@ -653,6 +666,7 @@ str		The column {name} would break: {why}	A coluna {name} deixaria de ser válid
 str		A column takes a domain or an enum type, not both.	Uma coluna usa um domínio ou um tipo enumerado, não ambos.
 str		A column on a domain takes the domain's type.	Uma coluna sobre um domínio usa o tipo do domínio.
 str		A column on a domain takes the domain's size.	Uma coluna sobre um domínio usa o tamanho do domínio.
+str		The table {name} would break: {why}	A tabela {name} deixaria de ser válida: {why}
 str		A column on a domain takes the domain's default.	Uma coluna sobre um domínio usa a predefinição do domínio.
 str		A column on a domain takes the domain's collation.	Uma coluna sobre um domínio usa a colação do domínio.
 str		A column of an enum type takes no type name of its own.	Uma coluna de um tipo enumerado não tem nome de tipo próprio.

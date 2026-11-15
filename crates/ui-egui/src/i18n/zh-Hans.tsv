@@ -225,6 +225,19 @@ str		Follows {target}	跟随 {target}
 str		Unlink	取消链接
 str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} 只包含它的两个键，因此可以重新成为 {from} 与 {to} 之间的多对多连线。
 str		Collapse into a relationship	折叠为关系
+str		Only a many-to-many relationship becomes a mapping table.	只有多对多关系才会成为映射表。
+str		The relationship lacks one of its two tables.	该关系缺少其两张表中的一张。
+str		A mapping table has exactly two foreign keys.	映射表恰好有两个外键。
+str		The foreign key {foreign_key} stands for no relationship.	外键 {foreign_key} 不代表任何关系。
+str		The foreign key {foreign_key} points at no key.	外键 {foreign_key} 没有指向任何键。
+str		The table has a relationship of its own, so it does not collapse into a relationship.	该表有自己的关系，因此不能折叠为关系。
+str		The table has columns of its own, so it does not collapse into a relationship.	该表有自己的列，因此不能折叠为关系。
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	该表的列并非都在其主键中，因此不能折叠为关系。
+str		The table has a unique constraint, so it does not collapse into a relationship.	该表有唯一约束，因此不能折叠为关系。
+str		The table has a check, so it does not collapse into a relationship.	该表有检查约束，因此不能折叠为关系。
+str		The table has an index, so it does not collapse into a relationship.	该表有索引，因此不能折叠为关系。
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} 的主键中没有外键。映射表需要两个。
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} 的主键中只有一个外键。映射表需要两个。
 str		Type	类型
 str		Primary key	主键
 str		Not null	非空
@@ -653,6 +666,7 @@ str		The column {name} would break: {why}	列 {name} 将失效：{why}
 str		A column takes a domain or an enum type, not both.	列只能使用域或枚举类型之一，不能同时使用两者。
 str		A column on a domain takes the domain's type.	基于域的列使用域的类型。
 str		A column on a domain takes the domain's size.	基于域的列使用域的大小。
+str		The table {name} would break: {why}	表 {name} 将失效：{why}
 str		A column on a domain takes the domain's default.	基于域的列使用域的默认值。
 str		A column on a domain takes the domain's collation.	基于域的列使用域的排序规则。
 str		A column of an enum type takes no type name of its own.	枚举类型的列不能有自身的类型名。
