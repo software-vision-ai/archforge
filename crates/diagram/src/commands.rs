@@ -30,6 +30,8 @@ pub const NOTE_LINK: &str = "note link";
 pub const DIAGRAM_ELEMENT: &str = "element a diagram is of";
 /// The kind a refusal of `diagram.style`'s list names: a diagram, a node or an edge.
 pub const STYLED: &str = "styled element";
+/// The kind a refusal of `diagram.arrange` names when the diagram shows no box: a box arranged.
+pub const ARRANGED: &str = "box arranged";
 
 fn has_diagrams<V: DiagramView>(f: &Facts<'_, Store, V>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(DIAGRAM)) { Ok(()) } else { Err(NO_DIAGRAMS) }
@@ -769,7 +771,9 @@ fn diagram_unlabel<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 // Styles.
 
 /// `diagram.style`: a style set as a whole on diagrams, boxes and lines, or removed by a call naming
-/// nothing; a list of ids, and a style name that is no plain word, refused with the reason typed.
+/// nothing; a list of ids, a style name that is no plain word and a colour not of the form `#rrggbb`
+/// refused with the reason typed. The engine refuses a line width outside 0 to [`MAX_LINE`] and a
+/// routing none of [`ROUTINGS`] before the command runs, so those two refusals stay untyped.
 fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let ids = list_of(ctx.doc, p, "ids", &[DIAGRAM, NODE, EDGE], STYLED, "a diagram, a node or an edge", "nothing to style")?;
     let name = str_of(p, "name");
@@ -777,12 +781,12 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         check_kind("name", name, "style name")?;
     }
     let colours = [("fill", style::FILL), ("stroke", style::STROKE), ("text", style::TEXT)];
-    for (key, _) in colours {
-        let c = str_of(p, key);
+    for (part, _) in colours {
+        let c = str_of(p, part);
         if !c.is_empty()
             && let Some(problem) = rules::colour_problem(c)
         {
-            return Err(refuse(key, problem));
+            return Err(refuse(part, problem).because(Reason::NotAColour { part }));
         }
     }
     let line = num(p, "line");
@@ -839,13 +843,15 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 /// Arranges the diagram's boxes in layers along their lines (crate::arrange), keeping its top-left
 /// where it was; a box moves with what it contains, and the lines' waypoints go, since their
-/// routes are worked out anew. One step.
+/// routes are worked out anew. One step. A diagram that shows no box, and a box that would land
+/// farther from the origin than [`rules::MAX_COORD`], refused with the reason typed; a stored place
+/// is a finite number, so a box lands infinitely far at worst, never at no number.
 fn diagram_arrange<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let st = &*ctx.doc;
     let tops: Vec<Obj> = st.list(d, diagram::NODE).map_err(fail)?.iter().filter_map(Value::as_ref).collect();
     if tops.is_empty() {
-        return Err(refuse("diagram", "the diagram shows nothing to arrange"));
+        return Err(refuse("diagram", "the diagram shows nothing to arrange").because(Reason::TooFew { kind: ARRANGED, min: 1 }));
     }
     let index: BTreeMap<Obj, usize> = tops.iter().enumerate().map(|(i, n)| (*n, i)).collect();
     // A line between nested boxes counts between the boxes on the diagram they are in.
@@ -880,7 +886,8 @@ fn diagram_arrange<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         for m in node_tree(st, *n) {
             let (x, y) = (real(st, m, node::X) + dx, real(st, m, node::Y) + dy);
             if let Some(problem) = rules::coord_problem(x).or_else(|| rules::coord_problem(y)) {
-                return Err(refuse("diagram", format!("arranged, a box would land at a place that {problem}")));
+                let said = format!("arranged, a box would land at a place that {problem}");
+                return Err(refuse("diagram", said).because(Reason::ArrangedTooFar));
             }
             moving.push((m, x, y));
         }

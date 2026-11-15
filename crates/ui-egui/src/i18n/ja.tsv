@@ -1375,6 +1375,11 @@ str		What the note links to is on another diagram.	ノートのリンク先は�
 str		The note is linked to it already.	ノートはすでにそこにリンクされています。
 str		A note's link shows no element, so it takes no label.	ノートのリンクは要素を表示しないため、ラベルを付けられません。
 str		This line has the label text {slot} already.	この線にはすでにラベルのテキスト {slot} があります。
+str		Give the fill colour as #rrggbb, such as #3366cc.	塗りの色を #rrggbb の形で指定してください（例: #3366cc）。
+str		Give the border or line colour as #rrggbb, such as #3366cc.	枠線または線の色を #rrggbb の形で指定してください（例: #3366cc）。
+str		Give the text colour as #rrggbb, such as #3366cc.	文字色を #rrggbb の形で指定してください（例: #3366cc）。
+str		This diagram shows no box to arrange.	この図には整列するボックスがありません。
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	整列すると、ボックスが原点から {max} より離れた位置に置かれます。先にボックスを原点に近づけてください。
 str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
 str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。

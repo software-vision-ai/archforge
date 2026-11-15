@@ -6387,6 +6387,41 @@ fn a_node_list_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A style's colour not of the form #rrggbb, of each part alone, and a diagram arranged that shows
+/// no box or would put one beyond a diagram's reach, are said in the chosen language. In light and
+/// dark (AR-516).
+#[test]
+fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
+        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
+        let colour = |part: &str| json!({ "ids": [&nodes["Order"]], part: "red" });
+        assert_eq!(refused(&mut h, "diagram.style", colour("fill")), "Geben Sie die Füllfarbe als #rrggbb an, etwa #3366cc.", "{theme:?}");
+        let stroke = "Geben Sie die Rahmen- oder Linienfarbe als #rrggbb an, etwa #3366cc.";
+        assert_eq!(refused(&mut h, "diagram.style", colour("stroke")), stroke, "{theme:?}");
+        assert_eq!(refused(&mut h, "diagram.style", colour("text")), "Geben Sie die Textfarbe als #rrggbb an, etwa #3366cc.", "{theme:?}");
+        // A new diagram of the classes' package: empty, then two classes at the edge of the reach.
+        let (order, customer) = (named(&h, archforge_uml::CLASS, "Order"), named(&h, archforge_uml::CLASS, "Customer"));
+        let st = h.state().session.as_ref().unwrap().doc();
+        let package = st.uuid(st.container(st.by_uuid(order).unwrap()).unwrap().unwrap().0).unwrap().to_string();
+        let added = run(&mut h, "diagram.add", json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": package })).unwrap();
+        let d = added["id"].as_str().unwrap().to_string();
+        let none = "Dieses Diagramm zeigt keinen Kasten, der sich anordnen ließe.";
+        assert_eq!(refused(&mut h, "diagram.arrange", json!({ "diagram": d })), none, "{theme:?}");
+        for class in [order, customer] {
+            let at_the_edge = json!({ "diagram": d, "element": class.to_string(), "x": 1_000_000, "y": 1_000_000 });
+            run(&mut h, "diagram.place", at_the_edge).unwrap();
+        }
+        let far = "Angeordnet läge ein Kasten weiter als 1000000 vom Ursprung entfernt. Rücken Sie die Kästen zuerst näher an ihn heran.";
+        assert_eq!(refused(&mut h, "diagram.arrange", json!({ "diagram": d })), far, "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

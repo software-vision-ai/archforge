@@ -533,12 +533,13 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
 /// does not remove yet, a kind word that is no plain word, a diagram kind or a label's text none
 /// takes, a list of boxes, or of what a style is set on, that is empty, no list of ids or names
-/// one twice, a line connected against a relationship's rules, a note's link refused, and a label on
-/// a note's link or shown already; none for another reason. A coordinate is said as a constraint's
-/// is.
+/// one twice, a line connected against a relationship's rules, a note's link refused, a label on a
+/// note's link or shown already, a style's colour not of the form #rrggbb, and a diagram arranged
+/// that shows no box or would put one out of reach; none for another reason. A coordinate is said as
+/// a constraint's is.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_diagram::commands::{DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
-    use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
+    use archforge_diagram::commands::{ARRANGED, DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
+    use archforge_diagram::rules::{MAX_COORD, MAX_SIZE, MIN_SIZE};
     use archforge_engine::{End, Reason};
     let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
     Some(match reason {
@@ -578,6 +579,14 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::Again { relationship: NOTE_LINK } => tr("The note is linked to it already."),
         Reason::LinkUnlabelled => tr("A note's link shows no element, so it takes no label."),
         Reason::Labelled { slot } => fmt(&tr("This line has the label text {slot} already."), &[("slot", slot)]),
+        Reason::NotAColour { part: "fill" } => tr("Give the fill colour as #rrggbb, such as #3366cc."),
+        Reason::NotAColour { part: "stroke" } => tr("Give the border or line colour as #rrggbb, such as #3366cc."),
+        Reason::NotAColour { part: "text" } => tr("Give the text colour as #rrggbb, such as #3366cc."),
+        Reason::TooFew { kind: ARRANGED, min: 1 } => tr("This diagram shows no box to arrange."),
+        Reason::ArrangedTooFar => {
+            let far = tr("Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.");
+            fmt(&far, &[("max", &MAX_COORD.to_string())])
+        }
         Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
         Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
         Reason::NotAPlainWord => tr("Use a plain word: lower case letters, digits, _, - and ., starting with a letter."),

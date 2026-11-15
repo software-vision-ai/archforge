@@ -1374,6 +1374,11 @@ str		What the note links to is on another diagram.	What the note links to is on 
 str		The note is linked to it already.	The note is linked to it already.
 str		A note's link shows no element, so it takes no label.	A note's link shows no element, so it takes no label.
 str		This line has the label text {slot} already.	This line has the label text {slot} already.
+str		Give the fill colour as #rrggbb, such as #3366cc.	Give the fill colour as #rrggbb, such as #3366cc.
+str		Give the border or line colour as #rrggbb, such as #3366cc.	Give the border or line colour as #rrggbb, such as #3366cc.
+str		Give the text colour as #rrggbb, such as #3366cc.	Give the text colour as #rrggbb, such as #3366cc.
+str		This diagram shows no box to arrange.	This diagram shows no box to arrange.
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.
 str		A line bends at most {max} times.	A line bends at most {max} times.
 str		{notation} elements cannot be removed yet.	{notation} elements cannot be removed yet.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use a plain word: lower case letters, digits, _, - and ., starting with a letter.

@@ -1375,6 +1375,11 @@ str		What the note links to is on another diagram.	Ce à quoi la note se lie est
 str		The note is linked to it already.	La note y est déjà liée.
 str		A note's link shows no element, so it takes no label.	Le lien d’une note n’affiche aucun élément, il ne prend donc aucune étiquette.
 str		This line has the label text {slot} already.	Cette ligne a déjà le texte d’étiquette {slot}.
+str		Give the fill colour as #rrggbb, such as #3366cc.	Indiquez la couleur de remplissage sous la forme #rrggbb, par exemple #3366cc.
+str		Give the border or line colour as #rrggbb, such as #3366cc.	Indiquez la couleur de la bordure ou du trait sous la forme #rrggbb, par exemple #3366cc.
+str		Give the text colour as #rrggbb, such as #3366cc.	Indiquez la couleur du texte sous la forme #rrggbb, par exemple #3366cc.
+str		This diagram shows no box to arrange.	Ce diagramme ne montre aucune boîte à disposer.
+str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Une fois disposée, une boîte se trouverait à plus de {max} de l’origine. Rapprochez d’abord les boîtes de celle-ci.
 str		A line bends at most {max} times.	Une ligne se plie au plus {max} fois.
 str		{notation} elements cannot be removed yet.	Les éléments {notation} ne peuvent pas encore être supprimés.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Utilisez un mot simple : lettres minuscules, chiffres, _, - et ., commençant par une lettre.
