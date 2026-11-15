@@ -697,12 +697,11 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
     }
 }
 
-/// The conversation follows the keyboard (AR-477), after it was laid out at the scroll `drawn` in
-/// `area`, with `room` to scroll. While one of its controls has the keyboard and no link's confirmation is open, Page Up
-/// and Page Down scroll it by what shows less a line, Home and End to either end; the composer is
-/// not one of them and keeps its keys. A control of it that the keyboard has just come to, by Tab
-/// or a screen reader (a click gives them none), is brought into view, from where the keys took
-/// it. Off its end, what comes in after leaves the place; at its end, the end stays in view.
+/// The conversation follows the keyboard (AR-477), laid out at the scroll `drawn` in `area` with
+/// `room` to scroll. While one of its controls has the keyboard and no link's confirmation is open,
+/// Page Up and Page Down scroll it by what shows less a line, Home and End to either end (the
+/// composer keeps its keys); a control the keyboard has just come to, by Tab or a screen reader, is
+/// brought into view from there. Off its end, what comes in after leaves the place.
 fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), panel: &mut Panel, drawn: f32) {
     let now = ui.memory(|m| m.focused()).and_then(|id| Some((id, shell.registry.laid_out(id)?)));
     let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id));
@@ -721,9 +720,9 @@ fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), 
     }
 }
 
-/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width, the
-/// appearance or the fonts drawn with (`look`) change; its links are controls that ask before they open, laid out where it does
-/// not show too, so that Tab reaches them and the transcript follows (AR-477). Gives its height.
+/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width, appearance or
+/// fonts (`look`) change; its links are controls that ask before they open, laid out where it does
+/// not show too, so Tab reaches them and the transcript follows (AR-477). Gives its height.
 #[allow(clippy::too_many_arguments)]
 fn reply(
     shell: &mut Shell,
@@ -747,8 +746,7 @@ fn reply(
         *laid = Some(Laid { width, look, job, height: galley.size().y, links });
     }
     let Some(l) = laid.as_ref() else { return 0.0 };
-    // Its text is laid out and drawn only while it shows; its height and its links' places are known
-    // either way, and its links are controls in view or not.
+    // Its text is drawn only while it shows; its links are controls either way.
     if ui.clip_rect().intersects(Rect::from_min_size(at, vec2(width, l.height))) {
         ui.painter().galley(at, ui.painter().layout_job((*l.job).clone()), p.text);
     }

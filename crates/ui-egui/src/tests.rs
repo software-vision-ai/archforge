@@ -14141,9 +14141,8 @@ fn only_a_web_link_in_a_reply_opens_and_only_after_its_confirmation() {
     assert_eq!(h.state().chat_panel.link, None);
 }
 
-/// The Chat transcript and the keyboard (AR-477): Page Up, Page Down, Home and End scroll it while
-/// one of its links has the keyboard, Tab and Shift+Tab reach every link and it follows each, the
-/// composer keeps its own keys, and a reply coming in leaves the place the keys paged to.
+/// The Chat transcript and the keyboard (AR-477): the page keys scroll it while a link has the
+/// keyboard, Tab reaches every link and it follows, and a reply coming in leaves the place.
 mod chat_keys {
     use egui::{Key, Modifiers};
 
@@ -14197,10 +14196,9 @@ mod chat_keys {
         assert!(focused_on(h, id), "{key_:?} left the keyboard on {id}");
     }
 
-    /// While a link has the keyboard, Page Up and Page Down scroll the transcript by what shows less a
-    /// line, Home and End to either end, in a frame the key asks for; not with the keyboard nowhere,
-    /// with the control key, with a link's confirmation or the menu bar open, and not from the
-    /// composer, which keeps its keys.
+    /// While a link has the keyboard, the page keys scroll the transcript, in a frame the key asks
+    /// for; not with the keyboard nowhere, with the control key, with a link's confirmation or the
+    /// menu bar open, nor from the composer, which keeps its keys.
     #[test]
     fn the_page_keys_scroll_the_transcript_while_a_link_has_the_keyboard() {
         in_both_appearances(|theme| {
@@ -14266,7 +14264,11 @@ mod chat_keys {
         let mut fonts = h.ctx.fonts(|f| f.definitions().clone());
         fonts.families.entry(egui::FontFamily::Name("ux-regular".into())).or_default().insert(0, "Hack".into());
         h.state_mut().fonts.give_next(fonts);
+        h.step();
+        let first = |h: &Harness<'static, Shell>| h.ctx.fonts(|f| f.definitions().families[&egui::FontFamily::Name("ux-regular".into())][0].clone());
+        assert_ne!(first(h), "Hack", "the pass they are given in draws with the fonts before");
         h.run();
+        assert_eq!(first(h), "Hack");
     }
 
     /// Replies laid out before the fonts change are laid out again in the new ones, shown or not:
