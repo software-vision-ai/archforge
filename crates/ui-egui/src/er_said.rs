@@ -5,11 +5,13 @@
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
 //! Found inside a step (AR-493): a key that would break, with why in the same words, and keys built
 //! on each other too deep. A column's generation (AR-494): the rule it breaks, also for a column on
-//! a domain that would break, and a key or identity column asked to be nullable.
+//! a domain that would break, and a key or identity column asked to be nullable. A column's own
+//! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
+//! a place past its table's last; a default none of an enum type's literals is UML's row.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, WordPlace};
 
-use crate::i18n::{fmt, tr};
+use crate::i18n::{fmt, tr, trn};
 
 /// The kinds of ER element a refusal names, as `archforge_er`'s commands type them.
 const KINDS: [&str; 16] = [
@@ -62,6 +64,10 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         }
         Reason::Generation(rule) => generation_said(*rule),
         Reason::NotNullable => tr("A key or identity column may never be null."),
+        Reason::DomainGives { what: "default" } => tr("A column on a domain takes the domain's default."),
+        Reason::DomainGives { what: "collation" } => tr("A column on a domain takes the domain's collation."),
+        Reason::FollowsNoColumn { name } => fmt(&tr("{name} follows no column."), &[("name", name)]),
+        Reason::PastLastColumn { columns } => trn("The table has {n} column.", "The table has {n} columns.", u64::try_from(*columns).ok()?),
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })

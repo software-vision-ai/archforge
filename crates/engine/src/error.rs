@@ -367,6 +367,13 @@ pub enum Reason {
     Generation(GenerationRule),
     /// A key or identity column is asked to be nullable, which it never is.
     NotNullable,
+    /// A column on a domain is given its own `what`, `"default"` or `"collation"`, which the
+    /// domain gives it.
+    DomainGives { what: &'static str },
+    /// The column `name` is unlinked, though it follows no column.
+    FollowsNoColumn { name: Box<str> },
+    /// A column's place is past the end of its table, which has `columns` columns.
+    PastLastColumn { columns: usize },
 }
 
 /// The rule a column's generation breaks, in a [`Reason::Generation`].

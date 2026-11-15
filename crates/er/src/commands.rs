@@ -623,10 +623,22 @@ fn generation_holds(st: &Store, a: Obj) -> Result<(), Invalid> {
 }
 
 /// Inside a step: the column `a` keeps its generation's rules ([`generation_holds`]), then its enum
-/// type's default ([`rules::enum_default_problem`]).
+/// type's default ([`rules::enum_default_problem`]), refused typed as a default that does not read
+/// ([`Reason::DefaultUnread`]).
 fn column_holds(st: &Store, a: Obj) -> Result<(), Invalid> {
     generation_holds(st, a)?;
-    rules::enum_default_problem(st, a).map_or(Ok(()), |problem| Err(Invalid::Refused(problem)))
+    rules::enum_default_problem(st, a).map_or(Ok(()), |problem| Err(refused(problem.reason(), problem.said())))
+}
+
+/// A column on a domain given its own `what` (its `"default"` or `"collation"`), refused as the
+/// domain's to give ([`Reason::DomainGives`]), in the English `said`.
+fn domain_gives(what: &'static str, said: &str) -> CommandError {
+    refuse(what, said).because(Reason::DomainGives { what })
+}
+
+/// A place `key` past the end of a table of `columns` columns ([`Reason::PastLastColumn`]).
+fn past_last_column(key: &str, columns: usize) -> CommandError {
+    refuse(key, format!("the entity has {columns} attributes")).because(Reason::PastLastColumn { columns })
 }
 
 /// The nullable parameter: `auto` follows the column (a key or identity column is not nullable,
@@ -645,6 +657,9 @@ fn nullable(p: &Params, held_not_null: bool) -> Result<bool, CommandError> {
     }
 }
 
+/// Adds a column to a table at a place among its columns: its type, size, default, generation,
+/// collation and flags checked first, with a place past the end refused
+/// ([`Reason::PastLastColumn`]), and the rules of the column and the keys around it in its step.
 fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let name = text(p, "name");
@@ -660,7 +675,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     if let Typed::Enum(en) = typed
         && let Some(problem) = rules::enum_default_check(ctx.doc, en, default)
     {
-        return Err(refuse("default", problem));
+        return Err(refuse("default", problem.said()).because(problem.reason()));
     }
     let (generation, expression) = generation_params(p)?;
     let collation = text(p, "collation");
@@ -669,10 +684,10 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     }
     if matches!(typed, Typed::Domain(_)) {
         if !default.is_empty() {
-            return Err(refuse("default", "a column on a domain takes the domain's default"));
+            return Err(domain_gives("default", "a column on a domain takes the domain's default"));
         }
         if !collation.is_empty() {
-            return Err(refuse("collation", "a column on a domain takes the domain's collation"));
+            return Err(domain_gives("collation", "a column on a domain takes the domain's collation"));
         }
     }
     let key = p.bool("primary_key").unwrap_or(false);
@@ -680,7 +695,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
     let len = ctx.doc.list(e, entity::ATTRIBUTE).map_err(fail)?.len();
     let at = match p.integer("at") {
         Some(i) if i < 0 => len,
-        Some(i) => usize::try_from(i).ok().filter(|i| *i <= len).ok_or_else(|| refuse("at", format!("the entity has {len} attributes")))?,
+        Some(i) => usize::try_from(i).ok().filter(|i| *i <= len).ok_or_else(|| past_last_column("at", len))?,
         None => len,
     };
     let at = u32::try_from(at).map_err(|_| refuse("at", "too large"))?;
@@ -1264,21 +1279,27 @@ fn set_domain(st: &mut Store, d: Obj, name: &str, f: &DomainFields) -> Result<()
     Ok(())
 }
 
-/// After a domain changed: the columns on it keep every rule (keys pair types, identity needs an
-/// integer); a column's generation with the reason typed, as the column that would break
-/// ([`Reason::WouldBreak`]).
+/// Inside a step: the column `a` would break by `why`, said in English as `said` after its name
+/// ([`Reason::WouldBreak`] of a column).
+fn column_breaks(st: &Store, a: Obj, why: Reason, said: &str) -> Invalid {
+    let name = rules::label(st, a);
+    let said = format!("{name}: {said}");
+    refused(Reason::WouldBreak { kind: kind_of(ATTRIBUTE), name: name.into(), why: Box::new(why) }, said)
+}
+
+/// After a domain or an enum type changed: the columns on it keep every rule (keys pair types,
+/// identity needs an integer); a column's generation, or its default none of the enum type's
+/// literals, with the reason typed, as the column that would break ([`Reason::WouldBreak`]).
 fn columns_still_hold(st: &Store, t: Obj) -> Result<(), Invalid> {
     let columns = rules::type_columns(st, t);
     let mut fks: BTreeSet<Obj> = BTreeSet::new();
     let mut entities: BTreeSet<Obj> = BTreeSet::new();
     for a in &columns {
         if let Some(problem) = rules::generation_problem(st, *a) {
-            let name = rules::label(st, *a);
-            let said = format!("{name}: {}", problem.said());
-            return Err(refused(Reason::WouldBreak { kind: kind_of(ATTRIBUTE), name: name.into(), why: Box::new(problem.reason()) }, said));
+            return Err(column_breaks(st, *a, problem.reason(), problem.said()));
         }
         if let Some(problem) = rules::enum_default_problem(st, *a) {
-            return Err(Invalid::Refused(format!("{}: {problem}", rules::label(st, *a))));
+            return Err(column_breaks(st, *a, problem.reason(), &problem.said()));
         }
         let (k, e) = keys_around(st, *a)?;
         fks.extend(k);
@@ -1546,7 +1567,7 @@ fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
     let default = text(p, "default");
     check_text("default", rules::text_problem(default, MAX_TEXT))?;
     if rules::domain_of(ctx.doc, a).is_some() && !default.is_empty() {
-        return Err(refuse("default", "the column takes its domain's default"));
+        return Err(domain_gives("default", "the column takes its domain's default"));
     }
     let old = rules::text_of(ctx.doc, a, attribute::DEFAULT);
     ctx.doc
@@ -1596,7 +1617,7 @@ fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
         check_name("collation", collation, MAX_NAME)?;
     }
     if rules::domain_of(ctx.doc, a).is_some() && !collation.is_empty() {
-        return Err(refuse("collation", "the column takes its domain's collation"));
+        return Err(domain_gives("collation", "the column takes its domain's collation"));
     }
     let old = rules::text_of(ctx.doc, a, attribute::COLLATION);
     ctx.doc
@@ -1609,11 +1630,12 @@ fn attribute_set_collation(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// Sets the description of an ER element, the text DDL writes as its comment, or nothing
-/// (`element.describe`, through [`crate::ErNotation`]).
+/// (`element.describe`, through [`crate::ErNotation`]). What is no ER element is refused as taking
+/// no description ([`Reason::TakesNoDescription`]).
 pub fn describe_element(store: &mut Store, o: Obj, description: &str) -> Result<(), CommandError> {
     let class = store.class_of(o).map_err(fail)?;
     if !store.universe().conforms(class, TypeRef::Class(ELEMENT)) {
-        return Err(refuse("element", format!("{} is not an element of the ER model", uuid_of(store, o)?)));
+        return Err(refuse("element", format!("{} is not an element of the ER model", uuid_of(store, o)?)).because(Reason::TakesNoDescription));
     }
     check_text("text", rules::text_problem(description, MAX_TEXT))?;
     store.set(o, element::DESCRIPTION, if description.is_empty() { Value::Null } else { Value::str(description) }).map_err(fail)
@@ -1674,15 +1696,14 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
+/// Moves a column to another place among its table's columns; a place past the last is refused
+/// ([`Reason::PastLastColumn`]).
 fn attribute_move(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     let Some((e, _)) = ctx.doc.container(a).map_err(fail)? else { return Err(refuse("attribute", "the attribute belongs to no entity")) };
     let list = ctx.doc.list(e, entity::ATTRIBUTE).map_err(fail)?;
     let from = list.iter().position(|v| *v == Value::Ref(a)).ok_or_else(|| refuse("attribute", "the attribute is not in its entity's list"))?;
-    let to = usize::try_from(p.integer("to").unwrap_or(0))
-        .ok()
-        .filter(|i| *i < list.len())
-        .ok_or_else(|| refuse("to", format!("the entity has {} attributes", list.len())))?;
+    let to = usize::try_from(p.integer("to").unwrap_or(0)).ok().filter(|i| *i < list.len()).ok_or_else(|| past_last_column("to", list.len()))?;
     let (from, to) = (u32::try_from(from).map_err(|_| refuse("attribute", "too far in"))?, u32::try_from(to).map_err(|_| refuse("to", "too large"))?);
     ctx.doc.move_item(e, entity::ATTRIBUTE, from, to).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)?, "to": to }))
@@ -2100,11 +2121,13 @@ fn relationship_resolve(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))
 }
 
-/// Drops a key column's link to the column it followed.
+/// Drops a key column's link to the column it followed; one that follows none is refused
+/// ([`Reason::FollowsNoColumn`]).
 fn attribute_unlink(ctx: &mut C<'_>, p: &Params) -> R {
     let a = id_of(ctx, p, "attribute", ATTRIBUTE)?;
     if rules::linked_to(ctx.doc, a).is_none() {
-        return Err(refuse("attribute", format!("{} follows no column", name_of(ctx.doc, a))));
+        let because = Reason::FollowsNoColumn { name: rules::label(ctx.doc, a).into() };
+        return Err(refuse("attribute", format!("{} follows no column", name_of(ctx.doc, a))).because(because));
     }
     ctx.doc.set(a, attribute::LINKED_TO, Value::Null).map_err(fail)?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))

@@ -6646,6 +6646,36 @@ fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A column's own default, collation, place and link refused are said in the chosen language: a
+/// default none of its enum type's literals in the words UML says it in, also for a column that
+/// would break; a default or collation its domain gives; a place past the table's last, singular
+/// and plural; and an unlink of a column that follows none. In light and dark (AR-495).
+#[test]
+fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::{DefaultKind, Reason};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let unread = Reason::DefaultUnread { value: "'zu'".into(), kind: DefaultKind::Literal("status".into()) };
+        let breaks = Reason::WouldBreak { kind: "column", name: "zustand".into(), why: Box::new(unread.clone()) };
+        for (reason, said) in [
+            (unread, "'zu' ist kein Literal von status."),
+            (breaks, "Die Spalte zustand wäre danach ungültig: 'zu' ist kein Literal von status."),
+            (Reason::DomainGives { what: "default" }, "Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne."),
+            (Reason::DomainGives { what: "collation" }, "Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne."),
+            (Reason::PastLastColumn { columns: 1 }, "Die Tabelle hat 1 Spalte."),
+            (Reason::PastLastColumn { columns: 3 }, "Die Tabelle hat 3 Spalten."),
+            (Reason::FollowsNoColumn { name: "kunde_id".into() }, "kunde_id folgt keiner Spalte."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        assert_eq!(crate::panels::said(&Reason::DomainGives { what: "size" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

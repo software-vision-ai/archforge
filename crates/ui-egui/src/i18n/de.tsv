@@ -597,6 +597,10 @@ str		An identity column takes no default.	Eine Identitätsspalte hat keinen Stan
 str		An identity column takes no expression.	Eine Identitätsspalte hat keinen Ausdruck.
 str		A key or identity column may never be null.	Eine Schlüssel- oder Identitätsspalte darf nie leer sein.
 str		The column {name} would break: {why}	Die Spalte {name} wäre danach ungültig: {why}
+str		A column on a domain takes the domain's default.	Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne.
+str		A column on a domain takes the domain's collation.	Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne.
+str		{name} follows no column.	{name} folgt keiner Spalte.
+plural		The table has {n} column.	Die Tabelle hat {n} Spalte.|Die Tabelle hat {n} Spalten.
 str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
 str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.

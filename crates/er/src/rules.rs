@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
-use archforge_engine::{GenerationRule, Reason};
+use archforge_engine::{DefaultKind, GenerationRule, Reason};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
@@ -477,14 +477,36 @@ pub fn domain_problem(store: &Store, d: Obj) -> Option<String> {
 
 /// Why a column's default does not fit its enum type: it is none of the literals (quoted or not);
 /// None when it fits or the column has no enum type or no default.
-pub fn enum_default_problem(store: &Store, a: Obj) -> Option<String> {
+pub fn enum_default_problem(store: &Store, a: Obj) -> Option<EnumDefaultProblem> {
     let e = enum_of(store, a)?;
     enum_default_check(store, e, &text_of(store, a, attribute::DEFAULT))
 }
 
+/// A default that is none of an enum type's literals ([`enum_default_check`]): said as an English
+/// sentence ([`EnumDefaultProblem::said`]) or typed ([`EnumDefaultProblem::reason`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDefaultProblem {
+    /// The default, cut to its first 40 characters.
+    pub value: String,
+    /// The enum type's name.
+    pub enumeration: String,
+}
+
+impl EnumDefaultProblem {
+    /// The problem as an English sentence, as `the default "x" is not a literal of Status`.
+    pub fn said(&self) -> String {
+        format!("the default {:?} is not a literal of {}", self.value, self.enumeration)
+    }
+
+    /// The problem typed, as a default that does not read as one of the enum type's literals.
+    pub fn reason(&self) -> Reason {
+        Reason::DefaultUnread { value: self.value.as_str().into(), kind: DefaultKind::Literal(self.enumeration.as_str().into()) }
+    }
+}
+
 /// Why `default` does not fit enum type `e`: it is none of the literals (quoted or not); None when
 /// it fits or is empty.
-pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<String> {
+pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<EnumDefaultProblem> {
     if default.is_empty() {
         return None;
     }
@@ -492,8 +514,7 @@ pub fn enum_default_check(store: &Store, e: Obj, default: &str) -> Option<String
     if literals_of(store, e).iter().any(|l| l == bare) {
         return None;
     }
-    let shown: String = default.chars().take(40).collect();
-    Some(format!("the default {shown:?} is not a literal of {}", name_of(store, e)))
+    Some(EnumDefaultProblem { value: default.chars().take(40).collect(), enumeration: name_of(store, e) })
 }
 
 /// What a type takes after its name, in the PostgreSQL list (owner decision 2026-10-30: this
@@ -1336,7 +1357,7 @@ pub fn problems(store: &Store) -> Vec<String> {
         }
         if class == ATTRIBUTE {
             if let Some(p) = enum_default_problem(store, o) {
-                out.push(format!("{o}: {p}"));
+                out.push(format!("{o}: {}", p.said()));
             }
             if domain_of(store, o).is_some() && (enum_of(store, o).is_some() || !own_type_of(store, o).is_empty()) {
                 out.push(format!("{o} has more than one type"));

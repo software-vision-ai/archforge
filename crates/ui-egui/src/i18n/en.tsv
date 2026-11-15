@@ -596,6 +596,10 @@ str		An identity column takes no default.	An identity column takes no default.
 str		An identity column takes no expression.	An identity column takes no expression.
 str		A key or identity column may never be null.	A key or identity column may never be null.
 str		The column {name} would break: {why}	The column {name} would break: {why}
+str		A column on a domain takes the domain's default.	A column on a domain takes the domain's default.
+str		A column on a domain takes the domain's collation.	A column on a domain takes the domain's collation.
+str		{name} follows no column.	{name} follows no column.
+plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		The text can't be empty.	The text can't be empty.

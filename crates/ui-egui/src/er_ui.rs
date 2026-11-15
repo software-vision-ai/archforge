@@ -292,7 +292,7 @@ impl NotationUi for ErUi {
                 }
                 for a in children(store, o, archforge_er::entity::ATTRIBUTE) {
                     if let Some(p) = r::enum_default_problem(store, a) {
-                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &p)]) });
+                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &p.said())]) });
                     }
                 }
                 for c in r::checks_of(store, o) {
