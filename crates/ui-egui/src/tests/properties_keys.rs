@@ -197,7 +197,7 @@ fn the_page_keys_scroll_the_body_while_it_has_the_keyboard() {
         }
         // Nor in the frame of the click that opens the bar, by the pointer or a screen reader (AR-518).
         for pointer in [true, false] {
-            open_file_with(&mut h, Key::End, pointer);
+            open_file_with(&mut h, Key::End, Modifiers::NONE, pointer);
             assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
             key(&mut h, Key::Escape, Modifiers::NONE);
             assert!(h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(ABSTRACT))), "{theme:?}: back on the check box");

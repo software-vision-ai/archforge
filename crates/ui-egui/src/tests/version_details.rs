@@ -1260,7 +1260,7 @@ fn a_page_key_with_the_click_that_opens_the_menu_bar_leaves_the_cards() {
         h.state_mut().in_window_menu = true;
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
         h.run();
-        open_file_with(h, egui::Key::PageDown, true);
+        open_file_with(h, egui::Key::PageDown, egui::Modifiers::NONE, true);
         assert_eq!(cards_scroll(h, top, at), 0.0, "the cards stayed where they were");
     });
 }

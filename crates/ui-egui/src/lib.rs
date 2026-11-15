@@ -1988,8 +1988,9 @@ impl Shell {
         let now = ctx.input(|i| i.time);
         edit_menu::deliver(self, ctx);
         version_details::compare::keep(self);
-        // An open menu or select list holds the keys, as a native one does.
-        if self.menu_bar.open.is_none() && version_details::compare::highlight(self).is_none() {
+        // An open menu or select list holds the keys, as a native one does; so does a menu a click on
+        // its title opens in this frame (AR-518).
+        if self.menu_bar.open.is_none() && !menu_bar::clicked(ctx) && version_details::compare::highlight(self).is_none() {
             actions::run_shortcuts(self, ctx);
         }
         // A skill's text is kept once its typing pauses, and all of it before quitting.

@@ -133,10 +133,10 @@ pub(crate) fn ends(shell: &mut Shell, ctx: &egui::Context, id: egui::Id, lost: b
 }
 
 /// Whether a title of the bar is clicked in this frame, by the pointer or by a screen reader, so that
-/// its menu opens, or closes, as the strip is drawn. Known as the frame starts, so that `Shell::ui`
-/// holds the frame's keys before anything behind the bar reads them (AR-518). A title that has the
-/// keyboard opens on its own Space or Enter, which a hold would take from it; there nothing behind
-/// the bar has the keyboard. Only a bar drawn has titles to click.
+/// its menu opens, or closes, as the strip is drawn. Known as the frame starts, so that the shortcuts
+/// and `Shell::ui` hold the frame's keys before anything behind the bar reads them (AR-518). A title
+/// that has the keyboard opens on its own Space or Enter, which a hold would take from it; there
+/// nothing behind the bar has the keyboard. Only a bar drawn has titles to click.
 pub(crate) fn clicked(ctx: &egui::Context) -> bool {
     let pointer = ctx.interaction_snapshot(|s| s.clicked);
     let title = |g: &Group| widgets::egui_id(&format!("strip.menu.{}", g.id));
