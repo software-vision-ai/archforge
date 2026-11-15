@@ -279,18 +279,22 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 // names the server's process id (the record's completion: a write to disk) leaves a server with no
 // watchdog and a record with no process id: this sweep settles that record as the opening of its
 // project does (`settle_pending`), finding the server by the command line recorded.
-/// Stops the servers of every project whose Archforge is gone (crashed, killed or force quit), and
-/// forgets the records of servers that are gone: for a start-up, so a project never opened again
-/// does not keep its server running. A server whose Archforge still runs, this one or another, is
-/// left alone, and a process is signalled only while its command line, checked before each signal,
-/// is exactly the recorded one, whose configuration lies in a run folder with a random name made
-/// for that start: a process id another program took gets no signal. A record without a process
-/// id, of a start that will not go on, is settled as the opening of its project settles it; one
-/// whose lock is held (a start under way) is left to the next start-up or opening, without a wait,
-/// and a copy under a name not its project's only goes itself. Then the temporary files of record
-/// writes no longer under way go (a writer killed in the middle, or one whose removal failed),
-/// each only while its record's lock can be had without a wait. For a start-up: with no start of
-/// this process under way. Returns how many servers were stopped.
+/// Stops the servers of every project whose record it lists and whose Archforge is gone (crashed,
+/// killed or force quit), and forgets the records of servers that are gone: for a start-up, so that
+/// such a project does not keep its server running until it is opened again. A server whose
+/// Archforge still runs, this one or another, is left alone, and a process is signalled only while
+/// its command line, checked before each signal, is exactly the recorded one, whose configuration
+/// lies in a run folder with a random name made for that start: a process id another program took
+/// gets no signal. A record without a process id, of a start that will not go on, is settled as the
+/// opening of its project settles it; one whose lock is held (a start under way) is left to the
+/// next start-up or opening, without a wait, and a copy under a name not its project's only goes
+/// itself. Then the temporary files of record writes no longer under way go (a writer killed in the
+/// middle, or one whose removal failed), each only while its record's lock can be had without a
+/// wait. For a start-up: with no start of this process under way. A records folder that cannot be
+/// listed in full is swept as far as it was listed, and the log says so: the records not listed,
+/// and their servers, are left to a later sweep that lists them or to the opening of their project,
+/// and to the opening alone where the failure comes back each time before them. Returns how many
+/// servers were stopped.
 pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     private_records(&opts.records)?;
     let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
@@ -299,10 +303,11 @@ pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     Ok(stopped)
 }
 
-/// Goes through the records of every project but `except`: forgets those whose server is gone and,
-/// given a stop budget, stops the servers whose Archforge is gone, as recovery does, then forgets
-/// them, and settles the records that name no process, which it leaves alone without a budget.
-/// Returns how many it stopped.
+/// Goes through the records [`record::all`] lists, but that of `except`: forgets those whose server
+/// is gone and, given a stop budget, stops the servers whose Archforge is gone, as recovery does,
+/// then forgets them, and settles the records that name no process, which it leaves alone without
+/// a budget. A folder that cannot be listed at all is logged and swept no further. Returns how many
+/// it stopped.
 fn sweep(records: &Path, except: Option<&str>, uid: Option<u32>, stop: Option<Duration>) -> usize {
     let all = match record::all(records) {
         Ok(a) => a,
@@ -1030,7 +1035,8 @@ mod tests {
         let refused = launch(&dolt, &dir.0, &project, &root, &run, uid, "x", &opts, &Arc::new(AtomicBool::new(false)));
         assert!(matches!(&refused, Err(Error::RecordTooLarge { project: named, .. }) if *named == project), "{refused:?}");
         assert_eq!(SPAWNED.get(), None, "no server was started");
-        let names: Vec<_> = std::fs::read_dir(&opts.records).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let names: Vec<_> =
+            std::fs::read_dir(&opts.records).unwrap().map(Result::unwrap).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
         assert!(names.iter().all(|n| n.ends_with(".lock")), "no record and no temporary file: {names:?}");
         assert!(!run.join("server.yaml").exists());
         assert!(record::hold(&record::path(&opts.records, &project), Duration::ZERO).is_ok(), "the lock went with the start");
@@ -1055,7 +1061,7 @@ mod tests {
             Server::start(&dolt, &dir.0.join("data"), &opts)
         };
         let root = root.0.canonicalize().unwrap();
-        let run_folders = || std::fs::read_dir(&root).map(|d| d.flatten().map(|e| e.path()).collect::<Vec<_>>()).unwrap_or_default();
+        let run_folders = || std::fs::read_dir(&root).map(|d| d.map(Result::unwrap).map(|e| e.path()).collect::<Vec<_>>()).unwrap_or_default();
         let records = || record::all(&opts.records).unwrap_or_default();
         // A server this test leaves running on purpose is ended once it holds the project's lock
         // (so that no half-written lock is left), and is gone before anything is asserted.
