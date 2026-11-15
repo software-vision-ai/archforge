@@ -532,12 +532,14 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// does not show or shows already, a box on
 /// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
 /// does not remove yet, a kind word that is no plain word, a diagram kind or a label's text none
-/// takes, and a list of boxes, or of what a style is set on, that is empty, no list of ids or names
-/// one twice; none for another reason. A coordinate is said as a constraint's is.
+/// takes, a list of boxes, or of what a style is set on, that is empty, no list of ids or names
+/// one twice, a line connected against a relationship's rules, a note's link refused, and a label on
+/// a note's link or shown already; none for another reason. A coordinate is said as a constraint's
+/// is.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_diagram::commands::{DIAGRAM_ELEMENT, STYLED};
+    use archforge_diagram::commands::{DIAGRAM_ELEMENT, NOTE, NOTE_LINK, STYLED};
     use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
-    use archforge_engine::Reason;
+    use archforge_engine::{End, Reason};
     let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
     Some(match reason {
         Reason::IdEmpty { kind: "diagram" } => tr("No diagram is given. Give its id."),
@@ -565,6 +567,17 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooMany { kind: "nesting level", max } => fmt(&tr("Boxes nest at most {max} deep."), &[("max", &max.to_string())]),
         Reason::ShowsElement => tr("This box shows an element and draws its text. Only a note takes a text of its own."),
         Reason::StraightLink => tr("A note's link is a straight line and does not bend."),
+        Reason::NoRelationship => tr("A line between two elements shows a relationship. Name the relationship."),
+        Reason::LacksEnd => tr("This element lacks an end, so no line shows it."),
+        Reason::NotAtEnd { end: End::Source } => tr("The first box does not show the relationship's first end."),
+        Reason::NotAtEnd { end: End::Target } => tr("The second box does not show the relationship's second end."),
+        Reason::NotA { kind: NOTE, name } => fmt(&tr("This box shows {name}. Only a note links to a box or a line."), &[("name", name)]),
+        Reason::Itself { relationship: NOTE_LINK, .. } => tr("A note does not link to itself."),
+        Reason::NotLinkable => tr("A note links to a box that shows an element or to a relationship's line."),
+        Reason::TargetOtherDiagram => tr("What the note links to is on another diagram."),
+        Reason::Again { relationship: NOTE_LINK } => tr("The note is linked to it already."),
+        Reason::LinkUnlabelled => tr("A note's link shows no element, so it takes no label."),
+        Reason::Labelled { slot } => fmt(&tr("This line has the label text {slot} already."), &[("slot", slot)]),
         Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
         Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
         Reason::NotAPlainWord => tr("Use a plain word: lower case letters, digits, _, - and ., starting with a letter."),

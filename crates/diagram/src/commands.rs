@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, End, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -24,6 +24,8 @@ pub const NO_DIAGRAMS: &str = "There is no diagram yet.";
 pub const NOTE_SIZE: (f64, f64) = (160.0, 80.0);
 /// The node kind of a note.
 pub const NOTE: &str = "note";
+/// The relationship a refusal of `diagram.link-note` names: a note's link.
+pub const NOTE_LINK: &str = "note link";
 /// The kind a [`Reason::NotA`] names for an element a diagram's kind cannot be of.
 pub const DIAGRAM_ELEMENT: &str = "element a diagram is of";
 /// The kind a refusal of `diagram.style`'s list names: a diagram, a node or an edge.
@@ -498,7 +500,8 @@ fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 // Edges.
 
-/// Checks that an edge for `element` may go from `source` to `target` in the diagram of `kind`.
+/// Checks that an edge for `element` may go from `source` to `target` in the diagram of `kind`;
+/// refused with the reason typed.
 fn check_edge<V: DiagramView>(
     view: &V,
     store: &Store,
@@ -510,23 +513,25 @@ fn check_edge<V: DiagramView>(
 ) -> Result<(), CommandError> {
     let Some(e) = element else {
         if element_of(store, source, node::ELEMENT).is_some() && element_of(store, target, node::ELEMENT).is_some() {
-            return Err(refuse("element", "an edge between two elements shows a relationship; name it"));
+            return Err(refuse("element", "an edge between two elements shows a relationship; name it").because(Reason::NoRelationship));
         }
         return Ok(());
     };
     let class = store.class_of(e).map_err(fail)?;
     if !view.connects(kind, class) {
-        return Err(refuse("element", format!("a {kind} diagram does not connect a {}", class_name(store, class).to_lowercase())));
+        let said = format!("a {kind} diagram does not connect a {}", class_name(store, class).to_lowercase());
+        return Err(refuse("element", said).because(Reason::NotShown { name: name_or_id(store, e) }));
     }
-    let (from, to) = view.ends(store, e).ok_or_else(|| refuse("element", "the relationship lacks an end"))?;
+    let lacks = || refuse("element", "the relationship lacks an end").because(Reason::LacksEnd);
+    let (from, to) = view.ends(store, e).ok_or_else(lacks)?;
     if element_of(store, source, node::ELEMENT) != Some(from) {
-        return Err(refuse("source", "the node does not show the relationship's first end"));
+        return Err(refuse("source", "the node does not show the relationship's first end").because(Reason::NotAtEnd { end: End::Source }));
     }
     if element_of(store, target, node::ELEMENT) != Some(to) {
-        return Err(refuse("target", "the node does not show the relationship's second end"));
+        return Err(refuse("target", "the node does not show the relationship's second end").because(Reason::NotAtEnd { end: End::Target }));
     }
     if !edges_showing(store, d, e).is_empty() {
-        return Err(refuse("element", "the diagram shows this relationship already"));
+        return Err(refuse("element", "the diagram shows this relationship already").because(Reason::ShownAlready { name: name_or_id(store, e) }));
     }
     Ok(())
 }
@@ -604,32 +609,35 @@ fn diagram_disconnect<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 }
 
 /// Links a note to a node, or to an edge that shows a relationship, in its diagram: an edge with no
-/// element from the note (owner decision). It changes no model element.
+/// element from the note (owner decision). It changes no model element. Refused with the reason
+/// typed.
 fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let note = node_in(ctx.doc, p, "note", d)?;
-    if element_of(ctx.doc, note, node::ELEMENT).is_some() {
-        return Err(refuse("note", "the node shows an element; only a note links"));
+    if let Some(shown) = element_of(ctx.doc, note, node::ELEMENT) {
+        let not_a = Reason::NotA { kind: NOTE, name: name_or_id(ctx.doc, shown) };
+        return Err(refuse("note", "the node shows an element; only a note links").because(not_a));
     }
     let target = any_of(ctx.doc, p, "target")?;
     if target == note {
-        return Err(refuse("target", "a note does not link to itself"));
+        return Err(refuse("target", "a note does not link to itself").because(Reason::Itself { relationship: NOTE_LINK, kind: NOTE }));
     }
+    let unlinkable = |said: &str| Err(refuse("target", said).because(Reason::NotLinkable));
     match ctx.doc.class_of(target).ok() {
         Some(c) if c == NODE => {
             if element_of(ctx.doc, target, node::ELEMENT).is_none() {
-                return Err(refuse("target", "a note links to a table or a relationship, not to another note"));
+                return unlinkable("a note links to a table or a relationship, not to another note");
             }
         }
         Some(c) if c == EDGE => {
             if element_of(ctx.doc, target, edge::ELEMENT).is_none() {
-                return Err(refuse("target", "a note links to a relationship's line, not to another link"));
+                return unlinkable("a note links to a relationship's line, not to another link");
             }
         }
-        _ => return Err(refuse("target", "a note links to a node or an edge")),
+        _ => return unlinkable("a note links to a node or an edge"),
     }
     if diagram_of(ctx.doc, target) != Some(d) {
-        return Err(refuse("target", "the target is in another diagram"));
+        return Err(refuse("target", "the target is in another diagram").because(Reason::TargetOtherDiagram));
     }
     // Already linked, either way round (an older anchor may run from the table to the note).
     let linked = ctx.doc.referrers(note).into_iter().any(|(e, prop)| {
@@ -641,7 +649,7 @@ fn diagram_link_note<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
         ctx.doc.class_of(e).ok() == Some(EDGE) && element_of(ctx.doc, e, edge::ELEMENT).is_none() && other == Some(target)
     });
     if linked {
-        return Err(refuse("target", "the note is linked to it already"));
+        return Err(refuse("target", "the note is linked to it already").because(Reason::Again { relationship: NOTE_LINK }));
     }
     let e = new_edge(ctx.doc, d, None, note, target).map_err(fail)?;
     select(ctx, vec![e]);
@@ -710,26 +718,28 @@ pub fn place_name(at: LabelPlace) -> &'static str {
 }
 
 /// `diagram.label`: a label showing one of a line's element's text slots, at a place along the line
-/// and an offset; a slot that is no plain word or none the element has refused with its reason
-/// typed.
+/// and an offset; a note's link, a slot that is no plain word, none the element has or one a label
+/// shows already refused with its reason typed. A line's labels are of distinct slots, fewer than
+/// [`MAX_LABELS`], so that refusal and a place none of the three, which the engine refuses first,
+/// stay untyped.
 fn diagram_label<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
-    let element =
-        element_of(ctx.doc, e, edge::ELEMENT).ok_or_else(|| refuse("edge", "the edge shows no element, so there is no text to label it with"))?;
+    let unlabelled = || refuse("edge", "the edge shows no element, so there is no text to label it with").because(Reason::LinkUnlabelled);
+    let element = element_of(ctx.doc, e, edge::ELEMENT).ok_or_else(unlabelled)?;
     let class = ctx.doc.class_of(element).map_err(fail)?;
     let kind = str_of(p, "kind");
     check_kind("kind", kind, "kind")?;
     let slots = ctx.view.text_slots(class);
-    if !slots.contains(&kind) {
+    let Some(slot) = slots.iter().copied().find(|s| *s == kind) else {
         let said = format!("a {} has no text slot {kind:?}; it has {}", class_name(ctx.doc, class).to_lowercase(), slots.join(", "));
         return Err(not_one_of("kind", said, WordPlace::TextSlot, kind, slots));
-    }
+    };
     let labels = ctx.doc.list(e, edge::LABEL).map_err(fail)?;
     if labels.len() >= MAX_LABELS {
         return Err(refuse("edge", format!("the edge has {MAX_LABELS} labels already")));
     }
     if labels.iter().filter_map(Value::as_ref).any(|l| text(ctx.doc, l, label::KIND) == kind) {
-        return Err(refuse("kind", format!("the edge has a {kind} label already")));
+        return Err(refuse("kind", format!("the edge has a {kind} label already")).because(Reason::Labelled { slot }));
     }
     let at = place(p)?;
     let (dx, dy) = (num(p, "dx"), num(p, "dy"));

@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	Indica los diagramas, 
 str		Boxes nest at most {max} deep.	Las cajas se anidan como máximo {max} niveles.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	Esta caja muestra un elemento y dibuja su texto. Solo una nota tiene un texto propio.
 str		A note's link is a straight line and does not bend.	El enlace de una nota es una línea recta y no se dobla.
+str		A line between two elements shows a relationship. Name the relationship.	Una línea entre dos elementos muestra una relación. Indica la relación.
+str		This element lacks an end, so no line shows it.	A este elemento le falta un extremo, así que ninguna línea lo muestra.
+str		The first box does not show the relationship's first end.	La primera caja no muestra el primer extremo de la relación.
+str		The second box does not show the relationship's second end.	La segunda caja no muestra el segundo extremo de la relación.
+str		This box shows {name}. Only a note links to a box or a line.	Esta caja muestra {name}. Solo una nota se enlaza a una caja o a una línea.
+str		A note does not link to itself.	Una nota no se enlaza a sí misma.
+str		A note links to a box that shows an element or to a relationship's line.	Una nota se enlaza a una caja que muestra un elemento o a la línea de una relación.
+str		What the note links to is on another diagram.	Aquello a lo que se enlaza la nota está en otro diagrama.
+str		The note is linked to it already.	La nota ya está enlazada a ello.
+str		A note's link shows no element, so it takes no label.	El enlace de una nota no muestra ningún elemento, así que no lleva etiqueta.
+str		This line has the label text {slot} already.	Esta línea ya tiene el texto de etiqueta {slot}.
 str		A line bends at most {max} times.	Una línea se dobla como máximo {max} veces.
 str		{notation} elements cannot be removed yet.	Los elementos {notation} aún no se pueden eliminar.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Usa una palabra simple: letras minúsculas, dígitos, _, - y ., empezando por una letra.

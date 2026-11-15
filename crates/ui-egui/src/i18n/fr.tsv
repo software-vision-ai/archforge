@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	Indiquez les diagramme
 str		Boxes nest at most {max} deep.	Les boîtes s’imbriquent sur {max} niveaux au plus.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	Cette boîte affiche un élément et dessine son texte. Seule une note a un texte propre.
 str		A note's link is a straight line and does not bend.	Le lien d’une note est une ligne droite et ne se plie pas.
+str		A line between two elements shows a relationship. Name the relationship.	Une ligne entre deux éléments affiche une relation. Indiquez la relation.
+str		This element lacks an end, so no line shows it.	Il manque une extrémité à cet élément, donc aucune ligne ne l’affiche.
+str		The first box does not show the relationship's first end.	La première boîte n’affiche pas la première extrémité de la relation.
+str		The second box does not show the relationship's second end.	La deuxième boîte n’affiche pas la deuxième extrémité de la relation.
+str		This box shows {name}. Only a note links to a box or a line.	Cette boîte affiche {name}. Seule une note se lie à une boîte ou à une ligne.
+str		A note does not link to itself.	Une note ne se lie pas à elle-même.
+str		A note links to a box that shows an element or to a relationship's line.	Une note se lie à une boîte qui affiche un élément ou à la ligne d’une relation.
+str		What the note links to is on another diagram.	Ce à quoi la note se lie est sur un autre diagramme.
+str		The note is linked to it already.	La note y est déjà liée.
+str		A note's link shows no element, so it takes no label.	Le lien d’une note n’affiche aucun élément, il ne prend donc aucune étiquette.
+str		This line has the label text {slot} already.	Cette ligne a déjà le texte d’étiquette {slot}.
 str		A line bends at most {max} times.	Une ligne se plie au plus {max} fois.
 str		{notation} elements cannot be removed yet.	Les éléments {notation} ne peuvent pas encore être supprimés.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Utilisez un mot simple : lettres minuscules, chiffres, _, - et ., commençant par une lettre.

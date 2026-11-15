@@ -477,6 +477,61 @@ fn every_node_list_refusal_carries_its_reason_typed() {
     check(&mut s, "diagram.move", "nodes", apart, Reason::OtherDiagram, "the nodes are in different diagrams");
 }
 
+/// The rules of `diagram.connect`, `diagram.link-note` and `diagram.label` refuse with their reason
+/// typed beside the unchanged English, under the parameter each is about: a line between elements
+/// with no relationship, one the diagram's kind does not connect, one that lacks an end, a box at
+/// either end that does not show that end, and one shown already; a note's link from a box that
+/// shows an element, to itself, to what no note links to, onto another diagram and twice; and a
+/// label on a note's link or of a slot a label shows already (AR-515).
+#[test]
+fn every_connect_link_and_label_rule_carries_its_reason_typed() {
+    use archforge_engine::{End, Reason};
+    let mut st = store();
+    let m = model(&mut st);
+    // A generalization of C's that names no general, as only a file could hold it: it lacks an end.
+    let loose = st.create(GENERALIZATION).unwrap();
+    st.push(m.c, toy::CLASS_GENERALIZATION, Value::Ref(loose)).unwrap();
+    let mut s = Session::new(registry(), st, 1, Options::default());
+    let sm = sample(&mut s, &m);
+    let doc = s.doc();
+    let (package, c, c_gen, b_gen, loose) = (id(doc, m.package), id(doc, m.c), id(doc, m.c_gen), id(doc, m.b_gen), id(doc, loose));
+    let c_node = run(&mut s, "diagram.place", json!({ "diagram": sm.diagram, "element": c, "x": 700, "y": 100 }));
+    let other = run(&mut s, "diagram.add", json!({ "kind": "toy.class" }));
+    let c_in_other = run(&mut s, "diagram.place", json!({ "diagram": other, "element": c, "x": 0, "y": 0 }));
+    let second = run(&mut s, "diagram.note", json!({ "diagram": sm.diagram, "text": "two", "x": 600, "y": 300 }));
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    };
+    let connect =
+        |element: &str, source: &str, target: &str| json!({ "diagram": sm.diagram, "element": element, "source": source, "target": target });
+    check(&mut s, "diagram.connect", connect("", &sm.a, &sm.b), "element", Reason::NoRelationship, "shows a relationship; name it");
+    let unshown = Reason::NotShown { name: "p".into() };
+    check(&mut s, "diagram.connect", connect(&package, &sm.b, &sm.a), "element", unshown, "does not connect a package");
+    check(&mut s, "diagram.connect", connect(&loose, &c_node, &sm.a), "element", Reason::LacksEnd, "the relationship lacks an end");
+    let first = Reason::NotAtEnd { end: End::Source };
+    check(&mut s, "diagram.connect", connect(&c_gen, &sm.a, &sm.b), "source", first, "the relationship's first end");
+    let second_end = Reason::NotAtEnd { end: End::Target };
+    check(&mut s, "diagram.connect", connect(&c_gen, &c_node, &sm.b), "target", second_end, "the relationship's second end");
+    let shown = Reason::ShownAlready { name: b_gen.clone() };
+    check(&mut s, "diagram.connect", connect(&b_gen, &sm.b, &sm.a), "element", shown, "shows this relationship already");
+    let link = |note: &str, target: &str| json!({ "diagram": sm.diagram, "note": note, "target": target });
+    let not_note = Reason::NotA { kind: commands::NOTE, name: "A".into() };
+    check(&mut s, "diagram.link-note", link(&sm.a, &sm.b), "note", not_note, "only a note links");
+    let itself = Reason::Itself { relationship: commands::NOTE_LINK, kind: commands::NOTE };
+    check(&mut s, "diagram.link-note", link(&sm.note, &sm.note), "target", itself, "does not link to itself");
+    for (target, english) in [(&second, "not to another note"), (&sm.anchor, "not to another link"), (&sm.diagram, "to a node or an edge")] {
+        check(&mut s, "diagram.link-note", link(&sm.note, target), "target", Reason::NotLinkable, english);
+    }
+    check(&mut s, "diagram.link-note", link(&sm.note, &c_in_other), "target", Reason::TargetOtherDiagram, "in another diagram");
+    let again = Reason::Again { relationship: commands::NOTE_LINK };
+    check(&mut s, "diagram.link-note", link(&sm.note, &sm.a), "target", again, "linked to it already");
+    let label = |edge: &str| json!({ "edge": edge, "kind": "general" });
+    check(&mut s, "diagram.label", label(&sm.anchor), "edge", Reason::LinkUnlabelled, "shows no element");
+    check(&mut s, "diagram.label", label(&sm.edge), "kind", Reason::Labelled { slot: "general" }, "has a general label already");
+}
+
 #[test]
 fn removing_an_element_takes_its_views_and_undo_brings_them_back() {
     let mut st = store();

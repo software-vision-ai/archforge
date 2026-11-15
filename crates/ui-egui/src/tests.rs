@@ -6288,6 +6288,70 @@ fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A line, a note's link or a label a diagram command refuses by its rules is said in the chosen
+/// language: a line between two classes with no relationship, of a class, of an attribute, which
+/// lacks an end, between boxes that do not show its ends, and one shown already; a note's link from
+/// a class's box, to itself, to another note and twice, and one onto another diagram said from the
+/// reason alone; and a label on a note's link or shown already. In light and dark (AR-515).
+#[test]
+fn a_line_link_or_label_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let run = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
+        let refused = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).err().unwrap_or_default();
+        let id = |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| run(h, cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let d = h.state().canvas.active.unwrap().to_string();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let g = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_uml::GENERALIZATION)).unwrap();
+        let (specific, general) = archforge_uml::figures::ends(st, g).unwrap();
+        let (specific, general) = (&nodes[&archforge_core::name_of(st, specific)], &nodes[&archforge_core::name_of(st, general)]);
+        let g = st.uuid(g).unwrap().to_string();
+        let edges = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
+        let shows = |e: &archforge_mof::Obj| st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref());
+        let is_association = |e: &archforge_mof::Obj| shows(e).and_then(|el| st.class_of(el).ok()) == Some(archforge_uml::ASSOCIATION);
+        let association = st.uuid(edges.iter().filter_map(archforge_mof::Value::as_ref).find(is_association).unwrap()).unwrap().to_string();
+        let connect = |element: &str, source: &str, target: &str| json!({ "diagram": d, "element": element, "source": source, "target": target });
+        let between = connect("", &nodes["Order"], &nodes["Customer"]);
+        let unnamed = "Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.";
+        assert_eq!(refused(&mut h, "diagram.connect", between), unnamed, "{theme:?}: the language is German");
+        let of_class = connect(&order, &nodes["Order"], &nodes["Customer"]);
+        assert_eq!(refused(&mut h, "diagram.connect", of_class), "Ein Diagramm dieser Art zeigt Order nicht.", "{theme:?}");
+        let status = id(&mut h, "uml.attribute.add", json!({ "class": order, "name": "status" }));
+        let lacks = "Diesem Element fehlt ein Ende, daher zeigt keine Linie es.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&status, &nodes["Order"], &nodes["Customer"])), lacks, "{theme:?}");
+        let first = "Der erste Kasten zeigt nicht das erste Ende der Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, general, general)), first, "{theme:?}");
+        let second = "Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, specific)), second, "{theme:?}");
+        let shown = format!("Dieses Diagramm zeigt {g} bereits.");
+        assert_eq!(refused(&mut h, "diagram.connect", connect(&g, specific, general)), shown, "{theme:?}");
+        // A note's links.
+        let note = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Hinweis", "x": 0, "y": 0 }));
+        let other = id(&mut h, "diagram.note", json!({ "diagram": d, "text": "Zweiter", "x": 0, "y": 200 }));
+        let link = |note: &str, target: &str| json!({ "diagram": d, "note": note, "target": target });
+        let not_note = "Dieser Kasten zeigt Order. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.";
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&nodes["Order"], &note)), not_note, "{theme:?}");
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &note)), "Eine Notiz wird nicht mit sich selbst verbunden.", "{theme:?}");
+        let unlinkable = "Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.";
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &other)), unlinkable, "{theme:?}");
+        let anchor = id(&mut h, "diagram.link-note", link(&note, &nodes["Order"]));
+        assert_eq!(refused(&mut h, "diagram.link-note", link(&note, &nodes["Order"])), "Die Notiz ist bereits damit verbunden.", "{theme:?}");
+        let elsewhere = crate::panels::said(&archforge_engine::Reason::TargetOtherDiagram);
+        assert_eq!(elsewhere.as_deref(), Some("Womit die Notiz verbunden wird, liegt in einem anderen Diagramm."), "{theme:?}");
+        // Labels.
+        let label = |edge: &str| json!({ "edge": edge, "kind": "from_end" });
+        let unlabelled = "Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.";
+        assert_eq!(refused(&mut h, "diagram.label", label(&anchor)), unlabelled, "{theme:?}");
+        id(&mut h, "diagram.label", label(&association));
+        assert_eq!(refused(&mut h, "diagram.label", label(&association)), "Diese Linie hat den Beschriftungstext from_end bereits.", "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A list of boxes moved or taken off, or of what a style is set on, that a diagram command refuses
 /// is said in the chosen language: an empty list, no list of ids, an empty id, an element of the
 /// wrong kind and a box named twice. In light and dark (AR-514).
