@@ -130,10 +130,12 @@ pub trait Notation: Send + Sync + 'static {
         let notation = self.name();
         Err(CommandError::about("ids", format!("{notation} elements cannot be removed yet")).because(Reason::NotRemovable { notation }))
     }
-    /// Sets the description of `obj`, an element of its metamodel; an empty text clears it.
+    /// Sets the description of `obj`, an element of its metamodel; an empty text clears it. By
+    /// default refused, the reason typed.
     fn describe(&self, store: &mut Store, obj: Obj, text: &str) -> Result<(), CommandError> {
         let _ = (store, obj, text);
-        Err(CommandError::about("element", format!("{} elements cannot be described yet", self.name())))
+        let notation = self.name();
+        Err(CommandError::about("element", format!("{notation} elements cannot be described yet")).because(Reason::NotDescribable { notation }))
     }
     /// The description of `obj`, an element of its metamodel, as [`Notation::describe`] set it;
     /// nothing when it has none or the notation keeps none.
@@ -322,7 +324,28 @@ fn short(s: &str) -> String {
     s.chars().take(40).collect()
 }
 
-/// The elements the ids under `key` name, each once.
+/// The kind the shared commands' refusals of an id name: an element of any kind.
+pub const ELEMENT: &str = "element";
+/// The kind a [`Reason::NotA`] names for an element of no notation the project holds, as a diagram.
+pub const NOTATION_ELEMENT: &str = "element of a notation";
+
+/// The live element `id` names, given under `key`; refused with its reason typed: no id, or one
+/// malformed or of no element.
+fn element_in(store: &Store, key: &str, id: &str) -> Result<Obj, CommandError> {
+    let refused =
+        |said: String| refuse(key, said).because(if id.is_empty() { Reason::IdEmpty { kind: ELEMENT } } else { Reason::NoElement { id: short(id) } });
+    let uuid = Uuid::parse(id).ok_or_else(|| refused(format!("{:?} is not an id", short(id))))?;
+    store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refused(format!("there is no element {}", short(id))))
+}
+
+/// The refusal under `key` of `o`, an element of no notation the project holds, said as `said`.
+fn of_no_notation(store: &Store, key: &str, o: Obj, said: String) -> CommandError {
+    refuse(key, said).because(Reason::NotA { kind: NOTATION_ELEMENT, name: crate::commands::name_or_id(store, o) })
+}
+
+/// The elements the ids under `key` name, each once; every refusal typed: an item that is no
+/// string, no id, of no element, or given twice. A list over the store's limit is refused untyped,
+/// as the engine's limit on a call's size refuses one that long first.
 fn id_list(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
     let items = p.get(key).and_then(Json::as_array).map(Vec::as_slice).unwrap_or_default();
     if items.len() > archforge_mof::store::MAX_LIST {
@@ -331,11 +354,10 @@ fn id_list(store: &Store, p: &Params, key: &str) -> Result<Vec<Obj>, CommandErro
     let mut seen = BTreeSet::new();
     let mut out = Vec::with_capacity(items.len());
     for v in items {
-        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string"))?;
-        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{:?} is not an id", short(id))))?;
-        let obj = store.by_uuid(uuid).filter(|o| store.is_alive(*o)).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
+        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string").because(Reason::IdsExpected { kind: ELEMENT }))?;
+        let obj = element_in(store, key, id)?;
         if !seen.insert(obj) {
-            return Err(refuse(key, format!("{id} is listed twice")));
+            return Err(refuse(key, format!("{id} is listed twice")).because(Reason::NamedTwice { kind: ELEMENT, name: short(id) }));
         }
         out.push(obj);
     }
@@ -361,17 +383,18 @@ fn view_select(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// Removes elements of any notation at once (the selection's delete): each notation removes its
-/// own, in the order the project holds them.
+/// own, in the order the project holds them. An empty list, and an element of no notation, refused
+/// with the reason typed.
 fn element_remove(ctx: &mut C<'_>, p: &Params) -> R {
     let ids = id_list(ctx.doc, p, "ids")?;
     if ids.is_empty() {
-        return Err(refuse("ids", "nothing to remove"));
+        return Err(refuse("ids", "nothing to remove").because(Reason::TooFew { kind: ELEMENT, min: 1 }));
     }
     let mut by_notation: Vec<Vec<Obj>> = vec![Vec::new(); ctx.view.notations.len()];
     for o in &ids {
         let class = ctx.doc.class_of(*o).map_err(fail)?;
         let Some(at) = ctx.view.notations.iter().position(|n| n.metamodel() == class.metamodel()) else {
-            return Err(refuse("ids", format!("{} is not an element of a notation", uuid_of(ctx.doc, *o)?)));
+            return Err(of_no_notation(ctx.doc, "ids", *o, format!("{} is not an element of a notation", uuid_of(ctx.doc, *o)?)));
         };
         by_notation[at].push(*o);
     }
@@ -386,12 +409,12 @@ fn element_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
-/// `element.describe`: sets an element's description through its notation, or clears it.
+/// `element.describe`: sets an element's description through its notation, or clears it. No id,
+/// one of no element and an element of no notation refused with the reason typed.
 fn element_describe(ctx: &mut C<'_>, p: &Params) -> R {
     let id = p.str("element").unwrap_or_default();
-    let uuid = Uuid::parse(id).ok_or_else(|| refuse("element", format!("{:?} is not an id", short(id))))?;
-    let o = ctx.doc.by_uuid(uuid).filter(|o| ctx.doc.is_alive(*o)).ok_or_else(|| refuse("element", format!("there is no element {}", short(id))))?;
-    let n = ctx.view.of_element(ctx.doc, o).ok_or_else(|| refuse("element", format!("{id} is not an element of a notation")))?;
+    let o = element_in(ctx.doc, "element", id)?;
+    let n = ctx.view.of_element(ctx.doc, o).ok_or_else(|| of_no_notation(ctx.doc, "element", o, format!("{id} is not an element of a notation")))?;
     n.describe(ctx.doc, o, p.str("text").unwrap_or_default())?;
     Ok(json!({ "id": uuid_of(ctx.doc, o)? }))
 }

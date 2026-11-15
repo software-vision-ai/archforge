@@ -6422,6 +6422,38 @@ fn a_style_colour_or_an_arrangement_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A list of elements selected or removed, or an element described, that a shared command refuses
+/// is said in the chosen language: no list of ids, an empty id, an empty list to remove, an element
+/// named twice, an id of no element, and a diagram, which belongs to no notation, removed or
+/// described; a notation's elements it does not describe said from the reason alone. In light and
+/// dark (AR-517).
+#[test]
+fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let d = h.state().canvas.active.unwrap();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let not_of = format!("{} ist kein Element einer Notation dieses Projekts.", archforge_core::name_of(st, st.by_uuid(d).unwrap()));
+        let d = d.to_string();
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        assert_eq!(refused("view.select", json!({ "ids": [7] })), "Geben Sie die Elemente als Liste von IDs an.", "{theme:?}");
+        assert_eq!(refused("view.select", json!({ "ids": [""] })), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
+        assert_eq!(refused("element.remove", json!({ "ids": [] })), "Geben Sie mindestens ein Element an.", "{theme:?}");
+        let twice = "Ein Element ist zweimal genannt. Jedes Element nur einmal nennen.";
+        assert_eq!(refused("element.remove", json!({ "ids": [&order, &order] })), twice, "{theme:?}");
+        assert_eq!(refused("element.describe", json!({ "element": "nope" })), "Es gibt kein Element mit der ID nope.", "{theme:?}");
+        assert_eq!(refused("element.remove", json!({ "ids": [&d] })), not_of, "{theme:?}");
+        assert_eq!(refused("element.describe", json!({ "element": &d })), not_of, "{theme:?}");
+        let undescribed = crate::panels::said(&archforge_engine::Reason::NotDescribable { notation: "ER" });
+        assert_eq!(undescribed.as_deref(), Some("ER-Elemente lassen sich noch nicht beschreiben."), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

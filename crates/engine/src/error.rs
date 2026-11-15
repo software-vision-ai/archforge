@@ -343,6 +343,8 @@ pub enum Reason {
     ArrangedTooFar,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
+    /// The elements of `notation` are not described yet.
+    NotDescribable { notation: &'static str },
     /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's
     /// name, is empty or more than lower-case letters, digits, `_`, `-` and `.` after a letter.
     NotAPlainWord,

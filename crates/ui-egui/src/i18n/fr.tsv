@@ -1359,6 +1359,7 @@ str		This diagram shows {name} already.	Ce diagramme affiche déjà {name}.
 str		That box is on another diagram.	Cette boîte est sur un autre diagramme.
 str		Give at least one box.	Indiquez au moins une boîte.
 str		Give at least one diagram, box or line.	Indiquez au moins un diagramme, une boîte ou une ligne.
+str		Give at least one element.	Indiquez au moins un élément.
 str		Give the boxes as a list of ids.	Indiquez les boîtes sous forme de liste d’identifiants.
 str		Give the diagrams, boxes and lines as a list of ids.	Indiquez les diagrammes, les boîtes et les lignes sous forme de liste d’identifiants.
 str		Boxes nest at most {max} deep.	Les boîtes s’imbriquent sur {max} niveaux au plus.
@@ -1382,6 +1383,8 @@ str		This diagram shows no box to arrange.	Ce diagramme ne montre aucune boîte 
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Une fois disposée, une boîte se trouverait à plus de {max} de l’origine. Rapprochez d’abord les boîtes de celle-ci.
 str		A line bends at most {max} times.	Une ligne se plie au plus {max} fois.
 str		{notation} elements cannot be removed yet.	Les éléments {notation} ne peuvent pas encore être supprimés.
+str		{notation} elements cannot be described yet.	Les éléments {notation} ne peuvent pas encore être décrits.
+str		{name} is not an element of any notation in this project.	{name} n’est un élément d’aucune notation de ce projet.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Utilisez un mot simple : lettres minuscules, chiffres, _, - et ., commençant par une lettre.
 str		{word} is not a diagram kind. The kinds are {kinds}.	{word} n’est pas un type de diagramme. Les types sont {kinds}.
 str		This project holds no notation, so it knows no diagram kind.	Ce projet ne contient aucune notation et ne connaît donc aucun type de diagramme.

@@ -239,6 +239,54 @@ fn a_removal_one_notation_refuses_changes_nothing_in_any() {
     assert_eq!(rows::snapshot(s.doc(), &tables, &junctions).unwrap(), before);
 }
 
+/// The shared commands refuse with their reason typed beside the unchanged English: the lists of
+/// `view.select` and `element.remove` with an item that is no string, no id, of no element or gone,
+/// or given twice, and an empty list to remove; `element.describe`'s id none, malformed or of no
+/// element; an element of no notation removed or described; and a notation's elements it does not
+/// describe (AR-517).
+#[test]
+fn every_shared_command_refusal_carries_its_reason_typed() {
+    use archforge_diagram::project::{ELEMENT, NOTATION_ELEMENT};
+    use archforge_engine::{EngineError, Reason};
+    let mut st = store(ids(0)).unwrap();
+    let model = st.create(archforge_core::MODEL).unwrap();
+    let pkg = st.create(archforge_uml::PACKAGE).unwrap();
+    archforge_core::ModelObj::push_member(&mut st, model, Value::Ref(pkg)).unwrap();
+    let pkg = uuid(&st, pkg);
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), ProjectView::new(STUBBORN));
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let table = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "customer" }));
+    let gone = id(&mut s, "er.entity.add", json!({ "schema": schema, "name": "gone" }));
+    s.execute("element.remove", &json!({ "ids": [gone] })).unwrap();
+    let map = id(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "Map" }));
+    let missing = ids(1 << 50)().to_string();
+    let long = "x".repeat(50);
+    let mut check = |cmd: &str, key: &str, value: Json, reason: Reason, english: String| {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &json!({ key: value })) else { panic!("{cmd} {value} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {value}: {}", error.message);
+        assert_eq!(error.message, english, "{cmd} {value}");
+    };
+    let no_element = |id: &str| Reason::NoElement { id: id.chars().take(40).collect() };
+    for cmd in ["view.select", "element.remove"] {
+        check(cmd, "ids", json!([7]), Reason::IdsExpected { kind: ELEMENT }, "every id must be a string".into());
+        check(cmd, "ids", json!([""]), Reason::IdEmpty { kind: ELEMENT }, "\"\" is not an id".into());
+        check(cmd, "ids", json!([&table, &long]), no_element(&long), format!("{:?} is not an id", "x".repeat(40)));
+        check(cmd, "ids", json!([&missing]), no_element(&missing), format!("there is no element {missing}"));
+        check(cmd, "ids", json!([&gone]), no_element(&gone), format!("there is no element {gone}"));
+        let twice = Reason::NamedTwice { kind: ELEMENT, name: table.clone() };
+        check(cmd, "ids", json!([&table, &schema, &table]), twice, format!("{table} is listed twice"));
+    }
+    check("element.remove", "ids", json!([]), Reason::TooFew { kind: ELEMENT, min: 1 }, "nothing to remove".into());
+    let not_of = Reason::NotA { kind: NOTATION_ELEMENT, name: "Map".into() };
+    check("element.remove", "ids", json!([&table, &map]), not_of.clone(), format!("{map} is not an element of a notation"));
+    check("element.describe", "element", json!(""), Reason::IdEmpty { kind: ELEMENT }, "\"\" is not an id".into());
+    check("element.describe", "element", json!("nope"), no_element("nope"), "\"nope\" is not an id".into());
+    check("element.describe", "element", json!(&missing), no_element(&missing), format!("there is no element {missing}"));
+    check("element.describe", "element", json!(&map), not_of, format!("{map} is not an element of a notation"));
+    let stubborn = Reason::NotDescribable { notation: "Stubborn" };
+    check("element.describe", "element", json!(&pkg), stubborn, "Stubborn elements cannot be described yet".into());
+}
+
 #[test]
 fn every_session_a_project_makes_holds_its_notations() {
     let s = new_project_session("Shop", ids(0)).unwrap();

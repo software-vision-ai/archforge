@@ -1359,6 +1359,7 @@ str		This diagram shows {name} already.	此图已显示 {name}。
 str		That box is on another diagram.	该框在另一个图上。
 str		Give at least one box.	请至少给出一个框。
 str		Give at least one diagram, box or line.	请至少给出一个图、框或线。
+str		Give at least one element.	请至少给出一个元素。
 str		Give the boxes as a list of ids.	请以 ID 列表的形式给出框。
 str		Give the diagrams, boxes and lines as a list of ids.	请以 ID 列表的形式给出图、框和线。
 str		Boxes nest at most {max} deep.	框最多嵌套 {max} 层。
@@ -1382,6 +1383,8 @@ str		This diagram shows no box to arrange.	此图中没有可排列的框。
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	排列后，某个框会离原点超过 {max}。请先将这些框移近原点。
 str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
 str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
+str		{notation} elements cannot be described yet.	{notation} 元素暂时还不能添加描述。
+str		{name} is not an element of any notation in this project.	{name} 不是此项目中任何表示法的元素。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	请使用简单的词：以小写字母开头，只含小写字母、数字、_、- 和 .。
 str		{word} is not a diagram kind. The kinds are {kinds}.	{word} 不是图类型。图类型有 {kinds}。
 str		This project holds no notation, so it knows no diagram kind.	此项目不含任何表示法，因此不知道任何图类型。
