@@ -844,20 +844,21 @@ fn a_conversation_whose_events_wait_is_capped_and_its_end_still_comes() {
 fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     let host =
         Host::new("accounts", Setup { claude: &claude_replay("claude/doc-turn-with-mcp-tool.jsonl"), codex: CODEX_ACCOUNT, ..Setup::default() });
-    assert_eq!(host.agents.test_message(Provider::Claude, "sonnet", CodexSignIn::ChatGpt).recv_timeout(WAIT).unwrap(), Ok(()));
-    let args = std::fs::read_to_string(host.base.join("claude.args")).unwrap();
-    let session = args.lines().skip_while(|l| *l != "--session-id").nth(1).unwrap().to_string();
-    assert_eq!(std::fs::read_to_string(host.base.join(format!("mcp-{session}.json"))).unwrap(), r#"{"mcpServers":{}}"#, "no tool server");
+    assert_eq!(answer_of(&host.agents.test_message(Provider::Claude, "sonnet", CodexSignIn::ChatGpt), "the test message"), Ok(()));
+    let args = std::fs::read_to_string(host.base.join("claude.args")).expect("the test message's claude recorded its arguments");
+    let session = args.lines().skip_while(|l| *l != "--session-id").nth(1).expect("the test message's claude was given a session id").to_string();
+    let mcp = std::fs::read_to_string(host.base.join(format!("mcp-{session}.json"))).expect("the test message's claude recorded its tool servers");
+    assert_eq!(mcp, r#"{"mcpServers":{}}"#, "no tool server");
     let workspace = host.settings.join("agents");
     let left: Vec<String> = std::fs::read_dir(&workspace)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .expect("the private workspace lists")
+        .map(|e| e.expect("a workspace entry reads").file_name().to_string_lossy().into_owned())
         .filter(|n| n.contains("test-"))
         .collect();
     assert!(left.is_empty(), "the scratch folder was removed: {left:?}");
     assert!(host.token_files().is_empty(), "the test message holds no access");
     // Codex's account.
-    let account = host.agents.codex_account_read().recv_timeout(WAIT).unwrap();
+    let account = answer_of(&host.agents.codex_account_read(), "the account read");
     assert_eq!(account, Ok(CodexAccount::SignedIn { email: "person@example.com".into(), plan: Some("plus".into()) }));
     assert!(host.agents.inner.store().is_ok(), "the secure store opens");
     assert_eq!(codex_store(&host), "\"file\"", "the account read");
@@ -879,10 +880,25 @@ fn the_test_message_and_codex_account_calls_run_through_their_programs() {
     );
     assert!(archforge_ui_egui::ai_agents::approved_browser_page("https://auth.openai.com/oauth/authorize?PLACEHOLDER").is_some());
     assert_eq!(codex_store(&host), "\"file\"", "the browser sign-in");
-    assert_eq!(host.agents.codex_logout().recv_timeout(WAIT).unwrap(), Ok(()));
+    assert_eq!(answer_of(&host.agents.codex_logout(), "the sign-out"), Ok(()));
     assert_eq!(codex_store(&host), "\"file\"", "the sign-out");
     assert!(!logged("person@example.com") && !logged("ABCD-EFGH"), "no sign-in value reached the log");
     assert!(!format!("{events:?}").contains("person@example.com"), "Debug shows no email");
+}
+
+/// The host's answer on `rx` within [`WAIT`]. A failure names `step`, whether the answer was late
+/// or will never come (its channel closed without one: the host's thread ended or never started),
+/// and how long it waited, so a log that keeps only the panic still says which step failed and how;
+/// the panic points at the caller's line.
+#[track_caller]
+fn answer_of<T>(rx: &Receiver<T>, step: &str) -> T {
+    let asked = Instant::now();
+    // A `match`, not a closure: a closure's panic would point at itself, not at the caller.
+    match rx.recv_timeout(WAIT) {
+        Ok(answer) => answer,
+        Err(RecvTimeoutError::Timeout) => panic!("{step}: no answer within {WAIT:?}"),
+        Err(RecvTimeoutError::Disconnected) => panic!("{step}: the answer channel closed without an answer after {:?}", asked.elapsed()),
+    }
 }
 
 /// A Codex script body for a device-code sign-in that never completes: the code, then only reading.
@@ -968,11 +984,18 @@ fn a_test_message_without_a_key_needs_one() {
 }
 
 /// The `cli_auth_credentials_store` value the codex program's latest start was given, taken: the
-/// arguments' file is removed, so the next call fails unless another start wrote it again.
+/// arguments' file is removed, so the next call fails unless another start wrote it again. A
+/// failure points at the caller's line, which names the step.
+#[track_caller]
 fn codex_store(host: &Host) -> String {
     let path = host.base.join("codex.args");
-    let args = std::fs::read_to_string(&path).unwrap();
-    std::fs::remove_file(&path).unwrap();
+    let args = match std::fs::read_to_string(&path) {
+        Ok(args) => args,
+        Err(e) => panic!("no codex start recorded its arguments since the last look: {e}"),
+    };
+    if let Err(e) = std::fs::remove_file(&path) {
+        panic!("the codex arguments' file could not be taken: {e}");
+    }
     let values: Vec<&str> = args.lines().filter_map(|l| l.strip_prefix("cli_auth_credentials_store=")).collect();
     assert_eq!(values.len(), 1, "one store: {args}");
     values[0].to_owned()
