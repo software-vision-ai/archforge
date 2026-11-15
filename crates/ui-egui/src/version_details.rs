@@ -355,8 +355,8 @@ pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
 }
 
 /// The changed items from `y`, or why they are not there: the first version has none, a comparison
-/// under way shows bars, and one that failed says so beside Retry, never as no changes. Gives where
-/// the next section starts.
+/// under way shows bars, and one that failed says so beside Retry, never as no changes. The keys
+/// scroll the items while no dialog is up. Gives where the next section starts.
 fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     let Some(found) = shell.versions.details.as_ref().and_then(|d| d.comparison.as_ref()).map(|c| c.found.clone()) else {
@@ -402,10 +402,14 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     // A little more than the cards: `scroll_tree` keeps that much of the area clear of a list that fits.
     let height = (items.len() as f32 * PITCH + 8.0).min(r.bottom() - BELOW_CARDS - top).max(PITCH);
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
-    let explorer = shell.explorer.focused;
+    // The keys are the list's while no dialog is up, as the change cards' are: a dialog that holds no
+    // keys from the window, as the explorer's delete does, leaves the keyboard nowhere (AR-523).
+    let (explorer, free) = (shell.explorer.focused, crate::actions::free(shell));
     let Some(d) = shell.versions.details.as_mut() else { return tree.bottom() };
-    // What shows of the list, as scroll_tree measures it.
-    scroll_keys(ui, explorer, &mut d.scroll, PITCH, (height - 8.0).max(PITCH));
+    if free {
+        // What shows of the list, as scroll_tree measures it.
+        scroll_keys(ui, explorer, &mut d.scroll, PITCH, (height - 8.0).max(PITCH));
+    }
     let offset = scroll_tree(ui, p, tree, top, items.len(), PITCH, 0.0, true, None, &mut d.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);
