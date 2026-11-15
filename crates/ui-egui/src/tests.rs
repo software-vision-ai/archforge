@@ -14663,6 +14663,7 @@ mod chat_keys {
                 open_file_with(&mut h, Key::PageDown, Modifiers::NONE, pointer);
                 assert_eq!(scroll(&h), 0.0, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
                 key(&mut h, Key::Escape, Modifiers::NONE);
+                assert!(h.state().menu_bar.open.is_none(), "{theme:?}: Escape closed the menu bar, by the pointer: {pointer}");
                 assert!(focused_on(&h, &last), "{theme:?}: back on the link");
             }
             h.state_mut().in_window_menu = false;
