@@ -6191,7 +6191,6 @@ fn a_diagram_refusal_is_said_in_the_chosen_language() {
 /// (AR-512).
 #[test]
 fn a_kind_word_refused_is_said_in_the_chosen_language() {
-    use crate::i18n::{fmt, tr};
     use archforge_mof::Value;
     use serde_json::json;
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -6204,7 +6203,7 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
         assert_eq!(plain, "Verwenden Sie ein einfaches Wort: Kleinbuchstaben, Ziffern, _, - und ., beginnend mit einem Buchstaben.", "{theme:?}");
         let session = h.state().session.as_ref().unwrap();
         let kinds = archforge_diagram::DiagramView::kinds(session.view()).join(", ");
-        let unknown = fmt(&tr("{word} is not a diagram kind. The kinds are {kinds}."), &[("word", "toy"), ("kinds", &kinds)]);
+        let unknown = format!("toy ist keine Diagrammart. Die Arten sind {kinds}.");
         assert_eq!(refused(&mut h, "diagram.add", json!({ "kind": "toy" })), unknown, "{theme:?}");
         let d = h.state().canvas.active.unwrap().to_string();
         let st = h.state().session.as_ref().unwrap().doc();
@@ -6224,14 +6223,15 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
         };
         let (association, generalization) = (line_of(archforge_uml::ASSOCIATION), line_of(archforge_uml::GENERALIZATION));
         let slots = archforge_uml::figures::text_slots(archforge_uml::ASSOCIATION).join(", ");
-        let lacks = fmt(&tr("This line has no label text {word}. It has {slots}."), &[("word", "kind"), ("slots", &slots)]);
+        let lacks = format!("Diese Linie hat keinen Beschriftungstext kind. Sie hat {slots}.");
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": association, "kind": "kind" })), lacks, "{theme:?}");
-        let none = fmt(&tr("This line has no label text {word}. It has none."), &[("word", "name")]);
+        let none = "Diese Linie hat keinen Beschriftungstext name. Sie hat keinen.";
         assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
         let bare = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "uml.class".into(), known: Vec::new() };
         let no_notation = crate::panels::said(&archforge_engine::Reason::NotOneOf(Box::new(bare)));
-        assert_eq!(no_notation, Some(tr("This project holds no notation, so it knows no diagram kind.")), "{theme:?}");
+        let no_kind = "Dieses Projekt enthält keine Notation und kennt daher keine Diagrammart.";
+        assert_eq!(no_notation.as_deref(), Some(no_kind), "{theme:?}");
     }
     crate::i18n::set_language("en");
 }
