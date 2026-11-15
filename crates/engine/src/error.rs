@@ -376,6 +376,9 @@ pub enum Reason {
     Generation(GenerationRule),
     /// A key or identity column is asked to be nullable, which it never is.
     NotNullable,
+    /// The size `value` of a column or a domain does not fit its type `ty` (empty when it has no
+    /// type name of its own), by the rule it breaks.
+    SizeMisfit { rule: SizeRule, ty: Box<str>, value: i64 },
     /// A column on a domain is given its own `what`, `"default"` or `"collation"`, which the
     /// domain gives it.
     DomainGives { what: &'static str },
@@ -402,6 +405,25 @@ pub enum GenerationRule {
     IdentityTakesNoDefault,
     /// An identity column has an expression.
     IdentityTakesNoExpression,
+}
+
+/// The rule a size breaks, in a [`Reason::SizeMisfit`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizeRule {
+    /// A length, precision or scale is not between 1 and 65535.
+    OutOfRange,
+    /// A length is given to a type that takes none.
+    TakesNoLength,
+    /// A precision is given to a type that takes none.
+    TakesNoPrecision,
+    /// A scale is given to a type that takes none.
+    TakesNoScale,
+    /// A BINARY's length is more than the 255 bytes it holds.
+    BinaryTooLong,
+    /// The scale is more than the precision.
+    ScaleOverPrecision,
+    /// A scale is given without a precision.
+    ScaleWithoutPrecision,
 }
 
 /// What a [`Reason::NotOneOf`] names; boxed in the reason, so the error stays small.

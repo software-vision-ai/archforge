@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
-use archforge_engine::{DefaultKind, GenerationRule, Reason};
+use archforge_engine::{DefaultKind, GenerationRule, Reason, SizeRule};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
@@ -464,8 +464,8 @@ pub fn domain_problem(store: &Store, d: Obj) -> Option<String> {
         return Some("the base type carries its own size; give length, precision or scale instead".into());
     }
     let (l, p, s) = own_size_of(store, d);
-    if let Some((_, problem)) = size_problem(&base, l, p, s) {
-        return Some(problem);
+    if let Some(problem) = size_problem(&base, l, p, s) {
+        return Some(problem.said());
     }
     for c in domain_checks(store, d) {
         if let Some(p) = check_problem(&text_of(store, c, domain_check::EXPRESSION)) {
@@ -615,41 +615,82 @@ pub fn text_of(store: &Store, o: Obj, prop: archforge_mof::PropId) -> String {
     store.get(o, prop).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// What a column's or a domain's size breaks ([`size_problem`]): said as an English sentence
+/// ([`SizeProblem::said`]) or typed ([`SizeProblem::reason`]), under the parameter it names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SizeProblem {
+    /// The part of the size that breaks it: `"length"`, `"precision"` or `"scale"`.
+    pub key: &'static str,
+    /// The rule it breaks.
+    pub rule: SizeRule,
+    /// The type name, as given; empty for none.
+    pub ty: String,
+    /// The length, precision or scale the rule is about.
+    pub value: i64,
+}
+
+impl SizeProblem {
+    /// The problem as an English sentence, as "INT takes no length".
+    pub fn said(&self) -> String {
+        let kind = if self.ty.is_empty() { "a type without a name" } else { self.ty.as_str() };
+        match self.rule {
+            SizeRule::OutOfRange => format!("{} is not between 1 and 65535", self.value),
+            SizeRule::TakesNoLength => format!("{kind} takes no length"),
+            SizeRule::BinaryTooLong => format!("{} is more than the 255 bytes a BINARY holds", self.value),
+            SizeRule::TakesNoPrecision => format!("{kind} takes no precision"),
+            SizeRule::TakesNoScale => format!("{kind} takes no scale"),
+            SizeRule::ScaleOverPrecision => "the scale is more than the precision".into(),
+            SizeRule::ScaleWithoutPrecision => "a scale needs a precision".into(),
+        }
+    }
+
+    /// The problem typed, with the type and the size, for an interface to say in its own words.
+    pub fn reason(&self) -> Reason {
+        Reason::SizeMisfit { rule: self.rule, ty: self.ty.as_str().into(), value: self.value }
+    }
+}
+
 /// Why a column's size does not fit its type, or none: a length only where the type takes one,
 /// precision and scale likewise, each 1 to 65535 (a BINARY's length to 255) and the scale no
 /// more than the precision.
-pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, scale: Option<i64>) -> Option<(&'static str, String)> {
+pub fn size_problem(kind: &str, length: Option<i64>, precision: Option<i64>, scale: Option<i64>) -> Option<SizeProblem> {
     let shape = type_shape(kind);
+    let problem = |key, rule, value| Some(SizeProblem { key, rule, ty: kind.to_string(), value });
     for (key, value) in [("length", length), ("precision", precision), ("scale", scale)] {
         if let Some(v) = value
             && !(1..=65_535).contains(&v)
         {
-            return Some((key, format!("{v} is not between 1 and 65535")));
+            return problem(key, SizeRule::OutOfRange, v);
         }
     }
-    let kind = if kind.is_empty() { "a type without a name" } else { kind };
-    if length.is_some() && shape != TypeShape::Length {
-        return Some(("length", format!("{kind} takes no length")));
+    if let Some(n) = length
+        && shape != TypeShape::Length
+    {
+        return problem("length", SizeRule::TakesNoLength, n);
     }
     if let Some(n) = length
         && n > 255
         && kind.trim().eq_ignore_ascii_case("binary")
     {
-        return Some(("length", format!("{n} is more than the 255 bytes a BINARY holds")));
+        return problem("length", SizeRule::BinaryTooLong, n);
     }
-    if precision.is_some() && !matches!(shape, TypeShape::Precision | TypeShape::PrecisionScale) {
-        return Some(("precision", format!("{kind} takes no precision")));
+    if let Some(p) = precision
+        && !matches!(shape, TypeShape::Precision | TypeShape::PrecisionScale)
+    {
+        return problem("precision", SizeRule::TakesNoPrecision, p);
     }
-    if scale.is_some() && shape != TypeShape::PrecisionScale {
-        return Some(("scale", format!("{kind} takes no scale")));
+    if let Some(s) = scale
+        && shape != TypeShape::PrecisionScale
+    {
+        return problem("scale", SizeRule::TakesNoScale, s);
     }
     if let (Some(p), Some(s)) = (precision, scale)
         && s > p
     {
-        return Some(("scale", "the scale is more than the precision".into()));
+        return problem("scale", SizeRule::ScaleOverPrecision, s);
     }
-    if scale.is_some() && precision.is_none() {
-        return Some(("scale", "a scale needs a precision".into()));
+    if let (None, Some(s)) = (precision, scale) {
+        return problem("scale", SizeRule::ScaleWithoutPrecision, s);
     }
     None
 }
@@ -1333,8 +1374,8 @@ pub fn problems(store: &Store) -> Vec<String> {
                 out.push(format!("{o} is a key and nullable"));
             }
             let (length, precision, scale) = size_of(store, o);
-            if let Some((_, p)) = size_problem(&type_of(store, o), length, precision, scale) {
-                out.push(format!("the size of {o}: {p}"));
+            if let Some(p) = size_problem(&type_of(store, o), length, precision, scale) {
+                out.push(format!("the size of {o}: {}", p.said()));
             }
             if let Some(p) = generation_problem(store, o) {
                 out.push(format!("the generation of {o}: {}", p.said()));

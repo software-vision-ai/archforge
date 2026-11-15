@@ -215,6 +215,14 @@ str		Unique	Único
 str		Length	Longitud
 str		Precision	Precisión
 str		Scale	Escala
+str		The size {value} is not between 1 and 65535.	El tamaño {value} no está entre 1 y 65535.
+str		A column without a type name of its own takes no size.	Una columna sin nombre de tipo propio no admite tamaño.
+str		{type} takes no length.	{type} no admite longitud.
+str		{type} takes no precision.	{type} no admite precisión.
+str		{type} takes no scale.	{type} no admite escala.
+str		A BINARY holds at most 255 bytes, not {value}.	Un BINARY admite como máximo 255 bytes, no {value}.
+str		The scale {value} is more than the precision.	La escala {value} es mayor que la precisión.
+str		A scale needs a precision.	Una escala necesita una precisión.
 str		Default	Valor por defecto
 str		Generation	Generación
 str		Expression	Expresión

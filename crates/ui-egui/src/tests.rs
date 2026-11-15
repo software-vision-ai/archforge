@@ -6779,6 +6779,37 @@ fn an_er_columns_generation_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A column's or a domain's size that does not fit its type is said in the chosen language by the
+/// rule it breaks, with the type and the size; a column without a type name of its own as taking no
+/// size, whichever part was given. In light and dark (AR-496).
+#[test]
+fn an_er_size_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::{Reason, SizeRule as R};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let none = "Eine Spalte ohne eigenen Typnamen hat keine Größe.";
+        for (rule, ty, value, said) in [
+            (R::OutOfRange, "VARCHAR", 0, "Die Größe 0 liegt nicht zwischen 1 und 65535."),
+            (R::TakesNoLength, "", 4, none),
+            (R::TakesNoPrecision, "", 4, none),
+            (R::TakesNoScale, "", 2, none),
+            (R::TakesNoLength, "INT", 4, "INT hat keine Länge."),
+            (R::TakesNoPrecision, "VARCHAR", 3, "VARCHAR hat keine Genauigkeit."),
+            (R::TakesNoScale, "TIMESTAMP", 2, "TIMESTAMP hat keine Nachkommastellen."),
+            (R::BinaryTooLong, "binary", 256, "Ein BINARY fasst höchstens 255 Bytes, nicht 256."),
+            (R::ScaleOverPrecision, "NUMERIC", 5, "Die Nachkommastellen (5) übersteigen die Genauigkeit."),
+            (R::ScaleWithoutPrecision, "NUMERIC", 2, "Nachkommastellen brauchen eine Genauigkeit."),
+        ] {
+            let reason = Reason::SizeMisfit { rule, ty: ty.into(), value };
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A column's own default, collation, place and link refused are said in the chosen language: a
 /// default none of its enum type's literals in the words UML says it in, also for a column that
 /// would break; a default or collation its domain gives; a place past the table's last, singular

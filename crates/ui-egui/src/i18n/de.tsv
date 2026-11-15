@@ -215,6 +215,14 @@ str		Unique	Eindeutig
 str		Length	Länge
 str		Precision	Genauigkeit
 str		Scale	Nachkommastellen
+str		The size {value} is not between 1 and 65535.	Die Größe {value} liegt nicht zwischen 1 und 65535.
+str		A column without a type name of its own takes no size.	Eine Spalte ohne eigenen Typnamen hat keine Größe.
+str		{type} takes no length.	{type} hat keine Länge.
+str		{type} takes no precision.	{type} hat keine Genauigkeit.
+str		{type} takes no scale.	{type} hat keine Nachkommastellen.
+str		A BINARY holds at most 255 bytes, not {value}.	Ein BINARY fasst höchstens 255 Bytes, nicht {value}.
+str		The scale {value} is more than the precision.	Die Nachkommastellen ({value}) übersteigen die Genauigkeit.
+str		A scale needs a precision.	Nachkommastellen brauchen eine Genauigkeit.
 str		Default	Standardwert
 str		Generation	Erzeugung
 str		Expression	Ausdruck
