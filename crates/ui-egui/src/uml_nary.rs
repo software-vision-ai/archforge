@@ -1013,7 +1013,7 @@ fn editor(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) ->
     let card = Rect::from_min_size(pos2(left, y), vec2(width, cy));
     paint.set(background, egui::Shape::rect_filled(card, 8.0, p.surface));
     paint.rect_stroke(card, 8.0, Stroke::new(1.0, p.accent), StrokeKind::Inside);
-    crate::panels::reveal(shell, ui, card);
+    crate::panels::reveal(shell, ui, crate::panels::Editor::NaryEnd, card);
     // The type menu last, over the card: a pick changes the field; Apply moves the end.
     if shell.panels.menu == Some(Menu::NaryEndType) {
         let names: Vec<String> = types_of.iter().map(|(_, n)| n.clone()).collect();
@@ -1206,7 +1206,6 @@ fn ask_remove(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect, y: f32, a:
     let g = ux::galley_rows(&paint, &after, types::CAPTION, p.text_secondary, Some(width), 6);
     let h = g.size().y;
     paint.galley(pos2(left, card.bottom() + 12.0), g, p.text_secondary);
-    crate::panels::reveal(shell, ui, card);
     let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
     if keep_resp.clicked() || escape {
         shell.panels.nary_remove = None;
