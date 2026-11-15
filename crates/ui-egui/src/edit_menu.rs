@@ -34,6 +34,8 @@ pub(crate) struct Edit {
     pub(crate) steps: Vec<Event>,
     /// Whether a paste was asked of the field, waiting for the window to read the system's clipboard.
     pub(crate) paste: bool,
+    /// Close project asked for on the field, waiting for the field to let go (`actions::follow_close`).
+    pub(crate) closing: Option<crate::actions::Closing>,
 }
 
 /// Records who has the keyboard, the field a menu was opened on counting while it is open. Called

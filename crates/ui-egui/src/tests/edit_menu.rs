@@ -772,6 +772,24 @@ fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
     }
 }
 
+/// The native bar's Close project, chosen with a name typed in place in Models or on the canvas:
+/// the field still has the keyboard, so it lets go and commits the name first, and Close asks about
+/// it and keeps the project open (AR-519). The row runs as the native bar runs it, before the
+/// frame's logic.
+#[test]
+fn the_native_close_finds_the_name_typed_in_place_committed() {
+    for (theme, on_canvas) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {
+        let mut h = renaming_a_saved_project(theme, on_canvas);
+        h.state_mut().in_window_menu = false;
+        actions::run(h.state_mut(), actions::CLOSE);
+        h.run();
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(st.alive().any(|o| archforge_core::name_of(st, o) == "Item"), "{theme:?}, on the canvas {on_canvas}: the name is in the model");
+        assert!(matches!(h.state().ask, Some(crate::close_ask::Ask::Unsaved { .. })), "{theme:?}: Close asks about the unsaved name");
+        assert_eq!(h.state().tabs.len(), 1, "{theme:?}: the project is still open");
+    }
+}
+
 /// Delete after Select all takes the boxes off the diagram and deletes nothing from the model,
 /// though the selection holds a relationship or a generalization set beside the boxes.
 #[test]
