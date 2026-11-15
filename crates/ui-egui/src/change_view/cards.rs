@@ -13,7 +13,7 @@ use crate::i18n::{fmt, tr};
 use crate::model_words::{kind_label, literal_label, property_label};
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
-use crate::version_details::{MARGIN, page_keys};
+use crate::version_details::{MARGIN, page_keys, scroll_keys};
 use crate::versions::{kind_look, when};
 
 /// The room between the cards, and from a side's eyebrow to its card.
@@ -35,7 +35,8 @@ const HEADING: f32 = 20.0;
 const AFTER_LIST: f32 = 7.0;
 
 /// Draws the summary, the cards of `sides` and their related changes from `top` to the end of `r`, scrolling as one, so a value
-/// stays level with itself across them; Page Up, Page Down, Home and End scroll them while a related link has the keyboard.
+/// stays level with itself across them; Page Up, Page Down, Home and End scroll them while a related link has the keyboard,
+/// and the arrows too while nothing has it.
 /// Everything comes from the sides already held: nothing here asks the host.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, sides: &ElementSides) {
     let Some(universe) = shell.session.as_ref().map(|s| s.doc().universe().clone()) else { return };
@@ -47,16 +48,22 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
     let links = related::links(&shell.versions.changes, &sides.lists.related);
     let under = related::height(links.len());
-    // The page keys are the cards' while a link of theirs has the keyboard, so no text field has
-    // it, and no panel's menu is open (AR-481). The in-window bar's menu, open or opening in this
-    // frame, holds every key from the window (`hold_keys`), so none comes here.
-    let paging = related::keyed(shell, ui.ctx(), &links).is_some() && shell.panels.menu.is_none();
+    // The keys are the cards' while no panel's menu and no dialog is up: the page keys while a link
+    // of theirs has the keyboard, so no text field has it (AR-481), and the arrows too while nothing
+    // and not the explorer has it, as a version's changed items take them (AR-486). The in-window
+    // bar's menu, open or opening in this frame, holds every key from the window (`hold_keys`).
+    let free = shell.panels.menu.is_none() && crate::actions::free(shell);
+    let (linked, explorer) = (related::keyed(shell, ui.ctx(), &links).is_some(), shell.explorer.focused);
     let Some(o) = shell.versions.element.as_mut() else { return };
     let lists = lists_height(&sides.lists.before).max(lists_height(&sides.lists.after));
     let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + lists + BELOW + under;
-    if paging {
-        // A page is what shows, as scroll_tree measures it, less a row, and never less than a row.
-        page_keys(ui, &mut o.scroll.offset, (tree.bottom() - top - 8.0 - ROW).max(ROW));
+    // A page is what shows, as scroll_tree measures it, less a row, and never less than a row;
+    // scroll_tree brings End's far offset back to the end before anything follows a link.
+    let page = (tree.bottom() - top - 8.0 - ROW).max(ROW);
+    if free && linked {
+        page_keys(ui, &mut o.scroll.offset, page);
+    } else if free {
+        scroll_keys(ui, explorer, &mut o.scroll, ROW, page);
     }
     let offset = scroll_tree(ui, p, tree, top, sides.fields.len(), ROW, tail, true, None, &mut o.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
