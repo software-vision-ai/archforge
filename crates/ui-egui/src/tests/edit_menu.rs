@@ -295,6 +295,28 @@ fn the_clipboard_rows_and_select_all_go_to_their_target_in_every_state() {
     }
 }
 
+/// The Models tree's keys go with it: folded away by View ▸ Models, with no press on its frame, it
+/// leaves Select all to the canvas clicked next (AR-524).
+#[test]
+fn a_folded_models_tree_leaves_select_all_to_the_canvas() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = drawn(theme);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.run_steps(1);
+        let row = ids(&h).into_iter().find(|i| i.strip_prefix("workspace.explorer.row.").is_some_and(|u| !u.contains('.'))).unwrap();
+        let at = rect_of(&h, &row).center();
+        click(&mut h, at);
+        assert!(h.state().explorer.focused, "{theme:?}: the tree has the keys");
+        run(h.state_mut(), crate::view_menu::MODELS);
+        h.step();
+        assert!(h.state().state.explorer_collapsed, "{theme:?}: folded");
+        let canvas = rect_of(&h, "workspace.canvas");
+        click(&mut h, egui::pos2(canvas.center().x, canvas.bottom() - 80.0));
+        assert!(h.state().canvas.focused, "{theme:?}: the canvas has the keys");
+        assert!(actions::available(h.state(), SELECT_ALL), "{theme:?}: Select all is the canvas's");
+    }
+}
+
 /// The rows and ⌘A act on a real field, each step asserted: Select all takes the whole text, Copy
 /// copies it, Cut copies and removes it, Paste asks the window for the clipboard.
 #[test]

@@ -357,9 +357,10 @@ fn behind_a_dialog(h: &mut Harness<'static, Shell>, offset: impl Fn(&Harness<'st
     assert_eq!(offset(h), 0.0, "and Home takes it back");
 }
 
-/// With no control and not the explorer holding the keys, they scroll the changed items: the
-/// arrows by a card, Page Down and Page Up by what shows, End to the last card and Home to the top.
-/// A focused control keeps them, and so does a dialog that leaves the keyboard nowhere (AR-523).
+/// With no control holding the keys, they scroll the changed items: the arrows by a card, Page Down
+/// and Page Up by what shows, End to the last card and Home to the top. A focused control keeps
+/// them, and so does a dialog that leaves the keyboard nowhere (AR-523); the Models tree, hidden
+/// while the details show, does not (AR-524).
 #[test]
 fn the_keys_scroll_the_changed_items() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -396,16 +397,75 @@ fn the_keys_scroll_the_changed_items() {
         key(h, Home, egui::Modifiers::NONE);
         h.run_steps(1);
         assert!(offset(h) == 0.0 && has_id(h, &first));
+        // The Models tree does not show beside the page, so it holds no keys there (AR-524).
         h.state_mut().explorer.focused = true;
         key(h, End, egui::Modifiers::NONE);
-        assert_eq!(offset(h), 0.0, "the explorer has the keys");
-        h.state_mut().explorer.focused = false;
+        assert_eq!(offset(h), end, "the hidden tree has no keys");
+        key(h, Home, egui::Modifiers::NONE);
         behind_a_dialog(h, offset, 60.0);
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(COMPARE)));
         h.run();
         key(h, End, egui::Modifiers::NONE);
         assert_eq!(offset(h), 0.0, "a control has the keys");
     });
+}
+
+/// The Models tree's keys go with it: once the versions show instead, a version's changed items
+/// scroll with the arrows and Page Down, whether the rail was tapped with its press and release in
+/// one frame, clicked by a screen reader or View ▸ Versions chosen; none presses on the tree's
+/// frame (AR-524).
+#[test]
+fn the_models_tree_lets_the_keys_go_when_the_versions_show() {
+    use egui::Key::{ArrowDown, PageDown};
+    const VERSIONS: &str = "workspace.explorers.source-control";
+    for way in ["tap", "screen reader", "menu"] {
+        in_both(|h, host| {
+            let without = rows_now(h);
+            (0..40).for_each(|i| add_schema(h, &format!("s{i}")));
+            let with = rows_now(h);
+            tap(h, "workspace.explorers.models");
+            h.run_steps(1);
+            let below = rect_of(h, "workspace.explorer.filter").bottom() + 40.0;
+            let row = ids(h)
+                .into_iter()
+                .find(|i| i.strip_prefix("workspace.explorer.row.").is_some_and(|u| !u.contains('.')) && rect_of(h, i).top() > below);
+            tap(h, &row.unwrap());
+            assert!(h.state().explorer.focused, "{way}: the tree has the keys");
+            let (at, primary, none) = (rect_of(h, VERSIONS).center(), egui::PointerButton::Primary, egui::Modifiers::NONE);
+            match way {
+                "tap" => {
+                    h.event(egui::Event::PointerMoved(at));
+                    let press = |pressed| egui::Event::PointerButton { pos: at, button: primary, pressed, modifiers: none };
+                    h.input_mut().events.extend([press(true), press(false)]);
+                }
+                "screen reader" => {
+                    let (action, target_tree, target_node) =
+                        (egui::accesskit::Action::Click, egui::accesskit::TreeId::ROOT, crate::widgets::egui_id(VERSIONS).accesskit_id());
+                    h.input_mut().events.push(egui::Event::AccessKitActionRequest(egui::accesskit::ActionRequest {
+                        action,
+                        target_tree,
+                        target_node,
+                        data: None,
+                    }));
+                }
+                _ => crate::actions::run(h.state_mut(), crate::view_menu::VERSIONS),
+            }
+            h.step();
+            assert_eq!(h.state().state.explorer, crate::state::Explorer::SourceControl, "{way}");
+            list_still(h);
+            host.reads.lock().unwrap().clear();
+            opened(h, "c3");
+            answer(host, "c2", Ok(with.clone()));
+            answer(host, "c3", Ok(without.clone()));
+            settled(h);
+            assert!(h.ctx.memory(|m| m.focused().is_none()), "{way}: no control has the keys");
+            let offset = |h: &Harness<'static, Shell>| h.state().versions.details.as_ref().unwrap().scroll.offset;
+            key(h, ArrowDown, egui::Modifiers::NONE);
+            assert_eq!(offset(h), 60.0, "{way}: a card down");
+            key(h, PageDown, egui::Modifiers::NONE);
+            assert!(offset(h) > 60.0, "{way}: a page down, {}", offset(h));
+        });
+    }
 }
 
 /// A comparison on its way wakes the window, once input has stopped asking for frames, and the
@@ -1269,9 +1329,9 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
 
 /// With nothing holding the keyboard, the keys scroll the cards as they scroll a version's changed
 /// items (AR-486): the arrows by a row, Page Down and Page Up by what shows less a row, End to the
-/// last link and Home to the top, each drawn in the frame that reads it. Not while the explorer,
-/// another control or a dialog has them, with a menu open, the in-window menu bar's too, or with
-/// the control key as Windows and Linux send it.
+/// last link and Home to the top, each drawn in the frame that reads it, the Models tree hidden
+/// beside them holding none (AR-524). Not while another control or a dialog has them, with a menu
+/// open, the in-window menu bar's too, or with the control key as Windows and Linux send it.
 #[test]
 fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -1304,9 +1364,11 @@ fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
         }
         key(h, Home, NONE);
         still(h, PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), "the control key");
+        // The Models tree does not show beside the cards, so it holds no keys there (AR-524).
         h.state_mut().explorer.focused = true;
-        still(h, End, NONE, "the explorer has the keys");
-        h.state_mut().explorer.focused = false;
+        once(h, End);
+        assert_eq!(cards_scroll(h, top, at), end, "the hidden tree has no keys");
+        key(h, Home, NONE);
         h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
         still(h, End, NONE, "a menu open");
         h.state_mut().panels.menu = None;
@@ -2677,9 +2739,10 @@ fn a_new_pair_lists_from_the_top() {
     });
 }
 
-/// With no control and not the explorer holding the keys, they scroll the list: the arrows by a
-/// card, Page Down by more, End to the last card and Home to the top. A focused control keeps them,
-/// and so does a dialog that leaves the keyboard nowhere (AR-523).
+/// With no control holding the keys, they scroll the list: the arrows by a card, Page Down by more,
+/// End to the last card and Home to the top. A focused control keeps them, and so does a dialog
+/// that leaves the keyboard nowhere (AR-523); the Models tree, hidden while the list shows, does
+/// not (AR-524).
 #[test]
 fn the_keys_scroll_the_list() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -2708,10 +2771,11 @@ fn the_keys_scroll_the_list() {
         key(h, Home, egui::Modifiers::NONE);
         h.run_steps(1);
         assert!(offset(h) == 0.0 && has_id(h, &first));
+        // The Models tree does not show beside the page, so it holds no keys there (AR-524).
         h.state_mut().explorer.focused = true;
         key(h, End, egui::Modifiers::NONE);
-        assert_eq!(offset(h), 0.0, "the explorer has the keys");
-        h.state_mut().explorer.focused = false;
+        assert_eq!(offset(h), end, "the hidden tree has no keys");
+        key(h, Home, egui::Modifiers::NONE);
         behind_a_dialog(h, offset, 56.0);
         h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(SWAP)));
         h.run();

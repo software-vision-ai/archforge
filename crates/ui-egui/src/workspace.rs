@@ -132,6 +132,11 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
             return;
         }
         activity_rail(shell, ui, &p, Rect::from_min_size(body.min, vec2(ACTIVITY, body.height())));
+        // The Models tree's keys go with it: folded away or with another explorer shown, however
+        // that came (the rail, a screen reader, the View menu), nothing below waits for them (AR-524).
+        if shell.state.explorer_collapsed || shell.state.explorer != Explorer::Models {
+            shell.explorer.focused = false;
+        }
         if let Some(r) = cols.explorer {
             explorer(shell, ui, &p, r);
             resize(shell, ui, &p, r.right(), body, "workspace.explorer.resize", true);
