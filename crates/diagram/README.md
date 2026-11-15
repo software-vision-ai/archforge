@@ -72,6 +72,17 @@ its kind needs one or of a class its kind cannot be of (AR-513).
 The lists of `diagram.move`, `diagram.unplace` and `diagram.style` carry their reasons typed too: an
 empty list, an item that is no string, no id, of no element or of the wrong kind, an item given
 twice, and boxes of different diagrams moved together (AR-514).
+The rules of `diagram.connect`, `diagram.link-note` and `diagram.label` carry their reasons typed as
+well (AR-515), as the engine's `Reason::{NoRelationship, LacksEnd, NotAtEnd, NotLinkable,
+TargetOtherDiagram, LinkUnlabelled, Labelled}` and reasons it had: a line between two elements that
+names no relationship, one the diagram's kind does not connect (`NotShown`), one that lacks an end,
+a box at either end that does not show that end, and one shown already (`ShownAlready`); a note's
+link from a box that shows an element (`NotA` a `commands::NOTE`), to itself (`Itself`) or twice
+(`Again`), both of the relationship `commands::NOTE_LINK`, to what no note links to, and onto another
+diagram; a label on a note's link, and one of a text a label of the line shows already. A line's
+labels are of distinct texts, never as many as `rules::MAX_LABELS`, and the engine refuses a place
+other than `source`, `middle` or `target` before the command runs, so those two refusals stay
+untyped.
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name

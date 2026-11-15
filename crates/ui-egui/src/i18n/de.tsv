@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	Geben Sie die Diagramm
 str		Boxes nest at most {max} deep.	Kästen lassen sich höchstens {max} Ebenen tief verschachteln.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	Dieser Kasten zeigt ein Element und zeichnet dessen Text. Nur eine Notiz hat einen eigenen Text.
 str		A note's link is a straight line and does not bend.	Die Verbindung einer Notiz ist eine gerade Linie und knickt nicht ab.
+str		A line between two elements shows a relationship. Name the relationship.	Eine Linie zwischen zwei Elementen zeigt eine Beziehung. Geben Sie die Beziehung an.
+str		This element lacks an end, so no line shows it.	Diesem Element fehlt ein Ende, daher zeigt keine Linie es.
+str		The first box does not show the relationship's first end.	Der erste Kasten zeigt nicht das erste Ende der Beziehung.
+str		The second box does not show the relationship's second end.	Der zweite Kasten zeigt nicht das zweite Ende der Beziehung.
+str		This box shows {name}. Only a note links to a box or a line.	Dieser Kasten zeigt {name}. Nur eine Notiz wird mit einem Kasten oder einer Linie verbunden.
+str		A note does not link to itself.	Eine Notiz wird nicht mit sich selbst verbunden.
+str		A note links to a box that shows an element or to a relationship's line.	Eine Notiz wird mit einem Kasten verbunden, der ein Element zeigt, oder mit der Linie einer Beziehung.
+str		What the note links to is on another diagram.	Womit die Notiz verbunden wird, liegt in einem anderen Diagramm.
+str		The note is linked to it already.	Die Notiz ist bereits damit verbunden.
+str		A note's link shows no element, so it takes no label.	Die Verbindung einer Notiz zeigt kein Element und erhält daher keine Beschriftung.
+str		This line has the label text {slot} already.	Diese Linie hat den Beschriftungstext {slot} bereits.
 str		A line bends at most {max} times.	Eine Linie knickt höchstens {max}-mal ab.
 str		{notation} elements cannot be removed yet.	{notation}-Elemente lassen sich noch nicht entfernen.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Verwenden Sie ein einfaches Wort: Kleinbuchstaben, Ziffern, _, - und ., beginnend mit einem Buchstaben.

@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	Indique os diagramas, 
 str		Boxes nest at most {max} deep.	As caixas aninham-se no máximo {max} níveis.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	Esta caixa mostra um elemento e desenha o texto dele. Só uma nota tem um texto próprio.
 str		A note's link is a straight line and does not bend.	A ligação de uma nota é uma linha reta e não dobra.
+str		A line between two elements shows a relationship. Name the relationship.	Uma linha entre dois elementos mostra uma relação. Indique a relação.
+str		This element lacks an end, so no line shows it.	Falta uma extremidade a este elemento, por isso nenhuma linha o mostra.
+str		The first box does not show the relationship's first end.	A primeira caixa não mostra a primeira extremidade da relação.
+str		The second box does not show the relationship's second end.	A segunda caixa não mostra a segunda extremidade da relação.
+str		This box shows {name}. Only a note links to a box or a line.	Esta caixa mostra {name}. Só uma nota se liga a uma caixa ou a uma linha.
+str		A note does not link to itself.	Uma nota não se liga a si própria.
+str		A note links to a box that shows an element or to a relationship's line.	Uma nota liga-se a uma caixa que mostra um elemento ou à linha de uma relação.
+str		What the note links to is on another diagram.	Aquilo a que a nota se liga está noutro diagrama.
+str		The note is linked to it already.	A nota já está ligada a isso.
+str		A note's link shows no element, so it takes no label.	A ligação de uma nota não mostra nenhum elemento, por isso não leva etiqueta.
+str		This line has the label text {slot} already.	Esta linha já tem o texto de etiqueta {slot}.
 str		A line bends at most {max} times.	Uma linha dobra no máximo {max} vezes.
 str		{notation} elements cannot be removed yet.	Os elementos {notation} ainda não podem ser removidos.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use uma palavra simples: letras minúsculas, algarismos, _, - e ., a começar por uma letra.

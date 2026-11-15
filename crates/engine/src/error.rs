@@ -322,6 +322,21 @@ pub enum Reason {
     ShowsElement,
     /// A note's link is a straight line, so it takes no waypoints.
     StraightLink,
+    /// A line between two boxes that both show an element shows a relationship, and none is named.
+    NoRelationship,
+    /// The element a line would show lacks one of its two ends, so no line shows it.
+    LacksEnd,
+    /// The box at the line's `end`, its source or its target, does not show the relationship's end
+    /// there.
+    NotAtEnd { end: End },
+    /// What a note's link points at is neither a box that shows an element nor a relationship's line.
+    NotLinkable,
+    /// What a note's link points at is on another diagram than the note.
+    TargetOtherDiagram,
+    /// A note's link shows no element, so it has no text for a label to show.
+    LinkUnlabelled,
+    /// The line has a label that shows its element's text `slot` already.
+    Labelled { slot: &'static str },
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
     /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's

@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	请以 ID 列表的形
 str		Boxes nest at most {max} deep.	框最多嵌套 {max} 层。
 str		This box shows an element and draws its text. Only a note takes a text of its own.	此框显示一个元素并绘制其文本。只有备注才有自己的文本。
 str		A note's link is a straight line and does not bend.	备注的链接是一条直线，不能弯折。
+str		A line between two elements shows a relationship. Name the relationship.	两个元素之间的线表示一个关系。请指定该关系。
+str		This element lacks an end, so no line shows it.	此元素缺少一端，因此没有线能显示它。
+str		The first box does not show the relationship's first end.	第一个框未显示该关系的第一端。
+str		The second box does not show the relationship's second end.	第二个框未显示该关系的第二端。
+str		This box shows {name}. Only a note links to a box or a line.	此框显示 {name}。只有备注才能链接到框或线。
+str		A note does not link to itself.	备注不能链接到自身。
+str		A note links to a box that shows an element or to a relationship's line.	备注链接到显示元素的框，或关系的线。
+str		What the note links to is on another diagram.	备注所链接的对象在另一个图上。
+str		The note is linked to it already.	该备注已链接到它。
+str		A note's link shows no element, so it takes no label.	备注的链接不显示任何元素，因此不能添加标签。
+str		This line has the label text {slot} already.	这条线已有标签文本 {slot}。
 str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
 str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	请使用简单的词：以小写字母开头，只含小写字母、数字、_、- 和 .。

@@ -1355,6 +1355,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	図、ボックス、�
 str		Boxes nest at most {max} deep.	ボックスの入れ子は最大 {max} 階層までです。
 str		This box shows an element and draws its text. Only a note takes a text of its own.	このボックスは要素を表示し、その要素のテキストを描画します。独自のテキストを持てるのはノートだけです。
 str		A note's link is a straight line and does not bend.	ノートのリンクは直線で、折れ曲がりません。
+str		A line between two elements shows a relationship. Name the relationship.	2 つの要素の間の線はリレーションシップを表します。リレーションシップを指定してください。
+str		This element lacks an end, so no line shows it.	この要素には端が欠けているため、線で表示できません。
+str		The first box does not show the relationship's first end.	最初のボックスはリレーションシップの最初の端を表示していません。
+str		The second box does not show the relationship's second end.	2 番目のボックスはリレーションシップの 2 番目の端を表示していません。
+str		This box shows {name}. Only a note links to a box or a line.	このボックスは {name} を表示しています。ボックスや線にリンクできるのはノートだけです。
+str		A note does not link to itself.	ノートは自分自身にはリンクしません。
+str		A note links to a box that shows an element or to a relationship's line.	ノートは要素を表示するボックスか、リレーションシップの線にリンクします。
+str		What the note links to is on another diagram.	ノートのリンク先は別の図にあります。
+str		The note is linked to it already.	ノートはすでにそこにリンクされています。
+str		A note's link shows no element, so it takes no label.	ノートのリンクは要素を表示しないため、ラベルを付けられません。
+str		This line has the label text {slot} already.	この線にはすでにラベルのテキスト {slot} があります。
 str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
 str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。

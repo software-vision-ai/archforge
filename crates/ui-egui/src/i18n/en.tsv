@@ -1354,6 +1354,17 @@ str		Give the diagrams, boxes and lines as a list of ids.	Give the diagrams, box
 str		Boxes nest at most {max} deep.	Boxes nest at most {max} deep.
 str		This box shows an element and draws its text. Only a note takes a text of its own.	This box shows an element and draws its text. Only a note takes a text of its own.
 str		A note's link is a straight line and does not bend.	A note's link is a straight line and does not bend.
+str		A line between two elements shows a relationship. Name the relationship.	A line between two elements shows a relationship. Name the relationship.
+str		This element lacks an end, so no line shows it.	This element lacks an end, so no line shows it.
+str		The first box does not show the relationship's first end.	The first box does not show the relationship's first end.
+str		The second box does not show the relationship's second end.	The second box does not show the relationship's second end.
+str		This box shows {name}. Only a note links to a box or a line.	This box shows {name}. Only a note links to a box or a line.
+str		A note does not link to itself.	A note does not link to itself.
+str		A note links to a box that shows an element or to a relationship's line.	A note links to a box that shows an element or to a relationship's line.
+str		What the note links to is on another diagram.	What the note links to is on another diagram.
+str		The note is linked to it already.	The note is linked to it already.
+str		A note's link shows no element, so it takes no label.	A note's link shows no element, so it takes no label.
+str		This line has the label text {slot} already.	This line has the label text {slot} already.
 str		A line bends at most {max} times.	A line bends at most {max} times.
 str		{notation} elements cannot be removed yet.	{notation} elements cannot be removed yet.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use a plain word: lower case letters, digits, _, - and ., starting with a letter.
