@@ -287,12 +287,16 @@ fn classify(pid: u32, record: Option<&Record>) -> Result<Proc, Error> {
 /// for that start: a process id another program took gets no signal. A record without a process
 /// id, of a start that will not go on, is settled as the opening of its project settles it; one
 /// whose lock is held (a start under way) is left to the next start-up or opening, without a wait,
-/// and a copy under a name not its project's only goes itself. For a start-up: with no start of
+/// and a copy under a name not its project's only goes itself. Then the temporary files of record
+/// writes no longer under way go (a writer killed in the middle, or one whose removal failed),
+/// each only while its record's lock can be had without a wait. For a start-up: with no start of
 /// this process under way. Returns how many servers were stopped.
 pub fn stop_orphans(opts: &ServerOptions) -> Result<usize, Error> {
     private_records(&opts.records)?;
     let (_, uid) = run_dir::checked_root(&opts.run_root.clone().unwrap_or_else(|| run_dir::default_root(&opts.records)))?;
-    Ok(sweep(&opts.records, None, uid, Some(opts.stop_budget)))
+    let stopped = sweep(&opts.records, None, uid, Some(opts.stop_budget));
+    record::clear_temporaries(&opts.records);
+    Ok(stopped)
 }
 
 /// Goes through the records of every project but `except`: forgets those whose server is gone and,
@@ -1152,6 +1156,23 @@ mod tests {
         assert!(record::tests::WAITING.with(|h| h.borrow_mut().take()).is_some(), "the sweep did not wait for the lock");
         assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(r.clone()));
         assert!(Path::new(&r.run_dir).join("server.yaml").exists());
+    }
+
+    /// The start-up sweep removes the temporary file a record's writer killed in the middle of a
+    /// write left, and leaves one whose record's lock is held.
+    #[test]
+    fn the_start_up_sweep_removes_a_killed_writers_temporary_file() {
+        let dir = crate::home::tests::Scratch::new("temporaries");
+        let opts = ServerOptions { run_root: Some(dir.0.clone()), ..ServerOptions::new(dir.0.join("records")) };
+        private_records(&opts.records).unwrap();
+        let (left, busy) = (record::tests::temporary(&opts.records, "/p/a", "abcdefgh"), record::tests::temporary(&opts.records, "/p/b", "abcdefgh"));
+        for file in [&left, &busy] {
+            std::fs::write(file, "{}").unwrap();
+        }
+        let held = record::hold(&record::path(&opts.records, "/p/b"), record::LOCK_WAIT).unwrap();
+        assert_eq!(stop_orphans(&opts).unwrap(), 0);
+        drop(held);
+        assert_eq!((left.exists(), busy.exists()), (false, true));
     }
 
     /// A start that ended before it completed its record: its server, found by the exact command

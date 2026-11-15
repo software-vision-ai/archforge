@@ -115,9 +115,14 @@ pub(crate) fn fnv1a64(bytes: &[u8]) -> u64 {
     h
 }
 
+/// The name of the record of the project at `data_dir`, without its extension: 16 hex digits.
+fn name(data_dir: &str) -> String {
+    format!("{:016x}", fnv1a64(data_dir.as_bytes()))
+}
+
 /// The record file of the project at `data_dir`.
 pub(crate) fn path(records: &Path, data_dir: &str) -> PathBuf {
-    records.join(format!("{:016x}.json", fnv1a64(data_dir.as_bytes())))
+    records.join(format!("{}.json", name(data_dir)))
 }
 
 /// The record of the project at `data_dir`, if there is one. A damaged or oversized record, or one
@@ -204,19 +209,23 @@ fn own_folder<'a>(held: &'a Held, r: &Record) -> Result<&'a Path, Error> {
     own.ok_or_else(|| Error::io("cannot write", file, std::io::Error::other("the lock held is another record's")))
 }
 
-/// Writes `r` in full under a new temporary name in `records` and synchronises it. Returns that
-/// name. The name is made exclusively, so nothing under it, a link included, is written through.
-/// A record the reader would refuse for its size once it names the largest process id there is
-/// is refused first, and nothing is written.
-fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
+/// Writes `r` in full under a new temporary name beside its record, whose lock `held` must be,
+/// and synchronises it. Returns that name: `.record-`, the record's name, `-` and 8 random
+/// characters, `.tmp`. The caller holds that lock until it has linked or renamed the file and
+/// tried to remove it, so [`clear_temporaries`] knows from the name which lock to try. The name is
+/// made exclusively, so nothing under it, a link included, is written through. A record the reader
+/// would refuse for its size once it names the largest process id there is is refused first, and
+/// nothing is written.
+fn write_tmp(held: &Held, r: &Record) -> Result<PathBuf, Error> {
     use std::io::Write;
+    let records = own_folder(held, r)?;
     let json = |r: &Record| serde_json::to_vec_pretty(r).map_err(|e| Error::io("cannot write", records, std::io::Error::other(e)));
     let largest = json(&Record { server_pid: Some(u32::MAX), ..r.clone() })?.len();
     if !fits(largest) {
         return Err(Error::RecordTooLarge { project: r.data_dir.clone(), len: largest, max: CAP });
     }
     let bytes = json(r)?;
-    let tmp = records.join(format!(".record-{}.tmp", crate::secret::random_name(8)?));
+    let tmp = records.join(format!(".record-{}-{}.tmp", name(&r.data_dir), crate::secret::random_name(8)?));
     // A name that is taken is another file's: only one this call made is removed again.
     let mut f = std::fs::File::create_new(&tmp).map_err(|e| Error::io("cannot write", &tmp, e))?;
     match f.write_all(&bytes).and_then(|()| f.sync_all()) {
@@ -234,7 +243,7 @@ fn write_tmp(records: &Path, r: &Record) -> Result<PathBuf, Error> {
 /// the record is about was started. Returns whether it was written.
 pub(crate) fn write_new(held: &Held, r: &Record) -> Result<bool, Error> {
     let file = &held.record;
-    let tmp = write_tmp(own_folder(held, r)?, r)?;
+    let tmp = write_tmp(held, r)?;
     #[cfg(test)]
     tests::in_change(file);
     let linked = std::fs::hard_link(&tmp, file);
@@ -257,7 +266,7 @@ pub(crate) fn complete(held: &Held, pending: &Record, server_pid: u32) -> Result
         return Err(Error::io("cannot complete", file, std::io::Error::other("it is no longer this start's record")));
     }
     let done = Record { server_pid: Some(server_pid), ..pending.clone() };
-    let tmp = write_tmp(own_folder(held, &done)?, &done)?;
+    let tmp = write_tmp(held, &done)?;
     std::fs::rename(&tmp, file).map_err(|e| {
         remove(&tmp);
         Error::io("cannot write", file, e)
@@ -323,6 +332,59 @@ pub(crate) fn remove(file: &Path) {
     }
 }
 
+/// The record name in `file`, if it is a temporary file's name exactly as [`write_tmp`] makes it.
+fn temporary_of(file: &std::ffi::OsStr) -> Option<&str> {
+    let (record, random) = file.to_str()?.strip_prefix(".record-")?.strip_suffix(".tmp")?.split_once('-')?;
+    let hex = record.len() == 16 && record.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    (hex && random.len() == 8 && random.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())).then_some(record)
+}
+
+/// Removes, for the start-up sweep, the temporary files in `records` of writes no longer under
+/// way: those of a writer killed in the middle of a write, or of one whose removal failed. A
+/// writer holds its record's lock from before it makes its temporary file until it has linked or
+/// renamed it and tried to remove it, and the file is named for that record: one whose record's
+/// lock can be had, without a wait, belongs to no write under way, and goes under that lock. One
+/// under a lock held is left, since its writer may be under way. Only what is a plain file when
+/// looked at goes, a second name of a record too (the record keeps its own); a link or a folder
+/// stays, and no removal follows a link. What is left is logged.
+pub(crate) fn clear_temporaries(records: &Path) {
+    let entries = match std::fs::read_dir(records) {
+        Ok(entries) => entries,
+        Err(e) => {
+            log::warn!("the temporary server records in {} stay: {e}", records.display());
+            return;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            // On Windows a listing does not end after an error, which could come back each time.
+            Err(e) => {
+                log::warn!("the temporary server records in {} were not all looked at: {e}", records.display());
+                break;
+            }
+        };
+        let (tmp, file) = (entry.path(), entry.file_name());
+        let Some(record) = temporary_of(&file) else { continue };
+        let left = match hold(&records.join(format!("{record}.json")), Duration::ZERO) {
+            Ok(_held) => match std::fs::symlink_metadata(&tmp) {
+                Ok(m) if m.is_file() => std::fs::remove_file(&tmp).err(),
+                Ok(_) => Some(std::io::Error::other("it is not a plain file")),
+                Err(e) => Some(e),
+            },
+            Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::TimedOut => {
+                Some(std::io::Error::other("its record's lock is held, so a change of it may be under way"))
+            }
+            Err(e) => Some(std::io::Error::other(e.to_string())),
+        };
+        match left {
+            None => log::info!("the temporary server record {} was removed: no write of its record was under way", tmp.display()),
+            Some(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Some(e) => log::warn!("the temporary server record {} stays: {e}", tmp.display()),
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -352,6 +414,12 @@ pub(crate) mod tests {
     /// Writes `r` as a start does: under its record's lock, taken first.
     pub(crate) fn write_new(records: &Path, r: &Record) -> Result<bool, Error> {
         super::write_new(&hold(&path(records, &r.data_dir), LOCK_WAIT)?, r)
+    }
+
+    /// A temporary file's name as a writer of the record of `data_dir` could give it, with
+    /// `random` for its random part.
+    pub(crate) fn temporary(records: &Path, data_dir: &str, random: &str) -> PathBuf {
+        records.join(format!(".record-{}-{random}.tmp", name(data_dir)))
     }
 
     /// Sets the next change's hook to try another change right there, where a second start or a
@@ -586,6 +654,67 @@ pub(crate) mod tests {
             std::fs::write(path(&dir.0, "/p/a"), old.replace(r#""server_pid":7,"#, pid)).unwrap();
             assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(Record { server_pid: None, ..rec("/p/a") }));
         }
+    }
+
+    /// A writer's temporary file is named for its record, as the middle of a write shows. Left as
+    /// a second name of the record, as by a writer killed after linking it, it goes, and the record
+    /// still reads.
+    #[test]
+    fn a_temporary_file_is_named_for_its_record_and_a_second_name_goes() {
+        let dir = crate::home::tests::Scratch::new("tmp-name");
+        let (seen, records) = (std::rc::Rc::new(RefCell::new(Vec::new())), dir.0.clone());
+        let names = seen.clone();
+        IN_CHANGE.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move |_: &Path| {
+                let all = std::fs::read_dir(&records).unwrap().flatten().map(|e| e.file_name().into_string().unwrap());
+                names.borrow_mut().extend(all.filter(|n| n.starts_with(".record-")));
+                // A name the writer will not remove, as one killed before the removal leaves it.
+                std::fs::hard_link(records.join(&names.borrow()[0]), temporary(&records, "/p/a", "zzzzzzzz")).unwrap();
+            }))
+        });
+        assert!(write_new(&dir.0, &rec("/p/a")).unwrap());
+        let seen = seen.take();
+        let random = seen.first().and_then(|n| n.strip_prefix(&format!(".record-{}-", name("/p/a")))?.strip_suffix(".tmp"));
+        assert!(seen.len() == 1 && random.is_some_and(|r| r.len() == 8), "{seen:?}");
+        assert_eq!(seen.first().and_then(|n| temporary_of(n.as_ref())), Some(name("/p/a").as_str()), "the sweep knows the name");
+        assert_eq!(std::fs::read(temporary(&dir.0, "/p/a", "zzzzzzzz")).unwrap(), std::fs::read(path(&dir.0, "/p/a")).unwrap());
+        clear_temporaries(&dir.0);
+        assert_eq!(read(&dir.0, "/p/a").unwrap(), Some(rec("/p/a")));
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2, "the record and its lock: no temporary file");
+    }
+
+    /// A temporary file goes only while its record's lock can be had, taken without a wait, and
+    /// only a plain file under exactly the name a writer gives. A file whose record's lock cannot
+    /// be taken at all, a link under such a name, what it points to, a folder under it, a name of
+    /// the earlier form and the other files beside the records stay.
+    #[test]
+    fn a_temporary_file_goes_only_while_its_records_lock_is_free() {
+        let dir = crate::home::tests::Scratch::new("tmp-clear");
+        let (free, busy, folder) =
+            (temporary(&dir.0, "/p/a", "aaaaaaaa"), temporary(&dir.0, "/p/b", "bbbbbbbb"), temporary(&dir.0, "/p/d", "folder00"));
+        let (unlockable, other) = (temporary(&dir.0, "/p/x", "xxxxxxxx"), [".record-abcd1234.tmp", "foo.tmp"].map(|n| dir.0.join(n)));
+        let (lock, damaged) = (path(&dir.0, "/p/e").with_extension("lock"), path(&dir.0, "/p/e").with_extension("json.damaged-1"));
+        let kept = [&busy, &unlockable, &other[0], &other[1], &lock, &damaged];
+        for file in [&free].into_iter().chain(kept) {
+            std::fs::write(file, "{}").unwrap();
+        }
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::create_dir(path(&dir.0, "/p/x").with_extension("lock")).unwrap();
+        #[cfg(unix)]
+        let link = temporary(&dir.0, "/p/c", "linklink");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&other[1], &link).unwrap();
+        let held = hold(&path(&dir.0, "/p/b"), LOCK_WAIT).unwrap();
+        // Were the lock waited for, its holder would let go then, and its file would go.
+        WAITING.with(|h| *h.borrow_mut() = Some(Box::new(move || drop(held))));
+        clear_temporaries(&dir.0);
+        assert!(WAITING.with(|h| h.borrow_mut().take()).is_some(), "the lock was not waited for");
+        assert!(!free.exists() && folder.is_dir(), "the file under a free lock went, and the folder stays");
+        for file in kept {
+            assert!(file.is_file(), "{} stays", file.display());
+        }
+        #[cfg(unix)]
+        assert!(link.symlink_metadata().is_ok_and(|m| m.file_type().is_symlink()), "the link stays");
     }
 
     /// A start that wrote its record over a damaged one between a reader's first look and its
