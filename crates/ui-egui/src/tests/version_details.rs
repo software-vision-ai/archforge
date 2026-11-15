@@ -1181,6 +1181,131 @@ fn the_keys_reach_and_open_a_related_link_out_of_view() {
     });
 }
 
+/// Shop open with 120 related changes, far more than a page; gives the links in order and where the cards start.
+fn many_related(h: &mut Harness<'static, Shell>, host: &SavingHost) -> (Vec<String>, f32) {
+    let (row, key) = shop_and_warehouse(h, host);
+    let many: Vec<_> = (0..120u8).map(|n| Difference { id: Uuid([n + 1; 16]), ..row.clone() }).collect();
+    let rows = [h.state().versions.changes.clone(), many.clone()].concat();
+    crate::versions::settle_changes(h.state_mut(), key.clone(), Ok(rows));
+    land_related(h, key, many.iter().map(|d| d.id).collect());
+    (many.iter().map(|d| related_link(d.id)).collect(), rect_of(h, SUMMARY).top())
+}
+
+/// How far the cards that start at `top` are scrolled: by the summary while it shows, else by a
+/// link that shows, 28 under the one before it, the first of `links` 28 under `first` unscrolled.
+fn cards_scroll(h: &Harness<'static, Shell>, top: f32, (links, first): (&[String], f32)) -> f32 {
+    if has_id(h, SUMMARY) {
+        return top - rect_of(h, SUMMARY).top();
+    }
+    let (i, link) = links.iter().enumerate().find(|(_, id)| has_id(h, id)).unwrap();
+    first + 28.0 * (i + 1) as f32 - rect_of(h, link).top()
+}
+
+/// While a related link has the keyboard, Page Down and Page Up scroll the cards by what shows less
+/// a row and End and Home to their ends, the link keeping the keyboard; not with the keyboard
+/// nowhere, with a menu open, the in-window menu bar's too, or with the control key as Windows and
+/// Linux send it.
+#[test]
+fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
+    use egui::Key::{End, Home, PageDown, PageUp};
+    in_both(|h, host| {
+        let (links, top) = many_related(h, host);
+        let at = (links.as_slice(), rect_of(h, &links[0]).top() - 28.0);
+        let page = rect_of(h, "workspace.explorer.resize").bottom() - top - 8.0 - 28.0;
+        let still = |h: &mut Harness<'static, Shell>, key_, modifiers, why: &str| {
+            let was = cards_scroll(h, top, at);
+            key(h, key_, modifiers);
+            assert_eq!(cards_scroll(h, top, at), was, "{why}: {key_:?}");
+        };
+        for key_ in [PageDown, End] {
+            still(h, key_, egui::Modifiers::NONE, "the keyboard nowhere");
+        }
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
+        h.run();
+        for (key_, reaches) in [(PageDown, page), (PageDown, 2.0 * page), (PageUp, page), (Home, 0.0)] {
+            key(h, key_, egui::Modifiers::NONE);
+            assert_eq!(cards_scroll(h, top, at), reaches, "{key_:?}");
+            assert!(focused_on(h, &links[0]), "{key_:?} leaves the keyboard on the link");
+        }
+        key(h, End, egui::Modifiers::NONE);
+        let end = cards_scroll(h, top, at);
+        assert!(has_id(h, &links[119]) && !has_id(h, &links[0]) && end > 2.0 * page, "End went to the last link ({end})");
+        still(h, PageDown, egui::Modifiers::NONE, "at the end");
+        key(h, Home, egui::Modifiers::NONE);
+        still(h, PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), "the control key");
+        h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
+        still(h, End, egui::Modifiers::NONE, "a menu open");
+        assert!(h.state().panels.menu.is_some() && focused_on(h, &links[0]), "the menu stayed open over the link");
+        h.state_mut().panels.menu = None;
+        // The in-window menu bar opened by F10 leaves the keyboard on the link; its keys are its own.
+        h.state_mut().in_window_menu = true;
+        key(h, egui::Key::F10, egui::Modifiers::NONE);
+        assert!(h.state().menu_bar.open.is_some() && focused_on(h, &links[0]), "F10 opens the bar's first menu");
+        still(h, PageDown, egui::Modifiers::NONE, "the menu bar open");
+        key(h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().menu_bar.open.is_none() && focused_on(h, &links[0]), "Escape gives the keys back to the link");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert_eq!(cards_scroll(h, top, at), page, "the cards take Page Down again");
+    });
+}
+
+/// A click opening a menu of the in-window bar is read as the strip is drawn, after the frame's keys
+/// were let through, so a Page Down let go in the same frame finds the bar open over the cards, the
+/// link still holding the keyboard, and leaves the cards where they were.
+#[test]
+fn a_page_key_with_the_click_that_opens_the_menu_bar_leaves_the_cards() {
+    in_both(|h, host| {
+        let (links, top) = many_related(h, host);
+        let at = (links.as_slice(), rect_of(h, &links[0]).top() - 28.0);
+        h.state_mut().in_window_menu = true;
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
+        h.run();
+        let (title, primary) = (rect_of(h, "strip.menu.file").center(), egui::PointerButton::Primary);
+        h.event(egui::Event::PointerMoved(title));
+        h.event(egui::Event::PointerButton { pos: title, button: primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.step();
+        assert!(h.state().menu_bar.open.is_none() && focused_on(h, &links[0]), "the press keeps the keyboard on the link");
+        // kittest runs a frame per event it queues, so the release and the key go in by hand, together.
+        let down = egui::Event::Key { key: egui::Key::PageDown, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE };
+        h.input_mut()
+            .events
+            .extend([egui::Event::PointerButton { pos: title, button: primary, pressed: false, modifiers: egui::Modifiers::NONE }, down]);
+        h.step();
+        assert_eq!(h.state().menu_bar.open, Some("file"), "the click opened the bar's File menu");
+        assert_eq!(cards_scroll(h, top, at), 0.0, "the cards stayed where they were");
+    });
+}
+
+/// In a window of the least height, under a refusal long enough that the cards show less than two rows, Page
+/// Down still moves them a row, and Page Up back.
+#[test]
+fn a_page_key_moves_the_cards_at_least_a_row() {
+    use egui::Key::{PageDown, PageUp};
+    in_both(|h, host| {
+        let (links, tall) = many_related(h, host);
+        let first = rect_of(h, &links[0]).top() - 28.0;
+        h.set_size(egui::vec2(1600.0, 400.0));
+        let shows = |h: &Harness<'static, Shell>| rect_of(h, "workspace.explorer.resize").bottom() - rect_of(h, SUMMARY).top();
+        for n in 1..40 {
+            h.state_mut().canvas.notice = Some("Refused by a panel. ".repeat(n));
+            h.run_steps(2);
+            if !has_id(h, SUMMARY) || shows(h) < 64.0 {
+                break;
+            }
+        }
+        assert!(has_id(h, SUMMARY) && shows(h) < 64.0, "the cards show less than two rows");
+        // The cards start lower under the refusal, the links with them.
+        let top = rect_of(h, SUMMARY).top();
+        let at = (links.as_slice(), first + top - tall);
+        h.ctx.memory_mut(|m| m.request_focus(crate::widgets::egui_id(&links[0])));
+        h.run();
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert_eq!(cards_scroll(h, top, at), 28.0, "Page Down moved a row");
+        key(h, PageUp, egui::Modifiers::NONE);
+        assert_eq!(cards_scroll(h, top, at), 0.0, "Page Up moved back");
+    });
+}
+
 /// The ids a diagram comparison holds: the schema, the diagram, the boxes kept, gone, fresh and
 /// nested, the line and the box renamed.
 type Items = [String; 8];

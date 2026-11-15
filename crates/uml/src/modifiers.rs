@@ -777,7 +777,8 @@ pub struct Modifiers {
 
 /// The properties under `key`, `"subsets"` or `"redefines"`, at most [`MAX_TARGETS`], each a live
 /// element named once: each item an id as text, or an object with its `id`, as the reads give them
-/// (`{id, name}`). A refusal carries its reason typed, the list's kind of property in it.
+/// (`{id, name}`). A refusal carries its reason typed, the list's kind of property in it; an
+/// empty id is refused as no id given, never as no element with that id.
 fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, CommandError> {
     let kind = if key == "redefines" { "redefined property" } else { "subsetted property" };
     if items.len() > MAX_TARGETS {
@@ -795,6 +796,10 @@ fn targets(store: &Store, items: &[Json], key: &str) -> Result<Vec<Obj>, Command
             let said = format!("{item} is not a property's id; the list holds ids as text, or objects with an id as the reads give them");
             return Err(refuse(key, said).because(Reason::IdsExpected { kind }));
         };
+        if id.is_empty() {
+            let said = "an item gives no id; the list holds ids of attributes or association ends";
+            return Err(refuse(key, said).because(Reason::IdEmpty { kind }));
+        }
         let Some(o) = Uuid::parse(id).and_then(|u| store.by_uuid(u)).filter(|o| store.is_alive(*o)) else {
             let said = format!("there is no element {}; the list holds ids of attributes or association ends", short(id));
             return Err(refuse(key, said).because(Reason::NoElement { id: short(id) }));

@@ -516,7 +516,8 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
                 .or_else(|| profile_said(other))
                 .or_else(|| constraint_said(other))
                 .or_else(|| target_said(other))
-                .or_else(|| diagram_said(other));
+                .or_else(|| diagram_said(other))
+                .or_else(|| crate::er_said::said(other));
         }
     };
     let what = a_kind(kind)?;
@@ -620,6 +621,7 @@ fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooMany { kind: REDEFINED, max } => fmt(&tr("A property redefines at most {max} properties."), &[("max", &max.to_string())]),
         Reason::NamedTwice { kind: SUBSETTED | REDEFINED, .. } => tr("An element is named twice. Name each element once."),
         Reason::IdsExpected { kind: SUBSETTED | REDEFINED } => tr("Give the properties as a list of ids."),
+        Reason::IdEmpty { kind: SUBSETTED | REDEFINED } => tr("An item in the list has no id. Give each property's id."),
         Reason::NotAnItemKey { key } => fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", key)]),
         Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
         Reason::BuiltInNotLeaf { name } => fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", name)]),
@@ -781,7 +783,7 @@ fn set_and_end_said(reason: &archforge_engine::Reason) -> Option<String> {
 
 /// A kind of element as a refusal names it, with its article where the language has one; none for
 /// a kind the catalogues don't name.
-fn a_kind(kind: &str) -> Option<String> {
+pub(crate) fn a_kind(kind: &str) -> Option<String> {
     Some(match kind {
         "class" => tr_ctx("refusal", "a class"),
         "association class" => tr_ctx("refusal", "an association class"),
@@ -807,6 +809,15 @@ fn a_kind(kind: &str) -> Option<String> {
         "enum type" => tr_ctx("refusal", "an enum type"),
         "sequence" => tr_ctx("refusal", "a sequence"),
         "view" => tr_ctx("refusal", "a view"),
+        "constraint" => tr_ctx("refusal", "a constraint"),
+        "key" => tr_ctx("refusal", "a key"),
+        "primary key" => tr_ctx("refusal", "a primary key"),
+        "unique constraint" => tr_ctx("refusal", "a unique constraint"),
+        "foreign key" => tr_ctx("refusal", "a foreign key"),
+        "check" => tr_ctx("refusal", "a check"),
+        "index" => tr_ctx("refusal", "an index"),
+        "subtype" => tr_ctx("refusal", "a subtype"),
+        "key column" => tr_ctx("refusal", "a key column"),
         "skill" => tr_ctx("refusal", "a skill"),
         "association end" => tr_ctx("refusal", "an association end"),
         _ => return None,

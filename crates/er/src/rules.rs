@@ -1126,7 +1126,13 @@ fn constraint_names(store: &Store, s: Obj) -> Vec<(Obj, String)> {
 /// Whether `name` is free among the constraint names of `schema` (keys, foreign keys, checks and
 /// indexes), ignoring case, except for `except`.
 pub fn constraint_name_free(store: &Store, s: Obj, name: &str, except: Option<Obj>) -> bool {
-    !constraint_names(store, s).into_iter().any(|(c, n)| Some(c) != except && same_name(&n, name))
+    constraint_clash(store, s, name, except).is_none()
+}
+
+/// The name of the constraint of `schema`, other than `except`, that has `name` already, ignoring
+/// case; none when `name` is free ([`constraint_name_free`]).
+pub fn constraint_clash(store: &Store, s: Obj, name: &str, except: Option<Obj>) -> Option<String> {
+    constraint_names(store, s).into_iter().find(|(c, n)| Some(*c) != except && same_name(n, name)).map(|(_, n)| n)
 }
 
 /// Why an entity cannot be associative: it needs at least two foreign keys whose columns are all

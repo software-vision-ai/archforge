@@ -13,7 +13,7 @@ use crate::i18n::{fmt, tr};
 use crate::model_words::{kind_label, literal_label, property_label};
 use crate::settings::control;
 use crate::ux::{self, Palette, types};
-use crate::version_details::MARGIN;
+use crate::version_details::{MARGIN, page_keys};
 use crate::versions::{kind_look, when};
 
 /// The room between the cards, and from a side's eyebrow to its card.
@@ -35,7 +35,8 @@ const HEADING: f32 = 20.0;
 const AFTER_LIST: f32 = 7.0;
 
 /// Draws the summary, the cards of `sides` and their related changes from `top` to the end of `r`, scrolling as one, so a value
-/// stays level with itself across them. Everything comes from the sides already held: nothing here asks the host.
+/// stays level with itself across them; Page Up, Page Down, Home and End scroll them while a related link has the keyboard.
+/// Everything comes from the sides already held: nothing here asks the host.
 pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, top: f32, sides: &ElementSides) {
     let Some(universe) = shell.session.as_ref().map(|s| s.doc().universe().clone()) else { return };
     let head = head_before(shell);
@@ -46,9 +47,18 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let tree = Rect::from_min_max(pos2(r.left(), top), pos2(r.right() - 1.0, r.bottom().max(top)));
     let links = related::links(&shell.versions.changes, &sides.lists.related);
     let under = related::height(links.len());
+    // The page keys are the cards' while a link of theirs has the keyboard, so no text field has
+    // it, and no menu is open (AR-481), a panel's or the in-window bar's. A bar open as the frame
+    // starts holds every key from the window (`hold_keys`), but a click opening it is read as the
+    // strip is drawn, above the cards, so a key of that frame still comes here and meets it open.
+    let paging = related::keyed(shell, ui.ctx(), &links).is_some() && shell.panels.menu.is_none() && shell.menu_bar.open.is_none();
     let Some(o) = shell.versions.element.as_mut() else { return };
     let lists = lists_height(&sides.lists.before).max(lists_height(&sides.lists.after));
     let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + lists + BELOW + under;
+    if paging {
+        // A page is what shows, as scroll_tree measures it, less a row, and never less than a row.
+        page_keys(ui, &mut o.scroll.offset, (tree.bottom() - top - 8.0 - ROW).max(ROW));
+    }
     let offset = scroll_tree(ui, p, tree, top, sides.fields.len(), ROW, tail, true, None, &mut o.scroll);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(tree));
     clip.set_clip_rect(tree);

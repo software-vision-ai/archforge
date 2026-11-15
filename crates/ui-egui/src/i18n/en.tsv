@@ -571,6 +571,10 @@ str		A name has to be one line.	A name has to be one line.
 str		A name can't be empty.	A name can't be empty.
 str		There is {what} named {name} already.	There is {what} named {name} already.
 str		{what} cannot depend on itself.	{what} cannot depend on itself.
+str		No id is given. Give the id of {what}.	No id is given. Give the id of {what}.
+str		{name} is not {what}.	{name} is not {what}.
+str		Give the key's columns as a list of ids.	Give the key's columns as a list of ids.
+str		A key holds at most {max} columns.	A key holds at most {max} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		The text can't be empty.	The text can't be empty.
@@ -603,6 +607,15 @@ str	refusal	a domain	a domain
 str	refusal	an enum type	an enum type
 str	refusal	a sequence	a sequence
 str	refusal	a view	a view
+str	refusal	a constraint	a constraint
+str	refusal	a key	a key
+str	refusal	a primary key	a primary key
+str	refusal	a unique constraint	a unique constraint
+str	refusal	a foreign key	a foreign key
+str	refusal	a check	a check
+str	refusal	an index	an index
+str	refusal	a subtype	a subtype
+str	refusal	a key column	a key column
 str	refusal	a skill	a skill
 str	refusal	an association end	an association end
 str		A name can't start or end with a space.	A name can't start or end with a space.
@@ -1448,6 +1461,7 @@ str		A property chosen here is gone; choose again.	A property chosen here is gon
 str		A property subsets at most {max} properties.	A property subsets at most {max} properties.
 str		A property redefines at most {max} properties.	A property redefines at most {max} properties.
 str		Give the properties as a list of ids.	Give the properties as a list of ids.
+str		An item in the list has no id. Give each property's id.	An item in the list has no id. Give each property's id.
 str		{key} is not a key here. An item holds an id and a name.	{key} is not a key here. An item holds an id and a name.
 str		There is no element with the id {id}.	There is no element with the id {id}.
 str		A default value is at most {n} characters.	A default value is at most {n} characters.

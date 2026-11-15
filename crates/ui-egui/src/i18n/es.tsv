@@ -572,6 +572,10 @@ str		A name has to be one line.	Un nombre debe ocupar una sola línea.
 str		A name can't be empty.	Un nombre no puede estar vacío.
 str		There is {what} named {name} already.	Ya existe {what} con el nombre {name}.
 str		{what} cannot depend on itself.	{what} no puede depender de sí.
+str		No id is given. Give the id of {what}.	No se ha indicado ningún identificador. Indica el identificador para {what}.
+str		{name} is not {what}.	{name} no es {what}.
+str		Give the key's columns as a list of ids.	Indica las columnas de la clave como una lista de identificadores.
+str		A key holds at most {max} columns.	Una clave tiene como máximo {max} columnas.
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.
@@ -604,6 +608,15 @@ str	refusal	a domain	un dominio
 str	refusal	an enum type	un tipo enumerado
 str	refusal	a sequence	una secuencia
 str	refusal	a view	una vista
+str	refusal	a constraint	una restricción
+str	refusal	a key	una clave
+str	refusal	a primary key	una clave primaria
+str	refusal	a unique constraint	una restricción de unicidad
+str	refusal	a foreign key	una clave foránea
+str	refusal	a check	una comprobación
+str	refusal	an index	un índice
+str	refusal	a subtype	un subtipo
+str	refusal	a key column	una columna de clave
 str	refusal	a skill	una habilidad
 str	refusal	an association end	un extremo de asociación
 str		A name can't start or end with a space.	Un nombre no puede empezar ni terminar con un espacio.
@@ -1449,6 +1462,7 @@ str		A property chosen here is gone; choose again.	Una propiedad elegida aquí y
 str		A property subsets at most {max} properties.	Una propiedad es subconjunto de como máximo {max} propiedades.
 str		A property redefines at most {max} properties.	Una propiedad redefine como máximo {max} propiedades.
 str		Give the properties as a list of ids.	Indique las propiedades como una lista de identificadores.
+str		An item in the list has no id. Give each property's id.	Un elemento de la lista no tiene identificador. Indique el identificador de cada propiedad.
 str		{key} is not a key here. An item holds an id and a name.	{key} no es una clave aquí. Una entrada contiene un identificador y un nombre.
 str		There is no element with the id {id}.	No hay ningún elemento con el identificador {id}.
 str		A default value is at most {n} characters.	Un valor predeterminado tiene como máximo {n} caracteres.
