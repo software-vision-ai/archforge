@@ -131,7 +131,9 @@ follows, so every row can be reached; while a row has the keyboard, Page Up and 
 by a page, and Home and End to the first row and the last. After you click a row of **Models**, ↑
 and ↓ move the selection a row, Page Up and Page Down a page, and Home and End to the first and the
 last; the list follows the selection. With nothing selected, End selects the last row and the other
-three keys the first, as ↑ and ↓ do.
+three keys the first, as ↑ and ↓ do. When **Models** is folded away, the window is too narrow for
+it or another explorer shows, it lets these keys go to what shows; click a row of **Models** again
+to take them back.
 
 An element exists once in the model and can appear on many diagrams. Drag an element from Models
 onto a diagram to show it there.

@@ -209,7 +209,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   a row), the same keys move the selection, as ↑ and ↓ do, and the tree follows the selection;
   with nothing selected End selects the last row and the others the first. A page key always
   reveals the row it went to, even one that had the keyboard or the selection already; the wheel
-  never makes a tree follow.
+  never makes a tree follow. Models lets the keys go once it no longer shows (folded away, a
+  window too narrow for it, or another explorer shown by the rail, a screen reader or the View
+  menu), so they reach what does show; back on Models, a click on a row gives them to it again
+  (AR-524).
 - Deleting from the explorer asks first when the element is on diagrams or takes other elements
   with it (for ER, keys).
 - The Models and Diagrams trees scroll under their filter (wheel or trackpad, a thin thumb at the
