@@ -6746,6 +6746,26 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The selection's removal refused is said in the chosen language: an element removed where it is
+/// edited, and a part of a subtype's key without its subtype. In light and dark (AR-508).
+#[test]
+fn an_er_removal_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (reason, said) in [
+            (Reason::RemovedWhereEdited, "Dieses Element wird dort entfernt, wo es bearbeitet wird."),
+            (Reason::SubtypeKeyPart, "Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A column's generation refused is said in the chosen language by the rule it breaks, a column on
 /// a domain that would break with why in the same words, and a key or identity column asked to be
 /// nullable; a reason inside it this can't say leaves the whole to the engine's English. In light
@@ -6861,6 +6881,36 @@ fn what_an_er_column_is_typed_by_refused_is_said_in_the_chosen_language() {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
         assert_eq!(crate::panels::said(&Reason::EnumTypeTakesNo { what: "default" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A check's expression and a domain's checks refused are said in the chosen language: no
+/// expression in a constraint's words, too many checks, one named twice, an item of another shape,
+/// and an item's key the list does not take, also one without a name. In light and dark (AR-499).
+#[test]
+fn an_er_checks_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let takes = &["expression", "name"];
+        for (reason, said) in [
+            (Reason::NoExpression, "Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest."),
+            (Reason::TooMany { kind: "check", max: 32 }, "Geben Sie höchstens 32 Prüfbedingungen an."),
+            (
+                Reason::NamedTwice { kind: "check", name: "pos".into() },
+                "Zwei Prüfbedingungen heißen pos. Geben Sie jeder Prüfbedingung einen eigenen Namen.",
+            ),
+            (Reason::ItemsExpected { kind: "check" }, "Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen."),
+            (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
+            (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "index column" }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

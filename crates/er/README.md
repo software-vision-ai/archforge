@@ -170,7 +170,7 @@ minimum, maximum, cycle, ownedBy) and `View` (name, query, materialized).
 | `session_alone` | `pub fn session_alone(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String>`: a session over ER alone (with the core and the diagrams) and a Model root named `name`, for ER's tests and tools; a project's session is `archforge-notations`'s |
 | `universe_with`, `slabs`, `store`, `storage` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them; their tables |
 | `names::{kind, clash, RELATION, CONSTRAINT}` | the kind an ER element is told apart within by name in its owner, and the element a name would clash with there |
-| `rules::{name_problem, entity_name_free, relationship_name_free, first_twice, attribute_name_free, constraint_name_free, constraint_clash, schema_of, problems, notices, key_problem, key_columns_problem, KeyColumnsProblem, associative_problem, generation_problem, GenerationProblem, size_problem, SizeProblem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, generalization_parts, supertype_links, subtype_links, supertype_of, is_supertype_or_self, mapping_of, discriminator_of, subtyping_flags, generalization_problem, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check, EnumDefaultProblem, sequences_of, views_of, SequenceNumbers, sequence_numbers, owner_of_sequence, bound_of, sequence_problem, owned_by_problem, query_problem, MAX_QUERY}` | the rules, for commands and for a whole store |
+| `rules::{name_problem, entity_name_free, relationship_name_free, first_twice, attribute_name_free, constraint_name_free, constraint_clash, schema_of, problems, notices, key_problem, key_columns_problem, KeyColumnsProblem, associative_problem, generation_problem, GenerationProblem, size_problem, SizeProblem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, CheckProblem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, generalization_parts, supertype_links, subtype_links, supertype_of, is_supertype_or_self, mapping_of, discriminator_of, subtyping_flags, generalization_problem, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check, EnumDefaultProblem, sequences_of, views_of, SequenceNumbers, sequence_numbers, owner_of_sequence, bound_of, sequence_problem, owned_by_problem, query_problem, MAX_QUERY}` | the rules, for commands and for a whole store |
 | `figures::{card, line, slot_text, set_note, cardinality_text, end_mark, has_foreign_key, WORDS, PLURALS}` | what ER draws: a table's card with its columns and their PK and FK marks, dimmed when of another schema; a relationship's crow's foot line, dashed when it does not identify its child, green or orange with its key; a generalization's line to a hollow triangle with the set's facts; the words they say, for the shell's catalogue |
 | `commands::{remove_elements, describe_element, remove_element, remove_entity, remove_schema, dependents, index_dependents, keys_on, resolve, collapse, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, mapping_name, MAPPING_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
@@ -249,6 +249,22 @@ under `type`, as `DomainGives` of `"type"` or `EnumTypeTakesNo` of `"type"`. A s
 which no command reaches (see above), is typed as `DomainGives` or `EnumTypeTakesNo` of `"size"`,
 before the step (`size_allowed`) and inside it (`set_column_type`), and tested on those two
 directly. The English stays as it was.
+
+**Checks (AR-499).** A check's expression refused, of a table's check (`er.check.add`, `set`) and
+of a domain's, is typed as `rules::CheckProblem::reason` types it: none as `NoExpression`, a text
+rule broken as that rule's reason (`TooLong`, `ControlCharacter`, `EdgeSpace`), while
+`CheckProblem::said` keeps the English for the refusal and for `rules::problems`. A domain's list
+of checks is typed with the kind `"check"`: more than its limit as `TooMany`, an object's key other
+than `expression` and `name` as `UnknownKey` with the keys taken, an item neither text nor an object,
+or an object's expression or name that is not text, as `ItemsExpected`, and a name twice, whatever
+the case, as `NamedTwice` with the second spelling. Checks given as no list stay in English: the
+engine refuses that before the handler runs, as `checks` is an array parameter.
+
+**Refusals of a removal** (AR-508). `commands::remove_elements`, the selection's removal
+(`element.remove`), refuses an element of a kind removed where it is edited (a domain, an enum type,
+a check, an index and their parts) as `RemovedWhereEdited`, and a part of a subtype's key without
+its subtype, one of its two tables or their schema, as `SubtypeKeyPart`. A cascade too deep keeps
+its `TooDeep` through `er.schema.remove`, `er.entity.remove` and `element.remove` alike.
 
 **Tests.** `tests/er.rs`: the registry and the metamodel; every command's round trip on the store;
 refusals that name their key and change nothing; removing an entity with a core folder, comment and

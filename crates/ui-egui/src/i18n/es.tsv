@@ -611,6 +611,8 @@ str		Identifying relationships would run in a cycle between {child} and {parent}
 str		The foreign key points at this key already. Name the columns to change them.	La clave foránea ya apunta a esta clave. Indica las columnas para cambiarlas.
 str		The key {name} would break: {why}	La clave {name} dejaría de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Las claves construidas unas sobre otras superan aquí los {max} niveles o forman un ciclo.
+str		This element is removed where it is edited.	Este elemento se elimina donde se edita.
+str		This is part of a subtype's key, which goes only with its subtype.	Esto forma parte de la clave de un subtipo y solo se elimina con su subtipo.
 str		Only a computed column takes an expression.	Solo una columna calculada admite una expresión.
 str		A computed column needs an expression.	Una columna calculada necesita una expresión.
 str		A computed column takes no default.	Una columna calculada no admite valor por defecto.
@@ -1575,6 +1577,11 @@ str		A property redefines at most {max} properties.	Una propiedad redefine como 
 str		Give the properties as a list of ids.	Indique las propiedades como una lista de identificadores.
 str		An item in the list has no id. Give each property's id.	Un elemento de la lista no tiene identificador. Indique el identificador de cada propiedad.
 str		{key} is not a key here. An item holds an id and a name.	{key} no es una clave aquí. Una entrada contiene un identificador y un nombre.
+str		Give at most {max} checks.	Indica como máximo {max} comprobaciones.
+str		Two checks are named {name}. Give each check its own name.	Dos comprobaciones se llaman {name}. Da a cada comprobación su propio nombre.
+str		Give each check as text, or as an object with an expression and a name.	Indica cada comprobación como texto o como un objeto con una expresión y un nombre.
+str		An item takes no {key}. It takes {takes}.	Una entrada no admite {key}. Admite {takes}.
+str		An item holds a key without a name. It takes {takes}.	Una entrada contiene una clave sin nombre. Admite {takes}.
 str		There is no element with the id {id}.	No hay ningún elemento con el identificador {id}.
 str		A default value is at most {n} characters.	Un valor predeterminado tiene como máximo {n} caracteres.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} no es un número entero, que es lo que es el valor predeterminado de un Integer, como 42.

@@ -900,6 +900,31 @@ fn describing_what_is_no_er_element_is_refused_typed() {
     assert_eq!(error.message, format!("{} is not an element of the ER model", st.uuid(m).unwrap()));
 }
 
+/// The selection's removal refuses, typed, a domain or an index, which are removed where they are
+/// edited, and a part of a subtype's key without its subtype, with the English as it was (AR-508).
+#[test]
+fn removing_with_the_selection_what_goes_elsewhere_is_refused_typed() {
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "counter", "base_type": "INTEGER" }));
+    let index = run(&mut s, "er.index.add", json!({ "entity": sm.customer, "columns": [sm.key] }));
+    let party = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Party" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": party, "name": "party_id", "type": "BIGINT", "primary_key": true }));
+    let person = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Person" }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": person }));
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    for (ids, reason, said) in [
+        (json!([dom]), archforge_engine::Reason::RemovedWhereEdited, format!("{dom} is not an ER element")),
+        (json!([sm.order, index]), archforge_engine::Reason::RemovedWhereEdited, format!("{index} is not an ER element")),
+        (json!([follower]), archforge_engine::Reason::SubtypeKeyPart, "a part of a subtype's key goes only with its generalization".into()),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute("element.remove", &json!({ "ids": ids })) else { panic!("{ids} is refused") };
+        assert_eq!((error.reason, error.key.as_deref(), error.message), (Some(reason), Some("ids"), said), "{ids}");
+        assert_eq!(picture(s.doc()), before, "{ids}: nothing goes");
+    }
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.
@@ -1979,6 +2004,99 @@ fn checks_and_indexes_are_named_constraints_of_a_table_and_go_with_their_columns
     all_rules_hold(s.doc());
 }
 
+/// A check's expression refused, of a table's check and of a domain's, and a domain's list of
+/// checks refused, carry their reason typed beside the English, which stays as it was: no
+/// expression, a text rule broken, too many checks, an item's key the list does not take, an item
+/// or an item's value of another shape, and a name twice (AR-499).
+#[test]
+fn a_checks_expression_and_a_domains_checks_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let check = run(&mut s, "er.check.add", json!({ "entity": sm.order, "expression": "total >= 0" }));
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "label", "base_type": "TEXT" }));
+    let domain = |checks: Json| json!({ "schema": sm.schema, "name": "d", "base_type": "TEXT", "checks": checks });
+    let long = "x".repeat(4097);
+    let (items, takes) = (Reason::ItemsExpected { kind: "check" }, &["expression", "name"]);
+    let twice = json!([{ "expression": "a", "name": "Pos" }, { "expression": "b", "name": "pos" }]);
+    for (cmd, p, key, reason, message) in [
+        ("er.check.add", json!({ "entity": sm.order, "expression": "   " }), "expression", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.check.set",
+            json!({ "check": check, "expression": " a" }),
+            "expression",
+            Reason::EdgeSpace,
+            "the expression starts or ends with a space",
+        ),
+        (
+            "er.check.add",
+            json!({ "entity": sm.order, "expression": long }),
+            "expression",
+            Reason::TooLong { max: 4096 },
+            "the expression is longer than 4096 characters",
+        ),
+        ("er.domain.add", domain(json!([" "])), "checks", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": ["a\u{7}"] }),
+            "checks",
+            Reason::ControlCharacter,
+            "the expression holds a control character",
+        ),
+        ("er.domain.add", domain(json!(vec!["a"; 33])), "checks", Reason::TooMany { kind: "check", max: 32 }, "at most 32 checks"),
+        (
+            "er.domain.add",
+            domain(json!([{ "expresion": "1 = 1" }])),
+            "checks",
+            Reason::UnknownKey { key: "expresion".into(), takes },
+            r#"a check takes no "expresion"; it takes expression, name"#,
+        ),
+        ("er.domain.add", domain(json!([{ "expression": 1 }])), "checks", items.clone(), "expression is 1, not text"),
+        ("er.domain.add", domain(json!([{ "expression": "a", "name": true }])), "checks", items.clone(), "name is true, not text"),
+        ("er.domain.add", domain(json!([7])), "checks", items, "7 is not a check"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": twice }),
+            "checks",
+            Reason::NamedTwice { kind: "check", name: "pos".into() },
+            "two checks are named pos",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    let empty = domain(json!([{ "": "1 = 1" }]));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.domain.add", &empty) else { panic!("a key without a name is refused") };
+    assert_eq!(error.reason, Some(Reason::UnknownKey { key: String::new(), takes }));
+}
+
+/// A loaded document's check without an expression and domain check with a control character,
+/// which no command makes, are named in the project's check in the English it had (AR-499).
+#[test]
+fn a_loaded_checks_expression_problem_keeps_its_english() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let c = st.create(CHECK_CONSTRAINT).unwrap();
+    st.set(c, check_constraint::NAME, Value::str("ck")).unwrap();
+    st.set(c, check_constraint::EXPRESSION, Value::str(" ")).unwrap();
+    st.push(e, entity::CHECK_CONSTRAINT, Value::Ref(c)).unwrap();
+    let d = st.create(DOMAIN).unwrap();
+    st.set(d, named_element::NAME, Value::str("D")).unwrap();
+    st.set(d, domain::BASE_TYPE, Value::str("TEXT")).unwrap();
+    st.push(s, schema::DOMAIN, Value::Ref(d)).unwrap();
+    let dc = st.create(DOMAIN_CHECK).unwrap();
+    st.set(dc, domain_check::EXPRESSION, Value::str("a\u{7}")).unwrap();
+    st.push(d, domain::CHECK, Value::Ref(dc)).unwrap();
+    let found = problems(&st);
+    for said in ["the check ck: a check needs an expression", "the domain D: the expression holds a control character"] {
+        assert!(found.iter().any(|p| p == said), "{said} in {found:?}");
+    }
+}
+
 #[test]
 fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_collapse() {
     let mut s = session();
@@ -2458,13 +2576,30 @@ fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
         }
         prev = Some((e, a, pk));
     }
+    let schema = st.uuid(s).unwrap().to_string();
+    let top = top.unwrap();
     let mut session = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
     let before = picture(session.doc());
-    let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
+    let e = session.execute("er.primary-key.remove", &json!({ "entity": top })).expect_err("too deep to cascade");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
     let EngineError::Failed { error, .. } = e else { panic!("refused by the handler") };
     assert_eq!(error.reason, Some(archforge_engine::Reason::TooDeep { kind: "key", max: 128 }), "typed from inside the step (AR-493)");
     assert_eq!(picture(session.doc()), before, "nothing of the attempt stays");
+    // Removing the table, its schema or the selection reaches as deep, and keeps the reason (AR-508).
+    for (cmd, p, key) in [
+        ("er.entity.remove", json!({ "entity": top }), "entity"),
+        ("er.schema.remove", json!({ "schema": schema }), "schema"),
+        ("element.remove", json!({ "ids": [top] }), "ids"),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = session.execute(cmd, &p) else { panic!("{cmd} is refused by the handler") };
+        let said = "the removal reaches deeper than 128 levels of keys built on each other";
+        assert_eq!(
+            (error.reason, error.key.as_deref(), error.message.as_str()),
+            (Some(archforge_engine::Reason::TooDeep { kind: "key", max: 128 }), Some(key), said),
+            "{cmd}"
+        );
+        assert_eq!(picture(session.doc()), before, "{cmd}: nothing of the attempt stays");
+    }
 }
 
 #[test]

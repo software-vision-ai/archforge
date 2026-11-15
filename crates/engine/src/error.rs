@@ -217,6 +217,9 @@ pub enum Reason {
     InNoProfile,
     /// A list that takes names of `kind`, each as text, is no list or holds something else.
     NamesExpected { kind: &'static str },
+    /// A list that takes items of `kind`, each as text or as an object of its keys, holds something
+    /// else, or an object whose key holds a value of another type.
+    ItemsExpected { kind: &'static str },
     /// The element is a stereotype application, which takes no stereotype itself.
     IsApplication,
     /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
@@ -283,6 +286,9 @@ pub enum Reason {
     IdsExpected { kind: &'static str },
     /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
     NotAnItemKey { key: String },
+    /// An item of a list, given as an object, holds `key`, cut to its first characters, where it
+    /// takes only the keys `takes`.
+    UnknownKey { key: String, takes: &'static [&'static str] },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },
     /// The built-in type `name` is never made leaf.
@@ -343,6 +349,12 @@ pub enum Reason {
     ArrangedTooFar,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
+    /// The element is of a kind its notation removes where it is edited, not with the selection, as
+    /// an ER domain, enum type, check or index.
+    RemovedWhereEdited,
+    /// The element is a part of a subtype's key, which goes only with its subtype, one of the
+    /// subtype's two tables or their schema.
+    SubtypeKeyPart,
     /// The elements of `notation` are not described yet.
     NotDescribable { notation: &'static str },
     /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's
