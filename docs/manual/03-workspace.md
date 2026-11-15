@@ -37,7 +37,7 @@ An open project fills the window with its workspace.
 On Windows and Linux the strip at the very top, on Home as well, also holds the **File**, **Edit**,
 **View**, **Model**, **Versions** and **Help** menus; on macOS those commands are in the system's menu bar. A click on a menu's name
 opens it or moves to it. **File** has the same groups on every system: **New project…**, **Open
-project…** and **Close project**, then **Save**, then **Generate…**; in the strip **Settings…** and
+project…** and **Close project** (⌘W, `Ctrl+W`), then **Save**, then **Generate…**; in the strip **Settings…** and
 **Exit** follow at its end, where macOS has them in its application menu. A few words follow the
 system: the last row of **File** is **Exit** there and **Quit Archforge** in the application menu on
 macOS, whose **Edit** menu writes **Select All**. On macOS a **Window** menu follows **Versions**, with

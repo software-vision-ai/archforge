@@ -2,9 +2,9 @@
 //! The toolkit's text field reads the control key with one of those letters as a deletion on
 //! every system: a character back, to the line's end, to its start, a word back. On macOS those
 //! are the system's own text keys and stay. Elsewhere the control key is the command key, so the
-//! same chord is an action's (Find…, History) or nobody's, and a field that deleted on it would
-//! lose text by surprise. One hook on the frame's input covers every field, since each of them
-//! reads its keys from that input.
+//! same chord is an action's (Find…, History, Close project) or nobody's, and a field that deleted
+//! on it would lose text by surprise. One hook on the frame's input covers every field, since each
+//! of them reads its keys from that input.
 
 use egui::{Event, Key, RawInput};
 

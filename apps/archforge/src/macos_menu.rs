@@ -311,6 +311,7 @@ mod tests {
             (NEWER, Some("CmdOrCtrl+Alt+ArrowRight")),
             (BACK, Some("CmdOrCtrl+Shift+H")),
             (FIND, Some("CmdOrCtrl+K")),
+            (CLOSE, Some("CmdOrCtrl+W")),
             (COMPARE, None),
             (NEW_BRANCH, None),
             (ZOOM_IN, None),
@@ -318,7 +319,6 @@ mod tests {
             (SKILLS, None),
             (ABOUT, None),
             (NEW, None),
-            (CLOSE, None),
         ];
         for (id, wanted) in keyed {
             assert!(!actions::label(&shell, id).is_empty(), "{id}");
