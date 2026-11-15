@@ -93,17 +93,20 @@ fn into_view(state: &mut TreeScroll, i: usize, pitch: f32, view: f32) {
 /// The row of `rows` rows `pitch` apart that Page Up, Page Down, Home or End moves to from the row
 /// `at` (AR-478): the last row whose top is at or above where [`crate::version_details::page_keys`]
 /// takes `at`'s top, going down, or the first at or below it, going up; a page is the `view` less a
-/// row, and at least a row. None when no such key was pressed.
+/// row, and at least a row. A key that goes nowhere, Home on the first row, gives `at`, which the
+/// caller reveals all the same. None when no such key was pressed: none was taken from the events.
 fn paged(ui: &egui::Ui, at: usize, rows: usize, pitch: f32, view: f32) -> Option<usize> {
     let top = |i: usize| i as f32 * pitch;
-    let mut to = top(at);
+    let (mut to, events) = (top(at), ui.input(|i| i.events.len()));
     crate::version_details::page_keys(ui, &mut to, (view - pitch).max(pitch));
-    if to > top(at) {
+    if ui.input(|i| i.events.len()) == events {
+        None
+    } else if to > top(at) {
         (0..rows).rposition(|i| top(i) <= to)
     } else if to < top(at) {
         (0..rows).position(|i| top(i) >= to)
     } else {
-        None
+        Some(at)
     }
 }
 

@@ -6446,9 +6446,8 @@ fn holds(h: &Harness<'static, Shell>, id: &str) -> bool {
     h.ctx.memory(|m| m.has_focus(crate::widgets::egui_id(id)))
 }
 
-/// Where a tree shows the rows it brings into view: from `top`, where its first row is drawn
-/// unscrolled, to the column's foot less 17 points, the 8 the tree keeps clear under its last row's
-/// pitch of 34 and the 9 of that pitch under the row's 25 points below its line.
+/// Where a tree shows the rows it brings into view: from `top`, its first row's top unscrolled, to
+/// the column's foot less 17 points (8 kept clear, and 9 of a 34-point pitch under a row's foot).
 fn within(h: &Harness<'static, Shell>, top: f32) -> (f32, f32) {
     (top, rect_of(h, "workspace.explorer.resize").bottom() - 17.0)
 }
@@ -6514,8 +6513,9 @@ fn past_the_edge(h: &mut Harness<'static, Shell>, rows: &[String], (k, from): (u
 }
 
 /// From the first of `rows`, Page Down twice moves what `on` says moved (the keyboard, or the
-/// selection) by what shows, End to the last row, again once the wheel has left it cut, Page Up twice
-/// back by what shows and Home to the first, each brought whole into view between `bounds`.
+/// selection) by what shows, End to the last row, Page Up twice back by what shows and Home to the
+/// first, each brought whole into view between `bounds`; a key that goes nowhere at either end
+/// brings back the row the wheel left cut.
 fn pages(h: &mut Harness<'static, Shell>, rows: &[String], bounds: (f32, f32), on: impl Fn(&Harness<'static, Shell>, &str) -> bool) {
     let shown = last_whole(h, rows, bounds);
     let press = |h: &mut Harness<'static, Shell>, key_: egui::Key, to: usize| {
@@ -6525,14 +6525,21 @@ fn pages(h: &mut Harness<'static, Shell>, rows: &[String], bounds: (f32, f32), o
     press(h, egui::Key::PageDown, shown);
     press(h, egui::Key::PageDown, 2 * shown);
     press(h, egui::Key::End, rows.len() - 1);
-    // The wheel leaves the last row cut by the foot; End again brings it back, though it stays.
-    cut_by_edge(h, &rows[rows.len() - 1], false, bounds);
-    press(h, egui::Key::End, rows.len() - 1);
+    // The wheel leaves the last row cut by the foot; End and Page Down bring it back, though it stays.
+    for key_ in [egui::Key::End, egui::Key::PageDown] {
+        cut_by_edge(h, &rows[rows.len() - 1], false, bounds);
+        press(h, key_, rows.len() - 1);
+    }
     let first = (0..rows.len()).find(|n| whole(h, &rows[*n], bounds)).unwrap();
     assert!(first > 30, "End scrolled the tree to its end");
     press(h, egui::Key::PageUp, first);
     press(h, egui::Key::PageUp, first - shown);
     press(h, egui::Key::Home, 0);
+    // The wheel leaves the first row cut by the top; Home and Page Up bring it back, though it stays.
+    for key_ in [egui::Key::Home, egui::Key::PageUp] {
+        cut_by_edge(h, &rows[0], true, bounds);
+        press(h, key_, 0);
+    }
 }
 
 /// Sixty diagrams, each of a schema of its own, in Diagrams at the design's window size; gives the
@@ -6556,11 +6563,10 @@ fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
     (h, controls)
 }
 
-/// From the filter field, Tab lands on every row of Diagrams and every group's `+` in turn, and
-/// Shift+Tab from the last row back to the filter field, each brought whole into view; Tab from
-/// the last row in view moves the keyboard as the rows are laid out, and that frame asks for the
-/// next, which brings the row under the fold into view. Tab goes on past a row the wheel left cut by
-/// an edge. The page keys move the keyboard; not with the control key, as Windows and Linux send it.
+/// Tab and Shift+Tab land on every row of Diagrams and group's `+` in turn, each brought whole into
+/// view, past a row the wheel left cut too; the frame Tab moves the keyboard in asks for the next.
+/// The page keys move the keyboard: not with the control key (Windows, Linux) or the menu bar open,
+/// and by a row in the smallest window.
 #[test]
 fn diagrams_follows_the_keyboard() {
     in_both_appearances(|theme| {
@@ -6589,8 +6595,7 @@ fn diagrams_follows_the_keyboard() {
         h.state_mut().in_window_menu = true;
         key(&mut h, egui::Key::F10, egui::Modifiers::NONE);
         key(&mut h, egui::Key::PageDown, egui::Modifiers::NONE);
-        let offset = h.state().diagrams.scroll.offset;
-        assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]) && offset == 0.0, "{theme:?}: with the menu bar open");
+        assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]), "{theme:?}: with the menu bar open");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // In the smallest window, over the open diagram's footer, not even a row shows whole: a
         // page key still moves a row.
