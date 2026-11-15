@@ -483,7 +483,10 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
 - The conversation follows the keyboard (AR-477): a link or button of it that Tab, Shift+Tab or a
   screen reader comes to is scrolled into view (a click moves nothing), and while one has the
   keyboard and no link's confirmation is open, Page Up and Page Down scroll it by what shows less a
-  line (a line at least), Home and End to either end; the composer keeps those keys. Every link is
+  line (a line at least), Home and End to either end; the composer keeps those keys. The
+  conversation itself is a Tab stop before its links (AR-487), so the keys reach one with no link
+  or button: a screen reader hears it as a log named "Conversation", a click never gives it the
+  keyboard, and coming to it scrolls nothing. Every link is
   laid out, in view or not, so Tab reaches each in turn; only what shows is listed. A reply coming
   in keeps the end in view only while the conversation was shown to its end, so a page key or Tab
   away from the end keeps the place.

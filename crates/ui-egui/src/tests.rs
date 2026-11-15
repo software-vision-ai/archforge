@@ -14893,6 +14893,13 @@ mod chat_keys {
         ids(h).into_iter().filter(|i| i.starts_with("workspace.canvas.node.")).count()
     }
 
+    /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
+    fn ringed(h: &Harness<'static, Shell>) -> bool {
+        let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == focus && r.rect == area.shrink(2.0));
+        h.output().shapes.iter().any(|c| ring(&c.shape))
+    }
+
     /// Six answered questions whose replies hold no link, at the design's window height, Order
     /// selected on the canvas: the transcript at its end, with nothing in it to take the keyboard
     /// but itself.
@@ -14924,13 +14931,14 @@ mod chat_keys {
             // The pointer leaves, so nothing shows for it; Tab from the agent's badge reaches the transcript.
             h.event(egui::Event::PointerMoved(egui::pos2(10.0, 600.0)));
             focus_on(&mut h, "workspace.chat.badge");
+            assert!(!ringed(&h), "{theme:?}: no ring while the badge has the keyboard");
             for _ in 0..8 {
                 if focused_on(&h, STOP) {
                     break;
                 }
                 key(&mut h, Key::Tab, Modifiers::NONE);
             }
-            assert!(focused_on(&h, STOP), "{theme:?}: Tab reached the transcript, not {:?}", focused(&h));
+            assert!(focused_on(&h, STOP) && ringed(&h), "{theme:?}: Tab reached the transcript, ringed, not {:?}", focused(&h));
             assert_eq!(scroll(&h), room, "{theme:?}: the keyboard coming to it moved nothing");
             h.key_down(Key::PageUp);
             h.step();

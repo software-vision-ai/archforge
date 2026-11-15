@@ -281,9 +281,10 @@ description, and HTML shows as text.
 
 The conversation keeps its end in view as a reply comes in, until you scroll up; then it stays where
 you are, and going back to the end keeps the end in view again. With the keyboard, Tab and Shift+Tab
-move through the links and buttons of the conversation and it follows, so every one can be reached;
-while one of them has the keyboard, Page Up and Page Down scroll the conversation by what shows, and
-Home and End go to its start and its end. In the box you type in, these keys stay with the box, and
+come to the conversation itself, before its links and buttons, and then move through those and it
+follows, so every one can be reached, also in a conversation that has none; while it or one of them
+has the keyboard, Page Up and Page Down scroll the conversation by what shows, and Home and End go
+to its start and its end. In the box you type in, these keys stay with the box, and
 while a link waits for you to confirm it they do not scroll.
 
 ### Read-only, or Allow changes

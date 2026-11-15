@@ -724,13 +724,14 @@ fn transcript_stop(shell: &mut Shell, ui: &egui::Ui, area: Rect) -> egui::Respon
 /// reader, is brought into view from there. Off its end, what comes in after leaves the place.
 fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), panel: &mut Panel, drawn: f32) {
     let focused = ui.memory(|m| m.focused());
-    // The transcript's own stop is no control of it to bring into view (AR-487).
-    let own = focused.filter(|id| *id == crate::widgets::egui_id(TRANSCRIPT));
+    // The transcript's own stop (AR-487) takes the keys too, but is laid out outside the stretch
+    // `now` looks in, as it is no control of it to bring into view.
+    let own = focused.is_some_and(|id| id == crate::widgets::egui_id(TRANSCRIPT));
     let now = focused.and_then(|id| Some((id, shell.registry.laid_out(id)?)));
-    let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id).or(own));
+    let was = std::mem::replace(&mut panel.held, now.map(|(id, _)| id));
     panel.area = Some(area);
     let before = panel.scroll;
-    if (now.is_some() || own.is_some()) && panel.link.is_none() {
+    if (now.is_some() || own) && panel.link.is_none() {
         crate::version_details::page_keys(ui, &mut panel.scroll, (area.height() - types::UI.line).max(types::UI.line));
     }
     // End's far offset becomes the real end before any place is worked out from it.
