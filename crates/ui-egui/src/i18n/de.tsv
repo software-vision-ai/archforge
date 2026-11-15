@@ -1306,6 +1306,25 @@ str		Give the values as a list of texts.	Geben Sie die Werte als Liste von Texte
 str		No element is given. Give its id.	Es ist kein Element angegeben. Geben Sie seine ID an.
 str		No stereotype is given. Give its id.	Es ist kein Stereotyp angegeben. Geben Sie seine ID an.
 str		No class diagram is given. Give its id.	Es ist kein Klassendiagramm angegeben. Geben Sie seine ID an.
+str		No diagram is given. Give its id.	Es ist kein Diagramm angegeben. Geben Sie seine ID an.
+str		No box is given. Give its id.	Es ist kein Kasten angegeben. Geben Sie seine ID an.
+str		No line is given. Give its id.	Es ist keine Linie angegeben. Geben Sie ihre ID an.
+str		No label is given. Give its id.	Es ist keine Beschriftung angegeben. Geben Sie ihre ID an.
+str		{name} is not a diagram.	{name} ist kein Diagramm.
+str		{name} is not a box on a diagram.	{name} ist kein Kasten in einem Diagramm.
+str		{name} is not a line on a diagram.	{name} ist keine Linie in einem Diagramm.
+str		{name} is not a label on a line.	{name} ist keine Beschriftung an einer Linie.
+str		The width is not between {min} and {max}.	Die Breite liegt nicht zwischen {min} und {max}.
+str		The height is not between {min} and {max}.	Die Höhe liegt nicht zwischen {min} und {max}.
+str		A diagram of this kind does not show {name}.	Ein Diagramm dieser Art zeigt {name} nicht.
+str		{name} is outside what this diagram shows.	{name} liegt außerhalb dessen, was dieses Diagramm zeigt.
+str		This diagram shows {name} already.	Dieses Diagramm zeigt {name} bereits.
+str		That box is on another diagram.	Dieser Kasten ist in einem anderen Diagramm.
+str		Boxes nest at most {max} deep.	Kästen lassen sich höchstens {max} Ebenen tief verschachteln.
+str		This box shows an element and draws its text. Only a note takes a text of its own.	Dieser Kasten zeigt ein Element und zeichnet dessen Text. Nur eine Notiz hat einen eigenen Text.
+str		A note's link is a straight line and does not bend.	Die Verbindung einer Notiz ist eine gerade Linie und knickt nicht ab.
+str		A line bends at most {max} times.	Eine Linie knickt höchstens {max}-mal ab.
+str		{notation} elements cannot be removed yet.	{notation}-Elemente lassen sich noch nicht entfernen.
 str		No property is given. Give its name or id.	Es ist keine Eigenschaft angegeben. Geben Sie ihren Namen oder ihre ID an.
 str		This element is gone.	Dieses Element gibt es nicht mehr.
 str		{name} is a template parameter of {template} and types only its members.	{name} ist ein Template-Parameter von {template} und typisiert nur dessen Member.

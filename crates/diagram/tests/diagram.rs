@@ -342,6 +342,69 @@ fn refusals_name_their_key_and_change_nothing() {
     let _ = sm.label;
 }
 
+/// The refusals of placing, a note's text and routing carry their reason typed beside the
+/// unchanged English, under the parameter each is about: an id missing or of no element, an element
+/// of the wrong kind, an element not shown or shown already, a box on another diagram or nested too
+/// deep, a size, a text, a box showing an element, a note's link, too many bends and a point's
+/// coordinates (AR-439).
+#[test]
+fn every_place_text_and_route_refusal_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    let (package, a, c) = (id(s.doc(), m.package), id(s.doc(), m.a), id(s.doc(), m.c));
+    let other = run(&mut s, "diagram.add", json!({ "kind": "toy.class" }));
+    let c_in_other = run(&mut s, "diagram.place", json!({ "diagram": other, "element": c, "x": 0, "y": 0 }));
+    let mut deep = sm.b.clone();
+    for i in 0..16 {
+        deep = run(&mut s, "diagram.note", json!({ "diagram": sm.diagram, "text": format!("level {i}"), "x": 0, "y": 0, "parent": deep }));
+    }
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    };
+    let place = |diagram: &str, element: &str, more: Json| {
+        let mut p = json!({ "diagram": diagram, "element": element, "x": 0, "y": 0 });
+        p.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+        p
+    };
+    let (d, none) = (sm.diagram.as_str(), json!({}));
+    check(&mut s, "diagram.place", place("", &c, none.clone()), "diagram", Reason::IdEmpty { kind: "diagram" }, "\"\" is not an id");
+    check(&mut s, "diagram.place", place(d, "", none.clone()), "element", Reason::IdEmpty { kind: "element" }, "\"\" is not an id");
+    check(&mut s, "diagram.place", place(d, "nope", none.clone()), "element", Reason::NoElement { id: "nope".into() }, "is not an id");
+    let not_a = Reason::NotA { kind: "diagram", name: sm.a.clone() };
+    check(&mut s, "diagram.place", place(&sm.a, &c, none.clone()), "diagram", not_a, "is not a diagram");
+    check(&mut s, "diagram.place", place(d, &package, none.clone()), "element", Reason::NotShown { name: "p".into() }, "does not show a package");
+    check(&mut s, "diagram.place", place(d, &a, none.clone()), "element", Reason::ShownAlready { name: "A".into() }, "shows this element already");
+    let parent = |p: &str| json!({ "parent": p });
+    check(&mut s, "diagram.place", place(d, &c, parent(&c_in_other)), "parent", Reason::OtherDiagram, "in another diagram");
+    let nested = Reason::TooMany { kind: "nesting level", max: 16 };
+    check(&mut s, "diagram.place", place(d, &c, parent(&deep)), "parent", nested, "nest at most 16 deep");
+    let narrow = Reason::SizeOutOfRange { side: "width" };
+    check(&mut s, "diagram.place", place(d, &c, json!({ "width": 5 })), "width", narrow, "the width is not between 20");
+    // A note's text, and a text set on a box that shows an element.
+    let note = |text: String| json!({ "diagram": d, "text": text, "x": 0, "y": 0 });
+    check(&mut s, "diagram.note", note("a\u{7}b".into()), "text", Reason::ControlCharacter, "holds a control character");
+    check(&mut s, "diagram.note", note(" x".into()), "text", Reason::EdgeSpace, "starts or ends with a space");
+    check(&mut s, "diagram.note", note("x".repeat(4097)), "text", Reason::TooLong { max: 4096 }, "longer than 4096");
+    let not_node = Reason::NotA { kind: "node", name: "A".into() };
+    check(&mut s, "diagram.set-text", json!({ "node": a, "text": "x" }), "node", not_node, "is not a node");
+    check(&mut s, "diagram.set-text", json!({ "node": sm.a, "text": "x" }), "node", Reason::ShowsElement, "draws its text");
+    // Routing: a note's link, too many bends, a point without a number y, and points too far.
+    let route = |edge: &str, points: Json| json!({ "edge": edge, "points": points });
+    check(&mut s, "diagram.route", route(&sm.anchor, json!([])), "edge", Reason::StraightLink, "a note link is straight");
+    let bends = (0..300).map(|i| json!({ "x": i, "y": i })).collect::<Vec<_>>();
+    let most = Reason::TooMany { kind: "waypoint", max: 256 };
+    check(&mut s, "diagram.route", route(&sm.edge, json!(bends)), "points", most, "at most 256 waypoints");
+    let nan = Reason::CoordinateNotANumber { axis: "y" };
+    check(&mut s, "diagram.route", route(&sm.edge, json!([{ "x": 1 }])), "points", nan, "every point needs a number y");
+    for (point, axis) in [(json!({ "x": 2e6, "y": 0 }), "x"), (json!({ "x": 0, "y": -2e6 }), "y")] {
+        let far = Reason::CoordinateTooFar { axis };
+        check(&mut s, "diagram.route", route(&sm.edge, json!([point])), "points", far, &format!("the {axis} is farther than"));
+    }
+}
+
 #[test]
 fn removing_an_element_takes_its_views_and_undo_brings_them_back() {
     let mut st = store();

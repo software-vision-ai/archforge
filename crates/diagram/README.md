@@ -53,7 +53,7 @@ tables.
 | `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `hit_keeping(x, y, keep)` (looking through the nodes `keep` leaves out), `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
 | `arrange::arrange` | `arrange(sizes, lines) -> Vec<(f64, f64)>`: boxes in layers along their lines, crossings few, groups side by side, lone boxes in rows |
 | `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
-| `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store |
+| `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store; `text_problem` typed as a `Problem` |
 | the generated constants, structs, `LabelPlace`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `diagram.{add, rename, remove, place, note, set-text, move, resize, unplace, connect,
@@ -62,11 +62,14 @@ connect-all, disconnect, route, label, unlabel, style, arrange}`, `view.open-dia
 the edges between them, so a multi-node drag is one step (the engine's `coalesce` key joins the
 steps of one drag); `diagram.style` sets a style as a whole and a call naming nothing removes it;
 `diagram.connect-all` adds an edge for every relationship whose both ends the diagram shows and
-which it does not show yet.
+which it does not show yet. A refusal of an id, an element of the wrong kind, a place, a size, a
+name or a note's text, an element placed where it is not shown or shown already, a box on another
+diagram or nested too deep, a note's link routed or a line bent too often, and a notation's elements
+it does not remove carries its reason typed for an interface to say (AR-439).
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name
-their key and change nothing; the cascades on the store with the delta inverted back; the grid's
+their key and change nothing, with their reasons typed; the cascades on the store with the delta inverted back; the grid's
 topmost node, nearest edge and viewport; the rules over hand-made data; the sweep; seeded random
 sequences with the rules and the store's validation checked after each step and undo back to the
 start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.

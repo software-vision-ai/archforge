@@ -1306,6 +1306,25 @@ str		Give the values as a list of texts.	请以文本列表的形式给出值。
 str		No element is given. Give its id.	未给出元素。请给出其 ID。
 str		No stereotype is given. Give its id.	未给出构造型。请给出其 ID。
 str		No class diagram is given. Give its id.	未给出类图。请给出其 ID。
+str		No diagram is given. Give its id.	未给出图。请给出其 ID。
+str		No box is given. Give its id.	未给出框。请给出其 ID。
+str		No line is given. Give its id.	未给出线。请给出其 ID。
+str		No label is given. Give its id.	未给出标签。请给出其 ID。
+str		{name} is not a diagram.	{name} 不是图。
+str		{name} is not a box on a diagram.	{name} 不是图上的框。
+str		{name} is not a line on a diagram.	{name} 不是图上的线。
+str		{name} is not a label on a line.	{name} 不是线上的标签。
+str		The width is not between {min} and {max}.	宽度不在 {min} 到 {max} 之间。
+str		The height is not between {min} and {max}.	高度不在 {min} 到 {max} 之间。
+str		A diagram of this kind does not show {name}.	此类图不显示 {name}。
+str		{name} is outside what this diagram shows.	{name} 超出了此图显示的范围。
+str		This diagram shows {name} already.	此图已显示 {name}。
+str		That box is on another diagram.	该框在另一个图上。
+str		Boxes nest at most {max} deep.	框最多嵌套 {max} 层。
+str		This box shows an element and draws its text. Only a note takes a text of its own.	此框显示一个元素并绘制其文本。只有备注才有自己的文本。
+str		A note's link is a straight line and does not bend.	备注的链接是一条直线，不能弯折。
+str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
+str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
 str		No property is given. Give its name or id.	未给出属性。请给出其名称或 ID。
 str		This element is gone.	此元素已不存在。
 str		{name} is a template parameter of {template} and types only its members.	{name} 是 {template} 的模板参数，只能作为其成员的类型。
