@@ -152,6 +152,16 @@ str		On this sequence · {n}	Zu dieser Sequenz · {n}
 str		from {start} by {increment}	ab {start} in Schritten von {increment}
 str		cycles	zyklisch
 str		owned by {column}	gehört zu {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} ist eine Spalte eines anderen Schemas. Eine Sequenz gehört zu einer Spalte ihres Schemas.
+str		The column {column} belongs to no table.	Die Spalte {column} gehört zu keiner Tabelle.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} hat keinen Typ. Eine Sequenz gehört zu einer Spalte mit ganzzahligem Typ.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} hat den Typ {type}. Eine Sequenz gehört zu einer Spalte mit ganzzahligem Typ.
+str		The increment can't be 0. A sequence moves by at least 1.	Die Schrittweite darf nicht 0 sein. Eine Sequenz bewegt sich um mindestens 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	Das Minimum „{value}“ ist keine ganze Zahl zwischen {min} und {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	Das Maximum „{value}“ ist keine ganze Zahl zwischen {min} und {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	Das Maximum {maximum} ist nicht größer als das Minimum {minimum}.
+str		The start {start} is below the minimum {minimum}.	Der Startwert {start} liegt unter dem Minimum {minimum}.
+str		The start {start} is above the maximum {maximum}.	Der Startwert {start} liegt über dem Maximum {maximum}.
 str	sequence	Start	Startwert
 str		Increment	Schrittweite
 str		Minimum	Minimum
@@ -1561,6 +1571,11 @@ str		A property redefines at most {max} properties.	Eine Eigenschaft redefiniert
 str		Give the properties as a list of ids.	Geben Sie die Eigenschaften als Liste von IDs an.
 str		An item in the list has no id. Give each property's id.	Ein Eintrag der Liste hat keine ID. Geben Sie die ID jeder Eigenschaft an.
 str		{key} is not a key here. An item holds an id and a name.	{key} ist hier kein Schlüssel. Ein Eintrag enthält eine ID und einen Namen.
+str		Give at most {max} checks.	Geben Sie höchstens {max} Prüfbedingungen an.
+str		Two checks are named {name}. Give each check its own name.	Zwei Prüfbedingungen heißen {name}. Geben Sie jeder Prüfbedingung einen eigenen Namen.
+str		Give each check as text, or as an object with an expression and a name.	Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen.
+str		An item takes no {key}. It takes {takes}.	Ein Eintrag kennt keinen Schlüssel {key}. Er kennt {takes}.
+str		An item holds a key without a name. It takes {takes}.	Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt {takes}.
 str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
 str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.

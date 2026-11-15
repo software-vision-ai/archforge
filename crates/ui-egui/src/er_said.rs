@@ -10,7 +10,10 @@
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
 //! a place past its table's last; a default none of an enum type's literals is UML's row. A
-//! column's or a domain's size (AR-496): the rule it breaks, with the type and the size.
+//! column's or a domain's size (AR-496): the rule it breaks, with the type and the size. Checks
+//! (AR-499): a domain's checks too many, one named twice, an item of another shape and an item's
+//! key the list does not take (said without a kind, for any list of items); an empty expression is
+//! a constraint's row.
 //! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
 //! without its subtype.
 
@@ -75,6 +78,17 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::WouldBreak { kind: "column", name, why } => {
             fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }
+        Reason::Sequence(rule) => sequence_said(rule),
+        Reason::ColumnOfOtherSchema { column } => {
+            fmt(&tr("{column} is a column of another schema. A sequence's owner is a column of its schema."), &[("column", column)])
+        }
+        Reason::InNoTable { column } => fmt(&tr("The column {column} belongs to no table."), &[("column", column)]),
+        Reason::NotIntegerType { column, ty } if ty.is_empty() => {
+            fmt(&tr("{column} has no type. A sequence's owner has a whole-number type."), &[("column", column)])
+        }
+        Reason::NotIntegerType { column, ty } => {
+            fmt(&tr("{column} is of type {type}. A sequence's owner has a whole-number type."), &[("column", column), ("type", ty)])
+        }
         Reason::Generation(rule) => generation_said(*rule),
         Reason::NotNullable => tr("A key or identity column may never be null."),
         Reason::SizeMisfit { rule, ty, value } => size_said(*rule, ty, *value),
@@ -82,9 +96,42 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::DomainGives { what: "collation" } => tr("A column on a domain takes the domain's collation."),
         Reason::FollowsNoColumn { name } => fmt(&tr("{name} follows no column."), &[("name", name)]),
         Reason::PastLastColumn { columns } => trn("The table has {n} column.", "The table has {n} columns.", u64::try_from(*columns).ok()?),
+        Reason::TooMany { kind: "check", max } => fmt(&tr("Give at most {max} checks."), &[("max", &max.to_string())]),
+        Reason::NamedTwice { kind: "check", name } => fmt(&tr("Two checks are named {name}. Give each check its own name."), &[("name", name)]),
+        Reason::ItemsExpected { kind: "check" } => tr("Give each check as text, or as an object with an expression and a name."),
+        Reason::UnknownKey { key, takes } => {
+            let template = if key.is_empty() {
+                tr("An item holds a key without a name. It takes {takes}.")
+            } else {
+                tr("An item takes no {key}. It takes {takes}.")
+            };
+            fmt(&template, &[("key", key), ("takes", &takes.join(", "))])
+        }
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })
+}
+
+/// The rule a sequence's numbers break, in the user's words (AR-507).
+fn sequence_said(rule: &archforge_engine::SequenceRule) -> String {
+    use archforge_engine::SequenceRule;
+    let (min, max) = (i64::MIN.to_string(), i64::MAX.to_string());
+    let unread = |template: String, value: &str| fmt(&template, &[("value", value), ("min", &min), ("max", &max)]);
+    match rule {
+        SequenceRule::IncrementZero => tr("The increment can't be 0. A sequence moves by at least 1."),
+        SequenceRule::MinimumUnread { value } => unread(tr("The minimum \"{value}\" is not a whole number between {min} and {max}."), value),
+        SequenceRule::MaximumUnread { value } => unread(tr("The maximum \"{value}\" is not a whole number between {min} and {max}."), value),
+        SequenceRule::MaximumNotAbove { maximum, minimum } => fmt(
+            &tr("The maximum {maximum} is not greater than the minimum {minimum}."),
+            &[("maximum", &maximum.to_string()), ("minimum", &minimum.to_string())],
+        ),
+        SequenceRule::StartBelow { start, minimum } => {
+            fmt(&tr("The start {start} is below the minimum {minimum}."), &[("start", &start.to_string()), ("minimum", &minimum.to_string())])
+        }
+        SequenceRule::StartAbove { start, maximum } => {
+            fmt(&tr("The start {start} is above the maximum {maximum}."), &[("start", &start.to_string()), ("maximum", &maximum.to_string())])
+        }
+    }
 }
 
 /// The rule a column's generation breaks, in the user's words (AR-494).

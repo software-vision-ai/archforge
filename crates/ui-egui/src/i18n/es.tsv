@@ -152,6 +152,16 @@ str		On this sequence · {n}	En esta secuencia · {n}
 str		from {start} by {increment}	desde {start}, paso {increment}
 str		cycles	cíclica
 str		owned by {column}	pertenece a {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} es una columna de otro esquema. Una secuencia pertenece a una columna de su esquema.
+str		The column {column} belongs to no table.	La columna {column} no pertenece a ninguna tabla.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} no tiene tipo. Una secuencia pertenece a una columna de tipo entero.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} es de tipo {type}. Una secuencia pertenece a una columna de tipo entero.
+str		The increment can't be 0. A sequence moves by at least 1.	El incremento no puede ser 0. Una secuencia avanza al menos 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	El mínimo «{value}» no es un número entero entre {min} y {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	El máximo «{value}» no es un número entero entre {min} y {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	El máximo {maximum} no es mayor que el mínimo {minimum}.
+str		The start {start} is below the minimum {minimum}.	El valor inicial {start} está por debajo del mínimo {minimum}.
+str		The start {start} is above the maximum {maximum}.	El valor inicial {start} está por encima del máximo {maximum}.
 str	sequence	Start	Valor inicial
 str		Increment	Incremento
 str		Minimum	Mínimo
@@ -1561,6 +1571,11 @@ str		A property redefines at most {max} properties.	Una propiedad redefine como 
 str		Give the properties as a list of ids.	Indique las propiedades como una lista de identificadores.
 str		An item in the list has no id. Give each property's id.	Un elemento de la lista no tiene identificador. Indique el identificador de cada propiedad.
 str		{key} is not a key here. An item holds an id and a name.	{key} no es una clave aquí. Una entrada contiene un identificador y un nombre.
+str		Give at most {max} checks.	Indica como máximo {max} comprobaciones.
+str		Two checks are named {name}. Give each check its own name.	Dos comprobaciones se llaman {name}. Da a cada comprobación su propio nombre.
+str		Give each check as text, or as an object with an expression and a name.	Indica cada comprobación como texto o como un objeto con una expresión y un nombre.
+str		An item takes no {key}. It takes {takes}.	Una entrada no admite {key}. Admite {takes}.
+str		An item holds a key without a name. It takes {takes}.	Una entrada contiene una clave sin nombre. Admite {takes}.
 str		There is no element with the id {id}.	No hay ningún elemento con el identificador {id}.
 str		A default value is at most {n} characters.	Un valor predeterminado tiene como máximo {n} caracteres.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} no es un número entero, que es lo que es el valor predeterminado de un Integer, como 42.

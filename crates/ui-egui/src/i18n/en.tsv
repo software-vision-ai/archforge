@@ -151,6 +151,16 @@ str		On this sequence · {n}	On this sequence · {n}
 str		from {start} by {increment}	from {start} by {increment}
 str		cycles	cycles
 str		owned by {column}	owned by {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} is a column of another schema. A sequence's owner is a column of its schema.
+str		The column {column} belongs to no table.	The column {column} belongs to no table.
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} has no type. A sequence's owner has a whole-number type.
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} is of type {type}. A sequence's owner has a whole-number type.
+str		The increment can't be 0. A sequence moves by at least 1.	The increment can't be 0. A sequence moves by at least 1.
+str		The minimum "{value}" is not a whole number between {min} and {max}.	The minimum "{value}" is not a whole number between {min} and {max}.
+str		The maximum "{value}" is not a whole number between {min} and {max}.	The maximum "{value}" is not a whole number between {min} and {max}.
+str		The maximum {maximum} is not greater than the minimum {minimum}.	The maximum {maximum} is not greater than the minimum {minimum}.
+str		The start {start} is below the minimum {minimum}.	The start {start} is below the minimum {minimum}.
+str		The start {start} is above the maximum {maximum}.	The start {start} is above the maximum {maximum}.
 str	sequence	Start	Start
 str		Increment	Increment
 str		Minimum	Minimum
@@ -1560,6 +1570,11 @@ str		A property redefines at most {max} properties.	A property redefines at most
 str		Give the properties as a list of ids.	Give the properties as a list of ids.
 str		An item in the list has no id. Give each property's id.	An item in the list has no id. Give each property's id.
 str		{key} is not a key here. An item holds an id and a name.	{key} is not a key here. An item holds an id and a name.
+str		Give at most {max} checks.	Give at most {max} checks.
+str		Two checks are named {name}. Give each check its own name.	Two checks are named {name}. Give each check its own name.
+str		Give each check as text, or as an object with an expression and a name.	Give each check as text, or as an object with an expression and a name.
+str		An item takes no {key}. It takes {takes}.	An item takes no {key}. It takes {takes}.
+str		An item holds a key without a name. It takes {takes}.	An item holds a key without a name. It takes {takes}.
 str		There is no element with the id {id}.	There is no element with the id {id}.
 str		A default value is at most {n} characters.	A default value is at most {n} characters.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} is not a whole number, which an Integer's default is, such as 42.

@@ -217,6 +217,9 @@ pub enum Reason {
     InNoProfile,
     /// A list that takes names of `kind`, each as text, is no list or holds something else.
     NamesExpected { kind: &'static str },
+    /// A list that takes items of `kind`, each as text or as an object of its keys, holds something
+    /// else, or an object whose key holds a value of another type.
+    ItemsExpected { kind: &'static str },
     /// The element is a stereotype application, which takes no stereotype itself.
     IsApplication,
     /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
@@ -283,6 +286,9 @@ pub enum Reason {
     IdsExpected { kind: &'static str },
     /// An item of a list of ids, given as an object, holds `key`, where it holds only `id` and `name`.
     NotAnItemKey { key: String },
+    /// An item of a list, given as an object, holds `key`, cut to its first characters, where it
+    /// takes only the keys `takes`.
+    UnknownKey { key: String, takes: &'static [&'static str] },
     /// No element of the model has the id `id`, cut to its first characters.
     NoElement { id: String },
     /// The built-in type `name` is never made leaf.
@@ -378,6 +384,14 @@ pub enum Reason {
     /// What of `kind` is built on each other (keys, as `"key"`) runs deeper than `max` levels, or
     /// in a loop.
     TooDeep { kind: &'static str, max: u32 },
+    /// A sequence's numbers do not fit each other, by the rule they break.
+    Sequence(SequenceRule),
+    /// The column `column`, as `table.column`, is of another schema than the sequence it would own.
+    ColumnOfOtherSchema { column: Box<str> },
+    /// The column `column` belongs to no table.
+    InNoTable { column: Box<str> },
+    /// The column `column` is of the type `ty`, empty for none, which is no whole-number type.
+    NotIntegerType { column: Box<str>, ty: Box<str> },
     /// A column's generation does not fit it, by the rule it breaks.
     Generation(GenerationRule),
     /// A key or identity column is asked to be nullable, which it never is.
@@ -392,6 +406,23 @@ pub enum Reason {
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.
     PastLastColumn { columns: usize },
+}
+
+/// The rule a sequence's numbers break, in a [`Reason::Sequence`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SequenceRule {
+    /// The increment is 0, where a sequence moves by at least 1.
+    IncrementZero,
+    /// The minimum, as given and cut short, is no whole number of 64 bits.
+    MinimumUnread { value: Box<str> },
+    /// The maximum, as given and cut short, is no whole number of 64 bits.
+    MaximumUnread { value: Box<str> },
+    /// The maximum is not greater than the minimum.
+    MaximumNotAbove { maximum: i64, minimum: i64 },
+    /// The start is below the minimum.
+    StartBelow { start: i64, minimum: i64 },
+    /// The start is above the maximum.
+    StartAbove { start: i64, maximum: i64 },
 }
 
 /// The rule a column's generation breaks, in a [`Reason::Generation`].

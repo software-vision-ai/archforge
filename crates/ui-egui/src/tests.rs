@@ -6860,6 +6860,77 @@ fn an_er_columns_default_collation_place_and_link_refused_are_said_in_the_chosen
     crate::i18n::set_language("en");
 }
 
+/// A check's expression and a domain's checks refused are said in the chosen language: no
+/// expression in a constraint's words, too many checks, one named twice, an item of another shape,
+/// and an item's key the list does not take, also one without a name. In light and dark (AR-499).
+#[test]
+fn an_er_checks_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let takes = &["expression", "name"];
+        for (reason, said) in [
+            (Reason::NoExpression, "Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest."),
+            (Reason::TooMany { kind: "check", max: 32 }, "Geben Sie höchstens 32 Prüfbedingungen an."),
+            (
+                Reason::NamedTwice { kind: "check", name: "pos".into() },
+                "Zwei Prüfbedingungen heißen pos. Geben Sie jeder Prüfbedingung einen eigenen Namen.",
+            ),
+            (Reason::ItemsExpected { kind: "check" }, "Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen."),
+            (Reason::UnknownKey { key: "expresion".into(), takes }, "Ein Eintrag kennt keinen Schlüssel expresion. Er kennt expression, name."),
+            (Reason::UnknownKey { key: String::new(), takes }, "Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt expression, name."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "index column" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A sequence's numbers and owner and a view's query refused are said in the chosen language: each
+/// rule the numbers break, an owner of another schema, of no table, of no type and of a type that is
+/// no whole number, and a query by the text rules' rows. In light and dark (AR-507).
+#[test]
+fn an_er_sequences_numbers_owner_and_views_query_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::{Reason, SequenceRule as Rule};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let between = "keine ganze Zahl zwischen -9223372036854775808 und 9223372036854775807.";
+        for (reason, said) in [
+            (Rule::IncrementZero, "Die Schrittweite darf nicht 0 sein. Eine Sequenz bewegt sich um mindestens 1.".to_string()),
+            (Rule::MinimumUnread { value: "eins".into() }, format!("Das Minimum „eins“ ist {between}")),
+            (Rule::MaximumUnread { value: "zwei".into() }, format!("Das Maximum „zwei“ ist {between}")),
+            (Rule::MaximumNotAbove { maximum: 5, minimum: 10 }, "Das Maximum 5 ist nicht größer als das Minimum 10.".into()),
+            (Rule::StartBelow { start: 1, minimum: 10 }, "Der Startwert 1 liegt unter dem Minimum 10.".into()),
+            (Rule::StartAbove { start: 50, maximum: 10 }, "Der Startwert 50 liegt über dem Maximum 10.".into()),
+        ] {
+            assert_eq!(crate::panels::said(&Reason::Sequence(reason.clone())), Some(said), "{reason:?} {theme:?}");
+        }
+        let owner = "Eine Sequenz gehört zu einer Spalte";
+        for (reason, said) in [
+            (
+                Reason::ColumnOfOtherSchema { column: "Kontakt.id".into() },
+                format!("Kontakt.id ist eine Spalte eines anderen Schemas. {owner} ihres Schemas."),
+            ),
+            (Reason::InNoTable { column: "lose".into() }, "Die Spalte lose gehört zu keiner Tabelle.".into()),
+            (Reason::NotIntegerType { column: "bar".into(), ty: "".into() }, format!("bar hat keinen Typ. {owner} mit ganzzahligem Typ.")),
+            (Reason::NotIntegerType { column: "notiz".into(), ty: "TEXT".into() }, format!("notiz hat den Typ TEXT. {owner} mit ganzzahligem Typ.")),
+            (Reason::NotA { kind: "column", name: "Kunde".into() }, "Kunde passt hier nicht: erwartet wird eine Spalte.".into()),
+            (Reason::TextEmpty, "Der Text darf nicht leer sein.".into()),
+            (Reason::ControlCharacter, "Steuerzeichen und unsichtbare Zeichen sind nicht erlaubt.".into()),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said.as_str()), "{reason:?} {theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

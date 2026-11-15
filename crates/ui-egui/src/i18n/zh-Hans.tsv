@@ -152,6 +152,16 @@ str		On this sequence · {n}	此序列上 · {n}
 str		from {start} by {increment}	从 {start} 起，步长 {increment}
 str		cycles	循环
 str		owned by {column}	属于 {column}
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} 是另一个架构的列。序列的所属列须是其所在架构的列。
+str		The column {column} belongs to no table.	列 {column} 不属于任何表。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} 没有类型。序列的所属列须为整数类型。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} 的类型为 {type}。序列的所属列须为整数类型。
+str		The increment can't be 0. A sequence moves by at least 1.	增量不能为 0。序列每次至少前进 1。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大值“{value}”不是介于 {min} 与 {max} 之间的整数。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大值 {maximum} 不大于最小值 {minimum}。
+str		The start {start} is below the minimum {minimum}.	起始值 {start} 低于最小值 {minimum}。
+str		The start {start} is above the maximum {maximum}.	起始值 {start} 高于最大值 {maximum}。
 str	sequence	Start	起始值
 str		Increment	增量
 str		Minimum	最小值
@@ -1561,6 +1571,11 @@ str		A property redefines at most {max} properties.	一个属性最多重定义 
 str		Give the properties as a list of ids.	请以 ID 列表的形式给出属性。
 str		An item in the list has no id. Give each property's id.	列表中有一项没有 ID。请给出每个属性的 ID。
 str		{key} is not a key here. An item holds an id and a name.	{key} 在此处不是有效的键。每一项包含一个 ID 和一个名称。
+str		Give at most {max} checks.	最多给出 {max} 个检查约束。
+str		Two checks are named {name}. Give each check its own name.	有两个检查约束都名为 {name}。请为每个检查约束取不同的名称。
+str		Give each check as text, or as an object with an expression and a name.	请将每个检查约束写成文本，或写成包含表达式和名称的对象。
+str		An item takes no {key}. It takes {takes}.	条目不接受 {key}。它接受 {takes}。
+str		An item holds a key without a name. It takes {takes}.	条目包含一个没有名称的键。它接受 {takes}。
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。

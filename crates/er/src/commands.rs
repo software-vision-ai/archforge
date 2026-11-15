@@ -1201,7 +1201,13 @@ struct DomainFields {
     checks: Vec<(String, String)>,
 }
 
+/// The keys a domain's check given as an object takes.
+const CHECK_KEYS: &[&str] = &["expression", "name"];
+
+/// A domain's fields from the parameters; each refusal of its checks typed with the kind `"check"`.
 fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
+    const CHECK: &str = "check";
+    let items_expected = |message: String| refuse("checks", message).because(Reason::ItemsExpected { kind: CHECK });
     let base = text(p, "base_type");
     check_name("base_type", base, MAX_TYPE)?;
     if base.contains('(') {
@@ -1216,32 +1222,34 @@ fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
         None | Some(Json::Null) => {}
         Some(Json::Array(items)) => {
             if items.len() > rules::MAX_KEY_COLUMNS {
-                return Err(refuse("checks", format!("at most {} checks", rules::MAX_KEY_COLUMNS)));
+                let most = Reason::TooMany { kind: CHECK, max: rules::MAX_KEY_COLUMNS };
+                return Err(refuse("checks", format!("at most {} checks", rules::MAX_KEY_COLUMNS)).because(most));
             }
             for item in items {
                 let (expression, name) = match item {
                     Json::String(s) => (s.clone(), String::new()),
                     Json::Object(fields) => {
-                        if let Some(unknown) = fields.keys().find(|k| k.as_str() != "expression" && k.as_str() != "name") {
-                            let unknown: String = unknown.chars().take(40).collect();
-                            return Err(refuse("checks", format!("a check takes no {unknown:?}; it takes expression, name")));
+                        if let Some(unknown) = fields.keys().find(|k| !CHECK_KEYS.contains(&k.as_str())) {
+                            let (unknown, takes) = (short(unknown), CHECK_KEYS.join(", "));
+                            let message = format!("a check takes no {unknown:?}; it takes {takes}");
+                            return Err(refuse("checks", message).because(Reason::UnknownKey { key: unknown, takes: CHECK_KEYS }));
                         }
                         let expression = match item.get("expression") {
                             Some(Json::String(s)) => s.clone(),
                             None | Some(Json::Null) => String::new(),
-                            Some(other) => return Err(refuse("checks", format!("expression is {}, not text", shown(other)))),
+                            Some(other) => return Err(items_expected(format!("expression is {}, not text", shown(other)))),
                         };
                         let name = match item.get("name") {
                             Some(Json::String(s)) => s.clone(),
                             None | Some(Json::Null) => String::new(),
-                            Some(other) => return Err(refuse("checks", format!("name is {}, not text", shown(other)))),
+                            Some(other) => return Err(items_expected(format!("name is {}, not text", shown(other)))),
                         };
                         (expression, name)
                     }
-                    other => return Err(refuse("checks", format!("{} is not a check", shown(other)))),
+                    other => return Err(items_expected(format!("{} is not a check", shown(other)))),
                 };
                 if let Some(problem) = rules::check_problem(&expression) {
-                    return Err(refuse("checks", problem));
+                    return Err(refuse("checks", problem.said()).because(problem.reason()));
                 }
                 if !name.is_empty() {
                     check_name("checks", &name, MAX_NAME)?;
@@ -1254,7 +1262,8 @@ fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
     // A domain names each of its checks once, whatever the case, as the project's check as it
     // opens asks (AR-209).
     if let Some(name) = rules::first_twice(checks.iter().map(|(_, n)| n.as_str())) {
-        return Err(refuse("checks", format!("two checks are named {name}")));
+        let twice = Reason::NamedTwice { kind: CHECK, name: name.to_string() };
+        return Err(refuse("checks", format!("two checks are named {name}")).because(twice));
     }
     Ok(DomainFields { base: base.to_string(), size, default: default.to_string(), not_null, checks })
 }
@@ -1441,6 +1450,8 @@ fn enum_remove(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// A sequence's numbers, owner and flag from the parameters; the bounds kept as their numbers.
 /// `current` is the owner the sequence has: kept as it is, it needs no whole-number type again.
+/// Numbers that break the rules ([`Reason::Sequence`]) and an owner that cannot own the sequence
+/// are refused typed.
 fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Result<(rules::SequenceNumbers, Option<Obj>), CommandError> {
     let mut n = rules::SequenceNumbers {
         start: p.integer("start").unwrap_or(1),
@@ -1449,8 +1460,8 @@ fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Res
         maximum: text(p, "maximum").to_string(),
         cycle: p.bool("cycle").unwrap_or(false),
     };
-    if let Some((key, why)) = rules::sequence_problem(&n) {
-        return Err(refuse(key, why));
+    if let Some((key, problem)) = rules::sequence_problem(&n) {
+        return Err(refuse(key, problem.to_string()).because(problem.reason));
     }
     // A bound is kept as its number: "+5" and "05" become "5".
     for bound in [&mut n.minimum, &mut n.maximum] {
@@ -1463,8 +1474,9 @@ fn sequence_params(ctx: &C<'_>, p: &Params, s: Obj, current: Option<Obj>) -> Res
     } else {
         let a = id_of(ctx, p, "owned_by", ATTRIBUTE)?;
         let new_owner = Some(a) != current;
-        if let Some(why) = rules::owned_by_problem(ctx.doc, s, a).or_else(|| if new_owner { rules::owner_type_problem(ctx.doc, a) } else { None }) {
-            return Err(refuse("owned_by", why));
+        if let Some(problem) = rules::owned_by_problem(ctx.doc, s, a).or_else(|| if new_owner { rules::owner_type_problem(ctx.doc, a) } else { None })
+        {
+            return Err(refuse("owned_by", problem.to_string()).because(problem.reason));
         }
         Some(a)
     };
@@ -1513,11 +1525,12 @@ fn sequence_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
-/// A view's query from the parameters: SQL text, not parsed.
+/// A view's query from the parameters: SQL text, not parsed; one the rules refuse is refused with
+/// the text rules' reason.
 fn query_param(p: &Params) -> Result<&str, CommandError> {
     let query = text(p, "query");
     match rules::query_problem(query) {
-        Some(why) => Err(refuse("query", why)),
+        Some(problem) => Err(refuse("query", problem.to_string()).because(problem.reason)),
         None => Ok(query),
     }
 }
@@ -2824,11 +2837,11 @@ fn unique_remove(ctx: &mut C<'_>, p: &Params) -> R {
 
 // Checks and indexes (slice S3).
 
-/// The expression under `key`, which a check needs.
+/// The expression under `key`, which a check needs; refused with the problem typed.
 fn check_expression<'a>(p: &'a Params, key: &str) -> Result<&'a str, CommandError> {
     let expression = text(p, key);
     match rules::check_problem(expression) {
-        Some(problem) => Err(refuse(key, problem)),
+        Some(problem) => Err(refuse(key, problem.said()).because(problem.reason())),
         None => Ok(expression),
     }
 }

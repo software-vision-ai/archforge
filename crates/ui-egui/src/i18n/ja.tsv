@@ -152,6 +152,16 @@ str		On this sequence · {n}	このシーケンスに · {n}
 str		from {start} by {increment}	{start} から {increment} ずつ
 str		cycles	循環
 str		owned by {column}	{column} が所有
+str		{column} is a column of another schema. A sequence's owner is a column of its schema.	{column} は別のスキーマの列です。シーケンスの所有者はそのスキーマの列です。
+str		The column {column} belongs to no table.	列 {column} はどのテーブルにも属していません。
+str		{column} has no type. A sequence's owner has a whole-number type.	{column} には型がありません。シーケンスの所有者は整数型の列です。
+str		{column} is of type {type}. A sequence's owner has a whole-number type.	{column} の型は {type} です。シーケンスの所有者は整数型の列です。
+str		The increment can't be 0. A sequence moves by at least 1.	増分を 0 にはできません。シーケンスは少なくとも 1 ずつ進みます。
+str		The minimum "{value}" is not a whole number between {min} and {max}.	最小値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum "{value}" is not a whole number between {min} and {max}.	最大値「{value}」は {min} から {max} までの整数ではありません。
+str		The maximum {maximum} is not greater than the minimum {minimum}.	最大値 {maximum} が最小値 {minimum} より大きくありません。
+str		The start {start} is below the minimum {minimum}.	開始値 {start} が最小値 {minimum} を下回っています。
+str		The start {start} is above the maximum {maximum}.	開始値 {start} が最大値 {maximum} を上回っています。
 str	sequence	Start	開始値
 str		Increment	増分
 str		Minimum	最小値
@@ -1561,6 +1571,11 @@ str		A property redefines at most {max} properties.	プロパティが再定義�
 str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
 str		An item in the list has no id. Give each property's id.	リストの項目に ID がありません。各プロパティの ID を指定してください。
 str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
+str		Give at most {max} checks.	チェック制約は最大 {max} 個まで指定してください。
+str		Two checks are named {name}. Give each check its own name.	2 つのチェック制約の名前が {name} です。チェック制約にはそれぞれ別の名前を付けてください。
+str		Give each check as text, or as an object with an expression and a name.	チェック制約はそれぞれテキスト、または式と名前を持つオブジェクトで指定してください。
+str		An item takes no {key}. It takes {takes}.	項目に {key} は指定できません。指定できるのは {takes} です。
+str		An item holds a key without a name. It takes {takes}.	項目に名前のないキーがあります。指定できるのは {takes} です。
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。

@@ -1956,6 +1956,99 @@ fn checks_and_indexes_are_named_constraints_of_a_table_and_go_with_their_columns
     all_rules_hold(s.doc());
 }
 
+/// A check's expression refused, of a table's check and of a domain's, and a domain's list of
+/// checks refused, carry their reason typed beside the English, which stays as it was: no
+/// expression, a text rule broken, too many checks, an item's key the list does not take, an item
+/// or an item's value of another shape, and a name twice (AR-499).
+#[test]
+fn a_checks_expression_and_a_domains_checks_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let check = run(&mut s, "er.check.add", json!({ "entity": sm.order, "expression": "total >= 0" }));
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "label", "base_type": "TEXT" }));
+    let domain = |checks: Json| json!({ "schema": sm.schema, "name": "d", "base_type": "TEXT", "checks": checks });
+    let long = "x".repeat(4097);
+    let (items, takes) = (Reason::ItemsExpected { kind: "check" }, &["expression", "name"]);
+    let twice = json!([{ "expression": "a", "name": "Pos" }, { "expression": "b", "name": "pos" }]);
+    for (cmd, p, key, reason, message) in [
+        ("er.check.add", json!({ "entity": sm.order, "expression": "   " }), "expression", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.check.set",
+            json!({ "check": check, "expression": " a" }),
+            "expression",
+            Reason::EdgeSpace,
+            "the expression starts or ends with a space",
+        ),
+        (
+            "er.check.add",
+            json!({ "entity": sm.order, "expression": long }),
+            "expression",
+            Reason::TooLong { max: 4096 },
+            "the expression is longer than 4096 characters",
+        ),
+        ("er.domain.add", domain(json!([" "])), "checks", Reason::NoExpression, "a check needs an expression"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": ["a\u{7}"] }),
+            "checks",
+            Reason::ControlCharacter,
+            "the expression holds a control character",
+        ),
+        ("er.domain.add", domain(json!(vec!["a"; 33])), "checks", Reason::TooMany { kind: "check", max: 32 }, "at most 32 checks"),
+        (
+            "er.domain.add",
+            domain(json!([{ "expresion": "1 = 1" }])),
+            "checks",
+            Reason::UnknownKey { key: "expresion".into(), takes },
+            r#"a check takes no "expresion"; it takes expression, name"#,
+        ),
+        ("er.domain.add", domain(json!([{ "expression": 1 }])), "checks", items.clone(), "expression is 1, not text"),
+        ("er.domain.add", domain(json!([{ "expression": "a", "name": true }])), "checks", items.clone(), "name is true, not text"),
+        ("er.domain.add", domain(json!([7])), "checks", items, "7 is not a check"),
+        (
+            "er.domain.set",
+            json!({ "domain": dom, "name": "label", "base_type": "TEXT", "checks": twice }),
+            "checks",
+            Reason::NamedTwice { kind: "check", name: "pos".into() },
+            "two checks are named pos",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    let empty = domain(json!([{ "": "1 = 1" }]));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.domain.add", &empty) else { panic!("a key without a name is refused") };
+    assert_eq!(error.reason, Some(Reason::UnknownKey { key: String::new(), takes }));
+}
+
+/// A loaded document's check without an expression and domain check with a control character,
+/// which no command makes, are named in the project's check in the English it had (AR-499).
+#[test]
+fn a_loaded_checks_expression_problem_keeps_its_english() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let c = st.create(CHECK_CONSTRAINT).unwrap();
+    st.set(c, check_constraint::NAME, Value::str("ck")).unwrap();
+    st.set(c, check_constraint::EXPRESSION, Value::str(" ")).unwrap();
+    st.push(e, entity::CHECK_CONSTRAINT, Value::Ref(c)).unwrap();
+    let d = st.create(DOMAIN).unwrap();
+    st.set(d, named_element::NAME, Value::str("D")).unwrap();
+    st.set(d, domain::BASE_TYPE, Value::str("TEXT")).unwrap();
+    st.push(s, schema::DOMAIN, Value::Ref(d)).unwrap();
+    let dc = st.create(DOMAIN_CHECK).unwrap();
+    st.set(dc, domain_check::EXPRESSION, Value::str("a\u{7}")).unwrap();
+    st.push(d, domain::CHECK, Value::Ref(dc)).unwrap();
+    let found = problems(&st);
+    for said in ["the check ck: a check needs an expression", "the domain D: the expression holds a control character"] {
+        assert!(found.iter().any(|p| p == said), "{said} in {found:?}");
+    }
+}
+
 #[test]
 fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_collapse() {
     let mut s = session();
@@ -2620,6 +2713,99 @@ fn view_queries_sequence_owners_and_types_of_another_schema_keep_their_limits() 
     let a = obj(s.doc(), &mine);
     assert_eq!((rules::type_of(s.doc(), a), rules::size_of(s.doc(), a)), ("NUMERIC".to_string(), (None, Some(18), None)));
     all_rules_hold(s.doc());
+}
+
+/// A sequence's numbers and owner and a view's query refused carry their reason typed beside the
+/// English, which stays as it was, under the parameter's key (AR-507).
+#[test]
+fn sequence_numbers_owners_and_view_queries_refused_carry_their_reason_typed() {
+    use archforge_engine::{Reason as R, SequenceRule::*};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let crm = run(&mut s, "er.schema.add", json!({ "name": "crm" }));
+    let contact = run(&mut s, "er.entity.add", json!({ "schema": crm, "name": "Contact" }));
+    let foreign = run(&mut s, "er.attribute.add", json!({ "entity": contact, "name": "id", "type": "BIGINT" }));
+    let note = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "note", "type": "TEXT" }));
+    let bare = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "bare" }));
+    let q = run(&mut s, "er.sequence.add", json!({ "schema": sm.schema, "name": "q" }));
+    let v = run(&mut s, "er.view.add", json!({ "schema": sm.schema, "name": "v", "query": "select 1" }));
+    let with = |mut p: Json, extra: Json| {
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let (sq, qs) = (|e| with(json!({ "schema": sm.schema, "name": "s" }), e), |e| with(json!({ "sequence": q, "name": "q" }), e));
+    let vw = |query: &str| json!({ "schema": sm.schema, "name": "w", "query": query });
+    let (add, set, va, max) = ("er.sequence.add", "er.sequence.set", "er.view.add", rules::MAX_QUERY);
+    let unread = |value: &str| format!("{value:?} is not a whole number between -9223372036854775808 and 9223372036854775807");
+    let (big, typed) = ("99999999999999999999", |column: &str, ty: &str| R::NotIntegerType { column: column.into(), ty: ty.into() });
+    for (cmd, p, key, reason, message) in [
+        (add, sq(json!({ "increment": 0 })), "increment", R::Sequence(IncrementZero), "is 0; a sequence moves by at least 1".into()),
+        (add, sq(json!({ "minimum": "one" })), "minimum", R::Sequence(MinimumUnread { value: "one".into() }), unread("one")),
+        (add, sq(json!({ "maximum": big })), "maximum", R::Sequence(MaximumUnread { value: big.into() }), unread(big)),
+        (
+            add,
+            sq(json!({ "minimum": "10", "maximum": "9" })),
+            "maximum",
+            R::Sequence(MaximumNotAbove { maximum: 9, minimum: 10 }),
+            "9 is not greater than the minimum 10".into(),
+        ),
+        (
+            add,
+            sq(json!({ "start": 5, "minimum": "9" })),
+            "start",
+            R::Sequence(StartBelow { start: 5, minimum: 9 }),
+            "5 is below the minimum 9".into(),
+        ),
+        (
+            set,
+            qs(json!({ "start": 50, "minimum": "1", "maximum": "9" })),
+            "start",
+            R::Sequence(StartAbove { start: 50, maximum: 9 }),
+            "50 is above the maximum 9".into(),
+        ),
+        (
+            add,
+            sq(json!({ "owned_by": foreign })),
+            "owned_by",
+            R::ColumnOfOtherSchema { column: "Contact.id".into() },
+            "Contact.id is a column of another schema".into(),
+        ),
+        (add, sq(json!({ "owned_by": note })), "owned_by", typed("note", "TEXT"), r#"note is "TEXT", not a whole-number type"#.into()),
+        (set, qs(json!({ "owned_by": bare })), "owned_by", typed("bare", ""), r#"bare is "", not a whole-number type"#.into()),
+        ("er.view.set", json!({ "view": v, "name": "v", "query": " " }), "query", R::TextEmpty, "a view needs its query".into()),
+        (va, vw("select 1\u{202E}"), "query", R::ControlCharacter, "the query holds a hidden direction or zero-width character".into()),
+        (va, vw(" select 1"), "query", R::EdgeSpace, "the query starts or ends with a space".into()),
+        (va, vw(&"x".repeat(max + 1)), "query", R::TooLong { max }, format!("the query is longer than {max} characters")),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {key} is refused") };
+        assert_eq!((error.reason, error.message, error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {key}");
+    }
+}
+
+/// A loaded document's column that belongs to no table, which no command makes, cannot own a
+/// sequence, named by its id when it has no name; what is no column at all, which the command's
+/// id check refuses first, is typed by the rule as no column (AR-507).
+#[test]
+fn a_column_of_no_table_or_no_column_cannot_own_a_sequence_typed() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    let not_column = rules::owned_by_problem(&st, s, e).expect("a table is no column");
+    assert_eq!(
+        (not_column.reason.clone(), not_column.to_string()),
+        (archforge_engine::Reason::NotA { kind: "column", name: "T".into() }, "T is not a column".into())
+    );
+    let (schema_id, id) = (st.uuid(s).unwrap().to_string(), st.uuid(a).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let p = json!({ "schema": schema_id, "name": "q", "owned_by": id });
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.sequence.add", &p) else { panic!("it belongs to no table") };
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::InNoTable { column: id.as_str().into() }), Some("owned_by")));
+    assert_eq!(error.message, format!("{id} belongs to no table"));
 }
 
 #[test]
