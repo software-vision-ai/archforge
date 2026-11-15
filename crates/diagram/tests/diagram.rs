@@ -342,13 +342,14 @@ fn refusals_name_their_key_and_change_nothing() {
     let _ = sm.label;
 }
 
-/// The refusals of placing, a note's text and routing carry their reason typed beside the
-/// unchanged English, under the parameter each is about: an id missing or of no element, an element
-/// of the wrong kind, an element not shown or shown already, a box on another diagram or nested too
-/// deep, a size, a text, a box showing an element, a note's link, too many bends and a point's
-/// coordinates (AR-439).
+/// The refusals of placing, a note's text, routing and a kind word carry their reason typed beside
+/// the unchanged English, under the parameter each is about: an id missing or of no element, an
+/// element of the wrong kind, an element not shown or shown already, a box on another diagram or
+/// nested too deep, a size, a text, a box showing an element, a note's link, too many bends and a
+/// point's coordinates (AR-439); a diagram's kind, a box's kind, a label's slot and a style's name
+/// that is no plain word, and a diagram kind or a text slot none takes (AR-512).
 #[test]
-fn every_place_text_and_route_refusal_carries_its_reason_typed() {
+fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
     use archforge_engine::Reason;
     let (mut s, m) = session();
     let sm = sample(&mut s, &m);
@@ -403,6 +404,24 @@ fn every_place_text_and_route_refusal_carries_its_reason_typed() {
         let far = Reason::CoordinateTooFar { axis };
         check(&mut s, "diagram.route", route(&sm.edge, json!([point])), "points", far, &format!("the {axis} is farther than"));
     }
+    // Kind words: no plain word, too long, and none a notation or the line's element takes.
+    let plain = "is not a plain identifier";
+    check(&mut s, "diagram.add", json!({ "kind": "" }), "kind", Reason::NotAPlainWord, "the kind is empty");
+    check(&mut s, "diagram.add", json!({ "kind": "Toy Class" }), "kind", Reason::NotAPlainWord, plain);
+    check(&mut s, "diagram.add", json!({ "kind": "a".repeat(65) }), "kind", Reason::TooLong { max: 64 }, "the kind is longer than 64");
+    let not_one_of = |what, word: &str, known: &[&str]| {
+        let known = known.iter().map(|k| k.to_string()).collect();
+        Reason::NotOneOf(Box::new(archforge_engine::NotOneOf { what, word: word.into(), known }))
+    };
+    let unknown = not_one_of(archforge_engine::WordPlace::DiagramKind, "uml.class", &["toy.class"]);
+    check(&mut s, "diagram.add", json!({ "kind": "uml.class" }), "kind", unknown, "\"uml.class\" is not one of toy.class");
+    check(&mut s, "diagram.place", place(d, &c, json!({ "kind": "Port" })), "kind", Reason::NotAPlainWord, plain);
+    let label = |kind: &str| json!({ "edge": sm.edge, "kind": kind });
+    check(&mut s, "diagram.label", label("Name"), "kind", Reason::NotAPlainWord, plain);
+    let no_slot = not_one_of(archforge_engine::WordPlace::TextSlot, "name", &["general"]);
+    check(&mut s, "diagram.label", label("name"), "kind", no_slot, "has no text slot \"name\"; it has general");
+    let style = json!({ "ids": [sm.a], "name": "Accent Style" });
+    check(&mut s, "diagram.style", style, "name", Reason::NotAPlainWord, "the style name is not a plain identifier");
 }
 
 #[test]

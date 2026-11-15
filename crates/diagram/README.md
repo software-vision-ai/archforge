@@ -53,7 +53,7 @@ tables.
 | `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `hit_keeping(x, y, keep)` (looking through the nodes `keep` leaves out), `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
 | `arrange::arrange` | `arrange(sizes, lines) -> Vec<(f64, f64)>`: boxes in layers along their lines, crossings few, groups side by side, lone boxes in rows |
 | `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
-| `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store; `text_problem` typed as a `Problem` |
+| `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store; `text_problem` and `kind_problem` typed as a `Problem` |
 | the generated constants, structs, `LabelPlace`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
 
 Commands: `diagram.{add, rename, remove, place, note, set-text, move, resize, unplace, connect,
@@ -65,7 +65,9 @@ steps of one drag); `diagram.style` sets a style as a whole and a call naming no
 which it does not show yet. A refusal of an id, an element of the wrong kind, a place, a size, a
 name or a note's text, an element placed where it is not shown or shown already, a box on another
 diagram or nested too deep, a note's link routed or a line bent too often, and a notation's elements
-it does not remove carries its reason typed for an interface to say (AR-439).
+it does not remove carries its reason typed for an interface to say (AR-439); so does a kind word
+that is no plain identifier or none the notations or a line's element take: a diagram's kind, a
+box's kind, a label's slot and a style's name (AR-512).
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name

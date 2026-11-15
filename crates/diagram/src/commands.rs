@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, Params, Reason, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -112,11 +112,20 @@ fn list_of(store: &Store, p: &Params, key: &str, classes: &[ClassId], what: &str
     Ok(out)
 }
 
-fn check(key: &str, problem: Option<String>, what: &str) -> Result<(), CommandError> {
-    match problem {
-        Some(p) => Err(refuse(key, format!("the {what} {p}"))),
+/// The kind word `word` under `key`, `what` naming it in the sentence; refused with its reason
+/// typed when it is no plain identifier.
+fn check_kind(key: &str, word: &str, what: &str) -> Result<(), CommandError> {
+    match rules::kind_problem(word) {
+        Some(p) => Err(refuse(key, format!("the {what} {p}")).because(p.reason)),
         None => Ok(()),
     }
+}
+
+/// A refusal under `key` of `word`, none of the words `known` its place `what` takes; `said` in
+/// English, the reason typed.
+fn not_one_of(key: &str, said: String, what: WordPlace, word: &str, known: &[&str]) -> CommandError {
+    let known = known.iter().map(|k| k.to_string()).collect();
+    refuse(key, said).because(Reason::NotOneOf(Box::new(NotOneOf { what, word: word.to_string(), known })))
 }
 
 /// The name or text `s` under `key`, at most `max` characters; refused with its reason typed.
@@ -181,15 +190,18 @@ fn select<V: DiagramView>(ctx: &mut C<'_, V>, objs: Vec<Obj>) {
 
 // Diagrams.
 
+/// `diagram.add`: a diagram of a kind a notation knows, named, of an element where its kind is; a
+/// kind that is no plain word or none the notations know refused with its reason typed.
 fn diagram_add<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let kind = str_of(p, "kind");
-    check("kind", rules::kind_problem(kind), "kind")?;
+    check_kind("kind", kind, "kind")?;
     let kinds = ctx.view.kinds();
     if kinds.is_empty() {
-        return Err(refuse("kind", "the project's view holds no notation, so it knows no diagram kind"));
+        let said = "the project's view holds no notation, so it knows no diagram kind".to_string();
+        return Err(not_one_of("kind", said, WordPlace::DiagramKind, kind, &[]));
     }
     if !kinds.contains(&kind) {
-        return Err(refuse("kind", format!("{kind:?} is not one of {}", kinds.join(", "))));
+        return Err(not_one_of("kind", format!("{kind:?} is not one of {}", kinds.join(", ")), WordPlace::DiagramKind, kind, &kinds));
     }
     let name = str_of(p, "name");
     check_text("name", name, MAX_NAME)?;
@@ -308,7 +320,8 @@ fn new_node(store: &mut Store, p: &Params, parent: (Obj, PropId), element: Optio
 }
 
 /// `diagram.place`: a box for an element on a diagram, nested in a box when a parent is named; an
-/// element the diagram does not show, is outside it or shows already refused with its reason typed.
+/// element the diagram does not show, is outside it or shows already, and a box's kind that is no
+/// plain word, refused with its reason typed.
 fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let d = one_of(ctx.doc, p, "diagram", DIAGRAM, "a diagram")?;
     let kind = kind_of(ctx.doc, d);
@@ -327,7 +340,7 @@ fn diagram_place<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     }
     let role = str_of(p, "kind");
     if !role.is_empty() {
-        check("kind", rules::kind_problem(role), "kind")?;
+        check_kind("kind", role, "kind")?;
     }
     let parent = parent_in(ctx.doc, p, d)?;
     let n = new_node(ctx.doc, p, parent, Some(e), role, ctx.view.default_size(class))?;
@@ -683,19 +696,20 @@ pub fn place_name(at: LabelPlace) -> &'static str {
     }
 }
 
+/// `diagram.label`: a label showing one of a line's element's text slots, at a place along the line
+/// and an offset; a slot that is no plain word or none the element has refused with its reason
+/// typed.
 fn diagram_label<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let e = one_of(ctx.doc, p, "edge", EDGE, "an edge")?;
     let element =
         element_of(ctx.doc, e, edge::ELEMENT).ok_or_else(|| refuse("edge", "the edge shows no element, so there is no text to label it with"))?;
     let class = ctx.doc.class_of(element).map_err(fail)?;
     let kind = str_of(p, "kind");
-    check("kind", rules::kind_problem(kind), "kind")?;
+    check_kind("kind", kind, "kind")?;
     let slots = ctx.view.text_slots(class);
     if !slots.contains(&kind) {
-        return Err(refuse(
-            "kind",
-            format!("a {} has no text slot {kind:?}; it has {}", class_name(ctx.doc, class).to_lowercase(), slots.join(", ")),
-        ));
+        let said = format!("a {} has no text slot {kind:?}; it has {}", class_name(ctx.doc, class).to_lowercase(), slots.join(", "));
+        return Err(not_one_of("kind", said, WordPlace::TextSlot, kind, slots));
     }
     let labels = ctx.doc.list(e, edge::LABEL).map_err(fail)?;
     if labels.len() >= MAX_LABELS {
@@ -731,6 +745,8 @@ fn diagram_unlabel<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 
 // Styles.
 
+/// `diagram.style`: a style set as a whole on diagrams, boxes and lines, or removed by a call naming
+/// nothing; a style name that is no plain word refused with its reason typed.
 fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     let ids = list_of(ctx.doc, p, "ids", &[DIAGRAM, NODE, EDGE], "a diagram, a node or an edge")?;
     if ids.is_empty() {
@@ -738,7 +754,7 @@ fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     }
     let name = str_of(p, "name");
     if !name.is_empty() {
-        check("name", rules::kind_problem(name), "style name")?;
+        check_kind("name", name, "style name")?;
     }
     let colours = [("fill", style::FILL), ("stroke", style::STROKE), ("text", style::TEXT)];
     for (key, _) in colours {

@@ -323,6 +323,33 @@ pub enum Reason {
     StraightLink,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
+    /// A word that names a kind, as a diagram's kind, a box's role, a label's slot or a style's
+    /// name, is empty or more than lower-case letters, digits, `_`, `-` and `.` after a letter.
+    NotAPlainWord,
+    /// A word is none of the words its place takes, as a diagram kind no notation knows.
+    NotOneOf(Box<NotOneOf>),
+}
+
+/// What a [`Reason::NotOneOf`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotOneOf {
+    /// What the word names, which decides how an interface says the refusal.
+    pub what: WordPlace,
+    /// The word given.
+    pub word: String,
+    /// The words the place takes, in order; empty when it takes none.
+    pub known: Vec<String>,
+}
+
+/// Where a [`NotOneOf`]'s word goes, which an interface says the refusal by; a notation that types
+/// another place's refusal adds its own variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WordPlace {
+    /// A diagram's kind, which the notations know.
+    DiagramKind,
+    /// A text slot a label shows, which the line's element has.
+    TextSlot,
 }
 
 /// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.
