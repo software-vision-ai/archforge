@@ -213,7 +213,7 @@ pub(crate) fn reveal(shell: &mut Shell, ui: &egui::Ui, editor: Editor, card: Rec
 
 /// How far a body showing `body` scrolls on to bring `part` into view: its foot if it fits, else
 /// its top, each 8 points clear of the edge; nothing for a part already in view.
-fn into_view(body: Rect, part: Rect) -> f32 {
+pub(crate) fn into_view(body: Rect, part: Rect) -> f32 {
     let down = (part.bottom() + 8.0 - body.bottom()).min(part.top() - 8.0 - body.top());
     let up = body.top() + 8.0 - part.top();
     if down > 0.0 { down } else { -up.max(0.0) }

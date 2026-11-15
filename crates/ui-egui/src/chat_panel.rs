@@ -171,13 +171,14 @@ pub struct Change {
 
 /// A rendered reply, kept until its width or appearance changes: its layout to lay out again while
 /// it shows (the fonts' atlas may change between frames, so no galley is kept), its height, and its
-/// links.
+/// links: where each was when last laid out, from the reply's top-left corner, the bytes of the
+/// text it covers, and its address.
 pub struct Laid {
     pub width: f32,
     pub dark: bool,
     pub job: Arc<egui::text::LayoutJob>,
     pub height: f32,
-    pub links: Vec<(std::ops::Range<usize>, String)>,
+    pub links: Vec<(egui::Rect, std::ops::Range<usize>, String)>,
 }
 
 /// One entry of a turn's timeline.
@@ -344,6 +345,10 @@ pub struct Panel {
     /// Whether the conversation was shown to its end the last time it was drawn: what comes in
     /// then keeps the end in view; scrolled up, the person's place stays.
     pub at_end: bool,
+    /// Where the conversation showed, and the control of it that had the keyboard, when it was
+    /// last drawn (AR-477).
+    pub area: Option<egui::Rect>,
+    pub held: Option<egui::Id>,
     /// The history's scroll position.
     pub history_scroll: f32,
     /// Why the history's conversations cannot be changed: a re-read of the list failed, and the
