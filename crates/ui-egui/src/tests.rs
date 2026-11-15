@@ -6483,6 +6483,37 @@ fn an_er_keys_columns_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A key a step would break is said in the chosen language with why in the same words, and keys built
+/// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
+/// English. In light and dark (AR-493).
+#[test]
+fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let breaks = |kind, why| crate::panels::said(&Reason::WouldBreak { kind, name: "pk_kunde".into(), why: Box::new(why) });
+        let nullable = || Reason::NullableKeyColumn { name: "notiz".into() };
+        let said = "Der Schlüssel pk_kunde wäre danach ungültig: notiz darf leer sein, was eine Primärschlüsselspalte nie darf.";
+        assert_eq!(breaks("primary key", nullable()).as_deref(), Some(said), "{theme:?}");
+        let other = "Der Schlüssel pk_kunde wäre danach ungültig: nummer ist keine Spalte von Bestellung.";
+        let not_column = Reason::NotColumnOf { column: "nummer".into(), table: "Bestellung".into() };
+        assert_eq!(breaks("unique constraint", not_column).as_deref(), Some(other), "{theme:?}");
+        assert_eq!(breaks("foreign key", nullable()), None, "{theme:?}");
+        assert_eq!(breaks("primary key", Reason::TooFew { kind: "key column", min: 2 }), None, "{theme:?}");
+        let deep = crate::panels::said(&Reason::TooDeep { kind: "key", max: 32 });
+        assert_eq!(
+            deep.as_deref(),
+            Some("Aufeinander aufbauende Schlüssel reichen hier tiefer als 32 Ebenen oder bilden eine Schleife."),
+            "{theme:?}"
+        );
+        assert_eq!(crate::panels::said(&Reason::TooDeep { kind: "subtype", max: 32 }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

@@ -586,6 +586,8 @@ str		{column} is not a column of {table}.	{column} は {table} の列ではあ�
 str		{name} may be null, which a primary key column never is.	{name} は NULL を許可していますが、主キーの列は NULL を許可できません。
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	外部キー {foreign_key} が {table} のこのキーを参照しています。先に外部キーを変更または削除してください。
 str		{table} has no primary key.	{table} に主キーがありません。
+str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。

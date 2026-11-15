@@ -419,6 +419,43 @@ fn a_keys_columns_refused_carry_their_reason_typed() {
     assert!(matches!(key_columns_problem(st, customer, &[], true), Some(KeyColumnsProblem::NoColumn)));
 }
 
+/// A key a step would break, found inside the step, carries its reason typed beside the English: the
+/// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
+/// column that may be null breaks on any edit that checks the keys around it (AR-493).
+#[test]
+fn a_key_a_step_would_break_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let mut column = |name: &str| {
+        let a = st.create(ATTRIBUTE).unwrap();
+        st.set(a, named_element::NAME, Value::str(name)).unwrap();
+        st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+        st.set(a, attribute::NULLABLE, Value::Bool(true)).unwrap();
+        st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+        st.uuid(a).unwrap().to_string()
+    };
+    let (id, note) = (column("id"), column("note"));
+    let pk = st.create(PRIMARY_KEY).unwrap();
+    st.set(pk, key::NAME, Value::str("pk_t")).unwrap();
+    st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+    st.push(pk, key::COLUMN, Value::Ref(obj(&st, &id))).unwrap();
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.attribute.set-type", &json!({ "attribute": note, "type": "BIGINT" })) else {
+        panic!("the key breaks")
+    };
+    let why = Box::new(Reason::NullableKeyColumn { name: "id".into() });
+    assert_eq!(error.reason, Some(Reason::WouldBreak { kind: "primary key", name: "pk_t".into(), why }));
+    assert_eq!(
+        (error.message.as_str(), error.key.as_deref()),
+        ("the key pk_t would break: id is nullable, and a primary key column cannot be", Some("type"))
+    );
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.
@@ -1673,6 +1710,8 @@ fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_o
         .execute("er.attribute.add", &json!({ "entity": a_id, "name": "more", "type": "INT", "primary_key": true }))
         .expect_err("the loop grows forever");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("or form a cycle"), "{e}");
+    let EngineError::Failed { error, .. } = e else { panic!("refused by the handler") };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::TooDeep { kind: "key", max: 32 }), "typed from inside the step (AR-493)");
     assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
     // A self-reference onto a unique key may identify: it cannot recurse.
     let mut s = session();
@@ -1979,6 +2018,8 @@ fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
     let before = picture(session.doc());
     let e = session.execute("er.primary-key.remove", &json!({ "entity": top.unwrap() })).expect_err("too deep to cascade");
     assert!(e.to_string().contains("deeper than") && e.to_string().contains("entity"), "{e}");
+    let EngineError::Failed { error, .. } = e else { panic!("refused by the handler") };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::TooDeep { kind: "key", max: 128 }), "typed from inside the step (AR-493)");
     assert_eq!(picture(session.doc()), before, "nothing of the attempt stays");
 }
 

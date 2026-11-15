@@ -41,9 +41,40 @@ fn refuse(key: &str, why: impl Into<String>) -> CommandError {
     CommandError::about(key, why)
 }
 
-/// A store refusal, as the command's failure.
+/// A store refusal, as the command's failure, with the reason [`refused`] kept for it.
 fn fail(e: Invalid) -> CommandError {
-    CommandError::new(e.to_string())
+    let reason = kept_reason(&e);
+    CommandError { reason, ..CommandError::new(e.to_string()) }
+}
+
+thread_local! {
+    /// The sentence and reason of the last refusal [`refused`] made on this thread, until a conduit
+    /// takes it ([`kept_reason`]).
+    static KEPT: std::cell::Cell<Option<(String, Reason)>> = const { std::cell::Cell::new(None) };
+}
+
+/// An ER refusal made inside a step, where only mof's [`Invalid::Refused`] gets out: the sentence
+/// `said` as that refusal, its reason kept beside it on this thread for the conduit that turns it
+/// into the command's refusal ([`refusal`], [`refused_as`], [`fail`]).
+fn refused(reason: Reason, said: String) -> Invalid {
+    KEPT.set(Some((said.clone(), reason)));
+    Invalid::Refused(said)
+}
+
+/// The reason kept for `e`, when `e` is mof's refusal with the very sentence [`refused`] kept. The
+/// slot is emptied either way, so a reason kept for a refusal that never reached a conduit (one
+/// dropped on the way, or a panic) never attaches to another; only the same sentence, which only
+/// the same refusal makes, could take it.
+fn kept_reason(e: &Invalid) -> Option<Reason> {
+    let (said, reason) = KEPT.take()?;
+    matches!(e, Invalid::Refused(why) if *why == said).then_some(reason)
+}
+
+/// A store refusal from inside a step as a refusal of `key`, with the reason [`refused`] kept for
+/// it.
+fn refusal(key: &str, e: Invalid) -> CommandError {
+    let reason = kept_reason(&e);
+    CommandError { reason, ..refuse(key, e.to_string()) }
 }
 
 fn text<'a>(p: &'a Params, key: &str) -> &'a str {
@@ -86,12 +117,10 @@ fn name_taken(store: &Store, owner: Obj, class: ClassId, name: &str, except: Opt
     Err(refuse("name", message).because(Reason::NameTaken { kind, name: existing }))
 }
 
-/// A store refusal as a refusal of `key`; anything else as the command's failure.
+/// A store refusal as a refusal of `key`; anything else as the command's failure; either with the
+/// reason [`refused`] kept for it.
 fn refused_as(key: &'static str) -> impl Fn(Invalid) -> CommandError {
-    move |e| match e {
-        Invalid::Refused(why) => refuse(key, why),
-        other => fail(other),
-    }
+    move |e| if matches!(e, Invalid::Refused(_)) { refusal(key, e) } else { fail(e) }
 }
 
 /// At most 40 characters of a value for an error text.
@@ -453,7 +482,8 @@ pub fn remove_element(store: &mut Store, obj: Obj) -> Result<usize, Invalid> {
         }
     }
     if DEPTH.with(|d| d.get()) >= REMOVAL_DEPTH {
-        return Err(Invalid::Refused(format!("the removal reaches deeper than {REMOVAL_DEPTH} levels of keys built on each other")));
+        let said = format!("the removal reaches deeper than {REMOVAL_DEPTH} levels of keys built on each other");
+        return Err(refused(Reason::TooDeep { kind: "key", max: REMOVAL_DEPTH }, said));
     }
     DEPTH.with(|d| d.set(d.get() + 1));
     let _deeper = Deeper;
@@ -665,7 +695,7 @@ fn attribute_add(ctx: &mut C<'_>, p: &Params) -> R {
             subtypes_hold(st, e)?;
             Ok(a)
         })
-        .map_err(|e| refuse("primary_key", e.to_string()))?;
+        .map_err(|e| refusal("primary_key", e))?;
     select(ctx, vec![a]);
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
@@ -687,7 +717,7 @@ fn attribute_rename(ctx: &mut C<'_>, p: &Params) -> R {
             }
             Ok(())
         })
-        .map_err(|e| refuse("name", e.to_string()))?;
+        .map_err(|e| refusal("name", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -804,8 +834,10 @@ fn grow_foreign_keys(st: &mut Store, k: Obj, old: &[Obj], new: &[Obj]) -> Result
             DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
         }
     }
-    if DEPTH.with(|d| d.get()) >= rules::MAX_KEY_COLUMNS as u32 {
-        return Err(Invalid::Refused(format!("the keys built on this key run deeper than {} levels or form a cycle", rules::MAX_KEY_COLUMNS)));
+    let max = rules::MAX_KEY_COLUMNS as u32;
+    if DEPTH.with(|d| d.get()) >= max {
+        let said = format!("the keys built on this key run deeper than {max} levels or form a cycle");
+        return Err(refused(Reason::TooDeep { kind: "key", max }, said));
     }
     DEPTH.with(|d| d.set(d.get() + 1));
     let _deeper = Deeper;
@@ -875,12 +907,15 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused.
+/// the rules, or the edit is refused; a key's columns with the reason typed ([`Reason::WouldBreak`]).
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
-            if let Some(problem) = rules::key_columns_problem(store, *e, &rules::key_columns(store, k), store.class_of(k)? == PRIMARY_KEY) {
-                return Err(Invalid::Refused(format!("the key {} would break: {}", rules::label(store, k), problem.said())));
+            let class = store.class_of(k)?;
+            if let Some(problem) = rules::key_columns_problem(store, *e, &rules::key_columns(store, k), class == PRIMARY_KEY) {
+                let name = rules::label(store, k);
+                let said = format!("the key {name} would break: {}", problem.said());
+                return Err(refused(Reason::WouldBreak { kind: kind_of(class), name: name.into(), why: Box::new(problem.reason()) }, said));
             }
         }
     }
@@ -1010,7 +1045,7 @@ fn attribute_set_type(ctx: &mut C<'_>, p: &Params) -> R {
             }
             keys_still_hold(st, &keys, &entities)
         })
-        .map_err(|e| refuse("type", e.to_string()))?;
+        .map_err(|e| refusal("type", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -1261,10 +1296,7 @@ fn domain_set(ctx: &mut C<'_>, p: &Params) -> R {
             set_domain(st, d, &name, &f)?;
             columns_still_hold(st, d)
         })
-        .map_err(|e| match e {
-            Invalid::Refused(why) => refuse("base_type", why),
-            other => fail(other),
-        })?;
+        .map_err(refused_as("base_type"))?;
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
 
@@ -1353,10 +1385,7 @@ fn enum_set(ctx: &mut C<'_>, p: &Params) -> R {
             set_literals(st, e, &literals)?;
             columns_still_hold(st, e)
         })
-        .map_err(|e| match e {
-            Invalid::Refused(why) => refuse("literals", why),
-            other => fail(other),
-        })?;
+        .map_err(refused_as("literals"))?;
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
@@ -1512,7 +1541,7 @@ fn attribute_set_default(ctx: &mut C<'_>, p: &Params) -> R {
                 None => Ok(()),
             }
         })
-        .map_err(|e| refuse("default", e.to_string()))?;
+        .map_err(|e| refusal("default", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -1542,7 +1571,7 @@ fn attribute_set_generation(ctx: &mut C<'_>, p: &Params) -> R {
                 None => Ok(()),
             }
         })
-        .map_err(|e| refuse("generation", e.to_string()))?;
+        .map_err(|e| refusal("generation", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -1630,7 +1659,7 @@ fn attribute_set_flags(ctx: &mut C<'_>, p: &Params) -> R {
             keys_still_hold(st, &fks, &entities)?;
             subtypes_hold(st, e)
         })
-        .map_err(|e| refuse("attribute", e.to_string()))?;
+        .map_err(|e| refusal("attribute", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, a)? }))
 }
 
@@ -1929,8 +1958,8 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
             Ok(r)
         })
         .map_err(|e| match (identifying, with_key) {
-            (true, _) => refuse("identifying", e.to_string()),
-            (false, true) => refuse("create_foreign_key", e.to_string()),
+            (true, _) => refusal("identifying", e),
+            (false, true) => refusal("create_foreign_key", e),
             (false, false) => fail(e),
         })?;
     select(ctx, vec![r]);
@@ -1960,7 +1989,7 @@ fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
             st.set(r, relationship::IDENTIFYING, Value::Bool(identifying))?;
             keys_still_hold(st, &keys, &BTreeSet::new())
         })
-        .map_err(|e| refuse("identifying", e.to_string()))?;
+        .map_err(|e| refusal("identifying", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
@@ -2055,7 +2084,7 @@ fn relationship_resolve(ctx: &mut C<'_>, p: &Params) -> R {
             name_taken(ctx.doc, s, ENTITY, name, None)?;
         }
     }
-    let m = resolve(ctx.doc, r, name).map_err(|e| refuse("relationship", e.to_string()))?;
+    let m = resolve(ctx.doc, r, name).map_err(|e| refusal("relationship", e))?;
     select(ctx, vec![m]);
     Ok(json!({ "id": uuid_of(ctx.doc, m)? }))
 }
@@ -2143,9 +2172,11 @@ pub fn collapse(store: &mut Store, m: Obj) -> Result<Obj, Invalid> {
     })
 }
 
+/// Replaces the mapping table `entity` by the many-to-many relationship it stood for
+/// ([`collapse`]) and selects it; a refusal is about `entity`.
 fn relationship_collapse(ctx: &mut C<'_>, p: &Params) -> R {
     let m = id_of(ctx, p, "entity", ENTITY)?;
-    let r = collapse(ctx.doc, m).map_err(|e| refuse("entity", e.to_string()))?;
+    let r = collapse(ctx.doc, m).map_err(|e| refusal("entity", e))?;
     select(ctx, vec![r]);
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
@@ -2322,10 +2353,7 @@ fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
             subtypes_hold(st, sup)?;
             Ok(g)
         })
-        .map_err(|e| match e {
-            Invalid::Refused(why) => refuse("subtype", why),
-            other => fail(other),
-        })?;
+        .map_err(refused_as("subtype"))?;
     select(ctx, vec![g]);
     Ok(json!({ "id": uuid_of(ctx.doc, g)? }))
 }
@@ -2374,10 +2402,7 @@ fn entity_set_subtyping(ctx: &mut C<'_>, p: &Params) -> R {
             }
             subtypes_hold(st, e)
         })
-        .map_err(|e| match e {
-            Invalid::Refused(why) => refuse("mapping", why),
-            other => fail(other),
-        })?;
+        .map_err(refused_as("mapping"))?;
     Ok(json!({ "id": uuid_of(ctx.doc, e)? }))
 }
 
@@ -2638,7 +2663,7 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
             }
             keys_still_hold(st, &fks, &entities)
         })
-        .map_err(|e| refuse("key", e.to_string()))?;
+        .map_err(|e| refusal("key", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, fk)? }))
 }
 
@@ -2688,7 +2713,7 @@ fn primary_key_set(ctx: &mut C<'_>, p: &Params) -> R {
             subtypes_hold(st, e)?;
             Ok(pk)
         })
-        .map_err(|e| refuse("columns", e.to_string()))?;
+        .map_err(|e| refusal("columns", e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, pk)? }))
 }
 
@@ -3037,7 +3062,7 @@ fn relationship_set_ends(ctx: &mut C<'_>, p: &Params) -> R {
             }
             keys_still_hold(st, &fks, &entities)
         })
-        .map_err(|e| refuse(if to_end != was_to && from_end == was_from { "to_end" } else { "from_end" }, e.to_string()))?;
+        .map_err(|e| refusal(if to_end != was_to && from_end == was_from { "to_end" } else { "from_end" }, e))?;
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
@@ -3740,4 +3765,30 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         cmd!(query "er.entity.get", "Get entity", &["Entity"], None, "entity: string; the entity's id", has_entities, entity_get),
     ]);
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A reason kept inside a step reaches the refusal its own sentence makes, through each conduit,
+    /// and only once; a reason left behind by a refusal that never reached a conduit, dropped or cut
+    /// short by a panic, never attaches to a later refusal of another sentence (AR-493).
+    #[test]
+    fn a_kept_reason_reaches_only_its_own_refusal_once() {
+        let deep = || Reason::TooDeep { kind: "key", max: 3 };
+        let other = || Invalid::Refused("another sentence".into());
+        assert_eq!(refusal("k", refused(deep(), "too deep".into())).reason, Some(deep()));
+        assert_eq!(refused_as("k")(refused(deep(), "too deep".into())).reason, Some(deep()));
+        assert_eq!(fail(refused(deep(), "too deep".into())).reason, Some(deep()));
+        assert_eq!(refusal("k", Invalid::Refused("too deep".into())).reason, None, "taken once");
+        drop(refused(deep(), "too deep".into()));
+        assert_eq!(refusal("k", other()).reason, None, "a dropped refusal's reason");
+        assert_eq!(fail(Invalid::Refused("too deep".into())).reason, None, "taken by the miss");
+        let _ = std::panic::catch_unwind(|| {
+            drop(refused(deep(), "too deep".into()));
+            panic!("a step cut short");
+        });
+        assert_eq!(refused_as("k")(other()).reason, None, "a reason left by a panic");
+    }
 }
