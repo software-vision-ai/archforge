@@ -528,8 +528,9 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 
 /// A diagram command's refusal: an id or an element of the wrong kind where a diagram, a box, a line
 /// or a label is taken, a box's size, an element a diagram does not show or shows already, a box on
-/// another diagram or nested too deep, a note's text or link, too many bends, and elements a
-/// notation does not remove yet; none for another reason. A coordinate is said as a constraint's is.
+/// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
+/// does not remove yet, a kind word that is no plain word, and a diagram kind or a label's text none
+/// takes; none for another reason. A coordinate is said as a constraint's is.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
     use archforge_engine::Reason;
@@ -554,6 +555,22 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::StraightLink => tr("A note's link is a straight line and does not bend."),
         Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
         Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
+        Reason::NotAPlainWord => tr("Use a plain word: lower case letters, digits, _, - and ., starting with a letter."),
+        Reason::NotOneOf(no) => return not_one_of_said(no),
+        _ => return None,
+    })
+}
+
+/// A word none of its place's words: a diagram kind no notation knows, with the kinds there are,
+/// and a label's text a line's element lacks, with those it has; none for another place.
+fn not_one_of_said(no: &archforge_engine::NotOneOf) -> Option<String> {
+    let known = no.known.join(", ");
+    let args = [("word", no.word.as_str()), ("kinds", known.as_str()), ("slots", known.as_str())];
+    Some(match (no.what, no.known.is_empty()) {
+        ("diagram kind", false) => fmt(&tr("{word} is not a diagram kind. The kinds are {kinds}."), &args),
+        ("diagram kind", true) => tr("This project holds no notation, so it knows no diagram kind."),
+        ("text slot", false) => fmt(&tr("This line has no label text {word}. It has {slots}."), &args),
+        ("text slot", true) => fmt(&tr("This line has no label text {word}. It has none."), &args),
         _ => return None,
     })
 }

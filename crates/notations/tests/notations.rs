@@ -246,10 +246,14 @@ fn every_session_a_project_makes_holds_its_notations() {
     let (tables, junctions) = storage();
     let back = session_from_rows(&rows::snapshot(s.doc(), &tables, &junctions).unwrap(), ids(1 << 40)).unwrap();
     assert!(std::ptr::eq(back.view().notations(), archforge_notations::NOTATIONS));
-    // A view without notations knows no diagram kind, and says so.
+    // A view without notations knows no diagram kind, and says so, the reason typed (AR-512).
     let mut bare = Session::new(registry().unwrap(), store(ids(1 << 41)).unwrap(), 1, Options::default());
-    let e = bare.execute("diagram.add", &json!({ "kind": "er" })).unwrap_err();
-    assert!(e.to_string().contains("holds no notation"), "{e}");
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = bare.execute("diagram.add", &json!({ "kind": "er" })) else {
+        panic!("a view without notations adds no diagram")
+    };
+    assert!(error.message.contains("holds no notation"), "{}", error.message);
+    let none = archforge_engine::NotOneOf { what: "diagram kind", word: "er".into(), known: Vec::new() };
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::NotOneOf(Box::new(none))), Some("kind")));
 }
 
 #[test]

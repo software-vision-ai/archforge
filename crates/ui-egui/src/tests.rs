@@ -6179,6 +6179,58 @@ fn a_diagram_refusal_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A kind word a diagram command refuses is said in the chosen language: a diagram's kind that is
+/// no plain word or none the notations know, with the kinds there are, a box's kind, a label's text
+/// an association's line lacks, with those it has, and one a generalization's line, which has none,
+/// and a style's name; a project without notations said from the reason alone. In light and dark
+/// (AR-512).
+#[test]
+fn a_kind_word_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr};
+    use archforge_mof::Value;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let refused =
+            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let plain = refused(&mut h, "diagram.add", json!({ "kind": "Klasse" }));
+        assert_eq!(plain, "Verwenden Sie ein einfaches Wort: Kleinbuchstaben, Ziffern, _, - und ., beginnend mit einem Buchstaben.", "{theme:?}");
+        let session = h.state().session.as_ref().unwrap();
+        let kinds = archforge_diagram::DiagramView::kinds(session.view()).join(", ");
+        let unknown = fmt(&tr("{word} is not a diagram kind. The kinds are {kinds}."), &[("word", "toy"), ("kinds", &kinds)]);
+        assert_eq!(refused(&mut h, "diagram.add", json!({ "kind": "toy" })), unknown, "{theme:?}");
+        let d = h.state().canvas.active.unwrap().to_string();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let commerce = st.container(st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
+        let p = json!({ "package": st.uuid(commerce).unwrap().to_string(), "name": "Shop" });
+        let shop = crate::panels::run(h.state_mut(), "uml.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
+        let role = json!({ "diagram": d, "element": shop, "x": 0, "y": 0, "kind": "Box" });
+        assert_eq!(refused(&mut h, "diagram.place", role), plain, "{theme:?}");
+        // A line of each kind: an association's, with label texts, and a generalization's, without.
+        let st = h.state().session.as_ref().unwrap().doc();
+        let lines = st.list(st.by_uuid(h.state().canvas.active.unwrap()).unwrap(), archforge_diagram::diagram::EDGE).unwrap();
+        let line_of = |class| {
+            let shows = |e: &archforge_mof::Obj| {
+                st.get(*e, archforge_diagram::edge::ELEMENT).ok().and_then(|v| v.as_ref()).and_then(|el| st.class_of(el).ok())
+            };
+            st.uuid(lines.iter().filter_map(Value::as_ref).find(|e| shows(e) == Some(class)).unwrap()).unwrap().to_string()
+        };
+        let (association, generalization) = (line_of(archforge_uml::ASSOCIATION), line_of(archforge_uml::GENERALIZATION));
+        let slots = archforge_uml::figures::text_slots(archforge_uml::ASSOCIATION).join(", ");
+        let lacks = fmt(&tr("This line has no label text {word}. It has {slots}."), &[("word", "kind"), ("slots", &slots)]);
+        assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": association, "kind": "kind" })), lacks, "{theme:?}");
+        let none = fmt(&tr("This line has no label text {word}. It has none."), &[("word", "name")]);
+        assert_eq!(refused(&mut h, "diagram.label", json!({ "edge": generalization, "kind": "name" })), none, "{theme:?}");
+        assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [nodes["Order"]], "name": "Akzent" })), plain, "{theme:?}");
+        let bare = archforge_engine::NotOneOf { what: "diagram kind", word: "uml.class".into(), known: Vec::new() };
+        let no_notation = crate::panels::said(&archforge_engine::Reason::NotOneOf(Box::new(bare)));
+        assert_eq!(no_notation, Some(tr("This project holds no notation, so it knows no diagram kind.")), "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

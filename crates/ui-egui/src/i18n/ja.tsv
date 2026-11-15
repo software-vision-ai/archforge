@@ -1325,6 +1325,11 @@ str		This box shows an element and draws its text. Only a note takes a text of i
 str		A note's link is a straight line and does not bend.	ノートのリンクは直線で、折れ曲がりません。
 str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
 str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} は図の種類ではありません。種類は {kinds} です。
+str		This project holds no notation, so it knows no diagram kind.	このプロジェクトには表記法がないため、図の種類がありません。
+str		This line has no label text {word}. It has {slots}.	この線にはラベルのテキスト {word} がありません。あるのは {slots} です。
+str		This line has no label text {word}. It has none.	この線にはラベルのテキスト {word} がありません。ラベルのテキストはありません。
 str		No property is given. Give its name or id.	プロパティが指定されていません。その名前か ID を指定してください。
 str		This element is gone.	この要素はもうありません。
 str		{name} is a template parameter of {template} and types only its members.	{name} は {template} のテンプレートパラメーターで、そのメンバーの型にだけ使えます。

@@ -1324,6 +1324,11 @@ str		This box shows an element and draws its text. Only a note takes a text of i
 str		A note's link is a straight line and does not bend.	A note's link is a straight line and does not bend.
 str		A line bends at most {max} times.	A line bends at most {max} times.
 str		{notation} elements cannot be removed yet.	{notation} elements cannot be removed yet.
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use a plain word: lower case letters, digits, _, - and ., starting with a letter.
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} is not a diagram kind. The kinds are {kinds}.
+str		This project holds no notation, so it knows no diagram kind.	This project holds no notation, so it knows no diagram kind.
+str		This line has no label text {word}. It has {slots}.	This line has no label text {word}. It has {slots}.
+str		This line has no label text {word}. It has none.	This line has no label text {word}. It has none.
 str		No property is given. Give its name or id.	No property is given. Give its name or id.
 str		This element is gone.	This element is gone.
 str		{name} is a template parameter of {template} and types only its members.	{name} is a template parameter of {template} and types only its members.

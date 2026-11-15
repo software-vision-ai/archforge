@@ -1325,6 +1325,11 @@ str		This box shows an element and draws its text. Only a note takes a text of i
 str		A note's link is a straight line and does not bend.	备注的链接是一条直线，不能弯折。
 str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
 str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	请使用简单的词：以小写字母开头，只含小写字母、数字、_、- 和 .。
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} 不是图类型。图类型有 {kinds}。
+str		This project holds no notation, so it knows no diagram kind.	此项目不含任何表示法，因此不知道任何图类型。
+str		This line has no label text {word}. It has {slots}.	这条线没有标签文本 {word}。它有 {slots}。
+str		This line has no label text {word}. It has none.	这条线没有标签文本 {word}。它没有标签文本。
 str		No property is given. Give its name or id.	未给出属性。请给出其名称或 ID。
 str		This element is gone.	此元素已不存在。
 str		{name} is a template parameter of {template} and types only its members.	{name} 是 {template} 的模板参数，只能作为其成员的类型。

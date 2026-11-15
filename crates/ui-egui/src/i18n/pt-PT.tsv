@@ -1325,6 +1325,11 @@ str		This box shows an element and draws its text. Only a note takes a text of i
 str		A note's link is a straight line and does not bend.	A ligação de uma nota é uma linha reta e não dobra.
 str		A line bends at most {max} times.	Uma linha dobra no máximo {max} vezes.
 str		{notation} elements cannot be removed yet.	Os elementos {notation} ainda não podem ser removidos.
+str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use uma palavra simples: letras minúsculas, algarismos, _, - e ., a começar por uma letra.
+str		{word} is not a diagram kind. The kinds are {kinds}.	{word} não é um tipo de diagrama. Os tipos são {kinds}.
+str		This project holds no notation, so it knows no diagram kind.	Este projeto não contém nenhuma notação, por isso não conhece nenhum tipo de diagrama.
+str		This line has no label text {word}. It has {slots}.	Esta linha não tem o texto de etiqueta {word}. Tem {slots}.
+str		This line has no label text {word}. It has none.	Esta linha não tem o texto de etiqueta {word}. Não tem nenhum.
 str		No property is given. Give its name or id.	Não foi indicada nenhuma propriedade. Indique o seu nome ou identificador.
 str		This element is gone.	Este elemento já não existe.
 str		{name} is a template parameter of {template} and types only its members.	{name} é um parâmetro de modelo de {template} e só tipifica os membros dele.

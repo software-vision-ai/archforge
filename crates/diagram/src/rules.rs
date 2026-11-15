@@ -27,19 +27,19 @@ pub const MAX_WAYPOINTS: usize = 256;
 pub const MAX_LABELS: usize = 16;
 
 /// Why a kind (a diagram kind, a node kind, a label's slot, a sheet style's name) is not acceptable,
-/// as the end of the sentence "the kind ...": plain identifiers only, `a-z`, digits, `_`, `-` and
-/// `.` between them.
-pub fn kind_problem(kind: &str) -> Option<String> {
+/// displayed as the end of the sentence "the kind ...", and typed for an interface to say: plain
+/// identifiers only, `a-z`, digits, `_`, `-` and `.` between them.
+pub fn kind_problem(kind: &str) -> Option<Problem> {
     if kind.is_empty() {
-        return Some("is empty".into());
+        return Some(Problem::new(Reason::NotAPlainWord, "is empty"));
     }
     if kind.chars().count() > MAX_KIND {
-        return Some(format!("is longer than {MAX_KIND} characters"));
+        return Some(Problem::too_long(MAX_KIND));
     }
     if !kind.starts_with(|c: char| c.is_ascii_lowercase())
         || !kind.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '_' | '-' | '.'))
     {
-        return Some("is not a plain identifier of lower case letters, digits, `_`, `-` and `.`".into());
+        return Some(Problem::new(Reason::NotAPlainWord, "is not a plain identifier of lower case letters, digits, `_`, `-` and `.`"));
     }
     None
 }
