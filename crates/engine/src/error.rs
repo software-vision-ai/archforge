@@ -234,13 +234,13 @@ pub enum Reason {
     /// The stereotype has no property `name`, as asked for and cut to its first characters, nor any
     /// other yet.
     NoProperties { stereotype: Box<str>, name: Box<str> },
-    /// The element `name` is not of `kind`, as `"stereotype"` or `"class diagram"`, which the
-    /// parameter takes.
+    /// The element `name` is not of `kind`, as `"stereotype"`, `"class diagram"` or, of the model,
+    /// `"constraint"`, which the parameter takes.
     NotA { kind: &'static str, name: String },
     /// A stereotype property's values, each as text, are no list or hold something else.
     ValuesExpected,
-    /// No id is given where the id of an element of `kind` is taken, as `"stereotype"`, or, for a
-    /// `"property"`, its id or name.
+    /// No id is given where the id of an element of `kind` is taken, as `"stereotype"` or
+    /// `"constraint"`, or, for a `"property"`, its id or name.
     IdEmpty { kind: &'static str },
     /// The element is gone from the model.
     Gone,
@@ -254,6 +254,18 @@ pub enum Reason {
     NotConstrainable,
     /// A constraint shown as braces sits by an element it names, and the diagram shows none of them.
     BracesNoElement,
+    /// The constraint is among no element's constraints: it has no context, or its context does not
+    /// list it.
+    NoContext,
+    /// No place `at` is among the elements of `kind`, as `"constraint"`, a list whose last place is
+    /// `last`; -1 is the last.
+    NoPlace { kind: &'static str, at: i64, last: usize },
+    /// One of the coordinates `x` and `y` is given without the other.
+    OneCoordinate,
+    /// The coordinate `axis`, `"x"` or `"y"`, is not a number.
+    CoordinateNotANumber { axis: &'static str },
+    /// The coordinate `axis`, `"x"` or `"y"`, is farther from the origin than a diagram reaches.
+    CoordinateTooFar { axis: &'static str },
     /// The element is of a kind that takes no description.
     TakesNoDescription,
     /// The element owns `max` comments or more, so its description, looked for among the first

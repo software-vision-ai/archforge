@@ -480,11 +480,25 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
     Some(fmt(&template, &[("what", &what), ("name", name)]))
 }
 
-/// A constraint's or a description's rule broken, in the constraint editor's own words where it has
-/// them; none for another reason.
+/// A constraint's or a description's rule broken, or a constraint command's parameter refused, in
+/// the constraint editor's own words where it has them; none for another reason.
 fn constraint_said(reason: &archforge_engine::Reason) -> Option<String> {
     use archforge_engine::Reason;
     Some(match reason {
+        Reason::IdEmpty { kind: "constraint" } => tr("No constraint is given. Give its id."),
+        Reason::NotA { kind: "constraint", name } => fmt(&tr("{name} is not a constraint of this model."), &[("name", name)]),
+        Reason::IdsExpected { kind: "constrained element" } => tr("Give the elements as a list of ids."),
+        Reason::NoContext => tr("This constraint is among no element's constraints."),
+        Reason::NoPlace { kind: "constraint", at, last } => fmt(
+            &tr("There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last."),
+            &[("at", &at.to_string()), ("last", &last.to_string())],
+        ),
+        Reason::OneCoordinate => tr("Give both x and y, or neither to place it where it reads."),
+        Reason::CoordinateNotANumber { axis } => fmt(&tr("The {axis} is not a number."), &[("axis", axis)]),
+        Reason::CoordinateTooFar { axis } => {
+            let max = archforge_diagram::rules::MAX_COORD.to_string();
+            fmt(&tr("The {axis} is farther than {max} from the origin."), &[("axis", axis), ("max", &max)])
+        }
         Reason::NoExpression => tr("Type an expression. A constraint without one states no rule."),
         Reason::BracesNoElement => tr("Braces sit by an element they constrain, and this diagram shows none of them. Show it as a linked note."),
         Reason::NotAContext => tr("Only a classifier of the model's own or a package owns constraints."),

@@ -236,8 +236,7 @@ fn an_empty_expression_and_an_element_outside_the_model_are_refused_changing_not
 
 /// A constraint's own rules, refused, carry their reason typed beside the unchanged English: an
 /// expression that states no rule, a context that owns none, an element no constraint names or one
-/// named twice, more elements than one names, and braces with nothing to sit by. A refusal about
-/// an id keeps only its sentence (AR-447).
+/// named twice, more elements than one names, and braces with nothing to sit by (AR-447).
 #[test]
 fn every_constraint_rule_refused_carries_its_reason_typed() {
     use archforge_engine::{EngineError, Reason};
@@ -268,12 +267,72 @@ fn every_constraint_rule_refused_carries_its_reason_typed() {
     let most = Some(Reason::TooMany { kind: "constrained element", max: 256 });
     check(&mut s, "uml.constraint.set", changed(json!(vec![&total; 257])), most, "a constraint names at most 256 elements; 257 were given");
     check(&mut s, "uml.constraint.set", changed(json!(vec![&total; 256])), twice(), "is named twice");
-    check(&mut s, "uml.constraint.set", changed(json!([order, "nope"])), None, "is not an id");
-    check(&mut s, "uml.constraint.set", json!({ "constraint": order, "name": "n" }), None, "is not a constraint of this model");
     // Braces need an element of theirs on the diagram.
     run(&mut s, "diagram.unplace", json!({ "nodes": [on] }));
     let braces = json!({ "diagram": d, "constraint": c, "as": "braces" });
     check(&mut s, "uml.constraint.show", braces, Some(Reason::BracesNoElement), "braces sit by an element they constrain");
+}
+
+/// The constraint commands' parameters refused carry their reason typed beside the unchanged
+/// English, under the parameter each is about: an id missing, as the id of what the parameter
+/// takes, malformed or of no element, an element that is no constraint or no class diagram, an
+/// element listed as no id, a place past the last, one coordinate without the other or one too far
+/// or no number, and a constraint among no element's constraints (AR-476).
+#[test]
+fn every_constraint_parameter_refused_carries_its_reason_typed() {
+    use archforge_engine::{EngineError, Reason};
+    let mut s = session();
+    let [sales, order, _, _, d, ..] = shop(&mut s);
+    let c = run(&mut s, "uml.constraint.add", json!({ "context": order, "expression": "x" }));
+    let check = |s: &mut S, cmd: &str, p: Json, key: &str, reason: Reason, english: &str| {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    };
+    let (add, set, show) = ("uml.constraint.add", "uml.constraint.set", "uml.constraint.show");
+    // An id missing is refused as the id of what the parameter takes.
+    let empty = |kind| Reason::IdEmpty { kind };
+    check(&mut s, add, json!({ "context": "", "expression": "x" }), "context", empty("element"), "\"\" is not an id");
+    check(&mut s, set, json!({ "constraint": "", "name": "n" }), "constraint", empty("constraint"), "\"\" is not an id");
+    check(&mut s, show, json!({ "diagram": "", "constraint": c }), "diagram", empty("class diagram"), "\"\" is not an id");
+    let changed = |constrained: Json| json!({ "constraint": c, "constrained": constrained });
+    check(&mut s, set, changed(json!([order, ""])), "constrained", empty("element"), "\"\" is not an id");
+    // An id malformed, or of no element, an element listed as no id, and elements of other kinds.
+    let none = |id: &str| Reason::NoElement { id: id.into() };
+    check(&mut s, set, changed(json!([order, "nope"])), "constrained", none("nope"), "\"nope\" is not an id");
+    let gone = run(&mut s, "uml.class.add", json!({ "package": sales, "name": "Gone" }));
+    run(&mut s, "element.remove", json!({ "ids": [gone] }));
+    check(&mut s, add, json!({ "context": gone, "expression": "x" }), "context", none(&gone), "there is no element");
+    let ids = Reason::IdsExpected { kind: "constrained element" };
+    check(&mut s, set, changed(json!([order, 7])), "constrained", ids, "every element is an id, as a string");
+    let not_a = |kind, name: &str| Reason::NotA { kind, name: name.into() };
+    check(&mut s, set, json!({ "constraint": order, "name": "n" }), "constraint", not_a("constraint", "Order"), "is not a constraint of this model");
+    check(&mut s, show, json!({ "diagram": order, "constraint": c }), "diagram", not_a("class diagram", "Order"), "is not a class diagram");
+    // A place past the last, and where it is shown: one coordinate alone, or one too far.
+    let past = Reason::NoPlace { kind: "constraint", at: 3, last: 0 };
+    check(&mut s, "uml.constraint.move", json!({ "constraint": c, "at": 3 }), "at", past, "3 is past the last constraint; a place from 0 to 0");
+    for alone in [json!({ "diagram": d, "constraint": c, "x": 10 }), json!({ "diagram": d, "constraint": c, "y": 10 })] {
+        check(&mut s, show, alone, "x", Reason::OneCoordinate, "give both x and y, or neither");
+    }
+    let far = |axis| Reason::CoordinateTooFar { axis };
+    check(&mut s, show, json!({ "diagram": d, "constraint": c, "x": 2e6, "y": 0 }), "x", far("x"), "the x is farther than");
+    check(&mut s, show, json!({ "diagram": d, "constraint": c, "x": 0, "y": -2e6 }), "y", far("y"), "the y is farther than");
+    // No number, as a caller of `show` may give, and a constraint a file put among a package's
+    // elements, outside any element's constraints.
+    let (tables, junctions) = tables();
+    let mut st = store(1 << 30);
+    rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
+    let (on, rule) = (obj(&st, &d), obj(&st, &c));
+    let nan = constraints::show(&mut st, on, rule, Form::Note, Some((0.0, f64::NAN))).unwrap_err();
+    assert_eq!((nan.reason, nan.key.as_deref()), (Some(Reason::CoordinateNotANumber { axis: "y" }), Some("y")), "{}", nan.message);
+    let loose = st.create(CONSTRAINT).unwrap();
+    st.push(obj(&st, &sales), archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(loose)).unwrap();
+    let loose = st.uuid(loose).unwrap().to_string();
+    let mut s = session_over(st);
+    let unlisted = json!({ "constraint": loose, "at": 0 });
+    check(&mut s, "uml.constraint.move", unlisted, "constraint", Reason::NoContext, "the constraint is not among its context's");
 }
 
 /// Deleting a constrained element drops it from the constraint in the same undo step; a constraint

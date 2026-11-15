@@ -1369,6 +1369,14 @@ str		Braces sit by an element they constrain, and this diagram shows none of the
 str		Only a classifier of the model's own or a package owns constraints.	只有模型自有的分类器或包可以拥有约束。
 str		A constraint names only elements of this model.	约束只能指定此模型中的元素。
 str		A constraint names at most {max} elements.	一个约束最多指定 {max} 个元素。
+str		No constraint is given. Give its id.	未给出约束。请给出其 ID。
+str		{name} is not a constraint of this model.	{name} 不是此模型的约束。
+str		Give the elements as a list of ids.	请以 ID 列表的形式给出元素。
+str		This constraint is among no element's constraints.	此约束不在任何元素的约束之中。
+str		There is no place {at} among the constraints. Give a place from 0 to {last}, or -1 for the last.	约束中没有位置 {at}。请给出 0 到 {last} 之间的位置，或用 -1 表示最后一个。
+str		Give both x and y, or neither to place it where it reads.	请同时给出 x 和 y，或者都不给出，以便放在易读的位置。
+str		The {axis} is not a number.	{axis} 的值不是数字。
+str		The {axis} is farther than {max} from the origin.	{axis} 的值离原点超过 {max}。
 str		An element is named twice. Name each element once.	有元素被指定了两次。每个元素只指定一次。
 str		a constraint	一个约束
 str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
