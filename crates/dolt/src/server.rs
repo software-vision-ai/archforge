@@ -1135,11 +1135,10 @@ mod tests {
     }
 
     /// A stand-in for a server, waiting on its input, run as `line`: started, and seen by its own
-    /// command line once it has one.
-    #[cfg(unix)]
+    /// command line once it has one. What it writes (`pause` prompts for a key) goes nowhere.
     fn stand_in(line: &[String]) -> std::process::Child {
-        let child = std::process::Command::new(&line[0]).args(&line[1..]).stdin(Stdio::piped()).spawn().unwrap();
-        // Between fork and exec the child still shows this test's command line.
+        let child = std::process::Command::new(&line[0]).args(&line[1..]).stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+        // On unix, between fork and exec, the child still shows this test's command line.
         let until = Instant::now() + Duration::from_secs(5);
         while !identity(child.id()).unwrap().is_some_and(|i| i.is(line)) && Instant::now() < until {
             std::thread::sleep(Duration::from_millis(20));
@@ -1349,6 +1348,30 @@ mod tests {
         }
         drop(decoy.stdin.take());
         assert_eq!(decoy.wait().unwrap().signal(), None, "the decoy got no signal");
+    }
+
+    /// A server whose run root and command line hold characters outside ASCII is recognised by
+    /// the start-up sweep as the recorded one once its Archforge is gone, and stopped, with its
+    /// record and run folder, whatever code page the console has (AR-468).
+    #[cfg(windows)]
+    #[test]
+    fn the_start_up_sweep_stops_a_server_whose_run_root_holds_characters_outside_ascii() {
+        let _oem = identity::tests::OemConsole::set();
+        let dir = crate::home::tests::Scratch::new("é ü Ä😀");
+        // `pause` waits for a key or the end of its input, whatever follows it on the line.
+        let cmd = runner::system32("cmd.exe").display().to_string();
+        let odd = format!("é ü Ä😀 {}", crate::secret::random_name(12).unwrap());
+        let (opts, _, pending) = left(&dir.0, &[cmd.as_str(), "/c", "pause", odd.as_str()], false).unwrap();
+        let mut server = stand_in(&pending.command);
+        let r = Record { server_pid: Some(server.id()), ..pending };
+        std::fs::write(record::path(&opts.records, &r.data_dir), serde_json::to_vec(&r).unwrap()).unwrap();
+        let stopped = stop_orphans(&opts);
+        // Had the sweep left it running, its input closes here, so nothing stays behind either way.
+        drop(server.stdin.take());
+        let status = server.wait().unwrap();
+        assert_eq!(stopped.unwrap(), 1, "the sweep recognised the server as the recorded one");
+        assert_ne!(status.code(), Some(0), "the sweep ended it, not its input");
+        assert_eq!((record::read(&opts.records, &r.data_dir).unwrap(), Path::new(&r.run_dir).exists()), (None, false));
     }
 
     /// A copy of a record without a process id under a name not its project's goes, and nothing

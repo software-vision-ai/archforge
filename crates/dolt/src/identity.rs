@@ -348,31 +348,52 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::ffi::OsStr;
+    use std::path::PathBuf;
 
     use super::{Identity, cim_answer};
     use crate::Error;
     use crate::runner;
 
+    /// The start of every query: Windows PowerShell answers in UTF-8, for a command line outside
+    /// ASCII, and without progress records, which would read as a failure. Left to itself it
+    /// writes in its console's code page, or in the OEM code page where there is no console, as
+    /// the application has none (measured on Windows 11 with Windows PowerShell 5.1: `é ü` came
+    /// as the bytes `82 20 81` of code page 850), and a command line with such a character then
+    /// reads as one with the replacement character, which is nobody's (AR-468).
+    const PREFIX: &str = "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ";
+
+    /// Windows PowerShell, by absolute path.
+    fn powershell() -> PathBuf {
+        runner::system32(r"WindowsPowerShell\v1.0\powershell.exe")
+    }
+
+    /// What Windows PowerShell answers to `query`, run after [`PREFIX`]: `cap` bytes of each
+    /// stream are kept for an answer that is long by nature, else [`runner::run`]'s.
+    fn ask(query: &str, cap: Option<u64>) -> Result<runner::Output, Error> {
+        let ps = powershell();
+        let script = format!("{PREFIX}{query}");
+        let args = [OsStr::new("-NoProfile"), OsStr::new("-NonInteractive"), OsStr::new("-Command"), OsStr::new(&script)];
+        match cap {
+            Some(cap) => runner::run_capped(&ps, &args, &runner::base_env(), runner::POWERSHELL_BUDGET, cap),
+            None => runner::run(&ps, &args, &runner::base_env(), runner::POWERSHELL_BUDGET),
+        }
+    }
+
+    /// One query (CIM) for the process `pid` alone.
     pub fn identity(pid: u32) -> Result<Option<Identity>, Error> {
-        let ps = runner::system32(r"WindowsPowerShell\v1.0\powershell.exe");
-        let script = format!(
+        let query = format!(
             "Get-CimInstance Win32_Process -Filter 'ProcessId={pid}' | Select-Object ParentProcessId,CreationDate,CommandLine | ConvertTo-Json -Compress"
         );
-        let args = [OsStr::new("-NoProfile"), OsStr::new("-NonInteractive"), OsStr::new("-Command"), OsStr::new(&script)];
-        let out = runner::run(&ps, &args, &runner::base_env(), runner::POWERSHELL_BUDGET)?;
-        cim_answer(&out).ok_or_else(|| runner::failed(&ps, &out))
+        let out = ask(&query, None)?;
+        cim_answer(&out).ok_or_else(|| runner::failed(&powershell(), &out))
     }
 
     /// One query for every process the query shows; the command line looked for is no part of it,
-    /// so the query's own process is never an answer. It answers in UTF-8, for a command line
-    /// outside ASCII, and without progress records, which would read as a failure.
+    /// so the query's own process is never an answer.
     pub fn running(command: &[String]) -> Result<Vec<u32>, Error> {
-        let ps = runner::system32(r"WindowsPowerShell\v1.0\powershell.exe");
-        let script = "$ProgressPreference='SilentlyContinue'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); \
-                      Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress";
-        let args = [OsStr::new("-NoProfile"), OsStr::new("-NonInteractive"), OsStr::new("-Command"), OsStr::new(script)];
-        let out =
-            super::whole(&ps, runner::run_capped(&ps, &args, &runner::base_env(), runner::POWERSHELL_BUDGET, super::LIST_CAP)?, super::LIST_CAP)?;
+        let ps = powershell();
+        let query = "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress";
+        let out = super::whole(&ps, ask(query, Some(super::LIST_CAP))?, super::LIST_CAP)?;
         Some(&out)
             .filter(|o| o.stderr.trim().is_empty())
             .and_then(|o| super::parse_cim_list(&o.stdout, command))
@@ -532,7 +553,7 @@ pub(crate) fn split_windows(line: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     fn list(a: &[&str]) -> Identity {
@@ -591,6 +612,72 @@ mod tests {
         assert_eq!(found, [child.id()]);
         assert!(!longer.contains(&child.id()) && !shorter.contains(&child.id()) && other.is_empty(), "{longer:?} {shorter:?} {other:?}");
         assert_eq!((status.signal(), running(&line(&[])).unwrap()), (None, Vec::new()), "and it is not found once it ended");
+    }
+
+    /// The console's output code page set to 850, where `é` and `ü` are single bytes that are no
+    /// UTF-8, as a console that is not set to UTF-8 has it, for one test at a time; the code page
+    /// found comes back when it is dropped, a panic included. Without a console nothing is set: a
+    /// query's answer is then in the OEM code page anyway, as the application, which has no
+    /// console, gets it.
+    #[cfg(windows)]
+    pub(crate) struct OemConsole {
+        before: Option<String>,
+        _turn: std::sync::MutexGuard<'static, ()>,
+    }
+
+    #[cfg(windows)]
+    impl OemConsole {
+        /// Sets the code page once the test before has given it back.
+        pub(crate) fn set() -> OemConsole {
+            static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            let turn = ONE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            // `chcp` alone says the code page, in the machine's language, the number last.
+            let before = Self::chcp(&[]).filter(|out| out.success).and_then(|out| {
+                let digits: String = out.stdout.chars().rev().skip_while(|c| !c.is_ascii_digit()).take_while(char::is_ascii_digit).collect();
+                (!digits.is_empty()).then(|| digits.chars().rev().collect())
+            });
+            if before.is_some() {
+                Self::chcp(&["850"]);
+            }
+            OemConsole { before, _turn: turn }
+        }
+
+        /// `chcp` with `args`, on the console this process has, if any.
+        fn chcp(args: &[&str]) -> Option<crate::runner::Output> {
+            let args: Vec<&std::ffi::OsStr> = args.iter().map(std::ffi::OsStr::new).collect();
+            crate::runner::run(&crate::runner::system32("chcp.com"), &args, &crate::runner::base_env(), crate::runner::HELPER_BUDGET).ok()
+        }
+    }
+
+    #[cfg(windows)]
+    impl Drop for OemConsole {
+        /// Gives the code page back.
+        fn drop(&mut self) {
+            if let Some(before) = &self.before {
+                Self::chcp(&[before]);
+            }
+        }
+    }
+
+    /// A running process whose command line holds characters outside ASCII, a sign beyond the
+    /// basic plane among them, is the command line it was started with, and no other, whatever
+    /// code page the console has: the application has no console at all (AR-468).
+    #[cfg(windows)]
+    #[test]
+    fn a_command_line_outside_ascii_is_recognised_as_started() {
+        let _oem = OemConsole::set();
+        let odd = format!("é ü Ä😀 {}", crate::secret::random_name(12).unwrap());
+        // findstr reads its input to the end for the text, and nothing is ever written to it.
+        let findstr = crate::runner::system32("findstr.exe").display().to_string();
+        let line = |last: &str| [findstr.as_str(), last].map(String::from);
+        let mut child =
+            std::process::Command::new(&findstr).arg(&odd).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn().unwrap();
+        let id = identity(child.id()).unwrap().unwrap();
+        let (ours, other) = (id.is(&line(&odd)), id.is(&line(&odd.replace("é ü Ä😀", "e u A"))));
+        drop(child.stdin.take());
+        child.wait().unwrap();
+        assert!(ours, "{id:?}");
+        assert!(!other);
     }
 
     /// Each line of the list is one process: only the exact line counts, the id column may be
