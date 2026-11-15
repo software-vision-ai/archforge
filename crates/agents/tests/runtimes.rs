@@ -314,7 +314,7 @@ fn a_failing_or_hanging_version_probe_is_refused() {
     assert!(matches!(find(RuntimeKind::Claude, &env, &ws).unwrap(), Discovery::Unsupported { reason: Unsupported::ProbeTimedOut { .. }, .. }));
     assert!(started.elapsed() < Duration::from_secs(10));
     // Every probe folder is gone again.
-    let left: Vec<_> = std::fs::read_dir(ws.root()).unwrap().filter_map(Result::ok).map(|e| e.file_name()).collect();
+    let left: Vec<_> = std::fs::read_dir(ws.root()).unwrap().map(Result::unwrap).map(|e| e.file_name()).collect();
     assert!(left.is_empty(), "{left:?}");
     std::fs::remove_dir_all(&base).unwrap();
 }

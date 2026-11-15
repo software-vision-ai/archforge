@@ -75,13 +75,22 @@ fn strip_comment(line: &str) -> &str {
 }
 
 /// Every regular file under `dir`, sorted, as paths relative to the workspace root. Symbolic links
-/// are not followed, so a link cycle cannot make the walk endless.
+/// are not followed, so a link cycle cannot make the walk endless. A folder's listing that fails
+/// part way ends at the failure, which is printed: the files listed after it are left out.
 pub fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&d) else { continue };
-        for e in entries.flatten() {
+        for e in entries {
+            // The standard library does not promise that a listing ends after an error.
+            let e = match e {
+                Ok(e) => e,
+                Err(err) => {
+                    eprintln!("{}: not listed in full, so the rest is left out: {err}", d.display());
+                    break;
+                }
+            };
             let Ok(kind) = e.file_type() else { continue };
             let p = e.path();
             if kind.is_dir() {

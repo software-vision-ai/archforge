@@ -121,13 +121,22 @@ pub fn choose_adapter(adapters: &[(u32, u32, bool)], driving: &[(u32, u32)]) -> 
 }
 
 /// PCI vendor and device ids of the GPUs with a connected monitor, from the kernel's connector
-/// status. Empty where the information does not exist.
+/// status. Empty where the information does not exist. A listing of the connectors that fails part
+/// way ends at the failure, which is logged: the GPUs found by then are kept.
 fn monitor_driving_gpus() -> Vec<(u32, u32)> {
     let root = Path::new("/sys/class/drm");
     let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
     let hex = |p: &Path| std::fs::read_to_string(p).ok().and_then(|s| u32::from_str_radix(s.trim().trim_start_matches("0x"), 16).ok());
     let mut out = Vec::new();
-    for entry in entries.flatten() {
+    for entry in entries {
+        // The standard library does not promise that a listing ends after an error.
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                log::warn!("the display connectors in {} were not all listed: {e}", root.display());
+                break;
+            }
+        };
         let name = entry.file_name().to_string_lossy().to_string();
         let Some((card, _connector)) = name.split_once('-') else { continue };
         let connected = std::fs::read_to_string(entry.path().join("status")).is_ok_and(|s| s.trim() == "connected");

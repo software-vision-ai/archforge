@@ -665,7 +665,7 @@ mod tests {
         let (loaded, warning) = prefs::load(&dir);
         assert_eq!(loaded, prefs::Prefs::default());
         assert!(warning.unwrap().contains("set aside"));
-        assert!(std::fs::read_dir(&dir).unwrap().flatten().any(|e| e.file_name().to_string_lossy().contains("damaged")));
+        assert!(std::fs::read_dir(&dir).unwrap().map(Result::unwrap).any(|e| e.file_name().to_string_lossy().contains("damaged")));
         std::fs::write(dir.join(prefs::FILE), vec![b' '; usize::try_from(prefs::MAX_BYTES).unwrap() + 1]).unwrap();
         let (loaded, warning) = prefs::load(&dir);
         assert_eq!(loaded, prefs::Prefs::default());

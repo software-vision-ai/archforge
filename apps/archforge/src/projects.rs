@@ -2712,7 +2712,7 @@ mod tests {
         let mut out = Vec::new();
         let mut todo = vec![dir.to_path_buf()];
         while let Some(d) = todo.pop() {
-            for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            for entry in std::fs::read_dir(&d).into_iter().flatten().map(Result::unwrap) {
                 let p = entry.path();
                 if p.is_dir() {
                     todo.push(p);

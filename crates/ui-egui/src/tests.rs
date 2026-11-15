@@ -3711,8 +3711,10 @@ fn every_ui_state_field_is_read() {
     let value = serde_json::to_value(UiState::default()).unwrap();
     let fields: Vec<&String> = value.as_object().unwrap().keys().collect();
     let mut sources = String::new();
+    /// Adds the text of the sources under `dir` but the state and the tests to `sources`; a
+    /// listing that fails part way fails the test.
     fn collect(dir: &std::path::Path, sources: &mut String) {
-        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
             let path = entry.path();
             if path.is_dir() {
                 collect(&path, sources);

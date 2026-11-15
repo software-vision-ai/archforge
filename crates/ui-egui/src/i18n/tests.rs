@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
+/// Adds the `.rs` files under `dir` to `out`; a listing that fails part way fails the test.
 fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
-    for entry in entries.flatten() {
+    for entry in entries.map(Result::unwrap) {
         let path = entry.path();
         if path.is_dir() {
             sources(&path, out);
@@ -808,11 +809,17 @@ fn every_catalogue_is_keyed_as_english_and_passes_the_screen() {
     }
 }
 
+/// Every catalogue file in the folder is a registered language, and every language's file is
+/// there; a listing that fails part way fails the test.
 #[test]
 fn every_catalogue_in_the_folder_is_registered() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("i18n");
-    let mut files: Vec<String> =
-        std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tsv")).collect();
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(Result::unwrap)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".tsv"))
+        .collect();
     files.sort();
     let mut registered: Vec<String> = LANGUAGES.iter().map(|l| l.catalogue.to_string()).collect();
     registered.sort();

@@ -64,9 +64,11 @@ impl Env {
         Project::open(&self.dolt, &self.opts(), path)
     }
 
+    /// The server records in the test's records folder; a listing that fails part way fails the
+    /// test.
     fn records(&self) -> usize {
         std::fs::read_dir(self.base.join("records"))
-            .map(|e| e.flatten().filter(|x| x.file_name().to_string_lossy().ends_with(".json")).count())
+            .map(|e| e.map(Result::unwrap).filter(|x| x.file_name().to_string_lossy().ends_with(".json")).count())
             .unwrap_or(0)
     }
 }

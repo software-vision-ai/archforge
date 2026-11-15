@@ -1251,7 +1251,7 @@ fn a_conversation_does_not_start_while_its_folder_is_being_removed_and_starts_on
         assert_eq!(!folder.exists(), goes, "{case}");
         let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
             .unwrap()
-            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
             .collect();
         assert!(aside.is_empty(), "{case}: nothing is left moved aside: {aside:?}");
@@ -1314,7 +1314,7 @@ fn a_start_as_the_folder_goes_is_taken_and_never_refused_while_its_folder_is_los
     assert!(!folder.join("config").join("transcript.jsonl").exists(), "the old folder's contents went with it");
     let aside: Vec<_> = std::fs::read_dir(host.settings.join("agents"))
         .unwrap()
-        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|n| n.starts_with(&format!("conversation-{chat}-rm-")))
         .collect();
     assert!(aside.is_empty(), "nothing is left moved aside: {aside:?}");

@@ -113,7 +113,8 @@ pub(crate) fn known_dirs(home: Option<&Path>, npm_prefix: Option<&Path>) -> Vec<
 }
 
 /// The `bin` folder of each Node version under `root` (`v22.3.0`, …), newest first, at most
-/// [`MAX_NODE_VERSIONS`] of them.
+/// [`MAX_NODE_VERSIONS`] of them. A listing of `root` that fails part way ends at the failure,
+/// which is logged: the versions listed after it are not searched.
 fn node_version_dirs(root: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
     let read = MAX_NODE_VERSIONS.saturating_mul(4);
@@ -124,7 +125,8 @@ fn node_version_dirs(root: &Path) -> Vec<PathBuf> {
     let mut versions: Vec<(Version, PathBuf)> = entries
         .into_iter()
         .take(read)
-        .filter_map(Result::ok)
+        // The standard library does not promise that a listing ends after an error.
+        .map_while(|e| e.inspect_err(|e| log::warn!("{} was not listed in full, so the rest is not searched: {e}", root.display())).ok())
         .filter_map(|e| {
             let name = e.file_name().into_string().ok()?;
             let version = Version::parse(name.strip_prefix('v')?)?;
