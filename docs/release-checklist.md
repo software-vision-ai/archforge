@@ -82,7 +82,9 @@ by choosing its own row in **Window**, press ⌘M and bring it back from the Doc
 With **Generate…** open, look at **Window** again, then close the dialog. With the project showing, press ⌘W;
 open it again and press ⌘S, so nothing is unsaved. Select an element in **Models**, press F2, type a new name
 and, still typing, press ⌘W; choose **Cancel**, then press ⌘S. Rename it the same way and, still typing,
-choose **File ▸ Close project**; choose **Cancel** again. Go to Home, look at **File** and press ⌘W.
+choose **File ▸ Close project**; choose **Cancel** again. Rename it once more and, still typing, choose
+**File ▸ Open project…** and pick another project; then click the first one's tab. Go to Home, look at
+**File** and press ⌘W.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open project…** (⌘O), **Close project** (⌘W), **Save** (⌘S) and **Generate…** (⇧⌘G), with a divider after
@@ -114,7 +116,9 @@ on the macOS release. Minimise and ⌘M
 each put the window in the Dock, and the window's row brings it back; Zoom grows it to fill the screen beside the Dock, and the second Zoom
 brings back its earlier size and place. Minimise and Zoom stay enabled while a dialog is up. ⌘W closes the project
 shown as **File ▸ Close project** does. With a name still being typed, both first finish the name, which
-then shows in **Models**, and ask about it as an unsaved change; **Cancel** keeps the project open. On Home
+then shows in **Models**, and ask about it as an unsaved change; **Cancel** keeps the project open.
+**File ▸ Open project…** chosen while typing finishes the name before the picker shows: back on the first
+project's tab the new name shows in **Models**, no longer open for typing. On Home
 **Close project** is disabled and ⌘W does nothing, the window staying open.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, the real window waking
@@ -134,11 +138,15 @@ change nothing behind the dialog; Escape closes it, and the table is still selec
 ## 7. Quitting with unsaved changes
 
 **Do:** make a change in a project without saving, then quit with ⌘Q; choose **Cancel**; quit again
-and choose **Save**.
+and choose **Save**. Open the project again; select an element in **Models**, press F2, type a new name
+and, still typing, choose **Archforge ▸ Quit Archforge**; choose **Cancel**. Rename it again and, still
+typing, click the window's close button; choose **Cancel**.
 
 **Expect:** Archforge asks **Save the changes to `<name>`?** with Save, Cancel and Don't save. Cancel
 keeps Archforge open with the change. Save saves, then Archforge quits; opening the project again
-shows the change.
+shows the change. A name still being typed when quitting, by the menu or the close button, is finished
+first, then shows in **Models**, and Archforge asks about it as an unsaved change; **Cancel** keeps
+Archforge open with the new name.
 
 **Covers:** the operating system's quit request and closing the real window.
 
