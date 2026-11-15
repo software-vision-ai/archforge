@@ -585,6 +585,8 @@ str		{column} is not a column of {table}.	{column} is not a column of {table}.
 str		{name} may be null, which a primary key column never is.	{name} may be null, which a primary key column never is.
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	The foreign key {foreign_key} points at this key of {table}. Change or remove it first.
 str		{table} has no primary key.	{table} has no primary key.
+str		The key {name} would break: {why}	The key {name} would break: {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		The text can't be empty.	The text can't be empty.

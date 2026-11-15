@@ -586,6 +586,8 @@ str		{column} is not a column of {table}.	{column} no es una columna de {table}.
 str		{name} may be null, which a primary key column never is.	{name} admite nulos, y una columna de clave primaria nunca los admite.
 str		The foreign key {foreign_key} points at this key of {table}. Change or remove it first.	La clave foránea {foreign_key} apunta a esta clave de {table}. Cámbiala o elimínala primero.
 str		{table} has no primary key.	{table} no tiene clave primaria.
+str		The key {name} would break: {why}	La clave {name} dejaría de ser válida: {why}
+str		Keys built on each other run deeper than {max} levels here, or in a loop.	Las claves construidas unas sobre otras superan aquí los {max} niveles o forman un ciclo.
 str		A package cannot go into itself or a package it holds.	Un paquete no puede ir dentro de sí mismo ni de un paquete que contiene.
 str		The model cannot be changed at the moment; nothing was changed.	El modelo no se puede cambiar en este momento; no se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.

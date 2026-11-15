@@ -338,6 +338,12 @@ pub enum Reason {
     KeyInUse { foreign_key: Box<str>, table: Box<str> },
     /// The table `table` has no primary key.
     NoPrimaryKey { table: String },
+    /// The key `name`, of `kind` (as `"primary key"`), would break if the step went ahead; `why`
+    /// says how, boxed so the error stays small.
+    WouldBreak { kind: &'static str, name: Box<str>, why: Box<Reason> },
+    /// What of `kind` is built on each other (keys, as `"key"`) runs deeper than `max` levels, or
+    /// in a loop.
+    TooDeep { kind: &'static str, max: u32 },
 }
 
 /// What a [`Reason::NotOneOf`] names; boxed in the reason, so the error stays small.

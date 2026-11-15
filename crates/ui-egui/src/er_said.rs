@@ -3,6 +3,8 @@
 //! uses for them; a kind not listed is left to the engine's English. A word none of a choice's
 //! words is said under the choice's label. A key's columns (AR-492): none, a column of another
 //! table, one that may be null in a primary key, a key a foreign key points at, and no primary key.
+//! Found inside a step (AR-493): a key that would break, with why in the same words, and keys built
+//! on each other too deep.
 
 use archforge_engine::{NotOneOf, Reason, WordPlace};
 
@@ -48,6 +50,12 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             &[("foreign_key", foreign_key), ("table", table)],
         ),
         Reason::NoPrimaryKey { table } => fmt(&tr("{table} has no primary key."), &[("table", table)]),
+        Reason::WouldBreak { kind: "primary key" | "unique constraint", name, why } => {
+            fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+        }
+        Reason::TooDeep { kind: "key", max } => {
+            fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
+        }
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })

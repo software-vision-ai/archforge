@@ -188,7 +188,13 @@ name the schema has; and (AR-491) an index column's direction or nulls order tha
 words, or no word, as `NotOneOf` with the words taken; and (AR-492) a key's columns none, of
 another table, or needed by a foreign key that points at the key, and no primary key to remove, as
 `rules::KeyColumnsProblem::reason` types them, which also types too many columns, one twice and one
-that may be null in a primary key for the rules. The rest follow ticket by ticket, except
+that may be null in a primary key for the rules; and (AR-493), found inside a step, where only the
+store's untyped refusal gets out, a key the step would break, as `WouldBreak` with the key's kind,
+name and `KeyColumnsProblem::reason`, and keys built on each other deeper than the budget, as
+`TooDeep` of `"key"` (growing foreign keys, and a removal's cascade). Such a refusal keeps its
+reason in a slot of the thread beside its sentence, and the conduit that makes the command's
+refusal attaches it only to that very sentence, emptying the slot either way, so a reason left by a
+refusal that never got out never reaches another. The rest follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
 (`generation_params`, `nullable`, `cardinality` twice, `entity_set_subtyping`, `action`,
