@@ -667,16 +667,19 @@ fn binding_list(ctx: &mut C<'_>, p: &Params) -> R {
     }))
 }
 
+/// Why a command that binds a template is not available.
+pub const NO_TEMPLATES: &str = "There is no template yet: give a class, an interface or a data type a template parameter first.";
+/// Why a command that changes a template binding is not available.
+pub const NO_BINDINGS: &str = "There is no template binding yet.";
+
+/// Whether a template, which a binding binds, exists.
 fn has_templates(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| templates::is_template(f.doc, o)) {
-        Ok(())
-    } else {
-        Err("There is no template yet: give a class, an interface or a data type a template parameter first.")
-    }
+    if f.doc.alive().any(|o| templates::is_template(f.doc, o)) { Ok(()) } else { Err(NO_TEMPLATES) }
 }
 
+/// Whether a template binding exists.
 fn has_bindings(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| is_binding(f.doc, o)) { Ok(()) } else { Err("There is no template binding yet.") }
+    if f.doc.alive().any(|o| is_binding(f.doc, o)) { Ok(()) } else { Err(NO_BINDINGS) }
 }
 
 /// The parameter line both commands share for the arguments.

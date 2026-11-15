@@ -168,6 +168,8 @@ pub(crate) fn built_in_problem(store: &Store, t: Obj, changed: &str) -> Option<S
 pub const MAX_LITERALS: usize = 256;
 /// Why a command for literals is not available.
 pub const NO_ENUMERATIONS: &str = "There is no enumeration yet.";
+/// Why `uml.class.set` is not available.
+pub const NO_CLASS: &str = "There is no class yet.";
 
 /// The visibilities, in the metamodel's order, as the commands name them.
 const VISIBILITIES: [&str; 4] = ["public", "private", "protected", "package"];
@@ -185,7 +187,7 @@ fn has_enumerations(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static st
 
 /// Whether a class, which `uml.class.set` changes, exists.
 fn has_class(f: &Facts<'_, Store, ProjectView>) -> Result<(), &'static str> {
-    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err("There is no class yet.") }
+    if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(CLASS)) { Ok(()) } else { Err(NO_CLASS) }
 }
 
 /// The lists a class, an interface, a data type or an association class keeps its attributes and

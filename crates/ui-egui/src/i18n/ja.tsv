@@ -603,6 +603,36 @@ str		{name} follows no column.	{name} はどの列にも従っていません。
 plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
+str		There is nothing to undo.	元に戻す操作はありません。
+str		There is nothing to redo.	やり直す操作はありません。
+str		The project has no model root yet.	プロジェクトにはまだモデルのルートがありません。
+str		There is no skill yet.	スキルはまだありません。
+str		There is no diagram yet.	図はまだありません。
+str		There is nothing to remove or describe yet.	削除や説明の対象はまだありません。
+str		There is no schema yet.	スキーマはまだありません。
+str		There is no entity yet.	テーブルはまだありません。
+str		There is no package yet.	パッケージはまだありません。
+str		There is no class, interface, enumeration, data type or primitive type yet.	クラス、インターフェース、列挙、データ型、プリミティブ型はまだありません。
+str		There is no class yet.	クラスはまだありません。
+str		There is no enumeration yet.	列挙はまだありません。
+str		There is no class or interface yet.	クラスやインターフェースはまだありません。
+str		There is no association or association class yet.	関連や関連クラスはまだありません。
+str		There is no n-ary association yet.	多項関連はまだありません。
+str		There is no generalization yet.	汎化はまだありません。
+str		There is no generalization set yet.	汎化セットはまだありません。
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	クラス、インターフェース、列挙、データ型、プリミティブ型、関連クラス、パッケージはまだありません。
+str		There is no constraint yet.	制約はまだありません。
+str		There is no class, interface or data type yet.	クラス、インターフェース、データ型はまだありません。
+str		There is no template parameter yet.	テンプレートパラメーターはまだありません。
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	テンプレートはまだありません。先にクラス、インターフェース、データ型のいずれかにテンプレートパラメーターを付けてください。
+str		There is no template binding yet.	テンプレートバインディングはまだありません。
+str		There is no profile yet.	プロファイルはまだありません。
+str		There is no stereotype yet.	ステレオタイプはまだありません。
+str		No stereotype is applied yet.	適用されたステレオタイプはまだありません。
+str		Another change is still under way. Try again once it ends.	別の変更がまだ進行中です。終わってからもう一度お試しください。
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	失敗の後、モデルを元の状態に戻せませんでした。続けるにはプロジェクトを開き直してください。
+str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
+str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
 str		It can't hold a control or hidden character.	制御文字や不可視の文字は使えません。

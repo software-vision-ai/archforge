@@ -6454,6 +6454,47 @@ fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The engine's own refusals are said in the chosen language: a command not available now by its
+/// reason, a reason the catalogues don't hold in the engine's words, a gesture under way, undo
+/// inside another change and a session that could not be put back, each in its sentence, and an
+/// unknown command, a parameter refused and an internal error as one sentence that repeats no
+/// engine text. In light and dark (AR-440).
+#[test]
+fn an_engine_refusal_is_said_in_the_chosen_language() {
+    use archforge_engine::EngineError;
+    use serde_json::json;
+    let internal = "Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.";
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, nodes) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let refused =
+            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let fill = json!({ "ids": [&nodes["Order"]], "fill": "#3366cc" });
+        crate::panels::run(h.state_mut(), "diagram.style", fill.clone()).unwrap();
+        assert_eq!(refused(&mut h, "edit.redo", json!({})), "Es gibt nichts zu wiederholen.", "{theme:?}");
+        let unheld = EngineError::Disabled { id: "edit.redo".into(), reason: "a reason no catalogue holds" };
+        assert_eq!(crate::panels::refusal(&unheld), "A reason no catalogue holds.", "{theme:?}");
+        let session = h.state_mut().session.as_mut().unwrap();
+        let in_batch = session.batch("Undo inside", |b| b.execute("edit.undo", &json!({})).map(|_| ())).unwrap_err();
+        assert!(matches!(in_batch, EngineError::NotInBatch { .. }), "{theme:?}: {in_batch:?}");
+        let said = "Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.";
+        assert_eq!(crate::panels::refusal(&in_batch), said, "{theme:?}");
+        session.begin_interaction("er.schema.add").unwrap();
+        let running = "Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.";
+        assert_eq!(refused(&mut h, "diagram.style", fill.clone()), running, "{theme:?}");
+        h.state_mut().session.as_mut().unwrap().cancel().unwrap();
+        let poisoned = EngineError::Poisoned { message: "the rollback failed".into() };
+        let reopen = "Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.";
+        assert_eq!(crate::panels::refusal(&poisoned), reopen, "{theme:?}");
+        assert_eq!(refused(&mut h, "no.such.command", json!({})), internal, "{theme:?}");
+        assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [&nodes["Order"]], "shade": 1 })), internal, "{theme:?}");
+        let stopped = EngineError::Internal { id: "diagram.style".into(), message: "a handler panicked".into() };
+        assert_eq!(crate::panels::refusal(&stopped), internal, "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).

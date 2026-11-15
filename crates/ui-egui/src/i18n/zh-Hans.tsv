@@ -603,6 +603,36 @@ str		{name} follows no column.	{name} 未跟随任何列。
 plural		The table has {n} column.	该表有 {n} 个列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
+str		There is nothing to undo.	没有可撤销的操作。
+str		There is nothing to redo.	没有可重做的操作。
+str		The project has no model root yet.	项目还没有模型根。
+str		There is no skill yet.	还没有技能。
+str		There is no diagram yet.	还没有图。
+str		There is nothing to remove or describe yet.	还没有可移除或描述的内容。
+str		There is no schema yet.	还没有架构。
+str		There is no entity yet.	还没有表。
+str		There is no package yet.	还没有包。
+str		There is no class, interface, enumeration, data type or primitive type yet.	还没有类、接口、枚举、数据类型或基本类型。
+str		There is no class yet.	还没有类。
+str		There is no enumeration yet.	还没有枚举。
+str		There is no class or interface yet.	还没有类或接口。
+str		There is no association or association class yet.	还没有关联或关联类。
+str		There is no n-ary association yet.	还没有多元关联。
+str		There is no generalization yet.	还没有泛化。
+str		There is no generalization set yet.	还没有泛化集。
+str		There is no class, interface, enumeration, data type, primitive type, association class or package yet.	还没有类、接口、枚举、数据类型、基本类型、关联类或包。
+str		There is no constraint yet.	还没有约束。
+str		There is no class, interface or data type yet.	还没有类、接口或数据类型。
+str		There is no template parameter yet.	还没有模板参数。
+str		There is no template yet: give a class, an interface or a data type a template parameter first.	还没有模板：请先给一个类、接口或数据类型添加模板参数。
+str		There is no template binding yet.	还没有模板绑定。
+str		There is no profile yet.	还没有配置文件。
+str		There is no stereotype yet.	还没有构造型。
+str		No stereotype is applied yet.	还没有应用任何构造型。
+str		Another change is still under way. Try again once it ends.	另一项更改仍在进行中。请在其结束后重试。
+str		The model could not be put back as it was after a failure. Reopen the project to go on.	失败后无法将模型恢复原状。请重新打开项目以继续。
+str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
+str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
 str		It can't hold a control or hidden character.	不能包含控制字符或隐藏字符。

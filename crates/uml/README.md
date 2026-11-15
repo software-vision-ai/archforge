@@ -50,7 +50,7 @@ rename, move, list}` (AR-124): a PrimitiveType of the model's own in a package, 
 name shared with the package's other classifiers and, in a package named Types, never a built-in
 type's; a built-in type is never renamed or moved; the list says which are built-in), `members::{specs, is_built_in, attributes, operations, parameters,
 parse_multiplicity, MultiplicityError, literal_owner, literal_clash, MAX_LITERALS, BUILT_IN, TYPES, MAX_PARAMETERS, MAX_BOUND,
-NO_ENUMERATIONS}` (`uml.class.{set, get}`, `uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`,
+NO_ENUMERATIONS, NO_CLASS}` (`uml.class.{set, get}`, `uml.attribute.{add, set, move}`, `uml.operation.{add, set, move}`,
 `uml.literal.{add, rename, move}`: an enumeration's literals at a place asked for or the end, their
 names told apart within their enumeration whatever the case, at most `MAX_LITERALS` (256, as ER's
 enum types) in one, a place past the end refused, removed
@@ -74,7 +74,7 @@ arrow; an interface realization dashed in the muted ink to a hollow triangle at 
 association class's line an association's and its card a class's under `Association class`),
 `constraints::{specs, constraints_of, context_of, constrained, expression, language, braces, is_context, is_constrainable,
 in_model, expression_problem, suggested_form, form_for, shown_on, form_of, linked_nodes, show, dropped_by, Dropped, Form, BRACES, NOTE,
-MAX_CONSTRAINED}` (AR-133: `uml.constraint.{add, set, move, show, list}`; a Constraint owned by a classifier of the model's own
+MAX_CONSTRAINED, NO_CONSTRAINTS}` (AR-133: `uml.constraint.{add, set, move, show, list}`; a Constraint owned by a classifier of the model's own
 or a package, naming the elements it constrains in order and stating its rule as an OpaqueExpression of one body and at most one
 language, kept exactly as typed and never evaluated; the only refusals an empty expression and an element outside the model,
 each with its reason typed for an interface to say, as is every parameter of these commands refused (AR-447, AR-476);
@@ -82,7 +82,7 @@ shown per diagram as a node of the kind `uml.constraint.braces`, nested in its e
 to its elements by `Notation::links`; removed through `element.remove`, and a constraint left naming nothing by a removal goes
 with it in the same step), `generalization_sets::{specs, is_set, is_generalization, members, sets_of, general, specific,
 general_of, sets_for, flags, braces, label, shared_general, Grouping, generalization_name, reconnect_problem, emptied_by,
-label_node, is_label, place, set_json, LABEL, MAX_MEMBERS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a
+label_node, is_label, place, set_json, LABEL, MAX_MEMBERS, NO_SETS}` (AR-129: `uml.generalization-set.{add, set, place, list}`; a
 GeneralizationSet in its general classifier's package, grouping generalizations that all specialize that classifier, each
 named once and at most 256, complete or not (isCovering) and disjoint or not (isDisjoint); a generalization may be in several
 sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, naming its sets); removed through
@@ -90,7 +90,7 @@ sets; a member is never reconnected (`uml.relationship.reconnect` refuses it, na
 goes in the same step; where a diagram shows its label, once moved, a node of the kind `uml.generalization-set.label` nested in
 the general classifier's node; the set line itself is the canvas's, worked out from the model), `nesting::{specs, nested,
 nested_within, classifier_owner, owner_of, home_package, owner_chain, qualified_name, names_under, classifier_clash,
-owner_problem, problem_text, candidates, can_own, can_nest, is_nested, OwnerProblem, OWNERS, NESTABLE, KINDS}` (AR-132:
+owner_problem, problem_text, candidates, can_own, can_nest, is_nested, OwnerProblem, OWNERS, NESTABLE, KINDS, NO_OWNERS}` (AR-132:
 `uml.nested.add`, `uml.classifier.set-owner`, `uml.nested.list`, `uml.classifier.owners`; a class, an interface, an
 enumeration or a data type in a class's, an interface's or an association class's `nestedClassifier`, its home package its
 owner's; an owner changed keeping the id, members, relationships and type references; a cycle, an owner of a kind that owns
@@ -112,7 +112,7 @@ its members with the member commands, renamed and moved with `uml.association-cl
 parameter_of, is_parameter_element, parameter_element_problem, parameter_element_why, type_scope_problem, kind_of,
 constraint_of, default_of, parameter_name, parameter_text, signature_rows, name_clash,
 substitutions, binding_of, bound_element, actual_of, users, bindings_to, removal_problem, fits,
-parameter_json, parameters_json, can_be_template, Kind, TEMPLATES, MAX_PARAMETERS}` (AR-130:
+parameter_json, parameters_json, can_be_template, Kind, TEMPLATES, MAX_PARAMETERS, NO_PARAMETERS}` (AR-130:
 `uml.template-parameter.{add, set, move, list}`; a class, an interface or a data type made a
 template by its first ClassifierTemplateParameter, its RedefinableTemplateSignature made with the
 first and removed with the last; each parameter owning a classifier of its kind (class, interface,
@@ -131,7 +131,7 @@ that a binding relies on, all checked before anything is written
 (`removals_problem`, `last_parameter_problem`); removed through `element.remove`; the card's `template` rows drawn as the signature box),
 `bindings::{specs, is_binding, bindings_of, template_of, substitutions, substitution_for, argument, missing,
 substitution_text, label, argument_uses, can_bind, binds, problem, Problem, arg_of, arg_fits, Arg,
-argument_removal_problem, needs_argument_problem, binding_json}` (AR-131: `uml.template-binding.{add, set, list}`; UML's
+argument_removal_problem, needs_argument_problem, binding_json, NO_TEMPLATES, NO_BINDINGS}` (AR-131: `uml.template-binding.{add, set, list}`; UML's
 TemplateBinding owned by its bound element, a class, an interface or a data type of the template's kind, naming the
 template's signature, with a TemplateParameterSubstitution per argument given; a parameter left out uses its default,
 one without a default needs an argument, each argument of its parameter's kind and its constraint or one that

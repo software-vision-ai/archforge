@@ -474,17 +474,22 @@ pub(crate) fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Res
 }
 
 /// An engine's refusal as the panel says it: the reason alone, without the command's id or the
-/// parameter it is about, as a sentence; a typed reason and read-only are said in the user's
-/// language, any other in the engine's English.
+/// parameter it is about, as a sentence. A typed reason, a reason a command is not available and
+/// the engine's own errors are said in the user's language ([`crate::engine_said`]); a handler's
+/// refusal not typed yet, or a reason not available the catalogues don't hold, in the engine's
+/// English.
 pub(crate) fn refusal(e: &archforge_engine::EngineError) -> String {
     let reason = match e {
         archforge_engine::EngineError::Failed { error, .. } => match error.reason.as_ref().and_then(said) {
             Some(words) => return words,
             None => error.message.clone(),
         },
-        archforge_engine::EngineError::Disabled { reason, .. } => (*reason).to_string(),
+        archforge_engine::EngineError::Disabled { reason, .. } => match crate::engine_said::disabled(reason) {
+            Some(words) => return words,
+            None => (*reason).to_string(),
+        },
         archforge_engine::EngineError::ReadOnly => return tr("The model cannot be changed at the moment; nothing was changed."),
-        other => other.to_string(),
+        other => return crate::engine_said::said(other),
     };
     let mut chars = reason.chars();
     let first: String = chars.next().map(|c| c.to_uppercase().collect()).unwrap_or_default();

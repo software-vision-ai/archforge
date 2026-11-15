@@ -44,7 +44,8 @@ const LABEL_MAX_WIDTH: f64 = 480.0;
 
 /// Why a command is not available.
 pub const NO_GENERALIZATIONS: &str = "There is no generalization yet.";
-const NO_SETS: &str = "There is no generalization set yet.";
+/// Why a command that changes a generalization set is not available.
+pub const NO_SETS: &str = "There is no generalization set yet.";
 
 fn one(store: &Store, o: Obj, prop: archforge_mof::PropId) -> Option<Obj> {
     store.get(o, prop).ok().and_then(|v| v.as_ref()).filter(|x| store.is_alive(*x))

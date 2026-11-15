@@ -336,6 +336,33 @@ fn every_class_the_notations_create_has_a_kind_word() {
     }
 }
 
+/// Every reason a command gives for not being available, in a project without a model root and in
+/// a new project that holds only its root, has a catalogue row keyed by that reason: said in
+/// English, it is the reason itself (AR-440).
+#[test]
+fn every_reason_a_command_is_not_available_has_its_row() {
+    let ids = || {
+        let mut n: u128 = 0;
+        Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid(n.to_le_bytes())
+        })
+    };
+    let options = archforge_engine::Options::default();
+    let rootless = archforge_notations::store(ids()).unwrap();
+    let rootless = archforge_engine::Session::with_view(archforge_notations::registry().unwrap(), rootless, 1, options, archforge_notations::view());
+    let new = archforge_notations::new_project_session("Shop", ids()).unwrap();
+    set_language("en");
+    let mut reasons = std::collections::BTreeSet::new();
+    for session in [&rootless, &new] {
+        reasons.extend(session.registry().infos(&session.facts()).into_iter().filter_map(|i| i.disabled_reason));
+    }
+    for reason in &reasons {
+        assert_eq!(crate::engine_said::disabled(reason).as_deref(), Some(*reason), "no row keyed by {reason:?}");
+    }
+    assert_eq!(reasons.len(), 26, "the reasons found: {reasons:?}");
+}
+
 #[test]
 fn plural_forms_hold_at_edge_numbers() {
     set_language("en");
