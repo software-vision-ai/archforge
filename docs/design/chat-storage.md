@@ -122,11 +122,12 @@ CREATE TABLE chat (
   back), and when chips were removed before the first question, once the conversation is made; it
   leaves `updated_at` alone, waits for the next chat commit, and a code outside the list makes the
   conversation unreadable. It cannot be derived from the anchors: a question without a `diagram`
-  anchor cannot tell a removed chip from no diagram open. It joins chat shape 1 and format 3 with no
-  format bump, as no release has written chat tables (0.13 is unreleased; the latest release is
-  0.12.0): a `chat` table made before the column lacks it, its rows read as none removed, and the
-  first write of chips adds the column at the end (a conversation brought back from a commit before
-  the column comes back with none removed).
+  anchor cannot tell a removed chip from no diagram open. It joined chat shape 1 and format 3 with no
+  format bump because it was added before any release wrote chat tables: 0.13.0, the first release
+  with conversations, already has it. A `chat` table made before the column (by a build before
+  0.13.0) lacks it, its rows read as none removed, and the first write of chips adds the column at
+  the end (a conversation brought back from a commit before the column comes back with none
+  removed).
 - **Message count** in the history ("6 messages") is counted, not stored:
   `SELECT chat, COUNT(*) FROM chat_message WHERE role IN ('user','assistant') GROUP BY chat`.
 - **"Allow changes to the model"** is not a column here: it is recorded on each turn
@@ -406,9 +407,11 @@ Proposed:
   (`DOLT_RESET --hard`, `DOLT_CLEAN`) neither resets nor removes committed tables.
 - **Later chat-schema changes** bump the format again (4, …) and follow the model tables' upgrade
   rule: only columns added at the end, empty or with a default for old rows. Anything else is
-  refused, never changed. Until 0.13 is released, a nullable column added at the end joins shape 1
-  and format 3 without a bump (`chat.removed_chips`, AR-227): a table made before it reads its rows
-  as empty in it and takes the column when it is next written.
+  refused, never changed. Before 0.13.0, the first release with conversations, one nullable column
+  was added at the end within shape 1 and format 3 without a bump (`chat.removed_chips`, AR-227):
+  a table made before it reads its rows as empty in it and takes the column when it is next
+  written. 0.13.0 shipped shape 1 with that column, so every later chat-schema change bumps the
+  format.
 
 ## 6. "Don't save" keeps chats: how, with Dolt
 
