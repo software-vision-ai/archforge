@@ -169,16 +169,16 @@ pub struct Change {
     pub span: Option<Span>,
 }
 
-/// A rendered reply, kept until its width or appearance changes: its layout to lay out again while
-/// it shows (the fonts' atlas may change between frames, so no galley is kept), its height, and its
-/// links: where each was when last laid out, from the reply's top-left corner, the bytes of the
-/// text it covers, and its address.
+/// A rendered reply, kept until its width, its appearance or the fonts drawn with change
+/// (`look`: dark, and [`crate::fonts::FontState::drawn`]): its layout to lay out again while it
+/// shows (the fonts' atlas may change between frames, so no galley is kept), its height, and its
+/// links: where each is, from the reply's top-left corner, and its address.
 pub struct Laid {
     pub width: f32,
-    pub dark: bool,
+    pub look: (bool, u64),
     pub job: Arc<egui::text::LayoutJob>,
     pub height: f32,
-    pub links: Vec<(egui::Rect, std::ops::Range<usize>, String)>,
+    pub links: Vec<(egui::Rect, String)>,
 }
 
 /// One entry of a turn's timeline.

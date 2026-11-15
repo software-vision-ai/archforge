@@ -194,6 +194,14 @@ pub(crate) struct FontState {
     /// Bumped whenever the scan reports, a face loads or fails, or the worker stops: the
     /// fallbacks are worked out again only when this or the language has changed.
     generation: u64,
+    /// How many times the shell gave egui its fonts, and how many of those egui draws with in this
+    /// pass, as a change is egui's at the next one: text kept laid out is laid out again when the
+    /// second moves.
+    set: u64,
+    drawn: u64,
+    /// Fonts a test gives egui in the next frame, where a face that loads is given (tests only).
+    #[cfg(test)]
+    pending: Option<egui::FontDefinitions>,
     /// The language and generation the fallbacks were last worked out for.
     fallback_seen: Option<(&'static str, u64)>,
     /// Started without a source: no installed font will ever be offered (the web host).
@@ -284,10 +292,20 @@ impl FontState {
     /// Once per frame: starts the worker on the first frame with a source, and takes in what it
     /// has scanned or read.
     pub(crate) fn frame(&mut self, source: Option<&Arc<dyn FontSource>>, ctx: &egui::Context) {
+        self.drawn = self.set;
+        // A test's fonts, given after text was laid out in this pass, so egui's change waits for the next.
+        #[cfg(test)]
+        if let Some(defs) = self.pending.take() {
+            ctx.fonts_mut(|f| f.layout_job(egui::text::LayoutJob::single_section("x".into(), Default::default())));
+            ctx.set_fonts(defs.clone());
+            self.defs = Some(defs);
+            self.set += 1;
+        }
         if !self.started {
             self.started = true;
             let defs = self.defs.get_or_insert_with(definitions);
             ctx.set_fonts(defs.clone());
+            self.set += 1;
             if let Some(source) = source {
                 self.start(Arc::clone(source), ctx);
             } else {
@@ -441,6 +459,7 @@ impl FontState {
         self.fallback_order = order;
         // The shell is the only caller of set_fonts; the change is egui's at the next pass.
         ctx.set_fonts(defs.clone());
+        self.set += 1;
         ctx.request_repaint();
         self.added.insert(family, ctx.cumulative_pass_nr());
     }
@@ -509,8 +528,22 @@ impl FontState {
             arrange(defs, &self.fallback_order, &order);
             self.fallback_order = order;
             ctx.set_fonts(defs.clone());
+            self.set += 1;
             ctx.request_repaint();
         }
+    }
+
+    /// Which of the fonts the shell gave egui it draws with in this pass: it moves with each new
+    /// set, so text kept laid out can tell it is laid out in fonts no longer drawn.
+    pub(crate) fn drawn(&self) -> u64 {
+        self.drawn
+    }
+
+    /// Has the next frame give egui `defs` as the shell's fonts, where a face that loads is given
+    /// (tests only).
+    #[cfg(test)]
+    pub(crate) fn give_next(&mut self, defs: egui::FontDefinitions) {
+        self.pending = Some(defs);
     }
 
     /// The scripts' families installed for `language`'s lists, each canonical name once.

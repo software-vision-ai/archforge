@@ -562,7 +562,7 @@ fn branch_note(shell: &mut Shell, ui: &egui::Ui, p: &Palette, at: egui::Pos2, wi
 /// The conversation's timeline in `area`, scrolled; it follows the end while the person has not
 /// scrolled up, by the wheel or the keys.
 fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel: &mut Panel, acts: &mut Vec<Act>) {
-    let dark = shell.state.theme.is_dark();
+    let look = (shell.state.theme.is_dark(), shell.fonts.drawn());
     let left = area.left() + PAD;
     let width = (area.width() - 2.0 * PAD).max(0.0);
     let mut clip = ui.new_child(egui::UiBuilder::new().max_rect(area));
@@ -622,14 +622,14 @@ fn timeline(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, area: Rect, panel
             if streaming_at == Some(i) {
                 y += ENTRY_GAP;
                 let text = turn.streaming.as_ref().map(|(_, t)| format!("{t}▍")).unwrap_or_default();
-                y += reply(shell, &clip, p, pos2(left, y), width, &text, &mut turn.laid, dark, &mut link_n, acts);
+                y += reply(shell, &clip, p, pos2(left, y), width, &text, &mut turn.laid, look, &mut link_n, acts);
             }
             let Some(item) = turn.items.get_mut(i) else { continue };
             y += ENTRY_GAP;
             match item {
                 Item::Tool(facts) => y += tool_row(&paint, p, pos2(left, y), width, facts),
                 Item::Text { text, shortened, laid, .. } => {
-                    y += reply(shell, &clip, p, pos2(left, y), width, text, laid, dark, &mut link_n, acts);
+                    y += reply(shell, &clip, p, pos2(left, y), width, text, laid, look, &mut link_n, acts);
                     if *shortened {
                         y += 4.0
                             + ux::text(&paint, pos2(left, y + 4.0), &tr("The reply was shortened to fit."), types::SMALL, p.text_muted, Some(width))
@@ -721,8 +721,8 @@ fn transcript_keys(shell: &mut Shell, ui: &egui::Ui, (area, room): (Rect, f32), 
     }
 }
 
-/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width or the
-/// appearance changes; its links are controls that ask before they open, laid out where it does
+/// A reply rendered at `at`, `width` wide, its layout kept in `laid` until the width, the
+/// appearance or the fonts drawn with (`look`) change; its links are controls that ask before they open, laid out where it does
 /// not show too, so that Tab reaches them and the transcript follows (AR-477). Gives its height.
 #[allow(clippy::too_many_arguments)]
 fn reply(
@@ -733,29 +733,26 @@ fn reply(
     width: f32,
     text: &str,
     laid: &mut Option<Laid>,
-    dark: bool,
+    look: (bool, u64),
     link_n: &mut usize,
     acts: &mut Vec<Act>,
 ) -> f32 {
-    let fresh = laid.as_ref().is_none_or(|l| (l.width - width).abs() > 0.5 || l.dark != dark);
+    let fresh = laid.as_ref().is_none_or(|l| (l.width - width).abs() > 0.5 || l.look != look);
     // A streaming reply's layout is dropped with each piece of text that comes in.
     if fresh {
         let r = crate::chat_markdown::render(text, p, width);
         let job = std::sync::Arc::new(r.job);
         let galley = ui.painter().layout_job((*job).clone());
-        let links = r.links.into_iter().map(|(range, url)| (link_rect(&galley, &range), range, url)).collect();
-        *laid = Some(Laid { width, dark, job, height: galley.size().y, links });
+        let links = r.links.into_iter().map(|(range, url)| (link_rect(&galley, range), url)).collect();
+        *laid = Some(Laid { width, look, job, height: galley.size().y, links });
     }
-    let Some(l) = laid.as_mut() else { return 0.0 };
-    // Its text is laid out and drawn only while it shows, its links placed on it again, as the fonts
-    // can change; its height and its links' last places are known either way, and its links are
-    // controls in view or not.
+    let Some(l) = laid.as_ref() else { return 0.0 };
+    // Its text is laid out and drawn only while it shows; its height and its links' places are known
+    // either way, and its links are controls in view or not.
     if ui.clip_rect().intersects(Rect::from_min_size(at, vec2(width, l.height))) {
-        let galley = ui.painter().layout_job((*l.job).clone());
-        l.links.iter_mut().for_each(|(hit, range, _)| *hit = link_rect(&galley, range));
-        ui.painter().galley(at, galley, p.text);
+        ui.painter().galley(at, ui.painter().layout_job((*l.job).clone()), p.text);
     }
-    for (hit, _, url) in &l.links {
+    for (hit, url) in &l.links {
         let hit = hit.translate(at.to_vec2());
         let id = format!("workspace.chat.link.{}", *link_n);
         *link_n += 1;
@@ -770,7 +767,7 @@ fn reply(
 
 /// Where the link over the bytes `range` of a reply laid out as `galley` is, from its top-left
 /// corner: its first row, as far as it goes on it.
-fn link_rect(galley: &egui::Galley, range: &std::ops::Range<usize>) -> Rect {
+fn link_rect(galley: &egui::Galley, range: std::ops::Range<usize>) -> Rect {
     let char_at = |byte: usize| galley.job.text.get(..byte).map_or(0, |s| s.chars().count());
     let a = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.start)));
     let b = galley.pos_from_cursor(egui::text::CCursor::new(char_at(range.end)));
