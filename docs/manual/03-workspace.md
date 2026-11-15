@@ -132,11 +132,12 @@ every diagram. Each row has an edit button (a pencil) at its right end; it opens
 which changes nothing until you apply it with the check at its foot (or Enter). The cross (or
 Escape) cancels, and the red bin removes the row.
 
-When Properties holds more than fits, it scrolls under the name and the description. With the
-keyboard, Tab and Shift+Tab move through its controls and the panel follows, so every control can
-be reached; while a button, a check box or a row of Properties has the keyboard, Page Up and Page
-Down scroll it by a page and Home and End go to its top and its end. In a text field these keys
-stay with the field, and while a menu is open they do not scroll it.
+When Properties holds more than fits, it scrolls under the name and the description. An editor
+that opens, or that refuses a change, is brought into view with its message and its buttons. With
+the keyboard, Tab and Shift+Tab move through its controls and the panel follows, so every control
+can be reached; while a button, a check box or a row of Properties has the keyboard, Page Up and
+Page Down scroll it by a page and Home and End go to its top and its end. In a text field these
+keys stay with the field, and while a menu is open they do not scroll it.
 
 Type a new name in the **Name** field, or a description in the **Description** field, and press
 Enter, or leave the field, to keep it; press Escape to give up what you typed and get back what
