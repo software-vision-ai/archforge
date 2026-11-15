@@ -197,6 +197,15 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   in place keeps the keyboard with the name as typed, for a correction or Esc (AR-426).
 - Dragging an element from Models onto the canvas places it; one already there is refused with a
   toast.
+- The Diagrams and Models trees follow the keyboard (AR-478), as the Versions lists do: a row, a
+  group's +, a row's arrow or drag handle that Tab or Shift+Tab comes to is brought whole into view,
+  and while a row has the keyboard Page Up and Page Down move it a page (what shows less a row, at
+  least a row) and Home and End to the first and the last row. A row past either edge is laid out,
+  so Tab reaches it; only what shows is listed. While Models holds the keys itself (after a click on
+  a row), the same keys move the selection, as ↑ and ↓ do, and the tree follows the selection;
+  with nothing selected End selects the last row and the others the first. A page key always
+  reveals the row it went to, even one that had the keyboard or the selection already; the wheel
+  never makes a tree follow.
 - Deleting from the explorer asks first when the element is on diagrams or takes other elements
   with it (for ER, keys).
 - The Models and Diagrams trees scroll under their filter (wheel or trackpad, a thin thumb at the
