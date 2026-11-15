@@ -531,10 +531,11 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 /// or a label is taken, an element a diagram's kind cannot be of, a box's size, an element a diagram
 /// does not show or shows already, a box on
 /// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
-/// does not remove yet, a kind word that is no plain word, and a diagram kind or a label's text none
-/// takes; none for another reason. A coordinate is said as a constraint's is.
+/// does not remove yet, a kind word that is no plain word, a diagram kind or a label's text none
+/// takes, and a list of boxes, or of what a style is set on, that is empty, no list of ids or names
+/// one twice; none for another reason. A coordinate is said as a constraint's is.
 fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
-    use archforge_diagram::commands::DIAGRAM_ELEMENT;
+    use archforge_diagram::commands::{DIAGRAM_ELEMENT, STYLED};
     use archforge_diagram::rules::{MAX_SIZE, MIN_SIZE};
     use archforge_engine::Reason;
     let between = |template: String| fmt(&template, &[("min", &MIN_SIZE.to_string()), ("max", &MAX_SIZE.to_string())]);
@@ -543,10 +544,12 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::IdEmpty { kind: "node" } => tr("No box is given. Give its id."),
         Reason::IdEmpty { kind: "edge" } => tr("No line is given. Give its id."),
         Reason::IdEmpty { kind: "label" } => tr("No label is given. Give its id."),
+        Reason::IdEmpty { kind: STYLED } => tr("No diagram, box or line is given. Give its id."),
         Reason::NotA { kind: "diagram", name } => fmt(&tr("{name} is not a diagram."), &[("name", name)]),
         Reason::NotA { kind: "node", name } => fmt(&tr("{name} is not a box on a diagram."), &[("name", name)]),
         Reason::NotA { kind: "edge", name } => fmt(&tr("{name} is not a line on a diagram."), &[("name", name)]),
         Reason::NotA { kind: "label", name } => fmt(&tr("{name} is not a label on a line."), &[("name", name)]),
+        Reason::NotA { kind: STYLED, name } => fmt(&tr("{name} is not a diagram, a box or a line."), &[("name", name)]),
         Reason::NotA { kind: DIAGRAM_ELEMENT, name } => fmt(&tr("{name} cannot have a diagram of this kind."), &[("name", name)]),
         Reason::SizeOutOfRange { side: "width" } => between(tr("The width is not between {min} and {max}.")),
         Reason::SizeOutOfRange { side: "height" } => between(tr("The height is not between {min} and {max}.")),
@@ -554,6 +557,11 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::OutsideDiagram { name } => fmt(&tr("{name} is outside what this diagram shows."), &[("name", name)]),
         Reason::ShownAlready { name } => fmt(&tr("This diagram shows {name} already."), &[("name", name)]),
         Reason::OtherDiagram => tr("That box is on another diagram."),
+        Reason::TooFew { kind: "node", min: 1 } => tr("Give at least one box."),
+        Reason::TooFew { kind: STYLED, min: 1 } => tr("Give at least one diagram, box or line."),
+        Reason::IdsExpected { kind: "node" } => tr("Give the boxes as a list of ids."),
+        Reason::IdsExpected { kind: STYLED } => tr("Give the diagrams, boxes and lines as a list of ids."),
+        Reason::NamedTwice { kind: "node" | STYLED, .. } => tr("An element is named twice. Name each element once."),
         Reason::TooMany { kind: "nesting level", max } => fmt(&tr("Boxes nest at most {max} deep."), &[("max", &max.to_string())]),
         Reason::ShowsElement => tr("This box shows an element and draws its text. Only a note takes a text of its own."),
         Reason::StraightLink => tr("A note's link is a straight line and does not bend."),

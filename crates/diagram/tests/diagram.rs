@@ -441,6 +441,42 @@ fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
     check(&mut s, "diagram.add", of(&a), "element", not_of, "a toy.class diagram is not of a class");
 }
 
+/// The node lists of `diagram.move` and `diagram.unplace` and `diagram.style`'s list of ids refuse
+/// with their reason typed, of a node or of a styled element: an empty list, an item that is no
+/// string, no id, of no element or of the wrong kind, and an item given twice; and nodes of
+/// different diagrams moved together (AR-514).
+#[test]
+fn every_node_list_refusal_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let (mut s, m) = session();
+    let sm = sample(&mut s, &m);
+    let (a, c) = (id(s.doc(), m.a), id(s.doc(), m.c));
+    let other = run(&mut s, "diagram.add", json!({ "kind": "toy.class" }));
+    let c_in_other = run(&mut s, "diagram.place", json!({ "diagram": other, "element": c, "x": 0, "y": 0 }));
+    let check = |s: &mut S, cmd: &str, key: &str, list: Json, reason: Reason, english: &str| {
+        let p = if cmd == "diagram.move" { json!({ key: list, "dx": 1, "dy": 1 }) } else { json!({ key: list }) };
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.key.as_deref()), (Some(reason), Some(key)), "{cmd} {p}: {}", error.message);
+        assert!(error.message.contains(english), "{cmd} {p}: {}", error.message);
+    };
+    let lists = [
+        ("diagram.move", "nodes", "node", "nothing to move", (a.clone(), "A".to_string()), "is not a node"),
+        ("diagram.unplace", "nodes", "node", "nothing to remove", (a.clone(), "A".to_string()), "is not a node"),
+        ("diagram.style", "ids", commands::STYLED, "nothing to style", (sm.label.clone(), sm.label.clone()), "is not a diagram, a node or an edge"),
+    ];
+    for (cmd, key, kind, nothing, (wrong, name), not_a) in lists {
+        check(&mut s, cmd, key, json!([]), Reason::TooFew { kind, min: 1 }, nothing);
+        check(&mut s, cmd, key, json!([7]), Reason::IdsExpected { kind }, "every id must be a string");
+        check(&mut s, cmd, key, json!([""]), Reason::IdEmpty { kind }, "\"\" is not an id");
+        check(&mut s, cmd, key, json!(["nope"]), Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id");
+        check(&mut s, cmd, key, json!([&wrong]), Reason::NotA { kind, name }, not_a);
+        let twice = Reason::NamedTwice { kind, name: sm.a.clone() };
+        check(&mut s, cmd, key, json!([&sm.a, &sm.b, &sm.a]), twice, "is listed twice");
+    }
+    let apart = json!([&sm.a, &c_in_other]);
+    check(&mut s, "diagram.move", "nodes", apart, Reason::OtherDiagram, "the nodes are in different diagrams");
+}
+
 #[test]
 fn removing_an_element_takes_its_views_and_undo_brings_them_back() {
     let mut st = store();

@@ -26,6 +26,8 @@ pub const NOTE_SIZE: (f64, f64) = (160.0, 80.0);
 pub const NOTE: &str = "note";
 /// The kind a [`Reason::NotA`] names for an element a diagram's kind cannot be of.
 pub const DIAGRAM_ELEMENT: &str = "element a diagram is of";
+/// The kind a refusal of `diagram.style`'s list names: a diagram, a node or an edge.
+pub const STYLED: &str = "styled element";
 
 fn has_diagrams<V: DiagramView>(f: &Facts<'_, Store, V>) -> Result<(), &'static str> {
     if f.doc.alive().any(|o| f.doc.class_of(o).ok() == Some(DIAGRAM)) { Ok(()) } else { Err(NO_DIAGRAMS) }
@@ -70,7 +72,12 @@ fn any_of(store: &Store, p: &Params, key: &str) -> Result<Obj, CommandError> {
 /// The live element the id under `key` names, the id of an element of `kind`; refused with its
 /// reason typed: no id, or one malformed or of no element.
 fn id_of(store: &Store, p: &Params, key: &str, kind: &'static str) -> Result<Obj, CommandError> {
-    let id = str_of(p, key);
+    id_in(store, key, str_of(p, key), kind)
+}
+
+/// The live element `id` names, given under `key` as the id of an element of `kind`; refused with
+/// its reason typed: no id, or one malformed or of no element.
+fn id_in(store: &Store, key: &str, id: &str, kind: &'static str) -> Result<Obj, CommandError> {
     let refused = |said: String| {
         let short: String = id.chars().take(40).collect();
         refuse(key, said).because(if id.is_empty() { Reason::IdEmpty { kind } } else { Reason::NoElement { id: short } })
@@ -91,23 +98,29 @@ fn one_of(store: &Store, p: &Params, key: &str, class: ClassId, what: &'static s
     Ok(obj)
 }
 
-/// The ids of an array parameter: strings naming live elements of `class`, none twice.
-fn list_of(store: &Store, p: &Params, key: &str, classes: &[ClassId], what: &str) -> Result<Vec<Obj>, CommandError> {
+/// The ids of an array parameter: at least one, strings naming live elements of `classes`, none
+/// twice; every refusal typed, its kind `kind`, `what` naming it in English and `none` saying an
+/// empty list. A list over the store's limit is refused untyped, as the engine's limit on a call's
+/// size refuses one that long first.
+fn list_of(store: &Store, p: &Params, key: &str, classes: &[ClassId], kind: &'static str, what: &str, none: &str) -> Result<Vec<Obj>, CommandError> {
     let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
     if items.len() > archforge_mof::store::MAX_LIST {
         return Err(refuse(key, format!("at most {} ids", archforge_mof::store::MAX_LIST)));
     }
+    if items.is_empty() {
+        return Err(refuse(key, none).because(Reason::TooFew { kind, min: 1 }));
+    }
     let mut seen = BTreeSet::new();
     let mut out = Vec::with_capacity(items.len());
     for v in &items {
-        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string"))?;
-        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{id:?} is not an id")))?;
-        let obj = store.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {id}")))?;
+        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string").because(Reason::IdsExpected { kind }))?;
+        let obj = id_in(store, key, id, kind)?;
         if !store.class_of(obj).is_ok_and(|c| classes.contains(&c)) {
-            return Err(refuse(key, format!("{id} is not {what}")));
+            return Err(refuse(key, format!("{id} is not {what}")).because(Reason::NotA { kind, name: name_or_id(store, obj) }));
         }
         if !seen.insert(obj) {
-            return Err(refuse(key, format!("{id} is listed twice")));
+            let twice = Reason::NamedTwice { kind, name: id.chars().take(40).collect() };
+            return Err(refuse(key, format!("{id} is listed twice")).because(twice));
         }
         out.push(obj);
     }
@@ -382,18 +395,16 @@ fn diagram_set_text<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, n)? }))
 }
 
+/// `diagram.move`: the nodes, of one diagram, with what they contain and the waypoints of the
+/// edges between them; a list refused, and nodes of different diagrams, with the reason typed.
 fn diagram_move<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
-    let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "a node")?;
-    if nodes.is_empty() {
-        return Err(refuse("nodes", "nothing to move"));
-    }
+    let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "node", "a node", "nothing to move")?;
     let (dx, dy) = (num(p, "dx"), num(p, "dy"));
-    let first = nodes.first().copied().ok_or_else(|| refuse("nodes", "nothing to move"))?;
-    let d = diagram_of(ctx.doc, first).ok_or_else(|| refuse("nodes", "the node belongs to no diagram"))?;
+    let d = nodes.first().and_then(|n| diagram_of(ctx.doc, *n)).ok_or_else(|| refuse("nodes", "the node belongs to no diagram"))?;
     let mut moving: BTreeSet<Obj> = BTreeSet::new();
     for n in &nodes {
         if diagram_of(ctx.doc, *n) != Some(d) {
-            return Err(refuse("nodes", "the nodes are in different diagrams"));
+            return Err(refuse("nodes", "the nodes are in different diagrams").because(Reason::OtherDiagram));
         }
         moving.extend(node_tree(ctx.doc, *n));
     }
@@ -450,12 +461,9 @@ fn diagram_resize<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 /// `diagram.unplace`: the nodes go from their diagram with the nodes nested in them and the edges
 /// on any of them, and with the edges of that diagram that show the same element as one of those
 /// nodes does (an association class's line goes with its card, nested or not). An edge alone, its element's node not on the diagram, is left as it is: that is a
-/// state of its own. The model is untouched.
+/// state of its own. The model is untouched. A list refused carries its reason typed.
 fn diagram_unplace<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
-    let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "a node")?;
-    if nodes.is_empty() {
-        return Err(refuse("nodes", "nothing to remove"));
-    }
+    let nodes = list_of(ctx.doc, p, "nodes", &[NODE], "node", "a node", "nothing to remove")?;
     // The edges that show what the nodes and the nodes nested in them show, on the nodes' own
     // diagrams: a card nested in another (`diagram.place` with a parent) goes with it, its line too.
     let mut lines: Vec<Obj> = Vec::new();
@@ -751,12 +759,9 @@ fn diagram_unlabel<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
 // Styles.
 
 /// `diagram.style`: a style set as a whole on diagrams, boxes and lines, or removed by a call naming
-/// nothing; a style name that is no plain word refused with its reason typed.
+/// nothing; a list of ids, and a style name that is no plain word, refused with the reason typed.
 fn diagram_style<V: DiagramView>(ctx: &mut C<'_, V>, p: &Params) -> R {
-    let ids = list_of(ctx.doc, p, "ids", &[DIAGRAM, NODE, EDGE], "a diagram, a node or an edge")?;
-    if ids.is_empty() {
-        return Err(refuse("ids", "nothing to style"));
-    }
+    let ids = list_of(ctx.doc, p, "ids", &[DIAGRAM, NODE, EDGE], STYLED, "a diagram, a node or an edge", "nothing to style")?;
     let name = str_of(p, "name");
     if !name.is_empty() {
         check_kind("name", name, "style name")?;
