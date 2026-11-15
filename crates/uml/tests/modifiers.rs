@@ -564,7 +564,8 @@ fn subsets_and_redefines_on_attributes_take_only_valid_targets() {
 
 /// The lists of properties a property subsets and redefines, refused, carry their reason typed
 /// beside the unchanged English, with the list's kind: too many ids, an object with another key,
-/// an item that is no id, no such element, and a property named twice (AR-466).
+/// an item that is no id, no such element, and a property named twice (AR-466); an empty id, as
+/// text or in an object, as no id given rather than no element with it (AR-480).
 #[test]
 fn a_target_list_refused_carries_its_reason_typed() {
     use archforge_engine::{EngineError, Reason};
@@ -586,6 +587,8 @@ fn a_target_list_refused_carries_its_reason_typed() {
         check(&mut s, json!([7]), Reason::IdsExpected { kind }, "7 is not a property's id; the list holds ids as text");
         check(&mut s, json!([{ "name": "all" }]), Reason::IdsExpected { kind }, "is not a property's id");
         check(&mut s, json!(["nope"]), Reason::NoElement { id: "nope".into() }, "there is no element nope; the list holds ids of attributes");
+        check(&mut s, json!([""]), Reason::IdEmpty { kind }, "an item gives no id; the list holds ids of attributes");
+        check(&mut s, json!([all, { "id": "", "name": "all" }]), Reason::IdEmpty { kind }, "an item gives no id");
         check(&mut s, json!([all, all]), Reason::NamedTwice { kind, name: all.clone() }, "is named twice; name each property once");
     }
     // At the most, the list is read on, to the rules.

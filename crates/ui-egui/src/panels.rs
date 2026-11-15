@@ -603,6 +603,7 @@ fn target_said(reason: &archforge_engine::Reason) -> Option<String> {
         Reason::TooMany { kind: REDEFINED, max } => fmt(&tr("A property redefines at most {max} properties."), &[("max", &max.to_string())]),
         Reason::NamedTwice { kind: SUBSETTED | REDEFINED, .. } => tr("An element is named twice. Name each element once."),
         Reason::IdsExpected { kind: SUBSETTED | REDEFINED } => tr("Give the properties as a list of ids."),
+        Reason::IdEmpty { kind: SUBSETTED | REDEFINED } => tr("An item in the list has no id. Give each property's id."),
         Reason::NotAnItemKey { key } => fmt(&tr("{key} is not a key here. An item holds an id and a name."), &[("key", key)]),
         Reason::NoElement { id } => fmt(&tr("There is no element with the id {id}."), &[("id", id)]),
         Reason::BuiltInNotLeaf { name } => fmt(&tr("{name} is a built-in type, which is never made leaf."), &[("name", name)]),

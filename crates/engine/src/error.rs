@@ -240,7 +240,8 @@ pub enum Reason {
     /// A stereotype property's values, each as text, are no list or hold something else.
     ValuesExpected,
     /// No id is given where the id of an element of `kind` is taken, as `"stereotype"` or
-    /// `"constraint"`, or, for a `"property"`, its id or name.
+    /// `"constraint"`, or, for a `"property"`, its id or name; an item of the lists a property
+    /// subsets or redefines, of `"subsetted property"` or `"redefined property"`, likewise.
     IdEmpty { kind: &'static str },
     /// The element is gone from the model.
     Gone,

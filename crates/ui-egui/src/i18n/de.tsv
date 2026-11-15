@@ -1444,6 +1444,7 @@ str		A property chosen here is gone; choose again.	Eine hier gewählte Eigenscha
 str		A property subsets at most {max} properties.	Eine Eigenschaft ist Teilmenge von höchstens {max} Eigenschaften.
 str		A property redefines at most {max} properties.	Eine Eigenschaft redefiniert höchstens {max} Eigenschaften.
 str		Give the properties as a list of ids.	Geben Sie die Eigenschaften als Liste von IDs an.
+str		An item in the list has no id. Give each property's id.	Ein Eintrag der Liste hat keine ID. Geben Sie die ID jeder Eigenschaft an.
 str		{key} is not a key here. An item holds an id and a name.	{key} ist hier kein Schlüssel. Ein Eintrag enthält eine ID und einen Namen.
 str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
 str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.

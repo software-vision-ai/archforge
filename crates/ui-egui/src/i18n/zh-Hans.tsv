@@ -1444,6 +1444,7 @@ str		A property chosen here is gone; choose again.	此处选择的属性已不�
 str		A property subsets at most {max} properties.	一个属性最多可作为 {max} 个属性的子集。
 str		A property redefines at most {max} properties.	一个属性最多重定义 {max} 个属性。
 str		Give the properties as a list of ids.	请以 ID 列表的形式给出属性。
+str		An item in the list has no id. Give each property's id.	列表中有一项没有 ID。请给出每个属性的 ID。
 str		{key} is not a key here. An item holds an id and a name.	{key} 在此处不是有效的键。每一项包含一个 ID 和一个名称。
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
