@@ -1568,6 +1568,11 @@ str		A property redefines at most {max} properties.	A property redefines at most
 str		Give the properties as a list of ids.	Give the properties as a list of ids.
 str		An item in the list has no id. Give each property's id.	An item in the list has no id. Give each property's id.
 str		{key} is not a key here. An item holds an id and a name.	{key} is not a key here. An item holds an id and a name.
+str		Give at most {max} checks.	Give at most {max} checks.
+str		Two checks are named {name}. Give each check its own name.	Two checks are named {name}. Give each check its own name.
+str		Give each check as text, or as an object with an expression and a name.	Give each check as text, or as an object with an expression and a name.
+str		An item takes no {key}. It takes {takes}.	An item takes no {key}. It takes {takes}.
+str		An item holds a key without a name. It takes {takes}.	An item holds a key without a name. It takes {takes}.
 str		There is no element with the id {id}.	There is no element with the id {id}.
 str		A default value is at most {n} characters.	A default value is at most {n} characters.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} is not a whole number, which an Integer's default is, such as 42.

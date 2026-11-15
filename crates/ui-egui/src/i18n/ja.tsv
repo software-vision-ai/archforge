@@ -1569,6 +1569,11 @@ str		A property redefines at most {max} properties.	プロパティが再定義�
 str		Give the properties as a list of ids.	プロパティは ID のリストで指定してください。
 str		An item in the list has no id. Give each property's id.	リストの項目に ID がありません。各プロパティの ID を指定してください。
 str		{key} is not a key here. An item holds an id and a name.	{key} はここで使えるキーではありません。項目には ID と名前を指定します。
+str		Give at most {max} checks.	チェック制約は最大 {max} 個まで指定してください。
+str		Two checks are named {name}. Give each check its own name.	2 つのチェック制約の名前が {name} です。チェック制約にはそれぞれ別の名前を付けてください。
+str		Give each check as text, or as an object with an expression and a name.	チェック制約はそれぞれテキスト、または式と名前を持つオブジェクトで指定してください。
+str		An item takes no {key}. It takes {takes}.	項目に {key} は指定できません。指定できるのは {takes} です。
+str		An item holds a key without a name. It takes {takes}.	項目に名前のないキーがあります。指定できるのは {takes} です。
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。

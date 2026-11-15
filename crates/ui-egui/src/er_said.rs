@@ -10,7 +10,10 @@
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
 //! a place past its table's last; a default none of an enum type's literals is UML's row. A
-//! column's or a domain's size (AR-496): the rule it breaks, with the type and the size.
+//! column's or a domain's size (AR-496): the rule it breaks, with the type and the size. Checks
+//! (AR-499): a domain's checks too many, one named twice, an item of another shape and an item's
+//! key the list does not take (said without a kind, for any list of items); an empty expression is
+//! a constraint's row.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
@@ -89,6 +92,17 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::DomainGives { what: "collation" } => tr("A column on a domain takes the domain's collation."),
         Reason::FollowsNoColumn { name } => fmt(&tr("{name} follows no column."), &[("name", name)]),
         Reason::PastLastColumn { columns } => trn("The table has {n} column.", "The table has {n} columns.", u64::try_from(*columns).ok()?),
+        Reason::TooMany { kind: "check", max } => fmt(&tr("Give at most {max} checks."), &[("max", &max.to_string())]),
+        Reason::NamedTwice { kind: "check", name } => fmt(&tr("Two checks are named {name}. Give each check its own name."), &[("name", name)]),
+        Reason::ItemsExpected { kind: "check" } => tr("Give each check as text, or as an object with an expression and a name."),
+        Reason::UnknownKey { key, takes } => {
+            let template = if key.is_empty() {
+                tr("An item holds a key without a name. It takes {takes}.")
+            } else {
+                tr("An item takes no {key}. It takes {takes}.")
+            };
+            fmt(&template, &[("key", key), ("takes", &takes.join(", "))])
+        }
         Reason::NotOneOf(no) => return not_one_of_said(no),
         _ => return None,
     })
