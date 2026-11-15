@@ -6814,7 +6814,7 @@ fn an_er_size_refused_is_said_in_the_chosen_language() {
 /// chosen language: the type with its first columns, singular and plural, a list the engine cut
 /// ending in an ellipsis; none, too many, no list
 /// of names, a literal that is no name with why in the same words (an empty one on its own), and
-/// one twice. In light and dark (AR-498).
+/// one twice, also as a problem of a loaded enum type. In light and dark (AR-498).
 #[test]
 fn an_er_type_in_use_and_its_literals_refused_are_said_in_the_chosen_language() {
     use archforge_engine::{Reason, TypeInUse};
@@ -6844,6 +6844,20 @@ fn an_er_type_in_use_and_its_literals_refused_are_said_in_the_chosen_language() 
         ] {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
+        // A loaded enum type's literal twice, which no command makes, is a problem in the same words.
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let e = st.create(archforge_er::ENUM_TYPE).unwrap();
+        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("status")).unwrap();
+        for literal in ["offen", "OFFEN"] {
+            st.push(e, archforge_er::enum_type::LITERAL, archforge_mof::Value::str(literal)).unwrap();
+        }
+        let texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        assert_eq!(texts, ["status: Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an."], "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
