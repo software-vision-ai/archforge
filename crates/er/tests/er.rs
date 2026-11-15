@@ -729,6 +729,130 @@ fn a_loaded_foreign_keys_key_and_relationship_break_typed() {
     assert_eq!(typed(loose, None), (None, "the key belongs to no entity".into()));
 }
 
+/// A relationship refused carries its reason typed beside the English, which stays as it was:
+/// identifying or a key to point at without the foreign key, a foreign key for many to many, a
+/// table with itself without a role or identifying itself, a key of another table, a parent without
+/// a primary key, identifying cycles from adding and from setting identifying, child and parent
+/// apart, roles against the name rule or without a letter, and a subtype's key changed (AR-504).
+#[test]
+fn a_relationship_refused_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    let item = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Item" }));
+    let vip = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Vip" }));
+    let identify = |from: &str, to: &str| json!({ "from": from, "to": to, "create_foreign_key": true, "identifying": true });
+    run(&mut s, "er.relationship.add", identify(&sm.customer, &line));
+    run(&mut s, "er.relationship.add", identify(&line, &item));
+    let back = run(&mut s, "er.relationship.add", json!({ "from": line, "to": sm.customer, "create_foreign_key": true }));
+    run(&mut s, "er.generalization.add", json!({ "supertype": sm.customer, "subtype": vip }));
+    let st = s.doc();
+    let line_pk = st.uuid(rules::primary_key_of(st, obj(st, &line)).unwrap()).unwrap().to_string();
+    let vip_fk = rules::foreign_keys(st, obj(st, &vip))[0];
+    let subtype_key = st.uuid(rules::key_parts(st, vip_fk).relationship.unwrap()).unwrap().to_string();
+    let vip_fk = st.uuid(vip_fk).unwrap().to_string();
+    let cycle = |child: &str, parent: &str| Reason::IdentifyingCycle { child: child.into(), parent: parent.into() };
+    let add = "er.relationship.add";
+    let with_key = |extra: Json| {
+        let mut p = json!({ "from": sm.customer, "to": sm.order, "create_foreign_key": true });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let subtype = "it is a subtype's key; remove the generalization instead";
+    for (cmd, p, key, reason, message) in [
+        (
+            add,
+            json!({ "from": sm.customer, "to": sm.order, "identifying": true }),
+            "identifying",
+            Reason::IdentifyingWithoutForeignKey,
+            "an identifying relationship needs its foreign key; set create_foreign_key",
+        ),
+        (
+            add,
+            json!({ "from": sm.customer, "to": sm.order, "points_to": line_pk }),
+            "points_to",
+            Reason::KeyWithoutForeignKey,
+            "only a relationship that brings its foreign key points at a key; set create_foreign_key",
+        ),
+        (
+            add,
+            with_key(json!({ "from_end": "one-or-more" })),
+            "create_foreign_key",
+            Reason::ManyToManyForeignKey,
+            "a many-to-many relationship needs a mapping table; resolve it instead",
+        ),
+        (
+            add,
+            with_key(json!({ "to": sm.customer })),
+            "create_foreign_key",
+            Reason::RoleNeeded,
+            "a relationship of an entity with itself needs a role at the end its key points to, such as parent; the role names the key columns",
+        ),
+        (
+            add,
+            with_key(json!({ "to": sm.customer, "from_role": "whole", "identifying": true })),
+            "identifying",
+            cycle("Customer", "Customer"),
+            "an entity cannot identify itself through its own primary key",
+        ),
+        (
+            add,
+            with_key(json!({ "points_to": line_pk })),
+            "points_to",
+            Reason::KeyNotOf { table: "Customer".into() },
+            "the key is not one of Customer's",
+        ),
+        (
+            add,
+            with_key(json!({ "from": sm.order, "to": sm.customer })),
+            "create_foreign_key",
+            Reason::NoPrimaryKey { table: "Order".into() },
+            "Order has no primary key to refer to",
+        ),
+        (
+            add,
+            with_key(json!({ "from": item, "to": sm.customer, "identifying": true })),
+            "identifying",
+            cycle("Customer", "Item"),
+            "the identifying relationships would form a cycle between Customer and Item",
+        ),
+        (
+            "er.relationship.set-identifying",
+            json!({ "relationship": sm.places, "identifying": true }),
+            "identifying",
+            Reason::IdentifyingWithoutForeignKey,
+            "the relationship has no foreign key to make part of a primary key",
+        ),
+        (
+            "er.relationship.set-identifying",
+            json!({ "relationship": back, "identifying": true }),
+            "identifying",
+            cycle("Customer", "Line"),
+            "the identifying relationships would form a cycle between Customer and Line",
+        ),
+        (add, with_key(json!({ "to_role": "buyer " })), "to_role", Reason::EdgeSpace, "the role starts or ends with a space"),
+        (
+            add,
+            with_key(json!({ "from_role": "--" })),
+            "from_role",
+            Reason::RoleWithoutLetter,
+            "the role needs a letter or a digit, since it names key columns",
+        ),
+        (
+            "er.relationship.set-roles",
+            json!({ "relationship": subtype_key, "from_role": "a", "to_role": "" }),
+            "relationship",
+            Reason::InSubtypeKey,
+            subtype,
+        ),
+        ("er.foreign-key.remove", json!({ "foreign_key": vip_fk }), "foreign_key", Reason::InSubtypeKey, subtype),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+}
+
 /// A key a step would break, found inside the step, carries its reason typed beside the English: the
 /// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
 /// column that may be null breaks on any edit that checks the keys around it (AR-493).

@@ -246,6 +246,15 @@ follows an identifying relationship as `IdentifyingOutsideKey`, each with the fi
 two tables by label; inside the step, a foreign key an edit would break that way as `WouldBreak` of
 `"foreign key"`; a key that is none, as `NotA` of `"key"`, and a key without columns, as
 `NoKeyColumns`, only a loaded document holds.
+A relationship (AR-504): identifying without its foreign key, from `relationship.add` and
+`set-identifying`, as `IdentifyingWithoutForeignKey`, a key to point at without it as
+`KeyWithoutForeignKey`, a foreign key for many to many as `ManyToManyForeignKey`, a table with
+itself without a role at the parent's end as `RoleNeeded`, and identifying itself through its own
+primary key, like a cycle, as `IdentifyingCycle` with the table twice; a key of another table as
+`KeyNotOf`, a parent without a primary key as `NoPrimaryKey`, identifying cycles from adding and
+from `set-identifying` as `IdentifyingCycle`; a role against the name rule with that rule's reason,
+one without a letter or a digit as `RoleWithoutLetter`; and a subtype's key changed or removed on
+its own (`not_subtype_key`) as `InSubtypeKey`, as a part of it is.
 The rest
 follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's

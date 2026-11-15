@@ -10,6 +10,8 @@
 //! Subtypes (AR-506): a table made its own subtype, one of another schema, one with a supertype
 //! already, a circle, a chain too deep, and a part of a subtype's key changed on its own;
 //! identifying keys in a cycle and a discriminator of another table take the key rules' rows.
+//! A relationship (AR-504): identifying or a key to point at without its foreign key, a foreign key
+//! for many to many, a table with itself without a role, and a role without a letter.
 //! Found inside a step
 //! (AR-493): a key that would break, with why in the same words, and keys built on each other too
 //! deep. A column's generation (AR-494): the rule it breaks, also for a column on
@@ -98,6 +100,11 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::Cycle { relationship: SUBTYPE } => tr("The supertype is a subtype of this table already, which would close a circle."),
         Reason::TooDeep { kind: SUBTYPE, max } => fmt(&tr("Subtypes would run deeper than {max} levels here."), &[("max", &max.to_string())]),
         Reason::InSubtypeKey => tr("This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead."),
+        Reason::IdentifyingWithoutForeignKey => tr("An identifying relationship needs its foreign key; turn the switch on first"),
+        Reason::KeyWithoutForeignKey => tr("Only a relationship with its foreign key points at a key."),
+        Reason::ManyToManyForeignKey => tr("A many-to-many relationship takes no foreign key. Add a mapping table instead."),
+        Reason::RoleNeeded => tr("A relationship of a table with itself needs a role at the end its key points to, such as parent."),
+        Reason::RoleWithoutLetter => tr("A role needs a letter or a digit, since it names key columns."),
         Reason::Again { relationship: "foreign key" } => tr("The foreign key points at this key already. Name the columns to change them."),
         Reason::TooFew { kind: FOREIGN_KEY_COLUMN, min: 1 } => tr("A foreign key needs at least one column."),
         Reason::TooMany { kind: FOREIGN_KEY_COLUMN, max } => fmt(&tr("A foreign key holds at most {max} columns."), &[("max", &max.to_string())]),
