@@ -76,21 +76,14 @@ fn strip_comment(line: &str) -> &str {
 
 /// Every regular file under `dir`, sorted, as paths relative to the workspace root. Symbolic links
 /// are not followed, so a link cycle cannot make the walk endless. A folder's listing that fails
-/// part way ends at the failure, which is printed: the files listed after it are left out.
-pub fn walk(dir: &Path) -> Vec<PathBuf> {
+/// part way is an error, so no check passes on the files listed before it alone.
+pub fn walk(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut out = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&d) else { continue };
         for e in entries {
-            // The standard library does not promise that a listing ends after an error.
-            let e = match e {
-                Ok(e) => e,
-                Err(err) => {
-                    eprintln!("{}: not listed in full, so the rest is left out: {err}", d.display());
-                    break;
-                }
-            };
+            let e = e.map_err(|e| format!("{}: the listing stopped part way: {e}", d.display()))?;
             let Ok(kind) = e.file_type() else { continue };
             let p = e.path();
             if kind.is_dir() {
@@ -101,15 +94,16 @@ pub fn walk(dir: &Path) -> Vec<PathBuf> {
         }
     }
     out.sort();
-    out
+    Ok(out)
 }
 
-/// The files git tracks, or every file under the root when git is unavailable.
-pub fn tracked() -> Vec<PathBuf> {
+/// The files git tracks, or every file under the root when git is unavailable; an error when that
+/// walk fails.
+pub fn tracked() -> Result<Vec<PathBuf>, String> {
     let out = Command::new("git").args(["ls-files", "--cached", "--others", "--exclude-standard"]).current_dir(root()).output();
     match out {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).lines().map(PathBuf::from).collect(),
-        _ => walk(&root()).into_iter().filter(|p| !p.starts_with("target") && !p.starts_with(".git")).collect(),
+        Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).lines().map(PathBuf::from).collect()),
+        _ => Ok(walk(&root())?.into_iter().filter(|p| !p.starts_with("target") && !p.starts_with(".git")).collect()),
     }
 }
 

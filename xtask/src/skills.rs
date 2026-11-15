@@ -21,7 +21,7 @@ pub fn run() -> Result<(), String> {
     let mut folders = Vec::new();
     let entries = std::fs::read_dir(root.join(DIR)).map_err(|e| format!("{DIR}/: {e}"))?;
     for e in entries {
-        let e = e.map_err(|e| format!("{DIR}/: {e}"))?;
+        let e = e.map_err(|e| format!("{DIR}/: the listing stopped part way: {e}"))?;
         if e.file_type().is_ok_and(|t| t.is_dir()) {
             folders.push(e.file_name().to_string_lossy().into_owned());
         }

@@ -399,7 +399,7 @@ fn conversation_folders_are_private_and_removed() {
         assert_eq!(mode(dir), 0o700, "{}", dir.display());
         assert!(dir.starts_with(ws.root()));
     }
-    assert_eq!(std::fs::read_dir(folder.work()).unwrap().count(), 0, "the working folder starts empty");
+    assert_eq!(std::fs::read_dir(folder.work()).unwrap().map(Result::unwrap).count(), 0, "the working folder starts empty");
     std::fs::write(folder.config().join("transcript.jsonl"), "{}").unwrap();
     // Opening it again keeps what the runtime wrote, for a resume.
     let again = ws.conversation(&id).unwrap();

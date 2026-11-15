@@ -118,15 +118,17 @@ pub(crate) fn known_dirs(home: Option<&Path>, npm_prefix: Option<&Path>) -> Vec<
 fn node_version_dirs(root: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
     let read = MAX_NODE_VERSIONS.saturating_mul(4);
-    let entries: Vec<_> = entries.take(read.saturating_add(1)).collect();
+    // The standard library does not promise that a listing ends after an error.
+    let entries: Vec<_> = entries
+        .take(read.saturating_add(1))
+        .map_while(|e| e.inspect_err(|e| log::warn!("{} was not listed in full, so the rest is not searched: {e}", root.display())).ok())
+        .collect();
     if entries.len() > read {
         log::warn!("{} holds more than {read} entries; only the first {read} read are searched", root.display());
     }
     let mut versions: Vec<(Version, PathBuf)> = entries
         .into_iter()
         .take(read)
-        // The standard library does not promise that a listing ends after an error.
-        .map_while(|e| e.inspect_err(|e| log::warn!("{} was not listed in full, so the rest is not searched: {e}", root.display())).ok())
         .filter_map(|e| {
             let name = e.file_name().into_string().ok()?;
             let version = Version::parse(name.strip_prefix('v')?)?;

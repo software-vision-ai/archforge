@@ -162,7 +162,7 @@ fn an_unwritable_folder_is_refused_and_nothing_is_left_in_it() {
     let r = env.create("Nowhere");
     std::fs::set_permissions(env.folder(), std::fs::Permissions::from_mode(0o700)).unwrap();
     assert!(matches!(r, Err(Error::FolderUnusable { .. })), "{r:?}");
-    assert_eq!(std::fs::read_dir(env.folder()).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(env.folder()).unwrap().map(Result::unwrap).count(), 0);
 }
 
 #[test]
@@ -350,5 +350,5 @@ fn every_name_rule_refuses_a_creation_before_anything_is_written() {
     for bad in ["", "a/b", "a:b", ".hidden", "ends.", " lead", "con", "a\tb", long.as_str()] {
         assert!(matches!(env.create(bad), Err(Error::BadName { .. })), "{bad:?}");
     }
-    assert!(!env.folder().exists() || std::fs::read_dir(env.folder()).unwrap().count() == 0);
+    assert!(!env.folder().exists() || std::fs::read_dir(env.folder()).unwrap().map(Result::unwrap).count() == 0);
 }

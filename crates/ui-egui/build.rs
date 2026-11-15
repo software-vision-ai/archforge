@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 /// it uses.
 const FACES: &[(&str, &str)] = &[("Inter", "Regular"), ("Inter", "SemiBold")];
 
-/// Writes the faces, then fails the build at a catalogue row that does not have four columns. A
-/// listing of the catalogues that fails part way ends at the failure with a warning.
+/// Writes the faces, then fails the build at a catalogue row that does not have four columns, or at
+/// a listing of the catalogues that fails part way.
 fn main() {
     faces();
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default();
@@ -17,13 +17,12 @@ fn main() {
     println!("cargo:rerun-if-changed={}", i18n.display());
     let Ok(entries) = std::fs::read_dir(&i18n) else { return };
     for entry in entries {
-        // The standard library does not promise that a listing ends after an error: the check
-        // ends there, and says so.
+        // The standard library does not promise that a listing ends after an error.
         let path = match entry {
             Ok(entry) => entry.path(),
             Err(e) => {
-                println!("cargo:warning={}: the catalogues were not all listed, so the rest are not checked: {e}", i18n.display());
-                break;
+                println!("cargo:warning={}: the catalogues were not all listed, so they cannot all be checked: {e}", i18n.display());
+                std::process::exit(1);
             }
         };
         if path.extension().is_none_or(|e| e != "tsv") {
