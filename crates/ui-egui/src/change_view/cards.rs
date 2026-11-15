@@ -48,9 +48,10 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let links = related::links(&shell.versions.changes, &sides.lists.related);
     let under = related::height(links.len());
     // The page keys are the cards' while a link of theirs has the keyboard, so no text field has
-    // it, and no menu is open (AR-481); an open menu of the in-window bar holds every key while
-    // the window behind it is drawn (`hold_keys`), so none reaches here then.
-    let paging = related::keyed(shell, ui.ctx(), &links).is_some() && shell.panels.menu.is_none();
+    // it, and no menu is open (AR-481), a panel's or the in-window bar's. A bar open as the frame
+    // starts holds every key from the window (`hold_keys`), but a click opening it is read as the
+    // strip is drawn, above the cards, so a key of that frame still comes here and meets it open.
+    let paging = related::keyed(shell, ui.ctx(), &links).is_some() && shell.panels.menu.is_none() && shell.menu_bar.open.is_none();
     let Some(o) = shell.versions.element.as_mut() else { return };
     let lists = lists_height(&sides.lists.before).max(lists_height(&sides.lists.after));
     let tail = tall + UNDER_SUMMARY + EYEBROW + ROWS_AT + lists + BELOW + under;
