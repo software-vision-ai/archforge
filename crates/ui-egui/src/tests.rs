@@ -4036,7 +4036,8 @@ fn menu_ids(h: &Harness<'static, Shell>) -> Vec<String> {
 }
 
 /// Told of a native menu, the shell draws no bar; otherwise the groups sit after Open project,
-/// centred on the strip, and File opens under its button at the design's sizes and order.
+/// centred on the strip, with no Window menu (the window's frame minimises and maximises it there,
+/// where macOS has one: AR-463), and File opens under its button at the design's sizes and order.
 #[test]
 fn the_bar_is_drawn_when_told_and_opens_a_menu_at_the_designs_sizes() {
     for (theme, project) in [(ThemeKind::Light, false), (ThemeKind::Dark, false), (ThemeKind::Light, true), (ThemeKind::Dark, true)] {

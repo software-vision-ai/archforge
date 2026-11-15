@@ -7,6 +7,9 @@ str		File	文件
 str	macOS	File	文件
 str		Help	帮助
 str	menu	View	视图
+str	menu	Window	窗口
+str		Minimise	最小化
+str	window	Zoom	缩放
 str		Ctrl	Ctrl
 str		Shift	Shift
 str	key	Alt	Alt

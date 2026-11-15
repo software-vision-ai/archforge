@@ -6,6 +6,9 @@ str		File	File
 str	macOS	File	File
 str		Help	Help
 str	menu	View	View
+str	menu	Window	Window
+str		Minimise	Minimise
+str	window	Zoom	Zoom
 str		Ctrl	Ctrl
 str		Shift	Shift
 str	key	Alt	Alt

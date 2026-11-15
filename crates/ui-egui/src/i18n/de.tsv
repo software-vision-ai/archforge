@@ -7,6 +7,9 @@ str		File	Datei
 str	macOS	File	Ablage
 str		Help	Hilfe
 str	menu	View	Ansicht
+str	menu	Window	Fenster
+str		Minimise	Minimieren
+str	window	Zoom	Zoomen
 str		Ctrl	Strg
 str		Shift	Umschalt
 str	key	Alt	Alt

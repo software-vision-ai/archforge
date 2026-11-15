@@ -65,7 +65,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   content; the panel's collapse button folds the panel. Folded columns are kept in the preferences.
 - The status bar says only what is true: the save state, the agent state, the location.
 - On macOS the menu bar is the table of actions (`crates/ui-egui/src/actions.rs`), and its items, keys
-  and Home's search rows share each action's availability. On Windows and Linux the same actions are
+  and Home's search rows share each action's availability; after Versions its Window menu holds the system's
+  own Minimise (⌘M) and Zoom (AR-463), which the window's frame does on Windows and Linux. On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
   `Shell::in_window_menu`): the groups of its own table (File, Edit, View, Model, Versions and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, the rows lower down to a line of text where a

@@ -40,7 +40,9 @@ opens it or moves to it. **File** has the same groups on every system: **New pro
 project…** and **Close project**, then **Save**, then **Generate…**; in the strip **Settings…** and
 **Exit** follow at its end, where macOS has them in its application menu. A few words follow the
 system: the last row of **File** is **Exit** there and **Quit Archforge** in the application menu on
-macOS, whose **Edit** menu writes **Select All**. A row that cannot act now is greyed out and says why when you point at
+macOS, whose **Edit** menu writes **Select All**. On macOS a **Window** menu follows **Versions**, with
+**Minimise** (⌘M) and **Zoom** for the window itself; on Windows and Linux the window's own frame does
+that. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 A click elsewhere only closes the menu: it does not also press, select or drag what is under it, so
