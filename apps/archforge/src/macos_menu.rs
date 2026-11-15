@@ -1,7 +1,8 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
-//! system's Hide), File, Edit, View, Model and Versions, in the design's order. Each item is enabled while its action can
-//! act, and its keys are the table's. Choosing an item wakes the window, so it acts with the pointer
-//! and keyboard still. When it cannot be built, the window works without it.
+//! system's Hide), File, Edit, View, Model and Versions, in the design's order, then Window with the
+//! system's own Minimise and Zoom. Each item from the table is enabled while its action can act, and
+//! its keys are the table's. Choosing an item wakes the window, so it acts with the pointer and
+//! keyboard still. When it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
 
 use std::str::FromStr;
@@ -25,6 +26,19 @@ struct Items {
     ticked: Vec<(&'static str, CheckMenuItem)>,
 }
 
+/// The menus of the bar, left to right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Title {
+    App,
+    File,
+    Edit,
+    View,
+    Model,
+    Versions,
+    Window,
+}
+
+const BAR: [Title; 7] = [Title::App, Title::File, Title::Edit, Title::View, Title::Model, Title::Versions, Title::Window];
 const APP: [Group; 2] = [&[ABOUT], &[SETTINGS]];
 const EDIT: [Group; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
 
@@ -78,25 +92,50 @@ fn append_groups<G: AsRef<[&'static str]>>(shell: &Shell, menu: &Submenu, groups
     Ok(())
 }
 
+/// The Window menu's items, in its order: the system's own, which act on the window without the
+/// table of actions, Minimise with the system's ⌘M.
+fn window_items() -> [PredefinedMenuItem; 2] {
+    [PredefinedMenuItem::minimize(Some(&tr("Minimise"))), PredefinedMenuItem::zoom(Some(&tr_ctx("window", "Zoom")))]
+}
+
+/// The menu `title` with its items, recorded in `items`; for Model, `model`, which the first frame fills.
+fn submenu(shell: &Shell, title: Title, model: &Submenu, items: &mut Items) -> Result<Submenu, muda::Error> {
+    let filled = |name: String, groups: &[&[&'static str]], items: &mut Items| {
+        let menu = Submenu::new(name, true);
+        append_groups(shell, &menu, groups, items).map(|()| menu)
+    };
+    match title {
+        Title::App => {
+            let app = filled("Archforge".to_string(), &APP, items)?;
+            let quit = item(shell, QUIT, items);
+            app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit])?;
+            Ok(app)
+        }
+        Title::File => {
+            let menu = Submenu::new(actions::file_title(shell), true);
+            append_groups(shell, &menu, &actions::file_menu(shell), items).map(|()| menu)
+        }
+        Title::Edit => filled(tr("Edit"), &EDIT, items),
+        Title::View => filled(tr_ctx("menu", "View"), &VIEW_MENU, items),
+        Title::Model => Ok(model.clone()),
+        Title::Versions => filled(tr("Versions"), &VERSIONS_MENU, items),
+        Title::Window => {
+            let window = Submenu::new(tr_ctx("menu", "Window"), true);
+            let [minimise, zoom] = window_items();
+            window.append_items(&[&minimise, &zoom]).map(|()| window)
+        }
+    }
+}
+
 /// Builds the menu bar and installs it for the application; `ctx` is the window a chosen item wakes.
 pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     let err = |e: muda::Error| e.to_string();
     let menu = Menu::new();
     let mut items = Items::default();
-    let app = Submenu::new("Archforge", true);
-    append_groups(shell, &app, &APP, &mut items).map_err(err)?;
-    let quit = item(shell, QUIT, &mut items);
-    app.append_items(&[&PredefinedMenuItem::separator(), &PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]).map_err(err)?;
-    let file = Submenu::new(actions::file_title(shell), true);
-    append_groups(shell, &file, &actions::file_menu(shell), &mut items).map_err(err)?;
-    let edit = Submenu::new(tr("Edit"), true);
-    append_groups(shell, &edit, &EDIT, &mut items).map_err(err)?;
-    let view = Submenu::new(tr_ctx("menu", "View"), true);
-    append_groups(shell, &view, &VIEW_MENU, &mut items).map_err(err)?;
     let model = Submenu::new(tr("Model"), true);
-    let versions = Submenu::new(tr("Versions"), true);
-    append_groups(shell, &versions, &VERSIONS_MENU, &mut items).map_err(err)?;
-    menu.append_items(&[&app, &file, &edit, &view, &model, &versions]).map_err(err)?;
+    for title in BAR {
+        menu.append(&submenu(shell, title, &model, &mut items).map_err(err)?).map_err(err)?;
+    }
     let (sender, chosen) = channel();
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
@@ -295,6 +334,18 @@ mod tests {
         let (rows, mut failing) = (vec![vec!["model.note", "model.link"]], false);
         assert_eq!((settle(rows.clone(), Err(muda::Error::NotAChildOfThisMenu), &mut failing), failing), (vec![], true));
         assert_eq!((settle(rows.clone(), Ok(()), &mut failing), failing), (rows, false));
+    }
+
+    /// The bar ends in the Window menu, after Versions, and Window holds the system's Minimise and
+    /// then Zoom, in the catalogues' words.
+    #[test]
+    fn the_bar_ends_in_a_window_menu_of_minimise_and_zoom() {
+        use Title::{App, Edit, File, Model, Versions, View, Window};
+        assert_eq!(BAR, [App, File, Edit, View, Model, Versions, Window]);
+        for (code, words) in [("en", ["Minimise", "Zoom"]), ("de", ["Minimieren", "Zoomen"])] {
+            assert!(archforge_ui_egui::i18n::set_language(code), "{code}");
+            assert_eq!(window_items().map(|item| item.text()), words, "{code}");
+        }
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read

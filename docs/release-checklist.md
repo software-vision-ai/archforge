@@ -76,7 +76,9 @@ into the name field. With the class diagram showing, look through **Model**, cho
 Home and look once more. Open a project with a version and a change since; look through **Versions**,
 choose **Versions ▸ Save version…** and cancel; choose **Older version**, then press ⇧⌘H. Look through
 **View**, choose **View ▸ Zoom in**, then **Whole diagram**, then **Skills**; type in a skill's text and press ⌘K;
-click the canvas and press ⌘K.
+click the canvas and press ⌘K. Look through **Window** and choose **Window ▸ Minimise**; bring the window back
+from the Dock, press ⌘M and bring it back again. Choose **Window ▸ Zoom**, then **Window ▸ Zoom** once more.
+With **Generate…** open, look at **Window** again, then close the dialog.
 
 **Expect:** the application menu offers **Settings…** (⌘,) and **Quit Archforge** (⌘Q). File offers
 **New project…**, **Open project…** (⌘O), **Close project**, **Save** (⌘S) and **Generate…** (⇧⌘G), with a divider after
@@ -101,7 +103,10 @@ and ⇧⌘H goes back; otherwise ⇧⌘H opens the list. With a project open tha
 last eight each with a tick while its minimap, explorer or panel shows; the
 zoom grows about the canvas's centre, the whole diagram comes into view and the Skills panel opens, its row then ticked. Choosing
 **Skills** again folds the panel away and the tick goes. In the
-skill's text ⌘K makes a link and opens no search; on the canvas it opens the search.
+skill's text ⌘K makes a link and opens no search; on the canvas it opens the search. **Window** follows
+**Versions** and offers **Minimise** (⌘M) and then **Zoom**; rows macOS may add below them are the system's own. Minimise and ⌘M
+each put the window in the Dock; Zoom grows it to fill the screen beside the Dock, and the second Zoom
+brings back its earlier size and place. Both stay enabled while a dialog is up.
 
 **Covers:** the native macOS menu bar, which the harness has no part of, the real window waking
 when an item in it is chosen, and a real pointer on the in-window bar over a real preview's selection.

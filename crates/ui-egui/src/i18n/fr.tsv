@@ -7,6 +7,9 @@ str		File	Fichier
 str	macOS	File	Fichier
 str		Help	Aide
 str	menu	View	Affichage
+str	menu	Window	Fenêtre
+str		Minimise	Réduire
+str	window	Zoom	Zoom
 str		Ctrl	Ctrl
 str		Shift	Maj
 str	key	Alt	Alt

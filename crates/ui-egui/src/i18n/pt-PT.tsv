@@ -7,6 +7,9 @@ str		File	Ficheiro
 str	macOS	File	Ficheiro
 str		Help	Ajuda
 str	menu	View	Ver
+str	menu	Window	Janela
+str		Minimise	Minimizar
+str	window	Zoom	Zoom
 str		Ctrl	Ctrl
 str		Shift	Shift
 str	key	Alt	Alt
