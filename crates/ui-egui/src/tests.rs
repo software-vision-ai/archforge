@@ -4030,6 +4030,21 @@ fn click_menu(h: &mut Harness<'static, Shell>, id: &str) {
     click(h, at);
 }
 
+/// Clicks the in-window bar's File title with `key` pressed and let go in the frame of the release,
+/// as both can arrive together, and asserts that the click opened File (AR-518).
+fn open_file_with(h: &mut Harness<'static, Shell>, key: egui::Key) {
+    let (at, primary, none) = (rect_of(h, "strip.menu.file").center(), egui::PointerButton::Primary, egui::Modifiers::NONE);
+    h.event(egui::Event::PointerMoved(at));
+    h.event(egui::Event::PointerButton { pos: at, button: primary, pressed: true, modifiers: none });
+    h.step();
+    // kittest runs a frame per event it queues, so the release and the key go in by hand, together.
+    let press = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: none };
+    let release = egui::Event::PointerButton { pos: at, button: primary, pressed: false, modifiers: none };
+    h.input_mut().events.extend([release, press(true), press(false)]);
+    h.step();
+    assert_eq!(h.state().menu_bar.open, Some("file"), "the click opened the bar's File menu");
+}
+
 /// The bar's controls in the frame.
 fn menu_ids(h: &Harness<'static, Shell>) -> Vec<String> {
     ids(h).into_iter().filter(|i| i.starts_with("strip.menu.")).collect()
@@ -6742,7 +6757,7 @@ fn many_diagrams(theme: ThemeKind) -> (Harness<'static, Shell>, Vec<String>) {
 /// Tab and Shift+Tab land on every row of Diagrams and group's `+` in turn, each brought whole into
 /// view, past a row the wheel left cut too; the frame Tab moves the keyboard in asks for the next.
 /// The page keys move the keyboard: not with the control key (Windows, Linux) or the menu bar open,
-/// and by a row in the smallest window.
+/// also in the frame a click opens it in, and by a row in the smallest window.
 #[test]
 fn diagrams_follows_the_keyboard() {
     in_both_appearances(|theme| {
@@ -6772,6 +6787,11 @@ fn diagrams_follows_the_keyboard() {
         key(&mut h, egui::Key::F10, egui::Modifiers::NONE);
         key(&mut h, egui::Key::PageDown, egui::Modifiers::NONE);
         assert!(h.state().menu_bar.open.is_some() && holds(&h, &rows[0]), "{theme:?}: with the menu bar open");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        // Nor in the frame of the click that opens the bar (AR-518).
+        open_file_with(&mut h, egui::Key::End);
+        let still = !holds(&h, &rows[rows.len() - 1]) && h.state().diagrams.scroll.offset == 0.0;
+        assert!(still, "{theme:?}: with the click that opens the menu bar");
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         // In the smallest window, over the open diagram's footer, not even a row shows whole: a
         // page key still moves a row.
