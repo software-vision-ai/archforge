@@ -67,7 +67,8 @@ name or a note's text, an element placed where it is not shown or shown already,
 diagram or nested too deep, a note's link routed or a line bent too often, and a notation's elements
 it does not remove carries its reason typed for an interface to say (AR-439); so does a kind word
 that is no plain identifier or none the notations or a line's element take: a diagram's kind, a
-box's kind, a label's slot and a style's name (AR-512).
+box's kind, a label's slot and a style's name (AR-512); and a new diagram's element missing where
+its kind needs one or of a class its kind cannot be of (AR-513).
 
 **Tests.** `tests/diagram.rs`, over the MOF core's toy metamodel with a test notation of classes and
 generalizations: the registry and the metamodel; every command's round trip; refusals that name

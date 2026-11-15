@@ -300,6 +300,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	Chat is using the model
 str		Agent access off	Agent access off
 # Chat panel
+str		Conversation	Conversation
 str		Conversations	Conversations
 str		New conversation	New conversation
 str		Stop the reply first	Stop the reply first
@@ -1332,6 +1333,7 @@ str		{name} is not a line on a diagram.	{name} is not a line on a diagram.
 str		{name} is not a label on a line.	{name} is not a label on a line.
 str		The width is not between {min} and {max}.	The width is not between {min} and {max}.
 str		The height is not between {min} and {max}.	The height is not between {min} and {max}.
+str		{name} cannot have a diagram of this kind.	{name} cannot have a diagram of this kind.
 str		A diagram of this kind does not show {name}.	A diagram of this kind does not show {name}.
 str		{name} is outside what this diagram shows.	{name} is outside what this diagram shows.
 str		This diagram shows {name} already.	This diagram shows {name} already.
@@ -1421,6 +1423,8 @@ str		Give both x and y, or neither to place it where it reads.	Give both x and y
 str		The {axis} is not a number.	The {axis} is not a number.
 str		The {axis} is farther than {max} from the origin.	The {axis} is farther than {max} from the origin.
 str		An element is named twice. Name each element once.	An element is named twice. Name each element once.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} is not one of the choices. The choices are {words}.
+str		{field}: no choice is given. The choices are {words}.	{field}: no choice is given. The choices are {words}.
 str		a constraint	a constraint
 str		{constraint} constrained nothing else and went with it	{constraint} constrained nothing else and went with it
 str		{constraint} now constrains {elements} only	{constraint} now constrains {elements} only

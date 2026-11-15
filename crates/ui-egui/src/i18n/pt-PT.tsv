@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	A Conversa está a usar o modelo
 str		Agent access off	Acesso de agentes desligado
 # Painel da Conversa
+str		Conversation	Conversa
 str		Conversations	Conversas
 str		New conversation	Nova conversa
 str		Stop the reply first	Pare primeiro a resposta
@@ -1333,6 +1334,7 @@ str		{name} is not a line on a diagram.	{name} não é uma linha de um diagrama.
 str		{name} is not a label on a line.	{name} não é uma etiqueta de uma linha.
 str		The width is not between {min} and {max}.	A largura não está entre {min} e {max}.
 str		The height is not between {min} and {max}.	A altura não está entre {min} e {max}.
+str		{name} cannot have a diagram of this kind.	{name} não pode ter um diagrama deste tipo.
 str		A diagram of this kind does not show {name}.	Um diagrama deste tipo não mostra {name}.
 str		{name} is outside what this diagram shows.	{name} está fora do que este diagrama mostra.
 str		This diagram shows {name} already.	Este diagrama já mostra {name}.
@@ -1422,6 +1424,8 @@ str		Give both x and y, or neither to place it where it reads.	Indique x e y em 
 str		The {axis} is not a number.	O valor {axis} não é um número.
 str		The {axis} is farther than {max} from the origin.	O valor {axis} está a mais de {max} da origem.
 str		An element is named twice. Name each element once.	Um elemento é indicado duas vezes. Indique cada elemento uma só vez.
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} não é uma das opções. As opções são {words}.
+str		{field}: no choice is given. The choices are {words}.	{field}: não foi indicada nenhuma opção. As opções são {words}.
 str		a constraint	uma restrição
 str		{constraint} constrained nothing else and went with it	{constraint} não restringia mais nada e foi eliminada com ele
 str		{constraint} now constrains {elements} only	{constraint} agora só restringe {elements}

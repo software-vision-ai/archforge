@@ -240,7 +240,8 @@ pub enum Reason {
     /// other yet.
     NoProperties { stereotype: Box<str>, name: Box<str> },
     /// The element `name` is not of `kind`, as `"stereotype"`, `"class diagram"` or, of the model,
-    /// `"constraint"`, which the parameter takes.
+    /// `"constraint"`, which the parameter takes; for a new diagram's element, of
+    /// `"element a diagram is of"`.
     NotA { kind: &'static str, name: String },
     /// A stereotype property's values, each as text, are no list or hold something else.
     ValuesExpected,
@@ -350,6 +351,10 @@ pub enum WordPlace {
     DiagramKind,
     /// A text slot a label shows, which the line's element has.
     TextSlot,
+    /// The sort direction of an ER index column.
+    IndexDirection,
+    /// Where an ER index column sorts its nulls.
+    IndexNulls,
 }
 
 /// What a [`Reason::Values`] names; boxed in the reason, so the error stays small.

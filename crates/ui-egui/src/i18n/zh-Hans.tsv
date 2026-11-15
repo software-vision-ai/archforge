@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	聊天正在使用模型
 str		Agent access off	代理访问已关闭
 # 聊天面板
+str		Conversation	对话
 str		Conversations	对话
 str		New conversation	新对话
 str		Stop the reply first	请先停止回复
@@ -1333,6 +1334,7 @@ str		{name} is not a line on a diagram.	{name} 不是图上的线。
 str		{name} is not a label on a line.	{name} 不是线上的标签。
 str		The width is not between {min} and {max}.	宽度不在 {min} 到 {max} 之间。
 str		The height is not between {min} and {max}.	高度不在 {min} 到 {max} 之间。
+str		{name} cannot have a diagram of this kind.	{name} 不能拥有此类图。
 str		A diagram of this kind does not show {name}.	此类图不显示 {name}。
 str		{name} is outside what this diagram shows.	{name} 超出了此图显示的范围。
 str		This diagram shows {name} already.	此图已显示 {name}。
@@ -1422,6 +1424,8 @@ str		Give both x and y, or neither to place it where it reads.	请同时给出 x
 str		The {axis} is not a number.	{axis} 的值不是数字。
 str		The {axis} is farther than {max} from the origin.	{axis} 的值离原点超过 {max}。
 str		An element is named twice. Name each element once.	有元素被指定了两次。每个元素只指定一次。
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}：{word} 不是可选项。可选项有 {words}。
+str		{field}: no choice is given. The choices are {words}.	{field}：未给出选项。可选项有 {words}。
 str		a constraint	一个约束
 str		{constraint} constrained nothing else and went with it	{constraint} 不约束其他任何元素，已一并删除
 str		{constraint} now constrains {elements} only	{constraint} 现在只约束 {elements}

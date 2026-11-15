@@ -356,7 +356,7 @@ pub(crate) fn breadcrumb(shell: &mut Shell, ui: &egui::Ui, p: &Palette, r: Rect,
 
 /// The changed items from `y`, or why they are not there: the first version has none, a comparison
 /// under way shows bars, and one that failed says so beside Retry, never as no changes. The keys
-/// scroll the items while no dialog is up. Gives where the next section starts.
+/// scroll the items while no panel's menu and no dialog is up. Gives where the next section starts.
 fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -> f32 {
     let (left, width) = (r.left() + MARGIN, (r.width() - 2.0 * MARGIN).max(0.0));
     let Some(found) = shell.versions.details.as_ref().and_then(|d| d.comparison.as_ref()).map(|c| c.found.clone()) else {
@@ -402,9 +402,10 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
     // A little more than the cards: `scroll_tree` keeps that much of the area clear of a list that fits.
     let height = (items.len() as f32 * PITCH + 8.0).min(r.bottom() - BELOW_CARDS - top).max(PITCH);
     let tree = Rect::from_min_size(pos2(r.left(), top), vec2(r.width() - 1.0, height));
-    // The keys are the list's while no dialog is up, as the change cards' are: a dialog that holds no
-    // keys from the window, as the explorer's delete does, leaves the keyboard nowhere (AR-523).
-    let (explorer, free) = (shell.explorer.focused, crate::actions::free(shell));
+    // The keys are the list's while no panel's menu (AR-526) and no dialog is up, as the change cards'
+    // are: a dialog that holds no keys from the window, as the explorer's delete does, leaves the
+    // keyboard nowhere (AR-523), and so does a panel's menu.
+    let (explorer, free) = (shell.explorer.focused, shell.panels.menu.is_none() && crate::actions::free(shell));
     let Some(d) = shell.versions.details.as_mut() else { return tree.bottom() };
     if free {
         // What shows of the list, as scroll_tree measures it.

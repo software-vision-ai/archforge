@@ -6266,6 +6266,28 @@ fn a_kind_word_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A new diagram's element a diagram command refuses is said in the chosen language: none given for
+/// a class diagram, which is always of an element, an id of no element, and a class, which no class
+/// diagram is of. In light and dark (AR-513).
+#[test]
+fn a_new_diagrams_element_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let mut refused = |element: &str| {
+            let p = json!({ "kind": archforge_uml::CLASS_DIAGRAM, "element": element, "name": "Neu" });
+            crate::panels::run(h.state_mut(), "diagram.add", p).err().unwrap_or_default()
+        };
+        assert_eq!(refused(""), "Es ist kein Element angegeben. Geben Sie seine ID an.", "{theme:?}");
+        assert_eq!(refused("nope"), "Es gibt kein Element mit der ID nope.", "{theme:?}");
+        assert_eq!(refused(&order), "Order kann kein Diagramm dieser Art haben.", "{theme:?}");
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A name another element has, whatever the case, is said in the chosen language with that
 /// element's kind and name, never in the engine's English: an attribute of a class, a column of a
 /// table, and a skill on one subject, renamed and added. In light and dark (AR-435).
@@ -6350,6 +6372,39 @@ fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language
         assert_eq!(refused(&mut h, "er.unique.add", clash).to_lowercase(), taken.to_lowercase(), "{theme:?}");
         // A kind ER does not name, though the catalogues have its word, is not ER's to say.
         assert_eq!(crate::er_said::said(&Reason::NotA { kind: "attribute", name: "x".into() }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// An index column's direction or nulls order that is none of the words, or no word, is said in
+/// the chosen language under the choice's label, with the words taken, one of only spaces as no
+/// choice given, though not one whose word comes after 40 spaces; a word of another place is not ER's to say. In a window of the design's height, in light and dark (AR-491).
+#[test]
+fn an_er_index_column_word_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
+        let mut refused = |field: &str, value: serde_json::Value| {
+            let p = json!({ "entity": table, "columns": [{ "attribute": column, field: value }] });
+            crate::panels::run(h.state_mut(), "er.index.add", p).err().unwrap_or_default()
+        };
+        let up = "Richtung: up ist keine der Möglichkeiten. Möglich sind ascending, descending.";
+        assert_eq!(refused("direction", json!("up")), up, "{theme:?}");
+        let array = "Nullwerte: [1] ist keine der Möglichkeiten. Möglich sind default, first, last.";
+        assert_eq!(refused("nulls", json!([1])), array, "{theme:?}");
+        let none = "Richtung: Es ist keine Möglichkeit angegeben. Möglich sind ascending, descending.";
+        assert_eq!(refused("direction", json!(" ")), none, "{theme:?}");
+        // A word after more spaces than the typed word keeps is no blank.
+        assert_eq!(refused("direction", json!(format!("{}up", " ".repeat(40)))), up, "{theme:?}");
+        let diagram = archforge_engine::NotOneOf { what: archforge_engine::WordPlace::DiagramKind, word: "x".into(), known: vec!["er".into()] };
+        assert_eq!(crate::er_said::said(&archforge_engine::Reason::NotOneOf(Box::new(diagram))), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");
@@ -14610,6 +14665,7 @@ fn only_a_web_link_in_a_reply_opens_and_only_after_its_confirmation() {
 /// keyboard, Tab reaches every link and it follows, and a reply coming in leaves the place.
 mod chat_keys {
     use egui::{Key, Modifiers};
+    use egui_kittest::kittest::{NodeT, Queryable};
 
     use super::*;
     use crate::chat::{ChatEvent, TurnEnd};
@@ -14881,6 +14937,106 @@ mod chat_keys {
             h.key_up(Key::Tab);
             h.run();
             assert!(focused_on(&h, &link(17)) && whole(&h, &link(17)), "{theme:?}: the link is in view after the long piece");
+        });
+    }
+
+    /// The transcript's own Tab stop.
+    const STOP: &str = "workspace.chat.transcript";
+
+    /// The canvas's controls of the diagram's boxes in the frame.
+    fn boxes(h: &Harness<'static, Shell>) -> usize {
+        ids(h).into_iter().filter(|i| i.starts_with("workspace.canvas.node.")).count()
+    }
+
+    /// Whether the transcript's focus ring is painted, in the focus colour just inside its edge.
+    fn ringed(h: &Harness<'static, Shell>) -> bool {
+        let (focus, area) = (crate::ux::palette(h.state().state.theme.is_dark()).focus, h.state().chat_panel.area.unwrap());
+        let ring = |s: &egui::Shape| matches!(s, egui::Shape::Rect(r) if r.stroke.color == focus && r.rect == area.shrink(2.0));
+        h.output().shapes.iter().any(|c| ring(&c.shape))
+    }
+
+    /// Six answered questions whose replies hold no link, at the design's window height, Order
+    /// selected on the canvas: the transcript at its end, with nothing in it to take the keyboard
+    /// but itself.
+    fn plain_chat(theme: ThemeKind) -> (Harness<'static, Shell>, crate::chat_fixture::Rig) {
+        let (mut h, rig) = chat_harness(theme, true);
+        let text = "The order keeps its lines, and each line names a product and how many. ".repeat(6);
+        for n in 0..6 {
+            ask_in_chat(&mut h, &format!("Question {n}"));
+            chat_event(&mut h, &rig, ChatEvent::Message { text: text.clone() });
+            chat_event(&mut h, &rig, ChatEvent::TurnEnded(TurnEnd::Completed));
+        }
+        let no_link = !ids(&h).iter().any(|i| i.starts_with("workspace.chat.link."));
+        assert!(h.state().chat_panel.at_end && scroll(&h) > 0.0 && no_link, "{theme:?}: at the end, no link in it");
+        (h, rig)
+    }
+
+    /// With no link or button in it, Tab reaches the transcript itself, which a screen reader hears
+    /// as the conversation, and nothing moves; while it has the keyboard, the page keys scroll it in
+    /// a frame the key asks for, and Delete stays away from the canvas; not with the menu bar open,
+    /// also in the frame a click of the pointer or a screen reader opens it in, nor from the composer.
+    #[test]
+    fn the_transcript_takes_the_keyboard_for_its_page_keys_with_no_link_in_it() {
+        in_both_appearances(|theme| {
+            let (mut h, _rig) = plain_chat(theme);
+            let (room, boxes_before) = (scroll(&h), boxes(&h));
+            let page = h.state().chat_panel.area.unwrap().height() - crate::ux::types::UI.line;
+            let node = h.get_by_label("Conversation").accesskit_node();
+            assert_eq!(node.role(), egui::accesskit::Role::Log, "{theme:?}: a screen reader hears what it is");
+            // The pointer leaves, so nothing shows for it; Tab from the agent's badge reaches the transcript.
+            h.event(egui::Event::PointerMoved(egui::pos2(10.0, 600.0)));
+            focus_on(&mut h, "workspace.chat.badge");
+            assert!(!ringed(&h), "{theme:?}: no ring while the badge has the keyboard");
+            for _ in 0..8 {
+                if focused_on(&h, STOP) {
+                    break;
+                }
+                key(&mut h, Key::Tab, Modifiers::NONE);
+            }
+            assert!(focused_on(&h, STOP) && ringed(&h), "{theme:?}: Tab reached the transcript, ringed, not {:?}", focused(&h));
+            assert_eq!(scroll(&h), room, "{theme:?}: the keyboard coming to it moved nothing");
+            h.key_down(Key::PageUp);
+            h.step();
+            h.step();
+            let asked = h.ctx.repaint_causes().iter().any(|c| c.file.ends_with("chat_view.rs"));
+            assert!(asked, "{theme:?}: Page Up asks for the frame that draws it: {:?}", h.ctx.repaint_causes());
+            h.key_up(Key::PageUp);
+            h.run();
+            assert_eq!(scroll(&h), room - page, "{theme:?}: Page Up");
+            press_to(&mut h, Key::Home, 0.0, STOP);
+            press_to(&mut h, Key::PageDown, page, STOP);
+            press_to(&mut h, Key::End, room, STOP);
+            // Delete, which takes Order off the diagram while the canvas has the keys, stays away from it.
+            h.state_mut().canvas.focused = true;
+            key(&mut h, Key::Delete, Modifiers::NONE);
+            assert!(focused_on(&h, STOP) && boxes(&h) == boxes_before, "{theme:?}: Delete left the canvas alone");
+            // The in-window menu bar holds the keys, also in the frame a click opens it in.
+            h.state_mut().in_window_menu = true;
+            key(&mut h, Key::F10, Modifiers::NONE);
+            assert!(h.state().menu_bar.open.is_some() && focused_on(&h, STOP), "{theme:?}: F10 opens the bar's first menu");
+            key(&mut h, Key::Home, Modifiers::NONE);
+            assert_eq!(scroll(&h), room, "{theme:?}: Home with the menu bar open");
+            key(&mut h, Key::Escape, Modifiers::NONE);
+            for pointer in [true, false] {
+                focus_on(&mut h, STOP);
+                open_file_with(&mut h, Key::Home, Modifiers::NONE, pointer);
+                assert_eq!(scroll(&h), room, "{theme:?}: with the click that opens the menu bar, by the pointer: {pointer}");
+                key(&mut h, Key::Escape, Modifiers::NONE);
+                assert!(h.state().menu_bar.open.is_none(), "{theme:?}: Escape closed the menu bar, by the pointer: {pointer}");
+            }
+            h.state_mut().in_window_menu = false;
+            // The composer keeps Home: what is typed after it lands at its start.
+            focus_on(&mut h, "workspace.chat.composer");
+            h.event(egui::Event::Text("abc".into()));
+            key(&mut h, Key::Home, Modifiers::NONE);
+            h.event(egui::Event::Text("x".into()));
+            h.run();
+            assert_eq!((h.state().chat_panel.draft.as_str(), scroll(&h)), ("xabc", room), "{theme:?}: Home in the composer");
+            // With nothing holding the keyboard, the canvas takes Delete.
+            h.ctx.memory_mut(|m| m.surrender_focus(crate::widgets::egui_id("workspace.chat.composer")));
+            h.state_mut().canvas.focused = true;
+            key(&mut h, Key::Delete, Modifiers::NONE);
+            assert!(boxes(&h) < boxes_before, "{theme:?}: Delete took Order off the diagram");
         });
     }
 

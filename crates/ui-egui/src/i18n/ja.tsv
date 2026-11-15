@@ -301,6 +301,7 @@ str		{branch} · {status}	{branch} · {status}
 str		Chat is using the model	チャットがモデルを使用中
 str		Agent access off	エージェントのアクセスはオフ
 # チャットパネル
+str		Conversation	会話
 str		Conversations	会話
 str		New conversation	新しい会話
 str		Stop the reply first	先に返答を停止してください
@@ -1333,6 +1334,7 @@ str		{name} is not a line on a diagram.	{name} は図上の線ではありませ
 str		{name} is not a label on a line.	{name} は線のラベルではありません。
 str		The width is not between {min} and {max}.	幅が {min} から {max} の範囲にありません。
 str		The height is not between {min} and {max}.	高さが {min} から {max} の範囲にありません。
+str		{name} cannot have a diagram of this kind.	{name} にはこの種類の図を作成できません。
 str		A diagram of this kind does not show {name}.	この種類の図には {name} を表示できません。
 str		{name} is outside what this diagram shows.	{name} はこの図が表示する範囲の外にあります。
 str		This diagram shows {name} already.	この図にはすでに {name} が表示されています。
@@ -1422,6 +1424,8 @@ str		Give both x and y, or neither to place it where it reads.	x と y を両方
 str		The {axis} is not a number.	{axis} の値が数値ではありません。
 str		The {axis} is farther than {max} from the origin.	{axis} の値が原点から {max} より離れています。
 str		An element is named twice. Name each element once.	要素が 2 回指定されています。要素はそれぞれ 1 回だけ指定してください。
+str		{field}: {word} is not one of the choices. The choices are {words}.	{field}: {word} は選択肢にありません。選択肢は {words} です。
+str		{field}: no choice is given. The choices are {words}.	{field}: 選択肢が指定されていません。選択肢は {words} です。
 str		a constraint	制約
 str		{constraint} constrained nothing else and went with it	{constraint} はほかに何も制約していなかったため、一緒に削除されました
 str		{constraint} now constrains {elements} only	{constraint} が制約するのは {elements} だけになりました

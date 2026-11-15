@@ -14,11 +14,12 @@ use archforge_mof::{ClassId, CompositeSlabs, Obj, PropId, Store, Uuid, Value};
 use serde_json::{Value as Json, json};
 
 /// The test notation's view: the selection, the open diagram, and a policy of classes and
-/// generalizations.
+/// generalizations, its diagrams of an element where `needs_element` says so.
 #[derive(Debug, Clone, PartialEq, Default)]
 struct TestView {
     selection: Vec<Obj>,
     open: Option<Obj>,
+    needs_element: bool,
 }
 
 impl archforge_engine::View<Store> for TestView {
@@ -62,6 +63,10 @@ impl DiagramView for TestView {
         let specific = store.container(element).ok()??.0;
         let general = store.get(element, toy::GENERALIZATION_GENERAL).ok()?.as_ref()?;
         Some((specific, general))
+    }
+    /// A diagram needs its package where the view says so.
+    fn needs_element(&self, _: &str) -> bool {
+        self.needs_element
     }
     fn text_slots(&self, class: ClassId) -> &'static [&'static str] {
         if class == GENERALIZATION { &["general"] } else { &[] }
@@ -347,7 +352,9 @@ fn refusals_name_their_key_and_change_nothing() {
 /// element of the wrong kind, an element not shown or shown already, a box on another diagram or
 /// nested too deep, a size, a text, a box showing an element, a note's link, too many bends and a
 /// point's coordinates (AR-439); a diagram's kind, a box's kind, a label's slot and a style's name
-/// that is no plain word, and a diagram kind or a text slot none takes (AR-512).
+/// that is no plain word, and a diagram kind or a text slot none takes (AR-512); a new diagram's
+/// element missing where its kind needs one, of no element or of a class its kind cannot be of
+/// (AR-513).
 #[test]
 fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
     use archforge_engine::Reason;
@@ -422,6 +429,16 @@ fn every_place_text_route_and_kind_refusal_carries_its_reason_typed() {
     check(&mut s, "diagram.label", label("name"), "kind", no_slot, "has no text slot \"name\"; it has general");
     let style = json!({ "ids": [sm.a], "name": "Accent Style" });
     check(&mut s, "diagram.style", style, "name", Reason::NotAPlainWord, "the style name is not a plain identifier");
+    // A new diagram's element: missing where the kind needs one, of no element, and of a class the
+    // kind cannot be of.
+    let view = TestView { needs_element: true, ..TestView::default() };
+    let mut needs = Session::with_view(registry(), store(), 1, Options::default(), view);
+    let missing = Reason::IdEmpty { kind: "element" };
+    check(&mut needs, "diagram.add", json!({ "kind": "toy.class" }), "element", missing, "a toy.class diagram is of an element; name it");
+    let of = |element: &str| json!({ "kind": "toy.class", "element": element });
+    check(&mut s, "diagram.add", of("nope"), "element", Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id");
+    let not_of = Reason::NotA { kind: commands::DIAGRAM_ELEMENT, name: "A".into() };
+    check(&mut s, "diagram.add", of(&a), "element", not_of, "a toy.class diagram is not of a class");
 }
 
 #[test]
