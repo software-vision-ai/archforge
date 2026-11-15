@@ -1203,7 +1203,8 @@ fn cards_scroll(h: &Harness<'static, Shell>, top: f32, (links, first): (&[String
 
 /// While a related link has the keyboard, Page Down and Page Up scroll the cards by what shows less
 /// a row and End and Home to their ends, the link keeping the keyboard; not with the keyboard
-/// nowhere, with a menu open, or with the control key as Windows and Linux send it.
+/// nowhere, with a menu open, the in-window menu bar's too, or with the control key as Windows and
+/// Linux send it.
 #[test]
 fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
     use egui::Key::{End, Home, PageDown, PageUp};
@@ -1235,6 +1236,16 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
         h.state_mut().panels.menu = Some(crate::panels::Menu::Branch(0));
         still(h, End, egui::Modifiers::NONE, "a menu open");
         assert!(h.state().panels.menu.is_some() && focused_on(h, &links[0]), "the menu stayed open over the link");
+        h.state_mut().panels.menu = None;
+        // The in-window menu bar opened by F10 leaves the keyboard on the link; its keys are its own.
+        h.state_mut().in_window_menu = true;
+        key(h, egui::Key::F10, egui::Modifiers::NONE);
+        assert!(h.state().menu_bar.open.is_some() && focused_on(h, &links[0]), "F10 opens the bar's first menu");
+        still(h, PageDown, egui::Modifiers::NONE, "the menu bar open");
+        key(h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().menu_bar.open.is_none() && focused_on(h, &links[0]), "Escape gives the keys back to the link");
+        key(h, PageDown, egui::Modifiers::NONE);
+        assert_eq!(cards_scroll(h, top, at), page, "the cards take Page Down again");
     });
 }
 

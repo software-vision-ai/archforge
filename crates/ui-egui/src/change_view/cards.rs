@@ -48,7 +48,8 @@ pub(super) fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, t
     let links = related::links(&shell.versions.changes, &sides.lists.related);
     let under = related::height(links.len());
     // The page keys are the cards' while a link of theirs has the keyboard, so no text field has
-    // it, and no menu is open (AR-481).
+    // it, and no menu is open (AR-481); an open menu of the in-window bar holds every key while
+    // the window behind it is drawn (`hold_keys`), so none reaches here then.
     let paging = related::keyed(shell, ui.ctx(), &links).is_some() && shell.panels.menu.is_none();
     let Some(o) = shell.versions.element.as_mut() else { return };
     let lists = lists_height(&sides.lists.before).max(lists_height(&sides.lists.after));
