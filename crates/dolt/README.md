@@ -130,7 +130,11 @@ removed. The password never shows in a log, an error or a debug print.
 
 **Tests.** Unit tests for the pure parts (parsers, the recovery rules, path and folder checks) and
 for the watchdog against a stand-in process, and integration tests in `tests/server.rs` against a
-real dolt 2.6 or later, measured on macOS; the Linux and Windows runs are still to be done.
+real dolt 2.6 or later, measured on macOS; the Linux and Windows runs are still to be done. The
+unit tests in `src/server.rs` start real servers too. One of them runs its own test binary again
+as an Archforge and kills it in the middle of a start, once its server runs and before its record
+names the server, and once before the server starts: the next start-up stops the server in the
+first case and removes what each start left.
 
 **Non-goals.** The project's tables (the project database and its settings come with creating a
 project), packaging dolt, TLS.

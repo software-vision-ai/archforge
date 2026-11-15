@@ -824,24 +824,45 @@ mod tests {
         static WRITE_AT_SPAWN: std::cell::RefCell<Option<(PathBuf, Vec<u8>)>> = const { std::cell::RefCell::new(None) };
         /// What a test does when this thread next tries to stop a server it started: once.
         static AT_STOP: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+        /// Whether this thread's next start pauses (see [`pause`]) just before its server starts.
+        static PAUSE_AT_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        /// Whether it pauses once its server runs, before its record names the server.
+        static PAUSE_AFTER_SPAWN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
 
     /// Notes the record under the lock `held` just before the server of the project at
-    /// `data_text` starts, then writes what a test asked for.
+    /// `data_text` starts, then writes what a test asked for, and pauses there once when asked.
     #[cfg(unix)]
     pub(super) fn at_spawn(held: &record::Held, data_text: &str) {
         RECORD_AT_SPAWN.set(record::look(held, data_text).ok().flatten());
         if let Some((file, bytes)) = WRITE_AT_SPAWN.take() {
             let _ = std::fs::write(file, bytes);
         }
+        if PAUSE_AT_SPAWN.take() {
+            pause("SPAWNING");
+        }
     }
 
-    /// Notes the server just started and, once when a test asked for it, fails in the place of
-    /// completing its record.
+    /// Notes the server just started, pauses there once when a test asked for it, and, once when
+    /// a test asked for it, fails in the place of completing its record.
     #[cfg(unix)]
     pub(super) fn after_spawn(server: u32) -> Result<(), Error> {
         SPAWNED.set(Some(server));
+        if PAUSE_AFTER_SPAWN.take() {
+            pause(&format!("SPAWNED {server}"));
+        }
         if FAIL_AFTER_SPAWN.take() { Err(Error::BadPath { what: "test", path: String::new() }) } else { Ok(()) }
+    }
+
+    /// Ends a line with `what` at once (the test harness may have begun it with the test's name),
+    /// then sleeps two minutes, for the test that runs this process to kill it there. A process
+    /// nobody killed then goes on with its start.
+    #[cfg(unix)]
+    fn pause(what: &str) {
+        use std::io::Write;
+        let mut out = std::io::stdout();
+        let _ = writeln!(out, "{what}").and_then(|()| out.flush());
+        std::thread::sleep(Duration::from_secs(120));
     }
 
     /// Runs the hook a test set for the next stop of a server this thread started, once.
@@ -1378,6 +1399,162 @@ mod tests {
         assert_eq!(stopped.unwrap(), 0);
         assert_eq!(record::read(&opts.records, &r.data_dir).unwrap(), Some(done));
         assert!(Path::new(&r.run_dir).join("server.yaml").exists());
+    }
+
+    /// The variable that makes this test binary the Archforge of [`owner_helper`]: where it pauses
+    /// (`at` or `after` its server's spawn), its scratch folder and its run root, one to a line.
+    #[cfg(unix)]
+    const OWNER: &str = "ARCHFORGE_DOLT_TEST_OWNER";
+
+    /// An Archforge whose start of the project in a scratch folder pauses as [`OWNER`] says, for
+    /// a test to kill it there: run as a process of its own by that test. Without that variable it
+    /// does nothing.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "run as a separate process by the test of a killed owner"]
+    fn owner_helper() {
+        let Some(spec) = std::env::var_os(OWNER) else { return };
+        let spec = spec.to_string_lossy().into_owned();
+        let [at, base, run_root] = spec.splitn(3, '\n').collect::<Vec<_>>()[..] else { panic!("{spec:?}") };
+        let pause = match at {
+            "at" => &PAUSE_AT_SPAWN,
+            "after" => &PAUSE_AFTER_SPAWN,
+            _ => panic!("{spec:?}"),
+        };
+        let dolt = Dolt::find(&crate::Home::prepare(&Path::new(base).join("home")).unwrap()).unwrap();
+        let opts = ServerOptions { run_root: Some(run_root.into()), ..ServerOptions::new(Path::new(base).join("records")) };
+        pause.set(true);
+        let _ = Server::start(&dolt, &Path::new(base).join("data"), &opts);
+    }
+
+    /// The Archforge of [`owner_helper`], killed and reaped when this is dropped; then a server
+    /// that runs the command line its start recorded is killed too, each proven by that line just
+    /// before its signal.
+    #[cfg(unix)]
+    struct Owner {
+        child: std::process::Child,
+        records: PathBuf,
+        data_text: String,
+        /// The server and its command line, once known.
+        server: Option<u32>,
+        line: Option<Vec<String>>,
+    }
+
+    #[cfg(unix)]
+    impl Drop for Owner {
+        /// Kills the owner, then the server its start left, if one runs that start's line: the line
+        /// known, or else the one its record holds. Waits up to five seconds for each server killed
+        /// to be gone, and says on the error output when one is not, or when the list failed.
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+            let Some(line) = self.line.take().or_else(|| record::read(&self.records, &self.data_text).ok().flatten().map(|r| r.command)) else {
+                return;
+            };
+            let listed = identity::running(&line).unwrap_or_else(|e| {
+                eprintln!("the servers running {line:?} could not be listed: {e}");
+                Vec::new()
+            });
+            for pid in listed.into_iter().chain(self.server) {
+                let runs = || identity(pid).ok().flatten().is_some_and(|i| i.is(&line));
+                if runs() {
+                    let _ = std::process::Command::new("/bin/kill").args(["-KILL", &pid.to_string()]).status();
+                    let until = Instant::now() + Duration::from_secs(5);
+                    while runs() && Instant::now() < until {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                    if runs() {
+                        eprintln!("the server {pid} still runs after its kill");
+                    }
+                }
+            }
+        }
+    }
+
+    /// An Archforge killed after its server started and before its record named the server: no
+    /// watchdog of its own stops it, and the next start-up finds it by the command line recorded,
+    /// removes its configuration before it looks, stops it politely and counts it; its record goes
+    /// only once the server is gone, and its run folder goes too. Killed before its server
+    /// started, it leaves a record and run folder the start-up removes, with nothing to stop. Its
+    /// Archforge is this test binary run again as a process of its own. Needs dolt.
+    #[cfg(unix)]
+    #[test]
+    fn a_start_up_stops_the_server_of_an_archforge_killed_before_its_record_was_complete() {
+        use std::io::BufRead;
+        for (at, count) in [("after", 1), ("at", 0)] {
+            let (dir, root) = (crate::home::tests::Scratch::new("killed-owner"), crate::home::tests::Scratch::new("o"));
+            Dolt::find(&crate::Home::prepare(&dir.0.join("home")).unwrap()).unwrap();
+            std::fs::create_dir(dir.0.join("data")).unwrap();
+            let data = dir.0.join("data").canonicalize().unwrap();
+            let opts =
+                ServerOptions { run_root: Some(root.0.clone()), stop_budget: Duration::from_secs(20), ..ServerOptions::new(dir.0.join("records")) };
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command.args(["--exact", "server::tests::owner_helper", "--ignored", "--nocapture", "--test-threads=1"]);
+            command.env(OWNER, format!("{at}\n{}\n{}", dir.0.display(), root.0.display()));
+            // Its error output is this test's: a helper that fails says why there.
+            command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::inherit());
+            // In its turn, so that it inherits no watchdog's pipe another test starts meanwhile.
+            let child = runner::spawn(&mut command, false).unwrap();
+            let data_text = data.display().to_string();
+            let mut owner = Owner { child, records: opts.records.clone(), data_text: data_text.clone(), server: None, line: None };
+            let out = owner.child.stdout.take().unwrap();
+            let (tx, rx) = std::sync::mpsc::channel();
+            // The test harness prints the test's name on the same line before it.
+            std::thread::spawn(move || {
+                for line in std::io::BufReader::new(out).lines().map_while(Result::ok) {
+                    if let Some(from) = line.find("SPAWN") {
+                        let _ = tx.send(line[from..].to_string());
+                    }
+                }
+            });
+            let said = rx.recv_timeout(Duration::from_secs(60)).expect("the owner paused in its start");
+            owner.server = said.strip_prefix("SPAWNED ").map(|pid| pid.trim().parse().unwrap());
+            assert_eq!((said == "SPAWNING", owner.server.is_some()), (at == "at", at == "after"), "{said}");
+            let pending = record::read(&opts.records, &data_text).unwrap().unwrap();
+            assert_eq!(pending.server_pid, None, "{at}: the record names no process");
+            let line = pending.command.clone();
+            owner.line = Some(line.clone());
+            let runs = |pid: u32| identity(pid).unwrap().is_some_and(|i| i.is(&line));
+            let until = Instant::now() + Duration::from_secs(30);
+            if let Some(pid) = owner.server {
+                let up = || identity(pid).ok().flatten().is_some_and(|i| i.is(&line)) && recovery::read_lock(&data).ok() == Some(Lock::Pid(pid));
+                while !up() && Instant::now() < until {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                assert!(runs(pid), "the server runs the line recorded");
+                assert_eq!(recovery::read_lock(&data).unwrap(), Lock::Pid(pid), "and holds its project's lock");
+                // Its start would tie one only once its record is complete, which it never comes to.
+                // Checked here, before the test ties one of its own below.
+                assert!(!watched(pid), "no watchdog runs");
+            }
+            // Should this test process die from here on, a watchdog of its own stops the server: no
+            // later start-up reads this test's records. Dropped, it ends without a signal.
+            let _tied = owner.server.map(|pid| Watchdog::tie(pid, &line));
+            // SIGKILL: no exit path of the owner runs.
+            owner.child.kill().unwrap();
+            owner.child.wait().unwrap();
+            assert_eq!(record::read(&opts.records, &data_text).unwrap(), Some(pending.clone()), "{at}: the record still names no process");
+            assert!(Path::new(&pending.run_dir).join("server.yaml").is_file(), "{at}: its configuration is there");
+            if let Some(pid) = owner.server {
+                assert!(runs(pid), "the server outlives its owner");
+            } else {
+                assert_eq!(identity::running(&line).unwrap(), Vec::<u32>::new(), "no server was started");
+            }
+            CONFIG_AT_LIST.set(None);
+            // Whether the server still ran when its record went, in the middle of that change.
+            let ran_at_forget = std::rc::Rc::new(std::cell::Cell::new(None));
+            let (seen, server, recorded) = (ran_at_forget.clone(), owner.server, line.clone());
+            let hook = move |_: &Path| seen.set(Some(server.is_some_and(|pid| identity(pid).unwrap().is_some_and(|i| i.is(&recorded)))));
+            record::tests::IN_CHANGE.set(Some(Box::new(hook)));
+            let stopped = stop_orphans(&opts);
+            assert!(matches!(stopped, Ok(n) if n == count), "{at}: {stopped:?}");
+            assert!(owner.server.is_none_or(|pid| !runs(pid)), "the server is gone");
+            assert_eq!(CONFIG_AT_LIST.get(), Some(false), "{at}: its configuration went before the server was looked for");
+            assert_eq!(ran_at_forget.get(), Some(false), "{at}: its record went once the server was gone");
+            let left = (record::read(&opts.records, &data_text).unwrap(), Path::new(&pending.run_dir).exists());
+            assert_eq!(left, (None, false), "{at}: the record and the run folder went");
+            assert!(!data.join(".dolt").join("sql-server.info").exists(), "{at}: no lock is left, the server stopped politely");
+        }
     }
 
     /// A record another start wrote after this one was read stays; the one read goes.
