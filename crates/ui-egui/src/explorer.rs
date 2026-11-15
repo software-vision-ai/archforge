@@ -107,23 +107,34 @@ fn paged(ui: &egui::Ui, at: usize, rows: usize, pitch: f32, view: f32) -> Option
     }
 }
 
+/// The row a page key selects in a tree of `rows` rows with nothing selected: End the last, Home,
+/// Page Up and Page Down the first, as ↑ and ↓ do; none in an empty tree, which takes no key.
+fn first_or_last(ui: &egui::Ui, rows: usize) -> Option<usize> {
+    let last = rows.checked_sub(1)?;
+    let mut to = 1.0;
+    crate::version_details::page_keys(ui, &mut to, 1.0);
+    (to != 1.0).then_some(if to == f32::MAX { last } else { 0 })
+}
+
 /// A tree whose rows take the keyboard follows it (AR-478), before the rows are drawn: while the
 /// row `rows[i]` has the keyboard, Page Up, Page Down, Home and End move it to another row, and the
 /// row, or a control of it (`parts`, each with its row), that the keyboard has come to since the
-/// tree last drew, by these keys, Tab or a screen reader, is brought whole into view. A click gives
+/// tree last drew, by Tab or a screen reader, or that these keys went to, is brought whole into view. A click gives
 /// a row no keyboard. The rows are `pitch` apart, from `first` in `tree`.
 pub(crate) fn follow_keys(ui: &egui::Ui, rows: &[egui::Id], parts: &[(egui::Id, usize)], place: (Rect, f32, f32), state: &mut TreeScroll) {
     let ((tree, first, pitch), mut now) = (place, ui.memory(|m| m.focused()));
     let view = tree_view(tree, first, pitch);
-    if let Some(to) = rows.iter().position(|id| Some(*id) == now).and_then(|at| paged(ui, at, rows.len(), pitch, view)) {
+    let to = rows.iter().position(|id| Some(*id) == now).and_then(|at| paged(ui, at, rows.len(), pitch, view));
+    if let Some(to) = to {
         ui.memory_mut(|m| m.request_focus(rows[to]));
         now = Some(rows[to]);
     }
-    if now != std::mem::replace(&mut state.held, now) {
-        let row = rows.iter().position(|id| Some(*id) == now).or_else(|| parts.iter().find(|(id, _)| Some(*id) == now).map(|(_, i)| *i));
-        if let Some(i) = row {
-            into_view(state, i, pitch, view);
-        }
+    // A page key reveals where it went even when the keyboard was there already; the wheel moves
+    // nothing, so the tree follows only a move.
+    let moved = now != std::mem::replace(&mut state.held, now);
+    let row = rows.iter().position(|id| Some(*id) == now).or_else(|| parts.iter().find(|(id, _)| Some(*id) == now).map(|(_, i)| *i));
+    if let Some(i) = to.or(row.filter(|_| moved)) {
+        into_view(state, i, pitch, view);
     }
 }
 
@@ -943,8 +954,9 @@ fn rename_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Rect) 
 
 /// The keys when the tree has them: up and down move the selection, left folds or goes to the
 /// parent, right unfolds (the arrows plain or with Shift, never as part of a chord), Page Up and
-/// Page Down move it by the `view` that shows and Home and End to the first and the last row
-/// (AR-478), Enter and F2 rename, Delete removes. The tree follows the selection.
+/// Page Down move it by the `view` that shows and Home and End to the first and the last row, or
+/// with nothing selected select the first or the last (AR-478), Enter and F2 rename, Delete
+/// removes. The tree follows the selection, and reveals the row a page key went to.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option<Obj>, view: f32) {
     let (up, down, left, right, rename, delete) = ui.input(|i| {
         (
@@ -957,8 +969,15 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], selected_obj: Option
         )
     });
     let at = rows.iter().position(|r| Some(r.obj) == selected_obj);
-    if let Some(to) = at.and_then(|i| paged(ui, i, rows.len(), ROW, view)) {
+    let went = match at {
+        Some(i) => paged(ui, i, rows.len(), ROW, view),
+        None => first_or_last(ui, rows.len()),
+    };
+    if let Some(to) = went {
         select(shell, Some(rows[to].id));
+        // The tree reveals the row again, though it was selected already and the wheel took it away.
+        shell.explorer.scroll.followed = None;
+        ui.ctx().request_repaint();
     } else if down {
         let next = at.map_or(0, |i| (i + 1).min(rows.len().saturating_sub(1)));
         if let Some(row) = rows.get(next) {
