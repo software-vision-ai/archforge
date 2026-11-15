@@ -11,6 +11,8 @@
 //! (AR-495): a default or collation its domain gives, an unlink of one that follows no column, and
 //! a place past its table's last; a default none of an enum type's literals is UML's row. A
 //! column's or a domain's size (AR-496): the rule it breaks, with the type and the size.
+//! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
+//! without its subtype.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
@@ -68,6 +70,8 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::TooDeep { kind: "key", max } => {
             fmt(&tr("Keys built on each other run deeper than {max} levels here, or in a loop."), &[("max", &max.to_string())])
         }
+        Reason::RemovedWhereEdited => tr("This element is removed where it is edited."),
+        Reason::SubtypeKeyPart => tr("This is part of a subtype's key, which goes only with its subtype."),
         Reason::WouldBreak { kind: "column", name, why } => {
             fmt(&tr("The column {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }

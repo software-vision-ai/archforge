@@ -234,6 +234,12 @@ refusals of `size_allowed`, and their twins in `set_column_type`'s step, are rea
 and stay in English. A size outside 1 to 65535 is refused by the engine before the handler runs (0
 is none); the rule types it all the same.
 
+**Refusals of a removal** (AR-508). `commands::remove_elements`, the selection's removal
+(`element.remove`), refuses an element of a kind removed where it is edited (a domain, an enum type,
+a check, an index and their parts) as `RemovedWhereEdited`, and a part of a subtype's key without
+its subtype, one of its two tables or their schema, as `SubtypeKeyPart`. A cascade too deep keeps
+its `TooDeep` through `er.schema.remove`, `er.entity.remove` and `element.remove` alike.
+
 **Tests.** `tests/er.rs`: the registry and the metamodel; every command's round trip on the store;
 refusals that name their key and change nothing; removing an entity with a core folder, comment and
 link around it, and the mixed delete through the engine; foreign keys (round trips, refusals that

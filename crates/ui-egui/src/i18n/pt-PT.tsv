@@ -600,6 +600,8 @@ str		Identifying relationships would run in a cycle between {child} and {parent}
 str		The foreign key points at this key already. Name the columns to change them.	A chave estrangeira já aponta para esta chave. Indique as colunas para as alterar.
 str		The key {name} would break: {why}	A chave {name} deixaria de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	As chaves construídas umas sobre as outras ultrapassam aqui os {max} níveis ou formam um ciclo.
+str		This element is removed where it is edited.	Este elemento remove-se onde é editado.
+str		This is part of a subtype's key, which goes only with its subtype.	Isto faz parte da chave de um subtipo e só é removido com o seu subtipo.
 str		Only a computed column takes an expression.	Só uma coluna calculada aceita uma expressão.
 str		A computed column needs an expression.	Uma coluna calculada precisa de uma expressão.
 str		A computed column takes no default.	Uma coluna calculada não aceita predefinição.

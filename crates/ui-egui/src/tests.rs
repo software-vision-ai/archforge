@@ -6746,6 +6746,26 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The selection's removal refused is said in the chosen language: an element removed where it is
+/// edited, and a part of a subtype's key without its subtype. In light and dark (AR-508).
+#[test]
+fn an_er_removal_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (reason, said) in [
+            (Reason::RemovedWhereEdited, "Dieses Element wird dort entfernt, wo es bearbeitet wird."),
+            (Reason::SubtypeKeyPart, "Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A column's generation refused is said in the chosen language by the rule it breaks, a column on
 /// a domain that would break with why in the same words, and a key or identity column asked to be
 /// nullable; a reason inside it this can't say leaves the whole to the engine's English. In light
