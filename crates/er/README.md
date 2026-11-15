@@ -163,7 +163,7 @@ minimum, maximum, cycle, ownedBy) and `View` (name, query, materialized).
 | `session_alone` | `pub fn session_alone(name: &str, ids: Box<dyn FnMut() -> Uuid + Send>) -> Result<Session, String>`: a session over ER alone (with the core and the diagrams) and a Model root named `name`, for ER's tests and tools; a project's session is `archforge-notations`'s |
 | `universe_with`, `slabs`, `store`, `storage` | a universe of the shared core, the diagram metamodel, ER and others; the slabs of the three; a store over them; their tables |
 | `names::{kind, clash, RELATION, CONSTRAINT}` | the kind an ER element is told apart within by name in its owner, and the element a name would clash with there |
-| `rules::{name_problem, entity_name_free, relationship_name_free, first_twice, attribute_name_free, constraint_name_free, constraint_clash, schema_of, problems, notices, key_problem, key_columns_problem, KeyColumnsProblem, associative_problem, generation_problem, GenerationProblem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, generalization_parts, supertype_links, subtype_links, supertype_of, is_supertype_or_self, mapping_of, discriminator_of, subtyping_flags, generalization_problem, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check, sequences_of, views_of, SequenceNumbers, sequence_numbers, owner_of_sequence, bound_of, sequence_problem, owned_by_problem, query_problem, MAX_QUERY}` | the rules, for commands and for a whole store |
+| `rules::{name_problem, entity_name_free, relationship_name_free, first_twice, attribute_name_free, constraint_name_free, constraint_clash, schema_of, problems, notices, key_problem, key_columns_problem, KeyColumnsProblem, associative_problem, generation_problem, GenerationProblem, key_parts, primary_key_of, primary_key, unique_constraints, keys_of, key_columns, keys_onto, in_primary_key, is_unique, checks_of, indexes_of, index_columns, index_specs, index_column_spec, IndexColumnSpec, is_unique_index, index_columns_problem, check_problem, display_name, linked_to, linked_from, collapse_problem, child_end_one_or_more, identifying_parents, identifying_cycle, generalization_parts, supertype_links, subtype_links, supertype_of, is_supertype_or_self, mapping_of, discriminator_of, subtyping_flags, generalization_problem, own_type_of, own_size_of, domain_of, enum_of, domains_of, enums_of, literals_of, domain_checks, type_columns, literals_problem, domain_problem, enum_default_problem, enum_default_check, EnumDefaultProblem, sequences_of, views_of, SequenceNumbers, sequence_numbers, owner_of_sequence, bound_of, sequence_problem, owned_by_problem, query_problem, MAX_QUERY}` | the rules, for commands and for a whole store |
 | `figures::{card, line, slot_text, set_note, cardinality_text, end_mark, has_foreign_key, WORDS, PLURALS}` | what ER draws: a table's card with its columns and their PK and FK marks, dimmed when of another schema; a relationship's crow's foot line, dashed when it does not identify its child, green or orange with its key; a generalization's line to a hollow triangle with the set's facts; the words they say, for the shell's catalogue |
 | `commands::{remove_elements, describe_element, remove_element, remove_entity, remove_schema, dependents, index_dependents, keys_on, resolve, collapse, cardinality_name, action_name, match_name, deferrability_name, direction_name, nulls_name, DIRECTION_WORDS, NULLS_WORDS, mapping_name, MAPPING_WORDS, specs}` | the cascades, the resolve step, the names in parameters, the command table |
 | the generated constants, structs, `Cardinality`, `TABLES`, `JUNCTIONS` | as every generated metamodel |
@@ -198,7 +198,14 @@ refusal that never got out never reaches another; and (AR-494) a column's genera
 not fit it, inside the step of every command that checks it, as `Generation` with the
 `GenerationRule` that `rules::GenerationProblem::reason` types, a column on a domain whose new base
 type it would break as `WouldBreak` of `"column"` with that reason, and a key or identity column
-asked to be nullable, as `NotNullable`. The rest follow ticket by ticket, except
+asked to be nullable, as `NotNullable`; and (AR-495) a column's default none of its enum type's
+literals, before the step and inside it, as `DefaultUnread` with the enum type as its `Literal`,
+which `rules::EnumDefaultProblem::reason` types, a column whose enum type loses that literal as
+`WouldBreak` of `"column"` with that reason, a default or collation of a column on a domain as
+`DomainGives`, a place past a table's last column as `PastLastColumn` with its count, an unlink of
+a column that follows none as `FollowsNoColumn` (named by its id when it has no name), and, from `commands::describe_element`, what is no
+ER element as `TakesNoDescription` (`element.describe` hands ER only its own elements, all of which
+take one). The rest follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
 (`generation_params`, `nullable`, `cardinality` twice, `entity_set_subtyping`, `action`,
@@ -208,7 +215,8 @@ documented choices hold back, as the engine refuses any other before the handler
 never leaves (`schema_rename`, `attribute_set_type`, `attribute_set_flags`, `attribute_move`,
 `column_type`, `domain_set`, `enum_set`, `sequence_set`, `view_set`, `new_key_columns`,
 `relationship_add` twice, `resolve`, `collapse` twice, `generalization_add`, `foreign_key_set_key`,
-`unique_set`, `index_set`); a mapping table without its two foreign keys (`collapse`); no free
+`unique_set`, `index_set`); a column missing from the list of the table that owns it, the only
+place a column is owned (`attribute_move`); a mapping table without its two foreign keys (`collapse`); no free
 name among a thousand (`first_free`); and a project without its model root (`model`).
 
 **Tests.** `tests/er.rs`: the registry and the metamodel; every command's round trip on the store;

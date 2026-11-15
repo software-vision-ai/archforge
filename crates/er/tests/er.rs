@@ -563,6 +563,107 @@ fn a_loaded_identity_column_with_a_default_is_refused_with_its_rule_typed() {
     assert_eq!((error.message.as_str(), error.key.as_deref()), ("an identity column takes no default", Some("attribute")));
 }
 
+/// A column's own default, collation, place and link refused carry their reason typed beside the
+/// English, which stays as it was: a default none of its enum type's literals, before the step and
+/// inside it, and a column whose enum type loses its default's literal, as that column; a default
+/// or collation of a column on a domain; a place past the table's last; and an unlink of a column
+/// that follows none (AR-495).
+#[test]
+fn a_columns_default_collation_place_and_link_refused_carry_their_reason_typed() {
+    use archforge_engine::{DefaultKind, Reason};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let line = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Line" }));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "status", "literals": ["open", "shut"] }));
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "label", "base_type": "TEXT" }));
+    let state = run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "state", "enum": en, "default": "'open'" }));
+    let note = run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "note", "type": "TEXT", "default": "'x'" }));
+    let tag = run(&mut s, "er.attribute.add", json!({ "entity": line, "name": "tag", "domain": dom }));
+    let add = |extra: Json| {
+        let mut p = json!({ "entity": line, "name": "x", "type": "TEXT" });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    let unread = |value: &str| Reason::DefaultUnread { value: value.into(), kind: DefaultKind::Literal("status".into()) };
+    let (gone, past) = (r#"the default "'gone'" is not a literal of status"#, Reason::PastLastColumn { columns: 3 });
+    let open = Reason::WouldBreak { kind: "column", name: "state".into(), why: Box::new(unread("'open'")) };
+    for (cmd, p, key, reason, message) in [
+        ("er.attribute.add", add(json!({ "type": "", "enum": en, "default": "'gone'" })), "default", unread("'gone'"), gone),
+        ("er.attribute.set-default", json!({ "attribute": state, "default": "'gone'" }), "default", unread("'gone'"), gone),
+        ("er.attribute.set-type", json!({ "attribute": note, "enum": en }), "type", unread("'x'"), r#"the default "'x'" is not a literal of status"#),
+        (
+            "er.enum.set",
+            json!({ "enum": en, "name": "status", "literals": ["shut"] }),
+            "literals",
+            open,
+            r#"state: the default "'open'" is not a literal of status"#,
+        ),
+        (
+            "er.attribute.add",
+            add(json!({ "type": "", "domain": dom, "default": "'a'" })),
+            "default",
+            Reason::DomainGives { what: "default" },
+            "a column on a domain takes the domain's default",
+        ),
+        (
+            "er.attribute.add",
+            add(json!({ "type": "", "domain": dom, "collation": "C" })),
+            "collation",
+            Reason::DomainGives { what: "collation" },
+            "a column on a domain takes the domain's collation",
+        ),
+        (
+            "er.attribute.set-default",
+            json!({ "attribute": tag, "default": "'a'" }),
+            "default",
+            Reason::DomainGives { what: "default" },
+            "the column takes its domain's default",
+        ),
+        (
+            "er.attribute.set-collation",
+            json!({ "attribute": tag, "collation": "C" }),
+            "collation",
+            Reason::DomainGives { what: "collation" },
+            "the column takes its domain's collation",
+        ),
+        ("er.attribute.add", add(json!({ "at": 4 })), "at", past.clone(), "the entity has 3 attributes"),
+        ("er.attribute.move", json!({ "attribute": state, "to": 3 }), "to", past, "the entity has 3 attributes"),
+        ("er.attribute.unlink", json!({ "attribute": note }), "attribute", Reason::FollowsNoColumn { name: "note".into() }, "note follows no column"),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+}
+
+/// A loaded document's column without a name, which no command makes, unlinked though it follows
+/// no column, is named by its id in the typed reason, never as an empty name (AR-495).
+#[test]
+fn an_unnamed_column_that_follows_none_is_named_by_its_id() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let e = st.create(ENTITY).unwrap();
+    st.set(e, named_element::NAME, Value::str("T")).unwrap();
+    st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let id = st.uuid(a).unwrap().to_string();
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.attribute.unlink", &json!({ "attribute": id })) else { panic!("it follows none") };
+    assert_eq!(error.reason, Some(archforge_engine::Reason::FollowsNoColumn { name: id.into() }));
+}
+
+/// What is no ER element, which `element.describe` never hands ER, is refused as taking no
+/// description, with the English as it was (AR-495).
+#[test]
+fn describing_what_is_no_er_element_is_refused_typed() {
+    let (mut st, m) = rooted_store();
+    let error = archforge_er::commands::describe_element(&mut st, m, "About it").expect_err("the model root is no ER element");
+    assert_eq!((error.reason, error.key.as_deref()), (Some(archforge_engine::Reason::TakesNoDescription), Some("element")));
+    assert_eq!(error.message, format!("{} is not an element of the ER model", st.uuid(m).unwrap()));
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.

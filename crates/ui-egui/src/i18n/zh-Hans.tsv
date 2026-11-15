@@ -597,6 +597,10 @@ str		An identity column takes no default.	标识列不能有默认值。
 str		An identity column takes no expression.	标识列不能有表达式。
 str		A key or identity column may never be null.	键列或标识列绝不允许为空。
 str		The column {name} would break: {why}	列 {name} 将失效：{why}
+str		A column on a domain takes the domain's default.	基于域的列使用域的默认值。
+str		A column on a domain takes the domain's collation.	基于域的列使用域的排序规则。
+str		{name} follows no column.	{name} 未跟随任何列。
+plural		The table has {n} column.	该表有 {n} 个列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		The text can't be empty.	文本不能为空。

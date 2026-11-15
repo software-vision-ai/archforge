@@ -597,6 +597,10 @@ str		An identity column takes no default.	識別列は既定値を持てませ�
 str		An identity column takes no expression.	識別列は式を持てません。
 str		A key or identity column may never be null.	キーの列や識別列は NULL を許可できません。
 str		The column {name} would break: {why}	列 {name} が成り立たなくなります: {why}
+str		A column on a domain takes the domain's default.	ドメイン上の列はドメインの既定値を使います。
+str		A column on a domain takes the domain's collation.	ドメイン上の列はドメインの照合順序を使います。
+str		{name} follows no column.	{name} はどの列にも従っていません。
+plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
