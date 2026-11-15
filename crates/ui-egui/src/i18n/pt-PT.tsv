@@ -572,6 +572,10 @@ str		A name has to be one line.	Um nome tem de ocupar uma só linha.
 str		A name can't be empty.	Um nome não pode estar vazio.
 str		There is {what} named {name} already.	Já existe {what} com o nome {name}.
 str		{what} cannot depend on itself.	{what} não pode depender de si.
+str		No id is given. Give the id of {what}.	Não foi indicado nenhum identificador. Indique o identificador para {what}.
+str		{name} is not {what}.	{name} não é {what}.
+str		Give the key's columns as a list of ids.	Indique as colunas da chave como uma lista de identificadores.
+str		A key holds at most {max} columns.	Uma chave tem no máximo {max} colunas.
 str		A package cannot go into itself or a package it holds.	Um pacote não pode ir para dentro de si próprio nem de um pacote que contém.
 str		The model cannot be changed at the moment; nothing was changed.	O modelo não pode ser alterado de momento; nada foi alterado.
 str		The text can't be empty.	O texto não pode estar vazio.
@@ -604,6 +608,14 @@ str	refusal	a domain	um domínio
 str	refusal	an enum type	um tipo enumerado
 str	refusal	a sequence	uma sequência
 str	refusal	a view	uma vista
+str	refusal	a constraint	uma restrição
+str	refusal	a key	uma chave
+str	refusal	a primary key	uma chave primária
+str	refusal	a unique constraint	uma restrição de unicidade
+str	refusal	a foreign key	uma chave estrangeira
+str	refusal	a check	uma verificação
+str	refusal	an index	um índice
+str	refusal	a key column	uma coluna de chave
 str	refusal	a skill	uma competência
 str	refusal	an association end	uma extremidade de associação
 str		A name can't start or end with a space.	Um nome não pode começar nem terminar com um espaço.

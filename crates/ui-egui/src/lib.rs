@@ -29,6 +29,7 @@ pub mod diagrams;
 mod edit_menu;
 pub mod editing;
 mod er_kind;
+mod er_said;
 mod er_ui;
 pub mod explorer;
 mod field_keys;

@@ -6147,6 +6147,55 @@ fn a_name_another_member_column_or_skill_has_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// An ER command's id, key columns and constraint name refused are said in the chosen language,
+/// never in the engine's English: no id, as the id of what the parameter takes, or of no element,
+/// an element of another kind by its name, a key's columns too many, no ids or given twice, and a
+/// constraint name the schema has; a kind ER does not name is left to the other rows. In a window
+/// of the design's height, in light and dark (AR-438).
+#[test]
+fn an_er_id_key_column_or_constraint_name_refused_is_said_in_the_chosen_language() {
+    use crate::i18n::{fmt, tr, tr_ctx};
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let table = id("er.entity.add", json!({ "schema": schema, "name": "Kunde" }));
+        let column = id("er.attribute.add", json!({ "entity": table, "name": "nummer", "type": "BIGINT" }));
+        id("er.unique.add", json!({ "entity": table, "columns": [column], "name": "uq_nummer" }));
+        let refused =
+            |h: &mut Harness<'static, Shell>, cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let no_id = tr("No id is given. Give the id of {what}.");
+        assert_eq!(no_id, "Es ist keine ID angegeben. Hier wird {what} per ID erwartet.", "{theme:?}: the language is German");
+        let no_table = fmt(&no_id, &[("what", &tr_ctx("refusal", "a table"))]);
+        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": "", "name": "X" })), no_table, "{theme:?}");
+        let nope = fmt(&tr("There is no element with the id {id}."), &[("id", "nope")]);
+        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": "nope", "name": "X" })), nope, "{theme:?}");
+        let not_a = tr("{name} is not {what}.");
+        let not_table = fmt(&not_a, &[("name", "nummer"), ("what", &tr_ctx("refusal", "a table"))]);
+        assert_eq!(refused(&mut h, "er.entity.rename", json!({ "entity": column, "name": "X" })), not_table, "{theme:?}");
+        let not_key = fmt(&not_a, &[("name", "Kunde"), ("what", &tr_ctx("refusal", "a key"))]);
+        assert_eq!(refused(&mut h, "er.foreign-key.add", json!({ "entity": table, "key": table })), not_key, "{theme:?}");
+        let columns = |given: serde_json::Value| json!({ "entity": table, "columns": given, "name": "uq_x" });
+        let many = vec![column.as_str(); archforge_er::rules::MAX_KEY_COLUMNS + 1];
+        let most = fmt(&tr("A key holds at most {max} columns."), &[("max", "32")]);
+        assert_eq!(refused(&mut h, "er.unique.add", columns(json!(many))), most, "{theme:?}");
+        assert_eq!(refused(&mut h, "er.unique.add", columns(json!([7]))), tr("Give the key's columns as a list of ids."), "{theme:?}");
+        let twice = tr("An element is named twice. Name each element once.");
+        assert_eq!(refused(&mut h, "er.unique.add", columns(json!([column, column]))), twice, "{theme:?}");
+        let taken = fmt(&tr("There is {what} named {name} already."), &[("what", &tr_ctx("refusal", "a constraint")), ("name", "uq_nummer")]);
+        let clash = json!({ "entity": table, "columns": [column], "name": "UQ_NUMMER" });
+        assert_eq!(refused(&mut h, "er.unique.add", clash).to_lowercase(), taken.to_lowercase(), "{theme:?}");
+        // A kind ER does not name, though the catalogues have its word, is not ER's to say.
+        assert_eq!(crate::er_said::said(&Reason::NotA { kind: "attribute", name: "x".into() }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's name and text rules are said in the chosen language, never in the engine's
 /// English, as a panel, a canvas or Models says them: a name too long, a control character, a space
 /// at an end and a note's empty text; an empty name has its own test. In light and dark (AR-434).

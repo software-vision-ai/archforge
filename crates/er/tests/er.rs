@@ -234,6 +234,75 @@ fn name_and_text_rules_carry_their_reason_typed() {
     }
 }
 
+/// An id, a key's columns and a constraint name refused carry their reason typed, the kind as the
+/// interface names it, beside the English sentence, which stays as it was: no id, one malformed or
+/// of no element, an element of another kind by its name or, unnamed, its id; too many columns, one
+/// no id, given twice or no column; and a constraint name the schema has, by the other's name (AR-438).
+#[test]
+fn ids_key_columns_and_constraint_names_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let fk = run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer }));
+    run(&mut s, "er.unique.add", json!({ "entity": sm.order, "columns": [sm.total], "name": "uq_total" }));
+    let none = "00000000-0000-7000-8000-000000000000";
+    let not = |kind, name: &str| Reason::NotA { kind, name: name.into() };
+    let unique = |columns: Json| json!({ "entity": sm.customer, "columns": columns });
+    let many = vec![sm.key.as_str(); rules::MAX_KEY_COLUMNS + 1];
+    for (cmd, p, reason, message) in [
+        ("er.entity.rename", json!({ "entity": "", "name": "X" }), Reason::IdEmpty { kind: "table" }, "\"\" is not an id".to_string()),
+        ("er.entity.rename", json!({ "entity": "nope", "name": "X" }), Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id".into()),
+        ("er.entity.rename", json!({ "entity": none, "name": "X" }), Reason::NoElement { id: none.into() }, format!("there is no element {none}")),
+        ("er.entity.rename", json!({ "entity": sm.key, "name": "X" }), not("table", "id"), format!("{} is not an entity", sm.key)),
+        ("er.entity.rename", json!({ "entity": fk, "name": "X" }), not("table", &fk), format!("{fk} is not an entity")),
+        (
+            "er.unique.set",
+            json!({ "unique": sm.key, "columns": [], "name": "", "nulls_distinct": true }),
+            not("unique constraint", "id"),
+            format!("{} is not a unique constraint", sm.key),
+        ),
+        ("er.foreign-key.set-key", json!({ "foreign_key": fk, "key": "" }), Reason::IdEmpty { kind: "key" }, "there is no element \"\"".into()),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "key": "nope" }),
+            Reason::NoElement { id: "nope".into() },
+            "there is no element \"nope\"".into(),
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "key": sm.customer }),
+            not("key", "Customer"),
+            format!("{} is neither a primary key nor a unique constraint", sm.customer),
+        ),
+        (
+            "er.foreign-key.set-key",
+            json!({ "foreign_key": fk, "key": fk }),
+            not("key", &fk),
+            format!("{fk} is neither a primary key nor a unique constraint"),
+        ),
+        ("er.unique.add", unique(json!(many)), Reason::TooMany { kind: "key column", max: rules::MAX_KEY_COLUMNS }, "at most 32 columns".into()),
+        ("er.unique.add", unique(json!([7])), Reason::IdsExpected { kind: "key column" }, "every id must be a string".into()),
+        ("er.unique.add", unique(json!([sm.key, ""])), Reason::IdEmpty { kind: "key column" }, "\"\" is not an id".into()),
+        ("er.unique.add", unique(json!([none])), Reason::NoElement { id: none.into() }, format!("there is no element {none}")),
+        (
+            "er.unique.add",
+            unique(json!([sm.key, sm.key])),
+            Reason::NamedTwice { kind: "key column", name: sm.key.clone() },
+            format!("{} is listed twice", sm.key),
+        ),
+        ("er.unique.add", unique(json!([sm.key, fk])), not("column", &fk), format!("{fk} is not an attribute")),
+        (
+            "er.unique.add",
+            json!({ "entity": sm.customer, "columns": [sm.key], "name": "UQ_TOTAL" }),
+            Reason::NameTaken { kind: "constraint", name: "uq_total".into() },
+            "the schema has a constraint named \"UQ_TOTAL\" already".into(),
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message), (Some(reason), message), "{cmd} {p}");
+    }
+}
+
 #[test]
 fn removing_an_entity_takes_its_attributes_relationships_and_links_in_one_step() {
     // Built on the store directly, so the shared core's folder, comment and link can sit around it.

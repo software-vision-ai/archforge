@@ -50,21 +50,35 @@ fn text<'a>(p: &'a Params, key: &str) -> &'a str {
     p.str(key).unwrap_or_default()
 }
 
+/// The kinds of ER element as the interface names them, by class.
+const KINDS: [(ClassId, &str); 13] = [
+    (SCHEMA, "schema"),
+    (ENTITY, "table"),
+    (ATTRIBUTE, "column"),
+    (RELATIONSHIP, "relationship"),
+    (DOMAIN, "domain"),
+    (ENUM_TYPE, "enum type"),
+    (SEQUENCE, "sequence"),
+    (VIEW, "view"),
+    (PRIMARY_KEY, "primary key"),
+    (UNIQUE_CONSTRAINT, "unique constraint"),
+    (FOREIGN_KEY, "foreign key"),
+    (CHECK_CONSTRAINT, "check"),
+    (TABLE_INDEX, "index"),
+];
+
+/// The kind of an element of `class` as a typed refusal names it: the word the interface uses
+/// (a table, a column, a check, ...), or `"element"` for a class it has no word for.
+fn kind_of(class: ClassId) -> &'static str {
+    KINDS.iter().find(|(c, _)| *c == class).map_or("element", |(_, kind)| kind)
+}
+
 /// Refuses `name` when `owner` holds an element, other than `except`, that one of `class` named so
 /// would clash with ([`crate::names`]): the English names that element by the word the interface
-/// uses for its kind (a table, a column, a domain, ...), and the reason is typed with its name.
+/// uses for its kind ([`kind_of`]), and the reason is typed with its name.
 fn name_taken(store: &Store, owner: Obj, class: ClassId, name: &str, except: Option<Obj>) -> Result<(), CommandError> {
     let Some(other) = crate::names::clash(store, owner, class, name, except) else { return Ok(()) };
-    let kind = match store.class_of(other).ok() {
-        Some(c) if c == ENTITY => "table",
-        Some(c) if c == ATTRIBUTE => "column",
-        Some(c) if c == RELATIONSHIP => "relationship",
-        Some(c) if c == DOMAIN => "domain",
-        Some(c) if c == ENUM_TYPE => "enum type",
-        Some(c) if c == SEQUENCE => "sequence",
-        Some(c) if c == VIEW => "view",
-        _ => "element",
-    };
+    let kind = store.class_of(other).map_or("element", kind_of);
     let (within, article) = (if kind == "column" { "table" } else { "schema" }, if kind.starts_with(['a', 'e']) { "an" } else { "a" });
     let existing = name_of(store, other);
     let message = format!("the {within} has {article} {kind} named {existing:?} already");
@@ -113,14 +127,37 @@ fn uuid_of(store: &Store, obj: Obj) -> Result<String, CommandError> {
     store.uuid(obj).map(|u| u.to_string()).map_err(fail)
 }
 
-/// The element the id under `key` names, of `class`.
+/// The refusal `message` of the id `id` under `key`, which names no element: typed as no id given,
+/// where the id of an element of `kind` is taken, or as one malformed or of no element.
+fn missing(key: &str, id: &str, kind: &'static str, message: String) -> CommandError {
+    let reason = if id.is_empty() { Reason::IdEmpty { kind } } else { Reason::NoElement { id: short(id) } };
+    refuse(key, message).because(reason)
+}
+
+/// The element the id `id` under `key` names, refused ([`missing`]) when it names none.
+fn element(store: &Store, key: &str, id: &str, kind: &'static str) -> Result<Obj, CommandError> {
+    let uuid = Uuid::parse(id).ok_or_else(|| missing(key, id, kind, format!("{:?} is not an id", short(id))))?;
+    store.by_uuid(uuid).ok_or_else(|| missing(key, id, kind, format!("there is no element {}", short(id))))
+}
+
+/// The refusal `message` of `obj`, given under `key` as the id `id`, which is no element of `kind`:
+/// typed with its name, or its id when it has none.
+fn not_a(store: &Store, key: &str, kind: &'static str, obj: Obj, id: &str, message: String) -> CommandError {
+    let name = Some(name_of(store, obj)).filter(|n| !n.is_empty()).unwrap_or_else(|| short(id));
+    refuse(key, message).because(Reason::NotA { kind, name })
+}
+
+/// The element the id under `key` names, of `class`; each refusal typed with the class's kind.
 fn id_of(ctx: &C<'_>, p: &Params, key: &str, class: ClassId) -> Result<Obj, CommandError> {
-    let id = text(p, key);
-    let Some(uuid) = Uuid::parse(id) else { return Err(refuse(key, format!("{:?} is not an id", short(id)))) };
-    let Some(obj) = ctx.doc.by_uuid(uuid) else { return Err(refuse(key, format!("there is no element {}", short(id)))) };
+    let (id, kind) = (text(p, key), kind_of(class));
+    let obj = element(ctx.doc, key, id, kind)?;
     if ctx.doc.class_of(obj).ok() != Some(class) {
-        return Err(refuse(
+        return Err(not_a(
+            ctx.doc,
             key,
+            kind,
+            obj,
+            id,
             format!(
                 "{id} is not {}",
                 ctx.doc
@@ -2371,25 +2408,38 @@ fn key_name(p: &Params) -> Result<&str, CommandError> {
     Ok(name)
 }
 
-/// The attributes the array parameter `key` names, none twice.
+/// The columns the array parameter `key` names, at most [`rules::MAX_KEY_COLUMNS`] ids of live
+/// elements, none twice, each a column; every refusal typed, the list's as of key columns.
 fn attribute_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
-    let n = p.get(key).and_then(Json::as_array).map_or(0, Vec::len);
-    if n > rules::MAX_KEY_COLUMNS {
-        return Err(refuse(key, format!("at most {} columns", rules::MAX_KEY_COLUMNS)));
+    const KIND: &str = "key column";
+    let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
+    if items.len() > rules::MAX_KEY_COLUMNS {
+        let most = Reason::TooMany { kind: KIND, max: rules::MAX_KEY_COLUMNS };
+        return Err(refuse(key, format!("at most {} columns", rules::MAX_KEY_COLUMNS)).because(most));
     }
-    let out = id_list(ctx, p, key)?;
-    if let Some(o) = out.iter().find(|o| ctx.doc.class_of(**o).ok() != Some(ATTRIBUTE)) {
-        return Err(refuse(key, format!("{} is not an attribute", uuid_of(ctx.doc, *o)?)));
+    let mut out = Vec::with_capacity(items.len());
+    for v in &items {
+        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string").because(Reason::IdsExpected { kind: KIND }))?;
+        let obj = element(ctx.doc, key, id, KIND)?;
+        if out.contains(&obj) {
+            return Err(refuse(key, format!("{id} is listed twice")).because(Reason::NamedTwice { kind: KIND, name: short(id) }));
+        }
+        out.push(obj);
+    }
+    if let Some((o, id)) = out.iter().zip(&items).find(|(o, _)| ctx.doc.class_of(**o).ok() != Some(ATTRIBUTE)) {
+        let message = format!("{} is not an attribute", uuid_of(ctx.doc, *o)?);
+        return Err(not_a(ctx.doc, key, "column", *o, id.as_str().unwrap_or_default(), message));
     }
     Ok(out)
 }
 
-/// The key the id under `param` names: a primary key or a unique constraint.
+/// The key the id under `param` names: a primary key or a unique constraint; every refusal typed.
 fn key_id(ctx: &C<'_>, p: &Params, param: &str) -> Result<Obj, CommandError> {
     let id = text(p, param);
-    let obj = Uuid::parse(id).and_then(|u| ctx.doc.by_uuid(u)).ok_or_else(|| refuse(param, format!("there is no element {:?}", short(id))))?;
+    let none = || missing(param, id, "key", format!("there is no element {:?}", short(id)));
+    let obj = Uuid::parse(id).and_then(|u| ctx.doc.by_uuid(u)).ok_or_else(none)?;
     if !rules::is_key(ctx.doc, obj) {
-        return Err(refuse(param, format!("{id} is neither a primary key nor a unique constraint")));
+        return Err(not_a(ctx.doc, param, "key", obj, id, format!("{id} is neither a primary key nor a unique constraint")));
     }
     Ok(obj)
 }
@@ -2399,9 +2449,10 @@ fn constraint_name(ctx: &C<'_>, p: &Params, obj: Obj, except: Option<Obj>) -> Re
     let name = key_name(p)?.to_string();
     if !name.is_empty()
         && let Some(s) = rules::schema_of(ctx.doc, obj)
-        && !rules::constraint_name_free(ctx.doc, s, &name, except)
+        && let Some(other) = rules::constraint_clash(ctx.doc, s, &name, except)
     {
-        return Err(refuse("name", format!("the schema has a constraint named {name:?} already")));
+        let taken = Reason::NameTaken { kind: "constraint", name: other };
+        return Err(refuse("name", format!("the schema has a constraint named {name:?} already")).because(taken));
     }
     Ok(name)
 }
@@ -3056,26 +3107,6 @@ fn relationship_remove(ctx: &mut C<'_>, p: &Params) -> R {
     not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let gone = remove_element(ctx.doc, r).map_err(fail)?;
     Ok(json!({ "removed": gone }))
-}
-
-/// The ids of an array parameter: strings naming live elements, none twice.
-fn id_list(ctx: &C<'_>, p: &Params, key: &str) -> Result<Vec<Obj>, CommandError> {
-    let items = p.get(key).and_then(Json::as_array).cloned().unwrap_or_default();
-    if items.len() > archforge_mof::store::MAX_LIST {
-        return Err(refuse(key, format!("at most {} ids", archforge_mof::store::MAX_LIST)));
-    }
-    let mut seen = BTreeSet::new();
-    let mut out = Vec::with_capacity(items.len());
-    for v in &items {
-        let id = v.as_str().ok_or_else(|| refuse(key, "every id must be a string"))?;
-        let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{:?} is not an id", short(id))))?;
-        let obj = ctx.doc.by_uuid(uuid).ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
-        if !seen.insert(obj) {
-            return Err(refuse(key, format!("{id} is listed twice")));
-        }
-        out.push(obj);
-    }
-    Ok(out)
 }
 
 /// Removes schemas, entities, attributes, relationships, keys and foreign keys at once: the

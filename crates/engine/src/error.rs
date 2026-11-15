@@ -70,6 +70,11 @@ pub enum EngineError {
     },
 }
 
+// An error travels in every `Result` of a call, so it stays small: a new reason boxes what it names
+// rather than grow `EngineError` (120 bytes) or `Reason` (48) on a 64-bit target.
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(std::mem::size_of::<EngineError>() == 120 && std::mem::size_of::<Reason>() == 48);
+
 /// The most of a caller's own text an error repeats, in characters.
 const ECHO: usize = 200;
 
