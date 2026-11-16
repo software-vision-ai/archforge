@@ -20,6 +20,8 @@
 //! (AR-499): a domain's checks too many, one named twice, an item of another shape and an item's
 //! key the list does not take (said without a kind, for any list of items); an empty expression is
 //! a constraint's row.
+//! An index's columns (AR-500): none, too many, one twice, an item of another shape, and an index
+//! column with both a column and an expression or with neither.
 //! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
 //! without its subtype.
 //! What a column is typed by (AR-497): a type name that holds its own size, a domain and an enum
@@ -66,6 +68,9 @@ const LITERAL: &str = "enum literal";
 
 /// A foreign key's columns, as its rules name them.
 const FOREIGN_KEY_COLUMN: &str = "foreign key column";
+
+/// An index's columns, as a list refused names them.
+const INDEX_COLUMN: &str = "index column";
 
 /// A subtype, as the refusals of a table's supertype name the relationship and the kind.
 const SUBTYPE: &str = "subtype";
@@ -154,6 +159,16 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::TooMany { kind: "check", max } => fmt(&tr("Give at most {max} checks."), &[("max", &max.to_string())]),
         Reason::NamedTwice { kind: "check", name } => fmt(&tr("Two checks are named {name}. Give each check its own name."), &[("name", name)]),
         Reason::ItemsExpected { kind: "check" } => tr("Give each check as text, or as an object with an expression and a name."),
+        Reason::TooFew { kind: INDEX_COLUMN, min: 1 } => tr("An index needs at least one column."),
+        Reason::TooMany { kind: INDEX_COLUMN, max } => fmt(&tr("An index holds at most {max} columns."), &[("max", &max.to_string())]),
+        Reason::NamedTwice { kind: INDEX_COLUMN, name } => fmt(&tr("{name} is in the index twice. Give each column once."), &[("name", name)]),
+        Reason::ItemsExpected { kind: INDEX_COLUMN } => {
+            tr("Give each index column as a column's id, or as an object with an attribute or an expression.")
+        }
+        Reason::AttributeAndExpression { column } => {
+            fmt(&tr("{column} is given with an expression too. An index column sorts by a column or by an expression."), &[("column", column)])
+        }
+        Reason::NoAttributeNorExpression => tr("An index column needs a column or an expression to sort by."),
         Reason::UnknownKey { key, takes } => {
             let template = if key.is_empty() {
                 tr("An item holds a key without a name. It takes {takes}.")

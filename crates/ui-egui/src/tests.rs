@@ -7151,7 +7151,53 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
         ] {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "index column" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// An index's columns refused are said in the chosen language: none, too many, one twice, an item
+/// of another shape, and an index column with both a column and an expression or with neither, also
+/// as a problem of a loaded index without columns. In light and dark (AR-500).
+#[test]
+fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (reason, said) in [
+            (Reason::TooFew { kind: "index column", min: 1 }, "Ein Index braucht mindestens eine Spalte."),
+            (Reason::TooMany { kind: "index column", max: 32 }, "Ein Index umfasst höchstens 32 Spalten."),
+            (Reason::NamedTwice { kind: "index column", name: "total".into() }, "total steht zweimal im Index. Geben Sie jede Spalte nur einmal an."),
+            (
+                Reason::ItemsExpected { kind: "index column" },
+                "Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.",
+            ),
+            (
+                Reason::AttributeAndExpression { column: "total".into() },
+                "total ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.",
+            ),
+            (Reason::NoAttributeNorExpression, "Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        // A loaded index without columns, which no command makes, is a problem in the same words.
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let e = st.create(archforge_er::ENTITY).unwrap();
+        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("Bestellung")).unwrap();
+        let ix = st.create(archforge_er::TABLE_INDEX).unwrap();
+        st.set(ix, archforge_er::table_index::NAME, archforge_mof::Value::str("ix_leer")).unwrap();
+        st.push(e, archforge_er::entity::TABLE_INDEX, archforge_mof::Value::Ref(ix)).unwrap();
+        let texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        let index: Vec<&String> = texts.iter().filter(|t| t.starts_with("ix_leer")).collect();
+        assert_eq!(index, ["ix_leer: Ein Index braucht mindestens eine Spalte."], "{texts:?} {theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

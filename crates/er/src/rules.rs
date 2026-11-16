@@ -984,32 +984,83 @@ pub fn index_specs(store: &Store, ix: Obj) -> Vec<IndexColumnSpec> {
     index_columns(store, ix).into_iter().map(|c| index_column_spec(store, c)).collect()
 }
 
-/// Why `columns` cannot be the columns of an index of `entity`, as a sentence; None when they can.
-pub fn index_columns_problem(store: &Store, entity: Obj, columns: &[IndexColumnSpec]) -> Option<String> {
+/// Why columns cannot be an index's ([`index_columns_problem`]), each element named by its label:
+/// said as an English sentence ([`IndexColumnsProblem::said`]) or typed
+/// ([`IndexColumnsProblem::reason`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexColumnsProblem {
+    /// The index has no column.
+    NoColumn,
+    /// The index has more than [`MAX_KEY_COLUMNS`] columns.
+    TooMany,
+    /// The element `column` is no column of the table `table`.
+    NotColumnOf { column: String, table: String },
+    /// The column `column` is in the index twice.
+    Twice { column: String },
+    /// An expression breaks a rule of every text: too long, a control character, a space at an end.
+    Expression(Problem),
+    /// An index column names the column `column` and an expression too.
+    Both { column: String },
+    /// An index column names neither a column nor an expression.
+    Neither,
+}
+
+impl IndexColumnsProblem {
+    /// The problem as an English sentence, as "an index needs at least one column".
+    pub fn said(&self) -> String {
+        match self {
+            Self::NoColumn => "an index needs at least one column".into(),
+            Self::TooMany => format!("an index has at most {MAX_KEY_COLUMNS} columns"),
+            Self::NotColumnOf { column, table } => format!("{column} is not an attribute of {table}"),
+            Self::Twice { column } => format!("{column} appears twice in the index"),
+            Self::Expression(p) => format!("the expression {p}"),
+            Self::Both { column } => format!("{column} has both an attribute and an expression"),
+            Self::Neither => "a column needs an attribute or an expression".into(),
+        }
+    }
+
+    /// The problem typed, for an interface to say in its own words; an index's columns are of the
+    /// kind `"index column"`.
+    pub fn reason(&self) -> Reason {
+        const KIND: &str = "index column";
+        match self {
+            Self::NoColumn => Reason::TooFew { kind: KIND, min: 1 },
+            Self::TooMany => Reason::TooMany { kind: KIND, max: MAX_KEY_COLUMNS },
+            Self::NotColumnOf { column, table } => Reason::NotColumnOf { column: column.as_str().into(), table: table.as_str().into() },
+            Self::Twice { column } => Reason::NamedTwice { kind: KIND, name: column.clone() },
+            Self::Expression(p) => p.reason.clone(),
+            Self::Both { column } => Reason::AttributeAndExpression { column: column.as_str().into() },
+            Self::Neither => Reason::NoAttributeNorExpression,
+        }
+    }
+}
+
+/// Why `columns` cannot be the columns of an index of `entity`; None when they can.
+pub fn index_columns_problem(store: &Store, entity: Obj, columns: &[IndexColumnSpec]) -> Option<IndexColumnsProblem> {
     if columns.is_empty() {
-        return Some("an index needs at least one column".into());
+        return Some(IndexColumnsProblem::NoColumn);
     }
     if columns.len() > MAX_KEY_COLUMNS {
-        return Some(format!("an index has at most {MAX_KEY_COLUMNS} columns"));
+        return Some(IndexColumnsProblem::TooMany);
     }
     let mut seen = BTreeSet::new();
     for c in columns {
         match (c.attribute, c.expression.is_empty()) {
             (Some(a), true) => {
                 if store.class_of(a).ok() != Some(ATTRIBUTE) || entity_of(store, a) != Some(entity) {
-                    return Some(format!("{} is not an attribute of {}", label(store, a), label(store, entity)));
+                    return Some(IndexColumnsProblem::NotColumnOf { column: label(store, a), table: label(store, entity) });
                 }
                 if !seen.insert(a) {
-                    return Some(format!("{} appears twice in the index", label(store, a)));
+                    return Some(IndexColumnsProblem::Twice { column: label(store, a) });
                 }
             }
             (None, false) => {
                 if let Some(p) = text_problem(&c.expression, MAX_TEXT) {
-                    return Some(format!("the expression {p}"));
+                    return Some(IndexColumnsProblem::Expression(p));
                 }
             }
-            (Some(a), false) => return Some(format!("{} has both an attribute and an expression", label(store, a))),
-            (None, true) => return Some("a column needs an attribute or an expression".into()),
+            (Some(a), false) => return Some(IndexColumnsProblem::Both { column: label(store, a) }),
+            (None, true) => return Some(IndexColumnsProblem::Neither),
         }
     }
     None
@@ -1629,7 +1680,7 @@ pub fn problems(store: &Store) -> Vec<String> {
             match entity_of(store, o) {
                 Some(e) => {
                     if let Some(p) = index_columns_problem(store, e, &index_specs(store, o)) {
-                        out.push(format!("the index {}: {p}", label(store, o)));
+                        out.push(format!("the index {}: {}", label(store, o), p.said()));
                     }
                 }
                 None => out.push(format!("the index {} belongs to no entity", label(store, o))),

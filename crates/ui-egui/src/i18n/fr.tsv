@@ -1606,6 +1606,12 @@ str		Two checks are named {name}. Give each check its own name.	Deux contrôles 
 str		Give each check as text, or as an object with an expression and a name.	Indiquez chaque contrôle sous forme de texte ou d’objet avec une expression et un nom.
 str		An item takes no {key}. It takes {takes}.	Une entrée n’accepte pas {key}. Elle accepte {takes}.
 str		An item holds a key without a name. It takes {takes}.	Une entrée contient une clé sans nom. Elle accepte {takes}.
+str		An index needs at least one column.	Un index doit comprendre au moins une colonne.
+str		An index holds at most {max} columns.	Un index comprend au plus {max} colonnes.
+str		{name} is in the index twice. Give each column once.	{name} figure deux fois dans l’index. Indiquez chaque colonne une seule fois.
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	Indiquez chaque colonne d’index par l’identifiant d’une colonne ou par un objet avec un attribut ou une expression.
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} est indiquée avec une expression. Une colonne d’index trie selon une colonne ou selon une expression.
+str		An index column needs a column or an expression to sort by.	Une colonne d’index a besoin d’une colonne ou d’une expression selon laquelle trier.
 str		There is no element with the id {id}.	Il n’existe aucun élément ayant l’identifiant {id}.
 str		A default value is at most {n} characters.	Une valeur par défaut compte au plus {n} caractères.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} n’est pas un nombre entier, ce qu’est la valeur par défaut d’un Integer, comme 42.

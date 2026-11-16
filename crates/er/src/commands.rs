@@ -3004,14 +3004,18 @@ fn not_one_of(key: &str, said: String, what: WordPlace, word: &str, known: &[&st
 /// The index columns the array parameter `key` gives: objects with `attribute` (an id) or
 /// `expression`, `direction` (ascending unless given) and `nulls` (default unless given), or bare
 /// attribute ids with both defaults; an unknown key in an object is refused; checked against
-/// `entity`.
+/// `entity`. Each refusal typed, the items of the kind `"index column"`; given as no array, which
+/// the engine refuses before the handler runs, it stays in English.
 fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Result<Vec<IndexColumnSpec>, CommandError> {
+    const KIND: &str = "index column";
+    let items_expected = |message: String| refuse(key, message).because(Reason::ItemsExpected { kind: KIND });
     let items = match p.get(key) {
         Some(Json::Array(items)) => items,
         _ => return Err(refuse(key, "an array of columns")),
     };
     if items.len() > rules::MAX_KEY_COLUMNS {
-        return Err(refuse(key, format!("at most {} columns", rules::MAX_KEY_COLUMNS)));
+        let most = Reason::TooMany { kind: KIND, max: rules::MAX_KEY_COLUMNS };
+        return Err(refuse(key, format!("at most {} columns", rules::MAX_KEY_COLUMNS)).because(most));
     }
     let mut out = Vec::with_capacity(items.len());
     for item in items {
@@ -3019,35 +3023,36 @@ fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Resul
             Json::String(id) => (Some(id.as_str()), String::new(), SortDirection::Ascending, NullsOrder::Default),
             Json::Object(fields) => {
                 if let Some(unknown) = fields.keys().find(|k| !INDEX_COLUMN_KEYS.contains(&k.as_str())) {
-                    let unknown: String = unknown.chars().take(40).collect();
-                    return Err(refuse(key, format!("a column takes no {unknown:?}; it takes {}", INDEX_COLUMN_KEYS.join(", "))));
+                    let (unknown, takes) = (short(unknown), INDEX_COLUMN_KEYS.join(", "));
+                    let message = format!("a column takes no {unknown:?}; it takes {takes}");
+                    return Err(refuse(key, message).because(Reason::UnknownKey { key: unknown, takes: &INDEX_COLUMN_KEYS }));
                 }
                 (
                     match item.get("attribute") {
                         None | Some(Json::Null) => None,
                         Some(Json::String(s)) if s.is_empty() => None,
                         Some(Json::String(s)) => Some(s.as_str()),
-                        Some(other) => return Err(refuse(key, format!("attribute is {}, not an id", shown(other)))),
+                        Some(other) => return Err(items_expected(format!("attribute is {}, not an id", shown(other)))),
                     },
                     match item.get("expression") {
                         None | Some(Json::Null) => String::new(),
                         Some(Json::String(s)) => s.clone(),
-                        Some(other) => return Err(refuse(key, format!("expression is {}, not text", shown(other)))),
+                        Some(other) => return Err(items_expected(format!("expression is {}, not text", shown(other)))),
                     },
                     word_of(item, "direction", &DIRECTION_WORDS, SortDirection::Ascending, key, WordPlace::IndexDirection)?,
                     word_of(item, "nulls", &NULLS_WORDS, NullsOrder::Default, key, WordPlace::IndexNulls)?,
                 )
             }
-            other => return Err(refuse(key, format!("{} is not a column", shown(other)))),
+            other => return Err(items_expected(format!("{} is not a column", shown(other)))),
         };
         let attribute = match attribute {
             Some(id) => {
-                let uuid = Uuid::parse(id).ok_or_else(|| refuse(key, format!("{:?} is not an id", short(id))))?;
+                let uuid = Uuid::parse(id).ok_or_else(|| missing(key, id, "column", format!("{:?} is not an id", short(id))))?;
                 let a = ctx
                     .doc
                     .by_uuid(uuid)
                     .filter(|a| ctx.doc.is_alive(*a))
-                    .ok_or_else(|| refuse(key, format!("there is no element {}", short(id))))?;
+                    .ok_or_else(|| missing(key, id, "column", format!("there is no element {}", short(id))))?;
                 Some(a)
             }
             None => None,
@@ -3055,7 +3060,7 @@ fn index_columns_param(ctx: &C<'_>, p: &Params, key: &str, entity: Obj) -> Resul
         out.push(IndexColumnSpec { attribute, expression, direction, nulls });
     }
     if let Some(problem) = rules::index_columns_problem(ctx.doc, entity, &out) {
-        return Err(refuse(key, problem));
+        return Err(refuse(key, problem.said()).because(problem.reason()));
     }
     Ok(out)
 }
