@@ -6634,6 +6634,34 @@ fn a_shared_commands_element_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// An association's end, which UML does not remove yet, removed with the selection is said in the
+/// chosen language, named by its role or, without one, its id. In light and dark (AR-530).
+#[test]
+fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, _) = related_sample_in(theme, egui::vec2(1600.0, 1000.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let order = named(&h, archforge_uml::CLASS, "Order").to_string();
+        let st = h.state().session.as_ref().unwrap().doc();
+        let commerce = st.container(st.by_uuid(named(&h, archforge_uml::CLASS, "Order")).unwrap()).unwrap().unwrap().0;
+        let p = json!({ "package": st.uuid(commerce).unwrap().to_string(), "name": "Shop" });
+        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p);
+        let shop = run("uml.class.add", p).unwrap()["id"].as_str().unwrap().to_string();
+        let sells = run("uml.association.add", json!({ "from": shop, "to": order })).unwrap()["id"].as_str().unwrap().to_string();
+        let seller = run("uml.association.set-end", json!({ "association": sells, "end": 0, "role": "seller" })).unwrap();
+        let unnamed = run("uml.association.set-end", json!({ "association": sells, "end": 1, "multiplicity": "*" })).unwrap();
+        let unnamed = unnamed["id"].as_str().unwrap();
+        let refused = run("element.remove", json!({ "ids": [seller["id"]] })).unwrap_err();
+        assert_eq!(refused, "seller lässt sich noch nicht entfernen.", "{theme:?}");
+        let refused = run("element.remove", json!({ "ids": [unnamed] })).unwrap_err();
+        assert_eq!(refused, format!("{unnamed} lässt sich noch nicht entfernen."), "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// The engine's own refusals are said in the chosen language: a command not available now by its
 /// reason, a reason the catalogues don't hold in the engine's words, a gesture under way, undo
 /// inside another change and a session that could not be put back, each in its sentence, and an

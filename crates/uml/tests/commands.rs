@@ -182,6 +182,38 @@ fn a_class_diagram_shows_its_packages_classes_and_removing_the_package_takes_the
     s.redo().unwrap();
 }
 
+/// What UML does not remove yet is refused with its reason typed beside the unchanged English,
+/// naming the element by its name or, without one, its id: an association's end, with a role and
+/// without; and, called directly, the model, of a kind UML does not remove, and a classifier
+/// template parameter that is no template's (AR-530).
+#[test]
+fn what_uml_does_not_remove_yet_is_refused_typed_by_its_name_or_its_id() {
+    let mut s = session();
+    let pkg = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
+    let order = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Order" }));
+    let party = run(&mut s, "uml.class.add", json!({ "package": pkg, "name": "Party" }));
+    let places = run(&mut s, "uml.association.add", json!({ "from": party, "to": order }));
+    let buyer = run(&mut s, "uml.association.set-end", json!({ "association": places, "end": 0, "role": "buyer" }));
+    let unnamed = run(&mut s, "uml.association.set-end", json!({ "association": places, "end": 1, "multiplicity": "*" }));
+    for (end, name) in [(&buyer, "buyer".to_string()), (&unnamed, unnamed.clone())] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute("element.remove", &json!({ "ids": [end] })) else { panic!("{end} is refused") };
+        let said = format!("{end} cannot be removed yet");
+        assert_eq!((error.reason, error.key.as_deref(), error.message), (Some(Reason::ElementNotRemovable { name }), Some("ids"), said));
+        assert_eq!(picture(s.doc()), before, "nothing went");
+    }
+    let mut st = store();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let loose = st.create(archforge_uml::CLASSIFIER_TEMPLATE_PARAMETER).unwrap();
+    for (o, name) in [(model, "Shop".to_string()), (loose, st.uuid(loose).unwrap().to_string())] {
+        let before = picture(&st);
+        let error = archforge_uml::commands::remove_elements(&mut st, &[o]).unwrap_err();
+        let said = format!("{} cannot be removed yet", st.uuid(o).unwrap());
+        assert_eq!((error.reason, error.key.as_deref(), error.message), (Some(Reason::ElementNotRemovable { name }), Some("ids"), said));
+        assert_eq!(picture(&st), before, "nothing went");
+    }
+}
+
 #[test]
 fn every_command_undoes_and_redoes_and_the_sweep_breaks_nothing() {
     let mut s = session();

@@ -534,9 +534,9 @@ pub(crate) fn said(reason: &archforge_engine::Reason) -> Option<String> {
 
 /// A diagram command's refusal: an id or an element of the wrong kind where a diagram, a box, a line
 /// or a label is taken, an element a diagram's kind cannot be of, a box's size, an element a diagram
-/// does not show or shows already, a box on
-/// another diagram or nested too deep, a note's text or link, too many bends, elements a notation
-/// does not remove yet, a kind word that is no plain word, a diagram kind or a label's text none
+/// does not show or shows already, a box on another diagram or nested too deep, a note's text or
+/// link, too many bends, elements a notation does not remove yet and one element it does not, a
+/// kind word that is no plain word, a diagram kind or a label's text none
 /// takes, a list of boxes, or of what a style is set on, that is empty, no list of ids or names
 /// one twice, a line connected against a relationship's rules, a note's link refused, a label on a
 /// note's link or shown already, a style's colour not of the form #rrggbb, and a diagram arranged
@@ -597,6 +597,7 @@ fn diagram_said(reason: &archforge_engine::Reason) -> Option<String> {
         }
         Reason::TooMany { kind: "waypoint", max } => fmt(&tr("A line bends at most {max} times."), &[("max", &max.to_string())]),
         Reason::NotRemovable { notation } => fmt(&tr("{notation} elements cannot be removed yet."), &[("notation", notation)]),
+        Reason::ElementNotRemovable { name } => fmt(&tr("{name} cannot be removed yet."), &[("name", name)]),
         Reason::NotDescribable { notation } => fmt(&tr("{notation} elements cannot be described yet."), &[("notation", notation)]),
         Reason::TooFew { kind: ELEMENT, min: 1 } => tr("Give at least one element."),
         Reason::IdsExpected { kind: ELEMENT } => tr("Give the elements as a list of ids."),
