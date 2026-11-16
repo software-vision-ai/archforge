@@ -401,15 +401,37 @@ pub fn text_marked(painter: &egui::Painter, at: Pos2, text: &str, ty: Type, colo
     if marks.underlined {
         for row in &g.rows {
             let (Some(first), Some(last)) = (row.glyphs.first(), row.glyphs.last()) else { continue };
-            let left = at.x + row.pos.x + first.pos.x;
-            let right = at.x + row.pos.x + last.max_x();
-            let thickness = (ty.size * UNDERLINE_WEIGHT).max(1.0);
-            let y = painter.round_to_pixel_center(at.y + row.pos.y + first.pos.y + ty.size * UNDERLINE_DROP);
-            painter.hline(left..=right, y, egui::Stroke::new(thickness, color));
+            underline(painter, at, row, first, last, ty, color);
         }
     }
     painter.galley(at, g, color);
     rect
+}
+
+/// Underlines the character at `index` of `g`, laid out to be drawn from `at`, as [`text_marked`]
+/// underlines a text: a menu's access letter. Nothing when `g` was cut before that character.
+pub fn underline_char(painter: &egui::Painter, at: Pos2, g: &egui::Galley, index: usize, ty: Type, color: Color32) {
+    let mut glyphs = g.rows.iter().flat_map(|row| row.glyphs.iter().map(move |glyph| (row, glyph)));
+    // A cut text holds the glyphs before the cut and then its ellipsis.
+    if let Some((row, glyph)) = glyphs.nth(index).filter(|(_, glyph)| glyph.chr != '…') {
+        underline(painter, at, row, glyph, glyph, ty, color);
+    }
+}
+
+/// The underline from the glyph `first` to the end of `last` of `row`, a text drawn from `at`.
+fn underline(
+    painter: &egui::Painter,
+    at: Pos2,
+    row: &egui::epaint::text::PlacedRow,
+    first: &egui::epaint::text::Glyph,
+    last: &egui::epaint::text::Glyph,
+    ty: Type,
+    color: Color32,
+) {
+    let (left, right) = (at.x + row.pos.x + first.pos.x, at.x + row.pos.x + last.max_x());
+    let thickness = (ty.size * UNDERLINE_WEIGHT).max(1.0);
+    let y = painter.round_to_pixel_center(at.y + row.pos.y + first.pos.y + ty.size * UNDERLINE_DROP);
+    painter.hline(left..=right, y, egui::Stroke::new(thickness, color));
 }
 
 /// An underline's thickness and its distance under the baseline, each a share of the text's size:

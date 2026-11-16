@@ -83,6 +83,12 @@ pub fn sections(shell: &Shell) -> Vec<Vec<&'static str>> {
     own.iter().copied().chain([SHARED]).map(|section| section.iter().map(|a| a.id).collect()).collect()
 }
 
+/// The rows the menu can show at once, one list per notation, for the access letters' tests.
+#[cfg(test)]
+pub(crate) fn every_menu() -> Vec<Vec<&'static str>> {
+    [ER_ROWS, UML_ROWS].iter().map(|own| own.iter().copied().chain([SHARED]).flatten().map(|a| a.id).collect()).collect()
+}
+
 /// Whether a version's details or a changed element covers the canvas.
 pub(crate) fn covered(shell: &Shell) -> bool {
     shell.state.explorer == Explorer::SourceControl && (shell.versions.details.is_some() || shell.versions.element.is_some())
