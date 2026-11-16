@@ -107,6 +107,8 @@ fn required() -> (Vec<(String, String)>, Vec<String>) {
     strings.extend(crate::uml_profiles::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::uml_stereotypes::texts().map(|s| (String::new(), s.to_string())));
     strings.extend(crate::model_words::texts().into_iter().map(|s| (String::new(), s)));
+    // The in-window menu bar's access letters, keyed by each title's and row's id.
+    strings.extend(crate::menu_bar::access_keys().into_iter().map(|key| ("access".to_string(), key)));
     // The plurals the notations' cards say, which `trn` takes through their descriptions.
     plurals.extend(archforge_er::figures::PLURALS.iter().chain(archforge_uml::PLURALS).map(|s| s.to_string()));
     strings.sort();

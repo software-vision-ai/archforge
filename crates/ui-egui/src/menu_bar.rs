@@ -4,9 +4,15 @@
 //! F10 reaches the bar from the keys: the arrows walk groups and rows, off or not, wrapping, Enter or Space runs a row that can act.
 //! To a screen reader the bar is a menu bar, the open menu its title's menu, and the row under the keys has its focus.
 //! A press away from the bar and its open menu only closes the menu, and so does the window losing the focus.
+//! Each title and row has an access letter, its catalogue row in the `access` context keyed by the title's
+//! `menu.<group>` or the row's action id: underlined while Alt alone is held or the keys walk a menu, as
+//! Windows shows them, and the AccessKit access key of its node, which the Windows and Linux adapters do
+//! not report to a screen reader yet.
+
+use std::sync::Arc;
 
 use egui::text_edit::TextEditState;
-use egui::{Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::{Color32, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::Shell;
 use crate::actions::{
@@ -14,7 +20,7 @@ use crate::actions::{
     SELECT_ALL, UNDO, VERSIONS,
 };
 use crate::home::{control, off_words};
-use crate::i18n::{tr, tr_ctx};
+use crate::i18n::{fmt, tr, tr_ctx};
 use crate::ux::{self, Palette, types};
 use crate::widgets;
 
@@ -30,12 +36,18 @@ struct Group {
 /// The bar's menus, left to right. On these systems Quit and About live here, as the design has it.
 static GROUPS: &[Group] = &[
     Group { id: "file", title: || tr("File"), sections: actions::file_menu },
-    Group { id: "edit", title: || tr("Edit"), sections: |_| vec![vec![UNDO, REDO], vec![CUT, COPY, PASTE], vec![SELECT_ALL]] },
+    Group { id: "edit", title: || tr("Edit"), sections: |_| EDIT_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "view", title: || tr_ctx("menu", "View"), sections: |_| crate::view_menu::VIEW_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "model", title: || tr("Model"), sections: crate::model_menu::sections },
     Group { id: "versions", title: || tr("Versions"), sections: |_| actions::VERSIONS_MENU.iter().map(|s| s.to_vec()).collect() },
     Group { id: "help", title: || tr("Help"), sections: |_| vec![vec![ABOUT]] },
 ];
+
+/// The Edit menu's rows by section.
+static EDIT_MENU: [&[&str]; 3] = [&[UNDO, REDO], &[CUT, COPY, PASTE], &[SELECT_ALL]];
+
+/// The catalogues' context of the access letters.
+const ACCESS: &str = "access";
 
 const GROUP_HEIGHT: f32 = 24.0;
 const GROUP_PAD: f32 = 8.0;
@@ -266,21 +278,22 @@ pub(crate) fn show(shell: &mut Shell, ui: &egui::Ui, p: &Palette, strip: Rect, s
     let (mid, mut x, mut bar, mut shown) = (strip.center().y, start, Rect::NOTHING, None);
     for group in GROUPS {
         let was_open = shell.menu_bar.open == Some(group.id);
-        let title = (group.title)();
-        let text = ux::galley(&paint, &title, types::SMALL, p.text, None);
-        let size = vec2(text.size().x + 2.0 * GROUP_PAD, GROUP_HEIGHT);
+        let (title, key) = ((group.title)(), format!("menu.{}", group.id));
+        let text = lettered(&paint, &title, &key, p.text, None);
+        let size = vec2(text.0.size().x + 2.0 * GROUP_PAD, GROUP_HEIGHT);
         let button = Rect::from_center_size(pos2(x + size.x / 2.0, mid), size);
         let resp = control(shell, &titles, &format!("strip.menu.{}", group.id), "menu", button, true).accessible_name(title.as_str());
         ui.ctx().accesskit_node_builder(resp.id, |node| {
             node.set_role(egui::accesskit::Role::MenuItem);
             node.set_expanded(was_open);
+            letter(&key).inspect(|c| node.set_access_key(c.to_string()));
         });
         if was_open {
             paint.rect_filled(button, 5.0, p.surface);
         } else if resp.hovered() {
             paint.rect_filled(button, 5.0, p.border);
         }
-        paint.galley(pos2(button.left() + GROUP_PAD, mid - text.size().y / 2.0), text, p.text);
+        paint_lettered(&paint, pos2(button.left() + GROUP_PAD, mid - text.0.size().y / 2.0), text, p.text, cued(shell, ui.ctx()));
         if resp.clicked() {
             shell.menu_bar.open = if was_open { None } else { Some(group.id) };
             shell.menu_bar.row = None;
@@ -402,6 +415,7 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
         if keyed {
             node.set_selected(true);
         }
+        letter(id).inspect(|c| node.set_access_key(c.to_string()));
     });
     if keyed || (live && shell.menu_bar.row.is_none() && resp.hovered()) {
         paint.rect_filled(row, 5.0, p.accent_tint);
@@ -411,9 +425,77 @@ fn draw_row(shell: &mut Shell, ui: &egui::Ui, p: &Palette, id: &str, row: Rect) 
     let width = detail.size().x;
     paint.galley(pos2(row.right() - 10.0 - width, row.center().y - detail.size().y / 2.0), detail, p.text_secondary);
     let ink = if live { p.text } else { p.text_muted };
-    ux::text_mid(paint, row.left() + 10.0, row.center().y, &label, types::SMALL, ink, Some((row.width() - 28.0 - width).max(0.0)));
+    let text = lettered(paint, &label, id, ink, Some((row.width() - 28.0 - width).max(0.0)));
+    paint_lettered(paint, pos2(row.left() + 10.0, row.center().y - text.0.size().y / 2.0), text, ink, cued(shell, ui.ctx()));
     tick(shell, ui, p, id, row);
     live && resp.clicked()
+}
+
+/// The access letter of `key`, a title's `menu.<group>` or a row's action id, in the language shown:
+/// its catalogue row, one letter A to Z, as only those have a key of their own. None for anything
+/// else, such as a missing row, which reads as its key.
+fn letter(key: &str) -> Option<char> {
+    one_letter(&tr_ctx(ACCESS, key))
+}
+
+/// The letter `text` is when it is one letter A to Z and nothing else.
+fn one_letter(text: &str) -> Option<char> {
+    let mut chars = text.chars();
+    chars.next().filter(|c| c.is_ascii_uppercase() && chars.next().is_none())
+}
+
+/// What a title or row shows for `label`, and where in it the letter of `key` is: the first character
+/// that is the letter in either case, or else the letter in brackets after the label, in the
+/// catalogue's words, as a label with no such letter, Japanese or Chinese say, shows it.
+fn marked(label: &str, key: &str) -> (String, Option<usize>) {
+    let Some(letter) = letter(key) else { return (label.to_string(), None) };
+    match label.chars().position(|c| c.to_ascii_uppercase() == letter) {
+        Some(at) => (label.to_string(), Some(at)),
+        None => {
+            let text = fmt(&tr("{label}({letter})"), &[("label", label), ("letter", &letter.to_string())]);
+            let at = text.chars().position(|c| c == letter);
+            (text, at)
+        }
+    }
+}
+
+/// `label` laid out in the bar's text, as `marked` gives it, with where its letter is.
+fn lettered(paint: &egui::Painter, label: &str, key: &str, ink: Color32, width: Option<f32>) -> (Arc<egui::Galley>, Option<usize>) {
+    let (text, at) = marked(label, key);
+    (ux::galley(paint, &text, types::SMALL, ink, width), at)
+}
+
+/// Draws a text of `lettered` from `top_left`, its letter underlined while `cued`.
+fn paint_lettered(paint: &egui::Painter, top_left: egui::Pos2, (text, at): (Arc<egui::Galley>, Option<usize>), ink: Color32, cued: bool) {
+    if let Some(at) = at.filter(|_| cued) {
+        ux::underline_char(paint, top_left, &text, at, types::SMALL, ink);
+    }
+    paint.galley(top_left, text, ink);
+}
+
+/// Whether the letters show: while Alt alone is held, or the keys walk an open menu, as on Windows.
+/// Every way a menu closes leaves `row` as it was, so the menu being open is asked too.
+fn cued(shell: &Shell, ctx: &egui::Context) -> bool {
+    (shell.menu_bar.open.is_some() && shell.menu_bar.row.is_some()) || ctx.input(|i| i.modifiers.matches_exact(egui::Modifiers::ALT))
+}
+
+/// Every set of rows a menu of the bar can show at once, by its group's id: the Model menu once per
+/// notation, File with Settings… and Exit, as in the window.
+#[cfg(test)]
+pub(crate) fn every_menu() -> Vec<(&'static str, Vec<&'static str>)> {
+    let fixed = [("file", actions::FILE_MENU.concat()), ("edit", EDIT_MENU.concat()), ("view", crate::view_menu::VIEW_MENU.concat())];
+    let rest = [("versions", actions::VERSIONS_MENU.concat()), ("help", vec![ABOUT])];
+    fixed.into_iter().chain(crate::model_menu::every_menu().into_iter().map(|rows| ("model", rows))).chain(rest).collect()
+}
+
+/// The keys of every access letter: each title's and each row's, once.
+#[cfg(test)]
+pub(crate) fn access_keys() -> Vec<String> {
+    let rows = every_menu().into_iter().flat_map(|(_, rows)| rows).map(String::from);
+    let mut keys: Vec<String> = GROUPS.iter().map(|g| format!("menu.{}", g.id)).chain(rows).collect();
+    keys.sort();
+    keys.dedup();
+    keys
 }
 
 /// A row that shows and hides something, as View's panel rows do: a check box to a screen reader,
@@ -498,6 +580,48 @@ mod tests {
         assert_eq!(text(SETTINGS).as_deref(), Some("Ctrl+,"));
         assert_eq!(text(CLOSE).as_deref(), Some("Ctrl+W"));
         assert_eq!(text(NEW), None);
+    }
+
+    /// In every language each title and row has a letter A to Z, the titles each their own across the
+    /// bar and the rows each their own within every set a menu can show; a label with letters of its
+    /// own holds it, so only Japanese and Chinese show it in brackets.
+    #[test]
+    fn every_title_and_row_has_its_own_letter_in_every_language() {
+        let (mut s, ..) = shell();
+        s.in_window_menu = true;
+        let menus = every_menu();
+        assert!(GROUPS.iter().all(|g| menus.iter().any(|(id, _)| *id == g.id)), "every menu is checked");
+        for lang in crate::i18n::LANGUAGES {
+            crate::i18n::set_language(lang.code);
+            let titles = GROUPS.iter().map(|g| ((g.title)(), format!("menu.{}", g.id)));
+            let rows = menus.iter().map(|(_, rows)| rows.iter().map(|id| (actions::label(&s, id), id.to_string())).collect::<Vec<_>>());
+            for set in std::iter::once(titles.collect::<Vec<_>>()).chain(rows) {
+                let mut seen = Vec::new();
+                for (label, key) in set {
+                    let letter = letter(&key).unwrap_or_else(|| panic!("{}: {key} has no letter", lang.code));
+                    assert!(!seen.contains(&letter), "{}: {letter} of {key} twice among {seen:?}", lang.code);
+                    seen.push(letter);
+                    let own = label.chars().any(|c| c.is_ascii_alphabetic());
+                    assert_eq!(marked(&label, &key).0 == label, own, "{}: {key}'s {letter} in {label:?}", lang.code);
+                }
+            }
+        }
+    }
+
+    /// The letter is the first character that is it in either case, else it shows in brackets after
+    /// the label; a key with no letter marks nothing.
+    #[test]
+    fn the_letter_is_marked_in_the_label_or_after_it() {
+        crate::i18n::set_language("en");
+        assert_eq!(marked("Exit", "app.quit"), ("Exit".to_string(), Some(1)), "Exit's X");
+        assert_eq!(marked("Undo", "edit.undo"), ("Undo".to_string(), Some(0)));
+        assert_eq!(marked("Datei", "menu.file"), ("Datei(F)".to_string(), Some(6)), "a label without F");
+        assert_eq!(marked("File", "no.such"), ("File".to_string(), None));
+        assert_eq!(["F", "FI", "f", "É", "", "file.save"].map(one_letter), [Some('F'), None, None, None, None, None], "one letter A to Z");
+        crate::i18n::set_language("ja");
+        assert_eq!(marked(&tr("File"), "menu.file"), ("ファイル(F)".to_string(), Some(5)));
+        crate::i18n::set_language("de");
+        assert_eq!(marked(&tr("Exit"), "app.quit"), ("Beenden".to_string(), Some(0)), "German's own letter");
     }
 
     /// The parts around the bar cover every point of the window but the bar's own.

@@ -4123,6 +4123,97 @@ fn the_bar_in_the_window_says_its_systems_words() {
     });
 }
 
+/// The underlines of a letter drawn inside `rects`: level lines no wider than a letter.
+fn underlines(h: &Harness<'static, Shell>, rects: &[egui::Rect]) -> usize {
+    let inside = |left: f32, right: f32, y: f32| rects.iter().any(|r| r.contains(egui::pos2((left + right) / 2.0, y)));
+    level_lines(h).into_iter().filter(|(left, right, y, ..)| right - left < 12.0 && inside(*left, *right, *y)).count()
+}
+
+/// A letter that a label cut short no longer shows is not underlined: neither the ellipsis that
+/// stands for it nor anything else.
+#[test]
+fn a_letter_cut_from_its_label_is_not_underlined() {
+    let h = harness(ThemeKind::Light);
+    let mut out = h.ctx.run_ui(egui::RawInput::default(), |ui| {
+        let (paint, at) = (ui.painter(), egui::pos2(0.0, 0.0));
+        let text = crate::ux::galley(paint, "Generate every diagram", crate::ux::types::SMALL, egui::Color32::BLACK, Some(60.0));
+        let glyphs: Vec<char> = text.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.chr)).collect();
+        assert_eq!(glyphs.last(), Some(&'…'), "cut: {glyphs:?}");
+        for index in [glyphs.len() - 1, glyphs.len() + 3, 0] {
+            crate::ux::underline_char(paint, at, &text, index, crate::ux::types::SMALL, egui::Color32::BLACK);
+        }
+    });
+    out.textures_delta.clear();
+    let lines = out.shapes.iter().filter(|c| matches!(c.shape, egui::Shape::LineSegment { .. })).count();
+    assert_eq!(lines, 1, "only the first character's");
+}
+
+/// Each title and row carries its access letter on its accessibility node, and underlines it only
+/// while Alt alone is held or the keys walk a menu, as on Windows (AR-537).
+#[test]
+fn the_letters_are_underlined_while_alt_is_held_or_the_keys_walk_a_menu() {
+    use egui::Modifiers;
+    use egui_kittest::kittest::{NodeT, Queryable};
+    in_both_appearances(|theme| {
+        let mut h = menu_harness(theme, false);
+        let titles =
+            |h: &Harness<'static, Shell>| ["file", "edit", "view", "model", "versions", "help"].map(|g| rect_of(h, &format!("strip.menu.{g}")));
+        let held = |h: &mut Harness<'static, Shell>, modifiers: Modifiers| {
+            h.event(egui::Event::ModifiersChanged(modifiers));
+            h.run();
+            underlines(h, &titles(h))
+        };
+        assert_eq!(held(&mut h, Modifiers::NONE), 0, "{theme:?}: hidden until asked for");
+        assert_eq!(held(&mut h, Modifiers::ALT), 6, "{theme:?}: Alt shows every title's");
+        let alt_gr = Modifiers { alt: true, ctrl: true, command: true, ..Modifiers::NONE };
+        assert_eq!(held(&mut h, alt_gr), 0, "{theme:?}: Ctrl+Alt, as AltGr comes, is not Alt");
+        assert_eq!(held(&mut h, Modifiers::NONE), 0, "{theme:?}");
+        key(&mut h, egui::Key::F10, Modifiers::NONE);
+        let rows: Vec<egui::Rect> = menu_ids(&h).iter().filter(|i| i.starts_with("strip.menu.row.")).map(|i| rect_of(&h, i)).collect();
+        assert_eq!((underlines(&h, &titles(&h)), underlines(&h, &rows)), (6, rows.len()), "{theme:?}: the keys walk File");
+        let key_of = |name: &str| h.get_by_label(name).accesskit_node().data().access_key().map(str::to_string);
+        assert_eq!([key_of("File"), key_of("Help"), key_of("Exit")], [Some("F".into()), Some("H".into()), Some("X".into())], "{theme:?}");
+        for at in [rows[0].center(), rows[0].center() + egui::vec2(4.0, 0.0)] {
+            h.event(egui::Event::PointerMoved(at));
+        }
+        h.run();
+        assert_eq!(underlines(&h, &rows), 0, "{theme:?}: the pointer takes the menu, and the letters go");
+    });
+}
+
+/// The letters the keys showed go when the menu closes, by any way it closes: Esc, F10, Enter on a
+/// row, a press elsewhere or the window losing the focus.
+#[test]
+fn the_letters_go_when_the_keys_menu_closes() {
+    use egui::{Key, Modifiers};
+    in_both_appearances(|theme| {
+        let closes: [(&str, fn(&mut Harness<'static, Shell>)); 5] = [
+            ("Esc", |h| key(h, Key::Escape, Modifiers::NONE)),
+            ("F10", |h| key(h, Key::F10, Modifiers::NONE)),
+            ("Enter on Help's About", |h| {
+                key(h, Key::ArrowLeft, Modifiers::NONE);
+                key(h, Key::Enter, Modifiers::NONE);
+            }),
+            ("a press elsewhere", |h| click(h, egui::pos2(800.0, 500.0))),
+            ("the window losing the focus", |h| {
+                h.event(egui::Event::WindowFocused(false));
+                h.run();
+            }),
+        ];
+        for (how, close) in closes {
+            let mut h = menu_harness(theme, false);
+            let titles = ["file", "edit", "view", "model", "versions", "help"].map(|g| rect_of(&h, &format!("strip.menu.{g}")));
+            key(&mut h, Key::F10, Modifiers::NONE);
+            key(&mut h, Key::ArrowDown, Modifiers::NONE);
+            assert_eq!(underlines(&h, &titles), 6, "{theme:?}: the keys walk File");
+            close(&mut h);
+            h.run();
+            assert!(h.state().menu_bar.open.is_none(), "{theme:?}: {how} closed the menu");
+            assert_eq!(underlines(&h, &titles), 0, "{theme:?}: {how} took the letters away");
+        }
+    });
+}
+
 /// A live row runs on the next frame and closes the menu; a row that is off takes no click.
 #[test]
 fn a_row_runs_its_action_and_a_row_off_takes_no_click() {
