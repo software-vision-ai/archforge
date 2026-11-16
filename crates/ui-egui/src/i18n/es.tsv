@@ -1551,6 +1551,7 @@ str		This diagram shows no box to arrange.	Este diagrama no muestra ninguna caja
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Al organizar, una caja quedaría a más de {max} del origen. Acerca primero las cajas a él.
 str		A line bends at most {max} times.	Una línea se dobla como máximo {max} veces.
 str		{notation} elements cannot be removed yet.	Los elementos {notation} aún no se pueden eliminar.
+str		{name} cannot be removed yet.	{name} aún no se puede eliminar.
 str		{notation} elements cannot be described yet.	Los elementos {notation} aún no se pueden describir.
 str		{name} is not an element of any notation in this project.	{name} no es un elemento de ninguna notación de este proyecto.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Usa una palabra simple: letras minúsculas, dígitos, _, - y ., empezando por una letra.

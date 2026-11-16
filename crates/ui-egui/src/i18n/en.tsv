@@ -1550,6 +1550,7 @@ str		This diagram shows no box to arrange.	This diagram shows no box to arrange.
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.
 str		A line bends at most {max} times.	A line bends at most {max} times.
 str		{notation} elements cannot be removed yet.	{notation} elements cannot be removed yet.
+str		{name} cannot be removed yet.	{name} cannot be removed yet.
 str		{notation} elements cannot be described yet.	{notation} elements cannot be described yet.
 str		{name} is not an element of any notation in this project.	{name} is not an element of any notation in this project.
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	Use a plain word: lower case letters, digits, _, - and ., starting with a letter.

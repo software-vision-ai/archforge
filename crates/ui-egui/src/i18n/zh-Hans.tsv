@@ -1551,6 +1551,7 @@ str		This diagram shows no box to arrange.	此图中没有可排列的框。
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	排列后，某个框会离原点超过 {max}。请先将这些框移近原点。
 str		A line bends at most {max} times.	一条线最多弯折 {max} 次。
 str		{notation} elements cannot be removed yet.	{notation} 元素暂时还不能删除。
+str		{name} cannot be removed yet.	{name} 暂时还不能删除。
 str		{notation} elements cannot be described yet.	{notation} 元素暂时还不能添加描述。
 str		{name} is not an element of any notation in this project.	{name} 不是此项目中任何表示法的元素。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	请使用简单的词：以小写字母开头，只含小写字母、数字、_、- 和 .。

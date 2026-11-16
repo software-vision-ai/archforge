@@ -1551,6 +1551,7 @@ str		This diagram shows no box to arrange.	この図には整列するボック�
 str		Arranged, a box would land farther than {max} from the origin. Move the boxes nearer to it first.	整列すると、ボックスが原点から {max} より離れた位置に置かれます。先にボックスを原点に近づけてください。
 str		A line bends at most {max} times.	線が折れ曲がれるのは最大 {max} 回です。
 str		{notation} elements cannot be removed yet.	{notation} の要素はまだ削除できません。
+str		{name} cannot be removed yet.	{name} はまだ削除できません。
 str		{notation} elements cannot be described yet.	{notation} の要素はまだ説明を付けられません。
 str		{name} is not an element of any notation in this project.	{name} はこのプロジェクトのどの表記法の要素でもありません。
 str		Use a plain word: lower case letters, digits, _, - and ., starting with a letter.	英小文字で始まり、英小文字、数字、_、-、. だけからなる単純な語を使ってください。

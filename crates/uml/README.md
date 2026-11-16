@@ -164,6 +164,12 @@ and `figures::end_text`), `RELATIONSHIPS`, `is_relationship` and `is_association
 ends pair a derived end with a stored one, the generator gives neither an opposite: a derived end
 keeps no field to keep in step.
 
+**Refusals of a removal** (AR-530). `commands::remove_elements`, the selection's removal
+(`element.remove`), refuses an association's end, an element of a kind UML does not remove yet and
+a classifier template parameter that is no template's as `Reason::ElementNotRemovable`, naming the
+element by its name, or its id when it has none; the English, "{id} cannot be removed yet", is
+unchanged.
+
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
 

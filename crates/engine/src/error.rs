@@ -355,6 +355,10 @@ pub enum Reason {
     ArrangedTooFar,
     /// The elements of `notation`, such as `"ER"`, are not removed yet.
     NotRemovable { notation: &'static str },
+    /// The element `name`, or its id when it has none, is not removed yet, where its notation
+    /// removes others: a UML association's end, an element of a kind UML does not remove yet, or a
+    /// classifier template parameter that is no template's parameter.
+    ElementNotRemovable { name: String },
     /// The element is of a kind its notation removes where it is edited, not with the selection, as
     /// an ER domain, enum type, check or index.
     RemovedWhereEdited,

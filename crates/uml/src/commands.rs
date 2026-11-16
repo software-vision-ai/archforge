@@ -729,6 +729,17 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
     Ok(())
 }
 
+/// Why `o` is not removed yet, as "{id} cannot be removed yet", typed with its name, or its id
+/// when it has none ([`Reason::ElementNotRemovable`]): an association's end, an element of a kind
+/// UML does not remove yet, or a classifier template parameter that is no template's parameter.
+fn not_removable(store: &Store, o: Obj) -> CommandError {
+    match uuid_of(store, o) {
+        Ok(id) => refuse("ids", format!("{id} cannot be removed yet"))
+            .because(Reason::ElementNotRemovable { name: crate::applications::name_or_id(store, o) }),
+        Err(e) => e,
+    }
+}
+
 /// Removes UML elements (packages, classes, interfaces, enumerations, data types, attributes,
 /// operations, literals, primitive types, associations, generalizations, dependencies, interface
 /// realizations, association classes, constraints, generalization sets, template parameters,
@@ -746,7 +757,8 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
 /// (AR-129, [`crate::generalization_sets::emptied_by`]). A template binding goes with its
 /// substitutions, and with its bound element or its template; a classifier a binding that stays
 /// uses as an argument is refused, naming the binding (AR-131,
-/// [`crate::bindings::argument_removal_problem`]).
+/// [`crate::bindings::argument_removal_problem`]). An element UML does not remove yet is refused
+/// typed, as [`Reason::ElementNotRemovable`] (AR-530).
 pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, CommandError> {
     // Every id is checked before anything goes, so a refusal leaves the store as it was.
     let removable = [
@@ -798,7 +810,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
             return Err(refused);
         }
         if !removable.contains(&class) || end {
-            return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
+            return Err(not_removable(store, *o));
         }
         if Some(*o) == root_package(store) {
             return Err(refuse("ids", "the model's root package holds the whole model and stays"));
@@ -809,7 +821,7 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
         }
         // Only a classifier's template parameter is removed (AR-130).
         if class == crate::CLASSIFIER_TEMPLATE_PARAMETER && !crate::templates::is_parameter(store, *o) {
-            return Err(refuse("ids", format!("{} cannot be removed yet", uuid_of(store, *o)?)));
+            return Err(not_removable(store, *o));
         }
         if class == PACKAGE
             && let Some(parent) = package_of(store, *o)
