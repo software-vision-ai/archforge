@@ -1590,6 +1590,12 @@ str		Two checks are named {name}. Give each check its own name.	2 つのチェ�
 str		Give each check as text, or as an object with an expression and a name.	チェック制約はそれぞれテキスト、または式と名前を持つオブジェクトで指定してください。
 str		An item takes no {key}. It takes {takes}.	項目に {key} は指定できません。指定できるのは {takes} です。
 str		An item holds a key without a name. It takes {takes}.	項目に名前のないキーがあります。指定できるのは {takes} です。
+str		An index needs at least one column.	インデックスには少なくとも 1 つの列が必要です。
+str		An index holds at most {max} columns.	インデックスに含められる列は最大 {max} 個です。
+str		{name} is in the index twice. Give each column once.	{name} がインデックスに 2 回含まれています。各列は 1 回だけ指定してください。
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	インデックス列はそれぞれ列の ID、または属性か式を持つオブジェクトで指定してください。
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} は式と一緒に指定されています。インデックス列は列か式のどちらかで並べ替えます。
+str		An index column needs a column or an expression to sort by.	インデックス列には並べ替えに使う列か式が必要です。
 str		There is no element with the id {id}.	ID が {id} の要素はありません。
 str		A default value is at most {n} characters.	既定値は {n} 文字までです。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} は整数ではありません（Integer の既定値は 42 のような整数です）。

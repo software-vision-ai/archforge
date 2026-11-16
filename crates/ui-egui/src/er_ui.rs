@@ -307,7 +307,7 @@ impl NotationUi for ErUi {
                     if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
                         out.push(Problem {
                             element: o,
-                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &p)]),
+                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &p.said())]),
                         });
                     }
                 }

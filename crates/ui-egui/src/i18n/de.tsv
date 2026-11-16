@@ -1590,6 +1590,12 @@ str		Two checks are named {name}. Give each check its own name.	Zwei Prüfbeding
 str		Give each check as text, or as an object with an expression and a name.	Geben Sie jede Prüfbedingung als Text an oder als Objekt mit einem Ausdruck und einem Namen.
 str		An item takes no {key}. It takes {takes}.	Ein Eintrag kennt keinen Schlüssel {key}. Er kennt {takes}.
 str		An item holds a key without a name. It takes {takes}.	Ein Eintrag enthält einen Schlüssel ohne Namen. Er kennt {takes}.
+str		An index needs at least one column.	Ein Index braucht mindestens eine Spalte.
+str		An index holds at most {max} columns.	Ein Index umfasst höchstens {max} Spalten.
+str		{name} is in the index twice. Give each column once.	{name} steht zweimal im Index. Geben Sie jede Spalte nur einmal an.
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.
+str		An index column needs a column or an expression to sort by.	Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert.
 str		There is no element with the id {id}.	Es gibt kein Element mit der ID {id}.
 str		A default value is at most {n} characters.	Ein Standardwert hat höchstens {n} Zeichen.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} ist keine ganze Zahl, wie sie der Standardwert eines Integer ist, etwa 42.

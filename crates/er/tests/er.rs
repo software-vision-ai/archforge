@@ -2199,6 +2199,74 @@ fn a_loaded_checks_expression_problem_keeps_its_english() {
     }
 }
 
+/// An index's columns refused carry their reason typed beside the English, which stays as it was:
+/// too many, none, an item's key the list does not take, an item or an item's value of another
+/// shape, an id not given, malformed, of no element or of one removed, a column of another table,
+/// one twice, an expression that breaks a text rule, and an index column with both a column and an
+/// expression or with neither. The rules type too many columns, which the command finds first,
+/// themselves (AR-500).
+#[test]
+fn an_indexs_columns_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    use archforge_er::rules::{IndexColumnSpec, MAX_KEY_COLUMNS, index_columns_problem};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let gone = run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "gone", "type": "TEXT" }));
+    run(&mut s, "er.attribute.remove", json!({ "attribute": gone }));
+    let index = run(&mut s, "er.index.add", json!({ "entity": sm.order, "columns": [sm.total] }));
+    let add = |columns: Json| ("er.index.add", json!({ "entity": sm.order, "columns": columns }));
+    let none = "00000000-0000-7000-8000-000000000000";
+    let items = || Reason::ItemsExpected { kind: "index column" };
+    let takes = &["attribute", "expression", "direction", "nulls"];
+    let many = vec![sm.total.as_str(); MAX_KEY_COLUMNS + 1];
+    for ((cmd, p), reason, message) in [
+        (add(json!(many)), Reason::TooMany { kind: "index column", max: 32 }, "at most 32 columns".to_string()),
+        (add(json!([])), Reason::TooFew { kind: "index column", min: 1 }, "an index needs at least one column".into()),
+        (
+            ("er.index.set", json!({ "index": index, "columns": [] })),
+            Reason::TooFew { kind: "index column", min: 1 },
+            "an index needs at least one column".into(),
+        ),
+        (
+            add(json!([{ "atribute": sm.total }])),
+            Reason::UnknownKey { key: "atribute".into(), takes },
+            r#"a column takes no "atribute"; it takes attribute, expression, direction, nulls"#.into(),
+        ),
+        (add(json!([{ "attribute": 5 }])), items(), "attribute is 5, not an id".into()),
+        (add(json!([{ "expression": true }])), items(), "expression is true, not text".into()),
+        (add(json!([7])), items(), "7 is not a column".into()),
+        (add(json!([""])), Reason::IdEmpty { kind: "column" }, "\"\" is not an id".into()),
+        (add(json!(["nope"])), Reason::NoElement { id: "nope".into() }, "\"nope\" is not an id".into()),
+        (add(json!([none])), Reason::NoElement { id: none.into() }, format!("there is no element {none}")),
+        (add(json!([gone])), Reason::NoElement { id: gone.clone() }, format!("there is no element {gone}")),
+        (add(json!([sm.key])), Reason::NotColumnOf { column: "id".into(), table: "Order".into() }, "id is not an attribute of Order".into()),
+        (
+            ("er.index.set", json!({ "index": index, "columns": [sm.total, { "attribute": sm.total }] })),
+            Reason::NamedTwice { kind: "index column", name: "total".into() },
+            "total appears twice in the index".into(),
+        ),
+        (add(json!([{ "expression": " lower(x)" }])), Reason::EdgeSpace, "the expression starts or ends with a space".into()),
+        (
+            add(json!([{ "attribute": sm.total, "expression": "lower(x)" }])),
+            Reason::AttributeAndExpression { column: "total".into() },
+            "total has both an attribute and an expression".into(),
+        ),
+        (add(json!([{ "direction": "descending" }])), Reason::NoAttributeNorExpression, "a column needs an attribute or an expression".into()),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message, error.key.as_deref()), (Some(reason), message, Some("columns")), "{cmd} {p}");
+    }
+    let (st, order) = (s.doc(), obj(s.doc(), &sm.order));
+    let spec = IndexColumnSpec {
+        attribute: Some(obj(st, &sm.total)),
+        expression: String::new(),
+        direction: SortDirection::Ascending,
+        nulls: NullsOrder::Default,
+    };
+    let problem = index_columns_problem(st, order, &vec![spec; MAX_KEY_COLUMNS + 1]).map(|p| (p.reason(), p.said()));
+    assert_eq!(problem, Some((Reason::TooMany { kind: "index column", max: 32 }, "an index has at most 32 columns".into())));
+}
+
 #[test]
 fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_collapse() {
     let mut s = session();

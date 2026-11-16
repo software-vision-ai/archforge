@@ -1590,6 +1590,12 @@ str		Two checks are named {name}. Give each check its own name.	有两个检查�
 str		Give each check as text, or as an object with an expression and a name.	请将每个检查约束写成文本，或写成包含表达式和名称的对象。
 str		An item takes no {key}. It takes {takes}.	条目不接受 {key}。它接受 {takes}。
 str		An item holds a key without a name. It takes {takes}.	条目包含一个没有名称的键。它接受 {takes}。
+str		An index needs at least one column.	一个索引至少需要一列。
+str		An index holds at most {max} columns.	一个索引最多包含 {max} 列。
+str		{name} is in the index twice. Give each column once.	{name} 在索引中出现了两次。每列只需给出一次。
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	请将每个索引列写成列的 ID，或写成包含属性或表达式的对象。
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} 同时给出了表达式。索引列按一列或按一个表达式排序。
+str		An index column needs a column or an expression to sort by.	索引列需要一列或一个表达式作为排序依据。
 str		There is no element with the id {id}.	不存在 ID 为 {id} 的元素。
 str		A default value is at most {n} characters.	默认值最多 {n} 个字符。
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} 不是整数；Integer 的默认值是整数，例如 42。

@@ -6974,7 +6974,38 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
         ] {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
-        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "index column" }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(&Reason::ItemsExpected { kind: "gadget" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// An index's columns refused are said in the chosen language: none, too many, one twice, an item
+/// of another shape, and an index column with both a column and an expression or with neither. In
+/// light and dark (AR-500).
+#[test]
+fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        for (reason, said) in [
+            (Reason::TooFew { kind: "index column", min: 1 }, "Ein Index braucht mindestens eine Spalte."),
+            (Reason::TooMany { kind: "index column", max: 32 }, "Ein Index umfasst höchstens 32 Spalten."),
+            (Reason::NamedTwice { kind: "index column", name: "total".into() }, "total steht zweimal im Index. Geben Sie jede Spalte nur einmal an."),
+            (
+                Reason::ItemsExpected { kind: "index column" },
+                "Geben Sie jede Indexspalte als ID einer Spalte an oder als Objekt mit einem Attribut oder einem Ausdruck.",
+            ),
+            (
+                Reason::AttributeAndExpression { column: "total".into() },
+                "total ist zusammen mit einem Ausdruck angegeben. Eine Indexspalte sortiert nach einer Spalte oder nach einem Ausdruck.",
+            ),
+            (Reason::NoAttributeNorExpression, "Eine Indexspalte braucht eine Spalte oder einen Ausdruck, nach dem sie sortiert."),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
         h.run();
     }
     crate::i18n::set_language("en");

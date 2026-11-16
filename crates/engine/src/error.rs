@@ -402,6 +402,11 @@ pub enum Reason {
     Generation(GenerationRule),
     /// A key or identity column is asked to be nullable, which it never is.
     NotNullable,
+    /// An index column names the column `column` and an expression too, where it sorts by one of
+    /// them.
+    AttributeAndExpression { column: Box<str> },
+    /// An index column names neither a column nor an expression to sort by.
+    NoAttributeNorExpression,
     /// The size `value` of a column or a domain does not fit its type `ty` (empty when it has no
     /// type name of its own), by the rule it breaks.
     SizeMisfit { rule: SizeRule, ty: Box<str>, value: i64 },

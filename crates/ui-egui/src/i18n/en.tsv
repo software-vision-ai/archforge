@@ -1589,6 +1589,12 @@ str		Two checks are named {name}. Give each check its own name.	Two checks are n
 str		Give each check as text, or as an object with an expression and a name.	Give each check as text, or as an object with an expression and a name.
 str		An item takes no {key}. It takes {takes}.	An item takes no {key}. It takes {takes}.
 str		An item holds a key without a name. It takes {takes}.	An item holds a key without a name. It takes {takes}.
+str		An index needs at least one column.	An index needs at least one column.
+str		An index holds at most {max} columns.	An index holds at most {max} columns.
+str		{name} is in the index twice. Give each column once.	{name} is in the index twice. Give each column once.
+str		Give each index column as a column's id, or as an object with an attribute or an expression.	Give each index column as a column's id, or as an object with an attribute or an expression.
+str		{column} is given with an expression too. An index column sorts by a column or by an expression.	{column} is given with an expression too. An index column sorts by a column or by an expression.
+str		An index column needs a column or an expression to sort by.	An index column needs a column or an expression to sort by.
 str		There is no element with the id {id}.	There is no element with the id {id}.
 str		A default value is at most {n} characters.	A default value is at most {n} characters.
 str		{value} is not a whole number, which an Integer's default is, such as 42.	{value} is not a whole number, which an Integer's default is, such as 42.
