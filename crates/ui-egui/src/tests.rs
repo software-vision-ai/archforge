@@ -9157,17 +9157,26 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         click(&mut h, at);
         assert_eq!(active(&h), Some(root_diagram));
         assert_eq!((h.state().canvas.pan, h.state().canvas.zoom), left, "{theme:?}: the parent as it was left");
-        // ⌘↓ and ⌘↑ do the same from the keyboard.
-        rest(&mut h);
-        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package.to_string()] })).unwrap();
-        h.state_mut().canvas.focused = true;
-        h.run();
-        key(&mut h, egui::Key::ArrowDown, egui::Modifiers::COMMAND);
-        assert_eq!(active(&h), Some(inner), "{theme:?}: ⌘↓");
-        rest(&mut h);
-        h.state_mut().canvas.focused = true;
-        key(&mut h, egui::Key::ArrowUp, egui::Modifiers::COMMAND);
-        assert_eq!(active(&h), Some(root_diagram), "{theme:?}: ⌘↑");
+        // ⌘↓ and ⌘↑ do the same from the keyboard, in both key shapes; with Shift, Alt or a Mac's
+        // Control more they do nothing.
+        let (mac, shift, alt) = (egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND, egui::Modifiers::SHIFT, egui::Modifiers::ALT);
+        for (shape, extras) in [(mac, vec![shift, alt, egui::Modifiers::CTRL]), (egui::Modifiers::CTRL | egui::Modifiers::COMMAND, vec![shift, alt])]
+        {
+            rest(&mut h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [package.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+            for (arrow, here, there) in [(egui::Key::ArrowDown, root_diagram, inner), (egui::Key::ArrowUp, inner, root_diagram)] {
+                for &more in &extras {
+                    key(&mut h, arrow, shape | more);
+                    assert_eq!(active(&h), Some(here), "{theme:?}: {arrow:?} with {:?}", shape | more);
+                }
+                key(&mut h, arrow, shape);
+                assert_eq!(active(&h), Some(there), "{theme:?}: {arrow:?} with {shape:?}");
+                rest(&mut h);
+                h.state_mut().canvas.focused = true;
+            }
+        }
         // Zooming in until the package fills the view enters it; zooming out on it comes back.
         rest(&mut h);
         let node = {
@@ -10801,6 +10810,36 @@ fn the_key_editor_adds_a_unique_constraint_and_removes_the_primary_key() {
     let problems = crate::problems::of(crate::notation_ui::UIS, st, &crate::problems::by_element(crate::notation_ui::UIS, st), customer_obj);
     assert_eq!(problems.len(), 1);
     assert_eq!(problems[0].text, "Customer has no primary key");
+}
+
+/// A note's text typed in place commits on ⌘↩ (Ctrl Enter) alone, in both key shapes: with Shift,
+/// Alt or a Mac's Control more the press neither commits it nor writes in it.
+#[test]
+fn a_note_commits_on_its_own_chord_alone() {
+    in_both_appearances(|theme| {
+        let (mut h, _customer, diagram) = diagram_harness();
+        h.state_mut().state.theme = theme;
+        let s = h.state_mut().session.as_mut().unwrap();
+        let note = s.execute("diagram.note", &serde_json::json!({ "diagram": diagram, "text": "Why", "x": 100, "y": 320 })).unwrap().value;
+        let note = archforge_mof::Uuid::parse(note["id"].as_str().unwrap()).unwrap();
+        h.run();
+        let (mac, shift, alt) = (egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND, egui::Modifiers::SHIFT, egui::Modifiers::ALT);
+        for (shape, extras, typed) in
+            [(mac, vec![shift, alt, egui::Modifiers::CTRL], "Later"), (egui::Modifiers::CTRL | egui::Modifiers::COMMAND, vec![shift, alt], "Sooner")]
+        {
+            let at = rect_of(&h, &format!("workspace.canvas.node.{note}")).center();
+            (0..2).for_each(|_| click(&mut h, at));
+            h.state_mut().canvas.note_edit.as_mut().expect("its text is open").text = typed.into();
+            for more in extras {
+                key(&mut h, egui::Key::Enter, shape | more);
+                assert_eq!(h.state().canvas.note_edit.as_ref().map(|n| n.text.as_str()), Some(typed), "{theme:?}: {:?}", shape | more);
+            }
+            key(&mut h, egui::Key::Enter, shape);
+            assert!(h.state().canvas.note_edit.is_none(), "{theme:?}: {shape:?} commits");
+            let st = h.state().session.as_ref().unwrap().doc();
+            assert_eq!(st.get(st.by_uuid(note).unwrap(), archforge_diagram::node::TEXT).unwrap().as_str(), Some(typed), "{theme:?}");
+        }
+    });
 }
 
 #[test]
@@ -19402,11 +19441,24 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
         click(&mut h, at);
         assert_eq!(sets::members(h.state().session.as_ref().unwrap().doc(), set).len(), 2);
         assert!(!sets::members(h.state().session.as_ref().unwrap().doc(), set).contains(&wallet));
-        // ⌥⌘G: CardPayment's and WalletPayment's generalizations into a second set.
+        // ⌥⌘G: CardPayment's and WalletPayment's generalizations into a second set, in both key
+        // shapes; with Shift or a Mac's Control more, or without Alt, it makes none.
         select(&mut h, vec![gens[0].clone(), gens[2].clone()]);
         h.state_mut().canvas.focused = true;
-        key(&mut h, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT);
-        assert_eq!(all_sets(&h).len(), 2, "notice {:?}", h.state().canvas.notice);
+        let (mac, alt) = (egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND, egui::Modifiers::ALT);
+        for (n, shape) in [mac, egui::Modifiers::CTRL | egui::Modifiers::COMMAND].into_iter().enumerate() {
+            for other in [shape | alt | egui::Modifiers::SHIFT, shape, mac | alt | egui::Modifiers::CTRL] {
+                key(&mut h, egui::Key::G, other);
+                assert_eq!(all_sets(&h).len(), 1, "{theme:?}: {other:?}");
+            }
+            key(&mut h, egui::Key::G, shape | alt);
+            assert_eq!(all_sets(&h).len(), 2, "{theme:?} {shape:?}: notice {:?}", h.state().canvas.notice);
+            if n == 0 {
+                h.state_mut().session.as_mut().unwrap().undo().unwrap();
+                select(&mut h, vec![gens[0].clone(), gens[2].clone()]);
+                h.state_mut().canvas.focused = true;
+            }
+        }
         // B4: CardPayment's generalization lists both sets.
         select(&mut h, vec![gens[0].clone()]);
         assert!(painted(&h).iter().any(|t| t == "Generalization sets · 2"), "{:?}", painted(&h));
@@ -21022,8 +21074,18 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Add attribute"));
         assert!(painted(&h).iter().any(|t| t == "+ amount : Real"), "the card shows it");
         // ⇧⌘↩ opens an operation's draft, ⌘↩ an attribute's; the adorner and the menu's row an attribute's.
+        // With Alt or a Mac's Control more neither chord opens anything.
         h.state_mut().canvas.focused = true;
-        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT);
+        let (mac, win, shift) =
+            (egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND, egui::Modifiers::CTRL | egui::Modifiers::COMMAND, egui::Modifiers::SHIFT);
+        let (alt, ctrl) = (egui::Modifiers::ALT, egui::Modifiers::CTRL);
+        for other in [mac | alt, mac | ctrl, win | alt, mac | shift | alt, mac | shift | ctrl, win | shift | alt] {
+            key(&mut h, egui::Key::Enter, other);
+            assert!(h.state().canvas.inline.is_none(), "{theme:?}: {other:?}");
+        }
+        // Each chord in each shape, over the two appearances.
+        let (shape, other_shape) = if theme == ThemeKind::Light { (mac, win) } else { (win, mac) };
+        key(&mut h, egui::Key::Enter, shape | shift);
         assert_eq!(h.state().canvas.inline.as_ref().map(|i| (i.edit.kind, i.edit.class)), Some((MemberKind::Operation, money)));
         h.event(egui::Event::Text("add".into()));
         h.run();
@@ -21031,7 +21093,7 @@ fn the_classifier_tool_places_a_data_type_named_in_place_whose_card_takes_attrib
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert_eq!(member_rows(&h, money, true), ["+ add()"]);
         h.state_mut().canvas.focused = true;
-        key(&mut h, egui::Key::Enter, egui::Modifiers::COMMAND);
+        key(&mut h, egui::Key::Enter, other_shape);
         assert_eq!(h.state().canvas.inline.as_ref().map(|i| i.edit.kind), Some(MemberKind::Attribute));
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         let adorner = rect_of(&h, "workspace.canvas.adorn.add-attribute").center();

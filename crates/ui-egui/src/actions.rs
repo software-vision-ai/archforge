@@ -361,7 +361,7 @@ pub(crate) fn held_exactly(held: Modifiers, wanted: Modifiers) -> bool {
 /// or Alt is another chord's press and stays, so ⇧⌘S never saves with Save version… off. macOS's
 /// Control with the chord is nobody's: that press is taken too and counts for nothing, so a field
 /// drawn later never reads it as one of Control's text keys.
-fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
+pub(crate) fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
     let mut hit = false;
     input.events.retain(|e| match e {
         egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers) => {
@@ -378,8 +378,29 @@ fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
 /// ⌥⌘← is Older version's, and a chord whose action is off stays in the input: no reader behind it
 /// takes it for a plain arrow.
 pub(crate) fn plain_press(input: &egui::InputState, key: Key) -> bool {
-    let plain = |m: &Modifiers| !(m.command || m.ctrl || m.mac_cmd || m.alt);
     input.events.iter().any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && plain(modifiers)))
+}
+
+/// Whether `held` has no command key, Control or Alt in it: Shift alone, or nothing.
+fn plain(held: &Modifiers) -> bool {
+    !(held.command || held.ctrl || held.mac_cmd || held.alt)
+}
+
+/// Whether `key` was pressed in `input` plainly, as `plain_press` reads it, and takes those
+/// presses. A press with a command key, Control or Alt stays in the input for its own chord.
+pub(crate) fn take_plain(input: &mut egui::InputState, key: Key) -> bool {
+    let before = input.events.len();
+    input.events.retain(|e| !matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && plain(modifiers)));
+    input.events.len() != before
+}
+
+/// Whether `key` was pressed in `input` with exactly the modifiers `wanted` held (`held_exactly`):
+/// not with Shift or Alt more or less, and not with a Mac's Control. Takes nothing.
+pub(crate) fn chord_press(input: &egui::InputState, key: Key, wanted: Modifiers) -> bool {
+    input
+        .events
+        .iter()
+        .any(|e| matches!(e, egui::Event::Key { key: k, pressed: true, modifiers, .. } if *k == key && held_exactly(*modifiers, wanted)))
 }
 
 /// Whether `keys` were pressed in this frame, exactly; takes the press as `take` does.
@@ -852,6 +873,49 @@ pub(crate) mod tests {
         }
         let release = egui::Event::Key { key: Key::ArrowLeft, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE };
         assert!(!plain(&[release, down(Modifiers::NONE, Key::ArrowRight)]));
+    }
+
+    /// A plain press of the key is taken, with Shift too; one with a command key of either shape,
+    /// Control or Alt stays in the input, and so do other keys.
+    #[test]
+    fn taking_a_plain_press_leaves_the_chords() {
+        let taken = |events: &[egui::Event]| {
+            let mut input = egui::InputState::default();
+            input.events = events.to_vec();
+            (take_plain(&mut input, Key::Minus), input.events)
+        };
+        let other = down(Modifiers::NONE, Key::Plus);
+        for held in [Modifiers::NONE, Modifiers::SHIFT] {
+            assert_eq!(taken(&[down(held, Key::Minus), other.clone()]), (true, vec![other.clone()]), "{held:?}");
+        }
+        for held in [SHAPES[0].1, SHAPES[1].1, Modifiers::CTRL, Modifiers::ALT, Modifiers::ALT | Modifiers::SHIFT] {
+            let chord = down(held, Key::Minus);
+            assert_eq!(taken(std::slice::from_ref(&chord)), (false, vec![chord.clone()]), "{held:?}");
+        }
+    }
+
+    /// A chord's press counts in both shapes with exactly its modifiers; with Shift or Alt more or
+    /// less, with a Mac's Control, as another key or as a release it does not. Nothing is taken.
+    #[test]
+    fn a_chord_press_holds_exactly_its_modifiers() {
+        let pressed = |events: &[egui::Event], key, wanted| {
+            let mut input = egui::InputState::default();
+            input.events = events.to_vec();
+            (chord_press(&input, key, wanted), input.events.len() == events.len())
+        };
+        for (key, own) in
+            [(Key::Enter, Modifiers::COMMAND), (Key::Enter, Modifiers::COMMAND | Modifiers::SHIFT), (Key::G, Modifiers::COMMAND | Modifiers::ALT)]
+        {
+            for (system, shape) in SHAPES {
+                assert_eq!(pressed(&[down(own | shape, key)], key, own), (true, true), "{key:?} {own:?} on {system}");
+                for other in [Modifiers { shift: !own.shift, ..own }, Modifiers { alt: !own.alt, ..own }] {
+                    assert_eq!(pressed(&[down(other | shape, key)], key, own), (false, true), "{key:?} {own:?} on {system}: {other:?}");
+                }
+            }
+            assert_eq!(pressed(&[down(own | SHAPES[0].1 | Modifiers::CTRL, key)], key, own), (false, true), "{key:?} {own:?}: a Mac's Control");
+            let release = egui::Event::Key { key, physical_key: None, pressed: false, repeat: false, modifiers: own | SHAPES[0].1 };
+            assert_eq!(pressed(&[release, down(own | SHAPES[0].1, Key::Y)], key, own), (false, true), "{key:?} {own:?}");
+        }
     }
 
     /// A chord takes its own press only: another chord's press on the same key in the same frame

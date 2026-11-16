@@ -274,7 +274,7 @@ pub(crate) fn before_draw(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj) {
 }
 
 /// ⌘↓ opens the selected package, ⌘↑ the parent; +, = and − zoom about the canvas's centre. Only
-/// while the canvas has the keyboard and nothing is typed.
+/// while the canvas has the keyboard and nothing is typed. The keys are read by `pressed`.
 fn keys(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) {
     if !shell.canvas.focused
         || shell.canvas.rename.is_some()
@@ -284,16 +284,7 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) 
     {
         return;
     }
-    let (down, up, zoom_in, zoom_out) = ui.input_mut(|i| {
-        (
-            i.consume_key(egui::Modifiers::COMMAND, egui::Key::ArrowDown),
-            i.consume_key(egui::Modifiers::COMMAND, egui::Key::ArrowUp),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Plus)
-                || i.consume_key(egui::Modifiers::NONE, egui::Key::Equals)
-                || i.consume_key(egui::Modifiers::SHIFT, egui::Key::Equals),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Minus),
-        )
-    });
+    let (down, up, zoom_in, zoom_out) = ui.input_mut(pressed);
     if zoom_in || zoom_out {
         crate::canvas::zoom_by(&mut shell.canvas, if zoom_in { crate::canvas::ZOOM_STEP } else { 1.0 / crate::canvas::ZOOM_STEP }, r.size() / 2.0);
     }
@@ -303,6 +294,22 @@ fn keys(shell: &mut Shell, ui: &egui::Ui, r: Rect, d: Obj, here: Obj, now: f64) 
     } else if up && let Some(parent) = archforge_uml::commands::package_of(store, here).and_then(|p| store.uuid(p).ok()) {
         leave(shell, parent, None, now);
     }
+}
+
+/// ⌘↓, ⌘↑, zoom in and zoom out pressed in `i`, each press taken. ⌘↓ and ⌘↑ are exact, as the
+/// actions' chords are (`actions::take`): with Shift or Alt more they stay in the input, and with a
+/// Mac's Control they are taken and do nothing. The zoom keys are plain (`actions::take_plain`):
+/// with a command key, Control or Alt they stay, but Shift is free, since + is Shift and = on many
+/// layouts and some systems report that press as = with Shift.
+fn pressed(i: &mut egui::InputState) -> (bool, bool, bool, bool) {
+    use crate::actions::{Keys, take, take_plain};
+    let chord = |key| Keys { modifiers: egui::Modifiers::COMMAND, key };
+    (
+        take(i, &chord(egui::Key::ArrowDown)),
+        take(i, &chord(egui::Key::ArrowUp)),
+        take_plain(i, egui::Key::Plus) | take_plain(i, egui::Key::Equals),
+        take_plain(i, egui::Key::Minus),
+    )
 }
 
 /// The package selected alone on diagram `d`.
@@ -576,4 +583,52 @@ pub(crate) fn move_package(shell: &mut Shell, package: Obj, to: Obj) -> Result<(
         .execute("uml.package.move", &json!({ "package": package_id.to_string(), "to": to_id.to_string() }))
         .map(|_| ())
         .map_err(|e| crate::panels::refusal(&e))
+}
+
+#[cfg(test)]
+mod tests {
+    use egui::{Event, Key, Modifiers};
+
+    /// What `pressed` reads from an input holding only `event`, and whether it took the press.
+    fn read(event: &Event) -> ((bool, bool, bool, bool), bool) {
+        let mut input = egui::InputState::default();
+        input.events = vec![event.clone()];
+        (super::pressed(&mut input), input.events.is_empty())
+    }
+
+    /// A press of `key` with `modifiers`.
+    fn down(modifiers: Modifiers, key: Key) -> Event {
+        Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }
+    }
+
+    /// ⌘↓ and ⌘↑ count in both shapes and are taken; with Shift or Alt more they count for nothing
+    /// and stay, with a Mac's Control they count for nothing and are taken. The zoom keys count
+    /// plain or with Shift and are taken; with a command key, Control or Alt they stay.
+    #[test]
+    fn the_keys_are_exact_and_take_only_their_own_press() {
+        let none = (false, false, false, false);
+        let mac = Modifiers::MAC_CMD.plus(Modifiers::COMMAND);
+        for shape in [mac, Modifiers::CTRL.plus(Modifiers::COMMAND)] {
+            assert_eq!(read(&down(shape, Key::ArrowDown)), ((true, false, false, false), true), "{shape:?}");
+            assert_eq!(read(&down(shape, Key::ArrowUp)), ((false, true, false, false), true), "{shape:?}");
+            assert_eq!(read(&down(shape, Key::Minus)), (none, false), "{shape:?}: a chord of −");
+            for key in [Key::ArrowDown, Key::ArrowUp, Key::Equals, Key::Minus] {
+                for more in [Modifiers::SHIFT, Modifiers::ALT] {
+                    assert_eq!(read(&down(shape | more, key)), (none, false), "{shape:?} {more:?} {key:?}");
+                }
+            }
+        }
+        for key in [Key::ArrowDown, Key::ArrowUp] {
+            assert_eq!(read(&down(mac | Modifiers::CTRL, key)), (none, true), "a Mac's Control with {key:?}");
+        }
+        for held in [Modifiers::NONE, Modifiers::SHIFT] {
+            for (key, read_as) in
+                [(Key::Plus, (false, false, true, false)), (Key::Equals, (false, false, true, false)), (Key::Minus, (false, false, false, true))]
+            {
+                assert_eq!(read(&down(held, key)), (read_as, true), "{held:?} {key:?}");
+                assert_eq!(read(&down(held | Modifiers::ALT, key)), (none, false), "{held:?} with Alt {key:?}");
+            }
+        }
+        assert_eq!(read(&down(Modifiers::CTRL, Key::Minus)), (none, false), "Control alone");
+    }
 }
