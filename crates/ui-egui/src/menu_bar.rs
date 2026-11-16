@@ -2,6 +2,7 @@
 //! of rows from the table of actions. macOS keeps its native menu, so `Shell::in_window_menu` is false
 //! there and nothing here draws. A row chosen waits for the next frame's start, as a native item does.
 //! F10 reaches the bar from the keys: the arrows walk groups and rows, off or not, wrapping, Enter or Space runs a row that can act.
+//! Alt with a title's letter opens its menu, and with a menu open a row's letter, alone or with Alt, runs the row if it can act.
 //! To a screen reader the bar is a menu bar, the open menu its title's menu, and the row under the keys has its focus.
 //! A press away from the bar and its open menu only closes the menu, and so does the window losing the focus.
 //! Each title and row has an access letter, its catalogue row in the `access` context keyed by the title's
@@ -197,17 +198,27 @@ pub(crate) fn say_row(shell: &Shell, ctx: &egui::Context) {
     ctx.accesskit_node_builder(holder, |node| node.set_active_descendant(row.accesskit_id()));
 }
 
-/// The keys of the bar, before anything behind it can read them: F10 opens the first menu when the
-/// bar can open at all, and with a menu open F10 or Esc closes it, handing the focus back, the
-/// arrows move, and Enter or Space runs the row if it can act.
+/// The keys of the bar, before anything behind it can read them: F10 opens the first menu and Alt
+/// with a title's letter that title's, when the bar can open at all, and with a menu open F10 or Esc
+/// closes it, handing the focus back, the arrows move, and Enter or Space, or a row's letter, runs
+/// the row if it can act.
 pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Enter, Escape, F10, Space};
     let Some(at) = GROUPS.iter().position(|g| shell.menu_bar.open == Some(g.id)) else {
         shell.menu_bar.back = ctx.memory(egui::Memory::focused);
         shell.menu_bar.selected = shell.menu_bar.back.and_then(|id| TextEditState::load(ctx, id)?.cursor.char_range());
-        if shell.in_window_menu && actions::free(shell) && press(ctx, F10, false) {
-            shell.menu_bar.open = Some(GROUPS[0].id);
-            shell.menu_bar.row = first(shell, &GROUPS[0]);
+        if !(shell.in_window_menu && actions::free(shell)) {
+            return;
+        }
+        // An Alt letter no title has opens nothing and types nothing, as on Windows.
+        let opens = if press(ctx, F10, false) {
+            GROUPS.first()
+        } else {
+            ctx.input_mut(|i| take_letter(i, false)).and_then(|c| GROUPS.iter().find(|g| letter(&format!("menu.{}", g.id)) == Some(c)))
+        };
+        if let Some(group) = opens {
+            shell.menu_bar.open = Some(group.id);
+            shell.menu_bar.row = first(shell, group);
         }
         return;
     };
@@ -235,15 +246,44 @@ pub(crate) fn keys(shell: &mut Shell, ctx: &egui::Context) {
     } else if (press(ctx, Enter, false) || press(ctx, Space, false))
         && let Some(id) = from.filter(|id| actions::available(shell, id))
     {
-        shell.menu_bar.chosen = Some(id);
-        shell.menu_bar.open = None;
-        // Another menu's row finds a field committed, a name typed in place too, as after a click.
-        if !id.starts_with("edit.")
-            && let Some(back) = shell.menu_bar.back
-        {
-            ctx.memory_mut(|m| m.surrender_focus(back));
-        }
+        choose(shell, ctx, id);
+    } else if let Some(c) = ctx.input_mut(|i| take_letter(i, true))
+        && let Some(id) = (GROUPS[at].sections)(shell).concat().into_iter().find(|id| letter(id) == Some(c))
+        && actions::available(shell, id)
+    {
+        // A letter no row has, or a row's that is off, does nothing.
+        choose(shell, ctx, id);
     }
+}
+
+/// Chooses the row `id` from the keys: the menu closes at once and the row runs on the next frame.
+fn choose(shell: &mut Shell, ctx: &egui::Context, id: &'static str) {
+    shell.menu_bar.chosen = Some(id);
+    shell.menu_bar.open = None;
+    // Another menu's row finds a field committed, a name typed in place too, as after a click.
+    if !id.starts_with("edit.")
+        && let Some(back) = shell.menu_bar.back
+    {
+        ctx.memory_mut(|m| m.surrender_focus(back));
+    }
+}
+
+/// Takes the first press of a letter key A to Z in `input` with Alt alone held, or with nothing held
+/// either when `bare`, and the text it typed, which follows it, so no field drawn later types it;
+/// its letter, unless it is a held key's repeat, which counts for nothing. Ctrl+Alt, as AltGr comes
+/// on Windows, Shift, and the command key make another key's press, which stays in the input.
+fn take_letter(input: &mut egui::InputState, bare: bool) -> Option<char> {
+    let ours =
+        |held: &egui::Modifiers| actions::held_exactly(*held, egui::Modifiers::ALT) || (bare && actions::held_exactly(*held, egui::Modifiers::NONE));
+    let at = input
+        .events
+        .iter()
+        .position(|e| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if one_letter(key.name()).is_some() && ours(modifiers)))?;
+    let egui::Event::Key { key, repeat, .. } = input.events.remove(at) else { return None };
+    if matches!(input.events.get(at), Some(egui::Event::Text(_))) {
+        input.events.remove(at);
+    }
+    one_letter(key.name()).filter(|_| !repeat)
 }
 
 /// The keys of `keys` written for Windows and Linux, such as "Ctrl+Shift+G" or "Ctrl+Alt+←", in the
@@ -622,6 +662,36 @@ mod tests {
         assert_eq!(marked(&tr("File"), "menu.file"), ("ファイル(F)".to_string(), Some(5)));
         crate::i18n::set_language("de");
         assert_eq!(marked(&tr("Exit"), "app.quit"), ("Beenden".to_string(), Some(0)), "German's own letter");
+    }
+
+    /// A letter's press with Alt alone, or with nothing held when bare, is taken with the text that
+    /// follows it, and a repeat is taken too but counts for nothing (AR-538). With Shift, AltGr
+    /// (Ctrl+Alt), the command key of either shape, or nothing when not bare, it stays with its text,
+    /// and so do a digit, a release and a text that does not follow it.
+    #[test]
+    fn a_letters_press_is_taken_with_its_text_only_with_alt_or_bare() {
+        use egui::{Event, Key, Modifiers as M};
+        let down = |key, modifiers, repeat| Event::Key { key, physical_key: None, pressed: true, repeat, modifiers };
+        let text = |t: &str| Event::Text(t.to_string());
+        let taken = |events: &[Event], bare| {
+            let mut input = egui::InputState::default();
+            input.events = events.to_vec();
+            (take_letter(&mut input, bare), input.events)
+        };
+        let enter = down(Key::Enter, M::NONE, false);
+        assert_eq!(taken(&[down(Key::F, M::ALT, false), text("f"), enter.clone()], false), (Some('F'), vec![enter.clone()]));
+        assert_eq!(taken(&[down(Key::E, M::NONE, false), text("e")], true), (Some('E'), vec![]), "bare");
+        assert_eq!(taken(&[down(Key::E, M::ALT, true), text("e")], true), (None, vec![]), "a repeat");
+        let apart = [down(Key::F, M::ALT, false), enter.clone(), text("f")];
+        assert_eq!(taken(&apart, false), (Some('F'), apart[1..].to_vec()), "only the text right after it");
+        for held in [M::SHIFT, M::SHIFT | M::ALT, M::CTRL | M::COMMAND | M::ALT, M::CTRL | M::COMMAND, M::MAC_CMD | M::COMMAND | M::ALT] {
+            let stays = [down(Key::E, held, false), text("€")];
+            assert_eq!(taken(&stays, true), (None, stays.to_vec()), "{held:?}");
+        }
+        let release = Event::Key { key: Key::F, physical_key: None, pressed: false, repeat: false, modifiers: M::ALT };
+        for stays in [vec![down(Key::F, M::NONE, false), text("f")], vec![down(Key::Num1, M::ALT, false), text("1")], vec![release]] {
+            assert_eq!(taken(&stays, false), (None, stays.clone()));
+        }
     }
 
     /// The parts around the bar cover every point of the window but the bar's own.

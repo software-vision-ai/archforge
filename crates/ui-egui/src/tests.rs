@@ -4352,6 +4352,72 @@ fn only_bare_f10_opens_the_bar() {
     }
 }
 
+/// Alt with a title's letter opens its menu on a row, as F10 opens File, and types nothing in the
+/// field that has the keyboard; a letter no title has opens nothing and types nothing either. A
+/// letter alone, with AltGr (Ctrl+Alt) or with Shift and Alt is the field's text, and so is Alt on
+/// macOS, where the system has the menu (AR-538).
+#[test]
+fn alt_and_a_titles_letter_opens_its_menu() {
+    use egui::{Key, Modifiers as M};
+    // Key and text in one frame, as a real press arrives.
+    let typed = |h: &mut Harness<'static, Shell>, key, modifiers, text: &str| {
+        let event = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
+        h.input_mut().events.extend([event(true), egui::Event::Text(text.to_string()), event(false)]);
+        h.run();
+    };
+    let query = |h: &Harness<'static, Shell>| h.state().home_search.query.clone();
+    in_both_appearances(|theme| {
+        let mut h = menu_harness(theme, false);
+        menu_tap(&mut h, Key::K, M::COMMAND);
+        typed(&mut h, Key::Q, M::NONE, "q");
+        assert_eq!((menu_at(&h), query(&h)), ((None, None), "q".to_string()), "{theme:?}: a letter alone is text");
+        typed(&mut h, Key::V, M::ALT, "v");
+        assert_eq!((h.state().menu_bar.open, query(&h)), (Some("view"), "q".to_string()), "{theme:?}: Alt+V opens View");
+        assert!(h.state().menu_bar.row.is_some(), "{theme:?}: on a row, as from F10");
+        menu_press(&mut h, Key::Escape);
+        typed(&mut h, Key::Q, M::ALT, "q");
+        assert_eq!((h.state().menu_bar.open, query(&h)), (None, "q".to_string()), "{theme:?}: no title has Q");
+        for (held, text) in [(M::CTRL | M::COMMAND | M::ALT, "€"), (M::SHIFT | M::ALT, "E")] {
+            typed(&mut h, Key::E, held, text);
+            assert_eq!(h.state().menu_bar.open, None, "{theme:?}: {held:?}");
+        }
+        h.state_mut().in_window_menu = false;
+        typed(&mut h, Key::F, M::ALT, "ƒ");
+        assert_eq!((h.state().menu_bar.open, query(&h)), (None, "q€Eƒ".to_string()), "{theme:?}: each typed its text");
+    });
+}
+
+/// With a menu open a row's letter runs the row, alone or with Alt, in a menu the keys or the
+/// pointer opened, closing it as Enter does. A letter no row has, a row's that is off, one with
+/// Shift or Ctrl, another title's with Alt, and a letter held down since before the menu opened do
+/// nothing (AR-538).
+#[test]
+fn a_rows_letter_runs_it_alone_or_with_alt() {
+    use crate::actions::SETTINGS;
+    use egui::{Key, Modifiers as M};
+    in_both_appearances(|theme| {
+        let mut h = menu_harness(theme, false);
+        menu_press(&mut h, Key::F10);
+        // New and Generate are off without a project host and a project.
+        let nothing = [(Key::Z, M::NONE), (Key::N, M::NONE), (Key::G, M::ALT), (Key::E, M::SHIFT), (Key::E, M::CTRL | M::COMMAND), (Key::H, M::ALT)];
+        for (key, held) in nothing {
+            menu_tap(&mut h, key, held);
+            assert_eq!((menu_at(&h), h.state().menu_bar.chosen), ((Some("file"), Some(SETTINGS)), None), "{theme:?}: {key:?} with {held:?}");
+        }
+        menu_press(&mut h, Key::E);
+        assert!(h.state().menu_bar.open.is_none() && h.state().settings.is_some(), "{theme:?}: E runs Settings…");
+        let mut h = menu_harness(theme, false);
+        click_menu(&mut h, "strip.menu.help");
+        menu_tap(&mut h, Key::A, M::ALT);
+        assert!(h.state().menu_bar.open.is_none() && h.state().about.is_some(), "{theme:?}: Alt+A runs About under the pointer");
+        let mut h = menu_harness(theme, false);
+        menu_hold(&mut h, Key::E, M::NONE);
+        menu_press(&mut h, Key::F10);
+        menu_hold(&mut h, Key::E, M::NONE);
+        assert_eq!((menu_at(&h).0, h.state().settings.is_some()), (Some("file"), false), "{theme:?}: E held from before");
+    });
+}
+
 /// Up and Down go through every row, off or not, and wrap at both ends; the row under the keys is marked.
 #[test]
 fn up_and_down_walk_every_row_and_wrap() {
@@ -19627,7 +19693,9 @@ fn generalization_sets_are_made_from_the_menu_the_shortcut_and_properties() {
         assert_eq!(sets::members(h.state().session.as_ref().unwrap().doc(), set).len(), 2);
         assert!(!sets::members(h.state().session.as_ref().unwrap().doc(), set).contains(&wallet));
         // ⌥⌘G: CardPayment's and WalletPayment's generalizations into a second set, in both key
-        // shapes; with Shift or a Mac's Control more, or without Alt, it makes none.
+        // shapes; with Shift or a Mac's Control more, or without Alt, it makes none. The window's own
+        // bar and its Alt letters, as on Windows and Linux, leave it be (AR-538).
+        h.state_mut().in_window_menu = true;
         select(&mut h, vec![gens[0].clone(), gens[2].clone()]);
         h.state_mut().canvas.focused = true;
         let (mac, alt) = (egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND, egui::Modifiers::ALT);
@@ -23184,6 +23252,8 @@ fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
     use egui::Modifiers as M;
     in_both_appearances(|theme| {
         let (mut h, _) = paid_by(theme, egui::vec2(1600.0, 1000.0));
+        // With the window's own bar and its Alt letters, as on Windows and Linux (AR-538).
+        h.state_mut().in_window_menu = true;
         let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
         let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
         click(&mut h, at);

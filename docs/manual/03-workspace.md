@@ -62,7 +62,10 @@ cannot act. Each menu name and each row has a letter of its own within its menu,
 own across the bar: it is underlined while you hold Alt alone, and while the arrows go through an open
 menu, and goes when the menu closes. The letter is recorded for screen readers too, but on Windows
 and Linux it is not passed on to them yet, so a screen reader does not announce it. Where a name has no such letter, as in Japanese and Chinese, the letter
-shows in brackets after it, such as ファイル(F). The letters are not keys yet. A name, a
+shows in brackets after it, such as ファイル(F). Alt with a menu's letter opens that menu, and while a
+menu is open a row's letter, with Alt or without, runs the row if it can act; a letter no menu or row
+has, or a greyed-out row's, does nothing. A letter typed without Alt in a text field, with no menu
+open, stays text, as does AltGr with a letter. A name, a
 note's text or a class's member you are typing in place stays open for the **Edit** menu's rows to
 act on; it is finished before another menu's row runs, and by a click elsewhere, as it would be with
 no menu.
