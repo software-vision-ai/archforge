@@ -6,7 +6,11 @@
 //! The key a foreign key points at (AR-501): one of another table, one without columns, one it
 //! points at already, and identifying relationships that would run in a cycle. A foreign key's
 //! columns (AR-502): none, too many, not as many as its key's, one twice and types that differ,
-//! also for a foreign key a step would break. Found inside a step
+//! also for a foreign key a step would break.
+//! Subtypes (AR-506): a table made its own subtype, one of another schema, one with a supertype
+//! already, a circle, a chain too deep, and a part of a subtype's key changed on its own;
+//! identifying keys in a cycle and a discriminator of another table take the key rules' rows.
+//! Found inside a step
 //! (AR-493): a key that would break, with why in the same words, and keys built on each other too
 //! deep. A column's generation (AR-494): the rule it breaks, also for a column on
 //! a domain that would break, and a key or identity column asked to be nullable. A column's own
@@ -63,6 +67,9 @@ const LITERAL: &str = "enum literal";
 /// A foreign key's columns, as its rules name them.
 const FOREIGN_KEY_COLUMN: &str = "foreign key column";
 
+/// A subtype, as the refusals of a table's supertype name the relationship and the kind.
+const SUBTYPE: &str = "subtype";
+
 /// An ER command's refusal in the user's words; none for a reason or a kind this doesn't say.
 pub(crate) fn said(reason: &Reason) -> Option<String> {
     let what = |kind: &str| KINDS.contains(&kind).then(|| crate::panels::a_kind(kind)).flatten();
@@ -85,6 +92,12 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::IdentifyingCycle { child, parent } => {
             fmt(&tr("Identifying relationships would run in a cycle between {child} and {parent}."), &[("child", child), ("parent", parent)])
         }
+        Reason::Itself { relationship: SUBTYPE, .. } => tr("A table cannot be a subtype of itself."),
+        Reason::SchemasDiffer { relationship: SUBTYPE } => tr("The two tables are in different schemas. A subtype is in its supertype's schema."),
+        Reason::HasSupertype { table } => fmt(&tr("{table} has a supertype already. A table has one supertype."), &[("table", table)]),
+        Reason::Cycle { relationship: SUBTYPE } => tr("The supertype is a subtype of this table already, which would close a circle."),
+        Reason::TooDeep { kind: SUBTYPE, max } => fmt(&tr("Subtypes would run deeper than {max} levels here."), &[("max", &max.to_string())]),
+        Reason::InSubtypeKey => tr("This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead."),
         Reason::Again { relationship: "foreign key" } => tr("The foreign key points at this key already. Name the columns to change them."),
         Reason::TooFew { kind: FOREIGN_KEY_COLUMN, min: 1 } => tr("A foreign key needs at least one column."),
         Reason::TooMany { kind: FOREIGN_KEY_COLUMN, max } => fmt(&tr("A foreign key holds at most {max} columns."), &[("max", &max.to_string())]),

@@ -614,6 +614,12 @@ str		{table} has no primary key.	{table} has no primary key.
 str		The key is not one of {table}'s keys.	The key is not one of {table}'s keys.
 str		The key of {table} has no columns to refer to.	The key of {table} has no columns to refer to.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifying relationships would run in a cycle between {child} and {parent}.
+str		A table cannot be a subtype of itself.	A table cannot be a subtype of itself.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	The two tables are in different schemas. A subtype is in its supertype's schema.
+str		{table} has a supertype already. A table has one supertype.	{table} has a supertype already. A table has one supertype.
+str		The supertype is a subtype of this table already, which would close a circle.	The supertype is a subtype of this table already, which would close a circle.
+str		Subtypes would run deeper than {max} levels here.	Subtypes would run deeper than {max} levels here.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.
 str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
 str		A foreign key needs at least one column.	A foreign key needs at least one column.
 str		A foreign key holds at most {max} columns.	A foreign key holds at most {max} columns.

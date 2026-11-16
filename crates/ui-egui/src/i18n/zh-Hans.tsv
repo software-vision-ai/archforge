@@ -615,6 +615,12 @@ str		{table} has no primary key.	{table} 没有主键。
 str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
 str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
+str		A table cannot be a subtype of itself.	表不能是其自身的子类型。
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	两个表位于不同的架构中。子类型须位于其超类型的架构中。
+str		{table} has a supertype already. A table has one supertype.	{table} 已有超类型。一个表只有一个超类型。
+str		The supertype is a subtype of this table already, which would close a circle.	超类型已是此表的子类型，这将形成循环。
+str		Subtypes would run deeper than {max} levels here.	此处子类型将超过 {max} 层。
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	这是子类型键的一部分。请改为删除该子类型，或更改超类型的子类型映射。
 str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
 str		A foreign key needs at least one column.	外键至少需要一列。
 str		A foreign key holds at most {max} columns.	外键最多包含 {max} 列。

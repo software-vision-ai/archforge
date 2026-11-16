@@ -2865,6 +2865,148 @@ fn subtype_keys_hold_through_chains_later_keys_removals_and_circles() {
     all_rules_hold(s.doc());
 }
 
+/// A subtype refused carries its reason typed beside the English, which stays as it was: a table
+/// its own subtype, tables of two schemas, a subtype with a supertype already, a circle, identifying
+/// keys that would run in a cycle, a chain too deep, a discriminator of another table, and a part
+/// of a subtype's key changed on its own (AR-506).
+#[test]
+fn a_subtype_refused_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let table = |s: &mut Session, name: &str| run(s, "er.entity.add", json!({ "schema": sm.schema, "name": name }));
+    let keyed = |s: &mut Session, name: &str| {
+        let e = table(s, name);
+        run(s, "er.attribute.add", json!({ "entity": e, "name": format!("{name}_id"), "type": "INT", "primary_key": true }));
+        e
+    };
+    let (party, person, asset) = (keyed(&mut s, "Party"), table(&mut s, "Person"), table(&mut s, "Asset"));
+    run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": person }));
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    let (a, b) = (keyed(&mut s, "A"), keyed(&mut s, "B"));
+    run(&mut s, "er.relationship.add", json!({ "from": b, "to": a, "create_foreign_key": true, "identifying": true }));
+    let other = run(&mut s, "er.schema.add", json!({ "name": "other" }));
+    let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Elsewhere" }));
+    let mut chain = vec![table(&mut s, "L0")];
+    for i in 1..=31 {
+        let next = table(&mut s, &format!("L{i}"));
+        run(&mut s, "er.generalization.add", json!({ "supertype": chain[i - 1], "subtype": next }));
+        chain.push(next);
+    }
+    let add = |sup: &str, sub: &str| json!({ "supertype": sup, "subtype": sub });
+    let piece = "it is part of a subtype's key; remove the generalization or change the mapping instead";
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.generalization.add",
+            add(&party, &party),
+            "subtype",
+            Reason::Itself { relationship: "subtype", kind: "table" },
+            "a table cannot be a subtype of itself",
+        ),
+        (
+            "er.generalization.add",
+            add(&party, &elsewhere),
+            "subtype",
+            Reason::SchemasDiffer { relationship: "subtype" },
+            "the two tables are in different schemas",
+        ),
+        ("er.generalization.add", add(&asset, &person), "subtype", Reason::HasSupertype { table: "Person".into() }, "Person has a supertype already"),
+        (
+            "er.generalization.add",
+            add(&person, &party),
+            "supertype",
+            Reason::Cycle { relationship: "subtype" },
+            "Person is a subtype of Party already, so this would close a circle",
+        ),
+        (
+            "er.generalization.add",
+            add(&a, &b),
+            "subtype",
+            Reason::IdentifyingCycle { child: "B".into(), parent: "A".into() },
+            "the identifying relationships would form a cycle between B and A",
+        ),
+        (
+            "er.generalization.add",
+            add(&chain[31], &asset),
+            "subtype",
+            Reason::TooDeep { kind: "subtype", max: 32 },
+            "the subtypes would run deeper than 32 levels",
+        ),
+        (
+            "er.entity.set-subtyping",
+            json!({ "entity": party, "discriminator": sm.key }),
+            "discriminator",
+            Reason::NotColumnOf { column: "id".into(), table: "Party".into() },
+            "id is not a column of Party",
+        ),
+        ("er.attribute.remove", json!({ "attribute": follower }), "attribute", Reason::InSubtypeKey, piece),
+        ("er.primary-key.remove", json!({ "entity": person }), "entity", Reason::InSubtypeKey, piece),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p}: nothing changes");
+    }
+}
+
+/// A loaded document's subtypes that a command could never make, refused from inside the step with
+/// their reason typed and the document as it was: two tables subtypes of each other, whose keys a
+/// mapping change would make, and a chain deeper than the budget, which a key at its top would
+/// reach (AR-506).
+#[test]
+fn a_loaded_circle_or_too_deep_chain_of_subtypes_is_refused_typed() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let mut table = |name: &str| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        e
+    };
+    let (up, down) = (table("Up"), table("Down"));
+    let chain: Vec<Obj> = (0..40).map(|i| table(&format!("T{i}"))).collect();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, named_element::NAME, Value::str("up_id")).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    st.push(up, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let pk = st.create(PRIMARY_KEY).unwrap();
+    st.set(up, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+    st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+    st.set(up, entity::SUBTYPE_MAPPING, Value::Enum(SubtypeMapping::SingleTable.index())).unwrap();
+    let pairs = [(up, down), (down, up)].into_iter().chain(chain.windows(2).map(|w| (w[0], w[1])));
+    for (sup, sub) in pairs.collect::<Vec<_>>() {
+        let g = st.create(GENERALIZATION).unwrap();
+        st.set(g, generalization::SUPERTYPE, Value::Ref(sup)).unwrap();
+        st.set(g, generalization::SUBTYPE, Value::Ref(sub)).unwrap();
+        st.push(s, schema::GENERALIZATION, Value::Ref(g)).unwrap();
+    }
+    let (up, top) = (st.uuid(up).unwrap().to_string(), st.uuid(chain[0]).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let deep = archforge_engine::Reason::TooDeep { kind: "subtype", max: 32 };
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.entity.set-subtyping",
+            json!({ "entity": up, "mapping": "table-per-type" }),
+            "mapping",
+            archforge_engine::Reason::Cycle { relationship: "subtype" },
+            "Down and Up are subtypes of each other",
+        ),
+        (
+            "er.attribute.add",
+            json!({ "entity": top, "name": "id", "type": "INT", "primary_key": true }),
+            "primary_key",
+            deep,
+            "the subtypes run deeper than 32 levels",
+        ),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd}");
+        assert_eq!(picture(s.doc()), before, "{cmd}: nothing of the attempt stays");
+    }
+}
+
 #[test]
 fn removing_the_top_of_a_very_deep_loaded_chain_is_refused_not_a_crash() {
     // Two hundred keyed subtype levels built straight into a store, past the commands' limit, as a

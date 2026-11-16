@@ -249,22 +249,25 @@ pub fn subtyping_flags(store: &Store, e: Obj) -> (bool, bool) {
     (flag(store, e, entity::SUBTYPES_COMPLETE), store.get(e, entity::SUBTYPES_DISJOINT).ok().and_then(|v| v.as_bool()).unwrap_or(true))
 }
 
-/// Why `subtype` cannot become a subtype of `supertype`; None when it can.
-pub fn generalization_problem(store: &Store, supertype: Obj, subtype: Obj, except: Option<Obj>) -> Option<(&'static str, String)> {
+/// Why `subtype` cannot become a subtype of `supertype`, with the parameter it is about and its
+/// reason typed: itself ([`Reason::Itself`]), tables of two schemas ([`Reason::SchemasDiffer`]), a
+/// subtype with a supertype already ([`Reason::HasSupertype`], named by its [`label`]) or a circle
+/// ([`Reason::Cycle`]), each of `"subtype"`; None when it can.
+pub fn generalization_problem(store: &Store, supertype: Obj, subtype: Obj, except: Option<Obj>) -> Option<(&'static str, Problem)> {
+    const SUBTYPE: &str = "subtype";
     if supertype == subtype {
-        return Some(("subtype", "a table cannot be a subtype of itself".into()));
+        return Some(("subtype", Problem::new(Reason::Itself { relationship: SUBTYPE, kind: "table" }, "a table cannot be a subtype of itself")));
     }
     if schema_of(store, supertype).is_none() || schema_of(store, supertype) != schema_of(store, subtype) {
-        return Some(("subtype", "the two tables are in different schemas".into()));
+        return Some(("subtype", Problem::new(Reason::SchemasDiffer { relationship: SUBTYPE }, "the two tables are in different schemas")));
     }
     if supertype_links(store, subtype).into_iter().any(|g| Some(g) != except) {
-        return Some(("subtype", format!("{} has a supertype already", label(store, subtype))));
+        let table = label(store, subtype);
+        return Some(("subtype", Problem::new(Reason::HasSupertype { table: table.as_str().into() }, format!("{table} has a supertype already"))));
     }
     if is_supertype_or_self(store, subtype, supertype) {
-        return Some((
-            "supertype",
-            format!("{} is a subtype of {} already, so this would close a circle", label(store, supertype), label(store, subtype)),
-        ));
+        let said = format!("{} is a subtype of {} already, so this would close a circle", label(store, supertype), label(store, subtype));
+        return Some(("supertype", Problem::new(Reason::Cycle { relationship: SUBTYPE }, said)));
     }
     None
 }

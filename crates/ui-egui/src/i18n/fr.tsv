@@ -615,6 +615,12 @@ str		{table} has no primary key.	{table} n’a pas de clé primaire.
 str		The key is not one of {table}'s keys.	La clé n’est pas une des clés de {table}.
 str		The key of {table} has no columns to refer to.	La clé de {table} n’a aucune colonne à laquelle faire référence.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Les relations identifiantes formeraient un cycle entre {child} et {parent}.
+str		A table cannot be a subtype of itself.	Une table ne peut pas être un sous-type d’elle-même.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	Les deux tables sont dans des schémas différents. Un sous-type est dans le schéma de son supertype.
+str		{table} has a supertype already. A table has one supertype.	{table} a déjà un supertype. Une table a un seul supertype.
+str		The supertype is a subtype of this table already, which would close a circle.	Le supertype est déjà un sous-type de cette table, ce qui fermerait un cercle.
+str		Subtypes would run deeper than {max} levels here.	Les sous-types dépasseraient ici {max} niveaux.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	Ceci fait partie de la clé d’un sous-type. Supprimez plutôt le sous-type ou modifiez le mappage des sous-types du supertype.
 str		The foreign key points at this key already. Name the columns to change them.	La clé étrangère pointe déjà vers cette clé. Indiquez les colonnes pour les modifier.
 str		A foreign key needs at least one column.	Une clé étrangère doit comprendre au moins une colonne.
 str		A foreign key holds at most {max} columns.	Une clé étrangère comprend au plus {max} colonnes.

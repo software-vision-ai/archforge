@@ -125,6 +125,18 @@ zero-or-one key relationship with follower columns named like its key columns
 mapping change and cannot be removed on its own; a key that appears later reaches the subtypes then.
 A table has one supertype and generalizations never close a circle (`rules::generalization_problem`).
 
+**Refusals of a subtype** (AR-506). `er.generalization.add` refuses, as
+`rules::generalization_problem` types it, a table made its own subtype as `Itself` of `"subtype"`,
+tables of two schemas as `SchemasDiffer`, a subtype with a supertype already as `HasSupertype`,
+and a circle as `Cycle` of `"subtype"`; a chain deeper than its budget as `TooDeep` of `"subtype"`;
+and identifying keys that would run in a cycle, found inside the step that makes a subtype's key,
+as `IdentifyingCycle`. A
+discriminator of another table (`er.entity.set-subtyping`) is `NotColumnOf`, and a part of a
+subtype's key removed on its own (`er.attribute.remove`, `er.primary-key.remove`) is
+`InSubtypeKey`. Inside the step, a chain too deep and two tables subtypes of each other, which only
+a loaded document holds, are `TooDeep` and `Cycle` of `"subtype"`; a test loads such documents.
+Tables are named by their id when they have no name; the English stays as it was.
+
 Several schemas, sequences and views (slice S7): one model is one database with several schemas.
 A foreign key and a relationship may join tables of two schemas; the relationship belongs to its
 child's schema, as its foreign key does, and a many-to-many one resolves into a mapping table of
