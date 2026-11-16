@@ -7034,8 +7034,8 @@ fn an_er_checks_refused_are_said_in_the_chosen_language() {
 }
 
 /// An index's columns refused are said in the chosen language: none, too many, one twice, an item
-/// of another shape, and an index column with both a column and an expression or with neither. In
-/// light and dark (AR-500).
+/// of another shape, and an index column with both a column and an expression or with neither, also
+/// as a problem of a loaded index without columns. In light and dark (AR-500).
 #[test]
 fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
     use archforge_engine::Reason;
@@ -7059,6 +7059,21 @@ fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
         ] {
             assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
         }
+        // A loaded index without columns, which no command makes, is a problem in the same words.
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let e = st.create(archforge_er::ENTITY).unwrap();
+        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("Bestellung")).unwrap();
+        let ix = st.create(archforge_er::TABLE_INDEX).unwrap();
+        st.set(ix, archforge_er::table_index::NAME, archforge_mof::Value::str("ix_leer")).unwrap();
+        st.push(e, archforge_er::entity::TABLE_INDEX, archforge_mof::Value::Ref(ix)).unwrap();
+        let texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        let index: Vec<&String> = texts.iter().filter(|t| t.starts_with("ix_leer")).collect();
+        assert_eq!(index, ["ix_leer: Ein Index braucht mindestens eine Spalte."], "{texts:?} {theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

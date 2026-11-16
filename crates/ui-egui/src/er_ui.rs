@@ -306,9 +306,12 @@ impl NotationUi for ErUi {
                 }
                 for ix in r::indexes_of(store, o) {
                     if let Some(p) = r::index_columns_problem(store, o, &r::index_specs(store, ix)) {
+                        // The columns' problem is typed, so it is said in the user's words, the English
+                        // only for a reason the interface doesn't say.
+                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
-                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &p.said())]),
+                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, ix)), ("problem", &said)]),
                         });
                     }
                 }
