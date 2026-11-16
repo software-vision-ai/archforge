@@ -819,6 +819,31 @@ fn a_row_chosen_from_the_keys_finds_the_name_typed_in_place_committed() {
     }
 }
 
+/// The letters keep the name typed in place, in Models and on the canvas, as F10 and Enter do:
+/// Alt+E opens Edit with the name still open, A selects all of it and C copies it, and File ▸ Close
+/// by Alt+F and C finds it committed and asks about it (AR-538).
+#[test]
+fn the_letters_reach_the_name_typed_in_place_and_another_menus_row_finds_it_committed() {
+    for (theme, on_canvas) in BOTH {
+        let mut h = renaming_a_saved_project(theme, on_canvas);
+        let name = |h: &Harness<'static, Shell>| {
+            h.state().canvas.rename.as_ref().map(|r| r.text.clone()).or(h.state().explorer.rename.as_ref().map(|r| r.text.clone()))
+        };
+        let press = |key| Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
+        key(&mut h, Key::E, Modifiers::ALT);
+        assert_eq!((h.state().menu_bar.open, name(&h)), (Some("edit"), Some("Item".into())), "{theme:?} {on_canvas}");
+        key(&mut h, Key::A, Modifiers::NONE);
+        key(&mut h, Key::E, Modifiers::ALT);
+        h.event(press(Key::C));
+        let copied = (0..4).any(|_| (h.step(), copied(&h, "Item")).1);
+        assert!(copied && name(&h).as_deref() == Some("Item"), "{theme:?} {on_canvas}: C copied all of the name, still open");
+        h.event(Event::Key { key: Key::C, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE });
+        key(&mut h, Key::F, Modifiers::ALT);
+        h.event(press(Key::C));
+        close_asks(h, theme);
+    }
+}
+
 /// The native bar's Close project, chosen with a name typed in place in Models or on the canvas:
 /// the field still has the keyboard, so it lets go and commits the name first, and Close asks about
 /// it and keeps the project open (AR-519). The row runs as the native bar runs it, before the

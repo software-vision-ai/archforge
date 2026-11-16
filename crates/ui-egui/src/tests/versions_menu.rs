@@ -104,6 +104,8 @@ fn a_version_chord_is_never_a_plain_arrow() {
     in_both_appearances(|theme| {
         for shape in SHAPES {
             let (mut h, host, _, card) = card_on_a_diagram(theme);
+            // With the window's own bar and its Alt letters, as on Windows and Linux (AR-538).
+            h.state_mut().in_window_menu = true;
             let place = |h: &Harness<'static, Shell>| rect_of(h, &card).min;
             let at = rect_of(&h, &card).center();
             click(&mut h, at);
