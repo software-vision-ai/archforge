@@ -609,7 +609,15 @@ str		The key is not one of {table}'s keys.	Der Schlüssel ist keiner der Schlüs
 str		The key of {table} has no columns to refer to.	Der Schlüssel von {table} hat keine Spalten, auf die verwiesen werden kann.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifizierende Beziehungen würden einen Zyklus zwischen {child} und {parent} bilden.
 str		The foreign key points at this key already. Name the columns to change them.	Der Fremdschlüssel verweist bereits auf diesen Schlüssel. Nennen Sie die Spalten, um sie zu ändern.
+str		A foreign key needs at least one column.	Ein Fremdschlüssel braucht mindestens eine Spalte.
+str		A foreign key holds at most {max} columns.	Ein Fremdschlüssel umfasst höchstens {max} Spalten.
+str		{name} appears twice in the foreign key.	{name} kommt im Fremdschlüssel zweimal vor.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	Der Fremdschlüssel braucht so viele Spalten wie der Schlüssel von {table}, also {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} hat den Typ {type}, aber {target} hat den Typ {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} hat keinen Typ, aber {target} hat den Typ {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} hat den Typ {type}, aber {target} hat keinen Typ.
 str		The key {name} would break: {why}	Der Schlüssel {name} wäre danach ungültig: {why}
+str		The foreign key {name} would break: {why}	Der Fremdschlüssel {name} wäre danach ungültig: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Aufeinander aufbauende Schlüssel reichen hier tiefer als {max} Ebenen oder bilden eine Schleife.
 str		This element is removed where it is edited.	Dieses Element wird dort entfernt, wo es bearbeitet wird.
 str		This is part of a subtype's key, which goes only with its subtype.	Dies ist Teil des Schlüssels eines Untertyps und wird nur mit diesem Untertyp entfernt.

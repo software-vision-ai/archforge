@@ -609,7 +609,15 @@ str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
 str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
 str		The foreign key points at this key already. Name the columns to change them.	外键已指向此键。要更改，请指定列。
+str		A foreign key needs at least one column.	外键至少需要一列。
+str		A foreign key holds at most {max} columns.	外键最多包含 {max} 列。
+str		{name} appears twice in the foreign key.	{name} 在外键中出现了两次。
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	外键需要与 {table} 的键相同数量的列，即 {n} 列。
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} 的类型是 {type}，但 {target} 的类型是 {target_type}。
+str		{column} has no type, but {target} is of type {target_type}.	{column} 没有类型，但 {target} 的类型是 {target_type}。
+str		{column} is of type {type}, but {target} has no type.	{column} 的类型是 {type}，但 {target} 没有类型。
 str		The key {name} would break: {why}	键 {name} 将失效：{why}
+str		The foreign key {name} would break: {why}	外键 {name} 将失效：{why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
 str		This element is removed where it is edited.	此元素需在编辑它的地方删除。
 str		This is part of a subtype's key, which goes only with its subtype.	这是子类型键的一部分，只能随其子类型一起删除。
