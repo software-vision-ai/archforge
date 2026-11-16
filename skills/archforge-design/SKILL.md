@@ -95,8 +95,11 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   `every_title_and_row_has_its_own_letter_in_every_language`. It is the first character of the label
   that is the letter in either case, or else shown in brackets after the label (Japanese, Chinese:
   `ファイル(F)`, as Windows does there). Underlined in the text's ink with the static member's line,
-  only while Alt alone is held or the keys walk a menu (`row` set), as Windows hides them until then;
-  always the node's access key to a screen reader. The keys that use them are AR-538.
+  only while Alt alone is held or the keys walk an open menu (`open` and `row` set: every way a menu
+  closes leaves `row`), as Windows hides them until then. Always the node's AccessKit `access_key`, which
+  the AccessKit adapters for Windows and Linux (accesskit_windows 0.35, accesskit_atspi_common 0.21) do
+  not report to UI Automation or AT-SPI yet, so no screen reader announces it there. The keys that use
+  them are AR-538.
 - The View menu (`crates/ui-egui/src/view_menu.rs`, AR-403) is Find… (⌘K, the bar's search, off while a
   field has the keyboard, so a skill's text keeps ⌘K for a link, and while the bar has no room for the
   field, which then closes an open list), Zoom in, Zoom out and Whole diagram (the

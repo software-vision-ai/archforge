@@ -6,7 +6,8 @@
 //! A press away from the bar and its open menu only closes the menu, and so does the window losing the focus.
 //! Each title and row has an access letter, its catalogue row in the `access` context keyed by the title's
 //! `menu.<group>` or the row's action id: underlined while Alt alone is held or the keys walk a menu, as
-//! Windows shows them, and the access key of its node to a screen reader.
+//! Windows shows them, and the AccessKit access key of its node, which the Windows and Linux adapters do
+//! not report to a screen reader yet.
 
 use std::sync::Arc;
 
@@ -473,8 +474,9 @@ fn paint_lettered(paint: &egui::Painter, top_left: egui::Pos2, (text, at): (Arc<
 }
 
 /// Whether the letters show: while Alt alone is held, or the keys walk an open menu, as on Windows.
+/// Every way a menu closes leaves `row` as it was, so the menu being open is asked too.
 fn cued(shell: &Shell, ctx: &egui::Context) -> bool {
-    shell.menu_bar.row.is_some() || ctx.input(|i| i.modifiers.matches_exact(egui::Modifiers::ALT))
+    (shell.menu_bar.open.is_some() && shell.menu_bar.row.is_some()) || ctx.input(|i| i.modifiers.matches_exact(egui::Modifiers::ALT))
 }
 
 /// Every set of rows a menu of the bar can show at once, by its group's id: the Model menu once per

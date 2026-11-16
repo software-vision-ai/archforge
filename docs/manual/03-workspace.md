@@ -59,8 +59,9 @@ beside the menu, and Enter and Space do nothing on it. Enter or Space runs a row
 Esc puts the keyboard focus back where it was. A screen reader is given the strip's menus as a menu
 bar and the open one as a menu, follows the arrows from row to row, and is told why a greyed-out row
 cannot act. Each menu name and each row has a letter of its own within its menu, the names each their
-own across the bar: it is underlined while you hold Alt alone, and while the arrows go through a menu,
-and a screen reader is told it. Where a name has no such letter, as in Japanese and Chinese, the letter
+own across the bar: it is underlined while you hold Alt alone, and while the arrows go through an open
+menu, and goes when the menu closes. The letter is recorded for screen readers too, but on Windows
+and Linux it is not passed on to them yet, so a screen reader does not announce it. Where a name has no such letter, as in Japanese and Chinese, the letter
 shows in brackets after it, such as ファイル(F). The letters are not keys yet. A name, a
 note's text or a class's member you are typing in place stays open for the **Edit** menu's rows to
 act on; it is finished before another menu's row runs, and by a click elsewhere, as it would be with

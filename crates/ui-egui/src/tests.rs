@@ -4135,8 +4135,8 @@ fn a_letter_cut_from_its_label_is_not_underlined() {
     assert_eq!(lines, 1, "only the first character's");
 }
 
-/// Each title and row tells a screen reader its access letter, and underlines it only while Alt
-/// alone is held or the keys walk a menu, as on Windows (AR-537).
+/// Each title and row carries its access letter on its accessibility node, and underlines it only
+/// while Alt alone is held or the keys walk a menu, as on Windows (AR-537).
 #[test]
 fn the_letters_are_underlined_while_alt_is_held_or_the_keys_walk_a_menu() {
     use egui::Modifiers;
@@ -4165,6 +4165,39 @@ fn the_letters_are_underlined_while_alt_is_held_or_the_keys_walk_a_menu() {
         }
         h.run();
         assert_eq!(underlines(&h, &rows), 0, "{theme:?}: the pointer takes the menu, and the letters go");
+    });
+}
+
+/// The letters the keys showed go when the menu closes, by any way it closes: Esc, F10, Enter on a
+/// row, a press elsewhere or the window losing the focus.
+#[test]
+fn the_letters_go_when_the_keys_menu_closes() {
+    use egui::{Key, Modifiers};
+    in_both_appearances(|theme| {
+        let closes: [(&str, fn(&mut Harness<'static, Shell>)); 5] = [
+            ("Esc", |h| key(h, Key::Escape, Modifiers::NONE)),
+            ("F10", |h| key(h, Key::F10, Modifiers::NONE)),
+            ("Enter on Help's About", |h| {
+                key(h, Key::ArrowLeft, Modifiers::NONE);
+                key(h, Key::Enter, Modifiers::NONE);
+            }),
+            ("a press elsewhere", |h| click(h, egui::pos2(800.0, 500.0))),
+            ("the window losing the focus", |h| {
+                h.event(egui::Event::WindowFocused(false));
+                h.run();
+            }),
+        ];
+        for (how, close) in closes {
+            let mut h = menu_harness(theme, false);
+            let titles = ["file", "edit", "view", "model", "versions", "help"].map(|g| rect_of(&h, &format!("strip.menu.{g}")));
+            key(&mut h, Key::F10, Modifiers::NONE);
+            key(&mut h, Key::ArrowDown, Modifiers::NONE);
+            assert_eq!(underlines(&h, &titles), 6, "{theme:?}: the keys walk File");
+            close(&mut h);
+            h.run();
+            assert!(h.state().menu_bar.open.is_none(), "{theme:?}: {how} closed the menu");
+            assert_eq!(underlines(&h, &titles), 0, "{theme:?}: {how} took the letters away");
+        }
     });
 }
 
