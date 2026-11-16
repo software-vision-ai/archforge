@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::{Key, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::chat_words::date_and_time;
 use crate::close_ask::{Ask, Due, due};
@@ -127,7 +127,8 @@ pub(crate) fn failed(shell: &mut Shell, retry: bool) {
 }
 
 /// Draws the question over the window and acts on its answer. Enter does nothing here: a Restore
-/// is chosen with the pointer or by moving to its button.
+/// is chosen with the pointer or by moving to its button. Escape pressed alone closes it; with a
+/// modifier it does nothing.
 pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, confirm: Confirm) {
     let p = *ux::palette(ui.visuals().dark_mode);
     let window = ui.ctx().content_rect();
@@ -137,7 +138,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, confirm: Confirm) {
         ui.painter().rect_filled(window, 0.0, p.scrim);
         ui.interact(window, widgets::egui_id("restore-ask.veil"), Sense::click_and_drag());
         (restore, close) = card(shell, ui, &p, window, &confirm);
-        close |= ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+        close |= ui.input_mut(|i| crate::actions::take_alone(i, Key::Escape));
     });
     if restore {
         shell.ask = None;

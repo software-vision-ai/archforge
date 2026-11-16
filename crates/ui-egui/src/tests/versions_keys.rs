@@ -64,9 +64,9 @@ fn press_to(h: &mut Harness<'static, Shell>, key_: Key, to: &str, bounds: (f32, 
 }
 
 /// In each list, Page Down and Page Up move the keyboard by what shows, End and Home to the last
-/// row and the first, each brought whole into view; not with the control key, as Windows and Linux
-/// send it, nor in the frame of the click that opens the menu bar, nor while a row's menu is open,
-/// and not from the filter field, which keeps its keys.
+/// row and the first, each brought whole into view; these keys and the arrows act alone, not with
+/// a modifier, nor in the frame of the click that opens the menu bar, nor while a row's menu is
+/// open, and not from the filter field, which keeps its keys.
 #[test]
 fn the_page_keys_move_the_keyboard_through_each_list() {
     let row = |n: usize| format!("workspace.versions.row.v{n}");
@@ -85,8 +85,12 @@ fn the_page_keys_move_the_keyboard_through_each_list() {
         press_to(&mut h, Key::PageUp, &row(first_whole - last_whole), bounds);
         press_to(&mut h, Key::Home, &row(0), bounds);
         assert_eq!(rect_of(&h, &row(0)).top(), bounds.0, "{theme:?}: the list is back at its top");
-        key(&mut h, Key::PageDown, Modifiers::CTRL.plus(Modifiers::COMMAND));
-        assert!(holds(&h, &row(0)), "{theme:?}: not with the control key");
+        for (key_, more) in [Key::ArrowDown, Key::PageDown].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))) {
+            key(&mut h, key_, more);
+            assert!(holds(&h, &row(0)), "{theme:?}: not {key_:?} with {more:?}");
+        }
+        press_to(&mut h, Key::ArrowDown, &row(1), bounds);
+        press_to(&mut h, Key::ArrowUp, &row(0), bounds);
         // Nor in the frame of the click that opens the in-window menu bar (AR-518).
         h.state_mut().in_window_menu = true;
         h.run();

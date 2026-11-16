@@ -643,6 +643,20 @@ fn a_refused_branch_says_why_and_the_dialog_stays() {
     });
 }
 
+/// Escape alone closes New branch, its field holding the keyboard; with a modifier it does nothing.
+#[test]
+fn new_branch_closes_on_escape_alone() {
+    in_both_appearances(|theme| {
+        let (mut h, _host) = naming(theme, "Fresh idea");
+        for more in NOT_ALONE {
+            key(&mut h, egui::Key::Escape, more);
+            assert!(matches!(h.state().ask, Some(Ask::Branch { .. })), "{theme:?}: Escape with {more:?}");
+        }
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert!(h.state().ask.is_none(), "{theme:?}: Escape alone");
+    });
+}
+
 /// With the keyboard off the field nothing behind the dialog takes a key; a branch made after the
 /// dialog went with its session switches to nothing; a held project offers no new branch.
 #[test]

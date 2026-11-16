@@ -374,6 +374,14 @@ pub(crate) fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
     hit
 }
 
+/// Whether `key` was pressed alone in `input`, with no modifier held, and takes those presses:
+/// `take` with no modifiers. A press with Shift, Alt, Control or the command key stays in the input
+/// for its own reader, a field's selection keys among them, as egui's own focus keys act only on a
+/// press alone. `consume_key(Modifiers::NONE, …)` lets Shift and Alt through.
+pub(crate) fn take_alone(input: &mut egui::InputState, key: Key) -> bool {
+    take(input, &Keys { modifiers: Modifiers::NONE, key })
+}
+
 /// Whether `key` was pressed in `input` with no command key, Control or Alt held, with Shift or
 /// without: the press an arrow's own reader acts on. With one of them held it is a chord's, as
 /// ⌥⌘← is Older version's, and a chord whose action is off stays in the input: no reader behind it
@@ -855,6 +863,25 @@ pub(crate) mod tests {
             let control = down(own | SHAPES[0].1 | Modifiers::CTRL, keys.key);
             assert_eq!(taken(keys, std::slice::from_ref(&control)), (false, vec![]), "{id}: a Mac's Control with the chord");
             assert_eq!(taken(keys, &[down(own | SHAPES[0].1, keys.key), control]), (true, vec![]), "{id}: and after the chord itself");
+        }
+    }
+
+    /// A key pressed alone counts and is taken; with Shift, Alt, Control or a command key of either
+    /// shape it counts for nothing and stays, and so do another key's press and the key's release.
+    #[test]
+    fn a_key_alone_is_taken_and_with_a_modifier_it_stays() {
+        let alone = |events: &[egui::Event]| {
+            let mut input = egui::InputState::default();
+            input.events = events.to_vec();
+            (take_alone(&mut input, Key::Escape), input.events)
+        };
+        let other = down(Modifiers::NONE, Key::Enter);
+        assert_eq!(alone(&[down(Modifiers::NONE, Key::Escape), other.clone()]), (true, vec![other.clone()]));
+        let release = egui::Event::Key { key: Key::Escape, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE };
+        assert_eq!(alone(std::slice::from_ref(&release)), (false, vec![release.clone()]));
+        for held in [Modifiers::SHIFT, Modifiers::ALT, Modifiers::SHIFT | Modifiers::ALT, Modifiers::CTRL, SHAPES[0].1, SHAPES[1].1] {
+            let press = down(held, Key::Escape);
+            assert_eq!(alone(std::slice::from_ref(&press)), (false, vec![press.clone()]), "{held:?}");
         }
     }
 

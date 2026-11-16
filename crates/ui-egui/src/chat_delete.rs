@@ -631,7 +631,7 @@ pub(crate) enum MenuPick {
 
 /// The row's menu, when open: Open, a line, Delete conversation (disabled saying why when it may not
 /// be). The arrow keys walk its live items, Enter picks, Escape closes it and gives the row its
-/// focus back; a press elsewhere closes it.
+/// focus back, each pressed alone, not with a modifier; a press elsewhere closes it.
 pub(crate) fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) -> Option<(Uuid, MenuPick)> {
     let menu = shell.chat_panel.row_menu.clone()?;
     let entry = rows(&shell.chat_panel).iter().find(|l| l.id == menu.chat).map(|l| l.entry.clone());
@@ -649,10 +649,10 @@ pub(crate) fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) -> Option<
     let live: Vec<usize> = if refused.is_none() { vec![0, 1] } else { vec![0] };
     let (down, up, enter, escape) = ui.input_mut(|i| {
         (
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+            crate::actions::take_alone(i, egui::Key::ArrowDown),
+            crate::actions::take_alone(i, egui::Key::ArrowUp),
+            crate::actions::take_alone(i, egui::Key::Enter),
+            crate::actions::take_alone(i, egui::Key::Escape),
         )
     });
     if escape {
@@ -733,7 +733,7 @@ pub(crate) fn row_menu(shell: &mut Shell, ui: &egui::Ui, p: &Palette) -> Option<
 
 /// The confirmation, when open, over the whole window on a modal layer of its own: the title, the
 /// conversation named, what deleting it does, then Cancel and Delete. The focus starts on Cancel,
-/// Tab reaches Delete, Enter or Space presses the focused button, Escape cancels.
+/// Tab reaches Delete, Enter or Space presses the focused button, Escape pressed alone cancels.
 pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
     let Some(ask) = shell.chat_panel.ask.clone() else { return };
     let window = ui.ctx().content_rect();
@@ -790,7 +790,7 @@ pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette) {
         } else if delete.clicked() {
             answer = Some(true);
         }
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)) {
             answer = Some(false);
         }
     });

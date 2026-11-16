@@ -196,8 +196,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
     }
     let p = *ux::palette(shell.state.theme.is_dark());
     let window = ui.max_rect();
-    // While a creation runs nothing closes the dialog.
-    let escape = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+    // While a creation runs nothing closes the dialog; Escape closes it pressed alone.
+    let escape = ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape));
     let mut close = escape && !dialog.creating();
     egui::Area::new(egui::Id::unique("new-project")).order(egui::Order::Foreground).fixed_pos(window.min).show(ui.ctx(), |ui| {
         ui.set_min_size(window.size());

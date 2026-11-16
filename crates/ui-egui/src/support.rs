@@ -49,10 +49,11 @@ pub fn open(shell: &mut Shell) {
     }
 }
 
-/// Escape while the dialog is open closes it and goes no further: the shell asks before drawing
-/// the window behind, whose editors would otherwise read the same key and drop their drafts.
+/// Escape pressed alone while the dialog is open closes it and goes no further: the shell asks
+/// before drawing the window behind, whose editors would otherwise read the same key and drop their
+/// drafts. With a modifier it does nothing, the window behind holding no keys while About is up.
 pub(crate) fn dismiss_key(shell: &mut Shell, ctx: &egui::Context) {
-    if shell.about.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+    if shell.about.is_some() && ctx.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)) {
         shell.about = None;
     }
 }

@@ -427,13 +427,14 @@ fn changes(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, y: f32) -
 
 /// The keys scroll a list of cards `step` apart while no control and not the `explorer` has them,
 /// as the explorer's keys work only while it has them: the arrows by a card, Page Up and Page Down
-/// by the `page` that shows, Home and End to either end. scroll_tree keeps the offset within the list.
+/// by the `page` that shows, Home and End to either end, each pressed alone, not with a modifier.
+/// scroll_tree keeps the offset within the list.
 pub(crate) fn scroll_keys(ui: &egui::Ui, explorer: bool, scroll: &mut TreeScroll, step: f32, page: f32) {
     use egui::Key::{ArrowDown, ArrowUp};
     if explorer || ui.memory(|m| m.focused().is_some()) {
         return;
     }
-    let press = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    let press = |key| ui.input_mut(|i| crate::actions::take_alone(i, key));
     for (key, by) in [(ArrowDown, step), (ArrowUp, -step)] {
         if press(key) {
             scroll.offset += by;
@@ -442,11 +443,12 @@ pub(crate) fn scroll_keys(ui: &egui::Ui, explorer: bool, scroll: &mut TreeScroll
     page_keys(ui, &mut scroll.offset, page);
 }
 
-/// Page Up and Page Down move `offset` by the `page` that shows, Home and End to either end. The
-/// caller says when the keys are its own, and keeps the offset within its content after.
+/// Page Up and Page Down move `offset` by the `page` that shows, Home and End to either end, each
+/// pressed alone: with a modifier the press stays in the input. The caller says when the keys are
+/// its own, and keeps the offset within its content after.
 pub(crate) fn page_keys(ui: &egui::Ui, offset: &mut f32, page: f32) {
     use egui::Key::{End, Home, PageDown, PageUp};
-    let press = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    let press = |key| ui.input_mut(|i| crate::actions::take_alone(i, key));
     for (key, by) in [(PageDown, page), (PageUp, -page)] {
         if press(key) {
             *offset += by;

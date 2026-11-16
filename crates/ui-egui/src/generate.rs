@@ -297,7 +297,8 @@ pub fn show(shell: &mut Shell, ui: &mut egui::Ui) {
         if control(shell, ui, "generate.close", "button", close_b, true).clicked() {
             close = true;
         }
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        // Escape closes it pressed alone, not with a modifier.
+        if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)) {
             close = true;
         }
     });

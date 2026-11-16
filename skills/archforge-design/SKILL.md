@@ -117,6 +117,12 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   nothing holds the project; the chip's list ends in the same row, pinned under its rows and reached by ↓
   past the last one. Every shortcut is matched
   exactly, so ⇧⌘S never saves.
+- A key meant alone acts only pressed alone (AR-536): Escape in the versioning dialogs, About, New
+  project, Generate and Save version, and the arrows, Enter, Escape and the page keys of the version
+  list, the Versions panel, a version's cards, the Home search, a select field's open menu, and a
+  Chat row and its menu do nothing with Shift, Alt, Control or the command key held. Enter in the
+  version list, the Home search and a select field's menu keeps Shift and Alt: the field holding the
+  keyboard ends its input on those presses too and would drop the keyboard.
 - Outside a packaged app the window and the Dock show the Archforge icon; a packaged macOS app
   keeps its bundle's light and dark icon.
 

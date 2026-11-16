@@ -119,6 +119,29 @@ fn the_keys_move_view_and_close() {
     });
 }
 
+/// The list's arrows and Esc act alone: with a modifier they move and close nothing. Enter views
+/// with Shift or Alt too, never with Control or the command key. Esc alone closing it is
+/// `the_keys_move_view_and_close`'s.
+#[test]
+fn the_list_keys_act_only_alone() {
+    in_both(|mut h, host| {
+        opened_list(&mut h, &host);
+        for (k, more) in [egui::Key::ArrowDown, egui::Key::Escape].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))) {
+            key(&mut h, k, more);
+            assert!(list_shows(&h), "{k:?} with {more:?}");
+        }
+        // From current work, the first row, to the newest version, which Enter views.
+        key(&mut h, egui::Key::ArrowDown, MOVE[0]);
+        // Enter keeps Shift and Alt, which the filter field would take to end its input.
+        for more in &NOT_ALONE[2..] {
+            key(&mut h, egui::Key::Enter, *more);
+            assert!(list_shows(&h) && host.reads.lock().unwrap().is_empty(), "Enter with {more:?}");
+        }
+        key(&mut h, egui::Key::Enter, egui::Modifiers::SHIFT);
+        assert_eq!(host.reads.lock().unwrap()[0].0, "h3", "Shift+Enter views; the arrows with a modifier moved nothing");
+    });
+}
+
 /// The keys and the action wait while a hold or any dialog is up.
 #[test]
 fn the_list_cannot_open_behind_a_hold_or_a_dialog() {
