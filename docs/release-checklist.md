@@ -81,7 +81,8 @@ choose **Versions ▸ Save version…** and cancel; choose **Older version**, th
 **View**, choose **View ▸ Zoom in**, then **Whole diagram**, then **Skills**; type in a skill's text and press ⌘K;
 click the canvas and press ⌘K. Look through **Window** and choose **Window ▸ Minimise**; bring the window back
 by choosing its own row in **Window**, press ⌘M and bring it back from the Dock. Choose **Window ▸ Zoom**, then
-**Window ▸ Zoom** once more.
+**Window ▸ Zoom** once more. Open **Help** and type `Zoom` into its search field; point at a result, then
+press Esc.
 With **Generate…** open, look at **Window** and the **Archforge** menu again, then close the dialog. With the project showing, press ⌘W;
 open it again and press ⌘S, so nothing is unsaved. Select an element in **Models**, press F2, type a new name
 and, still typing, press ⌘W; choose **Cancel**, then press ⌘S. Rename it the same way and, still typing,
@@ -123,7 +124,9 @@ skill's text ⌘K makes a link and opens no search; on the canvas it opens the s
 system's words, among them a row for Archforge's window and **Bring All to Front**; which others it adds depends
 on the macOS release. Minimise and ⌘M
 each put the window in the Dock, and the window's row brings it back; Zoom grows it to fill the screen beside the Dock, and the second Zoom
-brings back its earlier size and place. Minimise and Zoom stay enabled while a dialog is up. ⌘W closes the project
+brings back its earlier size and place. Minimise and Zoom stay enabled while a dialog is up. **Help** ends the
+bar after **Window** and holds the system's search field and no rows of Archforge's own; typing `Zoom` lists
+**Zoom in** and **Window ▸ Zoom** among the results, and pointing at one shows the row in its menu. ⌘W closes the project
 shown as **File ▸ Close project** does. With a name still being typed, both first finish the name, which
 then shows in **Models**, and ask about it as an unsaved change; **Cancel** keeps the project open.
 **File ▸ Open project…** chosen while typing finishes the name before the picker shows: back on the first

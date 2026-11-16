@@ -68,7 +68,8 @@ search, Properties' panel and editors, skills, messages and saving) instead of m
   and Home's search rows share each action's availability; its application menu adds the system's own Services,
   Hide Archforge (⌘H), Hide Others (⌥⌘H) and Show All in the system's usual order (AR-489); after Versions its Window menu holds the system's
   own Minimise (⌘M) and Zoom (AR-463) and, as the application's windows menu, the rows macOS adds below them
-  (AR-509); the window's frame does that on Windows and Linux. On Windows and Linux the same actions are
+  (AR-509); the window's frame does that on Windows and Linux. Help ends the bar as the application's help menu,
+  holding only the search field macOS adds (AR-490). On Windows and Linux the same actions are
   an in-window menu bar in the title strip (`crates/ui-egui/src/menu_bar.rs`, set on by
   `Shell::in_window_menu`): the groups of its own table (File, Edit, View, Model, Versions and Help for now, others join by a
   row), popups 300 wide of rows 30 high and dividers 9, the rows lower down to a line of text where a
