@@ -279,7 +279,9 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
     }
     widgets::record_visible(ui, &mut shell.registry, &id, "field", field);
     // The list's keys before the field sees them: the arrows move, Enter runs, Esc closes; none
-    // while a dialog over the window has them (About).
+    // while a dialog over the window has them (About). The arrows and Esc act pressed alone: with a
+    // modifier they are the field's, as Shift with ↑ selects to its start. Enter keeps Shift and Alt
+    // on purpose, as the field would end its input on them too and drop the keyboard.
     let groups = hits(shell, &shell.home_search.query.clone());
     let count = groups.iter().map(|(_, h)| h.len()).sum::<usize>();
     let modal = shell.about.is_some();
@@ -288,10 +290,10 @@ pub(crate) fn field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, field: Re
             return (false, false, false, false);
         }
         (
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            crate::actions::take_alone(i, egui::Key::ArrowUp),
+            crate::actions::take_alone(i, egui::Key::ArrowDown),
             i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+            crate::actions::take_alone(i, egui::Key::Escape),
         )
     });
     if escape {

@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-use egui::{Key, Modifiers, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
+use egui::{Key, Rect, Sense, Stroke, StrokeKind, pos2, vec2};
 
 use crate::close_ask::Ask;
 use crate::i18n::{fmt, tr, trn};
@@ -268,7 +268,8 @@ fn made(shell: &mut Shell, name: String, renaming: Option<String>, answer: Recei
 }
 
 /// Draws the dialog over the window and acts on it. While a creation, rename or delete is on its
-/// way nothing closes it and nothing more is asked.
+/// way nothing closes it and nothing more is asked. Escape closes it pressed alone; with a modifier
+/// it is the name field's.
 pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
     let (Some(host), Some(path)) = (shell.services.projects.clone(), shell.project.as_ref().map(|o| o.path.clone())) else {
         shell.ask = None;
@@ -292,7 +293,7 @@ pub(crate) fn show(shell: &mut Shell, ui: &mut egui::Ui, mut naming: Naming) {
             Some(doomed) => doomed_card(shell, ui, &p, window, &naming, &doomed),
             None => card(shell, ui, &p, (window, &from), &mut naming, name),
         };
-        close |= !naming.waiting && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+        close |= !naming.waiting && ui.input_mut(|i| crate::actions::take_alone(i, Key::Escape));
     });
     if naming.text != before {
         (naming.edited, naming.refused) = (true, None);

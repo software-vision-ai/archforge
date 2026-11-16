@@ -144,6 +144,10 @@ fn cancel_the_close_button_and_escape_close_the_dialog() {
     for way in ["new-project.cancel", "new-project.close", "escape"] {
         open_new_project(&mut h);
         if way == "escape" {
+            for more in NOT_ALONE {
+                key(&mut h, egui::Key::Escape, more);
+                assert!(h.state().new_project.is_some(), "Escape with {more:?} closes nothing");
+            }
             h.key_press(egui::Key::Escape);
         } else {
             let at = centre_of(&h, way);
@@ -3488,7 +3492,8 @@ fn homes_search_finds_projects_and_actions_and_runs_them_from_the_keyboard() {
     h.event(egui::Event::Text("dark".into()));
     h.run_steps(2);
     assert_eq!(results(&h), 1);
-    key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
+    // With Shift too, which the field would otherwise take to end its input.
+    key(&mut h, egui::Key::Enter, egui::Modifiers::SHIFT);
     h.run_steps(2);
     assert!(h.state().state.theme.is_dark());
     // The arrows move the highlight round the list; Esc closes and forgets the query.
@@ -3501,6 +3506,14 @@ fn homes_search_finds_projects_and_actions_and_runs_them_from_the_keyboard() {
     key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
     h.run_steps(1);
     assert_eq!(h.state().home_search.highlight, 1);
+    // With a modifier the arrows and Esc move and close nothing, and Enter runs nothing with Control
+    // or the command key (with Shift or Alt it runs, as the field would end its input on them).
+    let enter = NOT_ALONE[2..].iter().map(|m| (egui::Key::Enter, *m));
+    for (k, more) in [egui::Key::ArrowDown, egui::Key::Escape].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))).chain(enter) {
+        key(&mut h, k, more);
+        let search = &h.state().home_search;
+        assert!(search.open && search.highlight == 1 && host.opens.lock().unwrap().is_empty(), "{k:?} with {more:?}");
+    }
     h.event(egui::Event::Text("zzz".into()));
     h.run_steps(2);
     assert_eq!(results(&h), 0, "no matches");
@@ -4747,6 +4760,16 @@ fn key(h: &mut Harness<'static, Shell>, key: egui::Key, modifiers: egui::Modifie
     h.key_up_modifiers(modifiers, key);
     h.run();
 }
+
+/// What a key meant alone must not act with held: Shift, Alt, Control, and the command key in the
+/// two shapes keyboards send it, a Mac's ⌘ and the Ctrl of Windows and Linux.
+const NOT_ALONE: [egui::Modifiers; 5] = [
+    egui::Modifiers::SHIFT,
+    egui::Modifiers::ALT,
+    egui::Modifiers::CTRL,
+    egui::Modifiers::MAC_CMD.plus(egui::Modifiers::COMMAND),
+    egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND),
+];
 
 fn schema_names(h: &Harness<'static, Shell>) -> Vec<String> {
     let s = h.state().session.as_ref().unwrap();
@@ -13503,8 +13526,8 @@ fn a_failed_save_keeps_the_description_and_offers_retry() {
     });
 }
 
-/// The dialog goes with its project, its session or a hold, on Esc, which gives the keyboard back
-/// to the button, and on Cancel.
+/// The dialog goes with its project, its session or a hold, on Esc pressed alone, which gives the
+/// keyboard back to the button, and on Cancel.
 #[test]
 fn the_save_dialog_goes_with_what_it_reviews() {
     let goes: [(&str, fn(&mut Shell)); 3] = [
@@ -13520,6 +13543,10 @@ fn the_save_dialog_goes_with_what_it_reviews() {
             assert!(!dialog_open(&h), "{theme:?}: {what}");
         }
         let (mut h, _host) = save_dialog(theme);
+        for more in NOT_ALONE {
+            key(&mut h, egui::Key::Escape, more);
+            assert!(dialog_open(&h), "{theme:?}: Esc with {more:?}");
+        }
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(!dialog_open(&h) && focused_on(&h, "workspace.versions.save"), "{theme:?}: Esc");
         click_id(&mut h, "workspace.versions.save");
@@ -16652,6 +16679,10 @@ fn the_bin_asks_first_and_undo_on_the_toast_brings_the_conversation_back_whole()
         assert!(painted(&h).iter().any(|t| t.starts_with("It stays in the project's saved history: anyone with a copy")), "{theme:?}");
         assert!(!painted_has(&h, "Its reply in progress stops first."), "no reply runs");
         assert_eq!(focused(&h).as_deref(), Some("workspace.chat.delete.cancel"), "{theme:?}: the focus starts on Cancel");
+        for more in NOT_ALONE {
+            key(&mut h, egui::Key::Escape, more);
+            assert!(h.state().chat_panel.ask.is_some(), "{theme:?}: Escape with {more:?} cancels nothing");
+        }
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         h.run();
         assert!(h.state().chat_panel.ask.is_none() && rig.store.kept(review).is_some(), "Escape cancels");
@@ -16712,6 +16743,13 @@ fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_cl
     click(&mut h, at);
     assert!(h.state().chat_panel.ask.as_ref().is_some_and(|a| a.chat == chats[0]), "the menu's item asks");
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+    // The keys on the focused row act alone: with a modifier ⌫, Delete and the menu key ask nothing.
+    focus_on(&mut h, "workspace.chat.history.0");
+    for (k, more) in [egui::Key::Backspace, egui::Key::Delete, egui::Key::Menu].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))) {
+        key(&mut h, k, more);
+        let quiet = h.state().chat_panel.ask.is_none() && h.state().chat_panel.row_menu.is_none();
+        assert!(quiet && focused(&h).as_deref() == Some("workspace.chat.history.0"), "{k:?} with {more:?}");
+    }
     // The keys on the focused row: ⌫, Delete, the menu key and ⇧F10.
     for (k, m, menu) in [
         (egui::Key::Backspace, egui::Modifiers::NONE, false),
@@ -16732,6 +16770,12 @@ fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_cl
                 h.state().chat_panel.row_menu.as_ref().is_some_and(|r| r.chat == chats[0] && r.reached == Some(0)),
                 "{k:?} opens the menu, Open reached"
             );
+            // Its keys act alone: with a modifier they move, pick and close nothing.
+            for (k, more) in [egui::Key::ArrowDown, egui::Key::Enter, egui::Key::Escape].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))) {
+                key(&mut h, k, more);
+                let open = h.state().chat_panel.row_menu.as_ref().is_some_and(|r| r.reached == Some(0));
+                assert!(open && h.state().chat_panel.ask.is_none(), "{k:?} with {more:?}");
+            }
             key(&mut h, egui::Key::ArrowDown, egui::Modifiers::NONE);
             key(&mut h, egui::Key::Enter, egui::Modifiers::NONE);
         }
@@ -17999,6 +18043,10 @@ fn generate_hands_a_schema_and_its_export_skills_to_an_agent_as_a_request_it_can
     h.state_mut().open_generate();
     h.run();
     assert!(painted(&h).iter().any(|t| t == "Diagram · Shop schema"), "{:?}", painted(&h));
+    for more in NOT_ALONE {
+        key(&mut h, egui::Key::Escape, more);
+        assert!(h.state().generate.is_some(), "Escape with {more:?} closes nothing");
+    }
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(h.state().generate.is_none());
     // A project's export skill and a schema's of the same name with its dialect: the schema's wins.
@@ -23038,7 +23086,8 @@ fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_canc
 }
 
 /// Alt+Down opens an end's multiplicity menu only as itself: with Shift more, a Mac's Control or
-/// the command key of either shape it opens nothing and the typing stays as it was.
+/// the command key of either shape it opens nothing and the typing stays as it was. The open menu's
+/// arrows and Escape act alone: with a modifier they move and close nothing.
 #[test]
 fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
     use egui::Modifiers as M;
@@ -23054,6 +23103,14 @@ fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
         }
         key(&mut h, egui::Key::ArrowDown, M::ALT);
         assert_eq!((open(&h), h.state().panels.highlight), (true, Some(0)), "{theme:?}: Alt+Down opens it at the current one");
+        for (k, more) in [egui::Key::ArrowDown, egui::Key::Escape].into_iter().flat_map(|k| NOT_ALONE.map(|m| (k, m))) {
+            key(&mut h, k, more);
+            assert_eq!((open(&h), h.state().panels.highlight), (true, Some(0)), "{theme:?}: {k:?} with {more:?}");
+        }
+        key(&mut h, egui::Key::ArrowDown, M::NONE);
+        assert_eq!(h.state().panels.highlight, Some(1), "{theme:?}: the arrow alone");
+        key(&mut h, egui::Key::Escape, M::NONE);
+        assert!(!open(&h), "{theme:?}: Escape alone");
     });
 }
 
@@ -23941,6 +23998,10 @@ fn escape_closes_about_and_leaves_a_draft_behind_it_as_it_was() {
     assert!(h.state().panels.member.is_some(), "an attribute draft is open");
     h.state_mut().open_about();
     h.run();
+    for more in NOT_ALONE {
+        key(&mut h, egui::Key::Escape, more);
+        assert!(h.state().about.is_some() && h.state().panels.member.is_some(), "Escape with {more:?} closes nothing");
+    }
     key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
     assert!(h.state().about.is_none(), "Escape closes About");
     assert!(h.state().panels.member.is_some(), "and the draft behind it stays");

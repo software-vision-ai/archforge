@@ -1162,13 +1162,13 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                             acts.push(Act::Delete(row.id, i));
                         }
                         // On the focused row: ⌫ or Delete asks, the menu key or ⇧F10 opens its menu;
-                        // ⇧F10 exactly, so not with Alt or Control more (`consume_key` lets Alt through).
+                        // ⇧F10 exactly, so not with Alt or Control more (`consume_key` lets Alt through),
+                        // and the others pressed alone.
                         if resp.has_focus() && panel.ask.is_none() && panel.row_menu.is_none() {
                             let shift_f10 = crate::actions::Keys { modifiers: egui::Modifiers::SHIFT, key: egui::Key::F10 };
                             let (delete, menu) = clip.input_mut(|k| {
-                                let delete = k.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)
-                                    || k.consume_key(egui::Modifiers::NONE, egui::Key::Delete);
-                                let menu = k.consume_key(egui::Modifiers::NONE, egui::Key::Menu) || crate::actions::take(k, &shift_f10);
+                                let delete = crate::actions::take_alone(k, egui::Key::Backspace) || crate::actions::take_alone(k, egui::Key::Delete);
+                                let menu = crate::actions::take_alone(k, egui::Key::Menu) || crate::actions::take(k, &shift_f10);
                                 (delete, menu)
                             });
                             if delete && refused.is_none() {

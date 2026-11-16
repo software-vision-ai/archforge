@@ -167,7 +167,8 @@ pub(crate) fn dialog(shell: &mut Shell, ui: &mut egui::Ui) {
     }
 }
 
-/// What the dialog holds; true when it should close, which waits for a save under way to answer.
+/// What the dialog holds; true when it should close, on Cancel or Escape pressed alone, which waits
+/// for a save under way to answer.
 fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, window: Rect) -> bool {
     let Some(d) = shell.versions.dialog.as_ref() else { return true };
     let (moved, error, focused, idle, mut text) = (d.moved, d.error.clone(), d.focused, d.ticket.is_none(), d.text.clone());
@@ -229,5 +230,5 @@ fn body(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, window: Rect) -> bool
     if live && (saved.clicked() || enter) {
         save(shell);
     }
-    idle && (cancel.clicked() || ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)))
+    idle && (cancel.clicked() || ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)))
 }

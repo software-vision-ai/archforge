@@ -1337,7 +1337,7 @@ fn the_page_keys_scroll_the_cards_while_a_related_link_has_the_keyboard() {
 /// items (AR-486): the arrows by a row, Page Down and Page Up by what shows less a row, End to the
 /// last link and Home to the top, each drawn in the frame that reads it, the Models tree hidden
 /// beside them holding none (AR-524). Not while another control or a dialog has them, with a menu
-/// open, the in-window menu bar's too, or with the control key as Windows and Linux send it.
+/// open, the in-window menu bar's too, or with a modifier held.
 #[test]
 fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
     use egui::Key::{ArrowDown, ArrowUp, End, Home, PageDown, PageUp};
@@ -1369,7 +1369,11 @@ fn the_keys_scroll_the_cards_while_nothing_has_the_keyboard() {
             still(h, key_, NONE, "at the end");
         }
         key(h, Home, NONE);
-        still(h, PageDown, egui::Modifiers::CTRL.plus(egui::Modifiers::COMMAND), "the control key");
+        for more in NOT_ALONE {
+            for key_ in [ArrowDown, PageDown, End] {
+                still(h, key_, more, &format!("with {more:?}"));
+            }
+        }
         // The Models tree does not show beside the cards, so it holds no keys there (AR-524).
         h.state_mut().explorer.focused = true;
         once(h, End);
@@ -3789,7 +3793,7 @@ fn a_restore_failure_kept_elsewhere_holds_restoring_back() {
 }
 
 /// With a Chat turn running, Restore asks about it next and Keep working ends it; typing goes
-/// nowhere behind the question, and Escape cancels it.
+/// nowhere behind the question, and Escape alone cancels it, with a modifier it does nothing.
 #[test]
 fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
     use crate::close_ask::Ask;
@@ -3807,6 +3811,10 @@ fn chat_still_asks_before_a_restore_and_keys_stay_with_the_question() {
         h.event(egui::Event::Text("x".into()));
         h.run();
         assert_eq!(h.state().chat_panel.draft, "y", "held behind the question");
+        for more in NOT_ALONE {
+            key(&mut h, egui::Key::Escape, more);
+            assert!(matches!(h.state().ask, Some(Ask::Restore { .. })), "{theme:?}: Escape with {more:?}");
+        }
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         assert!(h.state().ask.is_none());
         for answer in ["close-ask.keep", "close-ask.stop-chat"] {

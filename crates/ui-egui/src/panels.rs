@@ -1193,19 +1193,21 @@ pub(crate) fn editable_select(
     let was_open = shell.panels.menu == Some(c.menu);
     let focused = ui.memory(|m| m.has_focus(eid));
     let mut out = ComboOut::Idle;
-    // The keys first, before the text field takes them.
+    // The keys first, before the text field takes them. The open menu's arrows and Escape act pressed
+    // alone: with a modifier they are the field's, as Shift with Down selects to its end. Its Enter
+    // keeps Shift and Alt on purpose, as the field would end its input on them too.
     if was_open {
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown)) {
+        if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::ArrowDown)) {
             shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| (h + 1).min(rows - 1)));
         }
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp)) {
+        if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::ArrowUp)) {
             shell.panels.highlight = Some(shell.panels.highlight.map_or(0, |h| h.saturating_sub(1)));
         }
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
             out = shell.panels.highlight.map_or(ComboOut::Commit, ComboOut::Pick);
             shell.panels.menu = None;
         }
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        if ui.input_mut(|i| crate::actions::take_alone(i, egui::Key::Escape)) {
             shell.panels.menu = None;
         }
     } else if focused {

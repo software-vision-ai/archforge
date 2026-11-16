@@ -546,12 +546,13 @@ type Span = (f32, f32);
 /// ↑ and ↓ on a focused row of a list, `rows` in order with their spans, move the focus to the
 /// next or previous one, out of view too, and ↓ on `entry` to the first; Page Up and Page Down move
 /// it by the `page` that shows, and Home and End to the first and the last (AR-474). While a menu is
-/// open the keys are its own, and the row keeps its focus. Gives what the caller brings into view:
-/// the row moved to, or the row or other part of the list (`parts`) the keyboard has just come to.
+/// open the keys are its own, and the row keeps its focus. Each key acts pressed alone, not with a
+/// modifier. Gives what the caller brings into view: the row moved to, or the row or other part of
+/// the list (`parts`) the keyboard has just come to.
 fn key_rows(shell: &Shell, ui: &egui::Ui, rows: &[(egui::Id, Span)], parts: &[(egui::Id, Span)], entry: Option<egui::Id>, page: f32) -> Option<Span> {
     let on_entry = entry.filter(|&id| ui.memory(|m| m.has_focus(id)));
     let at = rows.iter().position(|&(id, _)| ui.memory(|m| m.has_focus(id)));
-    let pressed = |key| ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key));
+    let pressed = |key| ui.input_mut(|i| crate::actions::take_alone(i, key));
     let next = match at {
         _ if shell.panels.menu.is_some() => None,
         _ if on_entry.is_some() && pressed(egui::Key::ArrowDown) => (!rows.is_empty()).then_some(0),

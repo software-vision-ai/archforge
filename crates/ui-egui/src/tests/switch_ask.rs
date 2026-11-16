@@ -191,7 +191,8 @@ fn chat_is_asked_about_first_and_only_once() {
     });
 }
 
-/// While the question is up, typed keys and Undo don't reach the window behind; Escape cancels.
+/// While the question is up, typed keys and Undo don't reach the window behind; Escape alone
+/// cancels, with a modifier it does nothing.
 #[test]
 fn keys_stay_with_the_question_and_escape_cancels() {
     in_both_appearances(|theme| {
@@ -208,6 +209,10 @@ fn keys_stay_with_the_question_and_escape_cancels() {
         h.run_steps(2);
         assert_eq!(h.state().chat_panel.draft, "y", "held behind the question");
         assert_eq!(h.state().session.as_ref().unwrap().revision(), before, "Undo didn't reach the model");
+        for more in NOT_ALONE {
+            key(&mut h, egui::Key::Escape, more);
+            assert!(h.state().ask.is_some(), "{theme:?}: Escape with {more:?}");
+        }
         key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
         h.run_steps(2);
         assert!(h.state().ask.is_none());

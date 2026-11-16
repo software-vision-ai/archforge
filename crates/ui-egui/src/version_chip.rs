@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-use egui::{Key, Modifiers, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
+use egui::{Key, Rect, Stroke, StrokeKind, Vec2, pos2, vec2};
 
 use crate::chat_words::{Clock, civil, clock_time, local, month};
 use crate::explorer::{TreeScroll, scroll_tree};
@@ -599,10 +599,14 @@ fn step_button(shell: &mut Shell, ui: &egui::Ui, p: &Palette, x: f32, mid: f32, 
 }
 
 /// Moves the highlight by the keys, past the last row to New branch… when `new` offers it, runs
-/// Enter and closes on Esc; true when the list is gone.
+/// Enter and closes on Esc; true when the list is gone. The arrows and Esc act pressed alone: with a
+/// modifier they are the filter field's, as Shift with ↓ selects to its end (`actions::take_alone`).
+/// Enter keeps Shift and Alt on purpose: the field would end its input on them too and drop the
+/// keyboard. With Control or the command key no key acts.
 fn keys(shell: &mut Shell, ui: &egui::Ui, rows: &[Row], new: bool) -> bool {
-    let press = |key| ui.input_mut(|i| i.consume_key(Modifiers::NONE, key));
-    let (down, up, enter, esc) = (press(Key::ArrowDown), press(Key::ArrowUp), press(Key::Enter), press(Key::Escape));
+    let press = |key| ui.input_mut(|i| crate::actions::take_alone(i, key));
+    let enter = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter));
+    let (down, up, esc) = (press(Key::ArrowDown), press(Key::ArrowUp), press(Key::Escape));
     if esc {
         close(shell);
         return true;
