@@ -265,8 +265,10 @@ impl NotationUi for ErUi {
 
     /// A table without a primary key, a many-to-many relationship still waiting for its mapping
     /// table, a foreign key the rules refuse, a key column that may be null, a key whose columns
-    /// the rules refuse, and the rest the rules find; a column's or a key's on its table. An enum
-    /// type's literals are said by their typed reason.
+    /// the rules refuse, and the rest the rules find; a column's or a key's on its table. A rule's
+    /// problem that is typed (a key's columns, a column's enum default, a check, an index's columns,
+    /// a foreign key, an enum type's literals) is said by its reason in the user's words, the English
+    /// only for a reason the interface doesn't say; a domain's problem is not typed yet.
     fn problems(&self, store: &Store, out: &mut Vec<Problem>) {
         for o in store.alive() {
             let Ok(class) = store.class_of(o) else { continue };
@@ -282,7 +284,8 @@ impl NotationUi for ErUi {
                 for k in r::primary_key_of(store, o).into_iter().chain(r::unique_constraints(store, o)) {
                     let primary = store.class_of(k).ok() == Some(archforge_er::PRIMARY_KEY);
                     if let Some(p) = r::key_columns_problem(store, o, &r::key_columns(store, k), primary) {
-                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &p.said())]) });
+                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &r::label(store, k)), ("problem", &said)]) });
                     }
                 }
                 if !r::subtype_links(store, o).is_empty()
@@ -293,14 +296,16 @@ impl NotationUi for ErUi {
                 }
                 for a in children(store, o, archforge_er::entity::ATTRIBUTE) {
                     if let Some(p) = r::enum_default_problem(store, a) {
-                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &p.said())]) });
+                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
+                        out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, a)), ("problem", &said)]) });
                     }
                 }
                 for c in r::checks_of(store, o) {
                     if let Some(p) = r::check_problem(&r::text_of(store, c, archforge_er::check_constraint::EXPRESSION)) {
+                        let said = crate::panels::said(&p.reason()).unwrap_or_else(|| p.said());
                         out.push(Problem {
                             element: o,
-                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &p.said())]),
+                            text: fmt(&tr("{key}: {problem}"), &[("key", &r::display_name(store, c)), ("problem", &said)]),
                         });
                     }
                 }
@@ -318,9 +323,9 @@ impl NotationUi for ErUi {
                 for fk in children(store, o, archforge_er::entity::FOREIGN_KEY) {
                     let parts = r::key_parts(store, fk);
                     let text = match (parts.entity, parts.key) {
-                        (Some(e), Some(k)) => {
-                            r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship).map(|p| p.said())
-                        }
+                        // A key or a foreign key in no table or schema has no typed reason, so its English.
+                        (Some(e), Some(k)) => r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
+                            .map(|p| p.reason().and_then(|reason| crate::panels::said(&reason)).unwrap_or_else(|| p.said())),
                         _ => Some(tr("lacks its table or its key")),
                     };
                     if let Some(p) = text {

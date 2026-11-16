@@ -7507,6 +7507,87 @@ fn an_er_indexs_columns_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// The Problems panel says a loaded document's typed rule problems in the chosen language: a key
+/// without columns or with one that may be null in a primary key, a column's default none of its enum type's literals, a check without an
+/// expression and a foreign key without columns; a foreign key without its key keeps its own row.
+/// In light and dark (AR-532).
+#[test]
+fn an_er_documents_typed_problems_are_said_in_the_chosen_language() {
+    use archforge_er::{ATTRIBUTE, CHECK_CONSTRAINT, ENTITY, ENUM_TYPE, FOREIGN_KEY, PRIMARY_KEY, SCHEMA, UNIQUE_CONSTRAINT};
+    use archforge_mof::Value;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        // A document no command makes, each table in the schema, so the foreign key's rules apply.
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let schema = st.create(SCHEMA).unwrap();
+        let table = |st: &mut archforge_mof::Store, name: &str, nullable: bool| {
+            let e = st.create(ENTITY).unwrap();
+            st.set(e, archforge_er::named_element::NAME, Value::str(name)).unwrap();
+            st.push(schema, archforge_er::schema::ENTITY, Value::Ref(e)).unwrap();
+            let id = st.create(ATTRIBUTE).unwrap();
+            st.set(id, archforge_er::named_element::NAME, Value::str("id")).unwrap();
+            st.set(id, archforge_er::attribute::TYPE, Value::str("INT")).unwrap();
+            st.set(id, archforge_er::attribute::NULLABLE, Value::Bool(nullable)).unwrap();
+            st.push(e, archforge_er::entity::ATTRIBUTE, Value::Ref(id)).unwrap();
+            let pk = st.create(PRIMARY_KEY).unwrap();
+            st.set(pk, archforge_er::key::NAME, Value::str(&format!("pk_{name}"))).unwrap();
+            st.push(pk, archforge_er::key::COLUMN, Value::Ref(id)).unwrap();
+            st.set(e, archforge_er::entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+            e
+        };
+        let kunde = table(&mut st, "kunde", false);
+        let bestellung = table(&mut st, "bestellung", true);
+        let leer = st.create(UNIQUE_CONSTRAINT).unwrap();
+        st.set(leer, archforge_er::key::NAME, Value::str("uq_leer")).unwrap();
+        st.push(bestellung, archforge_er::entity::UNIQUE_CONSTRAINT, Value::Ref(leer)).unwrap();
+        let status = st.create(ENUM_TYPE).unwrap();
+        st.set(status, archforge_er::named_element::NAME, Value::str("status")).unwrap();
+        st.push(status, archforge_er::enum_type::LITERAL, Value::str("offen")).unwrap();
+        st.push(schema, archforge_er::schema::ENUM_TYPE, Value::Ref(status)).unwrap();
+        let zustand = st.create(ATTRIBUTE).unwrap();
+        st.set(zustand, archforge_er::named_element::NAME, Value::str("zustand")).unwrap();
+        st.set(zustand, archforge_er::attribute::ENUM_TYPE, Value::Ref(status)).unwrap();
+        st.set(zustand, archforge_er::attribute::DEFAULT, Value::str("'zu'")).unwrap();
+        st.push(bestellung, archforge_er::entity::ATTRIBUTE, Value::Ref(zustand)).unwrap();
+        let check = st.create(CHECK_CONSTRAINT).unwrap();
+        st.set(check, archforge_er::check_constraint::NAME, Value::str("ck_leer")).unwrap();
+        st.push(bestellung, archforge_er::entity::CHECK_CONSTRAINT, Value::Ref(check)).unwrap();
+        let pk_kunde = archforge_er::rules::primary_key_of(&st, kunde).unwrap();
+        for (name, key) in [("fk_kunde", Some(pk_kunde)), ("fk_offen", None)] {
+            let fk = st.create(FOREIGN_KEY).unwrap();
+            st.set(fk, archforge_er::foreign_key::NAME, Value::str(name)).unwrap();
+            if let Some(key) = key {
+                st.set(fk, archforge_er::foreign_key::REFERENCES, Value::Ref(key)).unwrap();
+            }
+            st.push(bestellung, archforge_er::entity::FOREIGN_KEY, Value::Ref(fk)).unwrap();
+        }
+        let mut texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        texts.sort();
+        assert_eq!(
+            texts,
+            [
+                "ck_leer: Geben Sie einen Ausdruck ein. Eine Einschränkung ohne Ausdruck legt keine Regel fest.",
+                "fk_kunde: Ein Fremdschlüssel braucht mindestens eine Spalte.",
+                "fk_offen: hat keine Tabelle oder keinen Schlüssel",
+                "id ist eine Schlüsselspalte und darf leer sein",
+                "pk_bestellung: id darf leer sein, was eine Primärschlüsselspalte nie darf.",
+                "uq_leer: Ein Schlüssel braucht mindestens eine Spalte.",
+                "zustand: 'zu' ist kein Literal von status.",
+            ],
+            "{theme:?}"
+        );
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A sequence's numbers and owner and a view's query refused are said in the chosen language: each
 /// rule the numbers break, an owner of another schema, of no table, of no type and of a type that is
 /// no whole number, and a query by the text rules' rows. In light and dark (AR-507).
