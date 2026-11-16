@@ -240,6 +240,7 @@ str		{type} takes no scale.	{type} には小数桁を指定できません。
 str		A BINARY holds at most 255 bytes, not {value}.	BINARY は最大 255 バイトです。{value} は指定できません。
 str		The scale {value} is more than the precision.	小数桁 {value} が精度を超えています。
 str		A scale needs a precision.	小数桁には精度が必要です。
+str		A type name holds no size; give the length, precision or scale instead.	型名にはサイズを含めません。代わりに長さ、精度、または小数桁を指定してください。
 str		Default	既定値
 str		Generation	生成
 str		Expression	式
@@ -615,7 +616,15 @@ str		The key is not one of {table}'s keys.	このキーは {table} のキーで�
 str		The key of {table} has no columns to refer to.	{table} のキーには参照できる列がありません。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	識別リレーションシップが {child} と {parent} の間で循環します。
 str		The foreign key points at this key already. Name the columns to change them.	外部キーはすでにこのキーを参照しています。変更するには列を指定してください。
+str		A foreign key needs at least one column.	外部キーには少なくとも 1 つの列が必要です。
+str		A foreign key holds at most {max} columns.	外部キーに含められる列は最大 {max} 個です。
+str		{name} appears twice in the foreign key.	{name} が外部キーに 2 回含まれています。
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	外部キーには {table} のキーと同じ数の列 ({n} 個) が必要です。
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} の型は {type} ですが、{target} の型は {target_type} です。
+str		{column} has no type, but {target} is of type {target_type}.	{column} には型がありませんが、{target} の型は {target_type} です。
+str		{column} is of type {type}, but {target} has no type.	{column} の型は {type} ですが、{target} には型がありません。
 str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
+str		The foreign key {name} would break: {why}	外部キー {name} が成り立たなくなります: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。
 str		This element is removed where it is edited.	この要素は、編集する場所で削除します。
 str		This is part of a subtype's key, which goes only with its subtype.	これはサブタイプのキーの一部で、そのサブタイプと一緒にのみ削除されます。
@@ -628,8 +637,13 @@ str		An identity column takes no default.	識別列は既定値を持てませ�
 str		An identity column takes no expression.	識別列は式を持てません。
 str		A key or identity column may never be null.	キーの列や識別列は NULL を許可できません。
 str		The column {name} would break: {why}	列 {name} が成り立たなくなります: {why}
+str		A column takes a domain or an enum type, not both.	列にはドメインか列挙型のどちらか一方を指定します。両方は指定できません。
+str		A column on a domain takes the domain's type.	ドメイン上の列はドメインの型を使います。
+str		A column on a domain takes the domain's size.	ドメイン上の列はドメインのサイズを使います。
 str		A column on a domain takes the domain's default.	ドメイン上の列はドメインの既定値を使います。
 str		A column on a domain takes the domain's collation.	ドメイン上の列はドメインの照合順序を使います。
+str		A column of an enum type takes no type name of its own.	列挙型の列には独自の型名を指定できません。
+str		A column of an enum type takes no size.	列挙型の列にはサイズを指定できません。
 str		{name} follows no column.	{name} はどの列にも従っていません。
 plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。

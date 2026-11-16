@@ -217,7 +217,15 @@ as `KeyNotOf`, a referenced table without a primary key as `NoPrimaryKey`, the k
 already, with no columns named, as `Again` of `"foreign key"`, identifying relationships that would
 run in a cycle, from adding a foreign key and from pointing one elsewhere, as `IdentifyingCycle`
 with the child and the parent, and, inside the step, a key without columns to copy, which only a
-loaded document holds, as `NoKeyColumns`, each table named by its id when it has no name. The rest
+loaded document holds, as `NoKeyColumns`, each table named by its id when it has no name; and
+(AR-502) a foreign key's columns, as `rules::KeyProblem::reason` types them, from adding a foreign
+key and from pointing one elsewhere: not as many as the key's as `ColumnCount`, a column of another
+table as `NotColumnOf`, and a column whose type differs from the key column it matches as
+`TypesDiffer`, a column without a type as having none; inside the step, a foreign key that an edit
+of a column would break as `WouldBreak` of `"foreign key"` with that reason, and a new foreign
+key's columns copied from a loaded key of more than 32 as `TooMany` of `"foreign key column"`; no
+columns and one twice, which only a loaded document holds, are `TooFew` and `NamedTwice` of that
+kind. The rest
 follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
@@ -238,8 +246,17 @@ names as `SizeMisfit`, with the type, the size and the `SizeRule` it breaks, as
 `rules::SizeProblem::reason` types it; the English stays as it was. A column on a domain or an enum
 type has no type name of its own, so a size beside one is refused this way first: the two
 refusals of `size_allowed`, and their twins in `set_column_type`'s step, are reached by no command
-and stay in English. A size outside 1 to 65535 is refused by the engine before the handler runs (0
-is none); the rule types it all the same.
+(they are typed all the same, below). A size outside 1 to 65535 is refused by the engine before the
+handler runs (0 is none); the rule types it all the same.
+
+**Refusals of what a column is typed by** (AR-497). A column's type name or a domain's base type
+that holds its own size in parentheses, from `attribute.add`, `attribute.set-type`, `domain.add`
+and `domain.set`, is refused under `type` or `base_type` as `SizeInTypeName`; a domain and an enum
+type together, under `enum`, as `DomainAndEnum`; and a type name beside a domain or an enum type,
+under `type`, as `DomainGives` of `"type"` or `EnumTypeTakesNo` of `"type"`. A size beside one,
+which no command reaches (see above), is typed as `DomainGives` or `EnumTypeTakesNo` of `"size"`,
+before the step (`size_allowed`) and inside it (`set_column_type`), and tested on those two
+directly. The English stays as it was.
 
 **Checks (AR-499).** A check's expression refused, of a table's check (`er.check.add`, `set`) and
 of a domain's, is typed as `rules::CheckProblem::reason` types it: none as `NoExpression`, a text

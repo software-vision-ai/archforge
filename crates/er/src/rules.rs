@@ -1230,8 +1230,68 @@ pub fn key_columns_problem(store: &Store, entity: Obj, columns: &[Obj], primary:
     None
 }
 
-/// Why a foreign key on `entity` with `columns` pointing at key `k` would break the rules: the
-/// parameter it concerns (`columns`, `key`, `on_delete` or `relationship`) and a sentence; None when
+/// Why a foreign key breaks the rules ([`key_problem`]), each column and table by its label: said
+/// as an English sentence ([`KeyProblem::said`]) or typed ([`KeyProblem::reason`]), under the
+/// parameter it concerns ([`KeyProblem::key`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyProblem {
+    /// The foreign key has no column.
+    NoColumn,
+    /// The foreign key has more than [`MAX_KEY_COLUMNS`] columns.
+    TooMany,
+    /// The foreign key has `columns` columns, where the key of `table` has `key`.
+    ColumnCount { columns: usize, table: String, key: usize },
+    /// The element `column` is no column of the table `table`.
+    NotColumnOf { column: String, table: String },
+    /// The column `column` is in the foreign key twice.
+    Twice { column: String },
+    /// The column `column`, of type `ty`, and the key's column `target` it matches, of `target_ty`,
+    /// differ in type; a type is empty for a column without one.
+    TypesDiffer { column: String, ty: String, target: String, target_ty: String },
+    /// The key, the actions or the relationship break a rule, under the parameter `key`, said only
+    /// in English for now.
+    Other { key: &'static str, said: String },
+}
+
+impl KeyProblem {
+    /// The parameter the problem concerns: `columns`, `key`, `on_delete` or `relationship`.
+    pub fn key(&self) -> &'static str {
+        if let Self::Other { key, .. } = self { key } else { "columns" }
+    }
+
+    /// The problem as an English sentence, as "a foreign key needs at least one column".
+    pub fn said(&self) -> String {
+        match self {
+            Self::NoColumn => "a foreign key needs at least one column".into(),
+            Self::TooMany => format!("a foreign key has at most {MAX_KEY_COLUMNS} columns"),
+            Self::ColumnCount { columns, table, key } => format!("the foreign key has {columns} columns but the key of {table} has {key}"),
+            Self::NotColumnOf { column, table } => format!("{column} is not an attribute of {table}"),
+            Self::Twice { column } => format!("{column} appears twice in the foreign key"),
+            Self::TypesDiffer { column, ty, target, target_ty } => format!("{column} is {ty:?} but {target} is {target_ty:?}"),
+            Self::Other { said, .. } => said.clone(),
+        }
+    }
+
+    /// The problem typed, for an interface to say in its own words; a foreign key's columns are of
+    /// the kind `"foreign key column"`. None for a problem not typed yet.
+    pub fn reason(&self) -> Option<Reason> {
+        const KIND: &str = "foreign key column";
+        let ty = |t: &str| (!t.is_empty()).then(|| t.into());
+        Some(match self {
+            Self::NoColumn => Reason::TooFew { kind: KIND, min: 1 },
+            Self::TooMany => Reason::TooMany { kind: KIND, max: MAX_KEY_COLUMNS },
+            Self::ColumnCount { columns, table, key } => Reason::ColumnCount { columns: *columns, table: table.as_str().into(), key: *key },
+            Self::NotColumnOf { column, table } => Reason::NotColumnOf { column: column.as_str().into(), table: table.as_str().into() },
+            Self::Twice { column } => Reason::NamedTwice { kind: KIND, name: column.clone() },
+            Self::TypesDiffer { column, ty: own, target, target_ty } => {
+                Reason::TypesDiffer { column: column.as_str().into(), target: target.as_str().into(), types: Box::new([ty(own), ty(target_ty)]) }
+            }
+            Self::Other { .. } => return None,
+        })
+    }
+}
+
+/// Why a foreign key on `entity` with `columns` pointing at key `k` would break the rules; None when
 /// it keeps them. Columns match the key's by position; types are compared ignoring case, as SQL does.
 pub fn key_problem(
     store: &Store,
@@ -1240,53 +1300,54 @@ pub fn key_problem(
     columns: &[Obj],
     actions: [ReferentialAction; 2],
     relationship: Option<Obj>,
-) -> Option<(&'static str, String)> {
-    let col = |why: String| Some(("columns", why));
+) -> Option<KeyProblem> {
+    let other = |key, said: String| Some(KeyProblem::Other { key, said });
     if !is_key(store, k) {
-        return Some(("key", format!("{} is neither a primary key nor a unique constraint", label(store, k))));
+        return other("key", format!("{} is neither a primary key nor a unique constraint", label(store, k)));
     }
-    let Some(references) = entity_of(store, k) else { return Some(("key", "the key belongs to no entity".into())) };
+    let Some(references) = entity_of(store, k) else { return other("key", "the key belongs to no entity".into()) };
     // A foreign key may point into another schema of the model (slice S7).
     if schema_of(store, entity).is_none() || schema_of(store, references).is_none() {
-        return Some(("key", "the key or the foreign key belongs to no schema".into()));
+        return other("key", "the key or the foreign key belongs to no schema".into());
     }
     let targets = key_columns(store, k);
     if targets.is_empty() {
-        return Some(("key", format!("the key of {} has no columns", label(store, references))));
+        return other("key", format!("the key of {} has no columns", label(store, references)));
     }
     if columns.is_empty() {
-        return col("a foreign key needs at least one column".into());
+        return Some(KeyProblem::NoColumn);
     }
     if columns.len() > MAX_KEY_COLUMNS {
-        return col(format!("a foreign key has at most {MAX_KEY_COLUMNS} columns"));
+        return Some(KeyProblem::TooMany);
     }
     if columns.len() != targets.len() {
-        return col(format!("the foreign key has {} columns but the key of {} has {}", columns.len(), label(store, references), targets.len()));
+        return Some(KeyProblem::ColumnCount { columns: columns.len(), table: label(store, references), key: targets.len() });
     }
     let mut seen = BTreeSet::new();
     for (a, t) in columns.iter().zip(&targets) {
         if store.class_of(*a).ok() != Some(ATTRIBUTE) || entity_of(store, *a) != Some(entity) {
-            return col(format!("{} is not an attribute of {}", label(store, *a), label(store, entity)));
+            return Some(KeyProblem::NotColumnOf { column: label(store, *a), table: label(store, entity) });
         }
         if !seen.insert(*a) {
-            return col(format!("{} appears twice in the foreign key", label(store, *a)));
+            return Some(KeyProblem::Twice { column: label(store, *a) });
         }
-        if !same_name(&type_of(store, *a), &type_of(store, *t)) {
-            return col(format!("{} is {:?} but {} is {:?}", label(store, *a), type_of(store, *a), label(store, *t), type_of(store, *t)));
+        let (ty, target_ty) = (type_of(store, *a), type_of(store, *t));
+        if !same_name(&ty, &target_ty) {
+            return Some(KeyProblem::TypesDiffer { column: label(store, *a), ty, target: label(store, *t), target_ty });
         }
     }
     if actions.contains(&ReferentialAction::SetNull) && columns.iter().any(|a| !is_nullable(store, *a)) {
-        return Some(("on_delete", "set null needs nullable columns".into()));
+        return other("on_delete", "set null needs nullable columns".into());
     }
     if let Some(r) = relationship {
         let ends: BTreeSet<Option<Obj>> = [reference(store, r, relationship::FROM), reference(store, r, relationship::TO)].into_iter().collect();
         let want: BTreeSet<Option<Obj>> = [Some(entity), Some(references)].into_iter().collect();
         if store.class_of(r).ok() != Some(RELATIONSHIP) || ends != want {
-            return Some(("relationship", "the relationship does not join these two entities".into()));
+            return other("relationship", "the relationship does not join these two entities".into());
         }
         let pk = primary_key(store, entity);
         if flag(store, r, relationship::IDENTIFYING) && columns.iter().any(|a| !pk.contains(a)) {
-            return Some(("relationship", "an identifying relationship's key columns must be part of the primary key".into()));
+            return other("relationship", "an identifying relationship's key columns must be part of the primary key".into());
         }
     }
     None
@@ -1550,8 +1611,8 @@ pub fn problems(store: &Store) -> Vec<String> {
             let parts = key_parts(store, o);
             match (parts.entity, parts.key) {
                 (Some(e), Some(k)) => {
-                    if let Some((_, p)) = key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship) {
-                        out.push(format!("the foreign key {}: {p}", label(store, o)));
+                    if let Some(p) = key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship) {
+                        out.push(format!("the foreign key {}: {}", label(store, o), p.said()));
                     }
                 }
                 _ => out.push(format!("the foreign key {} lacks its entity or its key", label(store, o))),

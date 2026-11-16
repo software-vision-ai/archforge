@@ -505,6 +505,108 @@ fn a_loaded_key_without_columns_gives_a_foreign_key_none_to_copy() {
     assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
 }
 
+/// A foreign key's columns, refused, carry their reason typed beside the English, which stays as
+/// it was: not as many as the key's, a column of another table, and types that differ, a column
+/// without a type among them, from adding a foreign key and from pointing one elsewhere; and a
+/// column's new type that would break a foreign key, found inside the step (AR-502).
+#[test]
+fn a_foreign_keys_columns_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let column = |s: &mut Session, name: &str, ty: &str| run(s, "er.attribute.add", json!({ "entity": sm.order, "name": name, "type": ty }));
+    let (buyer, seller, label) = (column(&mut s, "buyer", "BIGINT"), column(&mut s, "seller", "BIGINT"), column(&mut s, "label", "TEXT"));
+    let bare = column(&mut s, "bare", "");
+    let note = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Note" }));
+    run(&mut s, "er.attribute.add", json!({ "entity": note, "name": "code", "primary_key": true }));
+    let fk = json!({ "entity": sm.order, "references": sm.customer, "columns": [buyer], "name": "fk_buyer" });
+    let fk = run(&mut s, "er.foreign-key.add", fk);
+    let note_pk = s.doc().uuid(rules::primary_key_of(s.doc(), obj(s.doc(), &note)).unwrap()).unwrap().to_string();
+    let add = |columns: Json| json!({ "entity": sm.order, "references": sm.customer, "columns": columns });
+    let types = |own: Option<&str>, theirs: Option<&str>| Box::new([own.map(Into::into), theirs.map(Into::into)]);
+    let differ =
+        |column: &str, target: &str, own, theirs| Reason::TypesDiffer { column: column.into(), target: target.into(), types: types(own, theirs) };
+    for (cmd, p, reason, message) in [
+        (
+            "er.foreign-key.add",
+            add(json!([buyer, seller])),
+            Reason::ColumnCount { columns: 2, table: "Customer".into(), key: 1 },
+            "the foreign key has 2 columns but the key of Customer has 1",
+        ),
+        (
+            "er.foreign-key.add",
+            add(json!([sm.key])),
+            Reason::NotColumnOf { column: "id".into(), table: "Order".into() },
+            "id is not an attribute of Order",
+        ),
+        ("er.foreign-key.add", add(json!([label])), differ("label", "id", Some("TEXT"), Some("BIGINT")), r#"label is "TEXT" but id is "BIGINT""#),
+        ("er.foreign-key.add", add(json!([bare])), differ("bare", "id", None, Some("BIGINT")), r#"bare is "" but id is "BIGINT""#),
+        (
+            "er.foreign-key.set-key",
+            json!({ "foreign_key": fk, "key": note_pk, "columns": [seller] }),
+            differ("seller", "code", Some("BIGINT"), None),
+            r#"seller is "BIGINT" but code is """#,
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some("columns")), "{cmd} {p}");
+    }
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.attribute.set-type", &json!({ "attribute": buyer, "type": "TEXT" })) else {
+        panic!("the foreign key breaks")
+    };
+    let why = Box::new(differ("buyer", "id", Some("TEXT"), Some("BIGINT")));
+    assert_eq!(error.reason, Some(Reason::WouldBreak { kind: "foreign key", name: "fk_buyer".into(), why }));
+    let said = r#"the foreign key fk_buyer would break: buyer is "TEXT" but id is "BIGINT""#;
+    assert_eq!((error.message.as_str(), error.key.as_deref()), (said, Some("type")));
+}
+
+/// A loaded document's key of more columns than a foreign key holds gives a new foreign key too
+/// many, refused from inside the step with its reason typed and the document as it was; a foreign
+/// key without columns, or with one twice, which no command makes, is typed by the rules (AR-502).
+#[test]
+fn a_loaded_foreign_keys_columns_break_typed() {
+    use archforge_engine::Reason;
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let table = |st: &mut Store, name: &str, columns: usize| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        let pk = st.create(PRIMARY_KEY).unwrap();
+        st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+        for i in 0..columns {
+            let a = st.create(ATTRIBUTE).unwrap();
+            st.set(a, named_element::NAME, Value::str(&format!("c{i}"))).unwrap();
+            st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+            st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+            st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+        }
+        (e, pk)
+    };
+    let (wide, _) = table(&mut st, "Wide", rules::MAX_KEY_COLUMNS + 1);
+    let (_, pair) = table(&mut st, "Pair", 2);
+    let (child, child_pk) = table(&mut st, "Child", 1);
+    let c = rules::key_columns(&st, child_pk)[0];
+    let none = [ReferentialAction::NoAction; 2];
+    let problem = |columns: &[Obj]| rules::key_problem(&st, child, pair, columns, none, None).unwrap();
+    assert_eq!(
+        (problem(&[]).reason(), problem(&[]).said()),
+        (Some(Reason::TooFew { kind: "foreign key column", min: 1 }), "a foreign key needs at least one column".into())
+    );
+    let twice = Reason::NamedTwice { kind: "foreign key column", name: "c0".into() };
+    assert_eq!((problem(&[c, c]).reason(), problem(&[c, c]).said()), (Some(twice), "c0 appears twice in the foreign key".into()));
+    let (wide, child) = (st.uuid(wide).unwrap().to_string(), st.uuid(child).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let before = picture(s.doc());
+    let Err(EngineError::Failed { error, .. }) = s.execute("er.foreign-key.add", &json!({ "entity": child, "references": wide })) else {
+        panic!("the key has too many columns")
+    };
+    let most = Reason::TooMany { kind: "foreign key column", max: rules::MAX_KEY_COLUMNS };
+    assert_eq!((error.reason, error.message.as_str(), error.key), (Some(most), "a foreign key has at most 32 columns", None));
+    assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
+}
+
 /// A key a step would break, found inside the step, carries its reason typed beside the English: the
 /// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
 /// column that may be null breaks on any edit that checks the keys around it (AR-493).
@@ -749,6 +851,54 @@ fn a_size_out_of_range_is_typed_by_the_rule_though_no_command_reaches_it() {
         let refused = s.execute("er.attribute.add", &p);
         assert!(matches!(&refused, Err(EngineError::OutOfRange { key, .. }) if key == "length"), "{length}: {refused:?}");
     }
+}
+
+/// What a column is typed by, refused, carries its reason typed beside the English, which stays as
+/// it was: a column's or a domain's type name that holds its own size, a domain and an enum type
+/// together, with or without a type name, and a type name beside either, from attribute add and
+/// set-type and domain add and set (AR-497).
+#[test]
+fn what_a_column_is_typed_by_refused_is_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let dom = run(&mut s, "er.domain.add", json!({ "schema": sm.schema, "name": "money", "base_type": "NUMERIC", "precision": 10 }));
+    let en = run(&mut s, "er.enum.add", json!({ "schema": sm.schema, "name": "status", "literals": ["open", "shut"] }));
+    const SIZED: &str = "carries its own size; give length, precision or scale instead";
+    const BOTH: &str = "a column takes a domain or an enum type, not both";
+    let add = json!({ "entity": sm.order, "name": "n", "domain": dom, "enum": en });
+    let retype = |extra: Json| {
+        let mut p = json!({ "attribute": sm.total });
+        p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        p
+    };
+    for (cmd, p, key, reason, message) in [
+        ("er.attribute.add", json!({ "entity": sm.order, "name": "n", "type": "VARCHAR(20)" }), "type", Reason::SizeInTypeName, SIZED),
+        ("er.attribute.set-type", retype(json!({ "type": "DECIMAL(10,2)" })), "type", Reason::SizeInTypeName, SIZED),
+        ("er.domain.add", json!({ "schema": sm.schema, "name": "d", "base_type": "CHAR(3)" }), "base_type", Reason::SizeInTypeName, SIZED),
+        ("er.domain.set", json!({ "domain": dom, "name": "money", "base_type": "NUMERIC(10)" }), "base_type", Reason::SizeInTypeName, SIZED),
+        ("er.attribute.add", add, "enum", Reason::DomainAndEnum, BOTH),
+        ("er.attribute.set-type", retype(json!({ "type": "TEXT", "domain": dom, "enum": en })), "enum", Reason::DomainAndEnum, BOTH),
+        (
+            "er.attribute.set-type",
+            retype(json!({ "type": "TEXT", "domain": dom })),
+            "type",
+            Reason::DomainGives { what: "type" },
+            "a column on a domain takes no type name of its own",
+        ),
+        (
+            "er.attribute.add",
+            json!({ "entity": sm.order, "name": "n", "type": "TEXT", "enum": en }),
+            "type",
+            Reason::EnumTypeTakesNo { what: "type" },
+            "a column of an enum type takes no type name of its own",
+        ),
+    ] {
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    }
+    run(&mut s, "er.attribute.set-type", retype(json!({ "domain": dom })));
+    run(&mut s, "er.attribute.set-type", retype(json!({ "enum": en })));
 }
 
 /// A column's own default, collation, place and link refused carry their reason typed beside the

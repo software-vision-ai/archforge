@@ -372,6 +372,12 @@ pub enum Reason {
     NotColumnOf { column: Box<str>, table: Box<str> },
     /// The column `name` may be null, which a primary key's column never is.
     NullableKeyColumn { name: String },
+    /// A foreign key has `columns` columns, where the key of the table `table` it points at has
+    /// `key`; they match by position.
+    ColumnCount { columns: usize, table: Box<str>, key: usize },
+    /// A foreign key's column `column` and the key's column `target` it matches by position differ
+    /// in type; `types` holds the column's type and the target's, none for a column without one.
+    TypesDiffer { column: Box<str>, target: Box<str>, types: Box<[Option<Box<str>>; 2]> },
     /// The foreign key `foreign_key` points at a key of the table `table`, so the key keeps its
     /// columns while it does.
     KeyInUse { foreign_key: Box<str>, table: Box<str> },
@@ -405,9 +411,17 @@ pub enum Reason {
     /// The size `value` of a column or a domain does not fit its type `ty` (empty when it has no
     /// type name of its own), by the rule it breaks.
     SizeMisfit { rule: SizeRule, ty: Box<str>, value: i64 },
-    /// A column on a domain is given its own `what`, `"default"` or `"collation"`, which the
-    /// domain gives it.
+    /// A type name holds its own size in parentheses, as `VARCHAR(20)`, where the length, precision
+    /// and scale are given apart.
+    SizeInTypeName,
+    /// A column is given a domain and an enum type, where it takes one of them at most.
+    DomainAndEnum,
+    /// A column on a domain is given its own `what`, `"type"`, `"size"`, `"default"` or
+    /// `"collation"`, which the domain gives it.
     DomainGives { what: &'static str },
+    /// A column of an enum type is given its own `what`, `"type"` or `"size"`, of which it takes
+    /// none.
+    EnumTypeTakesNo { what: &'static str },
     /// The column `name` is unlinked, though it follows no column.
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.

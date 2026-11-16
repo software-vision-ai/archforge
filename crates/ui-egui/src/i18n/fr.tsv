@@ -240,6 +240,7 @@ str		{type} takes no scale.	{type} n'a pas d'échelle.
 str		A BINARY holds at most 255 bytes, not {value}.	Un BINARY contient au plus 255 octets, pas {value}.
 str		The scale {value} is more than the precision.	L'échelle {value} est supérieure à la précision.
 str		A scale needs a precision.	Une échelle a besoin d'une précision.
+str		A type name holds no size; give the length, precision or scale instead.	Un nom de type ne contient pas de taille ; indiquez plutôt la longueur, la précision ou l'échelle.
 str		Default	Valeur par défaut
 str		Generation	Génération
 str		Expression	Expression
@@ -615,7 +616,15 @@ str		The key is not one of {table}'s keys.	La clé n’est pas une des clés de 
 str		The key of {table} has no columns to refer to.	La clé de {table} n’a aucune colonne à laquelle faire référence.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Les relations identifiantes formeraient un cycle entre {child} et {parent}.
 str		The foreign key points at this key already. Name the columns to change them.	La clé étrangère pointe déjà vers cette clé. Indiquez les colonnes pour les modifier.
+str		A foreign key needs at least one column.	Une clé étrangère doit comprendre au moins une colonne.
+str		A foreign key holds at most {max} columns.	Une clé étrangère comprend au plus {max} colonnes.
+str		{name} appears twice in the foreign key.	{name} figure deux fois dans la clé étrangère.
+str		The foreign key needs as many columns as the key of {table}, which has {n}.	La clé étrangère doit comprendre autant de colonnes que la clé de {table}, soit {n}.
+str		{column} is of type {type}, but {target} is of type {target_type}.	{column} est de type {type}, mais {target} est de type {target_type}.
+str		{column} has no type, but {target} is of type {target_type}.	{column} n’a pas de type, mais {target} est de type {target_type}.
+str		{column} is of type {type}, but {target} has no type.	{column} est de type {type}, mais {target} n’a pas de type.
 str		The key {name} would break: {why}	La clé {name} ne serait plus valide : {why}
+str		The foreign key {name} would break: {why}	La clé étrangère {name} ne serait plus valide : {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Les clés construites les unes sur les autres dépassent ici {max} niveaux ou forment une boucle.
 str		This element is removed where it is edited.	Cet élément se supprime là où il se modifie.
 str		This is part of a subtype's key, which goes only with its subtype.	Ceci fait partie de la clé d'un sous-type et ne se supprime qu'avec son sous-type.
@@ -628,8 +637,13 @@ str		An identity column takes no default.	Une colonne d’identité ne prend pas
 str		An identity column takes no expression.	Une colonne d’identité ne prend pas d’expression.
 str		A key or identity column may never be null.	Une colonne de clé ou d’identité n’est jamais nulle.
 str		The column {name} would break: {why}	La colonne {name} ne serait plus valide : {why}
+str		A column takes a domain or an enum type, not both.	Une colonne prend un domaine ou un type énuméré, pas les deux.
+str		A column on a domain takes the domain's type.	Une colonne sur un domaine prend le type du domaine.
+str		A column on a domain takes the domain's size.	Une colonne sur un domaine prend la taille du domaine.
 str		A column on a domain takes the domain's default.	Une colonne sur un domaine prend la valeur par défaut du domaine.
 str		A column on a domain takes the domain's collation.	Une colonne sur un domaine prend la collation du domaine.
+str		A column of an enum type takes no type name of its own.	Une colonne d'un type énuméré n'a pas de nom de type propre.
+str		A column of an enum type takes no size.	Une colonne d'un type énuméré n'a pas de taille.
 str		{name} follows no column.	{name} ne suit aucune colonne.
 plural		The table has {n} column.	La table a {n} colonne.|La table a {n} colonnes.
 str		A package cannot go into itself or a package it holds.	Un paquetage ne peut aller ni dans lui-même ni dans un paquetage qu’il contient.

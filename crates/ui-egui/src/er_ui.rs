@@ -316,7 +316,7 @@ impl NotationUi for ErUi {
                     let parts = r::key_parts(store, fk);
                     let text = match (parts.entity, parts.key) {
                         (Some(e), Some(k)) => {
-                            r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship).map(|(_, p)| p)
+                            r::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship).map(|p| p.said())
                         }
                         _ => Some(tr("lacks its table or its key")),
                     };

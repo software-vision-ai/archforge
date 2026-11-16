@@ -218,14 +218,15 @@ fn check_text(key: &str, problem: Option<Problem>) -> Result<(), CommandError> {
     }
 }
 
-/// A type name: free text, but its size goes into the size parameters, never into the name.
+/// A type name: free text, but its size goes into the size parameters, never into the name
+/// ([`Reason::SizeInTypeName`]).
 fn check_type(kind: &str) -> Result<(), CommandError> {
     if kind.is_empty() {
         return Ok(());
     }
     check_name("type", kind, MAX_TYPE)?;
     if kind.contains('(') {
-        return Err(refuse("type", "carries its own size; give length, precision or scale instead"));
+        return Err(refuse("type", "carries its own size; give length, precision or scale instead").because(Reason::SizeInTypeName));
     }
     Ok(())
 }
@@ -937,7 +938,8 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused; a key's columns with the reason typed ([`Reason::WouldBreak`]).
+/// the rules, or the edit is refused; a key's columns and a foreign key's with the reason typed
+/// ([`Reason::WouldBreak`]).
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
@@ -952,9 +954,12 @@ fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Resu
     for fk in fks {
         let parts = rules::key_parts(store, *fk);
         if let (Some(e), Some(k)) = (parts.entity, parts.key)
-            && let Some((_, problem)) = rules::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
+            && let Some(problem) = rules::key_problem(store, e, k, &parts.columns, [parts.on_delete, parts.on_update], parts.relationship)
         {
-            return Err(Invalid::Refused(format!("the foreign key {} would break: {problem}", rules::label(store, *fk))));
+            let name = rules::label(store, *fk);
+            let said = format!("the foreign key {name} would break: {}", problem.said());
+            let Some(why) = problem.reason() else { return Err(Invalid::Refused(said)) };
+            return Err(refused(Reason::WouldBreak { kind: kind_of(FOREIGN_KEY), name: name.into(), why: Box::new(why) }, said));
         }
     }
     for e in entities {
@@ -1107,7 +1112,9 @@ enum Typed {
 }
 
 /// The `domain` or `enum` parameter beside `type`: exactly one of the three, of any schema of the
-/// model (slice S7: a key column in one schema follows its target's type from another).
+/// model (slice S7: a key column in one schema follows its target's type from another). Both is
+/// refused as [`Reason::DomainAndEnum`], a type name beside one as the domain's to give
+/// ([`Reason::DomainGives`]) or none of an enum type's ([`Reason::EnumTypeTakesNo`]).
 fn column_type(ctx: &C<'_>, p: &Params, _e: Obj, kind: &str) -> Result<Typed, CommandError> {
     let given = |key: &str, class: ClassId| -> Result<Option<Obj>, CommandError> {
         if text(p, key).is_empty() {
@@ -1121,20 +1128,37 @@ fn column_type(ctx: &C<'_>, p: &Params, _e: Obj, kind: &str) -> Result<Typed, Co
     };
     let (d, en) = (given("domain", DOMAIN)?, given("enum", ENUM_TYPE)?);
     match (kind.is_empty(), d, en) {
-        (_, Some(_), Some(_)) => Err(refuse("enum", "a column takes a domain or an enum type, not both")),
-        (false, Some(_), _) => Err(refuse("type", "a column on a domain takes no type name of its own")),
-        (false, _, Some(_)) => Err(refuse("type", "a column of an enum type takes no type name of its own")),
+        (_, Some(_), Some(_)) => Err(refuse("enum", "a column takes a domain or an enum type, not both").because(Reason::DomainAndEnum)),
+        (false, Some(_), _) => {
+            Err(refuse("type", "a column on a domain takes no type name of its own").because(Reason::DomainGives { what: "type" }))
+        }
+        (false, _, Some(_)) => {
+            Err(refuse("type", "a column of an enum type takes no type name of its own").because(Reason::EnumTypeTakesNo { what: "type" }))
+        }
         (_, Some(d), None) => Ok(Typed::Domain(d)),
         (_, None, Some(en)) => Ok(Typed::Enum(en)),
         (_, None, None) => Ok(Typed::Name),
     }
 }
 
-/// A size given beside a domain or an enum type is refused up front, under its own key.
-fn size_allowed(typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), CommandError> {
-    if typed == Typed::Name || size == (None, None, None) {
-        return Ok(());
+/// Why a size given beside what types the column, `typed`, is refused, in English and typed: a
+/// domain gives the column its size ([`Reason::DomainGives`]), and a column of an enum type takes
+/// none ([`Reason::EnumTypeTakesNo`]); none for a type name, which takes its own.
+fn size_beside(typed: Typed) -> Option<(&'static str, Reason)> {
+    match typed {
+        Typed::Name => None,
+        Typed::Domain(_) => Some(("a column on a domain takes the domain's size", Reason::DomainGives { what: "size" })),
+        Typed::Enum(_) => Some(("a column of an enum type takes no size", Reason::EnumTypeTakesNo { what: "size" })),
     }
+}
+
+/// A size given beside a domain or an enum type is refused up front, under its own key and typed
+/// ([`size_beside`]). No command reaches it today: the size rules refuse any size of a column
+/// without a type name of its own first.
+fn size_allowed(typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), CommandError> {
+    let Some((said, reason)) = size_beside(typed).filter(|_| size != (None, None, None)) else {
+        return Ok(());
+    };
     let key = if size.0.is_some() {
         "length"
     } else if size.1.is_some() {
@@ -1142,17 +1166,17 @@ fn size_allowed(typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> 
     } else {
         "scale"
     };
-    Err(refuse(
-        key,
-        match typed {
-            Typed::Domain(_) => "a column on a domain takes the domain's size",
-            _ => "a column of an enum type takes no size",
-        },
-    ))
+    Err(refuse(key, said).because(reason))
 }
 
-/// Writes a column's type: its own name and size, or the domain or enum type it takes instead.
+/// Writes a column's type: its own name and size, or the domain or enum type it takes instead; a
+/// size beside one is refused inside the step too, typed ([`size_beside`]).
 fn set_column_type(st: &mut Store, a: Obj, kind: &str, typed: Typed, size: (Option<i64>, Option<i64>, Option<i64>)) -> Result<(), Invalid> {
+    if size != (None, None, None)
+        && let Some((said, reason)) = size_beside(typed)
+    {
+        return Err(refused(reason, said.into()));
+    }
     match typed {
         Typed::Name => {
             st.set(a, attribute::TYPE, text_or_null(kind))?;
@@ -1161,9 +1185,6 @@ fn set_column_type(st: &mut Store, a: Obj, kind: &str, typed: Typed, size: (Opti
             st.set(a, attribute::ENUM_TYPE, Value::Null)
         }
         Typed::Domain(d) => {
-            if size != (None, None, None) {
-                return Err(Invalid::Refused("a column on a domain takes the domain's size".into()));
-            }
             st.set(a, attribute::TYPE, Value::Null)?;
             set_size(st, a, (None, None, None))?;
             // The domain's default and collation count: the column's own go.
@@ -1173,9 +1194,6 @@ fn set_column_type(st: &mut Store, a: Obj, kind: &str, typed: Typed, size: (Opti
             st.set(a, attribute::ENUM_TYPE, Value::Null)
         }
         Typed::Enum(e) => {
-            if size != (None, None, None) {
-                return Err(Invalid::Refused("a column of an enum type takes no size".into()));
-            }
             st.set(a, attribute::TYPE, Value::Null)?;
             set_size(st, a, (None, None, None))?;
             st.set(a, attribute::DOMAIN, Value::Null)?;
@@ -1204,14 +1222,16 @@ struct DomainFields {
 /// The keys a domain's check given as an object takes.
 const CHECK_KEYS: &[&str] = &["expression", "name"];
 
-/// A domain's fields from the parameters; each refusal of its checks typed with the kind `"check"`.
+/// A domain's fields from the parameters, each refused under its own key: a base type that holds
+/// its own size as [`Reason::SizeInTypeName`], and each refusal of its checks typed with the kind
+/// `"check"`.
 fn domain_fields(p: &Params) -> Result<DomainFields, CommandError> {
     const CHECK: &str = "check";
     let items_expected = |message: String| refuse("checks", message).because(Reason::ItemsExpected { kind: CHECK });
     let base = text(p, "base_type");
     check_name("base_type", base, MAX_TYPE)?;
     if base.contains('(') {
-        return Err(refuse("base_type", "carries its own size; give length, precision or scale instead"));
+        return Err(refuse("base_type", "carries its own size; give length, precision or scale instead").because(Reason::SizeInTypeName));
     }
     let size = size_params(p, base)?;
     let default = text(p, "default");
@@ -2581,6 +2601,21 @@ pub fn deferrability_name(d: Deferrability) -> &'static str {
     }
 }
 
+/// A foreign key's columns that break the rules, refused under the parameter the problem concerns,
+/// with the reason typed where [`rules::KeyProblem::reason`] has one.
+fn key_refused(problem: &rules::KeyProblem) -> CommandError {
+    CommandError { reason: problem.reason(), ..refuse(problem.key(), problem.said()) }
+}
+
+/// A foreign key's columns that break the rules, found inside a step: refused through the step's
+/// carrier ([`refused`]) where [`rules::KeyProblem::reason`] types the problem, else in English.
+fn key_broken(problem: &rules::KeyProblem) -> Invalid {
+    match problem.reason() {
+        Some(reason) => refused(reason, problem.said()),
+        None => Invalid::Refused(problem.said()),
+    }
+}
+
 /// The key a foreign key command names: `key`, or the primary key of the entity `references`. A key
 /// of another entity than `references` ([`Reason::KeyNotOf`]) and an entity without a primary key
 /// ([`Reason::NoPrimaryKey`]) are refused typed.
@@ -2615,9 +2650,9 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     let (matching, deferrable) = (match_type(p)?, deferrability(p)?);
     let rel = if text(p, "relationship").is_empty() { None } else { Some(id_of(ctx, p, "relationship", RELATIONSHIP)?) };
     if !given.is_empty()
-        && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, rel)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &given, actions, rel)
     {
-        return Err(refuse(param, problem));
+        return Err(key_refused(&problem));
     }
     // New columns follow the relationship: in the key when it identifies, nullable when the end it
     // points at is optional.
@@ -2636,8 +2671,8 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
         .doc
         .transaction(|st| {
             let columns = if given.is_empty() { new_key_columns(st, e, k, &parent_role, in_key, optional)? } else { given.clone() };
-            if let Some((_, problem)) = rules::key_problem(st, e, k, &columns, actions, rel) {
-                return Err(Invalid::Refused(problem));
+            if let Some(problem) = rules::key_problem(st, e, k, &columns, actions, rel) {
+                return Err(key_broken(&problem));
             }
             let fk = new_foreign_key(st, e, k, &columns, &name, actions, rel)?;
             st.set(fk, foreign_key::MATCH, Value::Enum(matching.index()))?;
@@ -2654,9 +2689,9 @@ fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
     let parts = rules::key_parts(ctx.doc, fk);
     if let (Some(e), Some(k)) = (parts.entity, parts.key)
-        && let Some((_, problem)) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
     {
-        return Err(refuse("on_delete", problem));
+        return Err(refuse("on_delete", problem.said()));
     }
     ctx.doc
         .transaction(|st| {
@@ -2697,9 +2732,9 @@ fn foreign_key_set_key(ctx: &mut C<'_>, p: &Params) -> R {
         return Err(refuse("key", "the foreign key points at this key already; name the columns to change them").because(again));
     }
     if !given.is_empty()
-        && let Some((param, problem)) = rules::key_problem(ctx.doc, e, k, &given, actions, parts.relationship)
+        && let Some(problem) = rules::key_problem(ctx.doc, e, k, &given, actions, parts.relationship)
     {
-        return Err(refuse(param, problem));
+        return Err(key_refused(&problem));
     }
     // New columns follow the relationship: in the key when it identifies, nullable when the end it
     // points at is optional.
@@ -3873,5 +3908,29 @@ mod tests {
             panic!("a step cut short");
         });
         assert_eq!(refused_as("k")(other()).reason, None, "a reason left by a panic");
+    }
+
+    /// A size beside a domain or an enum type, which no command reaches as the size rules refuse it
+    /// first, is refused typed before the step, under the part given first, and inside it; a type
+    /// name takes its size, and no size is no refusal (AR-497).
+    #[test]
+    fn a_size_beside_a_domain_or_an_enum_type_is_refused_typed() {
+        let (domain, enumerated) = (Typed::Domain(Obj(7)), Typed::Enum(Obj(8)));
+        let gives = Reason::DomainGives { what: "size" };
+        let none = Reason::EnumTypeTakesNo { what: "size" };
+        let refused_by = |r: Result<(), CommandError>| r.err().map(|e| (e.key, e.message, e.reason));
+        let expect = |key: &str, said: &str, reason: &Reason| Some((Some(key.to_string()), said.to_string(), Some(reason.clone())));
+        let on_domain = "a column on a domain takes the domain's size";
+        let on_enum = "a column of an enum type takes no size";
+        assert_eq!(refused_by(size_allowed(domain, (Some(3), Some(4), None))), expect("length", on_domain, &gives));
+        assert_eq!(refused_by(size_allowed(enumerated, (None, Some(4), Some(2)))), expect("precision", on_enum, &none));
+        assert_eq!(refused_by(size_allowed(domain, (None, None, Some(2)))), expect("scale", on_domain, &gives));
+        assert_eq!(refused_by(size_allowed(Typed::Name, (Some(3), None, None))), None);
+        assert_eq!(refused_by(size_allowed(enumerated, (None, None, None))), None);
+        let mut st = crate::store(Box::new(|| Uuid::v7(1_761_670_800_000, [0; 10]))).unwrap();
+        for (typed, reason) in [(domain, gives), (enumerated, none)] {
+            let refused = set_column_type(&mut st, Obj(9), "", typed, (None, Some(4), None)).unwrap_err();
+            assert_eq!(refusal("type", refused).reason, Some(reason));
+        }
     }
 }
