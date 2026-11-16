@@ -938,8 +938,8 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused; a key's columns and a foreign key's with the reason typed
-/// ([`Reason::WouldBreak`]).
+/// the rules, or the edit is refused; a key's columns and a foreign key with the reason typed
+/// ([`Reason::WouldBreak`]), except where the key or the foreign key belongs to no table or schema.
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
@@ -2601,13 +2601,14 @@ pub fn deferrability_name(d: Deferrability) -> &'static str {
     }
 }
 
-/// A foreign key's columns that break the rules, refused under the parameter the problem concerns,
-/// with the reason typed where [`rules::KeyProblem::reason`] has one.
+/// A foreign key that breaks the rules, by its key, columns, actions or relationship, refused under
+/// the parameter the problem concerns, with the reason typed where [`rules::KeyProblem::reason`]
+/// has one.
 fn key_refused(problem: &rules::KeyProblem) -> CommandError {
     CommandError { reason: problem.reason(), ..refuse(problem.key(), problem.said()) }
 }
 
-/// A foreign key's columns that break the rules, found inside a step: refused through the step's
+/// A foreign key that breaks the rules, found inside a step: refused through the step's
 /// carrier ([`refused`]) where [`rules::KeyProblem::reason`] types the problem, else in English.
 fn key_broken(problem: &rules::KeyProblem) -> Invalid {
     match problem.reason() {
@@ -2684,6 +2685,8 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, fk)? }))
 }
 
+/// Sets a foreign key's actions on a delete and an update. A foreign key that would break the rules
+/// with them is refused under `on_delete`, with the reason typed ([`rules::KeyProblem::reason`]).
 fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
@@ -2691,7 +2694,7 @@ fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     if let (Some(e), Some(k)) = (parts.entity, parts.key)
         && let Some(problem) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
     {
-        return Err(refuse("on_delete", problem.said()));
+        return Err(CommandError { reason: problem.reason(), ..refuse("on_delete", problem.said()) });
     }
     ctx.doc
         .transaction(|st| {

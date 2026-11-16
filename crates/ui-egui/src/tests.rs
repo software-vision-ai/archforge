@@ -6779,6 +6779,77 @@ fn a_foreign_keys_columns_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A foreign key's actions and relationship, refused, are said in the chosen language, never in
+/// the engine's English: set null on a column that may never be null, from adding a foreign key and
+/// from setting its actions, a relationship that does not join the two tables, a column outside
+/// the primary key under an identifying relationship, and a column made not null under a set-null
+/// foreign key; a key that is none and one without columns, which only a loaded document holds,
+/// too. In light and dark (AR-503).
+#[test]
+fn a_foreign_keys_actions_and_relationship_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let [kunde, auftrag, artikel] = ["Kunde", "Auftrag", "Artikel"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        id("er.attribute.add", json!({ "entity": artikel, "name": "code", "type": "TEXT", "primary_key": true }));
+        let mut column =
+            |name: &str, nullable: &str| id("er.attribute.add", json!({ "entity": auftrag, "name": name, "type": "BIGINT", "nullable": nullable }));
+        let (kaeufer, vielleicht) = (column("kaeufer", "no"), column("vielleicht", "yes"));
+        let fk = id("er.foreign-key.add", json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "name": "fk_kaeufer" }));
+        let null = json!({ "entity": auftrag, "references": kunde, "columns": [vielleicht], "name": "fk_vielleicht", "on_delete": "set-null" });
+        id("er.foreign-key.add", null);
+        let bestellt = json!({ "from": kunde, "to": auftrag, "to_end": "zero-or-more", "name": "bestellt" });
+        let bestellt = id("er.relationship.add", bestellt);
+        let traegt = json!({ "from": artikel, "to": auftrag, "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
+        let traegt = id("er.relationship.add", traegt);
+        let titel = id("er.attribute.add", json!({ "entity": auftrag, "name": "titel", "type": "TEXT", "nullable": "no" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        for (cmd, p, said) in [
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "on_delete": "set-null" }),
+                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
+            ),
+            (
+                "er.foreign-key.set-actions",
+                json!({ "foreign_key": fk, "on_delete": "no-action", "on_update": "set-null" }),
+                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
+            ),
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": bestellt }),
+                "Die Beziehung verbindet Auftrag und Artikel nicht.",
+            ),
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": traegt }),
+                "Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, titel aber nicht.",
+            ),
+            (
+                "er.attribute.set-flags",
+                json!({ "attribute": vielleicht, "primary_key": false, "nullable": "no", "unique": false }),
+                "Der Fremdschlüssel fk_vielleicht wäre danach ungültig: „Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber vielleicht darf nie leer sein.",
+            ),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        for (reason, said) in [
+            (Reason::NotA { kind: "key", name: "nummer".into() }, "nummer passt hier nicht: erwartet wird ein Schlüssel."),
+            (Reason::NoKeyColumns { table: "Kunde".into() }, "Der Schlüssel von Kunde hat keine Spalten, auf die verwiesen werden kann."),
+        ] {
+            assert_eq!(crate::er_said::said(&reason).as_deref(), Some(said), "{theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A key a step would break is said in the chosen language with why in the same words, and keys built
 /// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
 /// English. In light and dark (AR-493).

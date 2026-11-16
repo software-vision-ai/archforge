@@ -225,7 +225,16 @@ table as `NotColumnOf`, and a column whose type differs from the key column it m
 of a column would break as `WouldBreak` of `"foreign key"` with that reason, and a new foreign
 key's columns copied from a loaded key of more than 32 as `TooMany` of `"foreign key column"`; no
 columns and one twice, which only a loaded document holds, are `TooFew` and `NamedTwice` of that
-kind. The rest
+kind.
+A foreign key's key, actions and relationship (AR-503), as `rules::KeyProblem::reason` types them,
+from adding a foreign key, setting its actions and pointing it elsewhere: set null on a column that
+may never be null as `SetNullNotNullable`, a relationship that does not join its table and the
+table it points at as `RelationshipNotJoining`, and a column outside the primary key of one that
+follows an identifying relationship as `IdentifyingOutsideKey`, each with the first column or the
+two tables by label; inside the step, a foreign key an edit would break that way as `WouldBreak` of
+`"foreign key"`; a key that is none, as `NotA` of `"key"`, and a key without columns, as
+`NoKeyColumns`, only a loaded document holds.
+The rest
 follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
@@ -236,7 +245,7 @@ documented choices hold back, as the engine refuses any other before the handler
 never leaves (`schema_rename`, `attribute_set_type`, `attribute_set_flags`, `attribute_move`,
 `column_type`, `domain_set`, `enum_set`, `sequence_set`, `view_set`, `new_key_columns`,
 `relationship_add` twice, `resolve`, `collapse` twice, `generalization_add`, `foreign_key_set_key`,
-`unique_set`, `index_set`); a column missing from the list of the table that owns it, the only
+`unique_set`, `index_set`, `rules::key_problem` twice); a column missing from the list of the table that owns it, the only
 place a column is owned (`attribute_move`); a mapping table without its two foreign keys (`collapse`); no free
 name among a thousand (`first_free`); and a project without its model root (`model`).
 

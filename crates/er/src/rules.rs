@@ -1230,7 +1230,7 @@ pub fn key_columns_problem(store: &Store, entity: Obj, columns: &[Obj], primary:
     None
 }
 
-/// Why a foreign key breaks the rules ([`key_problem`]), each column and table by its label: said
+/// Why a foreign key breaks the rules ([`key_problem`]), each key, column and table by its label: said
 /// as an English sentence ([`KeyProblem::said`]) or typed ([`KeyProblem::reason`]), under the
 /// parameter it concerns ([`KeyProblem::key`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1248,15 +1248,30 @@ pub enum KeyProblem {
     /// The column `column`, of type `ty`, and the key's column `target` it matches, of `target_ty`,
     /// differ in type; a type is empty for a column without one.
     TypesDiffer { column: String, ty: String, target: String, target_ty: String },
-    /// The key, the actions or the relationship break a rule, under the parameter `key`, said only
-    /// in English for now.
-    Other { key: &'static str, said: String },
+    /// The element `name` the foreign key points at is no key.
+    NotAKey { name: String },
+    /// The key the foreign key points at, of the table `table`, has no columns.
+    KeyWithoutColumns { table: String },
+    /// An action sets the columns to null, and the column `column` may never be null.
+    SetNull { column: String },
+    /// The relationship does not join the foreign key's table `table` and the table `references`.
+    NotJoining { table: String, references: String },
+    /// The relationship identifies, and the column `column` is outside the primary key.
+    OutsideKey { column: String },
+    /// The key or the foreign key belongs to no table or schema, which containment never leaves:
+    /// said `said` in English only.
+    Unplaced { said: &'static str },
 }
 
 impl KeyProblem {
     /// The parameter the problem concerns: `columns`, `key`, `on_delete` or `relationship`.
     pub fn key(&self) -> &'static str {
-        if let Self::Other { key, .. } = self { key } else { "columns" }
+        match self {
+            Self::NotAKey { .. } | Self::KeyWithoutColumns { .. } | Self::Unplaced { .. } => "key",
+            Self::SetNull { .. } => "on_delete",
+            Self::NotJoining { .. } | Self::OutsideKey { .. } => "relationship",
+            _ => "columns",
+        }
     }
 
     /// The problem as an English sentence, as "a foreign key needs at least one column".
@@ -1268,12 +1283,18 @@ impl KeyProblem {
             Self::NotColumnOf { column, table } => format!("{column} is not an attribute of {table}"),
             Self::Twice { column } => format!("{column} appears twice in the foreign key"),
             Self::TypesDiffer { column, ty, target, target_ty } => format!("{column} is {ty:?} but {target} is {target_ty:?}"),
-            Self::Other { said, .. } => said.clone(),
+            Self::NotAKey { name } => format!("{name} is neither a primary key nor a unique constraint"),
+            Self::KeyWithoutColumns { table } => format!("the key of {table} has no columns"),
+            Self::SetNull { .. } => "set null needs nullable columns".into(),
+            Self::NotJoining { .. } => "the relationship does not join these two entities".into(),
+            Self::OutsideKey { .. } => "an identifying relationship's key columns must be part of the primary key".into(),
+            Self::Unplaced { said } => (*said).into(),
         }
     }
 
     /// The problem typed, for an interface to say in its own words; a foreign key's columns are of
-    /// the kind `"foreign key column"`. None for a problem not typed yet.
+    /// the kind `"foreign key column"`. None for a key or a foreign key that belongs to no table or
+    /// schema ([`KeyProblem::Unplaced`]).
     pub fn reason(&self) -> Option<Reason> {
         const KIND: &str = "foreign key column";
         let ty = |t: &str| (!t.is_empty()).then(|| t.into());
@@ -1286,7 +1307,14 @@ impl KeyProblem {
             Self::TypesDiffer { column, ty: own, target, target_ty } => {
                 Reason::TypesDiffer { column: column.as_str().into(), target: target.as_str().into(), types: Box::new([ty(own), ty(target_ty)]) }
             }
-            Self::Other { .. } => return None,
+            Self::NotAKey { name } => Reason::NotA { kind: "key", name: name.clone() },
+            Self::KeyWithoutColumns { table } => Reason::NoKeyColumns { table: table.as_str().into() },
+            Self::SetNull { column } => Reason::SetNullNotNullable { column: column.as_str().into() },
+            Self::NotJoining { table, references } => {
+                Reason::RelationshipNotJoining { table: table.as_str().into(), references: references.as_str().into() }
+            }
+            Self::OutsideKey { column } => Reason::IdentifyingOutsideKey { column: column.as_str().into() },
+            Self::Unplaced { .. } => return None,
         })
     }
 }
@@ -1301,18 +1329,17 @@ pub fn key_problem(
     actions: [ReferentialAction; 2],
     relationship: Option<Obj>,
 ) -> Option<KeyProblem> {
-    let other = |key, said: String| Some(KeyProblem::Other { key, said });
     if !is_key(store, k) {
-        return other("key", format!("{} is neither a primary key nor a unique constraint", label(store, k)));
+        return Some(KeyProblem::NotAKey { name: label(store, k) });
     }
-    let Some(references) = entity_of(store, k) else { return other("key", "the key belongs to no entity".into()) };
+    let Some(references) = entity_of(store, k) else { return Some(KeyProblem::Unplaced { said: "the key belongs to no entity" }) };
     // A foreign key may point into another schema of the model (slice S7).
     if schema_of(store, entity).is_none() || schema_of(store, references).is_none() {
-        return other("key", "the key or the foreign key belongs to no schema".into());
+        return Some(KeyProblem::Unplaced { said: "the key or the foreign key belongs to no schema" });
     }
     let targets = key_columns(store, k);
     if targets.is_empty() {
-        return other("key", format!("the key of {} has no columns", label(store, references)));
+        return Some(KeyProblem::KeyWithoutColumns { table: label(store, references) });
     }
     if columns.is_empty() {
         return Some(KeyProblem::NoColumn);
@@ -1336,18 +1363,22 @@ pub fn key_problem(
             return Some(KeyProblem::TypesDiffer { column: label(store, *a), ty, target: label(store, *t), target_ty });
         }
     }
-    if actions.contains(&ReferentialAction::SetNull) && columns.iter().any(|a| !is_nullable(store, *a)) {
-        return other("on_delete", "set null needs nullable columns".into());
+    if actions.contains(&ReferentialAction::SetNull)
+        && let Some(a) = columns.iter().find(|a| !is_nullable(store, **a))
+    {
+        return Some(KeyProblem::SetNull { column: label(store, *a) });
     }
     if let Some(r) = relationship {
         let ends: BTreeSet<Option<Obj>> = [reference(store, r, relationship::FROM), reference(store, r, relationship::TO)].into_iter().collect();
         let want: BTreeSet<Option<Obj>> = [Some(entity), Some(references)].into_iter().collect();
         if store.class_of(r).ok() != Some(RELATIONSHIP) || ends != want {
-            return other("relationship", "the relationship does not join these two entities".into());
+            return Some(KeyProblem::NotJoining { table: label(store, entity), references: label(store, references) });
         }
         let pk = primary_key(store, entity);
-        if flag(store, r, relationship::IDENTIFYING) && columns.iter().any(|a| !pk.contains(a)) {
-            return other("relationship", "an identifying relationship's key columns must be part of the primary key".into());
+        if flag(store, r, relationship::IDENTIFYING)
+            && let Some(a) = columns.iter().find(|a| !pk.contains(a))
+        {
+            return Some(KeyProblem::OutsideKey { column: label(store, *a) });
         }
     }
     None

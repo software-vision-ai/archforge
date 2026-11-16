@@ -623,6 +623,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} hat den Typ {type}, aber {target} hat den Typ {target_type}.
 str		{column} has no type, but {target} is of type {target_type}.	{column} hat keinen Typ, aber {target} hat den Typ {target_type}.
 str		{column} is of type {type}, but {target} has no type.	{column} hat den Typ {type}, aber {target} hat keinen Typ.
+str		Set null needs nullable columns, but {column} may never be null.	„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber {column} darf nie leer sein.
+str		The relationship does not join {table} and {references}.	Die Beziehung verbindet {table} und {references} nicht.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, {column} aber nicht.
 str		The key {name} would break: {why}	Der Schlüssel {name} wäre danach ungültig: {why}
 str		The foreign key {name} would break: {why}	Der Fremdschlüssel {name} wäre danach ungültig: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Aufeinander aufbauende Schlüssel reichen hier tiefer als {max} Ebenen oder bilden eine Schleife.

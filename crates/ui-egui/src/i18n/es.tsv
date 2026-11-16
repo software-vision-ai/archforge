@@ -623,6 +623,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} es de tipo {type}, pero {target} es de tipo {target_type}.
 str		{column} has no type, but {target} is of type {target_type}.	{column} no tiene tipo, pero {target} es de tipo {target_type}.
 str		{column} is of type {type}, but {target} has no type.	{column} es de tipo {type}, pero {target} no tiene tipo.
+str		Set null needs nullable columns, but {column} may never be null.	«Poner nulo» necesita columnas que admitan nulos, pero {column} nunca admite nulos.
+str		The relationship does not join {table} and {references}.	La relación no une {table} y {references}.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	Las columnas de clave foránea de una relación identificadora forman parte de la clave primaria, y {column} no.
 str		The key {name} would break: {why}	La clave {name} dejaría de ser válida: {why}
 str		The foreign key {name} would break: {why}	La clave foránea {name} dejaría de ser válida: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Las claves construidas unas sobre otras superan aquí los {max} niveles o forman un ciclo.
