@@ -1063,7 +1063,7 @@ fn commit_note(shell: &mut Shell) {
     }
 }
 
-/// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter or the keyboard
+/// The note's text typed in place: a field over the note; Cmd/Ctrl+Enter, exactly, or the keyboard
 /// leaving commits, though not for the in-window Edit menu, whose rows act on it; Escape closes, a
 /// refusal stays under it.
 fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: f32) {
@@ -1090,7 +1090,8 @@ fn note_field(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, rect: Rect, z: 
         ux::text(&paint, pos2(rect.left(), rect.bottom() + 4.0 * z), &refused, types::CAPTION, p.amber, Some(rect.width().max(0.0)));
     }
     let has_focus = out.response.has_focus();
-    let (enter, escape) = ui.input(|i| (i.modifiers.command && i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+    let (enter, escape) =
+        ui.input(|i| (crate::actions::chord_press(i, egui::Key::Enter, egui::Modifiers::COMMAND), i.key_pressed(egui::Key::Escape)));
     let nothing_focused = ui.memory(|m| m.focused().is_none());
     if escape && (has_focus || out.response.lost_focus() || nothing_focused) {
         shell.canvas.note_edit = None;
@@ -2091,7 +2092,8 @@ pub(crate) fn canvas_busy(shell: &Shell) -> bool {
 
 /// The keys while the canvas has them: Escape back to Select, Delete removes the selected nodes
 /// from the diagram (with Shift, asks before deleting from the model), the arrows nudge (plain or
-/// with Shift, never as part of a chord), ⌘↩ opens a new row on a card that takes one.
+/// with Shift, never as part of a chord), ⌘↩ opens a new row on a card that takes one and ⇧⌘↩ its
+/// second kind of row, ⌥⌘G makes a generalization set; the chords are matched exactly.
 fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     if !shell.canvas.focused
         || shell.generate.is_some()
@@ -2115,12 +2117,14 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
     // An open menu the keys walk (the classifier's kinds) takes the arrows and Enter itself; the
     // other popovers leave them to the canvas.
     let menu = shell.canvas.popover.is_some_and(crate::uml_classifier::takes_keys);
-    let (escape, delete, shift, add_column, left, right, up, down) = ui.input(|i| {
+    let (escape, delete, shift, add_row, add_second, left, right, up, down) = ui.input(|i| {
+        let command = egui::Modifiers::COMMAND;
         (
             i.key_pressed(egui::Key::Escape),
             i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
             i.modifiers.shift,
-            !menu && i.modifiers.command && i.key_pressed(egui::Key::Enter),
+            !menu && crate::actions::chord_press(i, egui::Key::Enter, command),
+            !menu && crate::actions::chord_press(i, egui::Key::Enter, command | egui::Modifiers::SHIFT),
             !menu && crate::actions::plain_press(i, egui::Key::ArrowLeft),
             !menu && crate::actions::plain_press(i, egui::Key::ArrowRight),
             !menu && crate::actions::plain_press(i, egui::Key::ArrowUp),
@@ -2137,7 +2141,8 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         return;
     }
     // ⌥⌘G (Ctrl Alt G): the selected generalizations into a new set (AR-129).
-    if ui.input(|i| i.modifiers.command && i.modifiers.alt && !i.modifiers.shift && i.key_pressed(egui::Key::G)) && crate::uml_sets::shortcut(shell) {
+    if ui.input(|i| crate::actions::chord_press(i, egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::ALT)) && crate::uml_sets::shortcut(shell)
+    {
         return;
     }
     if escape {
@@ -2188,14 +2193,14 @@ fn keyboard(shell: &mut Shell, ui: &egui::Ui, d: Obj) {
         return;
     }
     // The kind's new row, as its adorner opens it (ER's add column).
-    if add_column {
+    if add_row || add_second {
         let takes_rows = |k: &&'static dyn crate::kinds::DiagramKind, entity: Uuid| {
             shell.session.as_ref().is_some_and(|s| s.doc().by_uuid(entity).is_some_and(|e| k.adorner(s.doc(), e).is_some()))
         };
         if let [(_, Some(entity))] = selected.as_slice()
             && let Some(kind) = kind.filter(|k| takes_rows(k, *entity))
         {
-            if shift { kind.open_second(shell, *entity) } else { kind.open(shell, *entity, None) }
+            if add_second { kind.open_second(shell, *entity) } else { kind.open(shell, *entity, None) }
         }
         return;
     }
