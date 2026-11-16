@@ -615,6 +615,12 @@ str		{table} has no primary key.	{table} hat keinen Primärschlüssel.
 str		The key is not one of {table}'s keys.	Der Schlüssel ist keiner der Schlüssel von {table}.
 str		The key of {table} has no columns to refer to.	Der Schlüssel von {table} hat keine Spalten, auf die verwiesen werden kann.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifizierende Beziehungen würden einen Zyklus zwischen {child} und {parent} bilden.
+str		A table cannot be a subtype of itself.	Eine Tabelle kann kein Untertyp von sich selbst sein.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	Die beiden Tabellen liegen in verschiedenen Schemas. Ein Untertyp liegt im Schema seines Obertyps.
+str		{table} has a supertype already. A table has one supertype.	{table} hat bereits einen Obertyp. Eine Tabelle hat einen Obertyp.
+str		The supertype is a subtype of this table already, which would close a circle.	Der Obertyp ist bereits ein Untertyp dieser Tabelle, das würde einen Kreis schließen.
+str		Subtypes would run deeper than {max} levels here.	Untertypen würden hier tiefer als {max} Ebenen reichen.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.
 str		The foreign key points at this key already. Name the columns to change them.	Der Fremdschlüssel verweist bereits auf diesen Schlüssel. Nennen Sie die Spalten, um sie zu ändern.
 str		A foreign key needs at least one column.	Ein Fremdschlüssel braucht mindestens eine Spalte.
 str		A foreign key holds at most {max} columns.	Ein Fremdschlüssel umfasst höchstens {max} Spalten.
@@ -623,6 +629,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} hat den Typ {type}, aber {target} hat den Typ {target_type}.
 str		{column} has no type, but {target} is of type {target_type}.	{column} hat keinen Typ, aber {target} hat den Typ {target_type}.
 str		{column} is of type {type}, but {target} has no type.	{column} hat den Typ {type}, aber {target} hat keinen Typ.
+str		Set null needs nullable columns, but {column} may never be null.	„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber {column} darf nie leer sein.
+str		The relationship does not join {table} and {references}.	Die Beziehung verbindet {table} und {references} nicht.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, {column} aber nicht.
 str		The key {name} would break: {why}	Der Schlüssel {name} wäre danach ungültig: {why}
 str		The foreign key {name} would break: {why}	Der Fremdschlüssel {name} wäre danach ungültig: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Aufeinander aufbauende Schlüssel reichen hier tiefer als {max} Ebenen oder bilden eine Schleife.

@@ -614,6 +614,12 @@ str		{table} has no primary key.	{table} has no primary key.
 str		The key is not one of {table}'s keys.	The key is not one of {table}'s keys.
 str		The key of {table} has no columns to refer to.	The key of {table} has no columns to refer to.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Identifying relationships would run in a cycle between {child} and {parent}.
+str		A table cannot be a subtype of itself.	A table cannot be a subtype of itself.
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	The two tables are in different schemas. A subtype is in its supertype's schema.
+str		{table} has a supertype already. A table has one supertype.	{table} has a supertype already. A table has one supertype.
+str		The supertype is a subtype of this table already, which would close a circle.	The supertype is a subtype of this table already, which would close a circle.
+str		Subtypes would run deeper than {max} levels here.	Subtypes would run deeper than {max} levels here.
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.
 str		The foreign key points at this key already. Name the columns to change them.	The foreign key points at this key already. Name the columns to change them.
 str		A foreign key needs at least one column.	A foreign key needs at least one column.
 str		A foreign key holds at most {max} columns.	A foreign key holds at most {max} columns.
@@ -622,6 +628,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} is of type {type}, but {target} is of type {target_type}.
 str		{column} has no type, but {target} is of type {target_type}.	{column} has no type, but {target} is of type {target_type}.
 str		{column} is of type {type}, but {target} has no type.	{column} is of type {type}, but {target} has no type.
+str		Set null needs nullable columns, but {column} may never be null.	Set null needs nullable columns, but {column} may never be null.
+str		The relationship does not join {table} and {references}.	The relationship does not join {table} and {references}.
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	An identifying relationship's foreign key columns are part of the primary key, and {column} is not.
 str		The key {name} would break: {why}	The key {name} would break: {why}
 str		The foreign key {name} would break: {why}	The foreign key {name} would break: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	Keys built on each other run deeper than {max} levels here, or in a loop.

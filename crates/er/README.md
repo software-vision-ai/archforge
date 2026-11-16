@@ -125,6 +125,18 @@ zero-or-one key relationship with follower columns named like its key columns
 mapping change and cannot be removed on its own; a key that appears later reaches the subtypes then.
 A table has one supertype and generalizations never close a circle (`rules::generalization_problem`).
 
+**Refusals of a subtype** (AR-506). `er.generalization.add` refuses, as
+`rules::generalization_problem` types it, a table made its own subtype as `Itself` of `"subtype"`,
+tables of two schemas as `SchemasDiffer`, a subtype with a supertype already as `HasSupertype`,
+and a circle as `Cycle` of `"subtype"`; a chain deeper than its budget as `TooDeep` of `"subtype"`;
+and identifying keys that would run in a cycle, found inside the step that makes a subtype's key,
+as `IdentifyingCycle`. A
+discriminator of another table (`er.entity.set-subtyping`) is `NotColumnOf`, and a part of a
+subtype's key removed on its own (`er.attribute.remove`, `er.primary-key.remove`) is
+`InSubtypeKey`. Inside the step, a chain too deep and two tables subtypes of each other, which only
+a loaded document holds, are `TooDeep` and `Cycle` of `"subtype"`; a test loads such documents.
+Tables are named by their id when they have no name; the English stays as it was.
+
 Several schemas, sequences and views (slice S7): one model is one database with several schemas.
 A foreign key and a relationship may join tables of two schemas; the relationship belongs to its
 child's schema, as its foreign key does, and a many-to-many one resolves into a mapping table of
@@ -225,7 +237,16 @@ table as `NotColumnOf`, and a column whose type differs from the key column it m
 of a column would break as `WouldBreak` of `"foreign key"` with that reason, and a new foreign
 key's columns copied from a loaded key of more than 32 as `TooMany` of `"foreign key column"`; no
 columns and one twice, which only a loaded document holds, are `TooFew` and `NamedTwice` of that
-kind. The rest
+kind.
+A foreign key's key, actions and relationship (AR-503), as `rules::KeyProblem::reason` types them,
+from adding a foreign key, setting its actions and pointing it elsewhere: set null on a column that
+may never be null as `SetNullNotNullable`, a relationship that does not join its table and the
+table it points at as `RelationshipNotJoining`, and a column outside the primary key of one that
+follows an identifying relationship as `IdentifyingOutsideKey`, each with the first column or the
+two tables by label; inside the step, a foreign key an edit would break that way as `WouldBreak` of
+`"foreign key"`; a key that is none, as `NotA` of `"key"`, and a key without columns, as
+`NoKeyColumns`, only a loaded document holds.
+The rest
 follow ticket by ticket, except
 these, which no command a person gives reaches, so they stay in English: a word a parameter's
 documented choices hold back, as the engine refuses any other before the handler runs
@@ -236,7 +257,7 @@ documented choices hold back, as the engine refuses any other before the handler
 never leaves (`schema_rename`, `attribute_set_type`, `attribute_set_flags`, `attribute_move`,
 `column_type`, `domain_set`, `enum_set`, `sequence_set`, `view_set`, `new_key_columns`,
 `relationship_add` twice, `resolve`, `collapse` twice, `generalization_add`, `foreign_key_set_key`,
-`unique_set`, `index_set`); a column missing from the list of the table that owns it, the only
+`unique_set`, `index_set`, `rules::key_problem` twice); a column missing from the list of the table that owns it, the only
 place a column is owned (`attribute_move`); a mapping table without its two foreign keys (`collapse`); no free
 name among a thousand (`first_free`); and a project without its model root (`model`).
 

@@ -615,6 +615,12 @@ str		{table} has no primary key.	{table} に主キーがありません。
 str		The key is not one of {table}'s keys.	このキーは {table} のキーではありません。
 str		The key of {table} has no columns to refer to.	{table} のキーには参照できる列がありません。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	識別リレーションシップが {child} と {parent} の間で循環します。
+str		A table cannot be a subtype of itself.	テーブルを自分自身のサブタイプにすることはできません。
+str		The two tables are in different schemas. A subtype is in its supertype's schema.	2 つのテーブルは別々のスキーマにあります。サブタイプはスーパータイプと同じスキーマに置きます。
+str		{table} has a supertype already. A table has one supertype.	{table} にはすでにスーパータイプがあります。テーブルのスーパータイプは 1 つだけです。
+str		The supertype is a subtype of this table already, which would close a circle.	スーパータイプはすでにこのテーブルのサブタイプであり、循環になります。
+str		Subtypes would run deeper than {max} levels here.	サブタイプがここで {max} 段を超えます。
+str		This is part of a subtype's key. Remove the subtype or change the supertype's mapping instead.	これはサブタイプのキーの一部です。代わりにサブタイプを削除するか、スーパータイプのサブタイプマッピングを変更してください。
 str		The foreign key points at this key already. Name the columns to change them.	外部キーはすでにこのキーを参照しています。変更するには列を指定してください。
 str		A foreign key needs at least one column.	外部キーには少なくとも 1 つの列が必要です。
 str		A foreign key holds at most {max} columns.	外部キーに含められる列は最大 {max} 個です。
@@ -623,6 +629,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} の型は {type} ですが、{target} の型は {target_type} です。
 str		{column} has no type, but {target} is of type {target_type}.	{column} には型がありませんが、{target} の型は {target_type} です。
 str		{column} is of type {type}, but {target} has no type.	{column} の型は {type} ですが、{target} には型がありません。
+str		Set null needs nullable columns, but {column} may never be null.	「NULL に設定」には NULL を許可する列が必要ですが、{column} は NULL を許可できません。
+str		The relationship does not join {table} and {references}.	このリレーションシップは {table} と {references} を結んでいません。
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	識別リレーションシップの外部キーの列は主キーに含まれますが、{column} は含まれていません。
 str		The key {name} would break: {why}	キー {name} が成り立たなくなります: {why}
 str		The foreign key {name} would break: {why}	外部キー {name} が成り立たなくなります: {why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	互いの上に作られたキーが、ここで {max} 段を超えているか、循環しています。

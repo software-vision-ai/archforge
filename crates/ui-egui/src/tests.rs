@@ -6779,6 +6779,130 @@ fn a_foreign_keys_columns_refused_are_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A foreign key's actions and relationship, refused, are said in the chosen language, never in
+/// the engine's English: set null on a column that may never be null, from adding a foreign key and
+/// from setting its actions, a relationship that does not join the two tables, a column outside
+/// the primary key under an identifying relationship, and a column made not null under a set-null
+/// foreign key; a key that is none and one without columns, which only a loaded document holds,
+/// too. In light and dark (AR-503).
+#[test]
+fn a_foreign_keys_actions_and_relationship_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut id = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap()["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let [kunde, auftrag, artikel] = ["Kunde", "Auftrag", "Artikel"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        id("er.attribute.add", json!({ "entity": artikel, "name": "code", "type": "TEXT", "primary_key": true }));
+        let mut column =
+            |name: &str, nullable: &str| id("er.attribute.add", json!({ "entity": auftrag, "name": name, "type": "BIGINT", "nullable": nullable }));
+        let (kaeufer, vielleicht) = (column("kaeufer", "no"), column("vielleicht", "yes"));
+        let fk = id("er.foreign-key.add", json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "name": "fk_kaeufer" }));
+        let null = json!({ "entity": auftrag, "references": kunde, "columns": [vielleicht], "name": "fk_vielleicht", "on_delete": "set-null" });
+        id("er.foreign-key.add", null);
+        let bestellt = json!({ "from": kunde, "to": auftrag, "to_end": "zero-or-more", "name": "bestellt" });
+        let bestellt = id("er.relationship.add", bestellt);
+        let traegt = json!({ "from": artikel, "to": auftrag, "to_end": "zero-or-more", "create_foreign_key": true, "identifying": true });
+        let traegt = id("er.relationship.add", traegt);
+        let titel = id("er.attribute.add", json!({ "entity": auftrag, "name": "titel", "type": "TEXT", "nullable": "no" }));
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        for (cmd, p, said) in [
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": kunde, "columns": [kaeufer], "on_delete": "set-null" }),
+                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
+            ),
+            (
+                "er.foreign-key.set-actions",
+                json!({ "foreign_key": fk, "on_delete": "no-action", "on_update": "set-null" }),
+                "„Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber kaeufer darf nie leer sein.",
+            ),
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": bestellt }),
+                "Die Beziehung verbindet Auftrag und Artikel nicht.",
+            ),
+            (
+                "er.foreign-key.add",
+                json!({ "entity": auftrag, "references": artikel, "columns": [titel], "relationship": traegt }),
+                "Die Fremdschlüsselspalten einer identifizierenden Beziehung gehören zum Primärschlüssel, titel aber nicht.",
+            ),
+            (
+                "er.attribute.set-flags",
+                json!({ "attribute": vielleicht, "primary_key": false, "nullable": "no", "unique": false }),
+                "Der Fremdschlüssel fk_vielleicht wäre danach ungültig: „Auf Null setzen“ braucht Spalten, die leer sein dürfen, aber vielleicht darf nie leer sein.",
+            ),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        for (reason, said) in [
+            (Reason::NotA { kind: "key", name: "nummer".into() }, "nummer passt hier nicht: erwartet wird ein Schlüssel."),
+            (Reason::NoKeyColumns { table: "Kunde".into() }, "Der Schlüssel von Kunde hat keine Spalten, auf die verwiesen werden kann."),
+        ] {
+            assert_eq!(crate::er_said::said(&reason).as_deref(), Some(said), "{theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A subtype refused is said in the chosen language, never in the engine's English: a table its own
+/// subtype, tables of two schemas, a subtype with a supertype already, a circle, identifying keys in
+/// a cycle, a discriminator of another table and a part of a subtype's key changed on its own; a
+/// chain too deep too. In light and dark (AR-506).
+#[test]
+fn a_subtype_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::Reason;
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
+        let (schema, archiv) = (id("er.schema.add", json!({ "name": "Shop" })), id("er.schema.add", json!({ "name": "Archiv" })));
+        let [partei, person, gut, a, b] =
+            ["Partei", "Person", "Gut", "A", "B"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        let alt = id("er.entity.add", json!({ "schema": archiv, "name": "Alt" }));
+        for (e, name) in [(&partei, "nummer"), (&a, "a_nr"), (&b, "b_nr")] {
+            id("er.attribute.add", json!({ "entity": e, "name": name, "type": "BIGINT", "primary_key": true }));
+        }
+        let fremd = id("er.attribute.add", json!({ "entity": gut, "name": "art", "type": "TEXT" }));
+        id("er.generalization.add", json!({ "supertype": partei, "subtype": person }));
+        id("er.relationship.add", json!({ "from": b, "to": a, "create_foreign_key": true, "identifying": true }));
+        let geerbt = run("er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let add = |sup: &str, sub: &str| json!({ "supertype": sup, "subtype": sub });
+        let piece = "Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.";
+        for (cmd, p, said) in [
+            ("er.generalization.add", add(&partei, &partei), "Eine Tabelle kann kein Untertyp von sich selbst sein."),
+            (
+                "er.generalization.add",
+                add(&partei, &alt),
+                "Die beiden Tabellen liegen in verschiedenen Schemas. Ein Untertyp liegt im Schema seines Obertyps.",
+            ),
+            ("er.generalization.add", add(&gut, &person), "Person hat bereits einen Obertyp. Eine Tabelle hat einen Obertyp."),
+            ("er.generalization.add", add(&person, &partei), "Der Obertyp ist bereits ein Untertyp dieser Tabelle, das würde einen Kreis schließen."),
+            ("er.generalization.add", add(&a, &b), "Identifizierende Beziehungen würden einen Zyklus zwischen B und A bilden."),
+            ("er.entity.set-subtyping", json!({ "entity": partei, "discriminator": fremd }), "art ist keine Spalte von Partei."),
+            ("er.attribute.remove", json!({ "attribute": geerbt }), piece),
+            ("er.primary-key.remove", json!({ "entity": person }), piece),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        let deep = crate::er_said::said(&Reason::TooDeep { kind: "subtype", max: 32 });
+        assert_eq!(deep.as_deref(), Some("Untertypen würden hier tiefer als 32 Ebenen reichen."), "{theme:?}");
+        // A cycle of another relationship is not a subtype's.
+        assert_eq!(crate::er_said::said(&Reason::Cycle { relationship: "foreign key" }), None, "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A key a step would break is said in the chosen language with why in the same words, and keys built
 /// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
 /// English. In light and dark (AR-493).
@@ -6804,7 +6928,7 @@ fn an_er_key_a_step_would_break_is_said_in_the_chosen_language() {
             Some("Aufeinander aufbauende Schlüssel reichen hier tiefer als 32 Ebenen oder bilden eine Schleife."),
             "{theme:?}"
         );
-        assert_eq!(crate::panels::said(&Reason::TooDeep { kind: "subtype", max: 32 }), None, "{theme:?}");
+        assert_eq!(crate::panels::said(&Reason::TooDeep { kind: "untyped kind", max: 32 }), None, "{theme:?}");
         h.run();
     }
     crate::i18n::set_language("en");

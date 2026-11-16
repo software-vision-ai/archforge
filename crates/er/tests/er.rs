@@ -607,6 +607,128 @@ fn a_loaded_foreign_keys_columns_break_typed() {
     assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
 }
 
+/// A foreign key's actions and relationship, refused, carry their reason typed beside the English,
+/// which stays as it was: set null on a column that may never be null, the first such column named,
+/// from adding a foreign key and from setting its actions; a relationship that does not join the two
+/// tables; a column outside the primary key of one that follows an identifying relationship; and a
+/// column made not null under a set-null foreign key, found inside the step (AR-503).
+#[test]
+fn a_foreign_keys_actions_and_relationship_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let product = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Product" }));
+    for name in ["sku", "region"] {
+        run(&mut s, "er.attribute.add", json!({ "entity": product, "name": name, "type": "TEXT", "primary_key": true }));
+    }
+    let column = |s: &mut Session, name: &str, ty: &str, nullable: &str| {
+        run(s, "er.attribute.add", json!({ "entity": sm.order, "name": name, "type": ty, "nullable": nullable }))
+    };
+    let (open, held, buyer) = (column(&mut s, "open", "TEXT", "yes"), column(&mut s, "held", "TEXT", "no"), column(&mut s, "buyer", "BIGINT", "no"));
+    let maybe = column(&mut s, "maybe", "BIGINT", "yes");
+    let fk_buyer =
+        run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [buyer], "name": "fk_buyer" }));
+    let fk_maybe = json!({ "entity": sm.order, "references": sm.customer, "columns": [maybe], "name": "fk_maybe", "on_delete": "set-null" });
+    run(&mut s, "er.foreign-key.add", fk_maybe);
+    // An identifying relationship gives Order the key columns product_sku and product_region.
+    let owns = json!({ "from": product, "to": sm.order, "create_foreign_key": true, "identifying": true, "to_end": "zero-or-more" });
+    let owns = run(&mut s, "er.relationship.add", owns);
+    let in_key = get(&mut s, "er.entity.get", json!({ "entity": sm.order }))["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "product_sku")
+        .map(|a| a["id"].as_str().unwrap().to_string())
+        .unwrap();
+    let set_null = |column: &str| Reason::SetNullNotNullable { column: column.into() };
+    let (null_said, outside_said) = ("set null needs nullable columns", "an identifying relationship's key columns must be part of the primary key");
+    for (cmd, p, reason, message, key) in [
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [open, held], "on_update": "set-null" }),
+            set_null("held"),
+            null_said,
+            "on_delete",
+        ),
+        (
+            "er.foreign-key.set-actions",
+            json!({ "foreign_key": fk_buyer, "on_delete": "set-null", "on_update": "no-action" }),
+            set_null("buyer"),
+            null_said,
+            "on_delete",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [open, held], "relationship": sm.places }),
+            Reason::RelationshipNotJoining { table: "Order".into(), references: "Product".into() },
+            "the relationship does not join these two entities",
+            "relationship",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [in_key, held], "relationship": owns }),
+            Reason::IdentifyingOutsideKey { column: "held".into() },
+            outside_said,
+            "relationship",
+        ),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    }
+    let Err(EngineError::Failed { error, .. }) =
+        s.execute("er.attribute.set-flags", &json!({ "attribute": maybe, "primary_key": false, "nullable": "no", "unique": false }))
+    else {
+        panic!("the set-null foreign key breaks")
+    };
+    let why = Box::new(set_null("maybe"));
+    assert_eq!(error.reason, Some(Reason::WouldBreak { kind: "foreign key", name: "fk_maybe".into(), why }));
+    let said = "the foreign key fk_maybe would break: set null needs nullable columns";
+    assert_eq!((error.message.as_str(), error.key.as_deref()), (said, Some("attribute")));
+}
+
+/// A loaded document's foreign key that points at no key, at a key without columns, or follows
+/// what is no relationship, is typed by the rules; one whose key belongs to no table stays in
+/// English (AR-503).
+#[test]
+fn a_loaded_foreign_keys_key_and_relationship_break_typed() {
+    use archforge_engine::Reason;
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let table = |st: &mut Store, name: &str, columns: usize| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        let pk = st.create(PRIMARY_KEY).unwrap();
+        st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+        for i in 0..columns {
+            let a = st.create(ATTRIBUTE).unwrap();
+            st.set(a, named_element::NAME, Value::str(&format!("{name}{i}"))).unwrap();
+            st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+            st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+            st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+        }
+        (e, pk)
+    };
+    let (_, bare) = table(&mut st, "Bare", 0);
+    let (_, parent) = table(&mut st, "Parent", 1);
+    let (child, child_pk) = table(&mut st, "Child", 1);
+    let c = rules::key_columns(&st, child_pk)[0];
+    let loose = st.create(PRIMARY_KEY).unwrap();
+    let none = [ReferentialAction::NoAction; 2];
+    let problem = |k: Obj, relationship: Option<Obj>| rules::key_problem(&st, child, k, &[c], none, relationship).unwrap();
+    let typed = |k: Obj, relationship: Option<Obj>| (problem(k, relationship).reason(), problem(k, relationship).said());
+    let not_a = Reason::NotA { kind: "key", name: "Child0".into() };
+    assert_eq!(typed(c, None), (Some(not_a), "Child0 is neither a primary key nor a unique constraint".into()));
+    let no_columns = Reason::NoKeyColumns { table: "Bare".into() };
+    assert_eq!(typed(bare, None), (Some(no_columns), "the key of Bare has no columns".into()));
+    let not_joining = Reason::RelationshipNotJoining { table: "Child".into(), references: "Parent".into() };
+    assert_eq!(typed(parent, Some(c)), (Some(not_joining), "the relationship does not join these two entities".into()));
+    assert_eq!(typed(loose, None), (None, "the key belongs to no entity".into()));
+}
+
 /// A key a step would break, found inside the step, carries its reason typed beside the English: the
 /// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
 /// column that may be null breaks on any edit that checks the keys around it (AR-493).
@@ -2809,6 +2931,148 @@ fn subtype_keys_hold_through_chains_later_keys_removals_and_circles() {
     let own = get(&mut s, "er.entity.get", json!({ "entity": wide }))["attributes"][0]["id"].as_str().unwrap().to_string();
     assert_eq!(refused_on(&mut s, "er.attribute.remove", json!({ "attribute": own })), "attribute");
     all_rules_hold(s.doc());
+}
+
+/// A subtype refused carries its reason typed beside the English, which stays as it was: a table
+/// its own subtype, tables of two schemas, a subtype with a supertype already, a circle, identifying
+/// keys that would run in a cycle, a chain too deep, a discriminator of another table, and a part
+/// of a subtype's key changed on its own (AR-506).
+#[test]
+fn a_subtype_refused_carries_its_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let table = |s: &mut Session, name: &str| run(s, "er.entity.add", json!({ "schema": sm.schema, "name": name }));
+    let keyed = |s: &mut Session, name: &str| {
+        let e = table(s, name);
+        run(s, "er.attribute.add", json!({ "entity": e, "name": format!("{name}_id"), "type": "INT", "primary_key": true }));
+        e
+    };
+    let (party, person, asset) = (keyed(&mut s, "Party"), table(&mut s, "Person"), table(&mut s, "Asset"));
+    run(&mut s, "er.generalization.add", json!({ "supertype": party, "subtype": person }));
+    let follower = get(&mut s, "er.entity.get", json!({ "entity": person }))["attributes"][0]["id"].as_str().unwrap().to_string();
+    let (a, b) = (keyed(&mut s, "A"), keyed(&mut s, "B"));
+    run(&mut s, "er.relationship.add", json!({ "from": b, "to": a, "create_foreign_key": true, "identifying": true }));
+    let other = run(&mut s, "er.schema.add", json!({ "name": "other" }));
+    let elsewhere = run(&mut s, "er.entity.add", json!({ "schema": other, "name": "Elsewhere" }));
+    let mut chain = vec![table(&mut s, "L0")];
+    for i in 1..=31 {
+        let next = table(&mut s, &format!("L{i}"));
+        run(&mut s, "er.generalization.add", json!({ "supertype": chain[i - 1], "subtype": next }));
+        chain.push(next);
+    }
+    let add = |sup: &str, sub: &str| json!({ "supertype": sup, "subtype": sub });
+    let piece = "it is part of a subtype's key; remove the generalization or change the mapping instead";
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.generalization.add",
+            add(&party, &party),
+            "subtype",
+            Reason::Itself { relationship: "subtype", kind: "table" },
+            "a table cannot be a subtype of itself",
+        ),
+        (
+            "er.generalization.add",
+            add(&party, &elsewhere),
+            "subtype",
+            Reason::SchemasDiffer { relationship: "subtype" },
+            "the two tables are in different schemas",
+        ),
+        ("er.generalization.add", add(&asset, &person), "subtype", Reason::HasSupertype { table: "Person".into() }, "Person has a supertype already"),
+        (
+            "er.generalization.add",
+            add(&person, &party),
+            "supertype",
+            Reason::Cycle { relationship: "subtype" },
+            "Person is a subtype of Party already, so this would close a circle",
+        ),
+        (
+            "er.generalization.add",
+            add(&a, &b),
+            "subtype",
+            Reason::IdentifyingCycle { child: "B".into(), parent: "A".into() },
+            "the identifying relationships would form a cycle between B and A",
+        ),
+        (
+            "er.generalization.add",
+            add(&chain[31], &asset),
+            "subtype",
+            Reason::TooDeep { kind: "subtype", max: 32 },
+            "the subtypes would run deeper than 32 levels",
+        ),
+        (
+            "er.entity.set-subtyping",
+            json!({ "entity": party, "discriminator": sm.key }),
+            "discriminator",
+            Reason::NotColumnOf { column: "id".into(), table: "Party".into() },
+            "id is not a column of Party",
+        ),
+        ("er.attribute.remove", json!({ "attribute": follower }), "attribute", Reason::InSubtypeKey, piece),
+        ("er.primary-key.remove", json!({ "entity": person }), "entity", Reason::InSubtypeKey, piece),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p}: nothing changes");
+    }
+}
+
+/// A loaded document's subtypes that a command could never make, refused from inside the step with
+/// their reason typed and the document as it was: two tables subtypes of each other, whose keys a
+/// mapping change would make, and a chain deeper than the budget, which a key at its top would
+/// reach (AR-506).
+#[test]
+fn a_loaded_circle_or_too_deep_chain_of_subtypes_is_refused_typed() {
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let mut table = |name: &str| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        e
+    };
+    let (up, down) = (table("Up"), table("Down"));
+    let chain: Vec<Obj> = (0..40).map(|i| table(&format!("T{i}"))).collect();
+    let a = st.create(ATTRIBUTE).unwrap();
+    st.set(a, named_element::NAME, Value::str("up_id")).unwrap();
+    st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+    st.push(up, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+    let pk = st.create(PRIMARY_KEY).unwrap();
+    st.set(up, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+    st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+    st.set(up, entity::SUBTYPE_MAPPING, Value::Enum(SubtypeMapping::SingleTable.index())).unwrap();
+    let pairs = [(up, down), (down, up)].into_iter().chain(chain.windows(2).map(|w| (w[0], w[1])));
+    for (sup, sub) in pairs.collect::<Vec<_>>() {
+        let g = st.create(GENERALIZATION).unwrap();
+        st.set(g, generalization::SUPERTYPE, Value::Ref(sup)).unwrap();
+        st.set(g, generalization::SUBTYPE, Value::Ref(sub)).unwrap();
+        st.push(s, schema::GENERALIZATION, Value::Ref(g)).unwrap();
+    }
+    let (up, top) = (st.uuid(up).unwrap().to_string(), st.uuid(chain[0]).unwrap().to_string());
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let deep = archforge_engine::Reason::TooDeep { kind: "subtype", max: 32 };
+    for (cmd, p, key, reason, message) in [
+        (
+            "er.entity.set-subtyping",
+            json!({ "entity": up, "mapping": "table-per-type" }),
+            "mapping",
+            archforge_engine::Reason::Cycle { relationship: "subtype" },
+            "Down and Up are subtypes of each other",
+        ),
+        (
+            "er.attribute.add",
+            json!({ "entity": top, "name": "id", "type": "INT", "primary_key": true }),
+            "primary_key",
+            deep,
+            "the subtypes run deeper than 32 levels",
+        ),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd}");
+        assert_eq!(picture(s.doc()), before, "{cmd}: nothing of the attempt stays");
+    }
 }
 
 #[test]

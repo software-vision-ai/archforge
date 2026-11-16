@@ -938,8 +938,8 @@ fn gather(store: &Store, mut keys: BTreeSet<Obj>, entity: Option<Obj>) -> Result
 }
 
 /// After an edit inside a transaction: the keys, foreign keys and mapping tables around it still keep
-/// the rules, or the edit is refused; a key's columns and a foreign key's with the reason typed
-/// ([`Reason::WouldBreak`]).
+/// the rules, or the edit is refused; a key's columns and a foreign key with the reason typed
+/// ([`Reason::WouldBreak`]), except where the key or the foreign key belongs to no table or schema.
 fn keys_still_hold(store: &Store, fks: &[Obj], entities: &BTreeSet<Obj>) -> Result<(), Invalid> {
     for e in entities {
         for k in rules::keys_of(store, *e) {
@@ -2276,7 +2276,9 @@ pub fn mapping_name(m: SubtypeMapping) -> &'static str {
 /// Makes the key a subtype takes from its supertype under table per type, when the supertype has a
 /// primary key and the generalization has none yet: an identifying one to zero-or-one relationship
 /// from the supertype to the subtype with the foreign key and its columns, named like the
-/// supertype's key columns.
+/// supertype's key columns. A chain too deep, a circle of generalizations and one of identifying
+/// keys, which only a loaded document leaves to this step but the last, are refused with their
+/// reasons kept ([`refused`]).
 fn ensure_subtype_key(st: &mut Store, g: Obj) -> Result<(), Invalid> {
     let (Some(sup), Some(sub), key_rel) = rules::generalization_parts(st, g) else { return Ok(()) };
     if key_rel.is_some() || rules::mapping_of(st, sup) != SubtypeMapping::TablePerType {
@@ -2296,13 +2298,15 @@ fn ensure_subtype_key(st: &mut Store, g: Obj) -> Result<(), Invalid> {
         }
     }
     if DEPTH.with(|d| d.get()) >= rules::MAX_KEY_COLUMNS as u32 {
-        return Err(Invalid::Refused(format!("the subtypes run deeper than {} levels", rules::MAX_KEY_COLUMNS)));
+        return Err(refused(subtypes_too_deep(), format!("the subtypes run deeper than {} levels", rules::MAX_KEY_COLUMNS)));
     }
     if rules::is_supertype_or_self(st, sub, sup) {
-        return Err(Invalid::Refused(format!("{} and {} are subtypes of each other", name_of(st, sub), name_of(st, sup))));
+        let said = format!("{} and {} are subtypes of each other", name_of(st, sub), name_of(st, sup));
+        return Err(refused(Reason::Cycle { relationship: "subtype" }, said));
     }
     if rules::identifying_cycle(st, sub, pk) {
-        return Err(Invalid::Refused(cycle_text(st, sub, pk)));
+        let reason = Reason::IdentifyingCycle { child: rules::label(st, sub).into(), parent: rules::label(st, sup).into() };
+        return Err(refused(reason, cycle_text(st, sub, pk)));
     }
     DEPTH.with(|d| d.set(d.get() + 1));
     let _deeper = Deeper;
@@ -2341,6 +2345,12 @@ fn subtypes_hold(st: &Store, e: Obj) -> Result<(), Invalid> {
         keys_still_hold(st, &fks, &entities)?;
     }
     Ok(())
+}
+
+/// Subtypes running deeper than the budget allows, as a chain would or a loaded one does
+/// ([`Reason::TooDeep`] of `"subtype"`).
+fn subtypes_too_deep() -> Reason {
+    Reason::TooDeep { kind: "subtype", max: rules::MAX_KEY_COLUMNS as u32 }
 }
 
 /// How many levels the generalizations above `e` and below `sub` would reach together.
@@ -2409,16 +2419,19 @@ fn remove_generalization(st: &mut Store, g: Obj) -> Result<usize, Invalid> {
     Ok(gone + remove_element(st, g)?)
 }
 
+/// `er.generalization.add`: makes `subtype` a subtype of `supertype`, with its key under table per
+/// type; refused, typed, as `rules::generalization_problem` says, or as a chain too deep.
 fn generalization_add(ctx: &mut C<'_>, p: &Params) -> R {
     let sup = id_of(ctx, p, "supertype", ENTITY)?;
     let sub = id_of(ctx, p, "subtype", ENTITY)?;
     if let Some((key, problem)) = rules::generalization_problem(ctx.doc, sup, sub, None) {
-        return Err(refuse(key, problem));
+        return Err(refuse(key, problem.to_string()).because(problem.reason));
     }
     let s = rules::schema_of(ctx.doc, sup).ok_or_else(|| refuse("supertype", "the table belongs to no schema"))?;
     // Levels are links: the tables of the chain less one.
     if chain_depth(ctx.doc, sup, sub).saturating_sub(1) >= rules::MAX_KEY_COLUMNS {
-        return Err(refuse("subtype", format!("the subtypes would run deeper than {} levels", rules::MAX_KEY_COLUMNS)));
+        let said = format!("the subtypes would run deeper than {} levels", rules::MAX_KEY_COLUMNS);
+        return Err(refuse("subtype", said).because(subtypes_too_deep()));
     }
     let g = ctx
         .doc
@@ -2443,7 +2456,8 @@ fn generalization_remove(ctx: &mut C<'_>, p: &Params) -> R {
 }
 
 /// Sets how a supertype's subtypes hold together: complete, disjoint, the discriminator and the
-/// mapping; a mapping change makes or removes every subtype's key in the same step.
+/// mapping; a mapping change makes or removes every subtype's key in the same step. A
+/// discriminator of another table is refused as [`Reason::NotColumnOf`].
 fn entity_set_subtyping(ctx: &mut C<'_>, p: &Params) -> R {
     let e = id_of(ctx, p, "entity", ENTITY)?;
     let complete = p.bool("complete").unwrap_or(false);
@@ -2453,7 +2467,8 @@ fn entity_set_subtyping(ctx: &mut C<'_>, p: &Params) -> R {
     } else {
         let a = id_of(ctx, p, "discriminator", ATTRIBUTE)?;
         if rules::entity_of(ctx.doc, a) != Some(e) {
-            return Err(refuse("discriminator", format!("{} is not a column of {}", name_of(ctx.doc, a), name_of(ctx.doc, e))));
+            let because = Reason::NotColumnOf { column: rules::label(ctx.doc, a).into(), table: rules::label(ctx.doc, e).into() };
+            return Err(refuse("discriminator", format!("{} is not a column of {}", name_of(ctx.doc, a), name_of(ctx.doc, e))).because(because));
         }
         Some(a)
     };
@@ -2601,13 +2616,14 @@ pub fn deferrability_name(d: Deferrability) -> &'static str {
     }
 }
 
-/// A foreign key's columns that break the rules, refused under the parameter the problem concerns,
-/// with the reason typed where [`rules::KeyProblem::reason`] has one.
+/// A foreign key that breaks the rules, by its key, columns, actions or relationship, refused under
+/// the parameter the problem concerns, with the reason typed where [`rules::KeyProblem::reason`]
+/// has one.
 fn key_refused(problem: &rules::KeyProblem) -> CommandError {
     CommandError { reason: problem.reason(), ..refuse(problem.key(), problem.said()) }
 }
 
-/// A foreign key's columns that break the rules, found inside a step: refused through the step's
+/// A foreign key that breaks the rules, found inside a step: refused through the step's
 /// carrier ([`refused`]) where [`rules::KeyProblem::reason`] types the problem, else in English.
 fn key_broken(problem: &rules::KeyProblem) -> Invalid {
     match problem.reason() {
@@ -2684,6 +2700,8 @@ fn foreign_key_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, fk)? }))
 }
 
+/// Sets a foreign key's actions on a delete and an update. A foreign key that would break the rules
+/// with them is refused under `on_delete`, with the reason typed ([`rules::KeyProblem::reason`]).
 fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     let fk = id_of(ctx, p, "foreign_key", FOREIGN_KEY)?;
     let actions = [action(p, "on_delete")?, action(p, "on_update")?];
@@ -2691,7 +2709,7 @@ fn foreign_key_set_actions(ctx: &mut C<'_>, p: &Params) -> R {
     if let (Some(e), Some(k)) = (parts.entity, parts.key)
         && let Some(problem) = rules::key_problem(ctx.doc, e, k, &parts.columns, actions, parts.relationship)
     {
-        return Err(refuse("on_delete", problem.said()));
+        return Err(CommandError { reason: problem.reason(), ..refuse("on_delete", problem.said()) });
     }
     ctx.doc
         .transaction(|st| {
@@ -3237,10 +3255,12 @@ fn relationship_rename(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
-/// Refuses to remove or reshape a piece of a subtype's key on its own: the generalization owns it.
+/// Refuses to remove or reshape a piece of a subtype's key on its own: the generalization owns it
+/// ([`Reason::InSubtypeKey`]).
 fn not_piece(store: &Store, obj: Obj, key: &str) -> Result<(), CommandError> {
     if breaks_subtype_key(store, obj).is_some() {
-        return Err(refuse(key, "it is part of a subtype's key; remove the generalization or change the mapping instead"));
+        let said = "it is part of a subtype's key; remove the generalization or change the mapping instead";
+        return Err(refuse(key, said).because(Reason::InSubtypeKey));
     }
     Ok(())
 }

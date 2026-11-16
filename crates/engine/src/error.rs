@@ -390,6 +390,23 @@ pub enum Reason {
     /// Identifying relationships would run in a cycle: `child` would be built on `parent`, which is
     /// built on `child` already, or is `child` itself through its own primary key.
     IdentifyingCycle { child: Box<str>, parent: Box<str> },
+    /// A foreign key sets its columns to null on a delete or an update, and its column `column` may
+    /// never be null.
+    SetNullNotNullable { column: Box<str> },
+    /// The relationship a foreign key follows does not join the foreign key's table `table` and the
+    /// table `references` it points at.
+    RelationshipNotJoining { table: Box<str>, references: Box<str> },
+    /// A foreign key follows an identifying relationship, and its column `column` is outside its
+    /// table's primary key, which holds every column of such a foreign key.
+    IdentifyingOutsideKey { column: Box<str> },
+    /// The two ends of a `relationship` are in different schemas, where it joins two of one
+    /// schema, as a subtype its supertype.
+    SchemasDiffer { relationship: &'static str },
+    /// The table `table` has a supertype already, where a table has one at most.
+    HasSupertype { table: Box<str> },
+    /// The element is part of a subtype's key, which its subtype owns: it changes or goes only with
+    /// the subtype or the supertype's mapping.
+    InSubtypeKey,
     /// The key or column `name`, of `kind` (as `"primary key"` or `"column"`), would break if the
     /// step went ahead; `why` says how, boxed so the error stays small.
     WouldBreak { kind: &'static str, name: Box<str>, why: Box<Reason> },
