@@ -615,6 +615,10 @@ str		{table} has no primary key.	{table} に主キーがありません。
 str		The key is not one of {table}'s keys.	このキーは {table} のキーではありません。
 str		The key of {table} has no columns to refer to.	{table} のキーには参照できる列がありません。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	識別リレーションシップが {child} と {parent} の間で循環します。
+str		Only a relationship with its foreign key points at a key.	外部キーを持つリレーションシップだけがキーを参照します。
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	多対多のリレーションシップは外部キーを持ちません。代わりに対応テーブルを追加してください。
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	テーブル自身とのリレーションシップには、キーが参照する側の端に parent のようなロールが必要です。
+str		A role needs a letter or a digit, since it names key columns.	ロールはキー列の名前になるため、文字か数字が必要です。
 str		A table cannot be a subtype of itself.	テーブルを自分自身のサブタイプにすることはできません。
 str		The two tables are in different schemas. A subtype is in its supertype's schema.	2 つのテーブルは別々のスキーマにあります。サブタイプはスーパータイプと同じスキーマに置きます。
 str		{table} has a supertype already. A table has one supertype.	{table} にはすでにスーパータイプがあります。テーブルのスーパータイプは 1 つだけです。

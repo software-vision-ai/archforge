@@ -615,6 +615,10 @@ str		{table} has no primary key.	{table} n’a pas de clé primaire.
 str		The key is not one of {table}'s keys.	La clé n’est pas une des clés de {table}.
 str		The key of {table} has no columns to refer to.	La clé de {table} n’a aucune colonne à laquelle faire référence.
 str		Identifying relationships would run in a cycle between {child} and {parent}.	Les relations identifiantes formeraient un cycle entre {child} et {parent}.
+str		Only a relationship with its foreign key points at a key.	Seule une relation dotée de sa clé étrangère pointe vers une clé.
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	Une relation plusieurs à plusieurs ne prend pas de clé étrangère. Ajoutez plutôt une table d’association.
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	Une relation d’une table avec elle-même a besoin d’un rôle à l’extrémité vers laquelle pointe sa clé, comme parent.
+str		A role needs a letter or a digit, since it names key columns.	Un rôle a besoin d’une lettre ou d’un chiffre, car il nomme des colonnes de clé.
 str		A table cannot be a subtype of itself.	Une table ne peut pas être un sous-type d’elle-même.
 str		The two tables are in different schemas. A subtype is in its supertype's schema.	Les deux tables sont dans des schémas différents. Un sous-type est dans le schéma de son supertype.
 str		{table} has a supertype already. A table has one supertype.	{table} a déjà un supertype. Une table a un seul supertype.

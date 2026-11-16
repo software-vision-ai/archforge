@@ -407,6 +407,17 @@ pub enum Reason {
     /// The element is part of a subtype's key, which its subtype owns: it changes or goes only with
     /// the subtype or the supertype's mapping.
     InSubtypeKey,
+    /// A relationship asked to identify its child has no foreign key, or is added without one.
+    IdentifyingWithoutForeignKey,
+    /// A relationship added without its foreign key is given a key to point at.
+    KeyWithoutForeignKey,
+    /// A many-to-many relationship is asked for a foreign key, which only a mapping table holds.
+    ManyToManyForeignKey,
+    /// A relationship of a table with itself brings its foreign key without a role at the end the
+    /// key points to, which names the key columns.
+    RoleNeeded,
+    /// A role has no letter or digit to name key columns by.
+    RoleWithoutLetter,
     /// The key or column `name`, of `kind` (as `"primary key"` or `"column"`), would break if the
     /// step went ahead; `why` says how, boxed so the error stays small.
     WouldBreak { kind: &'static str, name: Box<str>, why: Box<Reason> },

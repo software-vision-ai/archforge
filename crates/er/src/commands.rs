@@ -1782,15 +1782,16 @@ pub fn cardinality_name(c: Cardinality) -> &'static str {
     }
 }
 
-/// A role name under `key`, or empty for none.
+/// A role name under `key`, or empty for none; refused with the name rule's reason, or as one
+/// without a letter or a digit ([`Reason::RoleWithoutLetter`]).
 fn role(p: &Params, key: &str) -> Result<String, CommandError> {
     let role = text(p, key);
     if !role.is_empty() {
         if let Some(problem) = rules::name_problem(role, MAX_NAME) {
-            return Err(refuse(key, format!("the role {problem}")));
+            return Err(refuse(key, format!("the role {problem}")).because(problem.reason));
         }
         if snake(role).is_empty() {
-            return Err(refuse(key, "the role needs a letter or a digit, since it names key columns"));
+            return Err(refuse(key, "the role needs a letter or a digit, since it names key columns").because(Reason::RoleWithoutLetter));
         }
     }
     Ok(role.to_string())
@@ -1960,6 +1961,11 @@ fn new_relationship(
     Ok(r)
 }
 
+/// `er.relationship.add`: a relationship between two tables, with its foreign key and key columns
+/// in the child when asked. Each refusal carries its reason typed: identifying or a key to point at
+/// without the foreign key, a foreign key for many to many, a table with itself without a role, a
+/// key of another table, a parent without a primary key, and an identifying cycle, a table
+/// identifying itself through its own primary key among them ([`Reason::IdentifyingCycle`]).
 fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     let from = id_of(ctx, p, "from", ENTITY)?;
     let to = id_of(ctx, p, "to", ENTITY)?;
@@ -1971,7 +1977,8 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     let identifying = p.bool("identifying").unwrap_or(false);
     let with_key = p.bool("create_foreign_key").unwrap_or(false);
     if identifying && !with_key {
-        return Err(refuse("identifying", "an identifying relationship needs its foreign key; set create_foreign_key"));
+        let because = Reason::IdentifyingWithoutForeignKey;
+        return Err(refuse("identifying", "an identifying relationship needs its foreign key; set create_foreign_key").because(because));
     }
     // The child holds the key: the end with many, or `to` for one to one. The role at the parent's
     // end names the key columns.
@@ -1988,37 +1995,42 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     name_taken(ctx.doc, s, RELATIONSHIP, &name, None)?;
     let points_to = if text(p, "points_to").is_empty() { None } else { Some(key_id(ctx, p, "points_to")?) };
     if points_to.is_some() && !with_key {
-        return Err(refuse("points_to", "only a relationship that brings its foreign key points at a key; set create_foreign_key"));
+        let because = Reason::KeyWithoutForeignKey;
+        return Err(refuse("points_to", "only a relationship that brings its foreign key points at a key; set create_foreign_key").because(because));
     }
     let mut target = None;
     if with_key {
         if rules::is_many(from_end) && rules::is_many(to_end) {
-            return Err(refuse("create_foreign_key", "a many-to-many relationship needs a mapping table; resolve it instead"));
+            let because = Reason::ManyToManyForeignKey;
+            return Err(refuse("create_foreign_key", "a many-to-many relationship needs a mapping table; resolve it instead").because(because));
         }
         if child == parent && parent_role.is_empty() {
             return Err(refuse(
                 "create_foreign_key",
                 "a relationship of an entity with itself needs a role at the end its key points to, such as parent; the role names the key columns",
-            ));
+            )
+            .because(Reason::RoleNeeded));
         }
         if child == parent && identifying && points_to.is_none() {
-            return Err(refuse("identifying", "an entity cannot identify itself through its own primary key"));
+            let because = Reason::IdentifyingCycle { child: rules::label(ctx.doc, child).into(), parent: rules::label(ctx.doc, child).into() };
+            return Err(refuse("identifying", "an entity cannot identify itself through its own primary key").because(because));
         }
         target = match points_to {
             Some(k) if rules::entity_of(ctx.doc, k) != Some(parent) => {
-                return Err(refuse("points_to", format!("the key is not one of {}'s", name_of(ctx.doc, parent))));
+                let because = Reason::KeyNotOf { table: rules::label(ctx.doc, parent).into() };
+                return Err(refuse("points_to", format!("the key is not one of {}'s", name_of(ctx.doc, parent))).because(because));
             }
             Some(k) => Some(k),
-            None => Some(
-                rules::primary_key_of(ctx.doc, parent)
-                    .ok_or_else(|| refuse("create_foreign_key", format!("{} has no primary key to refer to", name_of(ctx.doc, parent))))?,
-            ),
+            None => Some(rules::primary_key_of(ctx.doc, parent).ok_or_else(|| {
+                let because = Reason::NoPrimaryKey { table: rules::label(ctx.doc, parent) };
+                refuse("create_foreign_key", format!("{} has no primary key to refer to", name_of(ctx.doc, parent))).because(because)
+            })?),
         };
         if identifying
             && let Some(k) = target
             && rules::identifying_cycle(ctx.doc, child, k)
         {
-            return Err(refuse("identifying", cycle_text(ctx.doc, child, k)));
+            return Err(cycle_refused(ctx.doc, child, k, "identifying"));
         }
     }
     let r = ctx
@@ -2042,13 +2054,18 @@ fn relationship_add(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, r)? }))
 }
 
+/// `er.relationship.set-identifying`: whether the relationship identifies its child. A subtype's key
+/// ([`Reason::InSubtypeKey`]), identifying without a foreign key
+/// ([`Reason::IdentifyingWithoutForeignKey`]) and an identifying cycle ([`cycle_refused`]) are
+/// refused typed.
 fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
     let r = id_of(ctx, p, "relationship", RELATIONSHIP)?;
     not_subtype_key(ctx.doc, Some(r), "relationship")?;
     let identifying = p.bool("identifying").unwrap_or(false);
     let keys: Vec<Obj> = ctx.doc.referrers(r).into_iter().filter(|(_, prop)| *prop == foreign_key::RELATIONSHIP).map(|(fk, _)| fk).collect();
     if identifying && keys.is_empty() {
-        return Err(refuse("identifying", "the relationship has no foreign key to make part of a primary key"));
+        let because = Reason::IdentifyingWithoutForeignKey;
+        return Err(refuse("identifying", "the relationship has no foreign key to make part of a primary key").because(because));
     }
     if identifying {
         for fk in &keys {
@@ -2056,7 +2073,7 @@ fn relationship_set_identifying(ctx: &mut C<'_>, p: &Params) -> R {
             if let (Some(child), Some(k)) = (parts.entity, parts.key)
                 && rules::identifying_cycle(ctx.doc, child, k)
             {
-                return Err(refuse("identifying", cycle_text(ctx.doc, child, k)));
+                return Err(cycle_refused(ctx.doc, child, k, "identifying"));
             }
         }
     }
@@ -3271,12 +3288,13 @@ fn breaks_subtype_key(store: &Store, obj: Obj) -> Option<Obj> {
     subtype_key_piece(store, obj).or_else(|| dependents(store, obj).ok()?.0.into_iter().find_map(|k| subtype_key_piece(store, k)))
 }
 
-/// Refuses to remove a relationship or foreign key that is a subtype's key: the generalization owns it.
+/// Refuses to remove or change a relationship or foreign key that is a subtype's key: the
+/// generalization owns it ([`Reason::InSubtypeKey`]).
 fn not_subtype_key(store: &Store, r: Option<Obj>, key: &str) -> Result<(), CommandError> {
     let Some(r) = r else { return Ok(()) };
     let owned = store.referrers(r).into_iter().any(|(g, p)| p == generalization::KEY_RELATIONSHIP && store.is_alive(g));
     if owned {
-        return Err(refuse(key, "it is a subtype's key; remove the generalization instead"));
+        return Err(refuse(key, "it is a subtype's key; remove the generalization instead").because(Reason::InSubtypeKey));
     }
     Ok(())
 }

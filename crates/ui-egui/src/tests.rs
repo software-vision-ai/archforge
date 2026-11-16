@@ -6903,6 +6903,89 @@ fn a_subtype_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A relationship refused is said in the chosen language, never in the engine's English:
+/// identifying or a key to point at without the foreign key, a foreign key for many to many, a
+/// table with itself without a role or identifying itself, a key of another table, a parent without
+/// a primary key, roles against the name rule or without a letter, and a subtype's key changed. In
+/// light and dark (AR-504).
+#[test]
+fn a_relationship_refused_is_said_in_the_chosen_language() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let mut run = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).unwrap();
+        let mut id = |cmd: &str, p: serde_json::Value| run(cmd, p)["id"].as_str().unwrap().to_string();
+        let schema = id("er.schema.add", json!({ "name": "Shop" }));
+        let [kunde, auftrag, notiz, vip] =
+            ["Kunde", "Auftrag", "Notiz", "Vip"].map(|name| id("er.entity.add", json!({ "schema": schema, "name": name })));
+        id("er.attribute.add", json!({ "entity": kunde, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        id("er.attribute.add", json!({ "entity": notiz, "name": "nummer", "type": "BIGINT", "primary_key": true }));
+        id("er.generalization.add", json!({ "supertype": kunde, "subtype": vip }));
+        let places = id("er.relationship.add", json!({ "from": kunde, "to": auftrag }));
+        let vip_json = run("er.entity.get", json!({ "entity": vip }));
+        let vip_fk = vip_json["foreign_keys"][0]["id"].as_str().unwrap().to_string();
+        let notiz_pk = run("er.entity.get", json!({ "entity": notiz }))["primary_key"]["id"].as_str().unwrap().to_string();
+        let mut refused = |cmd: &str, p: serde_json::Value| crate::panels::run(h.state_mut(), cmd, p).err().unwrap_or_default();
+        let add = "er.relationship.add";
+        let keyed = |from: &str, to: &str, extra: serde_json::Value| {
+            let mut p = json!({ "from": from, "to": to, "create_foreign_key": true });
+            p.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            p
+        };
+        for (cmd, p, said) in [
+            (
+                add,
+                json!({ "from": kunde, "to": auftrag, "identifying": true }),
+                "Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten",
+            ),
+            (
+                add,
+                json!({ "from": kunde, "to": auftrag, "points_to": notiz_pk }),
+                "Nur eine Beziehung mit ihrem Fremdschlüssel verweist auf einen Schlüssel.",
+            ),
+            (
+                add,
+                keyed(&kunde, &auftrag, json!({ "from_end": "one-or-more" })),
+                "Eine Viele-zu-viele-Beziehung hat keinen Fremdschlüssel. Fügen Sie stattdessen eine Zuordnungstabelle hinzu.",
+            ),
+            (
+                add,
+                keyed(&kunde, &kunde, json!({})),
+                "Eine Beziehung einer Tabelle mit sich selbst braucht eine Rolle an dem Ende, auf das ihr Schlüssel verweist, etwa parent.",
+            ),
+            (
+                add,
+                keyed(&kunde, &kunde, json!({ "from_role": "ganzes", "identifying": true })),
+                "Identifizierende Beziehungen würden einen Zyklus zwischen Kunde und Kunde bilden.",
+            ),
+            (add, keyed(&kunde, &auftrag, json!({ "points_to": notiz_pk })), "Der Schlüssel ist keiner der Schlüssel von Kunde."),
+            (add, keyed(&auftrag, &kunde, json!({})), "Auftrag hat keinen Primärschlüssel."),
+            (add, keyed(&kunde, &auftrag, json!({ "to_role": "käufer " })), "Am Anfang und am Ende darf kein Leerzeichen stehen."),
+            (
+                add,
+                keyed(&kunde, &auftrag, json!({ "from_role": "--" })),
+                "Eine Rolle braucht einen Buchstaben oder eine Ziffer, da sie Schlüsselspalten benennt.",
+            ),
+            (
+                "er.relationship.set-identifying",
+                json!({ "relationship": places, "identifying": true }),
+                "Eine identifizierende Beziehung braucht ihren Fremdschlüssel; erst den Schalter einschalten",
+            ),
+            (
+                "er.foreign-key.remove",
+                json!({ "foreign_key": vip_fk }),
+                "Dies ist Teil des Schlüssels eines Untertyps. Entfernen Sie stattdessen den Untertyp oder ändern Sie die Untertyp-Abbildung des Obertyps.",
+            ),
+        ] {
+            assert_eq!(refused(cmd, p), said, "{cmd} {theme:?}");
+        }
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A key a step would break is said in the chosen language with why in the same words, and keys built
 /// on each other too deep too; a reason inside it this can't say leaves the whole to the engine's
 /// English. In light and dark (AR-493).

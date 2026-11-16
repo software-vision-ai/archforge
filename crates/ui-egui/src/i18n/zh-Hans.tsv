@@ -615,6 +615,10 @@ str		{table} has no primary key.	{table} 没有主键。
 str		The key is not one of {table}'s keys.	该键不是 {table} 的键。
 str		The key of {table} has no columns to refer to.	{table} 的键没有可引用的列。
 str		Identifying relationships would run in a cycle between {child} and {parent}.	标识关系将在 {child} 和 {parent} 之间形成循环。
+str		Only a relationship with its foreign key points at a key.	只有带外键的关系才指向键。
+str		A many-to-many relationship takes no foreign key. Add a mapping table instead.	多对多关系不带外键。请改为添加映射表。
+str		A relationship of a table with itself needs a role at the end its key points to, such as parent.	表与自身的关系需要在其键所指向的一端设置角色，例如 parent。
+str		A role needs a letter or a digit, since it names key columns.	角色需要一个字母或数字，因为它用于命名键列。
 str		A table cannot be a subtype of itself.	表不能是其自身的子类型。
 str		The two tables are in different schemas. A subtype is in its supertype's schema.	两个表位于不同的架构中。子类型须位于其超类型的架构中。
 str		{table} has a supertype already. A table has one supertype.	{table} 已有超类型。一个表只有一个超类型。
