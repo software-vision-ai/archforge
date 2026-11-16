@@ -22,6 +22,10 @@
 //! without its subtype.
 //! What a column is typed by (AR-497): a type name that holds its own size, a domain and an enum
 //! type together, and a type name or a size beside either.
+//!
+//! Domains and enum types (AR-498): a type that columns still take, with the first of them (a list
+//! the engine cut ending in an ellipsis) and their count, and an enum type's literals: none, too
+//! many, one that is no text or no name, or one twice.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
@@ -49,6 +53,9 @@ const KINDS: [&str; 16] = [
 
 /// A key's columns, as a list refused names them.
 const KEY_COLUMN: &str = "key column";
+
+/// An enum type's literals, as a list refused names them.
+const LITERAL: &str = "enum literal";
 
 /// A foreign key's columns, as its rules name them.
 const FOREIGN_KEY_COLUMN: &str = "foreign key column";
@@ -146,6 +153,21 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             fmt(&template, &[("key", key), ("takes", &takes.join(", "))])
         }
         Reason::NotOneOf(no) => return not_one_of_said(no),
+        Reason::TypeInUse(used) => {
+            let n = u64::try_from(used.count).ok()?;
+            let template = trn("{n} column takes {name}: {columns}. Retype it first.", "{n} columns take {name}: {columns}. Retype them first.", n);
+            // The engine names the first columns only; a list it cut ends in an ellipsis.
+            let cut = if used.count > used.columns.len() { ", …" } else { "" };
+            fmt(&template, &[("name", &used.name), ("columns", &format!("{}{cut}", used.columns.join(", ")))])
+        }
+        Reason::NamesExpected { kind: LITERAL } => tr("Give the literals as a list of names."),
+        Reason::TooFew { kind: LITERAL, min: 1 } => tr("An enum type needs at least one literal."),
+        Reason::TooMany { kind: LITERAL, max } => fmt(&tr("An enum type has at most {max} literals."), &[("max", &max.to_string())]),
+        Reason::LiteralName { name, .. } if name.is_empty() => tr("A literal can't be empty."),
+        Reason::LiteralName { name, why } => {
+            fmt(&tr("The literal \"{name}\" is not a valid name. {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
+        }
+        Reason::NamedTwice { kind: LITERAL, name } => fmt(&tr("The literal \"{name}\" is given twice. Give each literal once."), &[("name", name)]),
         _ => return None,
     })
 }

@@ -143,6 +143,13 @@ str		complete	完全
 str		disjoint	排他
 str		overlapping	重複あり
 str		Add a literal	リテラルを追加
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} 個の列が {name} を使っています: {columns}。先に型を変更してください。
+str		Give the literals as a list of names.	リテラルは名前のリストで指定してください。
+str		An enum type needs at least one literal.	列挙型にはリテラルが 1 つ以上必要です。
+str		An enum type has at most {max} literals.	列挙型が持てるリテラルは最大 {max} 個です。
+str		A literal can't be empty.	リテラルは空にできません。
+str		The literal "{name}" is not a valid name. {why}	リテラル「{name}」は有効な名前ではありません。{why}
+str		The literal "{name}" is given twice. Give each literal once.	リテラル「{name}」が 2 回指定されています。各リテラルは 1 回だけ指定してください。
 str		Sequences · {n}	シーケンス · {n}
 str		Add sequence	シーケンスを追加
 str		Sequence	シーケンス

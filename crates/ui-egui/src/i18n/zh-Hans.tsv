@@ -143,6 +143,13 @@ str		complete	完全
 str		disjoint	互斥
 str		overlapping	重叠
 str		Add a literal	添加字面量
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} 个列使用 {name}：{columns}。请先更改它们的类型。
+str		Give the literals as a list of names.	请以名称列表的形式给出字面量。
+str		An enum type needs at least one literal.	枚举类型至少需要一个字面量。
+str		An enum type has at most {max} literals.	一个枚举类型最多有 {max} 个字面量。
+str		A literal can't be empty.	字面量不能为空。
+str		The literal "{name}" is not a valid name. {why}	字面量“{name}”不是有效的名称。{why}
+str		The literal "{name}" is given twice. Give each literal once.	字面量“{name}”出现了两次。每个字面量只能给出一次。
 str		Sequences · {n}	序列 · {n}
 str		Add sequence	添加序列
 str		Sequence	序列

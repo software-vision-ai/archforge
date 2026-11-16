@@ -6894,6 +6894,59 @@ fn an_er_size_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A domain or an enum type that columns take, and an enum type's literals refused, are said in the
+/// chosen language: the type with its first columns, singular and plural, a list the engine cut
+/// ending in an ellipsis; none, too many, no list
+/// of names, a literal that is no name with why in the same words (an empty one on its own), and
+/// one twice, also as a problem of a loaded enum type. In light and dark (AR-498).
+#[test]
+fn an_er_type_in_use_and_its_literals_refused_are_said_in_the_chosen_language() {
+    use archforge_engine::{Reason, TypeInUse};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let in_use = |name: &str, columns: &[&str], count| {
+            Reason::TypeInUse(Box::new(TypeInUse { name: name.into(), columns: columns.iter().map(|c| c.to_string()).collect(), count }))
+        };
+        let named = |name: &str, why| Reason::LiteralName { name: name.into(), why: Box::new(why) };
+        for (reason, said) in [
+            (in_use("status", &["Bestellung.status"], 1), "1 Spalte verwendet status: Bestellung.status. Ändern Sie zuerst ihren Typ."),
+            (
+                in_use("geld", &["Bestellung.summe", "Kunde.saldo"], 7),
+                "7 Spalten verwenden geld: Bestellung.summe, Kunde.saldo, …. Ändern Sie zuerst ihren Typ.",
+            ),
+            (Reason::NamesExpected { kind: "enum literal" }, "Geben Sie die Literale als Liste von Namen an."),
+            (Reason::TooFew { kind: "enum literal", min: 1 }, "Ein Aufzählungstyp braucht mindestens ein Literal."),
+            (Reason::TooMany { kind: "enum literal", max: 256 }, "Ein Aufzählungstyp hat höchstens 256 Literale."),
+            (named("", Reason::NameEmpty), "Ein Literal darf nicht leer sein."),
+            (named(" offen", Reason::EdgeSpace), "Das Literal „ offen“ ist kein gültiger Name. Am Anfang und am Ende darf kein Leerzeichen stehen."),
+            (
+                Reason::NamedTwice { kind: "enum literal", name: "OFFEN".into() },
+                "Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an.",
+            ),
+        ] {
+            assert_eq!(crate::panels::said(&reason).as_deref(), Some(said), "{reason:?} {theme:?}");
+        }
+        // A loaded enum type's literal twice, which no command makes, is a problem in the same words.
+        let mut n = 0u64;
+        let ids = Box::new(move || {
+            n += 1;
+            archforge_mof::Uuid::v7(1_761_670_800_000, [0, 0, 0, 0, 0, 0, 0, 0, 0, u8::try_from(n).unwrap_or(u8::MAX)])
+        });
+        let mut st = archforge_er::store(ids).unwrap();
+        let e = st.create(archforge_er::ENUM_TYPE).unwrap();
+        st.set(e, archforge_er::named_element::NAME, archforge_mof::Value::str("status")).unwrap();
+        for literal in ["offen", "OFFEN"] {
+            st.push(e, archforge_er::enum_type::LITERAL, archforge_mof::Value::str(literal)).unwrap();
+        }
+        let texts: Vec<String> = crate::problems::all(crate::notation_ui::UIS, &st).into_iter().map(|p| p.text).collect();
+        assert_eq!(texts, ["status: Das Literal „OFFEN“ ist doppelt angegeben. Geben Sie jedes Literal nur einmal an."], "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A column's own default, collation, place and link refused are said in the chosen language: a
 /// default none of its enum type's literals in the words UML says it in, also for a column that
 /// would break; a default or collation its domain gives; a place past the table's last, singular

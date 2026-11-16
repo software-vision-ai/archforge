@@ -281,6 +281,16 @@ rule as that rule's reason, an index column with both a column and an expression
 which the command finds first, is typed for the rules as `TooMany`. Columns given as no list stay
 in English: the engine refuses that before the handler runs, as `columns` is an array parameter.
 
+**Refusals of a domain or an enum type** (AR-498). Removing a domain or an enum type that columns
+still take (`domain.remove`, `enum.remove`) is refused as `TypeInUse`, with the type, the first five
+columns as `table.column` and how many in all, each named by `rules::label`. An enum type's
+literals, from `enum.add` and `enum.set`, are refused under `literals` as `TooFew`, `TooMany`,
+`NamesExpected` and `NamedTwice` of `"enum literal"`, and a literal that is no name as
+`LiteralName` with the name rule's reason, as `rules::literals_problem` types it; the English stays
+as it was. The engine refuses `literals` that is no array, or left out, before the handler runs, so
+the handler's own refusal of it stays in English. The column rules a changed type would break inside
+the step were typed by AR-494 and AR-495.
+
 **Refusals of a removal** (AR-508). `commands::remove_elements`, the selection's removal
 (`element.remove`), refuses an element of a kind removed where it is edited (a domain, an enum type,
 a check, an index and their parts) as `RemovedWhereEdited`, and a part of a subtype's key without

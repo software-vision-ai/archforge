@@ -265,7 +265,8 @@ impl NotationUi for ErUi {
 
     /// A table without a primary key, a many-to-many relationship still waiting for its mapping
     /// table, a foreign key the rules refuse, a key column that may be null, a key whose columns
-    /// the rules refuse, and the rest the rules find; a column's or a key's on its table.
+    /// the rules refuse, and the rest the rules find; a column's or a key's on its table. An enum
+    /// type's literals are said by their typed reason.
     fn problems(&self, store: &Store, out: &mut Vec<Problem>) {
         for o in store.alive() {
             let Ok(class) = store.class_of(o) else { continue };
@@ -332,7 +333,10 @@ impl NotationUi for ErUi {
             if class == archforge_er::ENUM_TYPE
                 && let Some(p) = r::literals_problem(&r::literals_of(store, o))
             {
-                out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &p)]) });
+                // The literals' rule is typed, so it is said in the user's words, the English only
+                // for a reason the interface doesn't say.
+                let said = crate::panels::said(&p.reason).unwrap_or_else(|| p.to_string());
+                out.push(Problem { element: o, text: fmt(&tr("{key}: {problem}"), &[("key", &name(store, o)), ("problem", &said)]) });
             }
             if class == archforge_er::RELATIONSHIP {
                 let end = |p| store.get(o, p).ok().and_then(|v| v.as_ref()).map(|e| name(store, e)).unwrap_or_default();

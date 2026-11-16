@@ -142,6 +142,13 @@ str		complete	complete
 str		disjoint	disjoint
 str		overlapping	overlapping
 str		Add a literal	Add a literal
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} column takes {name}: {columns}. Retype it first.|{n} columns take {name}: {columns}. Retype them first.
+str		Give the literals as a list of names.	Give the literals as a list of names.
+str		An enum type needs at least one literal.	An enum type needs at least one literal.
+str		An enum type has at most {max} literals.	An enum type has at most {max} literals.
+str		A literal can't be empty.	A literal can't be empty.
+str		The literal "{name}" is not a valid name. {why}	The literal "{name}" is not a valid name. {why}
+str		The literal "{name}" is given twice. Give each literal once.	The literal "{name}" is given twice. Give each literal once.
 str		Sequences · {n}	Sequences · {n}
 str		Add sequence	Add sequence
 str		Sequence	Sequence

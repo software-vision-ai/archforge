@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
 use archforge_diagram::ProjectView;
-use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, WordPlace, always, cmd};
+use archforge_engine::{CommandError, CommandSpec, Ctx, Facts, NotOneOf, Params, Reason, TypeInUse, WordPlace, always, cmd};
 use archforge_mof::{ClassId, Invalid, Obj, Store, TypeRef, Uuid, Value};
 use serde_json::{Value as Json, json};
 
@@ -1370,21 +1370,23 @@ fn domain_set(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, d)? }))
 }
 
-/// Refuses to remove a type that columns still take.
+/// Refuses to remove a type that columns still take, typed with the type, the first five columns
+/// and their count ([`Reason::TypeInUse`]), each named by [`rules::label`] there.
 fn type_unused(store: &Store, t: Obj, key: &str) -> Result<(), CommandError> {
     let columns = rules::type_columns(store, t);
     if columns.is_empty() {
         return Ok(());
     }
-    let names: Vec<String> = columns
-        .iter()
-        .take(5)
-        .map(|a| match rules::entity_of(store, *a) {
-            Some(e) => format!("{}.{}", name_of(store, e), name_of(store, *a)),
+    let names = |name: fn(&Store, Obj) -> String| -> Vec<String> {
+        let named = |a: &Obj| match rules::entity_of(store, *a) {
+            Some(e) => format!("{}.{}", name(store, e), name(store, *a)),
             None => rules::label(store, *a),
-        })
-        .collect();
-    Err(refuse(key, format!("{} columns take {}: {}; retype them first", columns.len(), name_of(store, t), names.join(", "))))
+        };
+        columns.iter().take(5).map(named).collect()
+    };
+    let message = format!("{} columns take {}: {}; retype them first", columns.len(), name_of(store, t), names(name_of).join(", "));
+    let used = TypeInUse { name: rules::label(store, t), columns: names(rules::label), count: columns.len() };
+    Err(refuse(key, message).because(Reason::TypeInUse(Box::new(used))))
 }
 
 fn domain_remove(ctx: &mut C<'_>, p: &Params) -> R {
@@ -1394,24 +1396,30 @@ fn domain_remove(ctx: &mut C<'_>, p: &Params) -> R {
     Ok(json!({ "removed": gone }))
 }
 
-/// The `literals` array parameter: names, none twice.
+/// The `literals` array parameter: names, none twice; a refusal typed with the kind
+/// `"enum literal"`. The engine refuses a value that is no array before the handler runs, so the
+/// first refusal stays in English.
 fn literals_param(p: &Params) -> Result<Vec<String>, CommandError> {
     let items = match p.get("literals") {
         Some(Json::Array(items)) => items,
         _ => return Err(refuse("literals", "an array of literals")),
     };
     if items.len() > rules::MAX_LITERALS {
-        return Err(refuse("literals", format!("at most {} literals", rules::MAX_LITERALS)));
+        let most = Reason::TooMany { kind: rules::LITERAL, max: rules::MAX_LITERALS };
+        return Err(refuse("literals", format!("at most {} literals", rules::MAX_LITERALS)).because(most));
     }
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         match item {
             Json::String(s) => out.push(s.clone()),
-            other => return Err(refuse("literals", format!("{} is not a literal", shown(other)))),
+            other => {
+                let message = format!("{} is not a literal", shown(other));
+                return Err(refuse("literals", message).because(Reason::NamesExpected { kind: rules::LITERAL }));
+            }
         }
     }
     if let Some(problem) = rules::literals_problem(&out) {
-        return Err(refuse("literals", problem));
+        return Err(refuse("literals", problem.to_string()).because(problem.reason));
     }
     Ok(out)
 }

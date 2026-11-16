@@ -16,6 +16,8 @@ use crate::{
 
 /// The most literals of an enum type.
 pub const MAX_LITERALS: usize = 256;
+/// An enum type's literal, as a typed refusal names the kind.
+pub(crate) const LITERAL: &str = "enum literal";
 
 /// The most characters in a name, and in an attribute's type.
 pub const MAX_NAME: usize = 128;
@@ -446,22 +448,27 @@ pub fn type_columns(store: &Store, t: Obj) -> Vec<Obj> {
         .collect()
 }
 
-/// Why `literals` cannot be an enum type's: at least one, at most 256, each a name, none twice.
-pub fn literals_problem(literals: &[String]) -> Option<String> {
+/// Why `literals` cannot be an enum type's: at least one, at most 256, each a name, none twice; in
+/// English as it displays, and typed, a literal by its first 40 characters, of the kind
+/// `"enum literal"`.
+pub fn literals_problem(literals: &[String]) -> Option<Problem> {
     if literals.is_empty() {
-        return Some("an enum type needs at least one literal".into());
+        return Some(Problem::new(Reason::TooFew { kind: LITERAL, min: 1 }, "an enum type needs at least one literal"));
     }
     if literals.len() > MAX_LITERALS {
-        return Some(format!("an enum type has at most {MAX_LITERALS} literals"));
+        let reason = Reason::TooMany { kind: LITERAL, max: MAX_LITERALS };
+        return Some(Problem::new(reason, format!("an enum type has at most {MAX_LITERALS} literals")));
     }
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for l in literals {
         let shown: String = l.chars().take(40).collect();
         if let Some(p) = name_problem(l, MAX_NAME) {
-            return Some(format!("the literal {shown:?} {p}"));
+            let said = format!("the literal {shown:?} {p}");
+            return Some(Problem::new(Reason::LiteralName { name: shown.into(), why: Box::new(p.reason) }, said));
         }
         if !seen.insert(l.to_lowercase()) {
-            return Some(format!("the literal {shown:?} appears twice"));
+            let said = format!("the literal {shown:?} appears twice");
+            return Some(Problem::new(Reason::NamedTwice { kind: LITERAL, name: shown }, said));
         }
     }
     None
