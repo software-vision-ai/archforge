@@ -743,10 +743,12 @@ pub fn draw(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) {
     let no_widget_has_keys = ui.memory(|m| m.focused().is_none());
     let tree_keys =
         shell.explorer.focused && no_widget_has_keys && !typing_at_start && shell.explorer.rename.is_none() && shell.explorer.delete.is_none();
-    // ⇧F10 opens the selected row's menu under it, as a right click does (D1).
+    // ⇧F10 opens the selected row's menu under it, as a right click does (D1); exactly, so not
+    // with Alt or Control more (`consume_key` lets Alt through).
+    let menu_keys = crate::actions::Keys { modifiers: egui::Modifiers::SHIFT, key: egui::Key::F10 };
     if tree_keys
         && shell.explorer.context.is_none()
-        && ui.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::F10))
+        && ui.input_mut(|i| crate::actions::take(i, &menu_keys))
         && let Some(i) = selected_obj.and_then(|o| rows.iter().position(|row| row.obj == o))
     {
         let y = r.top() + FIRST_ROW + i as f32 * ROW - offset;
