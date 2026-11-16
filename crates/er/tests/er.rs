@@ -2634,6 +2634,115 @@ fn relationships_and_keys_agree_through_nullability_growing_keys_links_and_colla
     all_rules_hold(s.doc());
 }
 
+/// Runs a command that must be refused, and checks it changed nothing and carries `reason` typed
+/// beside the English `message`, under `key`.
+fn refused_typed(s: &mut Session, cmd: &str, p: Json, key: &str, reason: archforge_engine::Reason, message: &str) {
+    let before = picture(s.doc());
+    let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+    assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+    assert_eq!(picture(s.doc()), before, "{cmd} {p} changed something");
+}
+
+/// A relationship that does not resolve into a mapping table, a table that does not collapse back
+/// into a relationship, and one that cannot be associative are refused with the rule typed beside
+/// the English, which stays as it was: one-to-many, an end without a primary key, not two foreign
+/// keys, one that stands for no relationship, a relationship, a column, a unique constraint, a
+/// check or an index of its own, columns outside the primary key, and none or one foreign key
+/// within it (AR-505).
+#[test]
+fn a_mapping_table_refused_carries_its_rule_typed() {
+    use archforge_engine::{MappingRule as M, Reason};
+    let mut s = session();
+    let sm = sample(&mut s);
+    let (resolve, collapse, kind) = ("er.relationship.resolve", "er.relationship.collapse", "er.entity.set-kind");
+    let ends = json!({ "from": sm.customer, "to": sm.order, "from_end": "zero-or-more", "to_end": "zero-or-more" });
+    let r = run(&mut s, "er.relationship.add", ends);
+    let rule = Reason::Mapping;
+    let message = "only a many-to-many relationship becomes a mapping table";
+    refused_typed(&mut s, resolve, json!({ "relationship": sm.places }), "relationship", rule(M::NotManyToMany), message);
+    let no_key = Reason::NoPrimaryKey { table: "Order".into() };
+    refused_typed(&mut s, resolve, json!({ "relationship": r }), "relationship", no_key, "Order has no primary key to refer to");
+    run(&mut s, "er.attribute.add", json!({ "entity": sm.order, "name": "order_id", "type": "BIGINT", "primary_key": true }));
+    let m = run(&mut s, resolve, json!({ "relationship": r, "name": "lines" }));
+    let column = get(&mut s, "er.entity.get", json!({ "entity": m }))["attributes"][0]["id"].clone();
+    refused_typed(&mut s, collapse, json!({ "entity": sm.order }), "entity", rule(M::TwoForeignKeys), "a mapping table has exactly two foreign keys");
+    for (cmd, p, r, message) in [
+        ("er.relationship.add", json!({ "from": sm.customer, "to": m }), M::OwnRelationship, "it has a relationship of its own"),
+        ("er.attribute.add", json!({ "entity": m, "name": "note", "type": "TEXT" }), M::OwnColumns, "it has columns of its own"),
+        ("er.unique.add", json!({ "entity": m, "columns": [column] }), M::UniqueConstraint, "it has a unique constraint"),
+        ("er.check.add", json!({ "entity": m, "expression": "1 = 1" }), M::Check, "it has a check constraint"),
+        ("er.index.add", json!({ "entity": m, "columns": [column] }), M::Index, "it has an index"),
+    ] {
+        run(&mut s, cmd, p);
+        refused_typed(&mut s, collapse, json!({ "entity": m }), "entity", rule(r), message);
+        s.undo().unwrap();
+    }
+    // Two foreign keys of relationships that do not identify: their columns are outside a key.
+    let outside = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Outside" }));
+    for from in [&sm.customer, &sm.order] {
+        run(&mut s, "er.relationship.add", json!({ "from": from, "to": outside, "create_foreign_key": true }));
+    }
+    let message = "its columns are not all in its primary key";
+    refused_typed(&mut s, collapse, json!({ "entity": outside }), "entity", rule(M::ColumnsOutsideKey), message);
+    // Made a mapping table by its primary key, it keeps both foreign keys' columns in it.
+    let attributes = get(&mut s, "er.entity.get", json!({ "entity": outside }))["attributes"].clone();
+    let ids: Vec<Json> = attributes.as_array().unwrap().iter().map(|c| c["id"].clone()).collect();
+    run(&mut s, "er.primary-key.set", json!({ "entity": outside, "columns": ids, "name": "pk_outside" }));
+    run(&mut s, kind, json!({ "entity": outside, "kind": "associative" }));
+    let message = "a mapping table needs two foreign keys within its primary key; Outside has 1";
+    let why = Box::new(rule(M::KeysInPrimaryKey { table: "Outside".into(), keys: 1 }));
+    let breaks = Reason::WouldBreak { kind: "table", name: "Outside".into(), why };
+    refused_typed(&mut s, "er.primary-key.set", json!({ "entity": outside, "columns": [ids[0]], "name": "pk_outside" }), "columns", breaks, message);
+    // Two foreign keys of no relationship.
+    let loose = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Loose" }));
+    for (references, name) in [(&sm.customer, "fk_customer"), (&sm.order, "fk_order")] {
+        run(&mut s, "er.foreign-key.add", json!({ "entity": loose, "references": references, "name": name }));
+    }
+    let none = rule(M::NoRelationship { foreign_key: "fk_customer".into() });
+    refused_typed(&mut s, collapse, json!({ "entity": loose }), "entity", none, "the foreign key fk_customer realises no relationship");
+    // An entity with none, and one with one, foreign key within its primary key.
+    let associative = json!({ "entity": sm.order, "kind": "associative" });
+    let message = "a mapping table needs two foreign keys within its primary key; Order has 0";
+    refused_typed(&mut s, kind, associative, "kind", rule(M::KeysInPrimaryKey { table: "Order".into(), keys: 0 }), message);
+    let fk = get(&mut s, "er.entity.get", json!({ "entity": m }))["foreign_keys"][0]["id"].clone();
+    run(&mut s, "er.foreign-key.remove", json!({ "foreign_key": fk }));
+    let message = "a mapping table needs two foreign keys within its primary key; lines has 1";
+    let one = rule(M::KeysInPrimaryKey { table: "lines".into(), keys: 1 });
+    refused_typed(&mut s, kind, json!({ "entity": m, "kind": "associative" }), "kind", one, message);
+}
+
+/// A loaded document's many-to-many relationship that lacks an end, and a table whose two foreign
+/// keys point at no key, which no command makes, refuse resolve and collapse with the rule typed,
+/// the foreign key named by its id when it has no name (AR-505).
+#[test]
+fn a_loaded_relationship_without_an_end_or_a_key_is_refused_with_its_rule_typed() {
+    use archforge_engine::{MappingRule as M, Reason};
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let (a, t) = (st.create(ENTITY).unwrap(), st.create(ENTITY).unwrap());
+    let r = st.create(RELATIONSHIP).unwrap();
+    st.set(r, relationship::FROM, Value::Ref(a)).unwrap();
+    for end in [relationship::FROM_END, relationship::TO_END] {
+        st.set(r, end, Value::Enum(Cardinality::ZeroOrMore.index())).unwrap();
+    }
+    for (prop, o) in [(schema::ENTITY, a), (schema::ENTITY, t), (schema::RELATIONSHIP, r)] {
+        st.push(s, prop, Value::Ref(o)).unwrap();
+    }
+    let fks = [st.create(FOREIGN_KEY).unwrap(), st.create(FOREIGN_KEY).unwrap()];
+    for fk in fks {
+        st.set(fk, foreign_key::RELATIONSHIP, Value::Ref(r)).unwrap();
+        st.push(t, entity::FOREIGN_KEY, Value::Ref(fk)).unwrap();
+    }
+    let id = |st: &Store, o: Obj| st.uuid(o).unwrap().to_string();
+    let (r, t, fk) = (id(&st, r), id(&st, t), id(&st, fks[0]));
+    let mut s = Session::with_view(registry().unwrap(), st, 1, Options::default(), archforge_diagram::ProjectView::new(ALONE));
+    let lacks = Reason::Mapping(M::LacksEnd);
+    refused_typed(&mut s, "er.relationship.resolve", json!({ "relationship": r }), "relationship", lacks, "the relationship lacks an end");
+    let no_key = Reason::Mapping(M::NoKey { foreign_key: fk.into() });
+    refused_typed(&mut s, "er.relationship.collapse", json!({ "entity": t }), "entity", no_key, "a foreign key lacks its relationship or its key");
+}
+
 #[test]
 fn a_cycle_of_identifying_keys_in_a_loaded_document_cannot_grow_and_a_self_key_onto_a_unique_may_identify() {
     // Past the commands' refusals (a document from a file could carry it): A identifies B and B

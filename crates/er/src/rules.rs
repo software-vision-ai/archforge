@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use archforge_core::skills::Problem;
-use archforge_engine::{DefaultKind, GenerationRule, Reason, SizeRule};
+use archforge_engine::{DefaultKind, GenerationRule, MappingRule, Reason, SizeRule};
 use archforge_mof::{Obj, Store, Value};
 
 use crate::{
@@ -849,41 +849,75 @@ pub fn linked_from(store: &Store, a: Obj) -> Vec<Obj> {
     store.referrers(a).into_iter().filter(|(_, p)| *p == attribute::LINKED_TO).map(|(c, _)| c).filter(|c| store.is_alive(*c)).collect()
 }
 
+/// What a mapping table, or a relationship to become one, breaks ([`collapse_problem`],
+/// [`associative_problem`], and the resolve and collapse steps): said as an English sentence
+/// ([`MappingProblem::said`]) or typed ([`MappingProblem::reason`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MappingProblem(pub MappingRule);
+
+impl MappingProblem {
+    /// The problem as an English sentence, as "it has columns of its own".
+    pub fn said(&self) -> String {
+        match &self.0 {
+            MappingRule::NotManyToMany => "only a many-to-many relationship becomes a mapping table".into(),
+            MappingRule::LacksEnd => "the relationship lacks an end".into(),
+            MappingRule::TwoForeignKeys => "a mapping table has exactly two foreign keys".into(),
+            MappingRule::NoRelationship { foreign_key } => format!("the foreign key {foreign_key} realises no relationship"),
+            MappingRule::NoKey { .. } => "a foreign key lacks its relationship or its key".into(),
+            MappingRule::OwnRelationship => "it has a relationship of its own".into(),
+            MappingRule::OwnColumns => "it has columns of its own".into(),
+            MappingRule::ColumnsOutsideKey => "its columns are not all in its primary key".into(),
+            MappingRule::UniqueConstraint => "it has a unique constraint".into(),
+            MappingRule::Check => "it has a check constraint".into(),
+            MappingRule::Index => "it has an index".into(),
+            MappingRule::KeysInPrimaryKey { table, keys } => {
+                format!("a mapping table needs two foreign keys within its primary key; {table} has {keys}")
+            }
+        }
+    }
+
+    /// The problem typed, for an interface to say in its own words.
+    pub fn reason(&self) -> Reason {
+        Reason::Mapping(self.0.clone())
+    }
+}
+
 /// Why an entity is no pure mapping table that could collapse back into a relationship: it needs
 /// exactly two foreign keys with their relationships, columns that are exactly theirs and all in its
 /// primary key, and no unique constraint, check or index. None when it can collapse.
-pub fn collapse_problem(store: &Store, e: Obj) -> Option<String> {
+pub fn collapse_problem(store: &Store, e: Obj) -> Option<MappingProblem> {
     let fks = foreign_keys(store, e);
+    let rule = |rule| Some(MappingProblem(rule));
     if fks.len() != 2 {
-        return Some("a mapping table has exactly two foreign keys".into());
+        return rule(MappingRule::TwoForeignKeys);
     }
     let mut covered: BTreeSet<Obj> = BTreeSet::new();
     let mut own: BTreeSet<Obj> = BTreeSet::new();
     for fk in &fks {
         let parts = key_parts(store, *fk);
-        let Some(r) = parts.relationship else { return Some(format!("the foreign key {} realises no relationship", label(store, *fk))) };
+        let Some(r) = parts.relationship else { return rule(MappingRule::NoRelationship { foreign_key: label(store, *fk).into() }) };
         own.insert(r);
         covered.extend(parts.columns);
     }
     let touching = store.referrers(e).into_iter().any(|(r, p)| (p == relationship::FROM || p == relationship::TO) && !own.contains(&r));
     if touching {
-        return Some("it has a relationship of its own".into());
+        return rule(MappingRule::OwnRelationship);
     }
     let attributes: BTreeSet<Obj> = refs(store, e, entity::ATTRIBUTE).into_iter().collect();
     if attributes != covered {
-        return Some("it has columns of its own".into());
+        return rule(MappingRule::OwnColumns);
     }
     if primary_key(store, e).into_iter().collect::<BTreeSet<Obj>>() != attributes {
-        return Some("its columns are not all in its primary key".into());
+        return rule(MappingRule::ColumnsOutsideKey);
     }
     if !unique_constraints(store, e).is_empty() {
-        return Some("it has a unique constraint".into());
+        return rule(MappingRule::UniqueConstraint);
     }
     if !checks_of(store, e).is_empty() {
-        return Some("it has a check constraint".into());
+        return rule(MappingRule::Check);
     }
     if !indexes_of(store, e).is_empty() {
-        return Some("it has an index".into());
+        return rule(MappingRule::Index);
     }
     None
 }
@@ -1461,8 +1495,8 @@ pub fn constraint_clash(store: &Store, s: Obj, name: &str, except: Option<Obj>) 
 }
 
 /// Why an entity cannot be associative: it needs at least two foreign keys whose columns are all
-/// part of its primary key.
-pub fn associative_problem(store: &Store, e: Obj) -> Option<String> {
+/// part of its primary key; the table named by [`label`].
+pub fn associative_problem(store: &Store, e: Obj) -> Option<MappingProblem> {
     let pk = primary_key(store, e);
     let keys = foreign_keys(store, e)
         .into_iter()
@@ -1471,7 +1505,7 @@ pub fn associative_problem(store: &Store, e: Obj) -> Option<String> {
             !columns.is_empty() && columns.iter().all(|a| pk.contains(a))
         })
         .count();
-    if keys < 2 { Some(format!("a mapping table needs two foreign keys within its primary key; {} has {keys}", label(store, e))) } else { None }
+    (keys < 2).then(|| MappingProblem(MappingRule::KeysInPrimaryKey { table: label(store, e).into(), keys }))
 }
 
 /// The notice for a many-to-many relationship.
@@ -1690,7 +1724,7 @@ pub fn problems(store: &Store) -> Vec<String> {
             && kind_of(store, o) == EntityKind::Associative
             && let Some(p) = associative_problem(store, o)
         {
-            out.push(p);
+            out.push(p.said());
         }
         if class == FOREIGN_KEY {
             let parts = key_parts(store, o);

@@ -7037,6 +7037,47 @@ fn an_er_removal_refused_is_said_in_the_chosen_language() {
     crate::i18n::set_language("en");
 }
 
+/// A relationship that does not resolve into a mapping table, a table that does not collapse into
+/// a relationship and one that cannot be associative are said in the chosen language by the rule
+/// they break, a table with no foreign key within its primary key apart from one with one, and a
+/// mapping table a step would break with why in the same words. In light and dark (AR-505).
+#[test]
+fn an_er_mapping_table_refused_is_said_in_the_chosen_language() {
+    use archforge_engine::{MappingRule as M, Reason};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        h.state_mut().state.language = "de".into();
+        h.run();
+        let keys = |keys| M::KeysInPrimaryKey { table: "Posten".into(), keys };
+        for (rule, said) in [
+            (M::NotManyToMany, "Nur aus einer Viele-zu-viele-Beziehung wird eine Zuordnungstabelle."),
+            (M::LacksEnd, "Der Beziehung fehlt eine ihrer beiden Tabellen."),
+            (M::TwoForeignKeys, "Eine Zuordnungstabelle hat genau zwei Fremdschlüssel."),
+            (M::NoRelationship { foreign_key: "fk_kunde".into() }, "Der Fremdschlüssel fk_kunde steht für keine Beziehung."),
+            (M::NoKey { foreign_key: "fk_ware".into() }, "Der Fremdschlüssel fk_ware verweist auf keinen Schlüssel."),
+            (M::OwnRelationship, "Die Tabelle hat eine eigene Beziehung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
+            (M::OwnColumns, "Die Tabelle hat eigene Spalten und lässt sich daher nicht in eine Beziehung zusammenfassen."),
+            (
+                M::ColumnsOutsideKey,
+                "Nicht alle Spalten der Tabelle gehören zu ihrem Primärschlüssel, daher lässt sie sich nicht in eine Beziehung zusammenfassen.",
+            ),
+            (M::UniqueConstraint, "Die Tabelle hat eine Eindeutigkeitsbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
+            (M::Check, "Die Tabelle hat eine Prüfbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen."),
+            (M::Index, "Die Tabelle hat einen Index und lässt sich daher nicht in eine Beziehung zusammenfassen."),
+            (keys(0), "Posten hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
+            (keys(1), "Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei."),
+        ] {
+            assert_eq!(crate::panels::said(&Reason::Mapping(rule.clone())).as_deref(), Some(said), "{rule:?} {theme:?}");
+        }
+        let breaks = Reason::WouldBreak { kind: "table", name: "Verknüpfung".into(), why: Box::new(Reason::Mapping(keys(1))) };
+        let said = "Die Tabelle Verknüpfung wäre danach ungültig: Posten hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. \
+                    Eine Zuordnungstabelle braucht zwei.";
+        assert_eq!(crate::panels::said(&breaks).as_deref(), Some(said), "{theme:?}");
+        h.run();
+    }
+    crate::i18n::set_language("en");
+}
+
 /// A column's generation refused is said in the chosen language by the rule it breaks, a column on
 /// a domain that would break with why in the same words, and a key or identity column asked to be
 /// nullable; a reason inside it this can't say leaves the whole to the engine's English. In light

@@ -225,6 +225,19 @@ str		Follows {target}	Folgt {target}
 str		Unlink	Verknüpfung lösen
 str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} enthält nur seine zwei Schlüssel und kann wieder die Viele-zu-viele-Linie zwischen {from} und {to} werden.
 str		Collapse into a relationship	In eine Beziehung zusammenfassen
+str		Only a many-to-many relationship becomes a mapping table.	Nur aus einer Viele-zu-viele-Beziehung wird eine Zuordnungstabelle.
+str		The relationship lacks one of its two tables.	Der Beziehung fehlt eine ihrer beiden Tabellen.
+str		A mapping table has exactly two foreign keys.	Eine Zuordnungstabelle hat genau zwei Fremdschlüssel.
+str		The foreign key {foreign_key} stands for no relationship.	Der Fremdschlüssel {foreign_key} steht für keine Beziehung.
+str		The foreign key {foreign_key} points at no key.	Der Fremdschlüssel {foreign_key} verweist auf keinen Schlüssel.
+str		The table has a relationship of its own, so it does not collapse into a relationship.	Die Tabelle hat eine eigene Beziehung und lässt sich daher nicht in eine Beziehung zusammenfassen.
+str		The table has columns of its own, so it does not collapse into a relationship.	Die Tabelle hat eigene Spalten und lässt sich daher nicht in eine Beziehung zusammenfassen.
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Nicht alle Spalten der Tabelle gehören zu ihrem Primärschlüssel, daher lässt sie sich nicht in eine Beziehung zusammenfassen.
+str		The table has a unique constraint, so it does not collapse into a relationship.	Die Tabelle hat eine Eindeutigkeitsbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen.
+str		The table has a check, so it does not collapse into a relationship.	Die Tabelle hat eine Prüfbedingung und lässt sich daher nicht in eine Beziehung zusammenfassen.
+str		The table has an index, so it does not collapse into a relationship.	Die Tabelle hat einen Index und lässt sich daher nicht in eine Beziehung zusammenfassen.
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} hat keinen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei.
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} hat nur einen Fremdschlüssel innerhalb des Primärschlüssels. Eine Zuordnungstabelle braucht zwei.
 str		Type	Typ
 str		Primary key	Primärschlüssel
 str		Not null	Nicht null
@@ -653,6 +666,7 @@ str		The column {name} would break: {why}	Die Spalte {name} wäre danach ungült
 str		A column takes a domain or an enum type, not both.	Eine Spalte hat eine Domäne oder einen Aufzählungstyp, nicht beides.
 str		A column on a domain takes the domain's type.	Eine Spalte auf einer Domäne übernimmt den Typ der Domäne.
 str		A column on a domain takes the domain's size.	Eine Spalte auf einer Domäne übernimmt die Größe der Domäne.
+str		The table {name} would break: {why}	Die Tabelle {name} wäre danach ungültig: {why}
 str		A column on a domain takes the domain's default.	Eine Spalte auf einer Domäne übernimmt den Standardwert der Domäne.
 str		A column on a domain takes the domain's collation.	Eine Spalte auf einer Domäne übernimmt die Sortierung der Domäne.
 str		A column of an enum type takes no type name of its own.	Eine Spalte eines Aufzählungstyps hat keinen eigenen Typnamen.

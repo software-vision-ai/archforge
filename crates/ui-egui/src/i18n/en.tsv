@@ -224,6 +224,19 @@ str		Follows {target}	Follows {target}
 str		Unlink	Unlink
 str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.
 str		Collapse into a relationship	Collapse into a relationship
+str		Only a many-to-many relationship becomes a mapping table.	Only a many-to-many relationship becomes a mapping table.
+str		The relationship lacks one of its two tables.	The relationship lacks one of its two tables.
+str		A mapping table has exactly two foreign keys.	A mapping table has exactly two foreign keys.
+str		The foreign key {foreign_key} stands for no relationship.	The foreign key {foreign_key} stands for no relationship.
+str		The foreign key {foreign_key} points at no key.	The foreign key {foreign_key} points at no key.
+str		The table has a relationship of its own, so it does not collapse into a relationship.	The table has a relationship of its own, so it does not collapse into a relationship.
+str		The table has columns of its own, so it does not collapse into a relationship.	The table has columns of its own, so it does not collapse into a relationship.
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	Not all of the table's columns are in its primary key, so it does not collapse into a relationship.
+str		The table has a unique constraint, so it does not collapse into a relationship.	The table has a unique constraint, so it does not collapse into a relationship.
+str		The table has a check, so it does not collapse into a relationship.	The table has a check, so it does not collapse into a relationship.
+str		The table has an index, so it does not collapse into a relationship.	The table has an index, so it does not collapse into a relationship.
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} has no foreign key within its primary key. A mapping table needs two.
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} has only one foreign key within its primary key. A mapping table needs two.
 str		Type	Type
 str		Primary key	Primary key
 str		Not null	Not null
@@ -652,6 +665,7 @@ str		The column {name} would break: {why}	The column {name} would break: {why}
 str		A column takes a domain or an enum type, not both.	A column takes a domain or an enum type, not both.
 str		A column on a domain takes the domain's type.	A column on a domain takes the domain's type.
 str		A column on a domain takes the domain's size.	A column on a domain takes the domain's size.
+str		The table {name} would break: {why}	The table {name} would break: {why}
 str		A column on a domain takes the domain's default.	A column on a domain takes the domain's default.
 str		A column on a domain takes the domain's collation.	A column on a domain takes the domain's collation.
 str		A column of an enum type takes no type name of its own.	A column of an enum type takes no type name of its own.

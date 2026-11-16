@@ -225,6 +225,19 @@ str		Follows {target}	{target} に追従
 str		Unlink	リンクを解除
 str		{name} holds nothing but its two keys, so it can become the many-to-many line between {from} and {to} again.	{name} は 2 つのキーしか持たないため、{from} と {to} の多対多の線に戻せます。
 str		Collapse into a relationship	リレーションシップに折りたたむ
+str		Only a many-to-many relationship becomes a mapping table.	対応テーブルになるのは多対多のリレーションシップだけです。
+str		The relationship lacks one of its two tables.	リレーションシップに 2 つのテーブルの一方がありません。
+str		A mapping table has exactly two foreign keys.	対応テーブルの外部キーはちょうど 2 つです。
+str		The foreign key {foreign_key} stands for no relationship.	外部キー {foreign_key} はどのリレーションシップも表していません。
+str		The foreign key {foreign_key} points at no key.	外部キー {foreign_key} はどのキーも指していません。
+str		The table has a relationship of its own, so it does not collapse into a relationship.	テーブルに独自のリレーションシップがあるため、リレーションシップに折りたためません。
+str		The table has columns of its own, so it does not collapse into a relationship.	テーブルに独自の列があるため、リレーションシップに折りたためません。
+str		Not all of the table's columns are in its primary key, so it does not collapse into a relationship.	テーブルの列がすべて主キーに含まれていないため、リレーションシップに折りたためません。
+str		The table has a unique constraint, so it does not collapse into a relationship.	テーブルに一意制約があるため、リレーションシップに折りたためません。
+str		The table has a check, so it does not collapse into a relationship.	テーブルにチェック制約があるため、リレーションシップに折りたためません。
+str		The table has an index, so it does not collapse into a relationship.	テーブルにインデックスがあるため、リレーションシップに折りたためません。
+str		{table} has no foreign key within its primary key. A mapping table needs two.	{table} の主キーの中に外部キーがありません。対応テーブルには 2 つ必要です。
+str		{table} has only one foreign key within its primary key. A mapping table needs two.	{table} の主キーの中に外部キーが 1 つしかありません。対応テーブルには 2 つ必要です。
 str		Type	型
 str		Primary key	主キー
 str		Not null	NOT NULL
@@ -653,6 +666,7 @@ str		The column {name} would break: {why}	列 {name} が成り立たなくなり
 str		A column takes a domain or an enum type, not both.	列にはドメインか列挙型のどちらか一方を指定します。両方は指定できません。
 str		A column on a domain takes the domain's type.	ドメイン上の列はドメインの型を使います。
 str		A column on a domain takes the domain's size.	ドメイン上の列はドメインのサイズを使います。
+str		The table {name} would break: {why}	テーブル {name} が成り立たなくなります: {why}
 str		A column on a domain takes the domain's default.	ドメイン上の列はドメインの既定値を使います。
 str		A column on a domain takes the domain's collation.	ドメイン上の列はドメインの照合順序を使います。
 str		A column of an enum type takes no type name of its own.	列挙型の列には独自の型名を指定できません。
