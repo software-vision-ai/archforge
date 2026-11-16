@@ -143,6 +143,13 @@ str		complete	completa
 str		disjoint	disjunta
 str		overlapping	sobreposta
 str		Add a literal	Adicionar literal
+plural		{n} column takes {name}: {columns}. Retype it first.	{n} coluna usa {name}: {columns}. Mude primeiro o seu tipo.|{n} colunas usam {name}: {columns}. Mude primeiro o tipo delas.
+str		Give the literals as a list of names.	Indique os literais como uma lista de nomes.
+str		An enum type needs at least one literal.	Um tipo enumerado precisa de pelo menos um literal.
+str		An enum type has at most {max} literals.	Um tipo enumerado tem no máximo {max} literais.
+str		A literal can't be empty.	Um literal não pode estar vazio.
+str		The literal "{name}" is not a valid name. {why}	O literal «{name}» não é um nome válido. {why}
+str		The literal "{name}" is given twice. Give each literal once.	O literal «{name}» é indicado duas vezes. Indique cada literal uma só vez.
 str		Sequences · {n}	Sequências · {n}
 str		Add sequence	Adicionar sequência
 str		Sequence	Sequência

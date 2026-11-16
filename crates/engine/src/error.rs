@@ -195,6 +195,9 @@ pub enum Reason {
     /// A profile, a stereotype, one of its extensions or a package's profile applications stays
     /// while stereotype applications need it: what is in use, and the uses.
     InUse(Box<InUse>),
+    /// A domain or an enum type stays while columns take it: its name, the first of them and how
+    /// many in all.
+    TypeInUse(Box<TypeInUse>),
     /// The element is UML's own and never changes: the UML library that holds the metaclasses
     /// stereotypes extend, or its metaclass of this name.
     UmlOwn { metaclass: Option<String> },
@@ -220,6 +223,9 @@ pub enum Reason {
     /// A list that takes items of `kind`, each as text or as an object of its keys, holds something
     /// else, or an object whose key holds a value of another type.
     ItemsExpected { kind: &'static str },
+    /// The literal `name`, cut to its first characters, is no name: `why` says how, boxed so the
+    /// error stays small.
+    LiteralName { name: Box<str>, why: Box<Reason> },
     /// The element is a stereotype application, which takes no stereotype itself.
     IsApplication,
     /// The element is not inside the project's model, as the model itself, so no stereotype applies to it.
@@ -638,6 +644,17 @@ pub struct InUse {
     /// The uses by stereotype: its name, the names of the elements it is applied to while a refusal
     /// names them (two at most, none when it counts them), and how many applications in all.
     pub uses: Vec<(String, Vec<String>, usize)>,
+}
+
+/// What a [`Reason::TypeInUse`] names; boxed in the reason, so the error stays small.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeInUse {
+    /// The domain's or the enum type's name, or its id when it has none.
+    pub name: String,
+    /// The first columns that take it, each as `table.column`.
+    pub columns: Vec<String>,
+    /// How many columns take it in all.
+    pub count: usize,
 }
 
 /// What is in use in a [`Reason::InUse`], each by its name.
