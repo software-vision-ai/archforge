@@ -399,9 +399,17 @@ pub enum Reason {
     /// The size `value` of a column or a domain does not fit its type `ty` (empty when it has no
     /// type name of its own), by the rule it breaks.
     SizeMisfit { rule: SizeRule, ty: Box<str>, value: i64 },
-    /// A column on a domain is given its own `what`, `"default"` or `"collation"`, which the
-    /// domain gives it.
+    /// A type name holds its own size in parentheses, as `VARCHAR(20)`, where the length, precision
+    /// and scale are given apart.
+    SizeInTypeName,
+    /// A column is given a domain and an enum type, where it takes one of them at most.
+    DomainAndEnum,
+    /// A column on a domain is given its own `what`, `"type"`, `"size"`, `"default"` or
+    /// `"collation"`, which the domain gives it.
     DomainGives { what: &'static str },
+    /// A column of an enum type is given its own `what`, `"type"` or `"size"`, of which it takes
+    /// none.
+    EnumTypeTakesNo { what: &'static str },
     /// The column `name` is unlinked, though it follows no column.
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.

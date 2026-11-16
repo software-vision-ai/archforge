@@ -16,6 +16,8 @@
 //! a constraint's row.
 //! A removal (AR-508): an element removed where it is edited, and a part of a subtype's key
 //! without its subtype.
+//! What a column is typed by (AR-497): a type name that holds its own size, a domain and an enum
+//! type together, and a type name or a size beside either.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
@@ -92,8 +94,14 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
         Reason::Generation(rule) => generation_said(*rule),
         Reason::NotNullable => tr("A key or identity column may never be null."),
         Reason::SizeMisfit { rule, ty, value } => size_said(*rule, ty, *value),
+        Reason::SizeInTypeName => tr("A type name holds no size; give the length, precision or scale instead."),
+        Reason::DomainAndEnum => tr("A column takes a domain or an enum type, not both."),
+        Reason::DomainGives { what: "type" } => tr("A column on a domain takes the domain's type."),
+        Reason::DomainGives { what: "size" } => tr("A column on a domain takes the domain's size."),
         Reason::DomainGives { what: "default" } => tr("A column on a domain takes the domain's default."),
         Reason::DomainGives { what: "collation" } => tr("A column on a domain takes the domain's collation."),
+        Reason::EnumTypeTakesNo { what: "type" } => tr("A column of an enum type takes no type name of its own."),
+        Reason::EnumTypeTakesNo { what: "size" } => tr("A column of an enum type takes no size."),
         Reason::FollowsNoColumn { name } => fmt(&tr("{name} follows no column."), &[("name", name)]),
         Reason::PastLastColumn { columns } => trn("The table has {n} column.", "The table has {n} columns.", u64::try_from(*columns).ok()?),
         Reason::TooMany { kind: "check", max } => fmt(&tr("Give at most {max} checks."), &[("max", &max.to_string())]),
