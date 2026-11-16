@@ -24,10 +24,11 @@ pub const GALLERY: [(&str, &str); 4] =
 
 /// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
 /// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
-/// The wiki loads them from the latest release; the README shows none of them. The last four are the
-/// chat pages' screens: AI Agents set up and with a program to install, the Chat panel ready, and a
-/// turn's changes as one undo step.
-pub const WIKI_GALLERY: [(&str, &str); 24] = [
+/// The wiki loads them from the latest release; the README shows none of them. Then come the chat
+/// pages' screens: AI Agents set up and with a program to install, the Chat panel ready, and a
+/// turn's changes as one undo step. The last nine are the versions pages' (AR-351): four of the
+/// manual's Versions chapter for the overview, and five of the two step-by-step pages' own project.
+pub const WIKI_GALLERY: [(&str, &str); 33] = [
     ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
     ("workspace-guide-relate-kinds", "guide-relate-kinds"),
     ("workspace-guide-literals", "guide-literals"),
@@ -52,6 +53,15 @@ pub const WIKI_GALLERY: [(&str, &str); 24] = [
     ("settings-ai-agents-missing", "guide-ai-agents-install"),
     ("workspace-chat", "guide-chat"),
     ("workspace-chat-changes", "guide-chat-changes"),
+    ("workspace-versions", "guide-versions"),
+    ("workspace-version-details", "guide-version-details"),
+    ("workspace-restore-ask", "guide-restore-ask"),
+    ("workspace-branches", "guide-branches"),
+    ("workspace-guide-version-change", "guide-version-change"),
+    ("workspace-guide-version-viewing", "guide-version-viewing"),
+    ("workspace-guide-change-element", "guide-change-element"),
+    ("workspace-guide-compare", "guide-compare"),
+    ("workspace-guide-change-diagram", "guide-change-diagram"),
 ];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
@@ -215,6 +225,22 @@ mod tests {
         assert!(loaded > 0, "the manual loads its guide pictures from the latest release");
     }
 
+    /// The release guide's numbers of pictures are the galleries' own, so a screen added to either
+    /// gallery changes them there too.
+    #[test]
+    fn the_release_guide_counts_the_pictures_the_galleries_publish() {
+        let text = std::fs::read_to_string(util::root().join("docs/releasing.md")).unwrap();
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let (readme, guide) = (GALLERY.len() * THEMES.len(), WIKI_GALLERY.len() * THEMES.len());
+        for said in [
+            format!("{} screenshots: the README gallery's {readme},", readme + guide),
+            format!("the {guide} guide pictures"),
+            format!("renders {} guide screens", WIKI_GALLERY.len()),
+        ] {
+            assert!(text.contains(&said), "docs/releasing.md does not say \"{said}\"");
+        }
+    }
+
     /// The wiki's chat pages load the AI Agents and Chat screens from the latest release, so every
     /// release publishes them under the names those pages use.
     #[test]
@@ -224,6 +250,26 @@ mod tests {
             ("settings-ai-agents-missing", "guide-ai-agents-install"),
             ("workspace-chat", "guide-chat"),
             ("workspace-chat-changes", "guide-chat-changes"),
+        ] {
+            assert!(WIKI_GALLERY.contains(&pair), "the wiki gallery does not publish {} as screenshot-{}", pair.0, pair.1);
+        }
+    }
+
+    /// The wiki's three versions pages load the Versions chapter's screens and their own
+    /// tryout's from the latest release, so every release publishes them under the names those
+    /// pages use.
+    #[test]
+    fn the_wiki_gallery_publishes_the_versions_pages_screens() {
+        for pair in [
+            ("workspace-versions", "guide-versions"),
+            ("workspace-version-details", "guide-version-details"),
+            ("workspace-restore-ask", "guide-restore-ask"),
+            ("workspace-branches", "guide-branches"),
+            ("workspace-guide-version-change", "guide-version-change"),
+            ("workspace-guide-version-viewing", "guide-version-viewing"),
+            ("workspace-guide-change-element", "guide-change-element"),
+            ("workspace-guide-compare", "guide-compare"),
+            ("workspace-guide-change-diagram", "guide-change-diagram"),
         ] {
             assert!(WIKI_GALLERY.contains(&pair), "the wiki gallery does not publish {} as screenshot-{}", pair.0, pair.1);
         }

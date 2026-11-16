@@ -29,8 +29,8 @@ can't be released again, so the next release always bumps it first.
 
    The workflow starts by itself.
 3. **Wait for the draft.** After about 40 minutes the Releases page has the draft
-   `Archforge v<version>`, with every package, `SHA256SUMS` and 56 screenshots: the README
-   gallery's eight, which the workflow makes no draft without, and the forty-eight guide pictures
+   `Archforge v<version>`, with every package, `SHA256SUMS` and 74 screenshots: the README
+   gallery's 8, which the workflow makes no draft without, and the 66 guide pictures
    of the wiki and the user manual (see [Screenshots](#screenshots)). Its notes are Archforge's own
    lines (install Dolt first, the packages are unsigned, what isn't available yet) above GitHub's
    notes from the pull requests merged since the last release: *What's Changed*, *New Contributors*
@@ -90,7 +90,7 @@ The README's gallery shows four screens in the visitor's appearance: Home, an ER
 class diagram and File → Generate. The pictures are never committed. The workflow renders them
 from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
 file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
-`screenshot-<name>-<light|dark>.png`. The same command renders twenty-four guide screens beside
+`screenshot-<name>-<light|dark>.png`. The same command renders 33 guide screens beside
 them (`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the README
 doesn't show: the wiki shows them, and the user manual's
 [Going further](manual/05-uml-class-model.md#going-further) shows those of its sections. The
@@ -104,8 +104,9 @@ The gallery stays whole in two ways:
   every `screenshot-*.png` the README names is among the pictures. The draft needs that job, so a
   missing picture stops the release before anything is published. A test in `xtask/src/screens.rs`
   keeps `GALLERY` and the README's pictures in step, another that every `WIKI_GALLERY` screen
-  is one the snapshot example draws and that no two published pictures share a name, and a third
-  that every guide picture the manual loads is one `WIKI_GALLERY` publishes.
+  is one the snapshot example draws and that no two published pictures share a name, a third
+  that every guide picture the manual loads is one `WIKI_GALLERY` publishes, and a fourth that
+  the numbers of pictures this page gives are the galleries' own.
 - **Look after publishing**, as step 6 above says: the front page for a release, the
   pre-release's own `releases/download/v<version>/` files for a pre-release. A draft can't be
   checked through `latest`.
