@@ -225,6 +225,22 @@ mod tests {
         assert!(loaded > 0, "the manual loads its guide pictures from the latest release");
     }
 
+    /// The release guide's numbers of pictures are the galleries' own, so a screen added to either
+    /// gallery changes them there too.
+    #[test]
+    fn the_release_guide_counts_the_pictures_the_galleries_publish() {
+        let text = std::fs::read_to_string(util::root().join("docs/releasing.md")).unwrap();
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let (readme, guide) = (GALLERY.len() * THEMES.len(), WIKI_GALLERY.len() * THEMES.len());
+        for said in [
+            format!("{} screenshots: the README gallery's {readme},", readme + guide),
+            format!("the {guide} guide pictures"),
+            format!("renders {} guide screens", WIKI_GALLERY.len()),
+        ] {
+            assert!(text.contains(&said), "docs/releasing.md does not say \"{said}\"");
+        }
+    }
+
     /// The wiki's chat pages load the AI Agents and Chat screens from the latest release, so every
     /// release publishes them under the names those pages use.
     #[test]
