@@ -44,7 +44,8 @@ macOS, whose **Edit** menu writes **Select All**. That application menu also hol
 **Services**, **Hide Archforge** (⌘H), **Hide Others** (⌥⌘H) and **Show All**. On macOS a **Window** menu follows **Versions**, with
 **Minimise** (⌘M) and **Zoom** for the window itself, and below them the rows macOS adds to every
 application's Window menu, such as **Bring All to Front**; on Windows and Linux the window's own frame
-minimises and maximises it. A row that cannot act now is greyed out and says why when you point at
+minimises and maximises it. Last on macOS comes **Help**, which holds the system's search field: type
+part of a command's name to find its row in the menus. A row that cannot act now is greyed out and says why when you point at
 it, and a row with a shortcut shows it, such as `Ctrl+Shift+G`. Esc closes the menu, and so does a
 click elsewhere; while one is open, keys go to neither the window behind it nor the shortcuts.
 A click elsewhere only closes the menu: it does not also press, select or drag what is under it, so

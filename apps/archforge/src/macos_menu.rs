@@ -1,7 +1,8 @@
 //! The native menu bar on macOS, built from the table of actions: the application menu (with the
 //! system's Services, Hide, Hide Others and Show All), File, Edit, View, Model and Versions, in the
 //! design's order, then Window with the system's own Minimise and Zoom, made the application's
-//! windows menu so macOS adds its own rows below them. Each item from the table is enabled while its action can act, and its keys are the
+//! windows menu so macOS adds its own rows below them, and last Help, made the application's help
+//! menu so macOS adds its search field. Each item from the table is enabled while its action can act, and its keys are the
 //! table's. Choosing an item wakes the window, so it acts with the pointer and keyboard still. When
 //! it cannot be built, the window works without it.
 #![cfg(target_os = "macos")]
@@ -37,9 +38,28 @@ enum Title {
     Model,
     Versions,
     Window,
+    Help,
 }
 
-const BAR: [Title; 7] = [Title::App, Title::File, Title::Edit, Title::View, Title::Model, Title::Versions, Title::Window];
+const BAR: [Title; 8] = [Title::App, Title::File, Title::Edit, Title::View, Title::Model, Title::Versions, Title::Window, Title::Help];
+
+/// What the system makes of a menu of the bar once the bar is the application's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Role {
+    /// The windows menu, to which macOS adds its own rows.
+    Windows,
+    /// The help menu, to which macOS adds its search field.
+    Help,
+}
+
+/// The role the system gives the menu `title`, if any.
+fn role(title: Title) -> Option<Role> {
+    match title {
+        Title::Window => Some(Role::Windows),
+        Title::Help => Some(Role::Help),
+        Title::App | Title::File | Title::Edit | Title::View | Title::Model | Title::Versions => None,
+    }
+}
 /// A row of the application menu: an action of the table, or one of the system's own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AppRow {
@@ -153,6 +173,12 @@ fn window_items() -> [PredefinedMenuItem; 2] {
     [PredefinedMenuItem::minimize(Some(&tr("Minimise"))), PredefinedMenuItem::zoom(Some(&tr_ctx("window", "Zoom")))]
 }
 
+/// The Help menu's title, in the catalogues' words. The menu has no rows of its own yet: macOS adds
+/// its search field once it is the help menu.
+fn help_title() -> String {
+    tr("Help")
+}
+
 /// The menu `title` with its items, recorded in `items`; for Model, `model`, which the first frame fills.
 fn submenu(shell: &Shell, title: Title, model: &Submenu, items: &mut Items) -> Result<Submenu, muda::Error> {
     let filled = |name: String, groups: &[&[&'static str]], items: &mut Items| {
@@ -174,16 +200,28 @@ fn submenu(shell: &Shell, title: Title, model: &Submenu, items: &mut Items) -> R
             let [minimise, zoom] = window_items();
             window.append_items(&[&minimise, &zoom]).map(|()| window)
         }
+        Title::Help => Ok(Submenu::new(help_title(), true)),
     }
 }
 
-/// Makes the bar the application's with `install`, then hands the Window menu among `menus` to
-/// `register`, which makes it the application's windows menu: muda finds that menu only through the
-/// bar the application already shows, and macOS then adds its own rows below Minimise and Zoom.
-fn install_and_register<M>(menus: &[(Title, M)], install: impl FnOnce(), register: impl FnOnce(&M)) {
+/// Makes the bar the application's with `install`, then hands each menu among `menus` that has a
+/// `role` to `register` with that role: muda finds those menus only through the bar the application
+/// already shows. macOS then adds its own rows below Window's Minimise and Zoom, and its search field
+/// to Help.
+fn install_and_register<M>(menus: &[(Title, M)], install: impl FnOnce(), mut register: impl FnMut(Role, &M)) {
     install();
-    if let Some((_, window)) = menus.iter().find(|(title, _)| *title == Title::Window) {
-        register(window);
+    for (title, menu) in menus {
+        if let Some(role) = role(*title) {
+            register(role, menu);
+        }
+    }
+}
+
+/// Gives `menu` its `role` in the application, which macOS reads from then on.
+fn register(role: Role, menu: &Submenu) {
+    match role {
+        Role::Windows => menu.set_as_windows_menu_for_nsapp(),
+        Role::Help => menu.set_as_help_menu_for_nsapp(),
     }
 }
 
@@ -203,7 +241,7 @@ pub fn build(shell: &Shell, ctx: egui::Context) -> Result<NativeMenu, String> {
     // Before the menu can fire: muda keeps the first answer it finds for good, and once a handler
     // is set its own receiver gets nothing.
     MenuEvent::set_event_handler(Some(forward(sender, ctx)));
-    install_and_register(&menus, || menu.init_for_nsapp(), Submenu::set_as_windows_menu_for_nsapp);
+    install_and_register(&menus, || menu.init_for_nsapp(), register);
     Ok(NativeMenu { _menu: menu, chosen, items, model, model_rows: Vec::new(), failing: false })
 }
 
@@ -419,27 +457,39 @@ mod tests {
         }
     }
 
-    /// The bar ends in the Window menu, after Versions, and Window holds the system's Minimise and
-    /// then Zoom, in the catalogues' words.
+    /// Window follows Versions, and Window holds the system's Minimise and then Zoom, in the
+    /// catalogues' words.
     #[test]
-    fn the_bar_ends_in_a_window_menu_of_minimise_and_zoom() {
-        use Title::{App, Edit, File, Model, Versions, View, Window};
-        assert_eq!(BAR, [App, File, Edit, View, Model, Versions, Window]);
+    fn a_window_menu_of_minimise_and_zoom_follows_versions() {
+        use Title::{App, Edit, File, Help, Model, Versions, View, Window};
+        assert_eq!(BAR, [App, File, Edit, View, Model, Versions, Window, Help]);
         for (code, words) in [("en", ["Minimise", "Zoom"]), ("de", ["Minimieren", "Zoomen"])] {
             assert!(archforge_ui_egui::i18n::set_language(code), "{code}");
             assert_eq!(window_items().map(|item| item.text()), words, "{code}");
         }
     }
 
-    /// The bar is the application's before Window becomes its windows menu, as muda finds that menu
-    /// only through the bar the application shows, and Window is found by its title wherever it
-    /// stands; the rows macOS then adds are seen by hand (release checklist item 5).
+    /// The bar is the application's before Window becomes its windows menu and Help its help menu,
+    /// as muda finds those menus only through the bar the application shows, and each is found by
+    /// its title wherever it stands; the rows and the search field macOS then adds are seen by hand
+    /// (release checklist item 5).
     #[test]
-    fn window_becomes_the_windows_menu_once_the_bar_is_installed() {
-        let menus = [(Title::Versions, 1), (Title::Window, 2), (Title::Model, 3)];
+    fn window_and_help_get_their_roles_once_the_bar_is_installed() {
+        let menus = [(Title::Help, 1), (Title::Versions, 2), (Title::Window, 3), (Title::Model, 4)];
         let steps = std::cell::RefCell::new(Vec::new());
-        install_and_register(&menus, || steps.borrow_mut().push(None), |menu| steps.borrow_mut().push(Some(*menu)));
-        assert_eq!(steps.into_inner(), vec![None, Some(2)]);
+        install_and_register(&menus, || steps.borrow_mut().push(None), |role, menu| steps.borrow_mut().push(Some((role, *menu))));
+        assert_eq!(steps.into_inner(), vec![None, Some((Role::Help, 1)), Some((Role::Windows, 3))]);
+    }
+
+    /// The bar ends in Help, after Window, titled in the catalogues' words; its search field is the
+    /// system's, seen by hand (release checklist item 5), as a real menu needs the main thread.
+    #[test]
+    fn the_bar_ends_in_a_help_menu_in_the_catalogues_words() {
+        assert_eq!(BAR.last(), Some(&Title::Help));
+        for (code, words) in [("en", "Help"), ("de", "Hilfe"), ("ja", "ヘルプ")] {
+            assert!(archforge_ui_egui::i18n::set_language(code), "{code}");
+            assert_eq!(help_title(), words, "{code}");
+        }
     }
 
     /// The bug of AR-243: without the wake the item waited for the next input. The queue is read
