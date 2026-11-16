@@ -1209,7 +1209,10 @@ pub(crate) fn editable_select(
             shell.panels.menu = None;
         }
     } else if focused {
-        if ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, egui::Key::ArrowDown)) {
+        // Alt+Down exactly (`consume_key` lets Shift through): with Shift more the press stays
+        // for the field, which selects to its end, as Shift with Down does.
+        let open = crate::actions::Keys { modifiers: egui::Modifiers::ALT, key: egui::Key::ArrowDown };
+        if ui.input_mut(|i| crate::actions::take(i, &open)) {
             shell.panels.menu = Some(c.menu);
             shell.panels.highlight = c.current;
         } else if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {

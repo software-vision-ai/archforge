@@ -15211,6 +15211,34 @@ fn a_question_is_kept_before_it_is_sent_with_its_chips_as_a_context_line_and_str
     assert_eq!(chat_calls(&rig).1, 1, "Shift+Enter sent nothing");
 }
 
+/// Enter sends from the composer only with no modifier, read from the press itself: holding Shift
+/// it starts a line, Alt with it too, and with Alt alone, a Mac's Control or the command key of
+/// either shape it does nothing; a Shift+Enter whose Shift is let go by the end of its frame is
+/// still a new line.
+#[test]
+fn enter_sends_only_with_no_modifier_held_on_the_press() {
+    use egui::Modifiers as M;
+    in_both_appearances(|theme| {
+        let (mut h, rig) = chat_harness(theme, true);
+        let at = rect_of(&h, "workspace.chat.composer").center();
+        click(&mut h, at);
+        h.event(egui::Event::Text("One".into()));
+        h.run();
+        for more in [M::ALT, M::SHIFT | M::ALT, M::CTRL, M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
+            key(&mut h, egui::Key::Enter, more);
+            assert_eq!(chat_calls(&rig).1, 0, "{theme:?}: {more:?} sends nothing");
+        }
+        for pressed in [true, false] {
+            h.event(egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed, repeat: false, modifiers: M::SHIFT });
+        }
+        h.run();
+        assert_eq!(chat_calls(&rig).1, 0, "{theme:?}: the press held Shift");
+        assert_eq!(h.state().chat_panel.draft, "One\n\n", "{theme:?}: Shift with Alt and Shift each started a line");
+        key(&mut h, egui::Key::Enter, M::NONE);
+        assert_eq!(chat_calls(&rig).1, 1, "{theme:?}: Enter alone sends");
+    });
+}
+
 /// The "Sign-in expired" card of a Codex conversation reads Codex's sign-in again (AR-222), so
 /// Settings shows it expired, with its email, without a restart. In both appearances.
 #[test]
@@ -16715,6 +16743,24 @@ fn the_menu_and_the_keys_ask_the_same_and_the_folder_goes_only_when_the_toast_cl
     h.run();
     assert!(!ids(&h).iter().any(|i| i == "workspace.chat.toast"), "closed");
     assert_eq!(forgotten(&rig), [key_of], "its folder goes once the toast closed, and only its");
+}
+
+/// ⇧F10 on the focused row opens its menu only as itself: with Alt more, a Mac's Control or the
+/// command key of either shape it opens nothing, and the keyboard stays on the row.
+#[test]
+fn shift_f10_opens_a_conversations_menu_only_with_shift_alone() {
+    use egui::Modifiers as M;
+    in_both_appearances(|theme| {
+        let (mut h, _rig, chats) = chat_history(theme);
+        focus_on(&mut h, "workspace.chat.history.0");
+        for more in [M::ALT, M::CTRL, M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
+            key(&mut h, egui::Key::F10, M::SHIFT | more);
+            let row = focused_on(&h, "workspace.chat.history.0");
+            assert!(h.state().chat_panel.row_menu.is_none() && row, "{theme:?}: {more:?} more opens nothing");
+        }
+        key(&mut h, egui::Key::F10, M::SHIFT);
+        assert!(h.state().chat_panel.row_menu.as_ref().is_some_and(|r| r.chat == chats[0]), "{theme:?}: ⇧F10 opens the row's menu");
+    });
 }
 
 /// Deleting the open conversation while its reply runs (AR-217): the confirmation says the reply
@@ -22929,6 +22975,26 @@ fn an_end_multiplicity_menu_follows_the_keys_and_escape_closes_it_before_it_canc
     assert_eq!(end_multiplicities(&h, paid).0[0], "1");
 }
 
+/// Alt+Down opens an end's multiplicity menu only as itself: with Shift more, a Mac's Control or
+/// the command key of either shape it opens nothing and the typing stays as it was.
+#[test]
+fn alt_down_opens_a_multiplicity_menu_only_with_alt_alone() {
+    use egui::Modifiers as M;
+    in_both_appearances(|theme| {
+        let (mut h, _) = paid_by(theme, egui::vec2(1600.0, 1000.0));
+        let open = |h: &Harness<'static, Shell>| h.state().panels.menu == Some(crate::panels::Menu::EndMultiplicity(1));
+        let at = rect_of(&h, "workspace.properties.end.1.multiplicity").center();
+        click(&mut h, at);
+        for more in [M::SHIFT, M::CTRL, M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
+            key(&mut h, egui::Key::ArrowDown, M::ALT | more);
+            assert!(!open(&h), "{theme:?}: {more:?} more opens nothing");
+            assert_eq!(typed_multiplicity(&h, 1), "0..1", "{theme:?}: {more:?} more changes no typing");
+        }
+        key(&mut h, egui::Key::ArrowDown, M::ALT);
+        assert_eq!((open(&h), h.state().panels.highlight), (true, Some(0)), "{theme:?}: Alt+Down opens it at the current one");
+    });
+}
+
 #[test]
 fn a_multiplicity_refusal_stays_until_its_own_field_is_written_and_reads_in_full() {
     let (mut h, paid) = paid_by(ThemeKind::Light, egui::vec2(1600.0, 1000.0));
@@ -24003,6 +24069,30 @@ fn while_about_is_open_no_key_reaches_the_models_explorer_or_the_workspace_behin
     h.state_mut().explorer.focused = true;
     key(&mut h, egui::Key::ArrowUp, egui::Modifiers::NONE);
     assert_ne!(h.state().session.as_ref().unwrap().view().selection, selection, "the arrows walk the tree again");
+}
+
+/// ⇧F10 opens the menu of the row selected in Models only as itself: with Alt more, a Mac's
+/// Control or the command key of either shape it opens nothing.
+#[test]
+fn shift_f10_opens_the_models_row_menu_only_with_shift_alone() {
+    use egui::Modifiers as M;
+    in_both_appearances(|theme| {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1120.0));
+        crate::explorer::add(h.state_mut(), "schema");
+        h.run();
+        key(&mut h, egui::Key::Escape, M::NONE);
+        // The new schema stays selected; a click on it would name it in place.
+        let rows = crate::explorer::rows(h.state().notation_uis, h.state().session.as_ref().unwrap().doc(), &h.state().explorer);
+        h.state_mut().explorer.focused = true;
+        h.run();
+        assert!(h.ctx.memory(|m| m.focused().is_none()), "{theme:?}: no widget has the keys, so the tree has them");
+        for more in [M::ALT, M::CTRL, M::MAC_CMD | M::COMMAND, M::CTRL | M::COMMAND] {
+            key(&mut h, egui::Key::F10, M::SHIFT | more);
+            assert!(h.state().explorer.context.is_none(), "{theme:?}: {more:?} more opens nothing");
+        }
+        key(&mut h, egui::Key::F10, M::SHIFT);
+        assert_eq!(h.state().explorer.context.as_ref().map(|c| c.target), Some(rows[0].id), "{theme:?}: ⇧F10 opens the row's menu");
+    });
 }
 
 #[test]

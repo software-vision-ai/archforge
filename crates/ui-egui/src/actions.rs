@@ -360,8 +360,9 @@ pub(crate) fn held_exactly(held: Modifiers, wanted: Modifiers) -> bool {
 /// Whether `keys` were pressed in `input`, and takes that press. Matched exactly: an extra Shift
 /// or Alt is another chord's press and stays, so ⇧⌘S never saves with Save version… off. macOS's
 /// Control with the chord is nobody's: that press is taken too and counts for nothing, so a field
-/// drawn later never reads it as one of Control's text keys.
-fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
+/// drawn later never reads it as one of Control's text keys. A chord without the command key, such
+/// as ⇧F10, takes nothing with any modifier more or less, a Mac's Control included.
+pub(crate) fn take(input: &mut egui::InputState, keys: &Keys) -> bool {
     let mut hit = false;
     input.events.retain(|e| match e {
         egui::Event::Key { key, pressed: true, modifiers, .. } if *key == keys.key && modifiers.matches_exact(keys.modifiers) => {
@@ -852,6 +853,20 @@ pub(crate) mod tests {
         }
         let release = egui::Event::Key { key: Key::ArrowLeft, physical_key: None, pressed: false, repeat: false, modifiers: Modifiers::NONE };
         assert!(!plain(&[release, down(Modifiers::NONE, Key::ArrowRight)]));
+    }
+
+    /// A chord without the command key, as ⇧F10, takes its own press only: with a modifier more or
+    /// less, a Mac's Control and the command key of either shape included, it counts for nothing and
+    /// stays.
+    #[test]
+    fn a_chord_without_the_command_key_takes_only_its_own_press() {
+        let keys = Keys { modifiers: Modifiers::SHIFT, key: Key::F10 };
+        assert_eq!(taken(&keys, &[down(Modifiers::SHIFT, Key::F10)]), (true, vec![]));
+        let shift = Modifiers::SHIFT;
+        for other in [Modifiers::NONE, shift | Modifiers::ALT, shift | Modifiers::CTRL, shift | SHAPES[0].1, shift | SHAPES[1].1] {
+            let press = down(other, Key::F10);
+            assert_eq!(taken(&keys, std::slice::from_ref(&press)), (false, vec![press.clone()]), "{other:?}");
+        }
     }
 
     /// A chord takes its own press only: another chord's press on the same key in the same frame

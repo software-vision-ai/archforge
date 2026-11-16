@@ -389,9 +389,11 @@ fn composer(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect, panel: &
     let eid = crate::widgets::egui_id(id);
     let focused = ui.ctx().memory(|m| m.has_focus(eid));
     paint.rect_stroke(r, 10.0, Stroke::new(1.0, if focused { p.focus } else { p.border }), StrokeKind::Inside);
-    // Enter sends, Shift+Enter starts a new line; while a reply runs Enter waits.
-    // (A shortcut without Shift matches with it held too, so Shift is looked at first.)
-    if focused && ui.input_mut(|i| !i.modifiers.shift && !i.modifiers.alt && i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+    // Enter sends, Shift+Enter starts a new line; while a reply runs Enter waits. Enter is matched
+    // exactly, on the press's own modifiers rather than on those held as the frame ends, which can
+    // differ: a press with any modifier more is the field's (a new line, or nothing).
+    let send = crate::actions::Keys { modifiers: egui::Modifiers::NONE, key: egui::Key::Enter };
+    if focused && ui.input_mut(|i| crate::actions::take(i, &send)) {
         acts.push(if busy { Act::Waiting } else { Act::Send });
     }
     let text_rect = Rect::from_min_max(pos2(r.left() + 10.0, r.top() + 10.0), pos2(r.right() - 8.0, r.bottom() - 8.0 - 28.0 - 6.0));
@@ -1159,13 +1161,14 @@ fn history(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, body: Rect, panel:
                         if with_bin && crate::chat_delete::bin(shell, &clip, p, &paint, &bin_id, bin, refused.as_deref()) {
                             acts.push(Act::Delete(row.id, i));
                         }
-                        // On the focused row: ⌫ or Delete asks, the menu key or ⇧F10 opens its menu.
+                        // On the focused row: ⌫ or Delete asks, the menu key or ⇧F10 opens its menu;
+                        // ⇧F10 exactly, so not with Alt or Control more (`consume_key` lets Alt through).
                         if resp.has_focus() && panel.ask.is_none() && panel.row_menu.is_none() {
+                            let shift_f10 = crate::actions::Keys { modifiers: egui::Modifiers::SHIFT, key: egui::Key::F10 };
                             let (delete, menu) = clip.input_mut(|k| {
                                 let delete = k.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)
                                     || k.consume_key(egui::Modifiers::NONE, egui::Key::Delete);
-                                let menu =
-                                    k.consume_key(egui::Modifiers::NONE, egui::Key::Menu) || k.consume_key(egui::Modifiers::SHIFT, egui::Key::F10);
+                                let menu = k.consume_key(egui::Modifiers::NONE, egui::Key::Menu) || crate::actions::take(k, &shift_f10);
                                 (delete, menu)
                             });
                             if delete && refused.is_none() {
