@@ -607,6 +607,128 @@ fn a_loaded_foreign_keys_columns_break_typed() {
     assert_eq!(picture(s.doc()), before, "nothing of the attempt stays");
 }
 
+/// A foreign key's actions and relationship, refused, carry their reason typed beside the English,
+/// which stays as it was: set null on a column that may never be null, the first such column named,
+/// from adding a foreign key and from setting its actions; a relationship that does not join the two
+/// tables; a column outside the primary key of one that follows an identifying relationship; and a
+/// column made not null under a set-null foreign key, found inside the step (AR-503).
+#[test]
+fn a_foreign_keys_actions_and_relationship_refused_carry_their_reason_typed() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sm = sample(&mut s);
+    let product = run(&mut s, "er.entity.add", json!({ "schema": sm.schema, "name": "Product" }));
+    for name in ["sku", "region"] {
+        run(&mut s, "er.attribute.add", json!({ "entity": product, "name": name, "type": "TEXT", "primary_key": true }));
+    }
+    let column = |s: &mut Session, name: &str, ty: &str, nullable: &str| {
+        run(s, "er.attribute.add", json!({ "entity": sm.order, "name": name, "type": ty, "nullable": nullable }))
+    };
+    let (open, held, buyer) = (column(&mut s, "open", "TEXT", "yes"), column(&mut s, "held", "TEXT", "no"), column(&mut s, "buyer", "BIGINT", "no"));
+    let maybe = column(&mut s, "maybe", "BIGINT", "yes");
+    let fk_buyer =
+        run(&mut s, "er.foreign-key.add", json!({ "entity": sm.order, "references": sm.customer, "columns": [buyer], "name": "fk_buyer" }));
+    let fk_maybe = json!({ "entity": sm.order, "references": sm.customer, "columns": [maybe], "name": "fk_maybe", "on_delete": "set-null" });
+    run(&mut s, "er.foreign-key.add", fk_maybe);
+    // An identifying relationship gives Order the key columns product_sku and product_region.
+    let owns = json!({ "from": product, "to": sm.order, "create_foreign_key": true, "identifying": true, "to_end": "zero-or-more" });
+    let owns = run(&mut s, "er.relationship.add", owns);
+    let in_key = get(&mut s, "er.entity.get", json!({ "entity": sm.order }))["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["name"] == "product_sku")
+        .map(|a| a["id"].as_str().unwrap().to_string())
+        .unwrap();
+    let set_null = |column: &str| Reason::SetNullNotNullable { column: column.into() };
+    let (null_said, outside_said) = ("set null needs nullable columns", "an identifying relationship's key columns must be part of the primary key");
+    for (cmd, p, reason, message, key) in [
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [open, held], "on_update": "set-null" }),
+            set_null("held"),
+            null_said,
+            "on_delete",
+        ),
+        (
+            "er.foreign-key.set-actions",
+            json!({ "foreign_key": fk_buyer, "on_delete": "set-null", "on_update": "no-action" }),
+            set_null("buyer"),
+            null_said,
+            "on_delete",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [open, held], "relationship": sm.places }),
+            Reason::RelationshipNotJoining { table: "Order".into(), references: "Product".into() },
+            "the relationship does not join these two entities",
+            "relationship",
+        ),
+        (
+            "er.foreign-key.add",
+            json!({ "entity": sm.order, "references": product, "columns": [in_key, held], "relationship": owns }),
+            Reason::IdentifyingOutsideKey { column: "held".into() },
+            outside_said,
+            "relationship",
+        ),
+    ] {
+        let before = picture(s.doc());
+        let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+        assert_eq!((error.reason, error.message.as_str(), error.key.as_deref()), (Some(reason), message, Some(key)), "{cmd} {p}");
+        assert_eq!(picture(s.doc()), before, "{cmd} {p} changed nothing");
+    }
+    let Err(EngineError::Failed { error, .. }) =
+        s.execute("er.attribute.set-flags", &json!({ "attribute": maybe, "primary_key": false, "nullable": "no", "unique": false }))
+    else {
+        panic!("the set-null foreign key breaks")
+    };
+    let why = Box::new(set_null("maybe"));
+    assert_eq!(error.reason, Some(Reason::WouldBreak { kind: "foreign key", name: "fk_maybe".into(), why }));
+    let said = "the foreign key fk_maybe would break: set null needs nullable columns";
+    assert_eq!((error.message.as_str(), error.key.as_deref()), (said, Some("attribute")));
+}
+
+/// A loaded document's foreign key that points at no key, at a key without columns, or follows
+/// what is no relationship, is typed by the rules; one whose key belongs to no table stays in
+/// English (AR-503).
+#[test]
+fn a_loaded_foreign_keys_key_and_relationship_break_typed() {
+    use archforge_engine::Reason;
+    let (mut st, m) = rooted_store();
+    let s = st.create(SCHEMA).unwrap();
+    st.push(m, model::MEMBER, Value::Ref(s)).unwrap();
+    let table = |st: &mut Store, name: &str, columns: usize| {
+        let e = st.create(ENTITY).unwrap();
+        st.set(e, named_element::NAME, Value::str(name)).unwrap();
+        st.push(s, schema::ENTITY, Value::Ref(e)).unwrap();
+        let pk = st.create(PRIMARY_KEY).unwrap();
+        st.set(e, entity::PRIMARY_KEY, Value::Ref(pk)).unwrap();
+        for i in 0..columns {
+            let a = st.create(ATTRIBUTE).unwrap();
+            st.set(a, named_element::NAME, Value::str(&format!("{name}{i}"))).unwrap();
+            st.set(a, attribute::TYPE, Value::str("INT")).unwrap();
+            st.push(e, entity::ATTRIBUTE, Value::Ref(a)).unwrap();
+            st.push(pk, key::COLUMN, Value::Ref(a)).unwrap();
+        }
+        (e, pk)
+    };
+    let (_, bare) = table(&mut st, "Bare", 0);
+    let (_, parent) = table(&mut st, "Parent", 1);
+    let (child, child_pk) = table(&mut st, "Child", 1);
+    let c = rules::key_columns(&st, child_pk)[0];
+    let loose = st.create(PRIMARY_KEY).unwrap();
+    let none = [ReferentialAction::NoAction; 2];
+    let problem = |k: Obj, relationship: Option<Obj>| rules::key_problem(&st, child, k, &[c], none, relationship).unwrap();
+    let typed = |k: Obj, relationship: Option<Obj>| (problem(k, relationship).reason(), problem(k, relationship).said());
+    let not_a = Reason::NotA { kind: "key", name: "Child0".into() };
+    assert_eq!(typed(c, None), (Some(not_a), "Child0 is neither a primary key nor a unique constraint".into()));
+    let no_columns = Reason::NoKeyColumns { table: "Bare".into() };
+    assert_eq!(typed(bare, None), (Some(no_columns), "the key of Bare has no columns".into()));
+    let not_joining = Reason::RelationshipNotJoining { table: "Child".into(), references: "Parent".into() };
+    assert_eq!(typed(parent, Some(c)), (Some(not_joining), "the relationship does not join these two entities".into()));
+    assert_eq!(typed(loose, None), (None, "the key belongs to no entity".into()));
+}
+
 /// A key a step would break, found inside the step, carries its reason typed beside the English: the
 /// key's kind and name, and why, as the key rules type it. A loaded document's primary key with a
 /// column that may be null breaks on any edit that checks the keys around it (AR-493).

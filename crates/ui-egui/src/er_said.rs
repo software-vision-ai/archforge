@@ -28,6 +28,11 @@
 //! Domains and enum types (AR-498): a type that columns still take, with the first of them (a list
 //! the engine cut ending in an ellipsis) and their count, and an enum type's literals: none, too
 //! many, one that is no text or no name, or one twice.
+//!
+//! A foreign key's key, actions and relationship (AR-503): set null on a column that may never be
+//! null, a relationship that does not join its two tables, and a column outside the primary key of
+//! one that follows an identifying relationship; a key that is none and one without columns are
+//! said by their own rows, also for a foreign key a step would break.
 
 use archforge_engine::{GenerationRule, NotOneOf, Reason, SizeRule, WordPlace};
 
@@ -101,6 +106,13 @@ pub(crate) fn said(reason: &Reason) -> Option<String> {
             fmt(&tr("The foreign key needs as many columns as the key of {table}, which has {n}."), &[("table", table), ("n", &key.to_string())])
         }
         Reason::TypesDiffer { column, target, types } => return types_said(column, target, types),
+        Reason::SetNullNotNullable { column } => fmt(&tr("Set null needs nullable columns, but {column} may never be null."), &[("column", column)]),
+        Reason::RelationshipNotJoining { table, references } => {
+            fmt(&tr("The relationship does not join {table} and {references}."), &[("table", table), ("references", references)])
+        }
+        Reason::IdentifyingOutsideKey { column } => {
+            fmt(&tr("An identifying relationship's foreign key columns are part of the primary key, and {column} is not."), &[("column", column)])
+        }
         Reason::WouldBreak { kind: "primary key" | "unique constraint", name, why } => {
             fmt(&tr("The key {name} would break: {why}"), &[("name", name), ("why", &crate::panels::said(why)?)])
         }

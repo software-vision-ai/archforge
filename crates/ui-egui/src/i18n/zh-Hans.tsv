@@ -629,6 +629,9 @@ str		The foreign key needs as many columns as the key of {table}, which has {n}.
 str		{column} is of type {type}, but {target} is of type {target_type}.	{column} 的类型是 {type}，但 {target} 的类型是 {target_type}。
 str		{column} has no type, but {target} is of type {target_type}.	{column} 没有类型，但 {target} 的类型是 {target_type}。
 str		{column} is of type {type}, but {target} has no type.	{column} 的类型是 {type}，但 {target} 没有类型。
+str		Set null needs nullable columns, but {column} may never be null.	“设为空”需要允许为空的列，但 {column} 绝不允许为空。
+str		The relationship does not join {table} and {references}.	该关系并未连接 {table} 和 {references}。
+str		An identifying relationship's foreign key columns are part of the primary key, and {column} is not.	标识关系的外键列属于主键，而 {column} 不属于。
 str		The key {name} would break: {why}	键 {name} 将失效：{why}
 str		The foreign key {name} would break: {why}	外键 {name} 将失效：{why}
 str		Keys built on each other run deeper than {max} levels here, or in a loop.	此处相互构建的键超过了 {max} 层，或形成了循环。
