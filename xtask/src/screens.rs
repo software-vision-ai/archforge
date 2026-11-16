@@ -24,10 +24,11 @@ pub const GALLERY: [(&str, &str); 4] =
 
 /// The wiki's guide screens: a screen of the snapshot example and the file stem it is published as,
 /// beside the README's gallery (`screenshot-<stem>-<light|dark>.png`, attached to every release).
-/// The wiki loads them from the latest release; the README shows none of them. The last four are the
-/// chat pages' screens: AI Agents set up and with a program to install, the Chat panel ready, and a
-/// turn's changes as one undo step.
-pub const WIKI_GALLERY: [(&str, &str); 24] = [
+/// The wiki loads them from the latest release; the README shows none of them. Then come the chat
+/// pages' screens: AI Agents set up and with a program to install, the Chat panel ready, and a
+/// turn's changes as one undo step. The last nine are the versions pages' (AR-351): four of the
+/// manual's Versions chapter for the overview, and five of the two step-by-step pages' own project.
+pub const WIKI_GALLERY: [(&str, &str); 33] = [
     ("workspace-guide-classifier-kinds", "guide-classifier-kinds"),
     ("workspace-guide-relate-kinds", "guide-relate-kinds"),
     ("workspace-guide-literals", "guide-literals"),
@@ -52,6 +53,15 @@ pub const WIKI_GALLERY: [(&str, &str); 24] = [
     ("settings-ai-agents-missing", "guide-ai-agents-install"),
     ("workspace-chat", "guide-chat"),
     ("workspace-chat-changes", "guide-chat-changes"),
+    ("workspace-versions", "guide-versions"),
+    ("workspace-version-details", "guide-version-details"),
+    ("workspace-restore-ask", "guide-restore-ask"),
+    ("workspace-branches", "guide-branches"),
+    ("workspace-guide-version-change", "guide-version-change"),
+    ("workspace-guide-version-viewing", "guide-version-viewing"),
+    ("workspace-guide-change-element", "guide-change-element"),
+    ("workspace-guide-compare", "guide-compare"),
+    ("workspace-guide-change-diagram", "guide-change-diagram"),
 ];
 
 /// The screens the snapshot example's `--screen` takes, in its order: each `Some("<name>") =>
@@ -224,6 +234,26 @@ mod tests {
             ("settings-ai-agents-missing", "guide-ai-agents-install"),
             ("workspace-chat", "guide-chat"),
             ("workspace-chat-changes", "guide-chat-changes"),
+        ] {
+            assert!(WIKI_GALLERY.contains(&pair), "the wiki gallery does not publish {} as screenshot-{}", pair.0, pair.1);
+        }
+    }
+
+    /// The wiki's three versions pages load the Versions chapter's screens and their own
+    /// tryout's from the latest release, so every release publishes them under the names those
+    /// pages use.
+    #[test]
+    fn the_wiki_gallery_publishes_the_versions_pages_screens() {
+        for pair in [
+            ("workspace-versions", "guide-versions"),
+            ("workspace-version-details", "guide-version-details"),
+            ("workspace-restore-ask", "guide-restore-ask"),
+            ("workspace-branches", "guide-branches"),
+            ("workspace-guide-version-change", "guide-version-change"),
+            ("workspace-guide-version-viewing", "guide-version-viewing"),
+            ("workspace-guide-change-element", "guide-change-element"),
+            ("workspace-guide-compare", "guide-compare"),
+            ("workspace-guide-change-diagram", "guide-change-diagram"),
         ] {
             assert!(WIKI_GALLERY.contains(&pair), "the wiki gallery does not publish {} as screenshot-{}", pair.0, pair.1);
         }

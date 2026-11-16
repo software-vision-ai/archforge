@@ -338,6 +338,20 @@ pub enum Screen {
     /// The same on the branch Contact details, where the rename is saved: Branches open with
     /// main, History with the divider above the versions shared with main.
     WorkspaceBranches,
+    /// The wiki's versions tutorial in the project Versions tryout: Added Customer saved alone, email
+    /// added since, its two sides open from Working changes.
+    GuideVersionChange,
+    /// The same viewing Added Customer: the banner, the tinted chip and Back to current work.
+    GuideVersionViewing,
+    /// The wiki's Before and After page: Added email saved too, email renamed contact since, the
+    /// attribute's two sides open from Working changes.
+    GuideChangeElement,
+    /// The same with the rename saved as Renamed email: the Compare page with Added Customer as
+    /// Before and Added email as After.
+    GuideCompare,
+    /// The same with Customer's box moved since Renamed email, the diagram's two sides open from
+    /// Working changes.
+    GuideChangeDiagram,
     /// The routing sample with the top bar's search open on "order".
     WorkspaceSearch,
     /// The Diagrams explorer with the diagram "dbo" open, its one table Company placed and its key
@@ -616,9 +630,11 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             | Screen::NewProjectFolder
     ) {
         shell.services.projects_folder = Some(Folder { path: "/Users/robin/Documents/Archforge".into(), label: "Documents / Archforge".into() });
+        // The wiki's versions pages make a project of their own, as their reader does.
+        let name = if versions::GUIDE.contains(&screen) { "Versions tryout" } else { "Commerce platform" };
         shell.open_project(crate::Opened {
-            name: "Commerce platform".into(),
-            path: "/Users/robin/Documents/Archforge/Commerce platform.archforge".into(),
+            name: name.into(),
+            path: format!("/Users/robin/Documents/Archforge/{name}.archforge").into(),
             ..Default::default()
         });
     }

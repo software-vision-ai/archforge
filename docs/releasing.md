@@ -90,7 +90,7 @@ The README's gallery shows four screens in the visitor's appearance: Home, an ER
 class diagram and File → Generate. The pictures are never committed. The workflow renders them
 from the release's own commit with `cargo xtask screens --gallery <dir>` (the screens and their
 file names are `GALLERY` in `xtask/src/screens.rs`) and attaches them to the release as
-`screenshot-<name>-<light|dark>.png`. The same command renders twenty-four guide screens beside
+`screenshot-<name>-<light|dark>.png`. The same command renders thirty-three guide screens beside
 them (`WIKI_GALLERY`, published as `screenshot-guide-<name>-<light|dark>.png`), which the README
 doesn't show: the wiki shows them, and the user manual's
 [Going further](manual/05-uml-class-model.md#going-further) shows those of its sections. The
