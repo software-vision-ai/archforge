@@ -58,12 +58,12 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
 /// model than the one it would run on, or for none, a package's default diagram that cannot be
 /// read, by what is wrong with its binding and the choice that mends it, a diagram a package's
 /// binding keeps, its own default or another element's diagram, with the choice to make first, a
+/// nested package's removal that would hand its diagrams up to a parent with no diagram yet or no
+/// valid default, with the choice to make first (AR-673), a
 /// package move or rename refused because the root package stays or the package Types keeps the
 /// built-in types, and a package's default diagram chosen with no package, something that is none,
-/// or a class diagram of another element (AR-580), a package with no class diagram to open yet
-/// (AR-582), and a nested package's removal that would hand its diagrams up to a parent with no
-/// diagram yet or no valid default, with the choice to make first (AR-673); none for another
-/// reason, or for a kind of element the catalogues don't name.
+/// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
+/// (AR-582); none for another reason, or for a kind of element the catalogues don't name.
 pub(crate) fn reason(reason: &Reason) -> Option<String> {
     let types = archforge_uml::members::TYPES;
     Some(match reason {

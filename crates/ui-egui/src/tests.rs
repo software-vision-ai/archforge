@@ -6669,11 +6669,12 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
 /// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
 /// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
-/// its own default or another element's diagram, with the package named (AR-578). Each package move
+/// its own default or another element's diagram, with the package named (AR-578), as are a nested
+/// package's diagrams that cannot move up to a parent with no diagram yet or no valid default
+/// (AR-673). Each package move
 /// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
 /// is a default diagram chosen for no package, for something that is none or among another
-/// element's diagrams (AR-580), and a nested package's diagrams that cannot move up to a parent
-/// with no diagram yet or no valid default (AR-673).
+/// element's diagrams (AR-580).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -8897,9 +8898,10 @@ fn a_package_whose_diagrams_cannot_move_up_stays_and_models_says_why() {
         let before = h.state().session.as_ref().unwrap().token();
         crate::explorer::remove_selection(h.state_mut());
         h.run();
-        let said = "Vertrieb hat noch kein Diagramm, das die Diagramme dieses Pakets aufnehmen kann. Erstellen Sie zuerst eines dafür. Es wurde nichts geändert.";
-        assert_eq!(h.state().explorer.notice.as_deref(), Some(said), "{theme:?}");
-        read_out(&h, said, "workspace.explorer.notice");
+        // The wording is the engine refusal test's; here, that Models shows it, in German.
+        let said = h.state().explorer.notice.clone().unwrap_or_default();
+        assert!(said.starts_with("Vertrieb hat noch kein Diagramm"), "{theme:?}: {said}");
+        read_out(&h, &said, "workspace.explorer.notice");
         assert_eq!(h.state().session.as_ref().unwrap().token(), before, "{theme:?}: nothing changed");
         assert!(h.state().canvas.toast.is_none(), "{theme:?}: no Undo offered");
     }
