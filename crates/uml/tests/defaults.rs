@@ -2,7 +2,9 @@
 //! under fixed ids, as no command makes a binding yet: bound, none yet, missing, duplicate, a dead,
 //! a wrong-kind and a foreign target, a profile, and every problem of a store in a stable order.
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
-//! read-only tool that leaves no undo step (AR-576).
+//! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
+//! or an element of another one's, is refused typed with nothing changed (AR-578), an association
+//! class's that goes with its end among them.
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -338,4 +340,133 @@ fn the_command_is_offered_as_a_read_only_tool() {
     assert_eq!((info.journal, info.undoable, info.enabled), (false, false, true));
     let revision = info.params.iter().find(|p| p.key == "expected_revision").unwrap();
     assert_eq!((revision.kind, revision.optional), ("object", true));
+}
+
+/// The tables and junctions of the core, the diagrams and UML.
+fn tables() -> (Vec<archforge_mof::schema::Table>, Vec<archforge_mof::schema::Junction>) {
+    let tables = [archforge_uml::TABLES, archforge_diagram::TABLES, archforge_core::TABLES].concat();
+    (tables, [archforge_core::JUNCTIONS, archforge_diagram::JUNCTIONS, archforge_uml::JUNCTIONS].concat())
+}
+
+/// The store's rows, to compare a store before and after a command.
+fn rows_of(st: &Store) -> rows::Rows {
+    let (tables, junctions) = tables();
+    rows::snapshot(st, &tables, &junctions).unwrap()
+}
+
+/// `cmd` given `p`, checked to be refused with the store as it was and no undo step: the refusal's
+/// parameter, reason and English.
+fn refused(s: &mut S, cmd: &str, p: Json) -> (Option<String>, Option<Reason>, String) {
+    let (at, before) = (s.token(), rows_of(s.doc()));
+    let Err(EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} was not refused") };
+    assert_eq!((s.token(), s.can_undo()), (at, false), "{cmd} {p} left no undo step");
+    assert!(rows_of(s.doc()) == before, "{cmd} {p} changed nothing");
+    (error.key, error.reason, error.message)
+}
+
+/// Sales, bound to the second of its two structure diagrams: (store, model, sales, its first
+/// diagram, its default, the binding).
+fn bound_sales() -> (Store, Obj, Obj, Obj, Obj, Obj) {
+    let (mut st, model) = store();
+    let sales = add(&mut st, model, PACKAGE, 0x10);
+    st.set(sales, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
+    let first = diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, sales);
+    let detail = diagram(&mut st, model, 0x12, STRUCTURE_DIAGRAM, sales);
+    let binding = bind(&mut st, model, 0x13, sales, detail);
+    (st, model, sales, first, detail, binding)
+}
+
+/// A package's default diagram is not removed: `diagram.remove` is refused about the diagram,
+/// typed with the package's name, before anything changes; its other diagram goes and leaves the
+/// binding as it was (AR-578).
+#[test]
+fn removing_a_default_diagram_is_refused_and_another_leaves_the_binding() {
+    let (st, _, sales, first, detail, binding) = bound_sales();
+    let mut s = over(st);
+    let (key, reason, said) = refused(&mut s, "diagram.remove", json!({ "diagram": id(0x12) }));
+    let default_of = Reason::DefaultDiagramOf { package: "Sales".into(), fault: None };
+    assert_eq!((key.as_deref(), reason), (Some("diagram"), Some(default_of)), "{said}");
+    assert_eq!(said, format!("the diagram {} is the default diagram of Sales; choose another default diagram for it first", id(0x12)));
+    s.execute("diagram.remove", &json!({ "diagram": id(0x11) })).unwrap();
+    let st = s.doc();
+    assert!(!st.is_alive(first) && st.is_alive(detail));
+    assert_eq!(archforge_diagram::defaults::bindings_of(st, sales), [binding]);
+    assert_eq!(resolve(st, sales), Ok(DefaultDiagram::Bound(detail)));
+}
+
+/// A binding of Billing that names a diagram of Sales (WrongOwner) keeps that diagram: removing
+/// it, or Sales with it, is refused typed with the binding's owner and its fault, never with the
+/// store's own error. A package nested in Sales whose diagram Billing names goes, as it hands that
+/// diagram up; removing Billing takes its bindings along and leaves Sales's diagrams (AR-578).
+#[test]
+fn a_diagram_another_packages_binding_names_keeps_it_and_its_package() {
+    let (mut st, model, sales, _, detail, _) = bound_sales();
+    let billing = add(&mut st, model, PACKAGE, 0x20);
+    st.set(billing, archforge_uml::named_element::NAME, Value::str("Billing")).unwrap();
+    let foreign = bind(&mut st, model, 0x21, billing, detail);
+    let archive = st.create_with_uuid(PACKAGE, Uuid([0x30; 16])).unwrap();
+    st.push(sales, archforge_uml::package::PACKAGED_ELEMENT, Value::Ref(archive)).unwrap();
+    let handed_up = diagram(&mut st, model, 0x31, STRUCTURE_DIAGRAM, archive);
+    bind(&mut st, model, 0x32, billing, handed_up);
+    let mut s = over(st);
+    let wrong = Some(Reason::DefaultDiagramOf { package: "Billing".into(), fault: Some(BindingFault::WrongOwner) });
+    let (key, reason, said) = refused(&mut s, "diagram.remove", json!({ "diagram": id(0x12) }));
+    assert_eq!((key.as_deref(), &reason), (Some("diagram"), &wrong), "{said}");
+    let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [id(0x10)] }));
+    assert_eq!((key.as_deref(), &reason), (Some("ids"), &wrong), "{said}");
+    assert!(said.contains(&format!("binding {} of Billing names the diagram {}", id(0x21), id(0x12))), "{said}");
+    s.execute("element.remove", &json!({ "ids": [id(0x30)] })).unwrap();
+    assert_eq!(s.doc().get(handed_up, archforge_diagram::diagram::ELEMENT).unwrap(), Value::Ref(sales), "handed up");
+    s.execute("element.remove", &json!({ "ids": [id(0x20)] })).unwrap();
+    let st = s.doc();
+    assert!(!st.is_alive(foreign) && st.is_alive(detail) && st.is_alive(handed_up) && st.is_alive(sales));
+    assert_eq!(resolve(st, sales), Ok(DefaultDiagram::Bound(detail)));
+}
+
+/// Billing, whose binding names a diagram of Sales, removed together with Sales goes, its binding
+/// with it, whichever of the two is selected first; one undo step brings everything back. Sales
+/// alone is still refused while Billing stays (AR-578).
+#[test]
+fn a_package_and_the_one_whose_diagram_its_binding_names_go_together_in_either_order() {
+    for order in [[0x20, 0x10], [0x10, 0x20]] {
+        let (mut st, model, _, _, detail, _) = bound_sales();
+        let billing = add(&mut st, model, PACKAGE, 0x20);
+        bind(&mut st, model, 0x21, billing, detail);
+        let mut s = over(st);
+        let before = rows_of(s.doc());
+        let wrong = Some(Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) });
+        assert_eq!(refused(&mut s, "element.remove", json!({ "ids": [id(0x10)] })).1, wrong, "{order:x?}");
+        s.execute("element.remove", &json!({ "ids": order.map(id) })).unwrap();
+        let st = s.doc();
+        assert!(!st.is_alive(billing) && !st.is_alive(detail), "{order:x?}");
+        assert_eq!((archforge_diagram::defaults::bindings(st), problems(st)), (vec![], vec![]), "{order:x?}");
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(rows_of(s.doc()) == before, "{order:x?}: one undo step brings all back");
+    }
+}
+
+/// An association class goes with a class at one of its ends, and its diagram with it, so a
+/// binding of a package that stays naming that diagram refuses the removal before anything changes,
+/// typed, the store and its history as they were (AR-578).
+#[test]
+fn a_binding_keeps_the_diagram_of_an_association_class_going_with_its_end() {
+    let mut s = over(store().0);
+    let made = |s: &mut S, cmd: &str, p: Json| s.execute(cmd, &p).unwrap().value["id"].as_str().unwrap().to_string();
+    let sales = made(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let order = made(&mut s, "uml.class.add", json!({ "package": sales, "name": "Order" }));
+    let item = made(&mut s, "uml.class.add", json!({ "package": sales, "name": "Item" }));
+    let line = made(&mut s, "uml.association-class.add", json!({ "from": order, "to": item, "name": "Line" }));
+    // Read back into a store of its own, to give the association class a diagram and bind it by hand.
+    let (tables, junctions) = tables();
+    let mut st = bare();
+    rows::restore(&mut st, &rows_of(s.doc()), &tables, &junctions).unwrap();
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let billing = add(&mut st, model, PACKAGE, 0x20);
+    let of_line = st.by_uuid(Uuid::parse(&line).unwrap()).unwrap();
+    let kept = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, of_line);
+    bind(&mut st, model, 0x22, billing, kept);
+    let mut s = over(st);
+    let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [order] }));
+    let wrong = Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) };
+    assert_eq!((key.as_deref(), reason), (Some("ids"), Some(wrong)), "{said}");
 }

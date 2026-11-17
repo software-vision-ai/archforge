@@ -38,9 +38,15 @@ it leaves both alive; while it stands, the store refuses to destroy either. Its 
 table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated.
 `defaults::{bindings_of, bindings_to, bindings}` find the bindings naming an element as their owner,
 naming a diagram as its default, and all of them, without judging them; UML's resolver says what a
-binding may name (AR-575). `remove_views_of` takes the bindings it finds along (AR-577); the
-commands that make bindings, Properties and what removing a default diagram does come later (AR-396,
-AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
+binding may name (AR-575). `remove_views_of` takes the bindings it finds along (AR-577).
+`diagram.remove` of a diagram a binding names is refused before anything changes, typed as
+`Reason::DefaultDiagramOf` with the binding's owner, and with `BindingFault::WrongOwner` when that
+owner is not the diagram's element (`defaults::diagram_removal_problem`); a notation asks
+`defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
+that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
+takes the bindings of all of it before any diagram goes, so the order of selection does not matter
+(AR-578). The commands that make bindings, Properties and replacing a default as it
+is removed come later (AR-396, AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 

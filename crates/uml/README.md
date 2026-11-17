@@ -187,6 +187,12 @@ revision of its session, refused as `StaleRevision` on another; it changes nothi
 undo step.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
+An element that would take along a diagram the binding of an element that stays names (unsoundly,
+`WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
+binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).
+An element that stays is one outside every element selected and what each holds, and outside the
+relationships that go with the classifiers that go (an association class with what it holds); the bindings of
+all that goes go before any diagram, so the order of selection does not matter.
 
 **Packages from anywhere in the model** (AR-562). `UmlNotation::may_show` lets a structure
 diagram of a package show any package of the model: one of another branch, the root, the diagram's
@@ -218,7 +224,11 @@ refused, typed, with no undo step; one outside the model shown on no diagram; th
 link and the bindings, and gains none, undone, redone and read back exactly; a refused move and one
 to its own parent change nothing, no undo step. (AR-577): bound packages removed nested, under the root and with no
 parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
-removed alone. `tests/skills.rs`: skills on a package, a class, an
+removed alone. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
+another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
+that holds it, while a nested package that holds one hands it up and goes; that package and the
+binding's owner removed together in either order, as one undo step; the diagram of an association
+class that goes with its end kept the same way. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and
