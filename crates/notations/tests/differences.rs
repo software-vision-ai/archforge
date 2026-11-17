@@ -1079,3 +1079,86 @@ fn model_and_layout_changes_are_kept_apart() {
     let (model, layout, itself) = apart(&seen.apart);
     assert_eq!((model, layout.len(), layout[0].1, layout[0].2, itself), (vec![], 1, Placing::Changed, true, true), "rerouted and renamed");
 }
+
+/// A project whose package Orders, held by Sales, is shown on Sales's diagram, and whose Billing
+/// has a diagram without it.
+struct Owned {
+    s: Session,
+    sales: String,
+    orders: String,
+    billing: String,
+    sales_d: String,
+    billing_d: String,
+}
+
+/// The project every comparison of a package move starts from.
+fn owned() -> Owned {
+    let mut s = new_project_session("Commerce", ids()).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let mut diagram =
+        |of: &str, name: &str| run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": of, "name": name }));
+    let (sales_d, billing_d) = (diagram(&sales, "Sales"), diagram(&billing, "Billing"));
+    run(&mut s, "diagram.place", json!({ "diagram": sales_d, "element": orders, "x": 40, "y": 60 }));
+    Owned { s, sales, orders, billing, sales_d, billing_d }
+}
+
+/// Each difference as its id, area and kind, to compare at once.
+fn areas(found: &[Difference]) -> Vec<(String, Area, ChangeKind)> {
+    found.iter().map(|d| (d.id.to_string(), d.area, d.kind)).collect()
+}
+
+/// A package moved into Billing is a change of the model alone: Sales and Billing, whose lists of
+/// what they hold differ, worded by their paths. Orders's card reads its owner changed from Sales
+/// to Billing, Sales's lists it removed and Billing's added, and no diagram is marked, its
+/// appearance on Sales's included (Decision 26).
+#[test]
+fn a_package_move_is_a_model_change_of_its_owners_alone() {
+    let Owned { mut s, sales, orders, billing, sales_d, billing_d } = owned();
+    let before = state(&s);
+    run(&mut s, "uml.package.move", json!({ "package": orders, "to": billing }));
+    let moved = state(&s);
+    let found = differences(&before, &moved);
+    assert_eq!(areas(&found), [(sales.clone(), Area::Model, ChangeKind::Changed), (billing.clone(), Area::Model, ChangeKind::Changed)]);
+    assert_eq!(told(about(&found, &billing)), (ChangeKind::Changed, Some("Billing"), vec!["Commerce", "Commerce"]));
+    let owner = |of: &[CardList]| lists(of).last().unwrap().1.clone();
+    let card = sides(&before, &moved, &orders);
+    assert_eq!(
+        (owner(&card.lists.before), owner(&card.lists.after)),
+        (vec![(said("Sales"), Some(ChangeKind::Changed))], vec![(said("Billing"), Some(ChangeKind::Changed))])
+    );
+    let held = |of: &[CardList]| lists(of).into_iter().find(|l| l.0 == ListKind::Members).map(|l| l.1).unwrap_or_default();
+    assert_eq!(held(&sides(&before, &moved, &sales).lists.before), [(said("Orders"), Some(ChangeKind::Removed))]);
+    assert_eq!(held(&sides(&before, &moved, &billing).lists.after), [(said("Orders"), Some(ChangeKind::Added))]);
+    for d in [&sales_d, &billing_d] {
+        let seen = drawn(&before, &moved, d);
+        assert_eq!((seen.marks, seen.apart), Default::default(), "{d} is drawn as it was");
+    }
+}
+
+/// Placed later on Billing's diagram, Orders is one box added there, in the diagrams' area, and
+/// that diagram's layout alone says so. Across both steps, the move stays in the model and the
+/// placement on the diagram, and nothing else differs.
+#[test]
+fn a_later_placement_is_a_diagram_change_kept_apart_from_the_move() {
+    let Owned { mut s, sales, orders, billing, sales_d, billing_d } = owned();
+    let start = state(&s);
+    run(&mut s, "uml.package.move", json!({ "package": orders, "to": billing }));
+    let moved = state(&s);
+    let node = run(&mut s, "diagram.place", json!({ "diagram": billing_d, "element": orders, "x": 300, "y": 40 }));
+    let placed = state(&s);
+    let found = differences(&moved, &placed);
+    assert_eq!(areas(&found), [(node.clone(), Area::Diagram, ChangeKind::Added)]);
+    assert_eq!(told(&found[0]), (ChangeKind::Added, Some("Orders"), vec!["Commerce", "Billing"]), "named by what it shows, on Billing's diagram");
+    let on_billing = drawn(&moved, &placed, &billing_d);
+    assert_eq!(apart(&on_billing.apart), (vec![], vec![("Orders", Placing::Placed, false)], false), "the layout alone");
+    assert_eq!(drawn(&moved, &placed, &sales_d).marks, Default::default(), "Sales's diagram as it was");
+
+    let both = differences(&start, &placed);
+    let each = [(sales, Area::Model, ChangeKind::Changed), (billing, Area::Model, ChangeKind::Changed), (node, Area::Diagram, ChangeKind::Added)];
+    assert_eq!(areas(&both), each, "the move's two owners and the box, each in its own area");
+    let on_billing = drawn(&start, &placed, &billing_d);
+    assert_eq!(apart(&on_billing.apart), (vec![], vec![("Orders", Placing::Placed, false)], false), "the move isn't drawn");
+    assert_eq!(drawn(&start, &placed, &sales_d).marks, Default::default());
+}
