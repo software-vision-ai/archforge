@@ -15,12 +15,16 @@ Pure, builds for the portable target.
 **Binding rules.** The tables are stored in the order of `PARTS`, and the project's fingerprint
 is taken over them in that order: a metamodel joins at the end, and the fingerprint the tables had
 goes to the project crate's `EARLIER_MODELS`, so a project of the earlier list is brought up to date.
-A project's database holds only the tables rows have gone to, so a notation's tables cost nothing
-until the project uses it. A session starts with `view()`, never the empty default view, which
-holds no notation and so knows no diagram kind. A model holding a diagram of a kind none of
-`NOTATIONS` knows, such as one an earlier version stored, is refused as it opens, with the typed
-`UnknownKinds` naming every such diagram and the kinds known, before anything is built from its
-rows; nothing in it is migrated, renamed or removed, and it is never shown under another kind.
+A metamodel that gains a table changes the fingerprint the same way: the diagrams' table of packages'
+default diagrams (`diagram_default_diagram_binding`, AR-552) put 0.14.0's on that list. Such an
+upgrade only adds the tables and columns that came since, as storage always has; it migrates no
+diagram kind and rewrites no row. A project's database holds only the tables rows have gone to, so a
+notation's tables cost nothing until the project uses it. A session starts with `view()`, never the
+empty default view, which holds no notation and so knows no diagram kind. A model holding a diagram
+of a kind none of `NOTATIONS` knows, such as one an earlier version stored, is refused as it opens,
+with the typed `UnknownKinds` naming every such diagram and the kinds known, before anything is
+built from its rows; nothing in it is migrated, renamed or removed, and it is never shown under
+another kind.
 
 **Public API.**
 

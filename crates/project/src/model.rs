@@ -50,6 +50,8 @@ pub const EARLIER_MODELS: &[&str] = &[
     "7666551b88d9af5b",
     // Before UML: the core's, the diagrams' and ER's tables alone.
     "8c7ee9a29f10f219",
+    // Before packages' default diagrams: no diagram_default_diagram_binding table (0.14.0).
+    "bb92f9913c8937ef",
 ];
 /// The table that names every model table rows have gone to: one the project lacks is then lost,
 /// not unused, and the project is refused rather than read short (owner decision).

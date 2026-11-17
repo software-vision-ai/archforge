@@ -9,7 +9,7 @@ use archforge_mof::{Builder, ClassId, DataId, DataKind, MetaError, Metamodel, Pr
 pub const INDEX: u16 = 5;
 pub const URI: &str = "archforge:diagram";
 pub const VERSION: &str = "1";
-pub const CONTENT_HASH: &str = "7ea3cde5c0a042c5";
+pub const CONTENT_HASH: &str = "4ad693da0cd73ae3";
 
 pub const BOOLEAN: DataId = DataId::new(INDEX, 0);
 pub const INTEGER: DataId = DataId::new(INDEX, 1);
@@ -27,6 +27,7 @@ pub const EDGE: ClassId = ClassId::new(INDEX, 4);
 pub const POINT: ClassId = ClassId::new(INDEX, 5);
 pub const LABEL: ClassId = ClassId::new(INDEX, 6);
 pub const STYLE: ClassId = ClassId::new(INDEX, 7);
+pub const DEFAULT_DIAGRAM_BINDING: ClassId = ClassId::new(INDEX, 8);
 
 /// The properties Element declares.
 pub mod element {
@@ -98,6 +99,13 @@ pub mod style {
     pub const ROUTING: PropId = PropId::new(INDEX, 33);
     pub const AVOID: PropId = PropId::new(INDEX, 34);
 }
+/// The properties DefaultDiagramBinding declares.
+pub mod default_diagram_binding {
+    use super::INDEX;
+    use super::PropId;
+    pub const OWNER_ELEMENT: PropId = PropId::new(INDEX, 35);
+    pub const DEFAULT_DIAGRAM: PropId = PropId::new(INDEX, 36);
+}
 
 fn build() -> Result<Arc<Metamodel>, MetaError> {
     let mut b = Builder::new(INDEX, URI, "diagram", VERSION, CONTENT_HASH);
@@ -116,6 +124,7 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
     b.class("Point", false, &[ELEMENT], "")?;
     b.class("Label", false, &[ELEMENT], "")?;
     b.class("Style", false, &[ELEMENT], "")?;
+    b.class("DefaultDiagramBinding", false, &[ELEMENT], "")?;
     b.property(PropertySpec {
         name: "ownedElement",
         owner: ELEMENT,
@@ -816,6 +825,46 @@ fn build() -> Result<Arc<Metamodel>, MetaError> {
         default: None,
         doc: "",
     })?; // style::AVOID
+    b.property(PropertySpec {
+        name: "ownerElement",
+        owner: DEFAULT_DIAGRAM_BINDING,
+        ty: TypeRef::Any,
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // default_diagram_binding::OWNER_ELEMENT
+    b.property(PropertySpec {
+        name: "defaultDiagram",
+        owner: DEFAULT_DIAGRAM_BINDING,
+        ty: TypeRef::Class(DIAGRAM),
+        lower: 1,
+        upper: Some(1),
+        is_ordered: false,
+        is_unique: true,
+        is_composite: false,
+        is_derived: false,
+        is_derived_union: false,
+        is_read_only: false,
+        is_id: false,
+        is_name: false,
+        opposite: None,
+        subsets: &[],
+        redefines: &[],
+        default: None,
+        doc: "",
+    })?; // default_diagram_binding::DEFAULT_DIAGRAM
     Ok(b.finish())
 }
 

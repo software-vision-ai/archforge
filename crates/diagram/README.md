@@ -30,11 +30,18 @@ such as a schema's own entities). Removing a model element removes, for it and e
 contains, the diagrams of them, the edges that show them and the nodes that show them with the
 edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element. A
 diagram goes with the skills on it, whether `diagram.remove` or its element's removal takes it.
+A `DefaultDiagramBinding` names a package's default diagram (AR-552): a member of the core's Model,
+whose `ownerElement` (typed Any) and `defaultDiagram` are both required and own nothing. Destroying
+it leaves both alive; while it stands, the store refuses to destroy either. Its table,
+`diagram_default_diagram_binding`, is a storage upgrade only: a project saved before it gets the
+table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated. The commands
+that make and check bindings, the resolver, Properties and the deletion policy come later (AR-396,
+AR-397); nothing creates a binding yet.
 
 **The metaclasses.** `Diagram` (kind, name, element, node, edge, style), `Node` (element, kind,
 text, x, y, width, height, child, style), `Edge` (element, source, target, waypoint, label, style),
 `Point` (x, y), `Label` (kind, at, dx, dy), `Style` (name, fill, stroke, text, line, routing,
-avoid) and the enumerations `LabelPlace` (source, middle, target) and `Routing` (asDiagram,
+avoid), `DefaultDiagramBinding` (ownerElement, defaultDiagram) and the enumerations `LabelPlace` (source, middle, target) and `Routing` (asDiagram,
 straight, rightAngled, curved); `Element` abstract above them. A diagram's style is the look its
 lines take unless their own says otherwise; a new diagram's lines run at right angles around the
 tables.
@@ -102,7 +109,8 @@ generalizations: the registry and the metamodel; every command's round trip; ref
 their key and change nothing, with their reasons typed; the cascades on the store with the delta inverted back; the grid's
 topmost node, nearest edge and viewport; the rules over hand-made data; the sweep; seeded random
 sequences with the rules and the store's validation checked after each step and undo back to the
-start. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
+start; a default-diagram binding as a Model member read back from its rows under the same ids and
+references, its creation undone and redone exactly, its ends required and owned by nothing. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
 **Known lacks.** The project crate persists diagrams; they do not load lazily. The style
 sheet's contents and the drawing come with the canvas. Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never

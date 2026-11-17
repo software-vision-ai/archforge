@@ -1563,7 +1563,7 @@ mod tests {
             .unwrap_or_else(|e| panic!("{e}"));
         let names: Vec<&str> = diagram.metamodel.classes.iter().map(|c| &*c.name).collect();
         // View is the abstract end of an edge: a node, or an edge a note links to.
-        assert_eq!(names, ["Element", "Diagram", "View", "Node", "Edge", "Point", "Label", "Style"]);
+        assert_eq!(names, ["Element", "Diagram", "View", "Node", "Edge", "Point", "Label", "Style", "DefaultDiagramBinding"]);
         assert_eq!(
             diagram.metamodel.props.iter().filter(|p| p.is_composite).count(),
             9,
@@ -1573,6 +1573,10 @@ mod tests {
             diagram.metamodel.props.iter().any(|p| &*p.name == prop && diagram.universe.class_name(p.owner) == class && p.ty == TypeRef::Any)
         };
         assert!(any("Diagram", "element") && any("Node", "element") && any("Edge", "element"), "what a view shows is typed Any");
+        // A package's default diagram: the owner typed Any and required, as the diagram is.
+        let owner = diagram.metamodel.props.iter().find(|p| &*p.name == "ownerElement").unwrap();
+        let target = diagram.metamodel.props.iter().find(|p| &*p.name == "defaultDiagram").unwrap();
+        assert!(any("DefaultDiagramBinding", "ownerElement") && owner.lower == 1 && target.lower == 1 && !owner.is_composite && !target.is_composite);
     }
 
     #[test]

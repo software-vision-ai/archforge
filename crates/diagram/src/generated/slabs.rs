@@ -14,6 +14,7 @@ pub struct DiagramSlabs {
     pub points: Vec<PointObj>,
     pub labels: Vec<LabelObj>,
     pub styles: Vec<StyleObj>,
+    pub default_diagram_bindings: Vec<DefaultDiagramBindingObj>,
 }
 
 fn push<T: Default>(v: &mut Vec<T>) -> Option<u32> {
@@ -39,6 +40,7 @@ impl Slabs for DiagramSlabs {
             POINT => push(&mut self.points),
             LABEL => push(&mut self.labels),
             STYLE => push(&mut self.styles),
+            DEFAULT_DIAGRAM_BINDING => push(&mut self.default_diagram_bindings),
             _ => None,
         }
     }
@@ -50,6 +52,7 @@ impl Slabs for DiagramSlabs {
             POINT => at(&self.points, slot),
             LABEL => at(&self.labels, slot),
             STYLE => at(&self.styles, slot),
+            DEFAULT_DIAGRAM_BINDING => at(&self.default_diagram_bindings, slot),
             _ => None,
         }
     }
@@ -61,6 +64,7 @@ impl Slabs for DiagramSlabs {
             POINT => at_mut(&mut self.points, slot),
             LABEL => at_mut(&mut self.labels, slot),
             STYLE => at_mut(&mut self.styles, slot),
+            DEFAULT_DIAGRAM_BINDING => at_mut(&mut self.default_diagram_bindings, slot),
             _ => None,
         }
     }
@@ -72,6 +76,7 @@ impl Slabs for DiagramSlabs {
             .saturating_add(self.points.capacity().saturating_mul(size_of::<PointObj>()))
             .saturating_add(self.labels.capacity().saturating_mul(size_of::<LabelObj>()))
             .saturating_add(self.styles.capacity().saturating_mul(size_of::<StyleObj>()))
+            .saturating_add(self.default_diagram_bindings.capacity().saturating_mul(size_of::<DefaultDiagramBindingObj>()))
     }
     /// Every slab copied, the objects' text shared.
     fn duplicate(&self) -> Box<dyn Slabs> {
