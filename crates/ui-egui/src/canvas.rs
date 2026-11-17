@@ -861,11 +861,16 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
     let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
-    // Nodes dragged into view draw too.
+    // Nodes dragged into view draw too, in the drawing order: a package's card dragged in stays
+    // under the other figures (AR-570).
+    let shown = visible.nodes.len();
     for n in refs(store, d, diagram::NODE) {
         if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
             visible.nodes.push(n);
         }
+    }
+    if visible.nodes.len() > shown {
+        grid.sort_drawn(&mut visible.nodes);
     }
     let draw = Drawing {
         p,

@@ -280,6 +280,13 @@ impl Grid {
         self.nodes.is_empty() && self.edges.is_empty()
     }
 
+    /// Puts `nodes` in the drawing order, nested nodes included; a node the index doesn't hold
+    /// goes last, in the order given.
+    pub fn sort_drawn(&self, nodes: &mut [Obj]) {
+        let at: BTreeMap<Obj, usize> = self.nodes.iter().enumerate().map(|(i, item)| (item.obj, i)).collect();
+        nodes.sort_by_key(|n| at.get(n).copied().unwrap_or(usize::MAX));
+    }
+
     /// Where `n` comes in the drawing order, nested nodes included: later is drawn on top.
     pub fn drawn_at(&self, n: Obj) -> Option<usize> {
         self.nodes.iter().position(|item| item.obj == n)

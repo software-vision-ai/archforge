@@ -10417,6 +10417,63 @@ fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest
     }
 }
 
+/// Where the last frame filled the rectangle `r`, in painting order.
+fn filled_at(h: &Harness<'static, Shell>, r: egui::Rect) -> Option<usize> {
+    /// Every shape `s` holds, nested lists opened, in painting order.
+    fn walk<'a>(s: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
+        match s {
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            s => out.push(s),
+        }
+    }
+    let mut flat = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut flat));
+    flat.iter()
+        .position(|s| matches!(s, egui::Shape::Rect(f) if f.fill.a() > 0 && f.rect.min.distance(r.min) < 0.5 && f.rect.max.distance(r.max) < 0.5))
+}
+
+/// A package selected with a class while its card lies out of view, dragged with the class until
+/// it covers another class: during the drag, the package's card is drawn under that class, as when
+/// it lies still (AR-570).
+#[test]
+fn a_package_dragged_into_view_stays_under_the_class_it_covers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        // At 100 % with no pan, a diagram unit is a point from the canvas's corner: Sales lies
+        // just past its right edge, Stay 360 points to the left of where Sales lies.
+        let (canvas, w) = {
+            let c = rect_of(&h, "workspace.canvas");
+            (c, c.width() as i64)
+        };
+        let place = |element: &str, (x, y, width, height): (i64, i64, i64, i64)| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": y, "width": width, "height": height });
+        let mut cards = Vec::new();
+        for (name, at) in [("Stay", (w - 360, 160, 140, 100)), ("Mover", (500, 400, 120, 80))] {
+            let c = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": name }));
+            cards.push((c.clone(), owning_path_made(&mut h, "diagram.place", place(&c, at))));
+        }
+        let sales = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales", "parent": root }));
+        let card = owning_path_made(&mut h, "diagram.place", place(&sales, (w + 40, 120, 240, 148)));
+        let ((mover, mover_card), stay) = (cards[1].clone(), cards[0].1.clone());
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [mover, sales] })).unwrap();
+        h.run();
+        assert!(!ids(&h).contains(&format!("workspace.canvas.node.{card}")), "{theme:?}: Sales lies out of view of {canvas:?}");
+        // Mover held 360 points to the left, Sales with it: its card now covers Stay.
+        let from = rect_of(&h, &format!("workspace.canvas.node.{mover_card}")).center();
+        let to = from - egui::vec2(360.0, 0.0);
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(to));
+        h.run();
+        let (stay_rect, card_rect) = (rect_of(&h, &format!("workspace.canvas.node.{stay}")), rect_of(&h, &format!("workspace.canvas.node.{card}")));
+        assert!(card_rect.intersects(stay_rect), "{theme:?}: Sales covers Stay: {card_rect:?} {stay_rect:?}");
+        let (stay_at, card_at) = (filled_at(&h, stay_rect), filled_at(&h, card_rect));
+        assert!(card_at.is_some() && stay_at > card_at, "{theme:?}: Stay is painted after the card: {stay_at:?} {card_at:?}");
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+}
+
 /// A class placed on a diagram before a package whose card and tab then cover it: the card is
 /// drawn first and the class over it, a press or a relationship's end on the class takes the class,
 /// on the card as on the tab, and a press on the card where nothing lies takes the package. Drawing
@@ -10441,22 +10498,7 @@ fn a_class_over_a_package_card_is_drawn_and_pressed_in_front_of_the_card() {
         // Where the class covers the package's tab, above its card.
         let on_tab = class_rect.intersect(rect_of(&h, &format!("workspace.canvas.node.{card}.tab"))).center();
         assert!(card_rect.contains(class_rect.center()) && !card_rect.contains(on_tab), "{theme:?}: {class_rect:?} {card_rect:?} {on_tab:?}");
-        // Where the last frame filled a rectangle `r`, in painting order.
-        let filled = |h: &Harness<'static, Shell>, r: egui::Rect| {
-            /// Every shape `s` holds, nested lists opened, in painting order.
-            fn walk<'a>(s: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
-                match s {
-                    egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
-                    s => out.push(s),
-                }
-            }
-            let mut flat = Vec::new();
-            h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut flat));
-            flat.iter().position(
-                |s| matches!(s, egui::Shape::Rect(f) if f.fill.a() > 0 && f.rect.min.distance(r.min) < 0.5 && f.rect.max.distance(r.max) < 0.5),
-            )
-        };
-        let (class_at, card_at) = (filled(&h, class_rect), filled(&h, card_rect));
+        let (class_at, card_at) = (filled_at(&h, class_rect), filled_at(&h, card_rect));
         assert!(card_at.is_some() && class_at > card_at, "{theme:?}: the class is painted after the card: {class_at:?} {card_at:?}");
         let selected = |h: &Harness<'static, Shell>| {
             let s = h.state().session.as_ref().unwrap();
