@@ -1275,6 +1275,7 @@ str		Relationships carry no skills	Beziehungen tragen keine Skills
 str		Generalization sets carry no skills	Generalisierungsmengen tragen keine Skills
 str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
+str		Default diagram	Standarddiagramm
 str		Diagram · of {schema}	Diagramm · von {schema}
 str		This diagram	Dieses Diagramm
 str		On this diagram · {n}	Auf diesem Diagramm · {n}

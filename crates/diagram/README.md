@@ -36,7 +36,9 @@ it leaves both alive; while it stands, the store refuses to destroy either. Its 
 `diagram_default_diagram_binding`, is a storage upgrade only: a project saved before it gets the
 table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated. The commands
 that make and check bindings, the resolver, Properties and the deletion policy come later (AR-396,
-AR-397); nothing creates a binding yet.
+AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
+the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
+Default diagram (AR-553).
 
 **The metaclasses.** `Diagram` (kind, name, element, node, edge, style), `Node` (element, kind,
 text, x, y, width, height, child, style), `Edge` (element, source, target, waypoint, label, style),

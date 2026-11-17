@@ -286,16 +286,20 @@ pub fn classified(before: &Rows, after: &Rows, repair: impl Fn(&mut Store)) -> R
     let kinds = kinds_between(&old_rows, &new_rows, &tables, &junctions)?;
     let named = |((id, class), kind): ((Uuid, ClassId), ChangeKind)| {
         let (name, path) = name_and_path(if kind == ChangeKind::Removed { &old } else { &new }, id);
-        let area = if class.metamodel() == archforge_diagram::INDEX {
-            Area::Diagram
-        } else if class == archforge_core::SKILL {
-            Area::Skill
-        } else {
-            Area::Model
-        };
-        Difference { id, class, area, kind, name, path }
+        Difference { id, class, area: area_of(class), kind, name, path }
     };
     Ok(kinds.into_iter().map(named).collect())
+}
+
+/// The area an item of `class` lies in. A package's default-diagram binding is stored with the
+/// diagrams but says which diagram the package opens on, so it is the model's, read as an element
+/// is and never drawn as a diagram.
+fn area_of(class: ClassId) -> Area {
+    match class {
+        c if c == archforge_core::SKILL => Area::Skill,
+        c if c.metamodel() == archforge_diagram::INDEX && c != archforge_diagram::DEFAULT_DIAGRAM_BINDING => Area::Diagram,
+        _ => Area::Model,
+    }
 }
 
 /// The two sides of the element `id` between `before` and `after`, each restored and repaired as

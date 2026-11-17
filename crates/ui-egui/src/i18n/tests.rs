@@ -252,6 +252,8 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
         assert_eq!(kind_label(&universe, class), german(word), "{word}");
     }
     assert_eq!(kind_label(&universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
+    // A package's default-diagram binding is the diagrams' one class a comparison lists as the model's.
+    assert_eq!(kind_label(&universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
     assert_eq!(kind_label(&universe, archforge_uml::ACTOR), german("Element"));
     assert_eq!(kind_label(&universe, archforge_diagram::NODE), german("Element"));
