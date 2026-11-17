@@ -2,7 +2,8 @@
 //! siblings, classes and packages moved, a nested package removed handing its contents and
 //! diagrams up to its parent (owner decision, for every notation), a top-level one taking them
 //! along, either taking its default-diagram bindings along (AR-577), and a class of another package
-//! drawn as an outsider; each one undo step; the sweep.
+//! drawn as an outsider; a package's card naming its owners from the root down (AR-564); each one
+//! undo step; the sweep.
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -318,6 +319,66 @@ fn a_package_card_builds_no_rows_however_much_it_holds() {
     let card = archforge_diagram::Notation::card(&archforge_uml::UmlNotation, s.doc(), obj(&s, &crowded), obj(&s, &d)).unwrap();
     // Its card shows its own diagram in small instead (AR-113): nothing listed, nothing counted.
     assert_eq!((card.compartments.len(), card.hidden, card.name.as_str()), (0, 0, "Crowded"));
+}
+
+/// The owning path the card of the package `id` gives on diagram `d`.
+fn path_of(s: &S, id: &str, d: &str) -> Vec<String> {
+    archforge_diagram::Notation::card(&archforge_uml::UmlNotation, s.doc(), obj(s, id), obj(s, d)).expect("a package's card").owner_path
+}
+
+/// A package's card names its owners from the root down to its parent, whichever branch the
+/// diagram shows: the root's card names none (AR-564).
+#[test]
+fn a_package_card_names_its_owners_from_the_root_down_to_its_parent() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
+    let operations = run(&mut s, "uml.package.add", json!({ "name": "Operations" }));
+    let archive = run(&mut s, "uml.package.add", json!({ "name": "Archive", "parent": operations }));
+    let root = s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string();
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": orders, "x": 0, "y": 0 }));
+    assert_eq!(path_of(&s, &sales, &d), ["Model"], "a top-level package: the root alone");
+    assert_eq!(path_of(&s, &orders, &d), ["Model", "Sales"], "a local package: two owners, the root first");
+    assert_eq!(path_of(&s, &lines, &d), ["Model", "Sales", "Orders"], "deeper: every owner down to its parent");
+    assert_eq!(path_of(&s, &archive, &d), ["Model", "Operations"], "one of another branch than the diagram's");
+    assert!(path_of(&s, &root, &d).is_empty(), "the root has no parent");
+}
+
+/// A package's path is read from the model every time, so it follows a rename of an owner and a
+/// move, and Undo brings the old path back (AR-564).
+#[test]
+fn a_package_cards_path_follows_a_rename_and_a_move() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let lines = run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
+    let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    run(&mut s, "uml.package.rename", json!({ "package": sales, "name": "Selling" }));
+    assert_eq!(path_of(&s, &orders, &d), ["Model", "Selling"]);
+    assert_eq!(path_of(&s, &lines, &d), ["Model", "Selling", "Orders"]);
+    run(&mut s, "uml.package.move", json!({ "package": orders, "to": billing }));
+    assert_eq!(path_of(&s, &orders, &d), ["Model", "Billing"]);
+    assert_eq!(path_of(&s, &lines, &d), ["Model", "Billing", "Orders"], "what it holds moves along");
+    s.undo().unwrap();
+    assert_eq!(path_of(&s, &lines, &d), ["Model", "Selling", "Orders"]);
+}
+
+/// A card is built every frame, so a package nested deeper than the path holds names its nearest
+/// owners only, its parent last (AR-564).
+#[test]
+fn a_package_card_names_at_most_its_nearest_owners() {
+    let mut s = session();
+    let mut at = run(&mut s, "uml.package.add", json!({ "name": "P0" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": at, "name": "Deep" }));
+    for i in 1..=300 {
+        at = run(&mut s, "uml.package.add", json!({ "name": format!("P{i}"), "parent": at }));
+    }
+    let path = path_of(&s, &at, &d);
+    assert_eq!(path.len(), 256);
+    assert_eq!((path[0].as_str(), path[255].as_str()), ("P44", "P299"), "the root and the farthest owners are left out");
 }
 
 /// `s`'s model read back from its rows into a store of its own, to make bindings in by hand, as no

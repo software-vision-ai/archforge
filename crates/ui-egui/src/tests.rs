@@ -12384,6 +12384,7 @@ impl archforge_diagram::Notation for Sketch {
             slanted: false,
             braces: None,
             template: Vec::new(),
+            owner_path: Vec::new(),
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
