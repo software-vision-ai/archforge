@@ -635,8 +635,10 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   keeps one binding, the one its first class diagram came with, or one made now for a package that
   has none; it keeps its id when another diagram is chosen. It is
   also how a binding that `uml_package_default_get` refuses is mended; a package with more than one
-  default keeps the first binding, now naming the chosen diagram, and the others are removed. It
-  answers the ids of the package, the binding and the diagram, and those of the bindings removed.
+  default keeps the first binding, now naming the chosen diagram, and the others are removed, each
+  with the links it is an end of. It answers the ids of the package, the binding and the
+  diagram, those of the bindings removed (`removed`) and those of the links removed with them
+  (`links_removed`).
   Choosing the default a package with one binding has already changes nothing and adds no undo
   step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
