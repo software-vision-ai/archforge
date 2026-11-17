@@ -768,6 +768,11 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	该包有类图，但没有一个是它的默认图。请从中选择一个作为默认图。
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	该包有多个默认图。请选择保留为其默认图的那个类图。
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	该包的默认图已不存在。请选择它的一个类图作为默认图。
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	该包的默认图不是类图。请选择它的一个类图作为默认图。
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
 str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。

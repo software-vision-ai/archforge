@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision, Session, Snapshot,
-    Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
+    CommandError, CommandSpec, Ctx, EXPECTED_REVISION, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision,
+    Session, Snapshot, Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
 };
 use serde_json::{Value, json};
 
@@ -87,7 +87,11 @@ fn select(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, Comman
     Ok(Value::Null)
 }
 
-fn count(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
+/// How many items there are; given an `expected_revision`, only on that revision.
+fn count(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
+    if p.get(EXPECTED_REVISION).is_some() {
+        expected_revision(ctx, p)?;
+    }
     Ok(json!(ctx.doc.0.len()))
 }
 
@@ -152,7 +156,7 @@ fn specs() -> Vec<CommandSpec<Doc, Selection>> {
             move_item
         ),
         cmd!(noundo "view.select", "Select", &["View"], None, "index: integer, 0..1000; which item", has_items, select),
-        cmd!(query "item.count", "Count items", &["Item"], None, "", always, count),
+        cmd!(query "item.count", "Count items", &["Item"], None, "expected_revision: object?; the history and revision read", always, count),
         cmd!("item.fail", "Fail", &["Item"], None, "", always, fail),
         cmd!("item.explode", "Explode", &["Item"], None, "", always, explode),
         cmd!(noundo "item.sneak", "Sneak", &["Item"], None, "", always, sneak),
@@ -1258,6 +1262,32 @@ fn a_token_read_from_a_preview_never_matches() {
     let previewed = read(&s).0;
     s.commit().unwrap();
     assert!(guarded_call(&mut s, "y", previewed).is_err(), "nor after a commit");
+}
+
+/// A query run while a gesture shows a preview runs on the preview's own revision: a token read
+/// before the gesture is refused then, and matches again once it is cancelled. The gesture's own
+/// command runs on the state before it, so a token read before the gesture matches each preview
+/// and the commit.
+#[test]
+fn a_query_during_a_preview_runs_on_the_preview() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    let count = |s: &mut S, token: &Value| s.execute("item.count", &json!({ "expected_revision": token })).map(|o| o.value);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let Err(EngineError::Failed { error, .. }) = count(&mut s, &token) else { panic!("a token read before the preview matched it") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: Some(at), current: s.token() }));
+    let shown = read(&s).0;
+    assert_eq!(count(&mut s, &shown).unwrap(), json!(0), "the preview's own token matches");
+    s.cancel().unwrap();
+    assert_eq!(count(&mut s, &token).unwrap(), json!(1), "after a cancel, it matches again");
+    s.begin_interaction("item.guarded").unwrap();
+    for name in ["b", "c"] {
+        s.preview(&json!({ "index": 0, "name": name, "expected_revision": token })).unwrap();
+    }
+    s.commit().unwrap();
+    assert_eq!(names(&s), ["c"]);
 }
 
 /// Undo takes the model back to the earlier revision, so a token read before the undone change

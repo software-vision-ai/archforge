@@ -6667,7 +6667,8 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// inside another change and a session that could not be put back, each in its sentence, and an
 /// unknown command, a parameter refused and an internal error as one sentence that repeats no
 /// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
-/// none, is said in its sentence too (AR-574).
+/// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
+/// can be unsound, with the choice that mends it (AR-576).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6712,6 +6713,18 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         let none = "Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. \
                     Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.";
         assert_eq!(stale(None), none, "{theme:?}");
+        use archforge_engine::BindingFault::{DeadTarget, Duplicate, Missing, WrongKind, WrongOwner};
+        let unsound = [Missing, Duplicate, DeadTarget, WrongKind, WrongOwner].map(|fault| {
+            let error = archforge_engine::CommandError::about("package", "unsound").because(archforge_engine::Reason::InvalidBinding(fault));
+            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.get".into(), error })
+        });
+        let missing = "Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.";
+        assert_eq!(unsound[0], missing, "{theme:?}");
+        let mut distinct = unsound.to_vec();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 5, "{theme:?}: each fault its own sentence {unsound:?}");
+        assert!(unsound.iter().all(|s| s.contains("Standarddiagramm")), "{theme:?}: {unsound:?}");
     }
     crate::i18n::set_language("en");
 }

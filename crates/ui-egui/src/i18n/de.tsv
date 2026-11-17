@@ -768,6 +768,11 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	Das Paket hat mehr als ein Standarddiagramm. Wählen Sie das Klassendiagramm, das sein Standarddiagramm bleibt.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets existiert nicht mehr. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets ist kein Klassendiagramm. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
 str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.

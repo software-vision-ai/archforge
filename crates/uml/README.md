@@ -177,7 +177,14 @@ profile or anything else that is no package, or a `BindingProblem`: `Missing` (s
 but no binding), `Duplicate`, `DeadTarget`, `WrongKind` (no structure diagram) or `WrongOwner`
 (another element's diagram, or a binding of something that is no package). It never falls back to
 the first diagram found and changes nothing. `defaults::problems` lists every problem in a store as
-a `Diagnosis`, ordered by the owner's id and then the binding's. No command uses it yet (AR-396).
+a `Diagnosis`, ordered by the owner's id and then the binding's.
+The query `uml.package.default.get` (AR-576) answers it for a `package` (a package or a profile):
+`{package, state, binding, diagram}`, `state` `bound` with the binding's and the diagram's ids,
+`no_diagram_yet` or `does_not_apply` with both null. A `BindingProblem` is refused about `package`
+as `Reason::InvalidBinding` with its `BindingFault`, the English naming the package's, bindings' and
+diagram's ids and the choice that mends it. Given an `expected_revision`, it answers only on that
+revision of its session, refused as `StaleRevision` on another; it changes nothing and records no
+undo step.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
 

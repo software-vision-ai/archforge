@@ -768,6 +768,11 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	モデルは読み込まれた後に変更されたか、別のプロジェクトが読み込まれました。もう一度読み込んでから、再度お試しください。何も変更されていません。
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	この変更には、どのリビジョンのモデルに対するものかが示されていません。モデルを読み込んでから、再度お試しください。何も変更されていません。
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	このパッケージにはクラス図がありますが、既定の図になっているものはありません。そのいずれかを既定の図として選んでください。
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	このパッケージには既定の図が複数あります。既定の図として残すクラス図を選んでください。
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はもう存在しません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はクラス図ではありません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
 str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。

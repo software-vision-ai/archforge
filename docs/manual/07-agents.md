@@ -588,6 +588,14 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   history, or none at all is refused and changes nothing. While a drag in the window shows a
   preview, the revision given is the preview's own, which never matches: read again once the drag
   ends.
+- **A package's default diagram**: `uml_package_default_get` (`uml.package.default.get`) reads the
+  diagram a package opens to, from the one binding that names it, never the first diagram found.
+  It gives the package's id with `state` `bound` and the ids of the binding and the diagram,
+  `no_diagram_yet` for a package without a class diagram, or `does_not_apply` for a profile, which
+  has no default. A package whose binding is unsound (class diagrams but no default, more than one
+  default, a default that is gone, is no class diagram or belongs to another element) is refused
+  with the ids concerned and what to choose. Given `expected_revision`, it answers only on that
+  revision and refuses another as changed since read. It only reads.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

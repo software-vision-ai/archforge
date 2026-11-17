@@ -38,7 +38,8 @@ pub struct Revision {
 pub const EXPECTED_REVISION: &str = "expected_revision";
 
 impl<D, V> Ctx<'_, D, V> {
-    /// The revision the call runs on: the session's when the call began (in a batch, the batch's).
+    /// The revision the call runs on: the session's token when the call began (in a batch, the
+    /// batch's), a preview's own while a gesture shows one ([`crate::Session::token`]).
     pub fn revision(&self) -> Revision {
         self.at
     }

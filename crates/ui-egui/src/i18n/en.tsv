@@ -767,6 +767,11 @@ str		The model could not be put back as it was after a failure. Reopen the proje
 str		Undo and redo cannot run as part of another change.	Undo and redo cannot run as part of another change.
 str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.
 str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	The package has class diagrams, but none is its default. Choose one of them as its default diagram.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	The package has more than one default diagram. Choose the one of its class diagrams that stays its default.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.
 str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.

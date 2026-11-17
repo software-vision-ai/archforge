@@ -470,6 +470,24 @@ pub enum Reason {
     /// caller read it, or the caller read another session's. None expected when the call gave no
     /// readable revision.
     StaleRevision { expected: Option<crate::cmd::Revision>, current: crate::cmd::Revision },
+    /// A package's default diagram cannot be read, as its default-diagram binding is unsound in
+    /// the way the fault names; one of the package's own diagrams has to be chosen as its default.
+    InvalidBinding(BindingFault),
+}
+
+/// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingFault {
+    /// The package has diagrams, but none is its default.
+    Missing,
+    /// More than one binding names the package's default.
+    Duplicate,
+    /// The binding names no diagram that exists.
+    DeadTarget,
+    /// The binding names a diagram of a kind no default may be, as an ER diagram for a UML package.
+    WrongKind,
+    /// The binding names a diagram of another element.
+    WrongOwner,
 }
 
 /// The rule a mapping table, or a relationship to become one, breaks, in a [`Reason::Mapping`].
