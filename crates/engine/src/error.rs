@@ -489,6 +489,9 @@ pub enum Reason {
     /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the
     /// binding names unsoundly, so a diagram of the package's own has to be chosen first (AR-578).
     DefaultDiagramOf { package: Box<str>, fault: Option<BindingFault> },
+    /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
+    /// has none), so it cannot be that package's default diagram (AR-580).
+    NotOwnDiagram { diagram: Box<str>, package: Box<str> },
 }
 
 /// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].

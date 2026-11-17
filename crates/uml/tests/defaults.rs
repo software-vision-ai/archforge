@@ -1,10 +1,12 @@
 //! A package's default diagram through its binding (AR-575): each state built by hand in a store
-//! under fixed ids, as no command makes a binding yet: bound, none yet, missing, duplicate, a dead,
-//! a wrong-kind and a foreign target, a profile, and every problem of a store in a stable order.
+//! under fixed ids: bound, none yet, missing, duplicate, a dead, a wrong-kind and a foreign
+//! target, a profile, and every problem of a store in a stable order.
 //! Each state read through `uml.package.default.get`, on the revision its caller read, as a
 //! read-only tool that leaves no undo step (AR-576). A diagram a binding names stays: removing it,
 //! or an element of another one's, is refused typed with nothing changed (AR-578), an association
-//! class's that goes with its end among them.
+//! class's that goes with its end among them. `uml.package.default.set` makes the binding, keeps its
+//! id when it names another diagram, changes nothing for the same one, mends several into one, and
+//! refuses anything but one of the package's own class diagrams on the revision read (AR-580).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, DiagramObj, ProjectView};
@@ -270,14 +272,14 @@ fn the_command_answers_every_state_of_a_default_and_changes_nothing() {
     assert_eq!(get(&mut s, &id(0x10), json!({})), answer("bound", 0x10, Some(0x13), Some(0x12)), "not the first-found 0x11");
     assert_eq!(get(&mut s, &id(0x20), json!({})), answer("no_diagram_yet", 0x20, None, None));
     assert_eq!(get(&mut s, &id(0x30), json!({})), answer("does_not_apply", 0x30, None, None));
-    let own = "choose one of its own structure diagrams as its default";
+    let own = "choose one of its own structure diagrams as its default with uml.package.default.set";
     for (package, fault, named, mend) in [
         (0x40, BindingFault::Missing, format!("(package {})", id(0x40)), own),
         (
             0x50,
             BindingFault::Duplicate,
             format!("bindings {} and 1 more)", (0x52..=0x56).map(id).collect::<Vec<_>>().join(", ")),
-            "choose which of its structure diagrams stays its default",
+            "choose which of its structure diagrams stays its default with uml.package.default.set, which removes the other bindings",
         ),
         (0x60, BindingFault::WrongKind, format!("binding {}, diagram {})", id(0x62), id(0x61)), own),
         (0x70, BindingFault::WrongOwner, format!("binding {}, diagram {})", id(0x72), id(0x12)), own),
@@ -469,4 +471,127 @@ fn a_binding_keeps_the_diagram_of_an_association_class_going_with_its_end() {
     let (key, reason, said) = refused(&mut s, "element.remove", json!({ "ids": [order] }));
     let wrong = Reason::DefaultDiagramOf { package: id(0x20).into(), fault: Some(BindingFault::WrongOwner) };
     assert_eq!((key.as_deref(), reason), (Some("ids"), Some(wrong)), "{said}");
+}
+
+/// The command that chooses a package's default diagram.
+const SET: &str = "uml.package.default.set";
+
+/// `uml.package.default.set` of the diagram `[diagram; 16]` for the package `[package; 16]`, on
+/// the revision the session is at: its answer.
+fn set(s: &mut S, package: u8, diagram: u8) -> Json {
+    let at = s.token();
+    let token = json!({ "history": at.history, "revision": at.revision });
+    s.execute(SET, &json!({ "package": id(package), "diagram": id(diagram), "expected_revision": token })).unwrap().value
+}
+
+/// Sales with two structure diagrams and no binding yet: (store, model, sales, overview, detail).
+fn unbound_sales() -> (Store, Obj, Obj, Obj, Obj) {
+    let (mut st, model) = store();
+    let sales = add(&mut st, model, PACKAGE, 0x10);
+    st.set(sales, archforge_uml::named_element::NAME, Value::str("Sales")).unwrap();
+    let overview = diagram(&mut st, model, 0x11, STRUCTURE_DIAGRAM, sales);
+    let detail = diagram(&mut st, model, 0x12, STRUCTURE_DIAGRAM, sales);
+    (st, model, sales, overview, detail)
+}
+
+/// Choosing makes the one binding, a member of the project's Model; choosing another keeps its id;
+/// choosing the same again changes nothing and leaves no undo step. Undo and Redo step back and
+/// forth exactly, and the rows read back to the same default (AR-580).
+#[test]
+fn choosing_a_default_makes_its_binding_then_retargets_it() {
+    let (st, model, sales, overview, detail) = unbound_sales();
+    let mut s = over(st);
+    let none = rows_of(s.doc());
+    assert_eq!(resolve(s.doc(), sales), Err(BindingProblem::Missing));
+    let made = set(&mut s, 0x10, 0x11);
+    let binding = Uuid::parse(made["binding"].as_str().unwrap()).unwrap();
+    assert_eq!(made, json!({ "package": id(0x10), "binding": binding.to_string(), "diagram": id(0x11), "removed": [] }));
+    let st = s.doc();
+    let b = st.by_uuid(binding).unwrap();
+    assert_eq!((resolve(st, sales), st.container(b).unwrap()), (Ok(DefaultDiagram::Bound(overview)), Some((model, archforge_core::model::MEMBER))));
+    assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
+    let first = rows_of(st);
+    assert_eq!(set(&mut s, 0x10, 0x12)["binding"], json!(binding.to_string()), "the binding keeps its id");
+    assert_eq!(resolve(s.doc(), sales), Ok(DefaultDiagram::Bound(detail)));
+    let second = rows_of(s.doc());
+    let at = s.token();
+    assert_eq!(set(&mut s, 0x10, 0x12)["binding"], json!(binding.to_string()));
+    assert!(s.token() == at && rows_of(s.doc()) == second, "the same default again changed nothing and left no undo step");
+    for (step, expected) in [("edit.undo", &first), ("edit.undo", &none), ("edit.redo", &first), ("edit.redo", &second)] {
+        s.execute(step, &json!({})).unwrap();
+        assert!(rows_of(s.doc()) == *expected, "{step} gives the rows exactly");
+    }
+    let (tables, junctions) = tables();
+    let mut back = bare();
+    rows::restore(&mut back, &second, &tables, &junctions).unwrap();
+    let (package, target) = (back.by_uuid(Uuid([0x10; 16])).unwrap(), back.by_uuid(Uuid([0x12; 16])).unwrap());
+    assert_eq!(
+        (resolve(&back, package), archforge_diagram::defaults::bindings_of(&back, package)),
+        (Ok(DefaultDiagram::Bound(target)), vec![back.by_uuid(binding).unwrap()])
+    );
+}
+
+/// A package with more than one binding is mended by the choice: the first binding by id names the
+/// chosen diagram, though a later one named it already, and the others go, all as one undo step.
+#[test]
+fn choosing_a_default_of_a_package_with_several_keeps_one_binding() {
+    let (mut st, model, sales, overview, detail) = unbound_sales();
+    let later = bind(&mut st, model, 0x1c, sales, detail);
+    let middle = bind(&mut st, model, 0x1b, sales, detail);
+    let first = bind(&mut st, model, 0x1a, sales, overview);
+    let mut s = over(st);
+    let before = rows_of(s.doc());
+    let made = set(&mut s, 0x10, 0x12);
+    assert_eq!(made, json!({ "package": id(0x10), "binding": id(0x1a), "diagram": id(0x12), "removed": [id(0x1b), id(0x1c)] }));
+    let st = s.doc();
+    assert!(st.is_alive(first) && !st.is_alive(middle) && !st.is_alive(later));
+    assert_eq!((resolve(st, sales), problems(st)), (Ok(DefaultDiagram::Bound(detail)), vec![]));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(rows_of(s.doc()) == before, "one undo step brings all three back");
+}
+
+/// Each choice that is not one of the package's own live class diagrams, of no package, or on a
+/// revision the caller did not read is refused, typed, with the store and its history as they were;
+/// a read-only session, as a version viewed, refuses the command before it runs (AR-580).
+#[test]
+fn a_default_that_is_not_the_packages_own_class_diagram_is_refused() {
+    let (mut st, model, sales, ..) = unbound_sales();
+    let schema = diagram(&mut st, model, 0x13, ER_DIAGRAM, sales);
+    DiagramObj::set_name(&mut st, schema, Some("Schema")).unwrap();
+    let billing = add(&mut st, model, PACKAGE, 0x20);
+    st.set(billing, archforge_uml::named_element::NAME, Value::str("Billing")).unwrap();
+    let theirs = diagram(&mut st, model, 0x21, STRUCTURE_DIAGRAM, billing);
+    DiagramObj::set_name(&mut st, theirs, Some("Invoices")).unwrap();
+    add(&mut st, model, PROFILE, 0x30);
+    let mut s = over(st);
+    let at = s.token();
+    let token = json!({ "history": at.history, "revision": at.revision });
+    let class_diagram = |name: &str| Reason::NotA { kind: "class diagram", name: name.into() };
+    let stale = Revision { revision: at.revision + 1, ..at };
+    const EXPECTED: &str = "expected_revision";
+    for (package, diagram, revision, key, reason) in [
+        (id(0x10), id(0x13), token.clone(), "diagram", class_diagram("Schema")),
+        (id(0x10), id(0x10), token.clone(), "diagram", class_diagram("Sales")),
+        (id(0x10), id(0x21), token.clone(), "diagram", Reason::NotOwnDiagram { diagram: "Invoices".into(), package: "Sales".into() }),
+        (id(0x10), id(0xee), token.clone(), "diagram", Reason::NoElement { id: id(0xee) }),
+        (id(0x10), String::new(), token.clone(), "diagram", Reason::IdEmpty { kind: "class diagram" }),
+        (id(0x30), id(0x11), token.clone(), "package", Reason::NotA { kind: "package", name: id(0x30) }),
+        (String::new(), id(0x11), token.clone(), "package", Reason::IdEmpty { kind: "package" }),
+        (
+            id(0x10),
+            id(0x11),
+            json!({ "history": stale.history, "revision": stale.revision }),
+            EXPECTED,
+            Reason::StaleRevision { expected: Some(stale), current: at },
+        ),
+        (id(0x10), id(0x11), Json::Null, EXPECTED, Reason::StaleRevision { expected: None, current: at }),
+    ] {
+        let p = json!({ "package": package, "diagram": diagram, "expected_revision": revision });
+        let (said_key, said_reason, said) = refused(&mut s, SET, p);
+        assert_eq!((said_key.as_deref(), said_reason.as_ref()), (Some(key), Some(&reason)), "{said}");
+    }
+    s.set_read_only(true).unwrap();
+    let p = json!({ "package": id(0x10), "diagram": id(0x11), "expected_revision": token });
+    assert!(matches!(s.execute(SET, &p), Err(EngineError::ReadOnly)));
+    assert_eq!((s.token(), s.can_undo()), (at, false));
 }

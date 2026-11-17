@@ -45,8 +45,8 @@ owner is not the diagram's element (`defaults::diagram_removal_problem`); a nota
 `defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
 that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
 takes the bindings of all of it before any diagram goes, so the order of selection does not matter
-(AR-578). The commands that make bindings, Properties and replacing a default as it
-is removed come later (AR-396, AR-397); nothing creates a binding yet. A comparison lists a binding among the model's elements, not
+(AR-578). UML's `uml.package.default.set` makes and retargets a binding (AR-580); Properties and
+replacing a default as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
 the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
 Default diagram (AR-553).
 

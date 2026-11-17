@@ -185,6 +185,17 @@ as `Reason::InvalidBinding` with its `BindingFault`, the English naming the pack
 diagram's ids and the choice that mends it. Given an `expected_revision`, it answers only on that
 revision of its session, refused as `StaleRevision` on another; it changes nothing and records no
 undo step.
+The command `uml.package.default.set` (AR-580) chooses it: `package`, `diagram` and the required
+`expected_revision`, refused as `StaleRevision` when it is left out or another. The diagram is one of
+the package's own live class diagrams, each refusal typed: no package or no diagram given
+(`IdEmpty`), an id of no element (`NoElement`), something that is no package or no class diagram, an
+ER diagram among them (`NotA`), and another element's diagram (`NotOwnDiagram`). The package's one
+binding is made as a member of the core's Model, or keeps its id and names the diagram; with
+several (`Duplicate`), the first by id is kept and names it and the others are removed, as the one
+explicit choice that mends them, which `default.get`'s refusal points to. The same diagram again
+changes nothing and records no undo step; otherwise it is one undo step. It answers
+`{package, binding, diagram, removed}`, `removed` the ids of the bindings it removed. A read-only
+session, as a version viewed, refuses it before it runs.
 Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
 diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
 An element that would take along a diagram the binding of an element that stays names (unsoundly,
