@@ -710,9 +710,10 @@ What is UML's own, beside the shared rules above.
   style and the secondary ink, at most as wide as the card, its front folding into `…` as
   Properties' path selects do so the nearest owners stay; the whole sentence is its hover and its
   accessible name, the id `workspace.canvas.node.{id}.path`. The root has none; below 50 % zoom
-  none is drawn. Only a package the
-  diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
-  made with it in one undo step (an existing one is reused); renaming the package renames a diagram
+  none is drawn. Any package of the model goes on it, dragged from Models, whichever package owns
+  it: another branch, the root or the diagram's own (AR-569). It keeps its owner, and dropping one
+  the diagram shows already says "Already on this diagram" and changes nothing. Every package
+  placed on a canvas has its own class diagram, made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it
   covers 60 % of the canvas does; each opens the package's diagram at 100 %, its content centred
   (AR-110). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it

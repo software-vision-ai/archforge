@@ -506,8 +506,12 @@ card where nothing lies over it to select the package.
 
 - **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
   package goes into the diagram's package, and its own diagram, named like it, is made with it.
-  Both are one step you can undo. A package dragged from Models onto the diagram of the package
-  that holds it lands there too, and gets its diagram if it has none yet.
+  Both are one step you can undo.
+- **Show one from anywhere.** Drag any package's row from **Models** onto a class diagram, whichever
+  package holds it, and its card lands where you let go. The package stays where it is in Models;
+  the line under its card names its owner. It gets its own diagram if it has none yet, in the same
+  step you can undo. A diagram shows a package once: dropping it again says it is already on this
+  diagram. Removing the card from the diagram leaves the package in Models.
 - **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
   on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
   clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
