@@ -98,6 +98,12 @@ pub enum Screen {
     WorkspacePackageParent,
     /// The root's diagram zoomed out to 10 %, its notice saying no package is above (AR-110).
     WorkspacePackageTop,
+    /// The root's diagram with packages of other branches beside Sales and Billing, each with its
+    /// owning path under its card, a long one folded at its front (AR-565).
+    WorkspacePackagePaths,
+    /// The root's diagram with a package's card placed over Customer, which is drawn in front of
+    /// the card (AR-570).
+    WorkspacePackageOverlap,
     /// The Diagrams explorer with its groups: two class diagrams, one of a nested package and
     /// open, and an ER diagram.
     WorkspaceDiagrams,
@@ -770,6 +776,16 @@ fn prepared(theme: ThemeKind, screen: Screen) -> Result<(Shell, Option<String>),
             shell.state.show_panel(crate::state::Panel::Properties);
             shell.panels.menu = Some(crate::panels::Menu::PackageParent);
         }
+    }
+    if screen == Screen::WorkspacePackagePaths {
+        shell.adopt_project();
+        sample_packages(&mut shell, false)?;
+        sample_package_paths(&mut shell)?;
+    }
+    if screen == Screen::WorkspacePackageOverlap {
+        shell.adopt_project();
+        sample_packages(&mut shell, false)?;
+        sample_package_overlap(&mut shell)?;
     }
     if screen == Screen::WorkspacePackageTop {
         shell.adopt_project();
@@ -1776,16 +1792,16 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
     let customer = run(session, "uml.class.add", json!({ "package": root, "name": "Customer" }))?;
     run(session, "diagram.place", json!({ "diagram": top, "element": customer, "x": 80, "y": 120 }))?;
     let (w, h) = archforge_uml::PACKAGE_SIZE;
-    let mut sales = String::new();
+    let (mut sales, mut inner) = (String::new(), String::new());
     for (name, x) in [("Sales", 420), ("Billing", 760)] {
         let p = run(session, "uml.package.add", json!({ "name": name, "parent": root }))?;
         run(session, "diagram.place", json!({ "diagram": top, "element": p, "x": x, "y": 120, "width": w, "height": h }))?;
-        run(session, "uml.package.diagram", json!({ "package": p }))?;
+        // Each package's own diagram, named like it and its default (AR-581).
+        let own = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": p, "name": name }))?;
         if name == "Sales" {
-            sales = p;
+            (sales, inner) = (p, own);
         }
     }
-    let inner = run(session, "uml.package.diagram", json!({ "package": sales }))?;
     // Sales's own diagram, which its card shows as a thumbnail (AR-113): two classes with their
     // attributes, the association between them, and its own package Payments with a class.
     let mut classes = Vec::new();
@@ -1800,7 +1816,7 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
     run(session, "uml.association.add", json!({ "from": classes[0], "to": classes[1], "name": "lines" }))?;
     let payments = run(session, "uml.package.add", json!({ "name": "Payments", "parent": sales }))?;
     run(session, "diagram.place", json!({ "diagram": inner, "element": payments, "x": 760, "y": 120, "width": w, "height": h }))?;
-    let own = run(session, "uml.package.diagram", json!({ "package": payments }))?;
+    let own = run(session, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": payments, "name": "Payments" }))?;
     let payment = run(session, "uml.class.add", json!({ "package": payments, "name": "Payment" }))?;
     run(session, "diagram.place", json!({ "diagram": own, "element": payment, "x": 80, "y": 80 }))?;
     let _ = session.execute("diagram.connect-all", &json!({ "diagram": inner }));
@@ -1811,6 +1827,51 @@ fn sample_packages(shell: &mut Shell, inside: bool) -> Result<(), String> {
         let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
         run(session, "view.select", json!({ "ids": [sales] }))?;
     }
+    shell.canvas.fit_pending = true;
+    Ok(())
+}
+
+/// Two packages of other branches placed on the open diagram, the root's, under Sales and Billing
+/// (AR-565): Archive in Operations, and one in a long branch, whose path folds at its front.
+fn sample_package_paths(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let top = crate::canvas::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
+    let top = top.ok_or_else(|| "the sample needs its diagram open".to_string())?.to_string();
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let (w, h) = archforge_uml::PACKAGE_SIZE;
+    for (branch, name, x) in [(["Operations"].as_slice(), "Archive", 420), (["Integrations", "Customer relationships"].as_slice(), "Exports", 760)] {
+        let mut owner = run(session, "uml.model.root", json!({}))?;
+        for b in branch {
+            owner = run(session, "uml.package.add", json!({ "name": b, "parent": owner }))?;
+        }
+        let p = run(session, "uml.package.add", json!({ "name": name, "parent": owner }))?;
+        run(session, "diagram.place", json!({ "diagram": top, "element": p, "x": x, "y": 400, "width": w, "height": h }))?;
+    }
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
+    shell.canvas.fit_pending = true;
+    Ok(())
+}
+
+/// A package Archive placed on the open diagram after Customer, its card over Customer's (AR-570).
+fn sample_package_overlap(shell: &mut Shell) -> Result<(), String> {
+    use serde_json::json;
+    let top = crate::canvas::active_diagram(shell).and_then(|d| shell.session.as_ref()?.doc().uuid(d).ok());
+    let top = top.ok_or_else(|| "the sample needs its diagram open".to_string())?.to_string();
+    let session = shell.session.as_mut().ok_or_else(|| "the sample needs a session".to_string())?;
+    let run = |session: &mut archforge_notations::Session, command: &str, params: serde_json::Value| -> Result<String, String> {
+        let out = session.execute(command, &params).map_err(|e| format!("{command}: {e:?}"))?;
+        Ok(out.value.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string())
+    };
+    let root = run(session, "uml.model.root", json!({}))?;
+    let archive = run(session, "uml.package.add", json!({ "name": "Archive", "parent": root }))?;
+    run(session, "diagram.place", json!({ "diagram": top, "element": archive, "x": 40, "y": 80, "width": 320, "height": 280 }))?;
+    run(session, "view.select", json!({ "ids": [] }))?;
+    session.mark_saved().map_err(|e| format!("mark_saved: {e:?}"))?;
     shell.canvas.fit_pending = true;
     Ok(())
 }

@@ -431,11 +431,30 @@ fn a_diagram_carries_skills_and_inherits_the_projects_and_its_elements() {
     assert!(e.contains("cannot sit on Diagram"), "{e}");
 }
 
+/// In a project of every notation only UML binds a first diagram as a default: a schema's first
+/// ER diagram binds nothing, a package's first class diagram is bound (AR-579).
+#[test]
+fn a_schemas_first_er_diagram_binds_nothing_and_a_packages_first_class_diagram_is_bound() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": schema, "name": "shop" }));
+    assert_eq!(archforge_diagram::defaults::bindings(s.doc()), [], "the schema's diagram is no default");
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let st = s.doc();
+    let [binding] = archforge_diagram::defaults::bindings(st)[..] else { panic!("the package's diagram is bound") };
+    let named = |prop| st.get(binding, prop).unwrap().as_ref().map(|o| uuid(st, o));
+    use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
+    assert_eq!((named(OWNER_ELEMENT), named(DEFAULT_DIAGRAM)), (Some(sales), Some(d)));
+}
+
 #[test]
 fn a_diagrams_skills_go_with_it_whether_it_or_its_element_goes_and_come_back_with_undo() {
     let mut s = new_project_session("Shop", ids(0)).unwrap();
     let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let schema = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    // Sales's first diagram is its default, which is not removed alone (AR-578): the second goes.
+    id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales overview" }));
     let class_diagram = id(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
     let er_diagram = id(&mut s, "diagram.add", json!({ "kind": "er", "element": schema, "name": "shop" }));
     id(&mut s, "skill.add", json!({ "subject": class_diagram, "name": "Layout" }));
@@ -577,4 +596,142 @@ fn the_kind_check_reads_a_diagram_table_of_any_shape_by_its_column_names() {
     let rows = rows::Rows { tables: vec![vec![vec![Cell::Id(known)]]], junctions: Vec::new() };
     let refused = check_kinds_in_rows(&rows, &diagrams_of(KINDLESS)).unwrap_err();
     assert_eq!((refused.diagrams.len(), refused.diagrams[0].kind.as_str()), (1, ""));
+}
+
+/// The rows of a project whose packages' bindings are each unsound in their own way: Sales has
+/// two, Billing's names an ER diagram, Stock's names Billing's diagram, and Orders has a diagram
+/// but none.
+fn unsound_bindings() -> rows::Rows {
+    use archforge_diagram::default_diagram_binding::DEFAULT_DIAGRAM;
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let shop = id(&mut s, "er.schema.add", json!({ "name": "shop" }));
+    let er = id(&mut s, "diagram.add", json!({ "kind": archforge_er::DIAGRAM_KIND, "element": shop, "name": "shop" }));
+    let mut diagrams = Vec::new();
+    for name in ["Sales", "Billing", "Stock", "Orders"] {
+        let p = id(&mut s, "uml.package.add", json!({ "name": name }));
+        diagrams.push(id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": p, "name": name })));
+    }
+    let (tables, junctions) = storage();
+    let mut st = store(ids(1 << 40)).unwrap();
+    rows::restore(&mut st, &rows::snapshot(s.doc(), &tables, &junctions).unwrap(), &tables, &junctions).unwrap();
+    let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+    let binding_to = |st: &Store, d: &str| archforge_diagram::defaults::bindings_to(st, obj(st, d))[0];
+    let (sales, billing, stock, orders) =
+        (binding_to(&st, &diagrams[0]), binding_to(&st, &diagrams[1]), binding_to(&st, &diagrams[2]), binding_to(&st, &diagrams[3]));
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let twin = st.create(archforge_diagram::DEFAULT_DIAGRAM_BINDING).unwrap();
+    for prop in [archforge_diagram::default_diagram_binding::OWNER_ELEMENT, DEFAULT_DIAGRAM] {
+        let end = st.get(sales, prop).unwrap();
+        st.set(twin, prop, end).unwrap();
+    }
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(twin)).unwrap();
+    st.set(billing, DEFAULT_DIAGRAM, Value::Ref(obj(&st, &er))).unwrap();
+    st.set(stock, DEFAULT_DIAGRAM, Value::Ref(obj(&st, &diagrams[1]))).unwrap();
+    st.destroy(orders).unwrap();
+    rows::snapshot(&st, &tables, &junctions).unwrap()
+}
+
+/// Each diagnosis as the name of the package it concerns and the problem's own name.
+fn diagnosed(st: &Store, all: &[archforge_uml::defaults::Diagnosis]) -> Vec<(String, String)> {
+    let owner = |d: &archforge_uml::defaults::Diagnosis| d.owner.map(|o| archforge_core::name_of(st, o)).unwrap_or_default();
+    all.iter().map(|d| (owner(d), format!("{:?}", d.problem).split(['(', ' ']).next().unwrap_or_default().to_string())).collect()
+}
+
+/// AR-586: a project whose bindings are unsound opens as it was stored, its rows unchanged and
+/// nothing to save, and says what is wrong with each; a repair that would change a binding is
+/// refused.
+#[test]
+fn unsound_bindings_open_unchanged_and_are_reported() {
+    let written = unsound_bindings();
+    let (tables, junctions) = storage();
+    let opened = archforge_notations::session_from_rows_diagnosed(&written, ids(1 << 41), |_| {}).unwrap();
+    let st = opened.session.doc();
+    assert_eq!(rows::snapshot(st, &tables, &junctions).unwrap(), written, "the rows are as they were read");
+    assert!(!opened.session.is_dirty(), "nothing to save");
+    let named = |pairs: [(&str, &str); 4]| pairs.map(|(p, k)| (p.to_string(), k.to_string())).to_vec();
+    let expected = named([("Sales", "Duplicate"), ("Billing", "WrongKind"), ("Stock", "WrongOwner"), ("Orders", "Missing")]);
+    assert_eq!(diagnosed(st, &opened.problems), expected);
+    assert_eq!(opened.problems, archforge_uml::defaults::problems(st), "the problems of the session's own store");
+    // A repair that touches a binding is refused, and so is one that adds one.
+    let retarget = |st: &mut Store| {
+        let b = archforge_diagram::defaults::bindings(st)[0];
+        st.set(b, archforge_diagram::default_diagram_binding::DEFAULT_DIAGRAM, Value::Null).unwrap();
+    };
+    let add = |st: &mut Store| {
+        st.create(archforge_diagram::DEFAULT_DIAGRAM_BINDING).unwrap();
+    };
+    for refused in [session_from_rows_repaired(&written, ids(1 << 41), retarget).err(), session_from_rows_repaired(&written, ids(1 << 41), add).err()]
+    {
+        assert!(matches!(&refused, Some(OpenError::Unreadable(why)) if why.contains("binding")), "{refused:?}");
+    }
+}
+
+/// AR-586: a repair is judged by ids, whatever store it leaves: the rows rebuilt as they were open,
+/// rebuilt with the binding under another id, its handles all the same, they are refused. What is
+/// reported is the store the session gets: a diagram the repair gives another owner is reported so.
+#[test]
+fn a_repair_is_judged_by_ids_and_the_problems_reported_follow_it() {
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let billing = id(&mut s, "uml.package.add", json!({ "name": "Billing" }));
+    let d = id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let (tables, junctions) = storage();
+    let written = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    let rebuilt = |rows: &rows::Rows| rows::restore_into_empty(store(ids(1 << 42)).unwrap(), rows, &tables, &junctions).unwrap();
+    assert!(session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&written)).is_ok(), "the same rows rebuilt open");
+    let binding = s.doc().uuid(archforge_diagram::defaults::bindings(s.doc())[0]).unwrap();
+    let (old, new) = (Cell::Id(binding), Cell::Id(Uuid::v7(1_761_670_800_000, [8; 10])));
+    let mut renamed = written.clone();
+    for cell in renamed.tables.iter_mut().flatten().flatten().chain(renamed.junctions.iter_mut().flatten().map(|(_, _, c)| c)) {
+        if *cell == old {
+            *cell = new.clone();
+        }
+    }
+    let refused = session_from_rows_repaired(&written, ids(1 << 41), |st| *st = rebuilt(&renamed)).err();
+    assert!(matches!(&refused, Some(OpenError::Unreadable(why)) if why.contains("binding")), "{refused:?}");
+    // Sales's diagram given to Billing: Sales's binding names another's diagram, and Billing has one but no binding.
+    let opened = archforge_notations::session_from_rows_diagnosed(&written, ids(1 << 41), |st| {
+        let obj = |st: &Store, id: &str| st.by_uuid(Uuid::parse(id).unwrap()).unwrap();
+        let (d, billing) = (obj(st, &d), obj(st, &billing));
+        st.set(d, archforge_diagram::diagram::ELEMENT, Value::Ref(billing)).unwrap();
+    })
+    .unwrap();
+    let expected = [("Sales", "WrongOwner"), ("Billing", "Missing")].map(|(p, k)| (p.to_string(), k.to_string()));
+    assert_eq!(diagnosed(opened.session.doc(), &opened.problems), expected);
+}
+
+/// AR-586: a binding whose diagram or owner the project does not hold, or which names none, is
+/// refused as the project opens, typed and naming it, before anything is built; one that names
+/// what the project holds opens.
+#[test]
+fn a_binding_that_names_nothing_refuses_its_model_before_anything_is_built() {
+    use archforge_notations::{BindingEnd, BrokenBinding, check_bindings_in_rows};
+    let mut s = new_project_session("Shop", ids(0)).unwrap();
+    let sales = id(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    id(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let (tables, junctions) = storage();
+    let fresh = rows::snapshot(s.doc(), &tables, &junctions).unwrap();
+    assert_eq!(check_bindings_in_rows(&fresh, &tables), Ok(()));
+    let at = tables.iter().position(|t| t.name == "diagram_default_diagram_binding").unwrap();
+    let column = |name| tables[at].columns.iter().position(|c| c.name == name).unwrap();
+    let Cell::Id(binding) = fresh.tables[at][0][column("id")] else { panic!("the binding has an id") };
+    let gone = Uuid::v7(1_761_670_800_000, [7; 10]);
+    for (name, cell, end, names) in [
+        ("default_diagram", Cell::Id(gone), BindingEnd::Diagram, Some(gone)),
+        ("default_diagram", Cell::Null, BindingEnd::Diagram, None),
+        ("owner_element", Cell::Id(gone), BindingEnd::Owner, Some(gone)),
+    ] {
+        let mut broken = fresh.clone();
+        broken.tables[at][0][column(name)] = cell;
+        let mut built = false;
+        let why = session_from_rows_repaired(&broken, ids(1 << 40), |_| built = true).err().unwrap();
+        assert!(!built, "nothing is built from refused rows");
+        assert_eq!(why, OpenError::BrokenBindings(vec![BrokenBinding { binding, end, names }]), "{name}");
+    }
+    let mut both = fresh.clone();
+    for name in ["owner_element", "default_diagram"] {
+        both.tables[at][0][column(name)] = Cell::Id(gone);
+    }
+    let said = format!("the default-diagram binding {binding} names the owner {gone}, which the project does not hold, and so do 1 more");
+    assert_eq!(session_from_rows(&both, ids(1 << 40)).err().unwrap().to_string(), said);
 }

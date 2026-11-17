@@ -593,8 +593,8 @@ fn element_param(store: &Store, p: &Params, key: &str, kind: &'static str) -> Re
 }
 
 /// The element the id under `key` names, refused with its reason typed unless `is` says it is of
-/// `kind`: a stereotype or a class diagram.
-fn kind_param(store: &Store, p: &Params, key: &str, kind: &'static str, is: impl Fn(Obj) -> bool) -> Result<Obj, CommandError> {
+/// `kind`: a stereotype, a class diagram or a package.
+pub(crate) fn kind_param(store: &Store, p: &Params, key: &str, kind: &'static str, is: impl Fn(Obj) -> bool) -> Result<Obj, CommandError> {
     let o = element_param(store, p, key, kind)?;
     if !is(o) {
         return Err(refuse(key, format!("{} is not a {kind}", text(p, key))).because(Reason::NotA { kind, name: name_or_id(store, o) }));

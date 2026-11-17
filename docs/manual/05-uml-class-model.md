@@ -490,18 +490,36 @@ where they sit there, and the lines between them. When you change that diagram, 
 A package whose diagram has nothing on it says *Empty diagram*. Zoomed out below 50 %, the card
 shows the package's name in its middle instead, as every card does.
 
+Under each package's card a line says where the package lives: *Owner:* and the packages from your
+project's root down to the one that holds it, such as *Owner: Commerce platform › Operations*. A
+diagram can show packages from anywhere in the project, so this line tells them apart. When the
+card is too narrow for the whole line, its first packages fold into "…" and the nearest stay, as in
+*Owner: … › Operations*; pointing at the line shows it whole. The root package's card has no such
+line, and below 50 % zoom none is drawn.
+
 The tab is part of the card: click it to select the package, drag it to move the card, and double
 click it to rename the package there. The tab grows as you type.
 
+A package's card lies under the diagram's other cards and notes. A class or a note you place over
+a package's card or its tab stays in sight, and clicking it selects it, not the package; click the
+card where nothing lies over it to select the package.
+
 - **Add one** with the **Package** tool of the toolbar: click where it goes and type its name. The
   package goes into the diagram's package, and its own diagram, named like it, is made with it.
-  Both are one step you can undo. A package dragged from Models onto the diagram of the package
-  that holds it lands there too, and gets its diagram if it has none yet.
+  Both are one step you can undo.
+- **Show one from anywhere.** Drag any package's row from **Models** onto a class diagram, whichever
+  package holds it, and its card lands where you let go. The package stays where it is in Models;
+  the line under its card names its owner. It gets its own diagram if it has none yet, in the same
+  step you can undo. A diagram shows a package once: dropping it again says it is already on this
+  diagram. Removing the card from the diagram leaves the package in Models.
 - **Go in.** Select the package and choose **Open** on its card, or press ⌘↓ (Ctrl+↓). Or zoom in
   on it, with a pinch, the scroll wheel with ⌘ (Ctrl), the zoom buttons, or the + key after
   clicking on empty canvas. Once the package covers most of the view, its diagram opens. However you go in,
-  the package's diagram opens at 100 %, what it shows centred. A double click still renames the
-  package, as it does a class.
+  the package's diagram opens at 100 %, what it shows centred. It is the package's default
+  diagram: at first the first class diagram made for it, until a different one is chosen as its
+  default (for now, by an agent with `uml.package.default.set`). Going in never makes a diagram: a package with no
+  class diagram yet, or whose default diagram can't be read, stays closed, and a note under the
+  path bar says why. A double click still renames the package, as it does a class.
 - **Come back by zooming out.** A package's diagram stays open while you zoom out, down to the
   least zoom, 10 %. Reach 10 % and its parent's diagram opens, at 100 %, with the package you were
   in at its centre. Zoom out to 10 % again to go up another level. At your project's root there is
@@ -530,24 +548,23 @@ itself stays.
 
 ### Move a package
 
-A package moves into another package with everything it holds and its own diagram. Four ways
-lead there:
+A package moves into another package with everything it holds and its own diagram. Its cards
+stay where they are on every diagram that shows them, and the line under each names its new owner. Two ways lead there:
 
-- **On a diagram**, drag its card onto another package's card. While you hold it there, that
-  card is ringed and a label says what the drop does (*Move Sales into Billing*). Let go, and the
-  package leaves this diagram for the diagram of its new home, and a message at the bottom of the
-  canvas offers **Undo**.
-- **Up the path bar**: drag a card onto one of the packages named in the path bar, such as your
-  project's root, to move it up there.
 - **In Models**, drag its row onto another package's row, or onto a class there.
 - **In Properties**, select it and choose its **Parent package**. The menu
   lists every package it may go into, never itself nor one it holds.
 
 A package can't go into itself or into a package it holds. In Models, such a row is ringed in
-amber while you hold the package over it, and the drop is refused with the reason. A card you
-drag on a diagram and let go anywhere but on a package only changes its place on the diagram; the
-model is not changed. Each move is one step
-you can undo, and the project keeps it once saved.
+amber while you hold the package over it, and the drop is refused with the reason. Each move is
+one step you can undo, with a notice that offers **Undo**, and the project keeps it once saved.
+
+A move adds no card to its new owner's diagram. To show the package there as well, drag its row
+from **Models** onto that diagram; that is a step of its own.
+
+Dragging a card on a diagram only arranges the diagram, wherever you let it go: over another
+package's card, or over a package named in the path bar, it keeps its package. Drag several
+selected cards at once, and one Undo puts them all back.
 
 <!-- picture: workspace-package-parent light | Properties for the package Sales: its Parent package menu lists the root and Billing -->
 

@@ -59,7 +59,8 @@ element's id or a built-in type's name, Integer, String, Boolean, Real or Unlimi
 the package Types the first time it is used and never twice, a built-in name always meaning the one
 in Types; a multiplicity is typed, `0`, `1`, `0..1`, `*`, `1..*`,
 `2..5`, and one that does not read is a `MultiplicityError` naming why; members are removed through `element.remove`), `figures::{card, line, ends, text_slots, slot_text, attribute_text, member_text,
-operation_text, multiplicity, visibility, is_static, member_ends, navigable, grow_cards, grow_node, MAX_CARD_ROWS}` (`grow_cards`
+operation_text, multiplicity, visibility, is_static, member_ends, navigable, grow_cards, grow_node, drawn_behind, MAX_CARD_ROWS}` (`drawn_behind`
+says a package's card is drawn and hit under the diagram's other figures, AR-570; `grow_cards`
 grows a classifier's nodes to their card's height, never shrinking one and keeping its width, which every command that adds
 or edits a member does in its own step; `grow_node` grows one node so, a plain card only, which `uml.stereotype.set-value`
 and `uml.stereotype.show-values` do for the nodes on diagrams that show values (AR-241); a class's card with its
@@ -170,6 +171,59 @@ a classifier template parameter that is no template's as `Reason::ElementNotRemo
 element by its name, or its id when it has none; the English, "{id} cannot be removed yet", is
 unchanged.
 
+**A package's default diagram** (AR-575). `defaults::resolve` reads a package's one
+`DefaultDiagramBinding` (the diagram crate's) and gives `DefaultDiagram::Bound` with the structure
+diagram it names, `NoDiagramYet` for a package with no structure diagram, `DoesNotApply` for a
+profile or anything else that is no package, or a `BindingProblem`: `Missing` (structure diagrams
+but no binding), `Duplicate`, `DeadTarget`, `WrongKind` (no structure diagram) or `WrongOwner`
+(another element's diagram, or a binding of something that is no package). It never falls back to
+the first diagram found and changes nothing. `defaults::problems` lists every problem in a store as
+a `Diagnosis`, ordered by the owner's id and then the binding's.
+A package's first class diagram is bound as its default as it is made (AR-579): UML's
+`binds_default` holds for a package's, never a profile's, so `diagram.add` makes the binding with
+the diagram in one undo step; a second diagram, and one of a package that has class diagrams but no
+binding (its default `Missing`), bind nothing.
+The query `uml.package.diagram` (AR-582, `defaults::entry`) gives `{id}`, the diagram a package
+opens to, read through `resolve`, the same target the interface's entry reaches. It never makes a
+diagram: a package with no structure diagram yet is refused as `Reason::NoDiagramYet` (by name or
+id), an unsound binding as `default.get` refuses it.
+The query `uml.package.default.get` (AR-576) answers it for a `package` (a package or a profile):
+`{package, state, binding, diagram}`, `state` `bound` with the binding's and the diagram's ids,
+`no_diagram_yet` or `does_not_apply` with both null. A `BindingProblem` is refused about `package`
+as `Reason::InvalidBinding` with its `BindingFault`, the English naming the package's, bindings' and
+diagram's ids and the choice that mends it. Given an `expected_revision`, it answers only on that
+revision of its session, refused as `StaleRevision` on another; it changes nothing and records no
+undo step.
+The command `uml.package.default.set` (AR-580) chooses it: `package`, `diagram` and the required
+`expected_revision`, refused as `StaleRevision` when it is left out or another. The diagram is one of
+the package's own live class diagrams, each refusal typed: no package or no diagram given
+(`IdEmpty`), an id of no element (`NoElement`), something that is no package or no class diagram, an
+ER diagram among them (`NotA`), and another element's diagram (`NotOwnDiagram`). The package's one
+binding is made as a member of the core's Model, or keeps its id and names the diagram; with
+several (`Duplicate`), the first by id is kept and names it and the others are removed, as the one
+explicit choice that mends them, which `default.get`'s refusal points to. Choosing the diagram
+the package's one binding already names changes nothing and records no undo step; anything else,
+a duplicate mended included, is one undo step. It answers
+`{package, binding, diagram, removed}`, `removed` the ids of the bindings it removed. A read-only
+session, as a version viewed, refuses it before it runs.
+Removing a package takes its binding along, with no replacement (AR-577): a nested one hands its
+diagrams up and its parent's binding stays; a top-level one takes the bindings of what it holds too.
+An element that would take along a diagram the binding of an element that stays names (unsoundly,
+`WrongOwner`; a nested package hands its diagrams up instead), and `diagram.remove` of a diagram a
+binding names, are refused before anything changes, typed as `Reason::DefaultDiagramOf` (AR-578).
+An element that stays is one outside every element selected and what each holds, and outside the
+relationships that go with the classifiers that go (an association class with what it holds); the bindings of
+all that goes go before any diagram, so the order of selection does not matter.
+
+**Packages from anywhere in the model** (AR-562). `UmlNotation::may_show` lets a structure
+diagram of a package show any package of the model: one of another branch, the root, the diagram's
+own package or an owner of it, but none outside the model. Placing one makes an appearance and
+never changes its owner. A profile's diagram still shows its stereotypes and their metaclasses
+alone. `uml.package.list` gives each package's `path`, the names of its owners from the root down,
+as its card's `owner_path` (AR-564). `uml.package.move` changes a package's owner alone (Decision
+26, AR-567): every appearance stays where it is under its id, with its notes' links, the default
+bindings stay as they were, and none is added to the new owner's diagram.
+
 **Measured** (release, M4 Max): a million UML objects (classes with three typed attributes and
 their multiplicity literals), rename p99 well inside a frame; see the test's output.
 
@@ -179,7 +233,28 @@ sweep). `tests/uml.rs`: the universe builds with the file's counts and the key i
 derived-union facts; a package with a class and a typed attribute behaves as UML says through the
 store (both ends of `ownedAttribute` and `class`, containment, `ownedElement`, `ownedMember`,
 `attribute`, defaults, destroy and undo); the adversarial sweep over a session of generic commands;
-the million-object test (release only). `tests/skills.rs`: skills on a package, a class, an
+the million-object test (release only). `tests/defaults.rs` (AR-575): each
+state of a package's default built by hand under fixed ids: bound to a diagram that is not the first
+made, none yet, missing, duplicate, a wrong-kind and a foreign target, a dead target read from
+rows (a dangling id refused as they are read), a profile; a store's problems in id order, the same
+read back. `tests/packages.rs` (AR-562): packages of another branch, the root, an owner and the
+diagram's own placed without a package made or an owner changed, undone and redone exactly, the rows
+read back; one shown already, one of another project's store and one on a profile's diagram
+refused, typed, with no undo step; one outside the model shown on no diagram; the list's paths.
+(AR-567): a package moved keeps its appearances on diagrams of two branches, their bounds, a note's
+link and the bindings, and gains none, undone, redone and read back exactly; a refused move and one
+to its own parent change nothing, no undo step. (AR-577): bound packages removed nested, under the root and with no
+parent, each one undo step bringing the bindings back under their ids; a diagram that is no default
+removed alone. `tests/appearances.rs` (AR-572): a package
+shown in two branches moved where its new owner's diagram lacks it and where it has it, gaining no
+appearance and keeping each one, its bounds and a route beside it; a later placement its own undo
+step; the rows read back; an earlier version built from its rows unchanged and read-only; the
+package removed with every appearance in one undo step; an agent's commands giving the store the
+interface's give. `tests/defaults.rs` (AR-578): a default diagram's removal refused with no undo step,
+another diagram's leaving the binding, and a foreign binding keeping its diagram and the package
+that holds it, while a nested package that holds one hands it up and goes; that package and the
+binding's owner removed together in either order, as one undo step; the diagram of an association
+class that goes with its end kept the same way. `tests/skills.rs`: skills on a package, a class, an
 attribute and an operation, each one undo step; a relationship and an association's end refused;
 the kinds a skill aims at; inheritance down the package tree with an override by name; a skill
 going with its element, a nested package's too, and back with undo. `tests/generalization_sets.rs` (AR-129): a set made, renamed, made complete and disjoint, given and

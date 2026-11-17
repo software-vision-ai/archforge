@@ -1068,3 +1068,34 @@ fn a_bindings_references_are_required_and_own_nothing() {
     assert_eq!(st.list(model, archforge_core::model::MEMBER).unwrap(), vec![Value::Ref(package), Value::Ref(diagram)]);
     assert!(st.validate_all().is_empty(), "{:?}", st.validate_all());
 }
+
+/// A binding is found from its package and from its diagram, and among the store's bindings;
+/// nothing else names either end.
+#[test]
+fn a_binding_is_found_from_either_end() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    assert_eq!((defaults::bindings_of(&st, package), defaults::bindings_to(&st, diagram)), (vec![binding], vec![binding]));
+    assert_eq!((defaults::bindings_of(&st, diagram), defaults::bindings_to(&st, package)), (vec![], vec![]), "each end by its own role");
+    let second = bind(&mut st, model, package, diagram);
+    assert_eq!(defaults::bindings(&st), [binding, second]);
+}
+
+/// Removing an element's views takes the bindings it owns first, so its diagram can go, and the
+/// element after it (AR-577); another element's binding stays, and the inverse brings all back.
+#[test]
+fn removing_an_elements_views_takes_the_bindings_it_owns() {
+    let mut st = bound_store(toy::counter_ids());
+    let (model, package, diagram, binding) = bound(&mut st);
+    let (_, other, theirs, kept) = bound(&mut st);
+    let before = picture(&st);
+    st.begin();
+    assert_eq!(remove_views_of(&mut st, package).unwrap(), 2, "the binding, then the diagram");
+    assert_eq!(st.destroy(package).unwrap(), 1, "nothing holds the package any more");
+    let delta = st.end().unwrap();
+    assert!(!st.is_alive(binding) && !st.is_alive(diagram));
+    assert_eq!((defaults::bindings_of(&st, other), defaults::bindings_to(&st, theirs)), (vec![kept], vec![kept]));
+    assert_eq!(st.list(model, archforge_core::model::MEMBER).unwrap(), vec![], "the binding was a member too");
+    st.apply(&Store::invert(&delta)).unwrap();
+    assert_eq!(picture(&st), before);
+}

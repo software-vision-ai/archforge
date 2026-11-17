@@ -429,7 +429,8 @@ impl DiagramKind for UmlKind {
 }
 
 /// The Package tool: a package in the diagram's package, its card centred under the click, and the
-/// package's own diagram, as one undo step (AR-95); then its name is open for typing.
+/// package's own diagram named like it, made by `diagram.add` and so its default from the start, as
+/// one undo step (AR-95, AR-581); then its name is open for typing.
 fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     shell.canvas.notice = None;
     let Some(session) = shell.session.as_mut() else { return };
@@ -451,7 +452,7 @@ fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
         let made = b.execute("uml.package.add", &json!({ "name": for_batch, "parent": parent_id.to_string() }))?;
         let package = made.get("id").and_then(|i| i.as_str()).unwrap_or_default().to_string();
         b.execute("diagram.place", &json!({ "diagram": diagram_id.to_string(), "element": package, "x": px, "y": py, "width": w, "height": h }))?;
-        b.execute("uml.package.diagram", &json!({ "package": package }))?;
+        b.execute("diagram.add", &json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package, "name": for_batch }))?;
         Ok(())
     });
     match out {
@@ -468,9 +469,11 @@ fn place_package(shell: &mut Shell, d: Obj, x: f64, y: f64) {
     }
 }
 
-/// A package dragged from Models onto a class diagram: placed where it was let go, with its own
-/// diagram made when it has none, as one undo step. Only a package the diagram's package holds
-/// goes on it.
+/// A package dragged from Models onto a class diagram, wherever the model owns it: another branch,
+/// the root or the diagram's own package (AR-569). It is placed where it was let go, keeping its
+/// owner, and, when it has no structure diagram yet, given one named like it by `diagram.add`, its
+/// default from the start, as one undo step (AR-581). One the diagram shows already is said so and
+/// left; one the diagram may not show, as on a profile's, is refused with the reason.
 fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
     let Some(session) = shell.session.as_mut() else { return };
     let store = session.doc();
@@ -479,12 +482,11 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
         shell.canvas.notice = Some(tr("Already on this diagram"));
         return;
     }
-    let here = store.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
-    if here.is_none() || package_of(store, package) != here {
-        shell.canvas.notice = Some(tr("Only a package this diagram's package holds goes on it"));
-        return;
-    }
     let Ok(diagram_id) = store.uuid(d) else { return };
+    let structure =
+        |d: &Obj| store.get(*d, archforge_diagram::diagram::KIND).ok().is_some_and(|k| k.as_str() == Some(archforge_uml::STRUCTURE_DIAGRAM));
+    let first = !archforge_diagram::views_of(store, package).0.iter().any(structure);
+    let own: String = name(store, package).chars().take(archforge_diagram::rules::MAX_NAME).collect();
     let (w, h) = archforge_uml::PACKAGE_SIZE;
     let (px, py) = ((at.0 - w / 2.0).round(), (at.1 - h / 2.0).round());
     let out = session.batch(&tr("Place package"), |b| {
@@ -492,7 +494,9 @@ fn drop_package(shell: &mut Shell, d: Obj, element: Uuid, at: (f64, f64)) {
             "diagram.place",
             &json!({ "diagram": diagram_id.to_string(), "element": element.to_string(), "x": px, "y": py, "width": w, "height": h }),
         )?;
-        b.execute("uml.package.diagram", &json!({ "package": element.to_string() }))?;
+        if first {
+            b.execute("diagram.add", &json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": element.to_string(), "name": own }))?;
+        }
         Ok(())
     });
     match out {

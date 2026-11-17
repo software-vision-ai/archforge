@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	Une colonne d'un type énuméré n'
 str		{name} follows no column.	{name} ne suit aucune colonne.
 plural		The table has {n} column.	La table a {n} colonne.|La table a {n} colonnes.
 str		A package cannot go into itself or a package it holds.	Un paquetage ne peut aller ni dans lui-même ni dans un paquetage qu’il contient.
+str		The model's root package holds all the other packages, so it stays where it is.	Le paquetage racine du modèle contient tous les autres paquetages : il reste donc où il est.
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	Le paquetage {types} garde les types intégrés : tant qu’il les contient, il garde son nom et reste sous le paquetage racine.
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	Il existe déjà un paquetage {types}, qui garde les types intégrés ; un second ne peut pas se trouver à côté.
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	Le paquetage contient {what} portant le nom {name}, le nom d’un type intégré, qui dans {types} désignerait ce type. Renommez d’abord {name}.
 str		The model cannot be changed at the moment; nothing was changed.	Le modèle ne peut pas être modifié pour le moment ; rien n’a été modifié.
 str		There is nothing to undo.	Il n’y a rien à annuler.
 str		There is nothing to redo.	Il n’y a rien à rétablir.
@@ -766,6 +770,19 @@ str		No stereotype is applied yet.	Aucun stéréotype n’est encore appliqué.
 str		Another change is still under way. Try again once it ends.	Une autre modification est encore en cours. Réessayez une fois qu’elle est terminée.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	Le modèle n’a pas pu être remis dans son état après un échec. Rouvrez le projet pour continuer.
 str		Undo and redo cannot run as part of another change.	Annuler et rétablir ne peuvent pas faire partie d’une autre modification.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Le modèle a changé depuis sa lecture, ou c’est un autre projet qui a été lu. Relisez-le, puis réessayez. Rien n’a été modifié.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	La modification n’indique pas pour quelle révision du modèle elle a été faite. Lisez le modèle, puis réessayez. Rien n’a été modifié.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	Le paquetage a des diagrammes de classes, mais aucun n’est son diagramme par défaut. Choisissez-en un comme diagramme par défaut.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	Le paquetage a plus d’un diagramme par défaut. Choisissez celui de ses diagrammes de classes qui reste son diagramme par défaut.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’existe plus. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Le diagramme par défaut du paquetage n’est pas un diagramme de classes. Choisissez l’un de ses diagrammes de classes comme diagramme par défaut.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Le diagramme par défaut du paquetage appartient à un autre élément. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Ce diagramme est le diagramme par défaut de {package}. Choisissez d’abord un autre diagramme de classes comme diagramme par défaut de {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} a pour diagramme par défaut le diagramme d’un autre élément, ce diagramme reste donc. Choisissez d’abord l’un de ses propres diagrammes de classes.
+str		No package is given. Give its id.	Aucun paquetage n’est indiqué. Indiquez son identifiant.
+str		{name} is not a package.	{name} n’est pas un paquetage.
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} n’est pas l’un des diagrammes de classes de {package}. Choisissez l’un de ses propres diagrammes de classes comme diagramme par défaut.
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} n’a pas encore de diagramme de classes, il n’y a donc rien à ouvrir. Créez-lui d’abord un diagramme de classes.
 str		This could not be done because of an internal error. Nothing was changed.	Cela n’a pas pu être fait à cause d’une erreur interne. Rien n’a été modifié.
 str		The text can't be empty.	Le texte ne peut pas être vide.
 str		It can't be longer than {max} characters.	{max} caractères au maximum.
@@ -1277,6 +1294,7 @@ str		Relationships carry no skills	Les relations ne portent pas de compétences
 str		Generalization sets carry no skills	Les ensembles de généralisations ne portent pas de compétences
 str		This element carries no skills	Cet élément ne porte pas de compétences
 str		Diagram	Diagramme
+str		Default diagram	Diagramme par défaut
 str		Diagram · of {schema}	Diagramme · de {schema}
 str		This diagram	Ce diagramme
 str		On this diagram · {n}	Sur ce diagramme · {n}
@@ -1392,6 +1410,7 @@ str		Literal · model	Littéral · modèle
 str		Attributes · {n}	Attributs · {n}
 str		Literals · {n}	Littéraux · {n}
 str		Owner	Propriétaire
+str		Owner: {path}	Propriétaire : {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Le propriétaire est un paquetage ou un classificateur. Le changer conserve l’identité, les membres et les relations de {name}, et chaque type qui l’utilise.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · imbriqué dans {owner} · modèle, dans chaque diagramme
 str		Nested classifiers · {n}	Classificateurs imbriqués · {n}
@@ -1728,12 +1747,10 @@ str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
 str		Parent package	Paquetage parent
-str		Move {what} into {where}	Déplacer {what} dans {where}
 str		{what} moved into {where}	{what} déplacé dans {where}
 str		Open this package's diagram	Ouvrir le diagramme de ce paquetage
 str		Open this package's diagram (⌘↓)	Ouvrir le diagramme de ce paquetage (⌘↓)
 str		This is the top package: zooming out goes no further	Ceci est le paquetage le plus haut : dézoomer ne mène pas plus loin
-str		Only a package this diagram's package holds goes on it	Seul un paquetage contenu dans le paquetage de ce diagramme peut y aller
 # Relier des classes
 str		A bound can be at most {max}.	Une borne vaut au plus {max}.
 str		A class realizes only an interface	Une classe ne réalise qu’une interface

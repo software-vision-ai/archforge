@@ -9,17 +9,41 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::params::{ParamDoc, Params, parse_params};
-use crate::{CommandError, Document, View};
+use crate::{CommandError, Document, Reason, View};
 
-/// What a handler acts on: the document, which undo covers, the view, which it never touches, and
-/// the counter new ids come from, which undo never rolls back, so an id is never given twice.
+/// What a handler acts on: the document, which undo covers, the view, which it never touches, the
+/// counter new ids come from, which undo never rolls back, so an id is never given twice, and the
+/// revision the call runs on, which it only reads.
 pub struct Ctx<'a, D, V> {
     pub doc: &'a mut D,
     pub view: &'a mut V,
     pub next: &'a mut u64,
+    pub(crate) at: Revision,
 }
 
+/// A point in a session's undo history: which history, and the revision within it. A revision
+/// means something only within its own history, as every session counts its revisions from 0, so
+/// a point another session, an earlier opening of the project or, once the host has seeded the
+/// numbering ([`crate::seed_histories`]), an earlier run gave never matches by chance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Revision {
+    pub history: u64,
+    pub revision: u64,
+}
+
+/// The parameter a command that changes the model only on the revision its caller read takes:
+/// `{ "history": h, "revision": r }`, as the project state gives them ([`crate::Session::token`]).
+/// Such a command declares it `object?` and calls [`expected_revision`] first, so a token left out
+/// or null reaches the check and is refused typed, not as a missing parameter.
+pub const EXPECTED_REVISION: &str = "expected_revision";
+
 impl<D, V> Ctx<'_, D, V> {
+    /// The revision the call runs on: the session's token when the call began (in a batch, the
+    /// batch's), a preview's own while a gesture shows one ([`crate::Session::token`]).
+    pub fn revision(&self) -> Revision {
+        self.at
+    }
+
     /// The next number for a new id, or None when the counter is spent.
     pub fn fresh(&mut self) -> Option<u64> {
         let n = *self.next;
@@ -27,6 +51,32 @@ impl<D, V> Ctx<'_, D, V> {
         *self.next = after;
         Some(n)
     }
+}
+
+/// Refuses, typed as [`Reason::StaleRevision`], unless `params` holds the
+/// [`EXPECTED_REVISION`] the call runs on: its history and its revision both, as whole numbers.
+/// Left out, null, or not of that shape, it is refused alike (none expected), naming the revision
+/// the call runs on. Like
+/// every refusal it changes nothing and leaves no undo step. A journal entry that holds one is
+/// refused when replayed in another session, whose history differs.
+pub fn expected_revision<D, V>(ctx: &Ctx<'_, D, V>, params: &Params) -> Result<(), CommandError> {
+    let current = ctx.revision();
+    let field = |v: &Value, key: &str| v.get(key).and_then(Value::as_u64);
+    let expected = params.get(EXPECTED_REVISION).and_then(|v| Some(Revision { history: field(v, "history")?, revision: field(v, "revision")? }));
+    if expected == Some(current) {
+        return Ok(());
+    }
+    let message = match expected {
+        Some(e) => format!(
+            "the model is at revision {} of history {}, not revision {} of history {}; read the project again and retry",
+            current.revision, current.history, e.revision, e.history
+        ),
+        None => format!(
+            "it must be the history and the revision the project state gives, now {{\"history\": {}, \"revision\": {}}}",
+            current.history, current.revision
+        ),
+    };
+    Err(CommandError::about(EXPECTED_REVISION, message).because(Reason::StaleRevision { expected, current }))
 }
 
 /// What an enabled predicate sees: the state the command would run on, and the history.
@@ -39,6 +89,12 @@ pub struct Facts<'a, D, V> {
 
 pub type RunFn<D, V> = fn(&mut Ctx<'_, D, V>, &Params) -> Result<Value, CommandError>;
 pub type EnabledFn<D, V> = fn(&Facts<'_, D, V>) -> Result<(), &'static str>;
+/// The check a registry may hold that sees every change just before it becomes kept history: the
+/// document as the change left it, and the change. It runs once at each commit point (a command
+/// run on its own, a gesture's commit, a whole batch), never per command inside a batch or per
+/// preview, so a batch may pass through a state it would refuse. A refusal takes the change back
+/// whole and is given to the caller as the command's failure.
+pub type CommitCheck<D> = fn(&D, &<D as Document>::Delta) -> Result<(), CommandError>;
 
 /// What runs a command: a handler, or the session's own undo and redo.
 pub enum Handler<D, V> {
@@ -170,15 +226,32 @@ pub struct CommandInfo {
     pub undoable: bool,
 }
 
-/// The commands of one notation, checked once and shared.
-pub struct Registry<D, V> {
+/// The commands of one notation, checked once and shared, and the check every change passes
+/// before it is kept, when the notation has one.
+pub struct Registry<D: Document, V> {
     specs: Vec<(CommandSpec<D, V>, Vec<ParamDoc>)>,
+    check: Option<CommitCheck<D>>,
 }
 
 impl<D: Document, V: View<D>> Registry<D, V> {
     /// Builds the table from the areas' specs, refusing a duplicate identifier, one that is not a
     /// dotted area-and-verb name, or parameter documentation that does not parse.
     pub fn new(specs: Vec<CommandSpec<D, V>>) -> Result<Arc<Registry<D, V>>, String> {
+        Registry::build(specs, None)
+    }
+
+    /// [`Registry::new`] with `check` run on every change at its commit point ([`CommitCheck`]).
+    pub fn with_commit_check(specs: Vec<CommandSpec<D, V>>, check: CommitCheck<D>) -> Result<Arc<Registry<D, V>>, String> {
+        Registry::build(specs, Some(check))
+    }
+
+    /// The commit check, when the registry has one.
+    pub(crate) fn commit_check(&self) -> Option<CommitCheck<D>> {
+        self.check
+    }
+
+    /// The table of [`Registry::new`], holding `check` when given.
+    fn build(specs: Vec<CommandSpec<D, V>>, check: Option<CommitCheck<D>>) -> Result<Arc<Registry<D, V>>, String> {
         let mut out: Vec<(CommandSpec<D, V>, Vec<ParamDoc>)> = Vec::with_capacity(specs.len());
         for spec in specs {
             if !valid_id(spec.id) {
@@ -190,7 +263,7 @@ impl<D: Document, V: View<D>> Registry<D, V> {
             let docs = parse_params(spec.params).map_err(|e| format!("{}: {e}", spec.id))?;
             out.push((spec, docs));
         }
-        Ok(Arc::new(Registry { specs: out }))
+        Ok(Arc::new(Registry { specs: out, check }))
     }
 
     pub(crate) fn find(&self, id: &str) -> Option<&(CommandSpec<D, V>, Vec<ParamDoc>)> {

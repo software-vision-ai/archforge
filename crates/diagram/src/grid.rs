@@ -160,17 +160,33 @@ pub fn bounds_of(store: &Store, n: Obj) -> Rect {
     Rect::new(real(store, n, node::X), real(store, n, node::Y), real(store, n, node::WIDTH), real(store, n, node::HEIGHT))
 }
 
+/// `diagram`'s top-level nodes in drawing order: the nodes `behind` takes first, then the others,
+/// each group in stored order. The store's order is left as it is.
+pub fn drawing_order(store: &Store, diagram: Obj, behind: impl Fn(Obj) -> bool) -> Vec<Obj> {
+    let (mut back, front): (Vec<Obj>, Vec<Obj>) =
+        store.list(diagram, diagram::NODE).unwrap_or_default().iter().filter_map(Value::as_ref).partition(|n| behind(*n));
+    back.extend(front);
+    back
+}
+
 impl Grid {
-    /// Indexes `diagram` as the store holds it now. An edge whose end is missing is left out; a
-    /// note link that ends on an edge ends at that edge's middle, so it is indexed after the edges
-    /// between nodes.
+    /// Indexes `diagram` as the store holds it now, its nodes in stored order. An edge whose end is
+    /// missing is left out; a note link that ends on an edge ends at that edge's middle, so it is
+    /// indexed after the edges between nodes.
     pub fn build(store: &Store, diagram: Obj) -> Grid {
+        Grid::build_with(store, diagram, |_| false)
+    }
+
+    /// [`Grid::build`] with the top-level nodes `behind` takes drawn, and hit, under the others
+    /// ([`drawing_order`]): a notation's figure that fills its area keeps the figures placed over
+    /// it in sight.
+    pub fn build_with(store: &Store, diagram: Obj, behind: impl Fn(Obj) -> bool) -> Grid {
         let mut nodes = Vec::new();
         let mut node_cells: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
         let mut index_of: BTreeMap<Obj, usize> = BTreeMap::new();
         let tops: Vec<(Obj, Rect)> =
             store.list(diagram, diagram::NODE).unwrap_or_default().iter().filter_map(Value::as_ref).map(|n| (n, bounds_of(store, n))).collect();
-        for top in store.list(diagram, diagram::NODE).unwrap_or_default().iter().filter_map(Value::as_ref) {
+        for top in drawing_order(store, diagram, behind) {
             for n in node_tree(store, top) {
                 let rect = bounds_of(store, n);
                 let i = nodes.len();
@@ -262,6 +278,13 @@ impl Grid {
 
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty() && self.edges.is_empty()
+    }
+
+    /// Puts `nodes` in the drawing order, nested nodes included; a node the index doesn't hold
+    /// goes last, in the order given.
+    pub fn sort_drawn(&self, nodes: &mut [Obj]) {
+        let at: BTreeMap<Obj, usize> = self.nodes.iter().enumerate().map(|(i, item)| (item.obj, i)).collect();
+        nodes.sort_by_key(|n| at.get(n).copied().unwrap_or(usize::MAX));
     }
 
     /// Where `n` comes in the drawing order, nested nodes included: later is drawn on top.

@@ -109,7 +109,7 @@ const TOOLS: [Tool; 9] = [
     },
     Tool {
         name: "inspect_document",
-        description: "The open project: its name, path and current branch, revision, whether it has unsaved changes, the undo and redo steps, the selection and the open diagram.",
+        description: "The open project: its name, path and current branch, its undo history and revision (together what a command's expected_revision names), whether it has unsaved changes, the undo and redo steps, the selection and the open diagram.",
         schema: || object(json!({}), &[]),
         method: Some("document.inspect"),
         read_only: true,

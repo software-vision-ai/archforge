@@ -3,11 +3,18 @@
 //! way, a session that could not be put back after a failure, and undo or redo inside another
 //! change as plain sentences; and the errors only a mistake in the program reaches (a parameter the
 //! engine refuses before the command runs, a command that stopped on an internal error) as one
-//! sentence, so no engine text reaches the user.
+//! sentence, so no engine text reaches the user. The engine's own typed refusal, a change made for a
+//! revision of the model other than the one it would run on (AR-574), is said here too, as is a
+//! package's default diagram that cannot be read for its unsound binding (AR-576), and a diagram
+//! that stays because a package's binding names it as its default (AR-578).
+//!
+//! A package move or rename the root package or the package Types refuses is said here too (AR-563),
+//! as is a default diagram chosen for no package or from another element's diagrams (AR-580), and
+//! a package with no class diagram yet to open (AR-582).
 
-use archforge_engine::EngineError;
+use archforge_engine::{BindingFault, EngineError, Reason};
 
-use crate::i18n::tr;
+use crate::i18n::{fmt, tr};
 
 /// Why a command is not available now, in the user's words, by the reason its availability check
 /// gives; none for a reason the catalogues don't hold, which the engine's English then says.
@@ -42,6 +49,71 @@ pub(crate) fn disabled(reason: &str) -> Option<String> {
         profiles::NO_PROFILES => tr("There is no profile yet."),
         profiles::NO_STEREOTYPES => tr("There is no stereotype yet."),
         applications::NO_APPLICATIONS => tr("No stereotype is applied yet."),
+        _ => return None,
+    })
+}
+
+/// A refusal the engine types itself in the user's words: a change made for another revision of the
+/// model than the one it would run on, or for none, a package's default diagram that cannot be
+/// read, by what is wrong with its binding and the choice that mends it, a diagram a package's
+/// binding keeps, its own default or another element's diagram, with the choice to make first, a
+/// package move or rename refused because the root package stays or the package Types keeps the
+/// built-in types, and a package's default diagram chosen with no package, something that is none,
+/// or a class diagram of another element (AR-580), and a package with no class diagram to open yet
+/// (AR-582); none for another reason, or for a kind of element the catalogues don't name.
+pub(crate) fn reason(reason: &Reason) -> Option<String> {
+    let types = archforge_uml::members::TYPES;
+    Some(match reason {
+        Reason::RootPackageStays => tr("The model's root package holds all the other packages, so it stays where it is."),
+        Reason::TypesPackageKept => fmt(
+            &tr("The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package."),
+            &[("types", types)],
+        ),
+        Reason::TypesPackageExists => {
+            fmt(&tr("There is a package {types} already, which keeps the built-in types; a second one can't sit beside it."), &[("types", types)])
+        }
+        Reason::HoldsBuiltInName { kind, name } => fmt(
+            &tr("The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first."),
+            &[("what", &crate::panels::a_kind(kind)?), ("name", name), ("types", types)],
+        ),
+        Reason::StaleRevision { expected: Some(_), .. } => {
+            tr("The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.")
+        }
+        Reason::StaleRevision { expected: None, .. } => {
+            tr("The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.")
+        }
+        Reason::InvalidBinding(BindingFault::Missing) => {
+            tr("The package has class diagrams, but none is its default. Choose one of them as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::Duplicate) => {
+            tr("The package has more than one default diagram. Choose the one of its class diagrams that stays its default.")
+        }
+        Reason::InvalidBinding(BindingFault::DeadTarget) => {
+            tr("The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::WrongKind) => {
+            tr("The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.")
+        }
+        Reason::InvalidBinding(BindingFault::WrongOwner) => {
+            tr("The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.")
+        }
+        Reason::DefaultDiagramOf { package, fault: None } => fmt(
+            &tr("This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first."),
+            &[("package", package)],
+        ),
+        Reason::DefaultDiagramOf { package, fault: Some(BindingFault::WrongOwner) } => fmt(
+            &tr("{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first."),
+            &[("package", package)],
+        ),
+        Reason::IdEmpty { kind: "package" } => tr("No package is given. Give its id."),
+        Reason::NotA { kind: "package", name } => fmt(&tr("{name} is not a package."), &[("name", name)]),
+        Reason::NotOwnDiagram { diagram, package } => fmt(
+            &tr("{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram."),
+            &[("diagram", diagram), ("package", package)],
+        ),
+        Reason::NoDiagramYet { package } => {
+            fmt(&tr("{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first."), &[("package", package)])
+        }
         _ => return None,
     })
 }

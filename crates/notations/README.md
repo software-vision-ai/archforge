@@ -24,7 +24,11 @@ empty default view, which holds no notation and so knows no diagram kind. A mode
 of a kind none of `NOTATIONS` knows, such as one an earlier version stored, is refused as it opens,
 with the typed `UnknownKinds` naming every such diagram and the kinds known, before anything is
 built from its rows; nothing in it is migrated, renamed or removed, and it is never shown under
-another kind.
+another kind. A default-diagram binding (Decision 12) that names an owner or diagram the rows do
+not hold, or names none, refuses the model the same way, with the typed `BrokenBindings`. One that
+names the wrong thing (a package with two, none, or a diagram of another kind or package) opens as
+it was stored and is reported, never repaired: the rows read back unchanged, and a repair that
+would change a binding, compared by ids, is refused. A version opened to be looked at reports its own.
 
 **Public API.**
 
@@ -37,6 +41,8 @@ another kind.
 | `storage` | every metamodel's tables and list tables, in the order of `PARTS` |
 | `registry`, `Session` | the edit area, the shared element commands, every notation's own, the diagrams' and the skills'; a project's session, `Session<Store, ProjectView>` |
 | `new_project_session` | a session with the project's Model root named `name`; the host supplies the ids |
-| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
-| `OpenError` | why rows do not open: `UnknownKinds`, which callers match, or any other reason in English |
+| `session_from_rows`, `session_from_rows_repaired` | a session rebuilt from a project's rows and checked (by `check_kinds_in_rows`, `check_bindings_in_rows`, then `name_kind`), saved as it is; the second runs a repair on the store first; refused with an `OpenError` |
+| `session_from_rows_diagnosed`, `Opened` | the second, with the binding problems of the store the session gets, after the repair (`archforge_uml::defaults::problems`), beside it |
+| `OpenError` | why rows do not open: `UnknownKinds` or `BrokenBindings`, which callers match, or any other reason in English |
+| `check_bindings_in_rows`, `BrokenBinding`, `BindingEnd` | the default-diagram bindings in rows whose owner or diagram is no row of any table, or none |
 | `check_kinds`, `check_kinds_in_rows`, `UnknownKinds`, `UnknownDiagram` | the diagrams of kinds no notation knows, in a store or in rows of any shape whose diagram table has its `id` and `kind` columns, read by name alone, so a host checks a project before it brings its tables up to date |

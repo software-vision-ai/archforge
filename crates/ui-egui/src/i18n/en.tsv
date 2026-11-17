@@ -735,6 +735,10 @@ str		A column of an enum type takes no size.	A column of an enum type takes no s
 str		{name} follows no column.	{name} follows no column.
 plural		The table has {n} column.	The table has {n} column.|The table has {n} columns.
 str		A package cannot go into itself or a package it holds.	A package cannot go into itself or a package it holds.
+str		The model's root package holds all the other packages, so it stays where it is.	The model's root package holds all the other packages, so it stays where it is.
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.
 str		The model cannot be changed at the moment; nothing was changed.	The model cannot be changed at the moment; nothing was changed.
 str		There is nothing to undo.	There is nothing to undo.
 str		There is nothing to redo.	There is nothing to redo.
@@ -765,6 +769,19 @@ str		No stereotype is applied yet.	No stereotype is applied yet.
 str		Another change is still under way. Try again once it ends.	Another change is still under way. Try again once it ends.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	The model could not be put back as it was after a failure. Reopen the project to go on.
 str		Undo and redo cannot run as part of another change.	Undo and redo cannot run as part of another change.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	The package has class diagrams, but none is its default. Choose one of them as its default diagram.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	The package has more than one default diagram. Choose the one of its class diagrams that stays its default.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.
+str		No package is given. Give its id.	No package is given. Give its id.
+str		{name} is not a package.	{name} is not a package.
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.
 str		This could not be done because of an internal error. Nothing was changed.	This could not be done because of an internal error. Nothing was changed.
 str		The text can't be empty.	The text can't be empty.
 str		It can't be longer than {max} characters.	It can't be longer than {max} characters.
@@ -1276,6 +1293,7 @@ str		Relationships carry no skills	Relationships carry no skills
 str		Generalization sets carry no skills	Generalization sets carry no skills
 str		This element carries no skills	This element carries no skills
 str		Diagram	Diagram
+str		Default diagram	Default diagram
 str		Diagram · of {schema}	Diagram · of {schema}
 str		This diagram	This diagram
 str		On this diagram · {n}	On this diagram · {n}
@@ -1391,6 +1409,7 @@ str		Literal · model	Literal · model
 str		Attributes · {n}	Attributes · {n}
 str		Literals · {n}	Literals · {n}
 str		Owner	Owner
+str		Owner: {path}	Owner: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · nested in {owner} · model, in every diagram
 str		Nested classifiers · {n}	Nested classifiers · {n}
@@ -1727,12 +1746,10 @@ str		Add package	Add package
 str		Place package	Place package
 str		Move package	Move package
 str		Parent package	Parent package
-str		Move {what} into {where}	Move {what} into {where}
 str		{what} moved into {where}	{what} moved into {where}
 str		Open this package's diagram	Open this package's diagram
 str		Open this package's diagram (⌘↓)	Open this package's diagram (⌘↓)
 str		This is the top package: zooming out goes no further	This is the top package: zooming out goes no further
-str		Only a package this diagram's package holds goes on it	Only a package this diagram's package holds goes on it
 # Relating classes
 str		A bound can be at most {max}.	A bound can be at most {max}.
 str		A class realizes only an interface	A class realizes only an interface

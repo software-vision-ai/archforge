@@ -700,26 +700,37 @@ What is UML's own, beside the shared rules above.
   (AR-113) holds the name in 12 px SemiBold, 22 px high with 12 px padding, never narrower than
   56 px nor wider than the card (a longer name ends in "…", the tab's hover shows it whole); it
   follows a rename as it is typed, and the rename field is the tab. The tab is part of the card for
-  click, drag and double click. The card's body is a thumbnail of the package's own diagram on the
+  click, drag and double click. Package cards are drawn and hit under every other figure (AR-570),
+  each group in stored order: a class or a note over a card or its tab stays in front and takes
+  the press; the model's order is untouched. The card's body is a thumbnail of the package's own diagram on the
   page tint, 10 px in from the card, fitted and enlarged at most 50 %: mini cards with a name bar,
   a header line and a bar per row, nested packages with a tab, notes amber, and the lines; "Empty
-  diagram" when it shows nothing; below 50 % zoom the name centred instead. Only a package the
-  diagram's package holds goes on it. Every package placed on a canvas has its own class diagram,
-  made with it in one undo step (an existing one is reused); renaming the package renames a diagram
+  diagram" when it shows nothing; below 50 % zoom the name centred instead. Under the card, 6 px
+  down, its owning path (AR-565): `Owner: Commerce platform › Operations` in the 11 px caption
+  style and the secondary ink, at most as wide as the card, its front folding into `…` as
+  Properties' path selects do so the nearest owners stay; the whole sentence is its hover and its
+  accessible name, the id `workspace.canvas.node.{id}.path`. The root has none; below 50 % zoom
+  none is drawn. Any package of the model goes on it, dragged from Models, whichever package owns
+  it: another branch, the root or the diagram's own (AR-569). It keeps its owner, and dropping one
+  the diagram shows already says "Already on this diagram" and changes nothing. Every package
+  placed on a canvas has its own class diagram, made with it in one undo step (an existing one is reused); renaming the package renames a diagram
   still named like it. Selected, its card shows Open; ⌘↓ opens it too, and zooming in until it
-  covers 60 % of the canvas does; each opens the package's diagram at 100 %, its content centred
-  (AR-110). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
+  covers 60 % of the canvas does; each opens the package's default diagram, the one its binding
+  names, at 100 %, its content centred (AR-110). Entry never makes a diagram: a package with no
+  class diagram yet, or an unsound binding, stays closed and the notice under the path bar says why
+  (AR-582). Zooming out stays in a package's diagram down to the least zoom, 10 %; reaching it
   opens the parent's diagram at 100 %, the package left centred; at the root, 10 % stays put with a
   notice ("This is the top package: zooming out goes no further"). The path bar at the canvas's top
   left (root to here, ancestors as buttons) and ⌘↑ go back to the parent as it was left. One level
   per gesture: a switch waits for the zoom to rest 0.3 s and for 0.6 s to pass since the last; a
   switch fades in over 0.2 s. A double click renames, never navigates.
-- A package moves (AR-102) by dragging its card onto another package's card (ringed, with a
-  "Move … into …" tag while held) or onto an ancestor in the path bar, its row in Models onto
-  another package's, or Properties' Parent package (the keyboard's way; never itself or one it
-  holds). It goes with what it holds and its own diagram, onto its new home's diagram, its card
-  leaving diagrams of a package that no longer holds it; one undo step, with a toast offering Undo.
-  Into itself or a package it holds is refused with the reason; Models rings such a row in amber.
+- A package moves (AR-102) by its row in Models onto another package's, or Properties' Parent
+  package (the keyboard's way; never itself or one it holds). It goes with what it holds and its
+  own diagram; its cards stay where they are, their owner lines following, and none is added to
+  its new owner's diagram (Decision 26, AR-568); one undo step, with a toast offering Undo. Into
+  itself or a package it holds is refused with the reason; Models rings such a row in amber. Dragging on the canvas only arranges (owner,
+  2026-11-11, AR-566): a card let go over another package's card or a path-bar ancestor keeps its
+  owner, with no ring and no prompt, and a moved selection is one diagram undo step.
 - A class is a plain card: the surface's white with the plain border, its eyebrow CLASS, its name,
   then two compartments under dividing lines, attributes and operations, each shown even when
   empty. Every compartment is padded as the card is: its first row as far under its line as under

@@ -16,8 +16,9 @@
 //! binding dashed, with an open arrow at its template and its `«bind» <T -> Order>` label at its
 //! middle (AR-131). An element's stereotypes (AR-135) take the place of a card's kind word (a
 //! keyword kind keeps its keyword first), start a member's row and sit at a line's middle; a diagram
-//! that shows them lists the values set in a compartment per stereotype. The canvas draws these
-//! descriptions.
+//! that shows them lists the values set in a compartment per stereotype. A package's card names
+//! its owners from the model's root down to its parent (AR-564), and is drawn under the diagram's
+//! other figures (AR-570). The canvas draws these descriptions.
 
 use archforge_diagram::figure::{Card, End, EndMark, Line, Row, Text, Tone};
 use archforge_mof::{Obj, Store, Value};
@@ -38,6 +39,9 @@ const MAX_ROW: usize = 200;
 /// rows built every frame never grow with the model. The rest are counted in `hidden`, which the
 /// canvas says in the card's `+ n more` row.
 pub const MAX_CARD_ROWS: usize = 500;
+/// The most owners a package's card names in its path, the nearest first kept: the path is built
+/// every frame, so it never grows with how deep the model nests.
+const MAX_OWNERS: usize = 256;
 
 /// The rows of `items` a card lists, made by `row`, at most `room` of them: `room` and `hidden`
 /// are counted down and up by what is left out.
@@ -238,6 +242,7 @@ pub fn card(store: &Store, c: Obj, diagram: Obj) -> Option<Card> {
         slanted: is_class && flag(store, c, class::IS_ABSTRACT),
         braces: braces(store, c),
         template: crate::templates::signature_rows(store, c),
+        owner_path: Vec::new(),
     })
 }
 
@@ -344,6 +349,12 @@ pub fn card_name(store: &Store, c: Obj, diagram: Obj) -> String {
     }
 }
 
+/// Whether the diagram node `n` is drawn, and hit, under the diagram's other figures: a package's
+/// card, which its preview fills, so a class or a note placed over it stays in sight (AR-570).
+pub fn drawn_behind(store: &Store, n: Obj) -> bool {
+    store.get(n, archforge_diagram::node::ELEMENT).ok().and_then(|v| v.as_ref()).is_some_and(|e| store.class_of(e).ok() == Some(crate::PACKAGE))
+}
+
 /// Whether `diagram` has a node of `element`.
 pub fn shows(store: &Store, diagram: Obj, element: Obj) -> bool {
     archforge_diagram::views_of(store, element).2.into_iter().any(|n| archforge_diagram::diagram_of(store, n) == Some(diagram))
@@ -366,6 +377,7 @@ fn primitive_type_card(store: &Store, t: Obj, diagram: Obj) -> Card {
         slanted: false,
         braces: braces(store, t),
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
@@ -386,6 +398,7 @@ fn stereotype_card(store: &Store, s: Obj) -> Card {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
@@ -403,6 +416,7 @@ fn metaclass_card(store: &Store, m: Obj) -> Card {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
@@ -433,6 +447,7 @@ fn enumeration_card(store: &Store, e: Obj, diagram: Obj) -> Card {
         slanted: false,
         braces: braces(store, e),
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
@@ -459,6 +474,7 @@ fn diamond_card(store: &Store, a: Obj) -> Card {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
@@ -713,11 +729,13 @@ fn constraint_card(store: &Store, c: Obj, diagram: Obj) -> Card {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     }
 }
 
 /// A package as a tabbed card: its name, which its tab shows, over a thumbnail of its own diagram
-/// that the canvas draws (AR-113), so it lists no rows.
+/// that the canvas draws (AR-113), so it lists no rows; and the names of its owners, which say where
+/// it lives (AR-564).
 fn package_card(store: &Store, p: Obj) -> Card {
     Card {
         eyebrow: Text::said("Package"),
@@ -730,5 +748,21 @@ fn package_card(store: &Store, p: Obj) -> Card {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: owner_path(store, p),
     }
+}
+
+/// The names of the packages that own the package `p`, from the model's root down to its parent:
+/// empty for the root, which has none. At most [`MAX_OWNERS`] of them, the nearest kept, since a
+/// card is built every frame.
+pub(crate) fn owner_path(store: &Store, p: Obj) -> Vec<String> {
+    let mut owners = Vec::new();
+    let mut at = p;
+    while owners.len() < MAX_OWNERS {
+        let Some(owner) = crate::commands::package_of(store, at) else { break };
+        owners.push(name(store, owner));
+        at = owner;
+    }
+    owners.reverse();
+    owners
 }

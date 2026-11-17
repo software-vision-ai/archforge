@@ -27,16 +27,34 @@ once per diagram, and its ends show the relationship's ends in order (`DiagramVi
 without an element is an anchor and has a note at one end; a label's slot is one the element has.
 A notation may require an element (`needs_element`) and keep a diagram to its scope (`may_show`,
 such as a schema's own entities). Removing a model element removes, for it and everything it
-contains, the diagrams of them, the edges that show them and the nodes that show them with the
-edges on those nodes (`remove_views_of`); a notation calls it before it destroys an element. A
+contains, the default-diagram bindings they own (with no replacement, AR-577), the diagrams of
+them, the edges that show them and the nodes that show them with the edges on those nodes
+(`remove_views_of`); a notation calls it before it destroys an element. A
 diagram goes with the skills on it, whether `diagram.remove` or its element's removal takes it.
 A `DefaultDiagramBinding` names a package's default diagram (AR-552): a member of the core's Model,
 whose `ownerElement` (typed Any) and `defaultDiagram` are both required and own nothing. Destroying
 it leaves both alive; while it stands, the store refuses to destroy either. Its table,
 `diagram_default_diagram_binding`, is a storage upgrade only: a project saved before it gets the
-table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated. The commands
-that make and check bindings, the resolver, Properties and the deletion policy come later (AR-396,
-AR-397); nothing creates a binding yet.
+table through the project crate's `EARLIER_MODELS`, and no diagram kind is migrated.
+`defaults::{bindings_of, bindings_to, bindings}` find the bindings naming an element as their owner,
+naming a diagram as its default, and all of them, without judging them; UML's resolver says what a
+binding may name (AR-575). `remove_views_of` takes the bindings it finds along (AR-577).
+`diagram.remove` of a diagram a binding names is refused before anything changes, typed as
+`Reason::DefaultDiagramOf` with the binding's owner, and with `BindingFault::WrongOwner` when that
+owner is not the diagram's element (`defaults::diagram_removal_problem`); a notation asks
+`defaults::views_removal_problem` before it removes an element whose diagram a binding of an element
+that stays names, judged against everything the removal takes, and `defaults::remove_bindings_of`
+takes the bindings of all of it before any diagram goes, so the order of selection does not matter
+(AR-578). A notation whose `Notation::binds_default` says so for a diagram's kind and its element's
+class (UML: a package's class diagram) gets the element's first diagram of that kind bound as its
+default as it is made: `defaults::new_diagram_bound`, which `diagram.add` calls, makes the diagram
+and a binding beside it in its home as one change, but only while the element has no diagram of
+that kind and no binding (`defaults::is_first`); an element with diagrams but no binding stays
+without one, its default diagnosed as missing, never bound silently (AR-579). UML's
+`uml.package.default.set` makes and retargets a binding (AR-580); Properties and replacing a default
+as it is removed come later (AR-396, AR-397). A comparison lists a binding among the model's elements, not
+the diagrams, worded by its package and diagram (`Sales → Sales overview`) under the kind word
+Default diagram (AR-553).
 
 **The metaclasses.** `Diagram` (kind, name, element, node, edge, style), `Node` (element, kind,
 text, x, y, width, height, child, style), `Edge` (element, source, target, waypoint, label, style),
@@ -50,14 +68,14 @@ tables.
 
 | Item | Signature |
 |---|---|
-| `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
+| `DiagramView` | the view's policy, asked of the view: the open diagram and selection, `kinds`, `home`, `is_of`, `needs_element`, `binds_default`, `shows`, `may_show`, `connects`, `ends`, `text_slots`, `default_size` |
 | `Notation`, `ProjectView` | what a notation answers for its own kinds and classes (the diagram policy, where skills sit, `remove`, `describe`); the view of a project holding several notations, which asks the right one (`of_kind`, `of_class`, `of_element`) and implements `DiagramView` and `SkillHost`: a diagram carries skills too and inherits those of the element it shows |
 | `figure::{Card, Row, Line, End, EndMark, Text, Tone, CARD_HEADER, CARD_FIRST_ROW, CARD_ROW, COMPARTMENT_GAP, CARD_FOOT}` | what a notation draws, without a toolkit: a node's card (eyebrow, name, compartments of rows, `Card::height` the height that shows them all by the card layout the canvas draws by, its tone: tinted, plain, tabbed, a constraint note, braces or an n-ary association's diamond, and a template's signature rows, drawn in a dashed box over its top-right corner), an edge's line (end marks and texts, roles, dashes, status, a note); `Notation::card`, `line` and `slot_text` give them and the canvas draws them alike; `Notation::links` gives the nodes a node is tied to by dashed links worked out from the model, never stored (a constraint note's); `Notation::nested_in` the element a node's element is nested in, whose node the canvas ties it to by a line ending in ⊕, never stored (a nested classifier's owner) |
 | `project::specs`, `project::{ELEMENT, NOTATION_ELEMENT}` | the shared commands: `view.select`, `element.remove` (each notation removes its own) and `element.describe`; the kinds their typed refusals name |
 | `commands::specs` | `pub fn specs<V: DiagramView>() -> Vec<CommandSpec<Store, V>>`: the diagram commands for a notation's registry |
 | `metamodel`, `universe_with`, `with_slabs` | the metamodel; a universe of it and others; the slabs joined to a `CompositeSlabs` |
 | `remove_views_of`, `destroy_node_with_edges`, `views_of`, `edges_on`, `node_tree`, `diagram_of` | the cascades and the walks they rest on |
-| `Grid`, `Hit`, `Rect`, `grid::Visible` | `Grid::build(store, diagram)`, `hit(x, y)`, `hit_keeping(x, y, keep)` (looking through the nodes `keep` leaves out), `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
+| `Grid`, `Hit`, `Rect`, `grid::Visible`, `grid::drawing_order` | `Grid::build(store, diagram)`, `Grid::build_with(store, diagram, behind)` (the top-level nodes `behind` takes drawn and hit under the others, `grid::drawing_order`), `hit(x, y)`, `sort_drawn(nodes)` (nodes put in the drawing order), `hit_keeping(x, y, keep)` (looking through the nodes `keep` leaves out), `visible(rect)`: the spatial index of one diagram, its lines routed as drawn |
 | `arrange::arrange` | `arrange(sizes, lines) -> Vec<(f64, f64)>`: boxes in layers along their lines, crossings few, groups side by side, lone boxes in rows |
 | `route`, `Way`, `route::{way_of, spreads}` | `route(way, from, to, at, via, boxes) -> Vec<(f64, f64)>`: a line straight, at right angles, around the other boxes, or curved; `way_of` reads an edge's routing (its own, else its diagram's); `spreads(store, diagram, rect)` places every line's ends along its boxes' sides, once per diagram |
 | `rules::{problems, kind_problem, text_problem, colour_problem, coord_problem, size_problem, depth_of}` | the rules, for commands and for a whole store; `text_problem` and `kind_problem` typed as a `Problem` |
@@ -110,7 +128,8 @@ their key and change nothing, with their reasons typed; the cascades on the stor
 topmost node, nearest edge and viewport; the rules over hand-made data; the sweep; seeded random
 sequences with the rules and the store's validation checked after each step and undo back to the
 start; a default-diagram binding as a Model member read back from its rows under the same ids and
-references, its creation undone and redone exactly, its ends required and owned by nothing. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
+references, its creation undone and redone exactly, its ends required and owned by nothing, and
+found from either end. `archforge-er/tests/diagram.rs` runs the commands with the ER policy.
 
 **Known lacks.** The project crate persists diagrams; they do not load lazily. The style
 sheet's contents and the drawing come with the canvas. Arrange is a layered layout without dummy boxes for long lines; routes are worked out when drawn, never

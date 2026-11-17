@@ -167,6 +167,8 @@ pub struct State {
     pub ends: Vec<EndText>,
     /// The packages' tabs the last frame drew, which take a press as their cards do (AR-113).
     pub package_tabs: Vec<PackageTab>,
+    /// The owning paths the last frame drew under the packages' cards (AR-565).
+    pub path_badges: Vec<PathBadge>,
     /// The generalization sets' labels the last frame drew, which take a press (AR-129).
     pub set_labels: Vec<SetLabel>,
     /// The line ends the last frame moved out to a qualifier box's outer side (AR-127): where the
@@ -194,6 +196,17 @@ pub struct PackageTab {
     pub rect: Rect,
     pub node: Uuid,
     pub cut: Option<String>,
+}
+
+/// A package's owning path as drawn under its card (AR-565): where it was on screen, its node, the
+/// text shown, its first owners folded into `…` when the card is too narrow, and the whole
+/// sentence, which its tooltip and a screen reader say.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathBadge {
+    pub rect: Rect,
+    pub node: Uuid,
+    pub shown: String,
+    pub whole: String,
 }
 
 /// A generalization set's label as drawn (AR-129): its set, where it was on screen, the node that
@@ -245,6 +258,7 @@ impl Default for State {
             skills: Vec::new(),
             ends: Vec::new(),
             package_tabs: Vec::new(),
+            path_badges: Vec::new(),
             set_labels: Vec::new(),
             qualified_ends: Vec::new(),
             nav: crate::package_nav::Nav::default(),
@@ -693,7 +707,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     let pointer = resp.interact_pointer_pos().or_else(|| ui.input(|i| i.pointer.hover_pos()));
     let overrides = crate::editing::preview_rects(shell, view, pointer);
     let renaming = shell.canvas.rename.as_ref().map(|rn| rn.node).or_else(|| shell.canvas.note_edit.as_ref().map(|ne| ne.node));
-    let grid = shell.session.as_ref().map(|s| Grid::build(s.doc(), d));
+    let grid = shell.session.as_ref().map(|s| grid(s.doc(), d));
     let mut pending_badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)> = Vec::new();
     if let (Some(session), Some(grid)) = (shell.session.as_ref(), grid.as_ref()) {
         let store = session.doc();
@@ -727,6 +741,7 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
         shell.canvas.qualified_ends = drawn.qualified_ends;
         shell.canvas.set_labels = drawn.set_labels;
         shell.canvas.package_tabs = drawn.package_tabs;
+        shell.canvas.path_badges = drawn.path_badges;
         // A set's label says its whole text while the pointer is on it.
         if let Some(at) = ui.input(|i| i.pointer.hover_pos())
             && shell.canvas.gesture.is_none()
@@ -739,6 +754,20 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
             && let Some(name) = shell.canvas.package_tabs.iter().rev().find(|t| t.rect.contains(at)).and_then(|t| t.cut.clone())
         {
             let _ = resp.clone().on_hover_text_at_pointer(name);
+        }
+        // A package's owning path says its whole sentence to a screen reader, as a label's value,
+        // and on hover.
+        for b in shell.canvas.path_badges.iter().filter(|b| b.rect.intersects(r)) {
+            ui.ctx().accesskit_node_builder(widgets::egui_id(&format!("workspace.canvas.node.{}.path", b.node)), |node| {
+                node.set_role(egui::accesskit::Role::Label);
+                node.set_value(b.whole.as_str());
+            });
+        }
+        if let Some(at) = ui.input(|i| i.pointer.hover_pos())
+            && shell.canvas.gesture.is_none()
+            && let Some(b) = shell.canvas.path_badges.iter().rev().find(|b| b.rect.contains(at))
+        {
+            let _ = resp.clone().on_hover_text_at_pointer(b.whole.as_str());
         }
         pending_badges = drawn.badges;
     }
@@ -773,6 +802,13 @@ fn canvas(shell: &mut Shell, ui: &mut egui::Ui, p: &Palette, r: Rect) -> f32 {
     // What an n-ary association's drawing has so far, or what Add end waits for (AR-128).
     crate::uml_nary::hint_bar(shell, ui, p, r, below_path);
     below_path
+}
+
+/// The index of diagram `d` as the canvas draws and hits it: packages' cards under the other
+/// figures, each group in stored order, so a class or a note placed over a package's card stays in
+/// sight and takes the press (AR-570). The store's order is untouched.
+pub(crate) fn grid(store: &Store, d: Obj) -> Grid {
+    Grid::build_with(store, d, |n| archforge_uml::figures::drawn_behind(store, n))
 }
 
 /// A diagram to draw: its store, the notations that describe it, and where it goes on screen.
@@ -812,6 +848,7 @@ pub(crate) struct Drawn {
     pub(crate) qualified_ends: Vec<(Pos2, Pos2)>,
     pub(crate) set_labels: Vec<SetLabel>,
     pub(crate) package_tabs: Vec<PackageTab>,
+    pub(crate) path_badges: Vec<PathBadge>,
     pub(crate) badges: Vec<(Pos2, Uuid, Uuid, Obj, bool)>,
 }
 
@@ -824,11 +861,16 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     let (x0, y0) = view.to_canvas(r.min);
     let (x1, y1) = view.to_canvas(r.max);
     let mut visible = grid.visible(archforge_diagram::Rect::new(x0, y0, x1 - x0, y1 - y0));
-    // Nodes dragged into view draw too.
+    // Nodes dragged into view draw too, in the drawing order: a package's card dragged in stays
+    // under the other figures (AR-570).
+    let shown = visible.nodes.len();
     for n in refs(store, d, diagram::NODE) {
         if !visible.nodes.contains(&n) && store.uuid(n).ok().is_some_and(|id| overrides.contains_key(&id)) {
             visible.nodes.push(n);
         }
+    }
+    if visible.nodes.len() > shown {
+        grid.sort_drawn(&mut visible.nodes);
     }
     let draw = Drawing {
         p,
@@ -852,6 +894,7 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
         draft: live.draft,
         rename_text: live.rename_text,
         tabs: std::cell::RefCell::new(Vec::new()),
+        paths: std::cell::RefCell::new(Vec::new()),
         led: std::cell::OnceCell::new(),
         set_drag: live.set_drag,
     };
@@ -865,7 +908,14 @@ pub(crate) fn draw_scene(ui: &egui::Ui, clip: &egui::Painter, scene: &Scene<'_>,
     for n in &visible.nodes {
         badges.extend(draw_node(clip, &draw, *n, registry, ui));
     }
-    Drawn { ends: draw.ends.take(), qualified_ends: draw.qualified_ends.take(), set_labels, package_tabs: draw.tabs.take(), badges }
+    Drawn {
+        ends: draw.ends.take(),
+        qualified_ends: draw.qualified_ends.take(),
+        set_labels,
+        package_tabs: draw.tabs.take(),
+        path_badges: draw.paths.take(),
+        badges,
+    }
 }
 
 /// The grid: a dot every `GRID_STEP` units, doubled until the dots are at least `GRID_MIN` px
@@ -929,6 +979,8 @@ struct Drawing<'a> {
     rename_text: Option<&'a str>,
     /// The packages' tabs drawn this frame, for the next frame's press and hover.
     tabs: std::cell::RefCell<Vec<PackageTab>>,
+    /// The packages' owning paths drawn this frame, for their tooltips and screen readers.
+    paths: std::cell::RefCell<Vec<PathBadge>>,
     /// The diagram each element leads to, by the element: worked out once a frame, when a card
     /// first shows one (a package's own diagram, AR-113).
     led: std::cell::OnceCell<std::collections::HashMap<Obj, Obj>>,
@@ -1066,6 +1118,16 @@ fn draw_node(
                     widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.tab"), "tab", tab);
                     d.tabs.borrow_mut().push(PackageTab { rect: tab, node: id, cut: cut.then(|| card.name.clone()) });
                 }
+            }
+            // Where the package lives, under its card; the root, which no package owns, has none.
+            if tabbed
+                && z >= DETAIL_ZOOM
+                && !card.owner_path.is_empty()
+                && let Some(id) = id
+            {
+                let badge = path_badge(paint, rect, &card.owner_path, z, d.p.text_secondary, id);
+                widgets::record_visible(ui, registry, &format!("workspace.canvas.node.{id}.path"), "label", badge.rect);
+                d.paths.borrow_mut().push(badge);
             }
             let room = Some((rect.width() - 2.0 * ENTITY_INSET * z).max(0.0));
             if z >= DETAIL_ZOOM && tabbed {
@@ -1335,6 +1397,24 @@ pub(crate) fn package_tab(paint: &egui::Painter, rect: Rect, name: &str, z: f32,
     (tab, shown, cut)
 }
 
+/// How far a package's owning path is under its card.
+const PATH_BADGE_GAP: f32 = 6.0;
+
+/// Draws a package's owning path under its card, `Owner: Commerce platform › Operations`, in the
+/// caption style and the canvas's secondary ink: its words say what it is, never its colour alone.
+/// It is as wide as the card at most: its first owners fold into `…` so the nearest stay, and the
+/// nearest alone is cut at its end ([`ux::cut_front`]).
+fn path_badge(paint: &egui::Painter, card: Rect, owners: &[String], z: f32, ink: egui::Color32, node: Uuid) -> PathBadge {
+    let ty = types::CAPTION.scaled(z);
+    let template = tr("Owner: {path}");
+    let say = |path: &str| fmt(&template, &[("path", path)]);
+    let width = card.width().max(0.0);
+    let (shown, _) = ux::cut_front(owners, crate::panels::PATH_SEP, |t| ux::galley(paint, &say(t), ty, ink, None).size().x <= width);
+    let shown = say(&shown);
+    let rect = ux::text(paint, pos2(card.left(), card.bottom() + PATH_BADGE_GAP * z), &shown, ty, ink, Some(width));
+    PathBadge { rect, node, shown, whole: say(&owners.join(crate::panels::PATH_SEP)) }
+}
+
 /// How a card of a thumbnail is drawn: as the card it stands for is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MiniLook {
@@ -1380,7 +1460,7 @@ fn leads(store: &Store) -> std::collections::HashMap<Obj, Obj> {
 /// `d` scaled to fit `area`, centred, enlarged at most [`PREVIEW_MOST`]: none when it shows
 /// nothing.
 pub(crate) fn preview(store: &Store, notations: &archforge_diagram::ProjectView, d: Obj, area: Rect) -> Option<Preview> {
-    let grid = Grid::build(store, d);
+    let grid = grid(store, d);
     let all = grid.visible(archforge_diagram::Rect::new(-1.0e9, -1.0e9, 2.0e9, 2.0e9));
     let mut boxes: Vec<(Rect, MiniLook, Vec<usize>)> = Vec::new();
     for n in &all.nodes {
@@ -3053,6 +3133,7 @@ fn a_cards_height_is_where_the_canvas_ends_its_last_place() {
         slanted: false,
         braces: None,
         template: Vec::new(),
+        owner_path: Vec::new(),
     };
     for compartments in [vec![], vec![vec![]], vec![vec![row()]], vec![vec![], vec![]], vec![vec![row(), row()], vec![], vec![row(); 3]]] {
         let c = card(compartments);

@@ -43,6 +43,10 @@ pub struct Card {
     /// The rows of its template signature, drawn in a dashed box over its top-right corner, one
     /// parameter each in their order: a UML template (AR-130). Empty for none.
     pub template: Vec<String>,
+    /// The names of the packages that own the element, from the model's root down to its owner: a
+    /// package appearance says where it lives (AR-564). Empty for the root and for a card that
+    /// tells no path.
+    pub owner_path: Vec<String>,
 }
 
 /// A card's header's height in diagram units: the canvas draws a card by these five measures, and

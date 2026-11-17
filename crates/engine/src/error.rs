@@ -117,6 +117,17 @@ pub enum Reason {
     DependsOnItself { kind: &'static str },
     /// A package would go into itself or a package it holds.
     PackageIntoItself,
+    /// The model's root package would move: it holds the other packages and stays where it is.
+    RootPackageStays,
+    /// The package Types would take another name or leave its place directly under the root
+    /// package, while it keeps the built-in types.
+    TypesPackageKept,
+    /// A package would become a second package Types directly under the root package, beside the
+    /// one that keeps the built-in types.
+    TypesPackageExists,
+    /// A package would become the package Types while it holds an element of `kind` named `name`, a
+    /// built-in type's name, which would then be taken for that built-in type.
+    HoldsBuiltInName { kind: &'static str, name: String },
     /// A name is empty.
     NameEmpty,
     /// A text that has to say something, as a note's, is empty.
@@ -466,6 +477,39 @@ pub enum Reason {
     FollowsNoColumn { name: Box<str> },
     /// A column's place is past the end of its table, which has `columns` columns.
     PastLastColumn { columns: usize },
+    /// The call expected the model at `expected`, but it is at `current`: it changed since the
+    /// caller read it, or the caller read another session's. None expected when the call gave no
+    /// readable revision.
+    StaleRevision { expected: Option<crate::cmd::Revision>, current: crate::cmd::Revision },
+    /// A package's default diagram cannot be read, as its default-diagram binding is unsound in
+    /// the way the fault names; one of the package's own diagrams has to be chosen as its default.
+    InvalidBinding(BindingFault),
+    /// The diagram stays while the default-diagram binding of `package` (its name, or its id when
+    /// it has none) names it: with no fault, it is that package's own default, which another has to
+    /// replace first; with [`BindingFault::WrongOwner`], it is another element's diagram, which the
+    /// binding names unsoundly, so a diagram of the package's own has to be chosen first (AR-578).
+    DefaultDiagramOf { package: Box<str>, fault: Option<BindingFault> },
+    /// The class diagram `diagram` is not one of `package`'s own (each its name, or its id when it
+    /// has none), so it cannot be that package's default diagram (AR-580).
+    NotOwnDiagram { diagram: Box<str>, package: Box<str> },
+    /// The package `package` (its name, or its id when it has none) has no class diagram yet, so
+    /// it has no default diagram to open; one has to be made for it first (AR-582).
+    NoDiagramYet { package: Box<str> },
+}
+
+/// What is wrong with a package's default-diagram binding, in a [`Reason::InvalidBinding`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingFault {
+    /// The package has diagrams, but none is its default.
+    Missing,
+    /// More than one binding names the package's default.
+    Duplicate,
+    /// The binding names no diagram that exists.
+    DeadTarget,
+    /// The binding names a diagram of a kind no default may be, as an ER diagram for a UML package.
+    WrongKind,
+    /// The binding names a diagram of another element.
+    WrongOwner,
 }
 
 /// The rule a mapping table, or a relationship to become one, breaks, in a [`Reason::Mapping`].

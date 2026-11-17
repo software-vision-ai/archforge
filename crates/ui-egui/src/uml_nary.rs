@@ -418,7 +418,7 @@ fn draw_draft(shell: &Shell, paint: &egui::Painter, p: &Palette, view: View, d: 
     };
     // The class under the pointer, ringed as the next end.
     let target = pointer.and_then(|at| {
-        let grid = archforge_diagram::Grid::build(store, d);
+        let grid = crate::canvas::grid(store, d);
         let (x, y) = view.to_canvas(at);
         match crate::editing::hit(store, &grid, x, y) {
             Some(archforge_diagram::Hit::Node(n)) if crate::uml_relate::class_of_node(store, uuid(store, n)?).is_some() => {

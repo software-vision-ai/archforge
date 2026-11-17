@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	枚举类型的列不能指定大�
 str		{name} follows no column.	{name} 未跟随任何列。
 plural		The table has {n} column.	该表有 {n} 个列。
 str		A package cannot go into itself or a package it holds.	包不能移入自身或其包含的包中。
+str		The model's root package holds all the other packages, so it stays where it is.	模型的根包包含所有其他包，因此它会留在原处。
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} 包存放内置类型：在存放它们期间，它保留名称并留在根包之下。
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	已有存放内置类型的 {types} 包；不能在它旁边再放第二个。
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	该包中有名为 {name} 的{what}，这是内置类型的名称，在 {types} 中会表示该类型。请先重命名 {name}。
 str		The model cannot be changed at the moment; nothing was changed.	目前无法更改模型；未作任何更改。
 str		There is nothing to undo.	没有可撤销的操作。
 str		There is nothing to redo.	没有可重做的操作。
@@ -766,6 +770,19 @@ str		No stereotype is applied yet.	还没有应用任何构造型。
 str		Another change is still under way. Try again once it ends.	另一项更改仍在进行中。请在其结束后重试。
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	失败后无法将模型恢复原状。请重新打开项目以继续。
 str		Undo and redo cannot run as part of another change.	撤销和重做不能作为其他更改的一部分运行。
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	模型在读取后已更改，或读取的是另一个项目。请重新读取，然后再试一次。未作任何更改。
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	此更改未说明它针对的是模型的哪个修订版本。请读取模型，然后再试一次。未作任何更改。
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	该包有类图，但没有一个是它的默认图。请从中选择一个作为默认图。
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	该包有多个默认图。请选择保留为其默认图的那个类图。
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	该包的默认图已不存在。请选择它的一个类图作为默认图。
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	该包的默认图不是类图。请选择它的一个类图作为默认图。
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	该包的默认图属于另一个元素。请选择它自己的一个类图作为默认图。
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	此图是 {package} 的默认图。请先选择另一个类图作为 {package} 的默认图。
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} 将另一个元素的图作为其默认图，因此该图会保留。请先选择 {package} 自己的一个类图。
+str		No package is given. Give its id.	未给出包。请给出其 ID。
+str		{name} is not a package.	{name} 不是包。
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} 不是 {package} 的类图。请选择它自己的一个类图作为默认图。
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} 还没有类图，因此没有可打开的内容。请先为它创建一个类图。
 str		This could not be done because of an internal error. Nothing was changed.	由于内部错误，无法完成此操作。未作任何更改。
 str		The text can't be empty.	文本不能为空。
 str		It can't be longer than {max} characters.	最多只能有 {max} 个字符。
@@ -1277,6 +1294,7 @@ str		Relationships carry no skills	关系不带技能
 str		Generalization sets carry no skills	泛化集不带技能
 str		This element carries no skills	此元素不带技能
 str		Diagram	图
+str		Default diagram	默认图
 str		Diagram · of {schema}	图 · 属于 {schema}
 str		This diagram	此图
 str		On this diagram · {n}	此图上 · {n}
@@ -1392,6 +1410,7 @@ str		Literal · model	字面量 · 模型
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	字面量 · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者：{path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者是包或分类器。更改它会保留 {name} 的标识、成员、关系以及使用它的每个类型。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · 嵌套于 {owner} · 模型，所有图中
 str		Nested classifiers · {n}	嵌套分类器 · {n}
@@ -1728,12 +1747,10 @@ str		Add package	添加包
 str		Place package	放置包
 str		Move package	移动包
 str		Parent package	上级包
-str		Move {what} into {where}	将 {what} 移入 {where}
 str		{what} moved into {where}	已将 {what} 移入 {where}
 str		Open this package's diagram	打开此包的图
 str		Open this package's diagram (⌘↓)	打开此包的图 (⌘↓)
 str		This is the top package: zooming out goes no further	这是最上层的包：继续缩小不会再向上
-str		Only a package this diagram's package holds goes on it	只能放入此图所属包中的包
 # 关联类
 str		A bound can be at most {max}.	界限最多为 {max}。
 str		A class realizes only an interface	类只能实现接口

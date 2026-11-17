@@ -8,6 +8,8 @@
 //! change takes a fresh one, undo and redo restore the one stored with the step, and the project is
 //! unsaved exactly when the current id is not the saved one. A session may be made read-only for a
 //! while: undoable commands, undo, redo and gestures are refused, view commands and queries run.
+//! A registry's commit check ([`crate::CommitCheck`]) sees each change as it is about to be kept:
+//! a command's, a gesture's commit, a whole batch's; a refusal rolls it back like a failed call.
 
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -139,6 +141,9 @@ struct Interaction<X, V> {
     view: V,
     next: u64,
     last: Option<(Params, Value, X)>,
+    /// The revision of the preview shown, a fresh one no state the history keeps ever has; none
+    /// while the state before the gesture shows.
+    shown: Option<u64>,
 }
 
 /// What a recorded run produced.
@@ -149,8 +154,31 @@ struct Ran<X> {
     next_changed: bool,
 }
 
-/// The number the next session's undo history gets.
+/// The number the next session's undo history gets: from 1 until the host seeds it
+/// ([`seed_histories`]).
 static NEXT_HISTORY: AtomicU64 = AtomicU64::new(1);
+
+/// The history numbers a seed starts at are below 2^52, so they stay exact as JSON numbers that a
+/// reader holds as doubles, with room to count up.
+const HISTORY_START_BITS: u64 = (1 << 52) - 1;
+
+/// Where a process's history numbers start for `entropy`, which the host draws once at start (the
+/// engine reads no clock and no randomness): the bits mixed, so near entropies start far apart,
+/// and kept between 1 and 2^52.
+pub fn history_start(entropy: u64) -> u64 {
+    // The splitmix64 finaliser: every bit of the entropy moves about half the bits of the start.
+    let mut z = entropy.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    ((z ^ (z >> 31)) & HISTORY_START_BITS).max(1)
+}
+
+/// Moves the next history number to [`history_start`] of `entropy`, never back, so the sessions of
+/// this process are numbered apart from another process's: a revision one process gave never
+/// matches a session of another, as an app started again. A number already given stays unique.
+pub fn seed_histories(entropy: u64) {
+    NEXT_HISTORY.fetch_max(history_start(entropy), Ordering::Relaxed);
+}
 
 pub struct Session<D: Document, V> {
     registry: Arc<Registry<D, V>>,
@@ -423,16 +451,25 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.groups.iter().position(|g| g.origin == origin)
     }
 
-    /// The document's state: it changes with every change, and undo and redo bring an earlier
-    /// state's back, so a host can tell when there is something new to write.
     /// Which undo history this session has: every session's is its own, so a revision means
     /// something only alongside this number.
     pub fn history(&self) -> u64 {
         self.history
     }
 
+    /// The document's state: it changes with every change, and undo and redo bring an earlier
+    /// state's back, so a host can tell when there is something new to write.
     pub fn revision(&self) -> u64 {
         self.id
+    }
+
+    /// The point a caller reading the model now names as its `expected_revision`: this history and
+    /// the revision. While a gesture shows a preview, which leaves [`Session::revision`] as it was,
+    /// the revision is the preview's own, which no state the history keeps ever has: a token read
+    /// from a preview never matches, whether the gesture is then committed or cancelled.
+    pub fn token(&self) -> crate::cmd::Revision {
+        let shown = self.interaction.as_ref().and_then(|it| it.shown);
+        crate::cmd::Revision { history: self.history, revision: shown.unwrap_or(self.id) }
     }
 
     /// Whether the document differs from the state last marked saved.
@@ -579,14 +616,18 @@ impl<D: Document, V: View<D>> Session<D, V> {
     }
 
     /// Runs a handler on the live document, recording, inside the guard. On any failure the
-    /// document, the view and the counter are as before and the error is given back.
+    /// document, the view and the counter are as before and the error is given back. The handler
+    /// runs on [`Session::token`]: a query while a gesture shows a preview runs on the preview's
+    /// own revision, which a token read before it never matches; a preview itself runs on the
+    /// state before the gesture, which it shows again first, so on that state's revision.
     fn run_recorded(&mut self, spec: &CommandSpec<D, V>, run: crate::cmd::RunFn<D, V>, params: &Params) -> Result<Ran<D::Delta>, EngineError> {
         let view0 = self.view.clone();
         let next0 = self.counter;
+        let at = self.token();
         let (doc, view, counter) = (&mut self.doc, &mut self.view, &mut self.counter);
         let result = guard(spec.id, || {
             doc.begin();
-            run(&mut Ctx { doc, view, next: counter }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
+            run(&mut Ctx { doc, view, next: counter, at }, params).map_err(|error| EngineError::Failed { id: spec.id.to_string(), error })
         });
         let doc = &mut self.doc;
         let delta = match guard(spec.id, || Ok(doc.end())) {
@@ -621,6 +662,21 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(e);
         }
         Ok(())
+    }
+
+    /// Runs the registry's commit check on the change `delta` made, inside the guard, and gives
+    /// the change back when it passes; a refusal or a panic takes the change back to `view0` and
+    /// `next0` and is given as the error. Without a check, nothing runs and nothing is copied.
+    fn check_commit(&mut self, id: &str, delta: D::Delta, view0: &V, next0: u64) -> Result<D::Delta, EngineError> {
+        let Some(check) = self.registry.commit_check() else { return Ok(delta) };
+        let doc = &self.doc;
+        match guard(id, || check(doc, &delta).map_err(|error| EngineError::Failed { id: id.to_string(), error })) {
+            Ok(()) => Ok(delta),
+            Err(e) => {
+                self.roll_back(id, Some(delta), view0.clone(), next0)?;
+                Err(e)
+            }
+        }
     }
 
     fn weigh(&mut self, id: &str, delta: &D::Delta) -> Result<usize, EngineError> {
@@ -675,6 +731,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.retain_valid_or_roll_back(spec.id, &ran.delta, view0.clone(), next0)?;
         let mut cleared = false;
         if let Some(delta) = ran.delta {
+            let delta = self.check_commit(spec.id, delta, &view0, next0)?;
             let weight = match self.weigh(spec.id, &delta) {
                 Ok(w) => w,
                 Err(e) => {
@@ -858,6 +915,11 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let doc_changed = whole.is_some();
         let view_changed = self.view != view0;
         self.retain_valid_or_roll_back("a batch", &whole, view0.clone(), next0)?;
+        // The batch is checked whole, never command by command.
+        let whole = match whole {
+            Some(d) => Some(self.check_commit("a batch", d, &view0, next0)?),
+            None => None,
+        };
         self.chain = None;
         let mut cleared = false;
         if let Some(delta) = whole {
@@ -907,7 +969,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         }
         self.check_enabled(&spec)?;
         self.chain = None;
-        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None });
+        self.interaction = Some(Interaction { id: spec.id, view: self.view.clone(), next: self.counter, last: None, shown: None });
         Ok(())
     }
 
@@ -917,6 +979,7 @@ impl<D: Document, V: View<D>> Session<D, V> {
         let id = it.id;
         let (view, next) = (it.view.clone(), it.next);
         let last = it.last.take().map(|(_, _, d)| d);
+        it.shown = None;
         self.roll_back(id, last, view, next)
     }
 
@@ -937,8 +1000,10 @@ impl<D: Document, V: View<D>> Session<D, V> {
             return Err(failed(spec.id, COUNTER_ONLY));
         }
         self.retain_valid_or_roll_back(spec.id, &ran.delta, view0, next0)?;
+        let shown = ran.delta.is_some().then(|| self.fresh_id());
         if let (Some(it), Some(delta)) = (self.interaction.as_mut(), ran.delta) {
             it.last = Some((p, ran.value.clone(), delta));
+            it.shown = shown;
         }
         Ok(ran.value)
     }
@@ -950,6 +1015,8 @@ impl<D: Document, V: View<D>> Session<D, V> {
         self.chain = None;
         match it.last {
             Some((params, value, delta)) => {
+                // Only the preview committed is checked; a refusal ends the gesture where it began.
+                let delta = self.check_commit(it.id, delta, &it.view, it.next)?;
                 let weight = match self.weigh(it.id, &delta) {
                     Ok(w) => w,
                     Err(e) => {

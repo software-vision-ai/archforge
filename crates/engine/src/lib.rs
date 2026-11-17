@@ -20,13 +20,15 @@ mod snapshot;
 #[cfg(feature = "testing")]
 pub mod testing;
 
-pub use cmd::{CommandInfo, CommandSpec, Ctx, Facts, Handler, ParamInfo, Registry, always};
+pub use cmd::{
+    CommandInfo, CommandSpec, CommitCheck, Ctx, EXPECTED_REVISION, Facts, Handler, ParamInfo, Registry, Revision, always, expected_revision,
+};
 pub use error::{
-    Accepted, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf, Parameter,
-    Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
+    Accepted, BindingFault, CommandError, DefaultKind, End, EngineError, GenerationRule, InUse, LiteralValued, MappingRule, NoProperty, NotOneOf,
+    Parameter, Reason, SequenceRule, SizeRule, TargetRule, TypeInUse, Unextended, Used, ValueMisfit, Values, WordPlace,
 };
 pub use params::{ParamDoc, Params, parse_params};
-pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session};
+pub use session::{Batch, Dropped, GroupEnd, JournalEntry, MAX_GROUPS, Options, Outcome, Session, history_start, seed_histories};
 pub use snapshot::{Replace, Snapshot, Snapshotted};
 
 /// What undo covers: the model, its layout, the project's settings. A handler changes it in place;

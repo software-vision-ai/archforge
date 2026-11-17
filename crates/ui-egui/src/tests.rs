@@ -6791,7 +6791,13 @@ fn a_uml_element_not_removed_yet_is_said_in_the_chosen_language() {
 /// reason, a reason the catalogues don't hold in the engine's words, a gesture under way, undo
 /// inside another change and a session that could not be put back, each in its sentence, and an
 /// unknown command, a parameter refused and an internal error as one sentence that repeats no
-/// engine text. In light and dark (AR-440).
+/// engine text. In light and dark (AR-440). A change made for another revision of the model, or for
+/// none, is said in its sentence too (AR-574), as is each way a package's default diagram binding
+/// can be unsound, with the choice that mends it (AR-576), and a diagram a package's binding keeps,
+/// its own default or another element's diagram, with the package named (AR-578). Each package move
+/// or rename the root package or the package Types refuses is said in its own sentence (AR-563), as
+/// is a default diagram chosen for no package, for something that is none or among another
+/// element's diagrams (AR-580).
 #[test]
 fn an_engine_refusal_is_said_in_the_chosen_language() {
     use archforge_engine::EngineError;
@@ -6824,6 +6830,59 @@ fn an_engine_refusal_is_said_in_the_chosen_language() {
         assert_eq!(refused(&mut h, "diagram.style", json!({ "ids": [&nodes["Order"]], "shade": 1 })), internal, "{theme:?}");
         let stopped = EngineError::Internal { id: "diagram.style".into(), message: "a handler panicked".into() };
         assert_eq!(crate::panels::refusal(&stopped), internal, "{theme:?}");
+        let at = archforge_engine::Revision { history: 2, revision: 5 };
+        let stale = |expected| {
+            let reason = archforge_engine::Reason::StaleRevision { expected, current: at };
+            let error = archforge_engine::CommandError::about("expected_revision", "stale").because(reason);
+            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.set".into(), error })
+        };
+        let changed = "Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. \
+                       Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.";
+        assert_eq!(stale(Some(archforge_engine::Revision { revision: 4, ..at })), changed, "{theme:?}");
+        let none = "Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. \
+                    Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.";
+        assert_eq!(stale(None), none, "{theme:?}");
+        use archforge_engine::BindingFault::{DeadTarget, Duplicate, Missing, WrongKind, WrongOwner};
+        let unsound = [Missing, Duplicate, DeadTarget, WrongKind, WrongOwner].map(|fault| {
+            let error = archforge_engine::CommandError::about("package", "unsound").because(archforge_engine::Reason::InvalidBinding(fault));
+            crate::panels::refusal(&EngineError::Failed { id: "uml.package.default.get".into(), error })
+        });
+        let missing = "Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.";
+        assert_eq!(unsound[0], missing, "{theme:?}");
+        let mut distinct = unsound.to_vec();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 5, "{theme:?}: each fault its own sentence {unsound:?}");
+        assert!(unsound.iter().all(|s| s.contains("Standarddiagramm")), "{theme:?}: {unsound:?}");
+        let kept = |fault| {
+            let reason = archforge_engine::Reason::DefaultDiagramOf { package: "Vertrieb".into(), fault };
+            let error = archforge_engine::CommandError::about("diagram", "kept").because(reason);
+            crate::panels::refusal(&EngineError::Failed { id: "diagram.remove".into(), error })
+        };
+        let own = "Dieses Diagramm ist das Standarddiagramm von Vertrieb. \
+                   Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von Vertrieb.";
+        assert_eq!(kept(None), own, "{theme:?}");
+        let foreign = "Vertrieb hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. \
+                       Wählen Sie zuerst eines seiner eigenen Klassendiagramme.";
+        assert_eq!(kept(Some(WrongOwner)), foreign, "{theme:?}");
+        // A default diagram chosen for no package, for something that is none, or among another's diagrams (AR-580).
+        use archforge_engine::Reason::{IdEmpty, NotA, NotOwnDiagram};
+        let other = NotOwnDiagram { diagram: "Rechnungen".into(), package: "Vertrieb".into() };
+        let chosen = [IdEmpty { kind: "package" }, NotA { kind: "package", name: "Vertrieb".into() }, other].map(|r| crate::panels::said(&r));
+        let theirs =
+            "Rechnungen ist keines der Klassendiagramme von Vertrieb. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.";
+        let chosen_said = ["Es ist kein Paket angegeben. Geben Sie seine ID an.", "Vertrieb ist kein Paket.", theirs].map(|s| Some(s.to_string()));
+        assert_eq!(chosen, chosen_said, "{theme:?}");
+        // A package move or rename the root package or the package Types refuses, each its own sentence.
+        use archforge_engine::Reason::{HoldsBuiltInName, RootPackageStays, TypesPackageExists, TypesPackageKept};
+        let held = HoldsBuiltInName { kind: "class", name: "String".into() };
+        let package = [RootPackageStays, TypesPackageKept, TypesPackageExists, held].map(|r| crate::panels::said(&r).unwrap_or_default());
+        let mut distinct = package.to_vec();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 4, "{theme:?}: each its own sentence {package:?}");
+        assert!(package.iter().all(|s| s.contains("Paket")), "{theme:?}: in German {package:?}");
+        assert!(package[3].contains("eine Klasse den Namen String"), "{theme:?}: {}", package[3]);
     }
     crate::i18n::set_language("en");
 }
@@ -7819,8 +7878,9 @@ fn the_engines_name_rules_are_said_in_the_chosen_language() {
 }
 
 /// The engine's typed refusals are said in the chosen language, never in the engine's English: a
-/// name another schema has, a package moved into one it holds, a class depending on itself, and a
-/// model that can't be changed at the moment. In light and dark (AR-429).
+/// name another schema has, a package moved into one it holds, a class depending on itself, a
+/// model that can't be changed at the moment, and a package named Types moved in Properties beside
+/// the package Types (AR-563). In light and dark (AR-429).
 #[test]
 fn the_engines_refusals_are_said_in_the_chosen_language() {
     let renamed = |h: &mut Harness<'static, Shell>, name: &str| {
@@ -7885,6 +7945,32 @@ fn the_engines_refusals_are_said_in_the_chosen_language() {
         assert_ne!(class, "a class", "{theme:?}: the catalogue has the kind in German");
         assert!(refused.to_lowercase().starts_with(&class.to_lowercase()), "{theme:?}: {refused}");
         assert!(refused.starts_with(char::is_uppercase) && !refused.contains("depend"), "{theme:?}: a sentence, not the engine's English: {refused}");
+        // A package named Types moved in Properties to the root, where the package Types is (AR-563).
+        let nested = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let count = serde_json::json!({ "class": order.to_string(), "name": "count", "type": "Integer" });
+            s.execute("uml.attribute.add", &count).unwrap();
+            id(s.execute("uml.package.add", &serde_json::json!({ "name": "Types", "parent": sales.to_string() })).unwrap().value)
+        };
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [nested.to_string()] })).unwrap();
+        h.state_mut().state.show_panel(crate::state::Panel::Properties);
+        h.run();
+        let (to_root, label) = {
+            let s = h.state().session.as_ref().unwrap();
+            let (st, package) = (s.doc(), s.doc().by_uuid(nested).unwrap());
+            let choices = archforge_uml::commands::all_packages(st).into_iter().filter(|o| !archforge_uml::commands::is_within(st, *o, package));
+            (choices.collect::<Vec<_>>().iter().position(|o| *o == st.by_uuid(root).unwrap()).unwrap(), s.undo_label().map(str::to_string))
+        };
+        let at = rect_of(&h, "workspace.properties.package.parent").center();
+        click(&mut h, at);
+        let at = rect_of(&h, &format!("workspace.properties.package.parent.{to_root}")).center();
+        click(&mut h, at);
+        let said = "Es gibt bereits ein Paket Types, das die eingebauten Typen enthält; ein zweites kann nicht daneben stehen.";
+        assert_eq!(h.state().panels.notice.as_deref(), Some(said), "{theme:?}");
+        assert!(ids(&h).iter().any(|i| i == "workspace.properties.notice"), "{theme:?}: Properties says it");
+        let s = h.state().session.as_ref().unwrap();
+        let (owner, sales) = (archforge_uml::commands::package_of(s.doc(), s.doc().by_uuid(nested).unwrap()), s.doc().by_uuid(sales));
+        assert_eq!((owner, s.undo_label().map(str::to_string)), (sales, label), "{theme:?}: not moved, nothing to undo");
     }
     crate::i18n::set_language("en");
 }
@@ -9524,6 +9610,193 @@ fn rest(h: &mut Harness<'static, Shell>) {
     h.run();
 }
 
+/// A package's own class diagram, made as a workflow makes one (AR-581): by `diagram.add`, named
+/// like the package and its default from the start, the selection left as it was.
+fn own_diagram(s: &mut archforge_notations::Session, package: archforge_mof::Uuid) -> archforge_mof::Uuid {
+    let st = s.doc();
+    let name = archforge_core::name_of(st, st.by_uuid(package).unwrap());
+    let kept: Vec<String> = s.view().selection.iter().map(|o| st.uuid(*o).unwrap().to_string()).collect();
+    let p = serde_json::json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": package.to_string(), "name": name });
+    let d = archforge_mof::Uuid::parse(s.execute("diagram.add", &p).unwrap().value["id"].as_str().unwrap()).unwrap();
+    s.execute("view.select", &serde_json::json!({ "ids": kept })).unwrap();
+    d
+}
+
+/// The default diagram of the package `p`, the one its binding names; none when it has none yet or
+/// its binding is unsound.
+fn default_of(st: &archforge_mof::Store, p: archforge_mof::Obj) -> Option<archforge_mof::Obj> {
+    match archforge_uml::defaults::resolve(st, p) {
+        Ok(archforge_uml::defaults::DefaultDiagram::Bound(d)) => Some(d),
+        _ => None,
+    }
+}
+
+/// The packages, their diagrams and the default-diagram bindings in the open project, counted.
+fn packages_diagrams_bindings(h: &Harness<'static, Shell>) -> [usize; 3] {
+    let st = h.state().session.as_ref().unwrap().doc();
+    let of = |class| st.alive().filter(|o| st.class_of(*o).ok() == Some(class)).count();
+    [of(archforge_uml::PACKAGE), of(archforge_diagram::DIAGRAM), archforge_diagram::defaults::bindings(st).len()]
+}
+
+/// The Package tool makes the package, its card, its own diagram and the binding that names that
+/// diagram its default as one undo step, and leaves the package selected; Escape before the click
+/// makes nothing (AR-581).
+#[test]
+fn the_package_tool_makes_the_package_its_diagram_and_its_default_as_one_undo_step() {
+    use archforge_uml::defaults::{DefaultDiagram, resolve};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let top = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let d = s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Top" })).unwrap().value;
+            archforge_mof::Uuid::parse(d["id"].as_str().unwrap()).unwrap()
+        };
+        crate::canvas::open(h.state_mut(), top);
+        h.run();
+        let made =
+            |h: &Harness<'static, Shell>| (packages_diagrams_bindings(h), h.state().session.as_ref().unwrap().undo_label().map(str::to_string));
+        let before = made(&h);
+        // Escape puts the tool down: nothing is made.
+        let tool = rect_of(&h, "workspace.tools.package").center();
+        click(&mut h, tool);
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        assert_eq!(h.state().canvas.tool, crate::canvas::Tool::Select, "{theme:?}: the tool is put down");
+        let centre = rect_of(&h, "workspace.canvas").center();
+        click(&mut h, centre);
+        assert_eq!(made(&h), before, "{theme:?}: nothing made");
+        // Placed: the package, its diagram and its binding, one step.
+        click(&mut h, tool);
+        click(&mut h, centre);
+        let [packages, diagrams, bindings] = before.0;
+        assert_eq!(packages_diagrams_bindings(&h), [packages + 1, diagrams + 1, bindings + 1], "{theme:?}");
+        let s = h.state().session.as_ref().unwrap();
+        assert_eq!(s.undo_label(), Some("Add package"), "{theme:?}: one undo step");
+        let package = h.state().canvas.rename.as_ref().expect("named in place").entity;
+        let (st, p) = (s.doc(), s.doc().by_uuid(package).unwrap());
+        assert_eq!(s.view().selection, [p], "{theme:?}: the package selected, not its diagram");
+        let Ok(DefaultDiagram::Bound(d)) = resolve(st, p) else { panic!("{theme:?}: no default for the package") };
+        assert_eq!(st.get(d, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(p), "{theme:?}: its own diagram");
+        assert_eq!(crate::diagrams::diagram_name(st, d), "Package 1", "{theme:?}: named like it");
+        key(&mut h, egui::Key::Escape, egui::Modifiers::NONE);
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!(packages_diagrams_bindings(&h), before.0, "{theme:?}: one Undo takes all three back");
+    }
+}
+
+/// A package dragged from Models onto a class diagram gets a diagram of its own, bound as its
+/// default in the same step, only when it has no structure diagram yet; one that has one keeps it
+/// and its default (AR-581).
+#[test]
+fn a_package_dropped_from_models_gets_a_default_diagram_only_when_it_has_none() {
+    use archforge_uml::defaults::{DefaultDiagram, resolve};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (root, top, sales, billing, billings) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value);
+            let top = own_diagram(s, root);
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+            (root, top, sales, billing, own_diagram(s, billing))
+        };
+        crate::canvas::open(h.state_mut(), top);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.insert(root);
+        h.run();
+        let default = |h: &Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            match resolve(st, st.by_uuid(p).unwrap()) {
+                Ok(DefaultDiagram::Bound(d)) => Some(st.uuid(d).unwrap()),
+                other => {
+                    assert_eq!(other, Ok(DefaultDiagram::NoDiagramYet), "{theme:?}");
+                    None
+                }
+            }
+        };
+        assert_eq!(default(&h, sales), None, "{theme:?}: Sales has no diagram yet");
+        let canvas = rect_of(&h, "workspace.canvas");
+        let before = packages_diagrams_bindings(&h);
+        // Sales, without one: placed, with its diagram and its binding, one step.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{sales}")).center();
+        drag(&mut h, from, canvas.center() - egui::vec2(300.0, 0.0));
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place package"), "{theme:?}: {:?}", h.state().canvas.notice);
+        assert_eq!(packages_diagrams_bindings(&h), [before[0], before[1] + 1, before[2] + 1], "{theme:?}");
+        let made = default(&h, sales).expect("Sales's default");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert_eq!(crate::diagrams::diagram_name(st, st.by_uuid(made).unwrap()), "Sales", "{theme:?}: named like it");
+        // Billing, which has one: placed, nothing made, its default as it was.
+        let from = rect_of(&h, &format!("workspace.explorer.row.{billing}")).center();
+        drag(&mut h, from, canvas.center() + egui::vec2(300.0, 0.0));
+        assert_eq!(packages_diagrams_bindings(&h), [before[0], before[1] + 1, before[2] + 1], "{theme:?}: no second diagram");
+        assert_eq!(default(&h, billing), Some(billings), "{theme:?}");
+        let st = h.state().session.as_ref().unwrap().doc();
+        assert!(crate::editing::on_diagram(st, st.by_uuid(top).unwrap(), st.by_uuid(billing).unwrap()), "{theme:?}: Billing placed");
+        // One Undo takes Billing's card back, the next Sales's card, diagram and binding.
+        let s = h.state_mut().session.as_mut().unwrap();
+        s.undo().unwrap();
+        s.undo().unwrap();
+        h.run();
+        assert_eq!((packages_diagrams_bindings(&h), default(&h, sales)), (before, None), "{theme:?}");
+    }
+}
+
+/// A package of another branch dragged from Models onto a class diagram is shown there once, its
+/// owner line naming where it lives, and keeps its owner; dropped again it is said to be there and
+/// nothing changes; its card removed, it is still in Models (AR-569).
+#[test]
+fn a_package_of_another_branch_dropped_from_models_is_shown_once_and_keeps_its_owner() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, _) = owning_path_harness(theme);
+        let add = |h: &mut Harness<'static, Shell>, name: &str, parent: &str| {
+            let id = owning_path_made(h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+            archforge_mof::Uuid::parse(&id).unwrap()
+        };
+        let commerce = add(&mut h, "Commerce", &root);
+        let operations = add(&mut h, "Operations", &root);
+        let archive = add(&mut h, "Archive", &operations.to_string());
+        let shown = own_diagram(h.state_mut().session.as_mut().unwrap(), commerce);
+        crate::canvas::open(h.state_mut(), shown);
+        h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().explorer.expanded.extend([archforge_mof::Uuid::parse(&root).unwrap(), operations]);
+        h.run();
+        // Archive's owner, and its cards with the diagram each is on.
+        let owner_and_cards = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let package = st.by_uuid(archive).unwrap();
+            let owner = archforge_uml::commands::package_of(st, package).map(|p| st.uuid(p).unwrap());
+            let on = |n: archforge_mof::Obj| archforge_diagram::diagram_of(st, n).map(|d| st.uuid(d).unwrap());
+            (owner, archforge_diagram::views_of(st, package).2.into_iter().map(|n| (st.uuid(n).unwrap(), on(n))).collect::<Vec<_>>())
+        };
+        let canvas = rect_of(&h, "workspace.canvas");
+        let row = rect_of(&h, &format!("workspace.explorer.row.{archive}")).center();
+        drag(&mut h, row, canvas.center());
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Place package"), "{theme:?}: {:?}", h.state().canvas.notice);
+        let (owner, cards) = owner_and_cards(&h);
+        let [(card, Some(on))] = cards[..] else { panic!("{theme:?}: one card of Archive: {cards:?}") };
+        assert_eq!((owner, on), (Some(operations), shown), "{theme:?}: on Commerce's diagram, still owned by Operations");
+        let line = h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone());
+        assert_eq!(line.as_deref(), Some("Owner: Commerce platform › Operations"), "{theme:?}: its owner line");
+        // Dropped again: said so, nothing changed.
+        let state = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_string), packages_diagrams_bindings(h), owner_and_cards(h))
+        };
+        let before = state(&h);
+        drag(&mut h, row, canvas.center() + egui::vec2(200.0, 0.0));
+        assert_eq!(h.state().canvas.notice.as_deref(), Some("Already on this diagram"), "{theme:?}");
+        assert_eq!(state(&h), before, "{theme:?}: nothing changed");
+        // Its card removed from the diagram, Archive stays in Models, under Operations.
+        crate::editing::unplace(h.state_mut(), vec![card]);
+        h.run();
+        assert_eq!(owner_and_cards(&h), (Some(operations), Vec::new()), "{theme:?}: no card, the same owner");
+        assert!(ids(&h).contains(&format!("workspace.explorer.row.{archive}")), "{theme:?}: still in Models");
+    }
+}
+
 #[test]
 fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path_keys_and_zoom() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
@@ -9552,7 +9825,7 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
             let st = h.state().session.as_ref().unwrap().doc();
             let p = st.by_uuid(rename.entity).unwrap();
             assert_eq!(archforge_core::name_of(st, p), "Sales");
-            let d = archforge_uml::commands::diagram_of(st, p).expect("its own diagram");
+            let d = default_of(st, p).expect("its own diagram");
             assert_eq!(crate::diagrams::diagram_name(st, d), "Sales", "{theme:?}: named with the package");
             (rename.entity, st.uuid(d).unwrap())
         };
@@ -9647,12 +9920,102 @@ fn a_package_placed_on_a_class_diagram_leads_to_its_own_diagram_by_open_the_path
         again.run();
         let st = again.state().session.as_ref().unwrap().doc();
         let p = st.by_uuid(package).expect("the package");
-        assert_eq!(archforge_uml::commands::diagram_of(st, p).and_then(|d| st.uuid(d).ok()), Some(inner), "{theme:?}: the same diagram");
+        assert_eq!(default_of(st, p).and_then(|d| st.uuid(d).ok()), Some(inner), "{theme:?}: the same diagram");
     }
 }
 
+/// Open, ⌘↓ and zooming in enter a package through its default diagram, the one its binding names,
+/// never the first found: Sales's first diagram is made first, and its second is then chosen with
+/// `uml.package.default.set`. The query agents ask, `uml.package.diagram`, names that same diagram.
+/// Billing, with no diagram yet, opens nothing and makes nothing, the model as it was, and the
+/// notice under the path bar says why in the chosen language (AR-582). In light and dark.
 #[test]
-fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_in_models_refusing_itself() {
+fn entry_reaches_the_bound_default_never_the_first_found_and_makes_nothing_without_one() {
+    use serde_json::json;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        let (top, [sales, billing], first, chosen, cards) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &json!({})).unwrap().value);
+            let top = own_diagram(s, root);
+            let sales = id(s.execute("uml.package.add", &json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &json!({ "name": "Billing" })).unwrap().value);
+            let first = own_diagram(s, sales);
+            let detail = json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales.to_string(), "name": "Detail" });
+            let chosen = id(s.execute("diagram.add", &detail).unwrap().value);
+            let at = s.token();
+            let token = json!({ "history": at.history, "revision": at.revision });
+            let choose = json!({ "package": sales.to_string(), "diagram": chosen.to_string(), "expected_revision": token });
+            s.execute("uml.package.default.set", &choose).unwrap();
+            // Sales's card big enough for zooming in on it to make it cover the canvas.
+            let mut place = |p: archforge_mof::Uuid, x: i32, width: i32| {
+                let at = json!({ "diagram": top.to_string(), "element": p.to_string(), "x": x, "y": 160, "width": width, "height": 260 });
+                id(s.execute("diagram.place", &at).unwrap().value)
+            };
+            let cards = [place(sales, 120, 400), place(billing, 600, 240)];
+            (top, [sales, billing], first, chosen, cards)
+        };
+        let asked = h.state_mut().session.as_mut().unwrap().execute("uml.package.diagram", &json!({ "package": sales.to_string() }));
+        assert_eq!(asked.map(|o| id(o.value)).ok(), Some(chosen), "{theme:?}: agents ask for the same diagram, not the first {first}");
+        let active = |h: &Harness<'static, Shell>| h.state().canvas.active;
+        let back_on_top = |h: &mut Harness<'static, Shell>, p: archforge_mof::Uuid| {
+            crate::canvas::open(h.state_mut(), top);
+            h.run();
+            rest(h);
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &json!({ "ids": [p.to_string()] })).unwrap();
+            h.state_mut().canvas.focused = true;
+            h.run();
+        };
+        let down = egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND;
+        // Open, ⌘↓ and zooming in on Sales each reach the chosen diagram.
+        back_on_top(&mut h, sales);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", cards[0])).center();
+        click(&mut h, at);
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: Open");
+        back_on_top(&mut h, sales);
+        key(&mut h, egui::Key::ArrowDown, down);
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: ⌘↓");
+        back_on_top(&mut h, sales);
+        h.event(egui::Event::PointerMoved(rect_of(&h, &format!("workspace.canvas.node.{}", cards[0])).center()));
+        for _ in 0..40 {
+            if active(&h) != Some(top) {
+                break;
+            }
+            h.event(egui::Event::Zoom(1.2));
+            h.step();
+        }
+        assert_eq!(active(&h), Some(chosen), "{theme:?}: zooming in");
+        // Billing has none: Open and ⌘↓ stay, make nothing and say why, in German.
+        h.state_mut().state.language = "de".into();
+        back_on_top(&mut h, billing);
+        let rows = |h: &Harness<'static, Shell>| {
+            let (tables, junctions) = archforge_notations::storage();
+            let s = h.state().session.as_ref().unwrap();
+            (archforge_mof::rows::snapshot(s.doc(), &tables, &junctions).unwrap(), s.undo_label().map(str::to_string))
+        };
+        let before = rows(&h);
+        let at = rect_of(&h, &format!("workspace.canvas.node.{}.enter", cards[1])).center();
+        click(&mut h, at);
+        let said = "Billing hat noch kein Klassendiagramm, daher gibt es nichts zu öffnen. Erstellen Sie zuerst ein Klassendiagramm dafür.";
+        assert_eq!((active(&h), h.state().canvas.notice.as_deref()), (Some(top), Some(said)), "{theme:?}: Open");
+        assert!(ids(&h).iter().any(|i| i == "workspace.canvas.notice"), "{theme:?}: the notice is shown");
+        h.state_mut().canvas.notice = None;
+        h.state_mut().canvas.focused = true;
+        key(&mut h, egui::Key::ArrowDown, down);
+        assert_eq!((active(&h), h.state().canvas.notice.as_deref()), (Some(top), Some(said)), "{theme:?}: ⌘↓");
+        assert!(rows(&h) == before, "{theme:?}: the model and its history as they were");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A package's card dragged over another package or an ancestor in the path bar only arranges the
+/// diagram: no ring, no prompt, its owner stays and one Undo puts the card back (AR-566). Its owner
+/// changes in Properties and in Models, which refuse it into a package it holds, said in the chosen
+/// language with history untouched (AR-102): its cards stay, their owner lines follow, nothing is
+/// added to the new owner's diagram, and Undo brings both back (AR-568).
+#[test]
+fn a_package_dragged_onto_a_package_or_the_path_bar_only_moves_and_changes_owner_in_properties_and_models() {
     for theme in [ThemeKind::Light, ThemeKind::Dark] {
         let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
         let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
@@ -9670,10 +10033,18 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
                     )
                     .unwrap()
                     .value);
-                s.execute("uml.package.diagram", &serde_json::json!({ "package": p.to_string() })).unwrap();
+                own_diagram(s, p);
                 made.push((p, card));
             }
             (top, made[0].0, made[1].0, made[0].1, made[1].1)
+        };
+        // Sales shown on a second diagram of the root as well.
+        let (overview, sales_card2) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = s.execute("uml.model.root", &serde_json::json!({})).unwrap().value["id"].as_str().unwrap().to_string();
+            let d = id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root, "name": "Overview" })).unwrap().value);
+            let at = serde_json::json!({ "diagram": d.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
+            (d, id(s.execute("diagram.place", &at).unwrap().value))
         };
         crate::canvas::open(h.state_mut(), top);
         h.run();
@@ -9681,39 +10052,69 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
             let st = h.state().session.as_ref().unwrap().doc();
             archforge_uml::commands::package_of(st, st.by_uuid(p).unwrap()).map(|o| archforge_core::name_of(st, o))
         };
-        // Dragged onto Billing: ringed while held there, then Sales goes into it as one step.
+        let card_at = |h: &Harness<'static, Shell>, card: archforge_mof::Uuid| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let b = archforge_diagram::grid::bounds_of(st, st.by_uuid(card).unwrap());
+            (b.x, b.y)
+        };
+        // Whether the last frame ringed `target` in the accent, more boldly than a selection is.
+        let accent = crate::ux::palette(theme == ThemeKind::Dark).accent;
+        let ringed = |h: &Harness<'static, Shell>, target: egui::Rect| {
+            /// Whether `s`, or a shape it holds, is a rectangle round `target` stroked in `accent`
+            /// at least 2 points wide.
+            fn walk(s: &egui::Shape, accent: egui::Color32, target: egui::Rect) -> bool {
+                match s {
+                    egui::Shape::Rect(r) => r.stroke.color == accent && r.stroke.width >= 2.0 && r.rect.contains_rect(target),
+                    egui::Shape::Vec(v) => v.iter().any(|s| walk(s, accent, target)),
+                    _ => false,
+                }
+            }
+            h.output().shapes.iter().any(|c| walk(&c.shape, accent, target))
+        };
+        // Whether any text the last frame painted names both `a` and `b`, as a move prompt would.
+        let prompt = |h: &Harness<'static, Shell>, a: &str, b: &str| painted(h).iter().any(|t| t.contains(a) && t.contains(b));
+        // Held over Billing: neither ringed nor a prompt; let go, Sales only moves on the diagram.
         let (from, to) = (
             rect_of(&h, &format!("workspace.canvas.node.{sales_card}")).center(),
             rect_of(&h, &format!("workspace.canvas.node.{billing_card}")).center(),
         );
+        let (billing_rect, before) = (rect_of(&h, &format!("workspace.canvas.node.{billing_card}")), card_at(&h, sales_card));
         h.event(egui::Event::PointerMoved(from));
         h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
         h.run();
         h.event(egui::Event::PointerMoved(to));
         h.run();
-        assert!(painted(&h).iter().any(|t| t == "Move Sales into Billing"), "{theme:?}: the drop is said");
+        assert!(!ringed(&h, billing_rect), "{theme:?}: Billing is not ringed");
+        assert!(!prompt(&h, "Sales", "Billing"), "{theme:?}: no prompt: {:?}", painted(&h));
         h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
         h.run();
-        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"));
-        assert!(!ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")), "{theme:?}: gone from the root's diagram");
-        let on_billing = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-            crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap())
-        };
-        assert!(on_billing, "{theme:?}: on Billing's diagram now");
-        assert!(painted(&h).iter().any(|t| t == "Sales moved into Billing"), "{theme:?}: the toast");
-        // Undo puts it back where it was, its card too.
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: the owner stays");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        assert_ne!(card_at(&h, sales_card), before, "{theme:?}: the card moved");
+        assert!(!prompt(&h, "Sales", "Billing"), "{theme:?}: no toast");
+        // One Undo puts the card back, its owner untouched.
         h.state_mut().session.as_mut().unwrap().undo().unwrap();
         h.run();
+        assert_eq!(card_at(&h, sales_card), before, "{theme:?}: back where it was");
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"));
-        assert!(ids(&h).iter().any(|i| i == &format!("workspace.canvas.node.{sales_card}")));
-        // Let go on empty canvas: only moved, still in the root.
-        let empty = rect_of(&h, "workspace.canvas").center() + egui::vec2(0.0, 260.0);
-        drag(&mut h, from, empty);
-        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: nothing moved in the model");
-        // Properties: the parent package, the keyboard's way; then up the path bar back to the root.
+        // Both selected and dragged: one diagram step moves both, and one Undo puts both back.
+        h.state_mut()
+            .session
+            .as_mut()
+            .unwrap()
+            .execute("view.select", &serde_json::json!({ "ids": [sales.to_string(), billing.to_string()] }))
+            .unwrap();
+        h.run();
+        let both = (card_at(&h, sales_card), card_at(&h, billing_card));
+        drag(&mut h, from, from + egui::vec2(0.0, 260.0));
+        let moved = (card_at(&h, sales_card), card_at(&h, billing_card));
+        assert!(moved.0 != both.0 && moved.1 != both.1, "{theme:?}: both moved: {both:?} to {moved:?}");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((card_at(&h, sales_card), card_at(&h, billing_card)), both, "{theme:?}: one Undo puts both back");
+        assert_eq!((parent(&h, sales).as_deref(), parent(&h, billing).as_deref()), (Some("Commerce platform"), Some("Commerce platform")));
+        // Properties: the parent package, the keyboard's way.
         h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
         h.state_mut().state.show_panel(crate::state::Panel::Properties);
         h.run();
@@ -9724,27 +10125,72 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
         let at = rect_of(&h, "workspace.properties.package.parent.1").center();
         click(&mut h, at);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"));
-        // Shown on a diagram, it goes onto its new home's diagram too, as a canvas drop takes it.
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Sales moved into Billing"), "{theme:?}");
+        // Its two cards stay, their owner lines naming Billing; Billing's diagram gets none (AR-568).
         let inner = {
             let st = h.state().session.as_ref().unwrap().doc();
-            let d = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-            assert!(crate::editing::on_diagram(st, d, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
-            st.uuid(d).unwrap()
+            st.uuid(default_of(st, st.by_uuid(billing).unwrap()).unwrap()).unwrap()
         };
-        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        let lines_say = |h: &mut Harness<'static, Shell>, owner: &str| {
+            let mut said = Vec::new();
+            for (d, card) in [(overview, sales_card2), (top, sales_card)] {
+                crate::canvas::open(h.state_mut(), d);
+                h.run();
+                said.push(h.state().canvas.path_badges.iter().find(|b| b.node == card).map(|b| b.whole.clone()));
+            }
+            let st = h.state().session.as_ref().unwrap().doc();
+            let mut on: Vec<_> = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2.into_iter().map(|n| st.uuid(n).unwrap()).collect();
+            on.sort();
+            let mut cards = vec![sales_card, sales_card2];
+            cards.sort();
+            assert_eq!(on, cards, "{theme:?}: its two cards, no other");
+            assert_eq!(said, vec![Some(format!("Owner: {owner}")); 2], "{theme:?}: both owner lines");
+        };
+        lines_say(&mut h, "Commerce platform › Billing");
+        // Placed on Billing's diagram later, by its own step.
+        let card = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let at =
+                serde_json::json!({ "diagram": inner.to_string(), "element": sales.to_string(), "x": 80, "y": 120, "width": 240, "height": 148 });
+            id(s.execute("diagram.place", &at).unwrap().value)
+        };
         crate::canvas::open(h.state_mut(), inner);
         h.run();
-        let card = {
-            let st = h.state().session.as_ref().unwrap().doc();
-            let d = st.by_uuid(inner).unwrap();
-            let n = st.list(d, archforge_diagram::diagram::NODE).unwrap().iter().filter_map(archforge_mof::Value::as_ref).next().unwrap();
-            st.uuid(n).unwrap()
-        };
-        let from = rect_of(&h, &format!("workspace.canvas.node.{card}")).center();
-        let root_pill = rect_of(&h, "workspace.canvas.path.0").center();
-        drag(&mut h, from, root_pill);
-        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: up into the root by the path bar");
-        // In Models, a package dropped onto a package it holds is refused, and says so.
+        // Held over the root in the path bar: neither ringed nor a prompt; let go, Sales only moves
+        // on Billing's diagram, which stays open.
+        let (from, pill, before) =
+            (rect_of(&h, &format!("workspace.canvas.node.{card}")).center(), rect_of(&h, "workspace.canvas.path.0"), card_at(&h, card));
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(pill.center()));
+        h.run();
+        assert!(!ringed(&h, pill), "{theme:?}: the root is not ringed");
+        assert!(!prompt(&h, "Sales", "Commerce platform"), "{theme:?}: no prompt: {:?}", painted(&h));
+        h.event(egui::Event::PointerButton {
+            pos: pill.center(),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Billing"), "{theme:?}: the path bar takes no package");
+        assert_eq!(h.state().canvas.active, Some(inner), "{theme:?}: still on Billing's diagram");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move"), "{theme:?}: a diagram step");
+        assert_ne!(card_at(&h, card), before, "{theme:?}: the card moved");
+        // Undo puts the card back, takes the placement back, then the Properties move: the owner
+        // lines name the root again, and both cards stay.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        h.run();
+        assert_eq!((card_at(&h, card), parent(&h, sales).as_deref()), (before, Some("Billing")), "{theme:?}: only the card back");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        lines_say(&mut h, "Commerce platform › Billing");
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: Properties' move undone");
+        lines_say(&mut h, "Commerce platform");
+        // In Models, a package dropped onto a package it holds is refused, said in German, and
+        // the history stays as it was.
         let lines = id(h
             .state_mut()
             .session
@@ -9754,27 +10200,106 @@ fn a_package_moves_onto_another_package_or_up_the_path_bar_from_properties_and_i
             .unwrap()
             .value);
         h.state_mut().state.show_explorer(crate::state::Explorer::Models);
+        h.state_mut().state.language = "de".into();
         let root = {
             let st = h.state().session.as_ref().unwrap().doc();
             st.uuid(archforge_uml::commands::root_package(st).unwrap()).unwrap()
         };
         h.state_mut().explorer.expanded.extend([root, sales]);
         h.run();
+        let history = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_string), s.redo_label().map(str::to_string))
+        };
+        let was = history(&h);
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{lines}")).center());
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: not moved");
-        let notice = h.state().explorer.notice.clone().unwrap_or_default();
-        // In plain words, as Properties says it: no command id, no engine wording (AR-427).
-        assert!(notice.starts_with("A package cannot go into itself") && !notice.contains("uml."), "{theme:?}: {notice}");
-        // Onto Billing's row: shown on a diagram, it goes onto Billing's diagram too.
+        let said = "Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.";
+        assert_eq!(h.state().explorer.notice.as_deref(), Some(said), "{theme:?}");
+        assert_eq!(history(&h), was, "{theme:?}: history untouched");
+        h.state_mut().state.language = "en".into();
+        h.state_mut().explorer.notice = None;
+        h.run();
+        // Onto Billing's row: moved, its cards kept with their owner lines, none on Billing's diagram.
         let (from, target) =
             (rect_of(&h, &format!("workspace.explorer.row.{sales}")).center(), rect_of(&h, &format!("workspace.explorer.row.{billing}")).center());
         drag(&mut h, from, target);
         assert_eq!(parent(&h, sales).as_deref(), Some("Billing"), "{theme:?}: moved in Models");
+        assert_eq!(h.state().session.as_ref().unwrap().undo_label(), Some("Move package"), "{theme:?}: one step");
+        assert_eq!(h.state().canvas.toast.as_ref().map(|t| t.text.as_str()), Some("Sales moved into Billing"), "{theme:?}");
+        lines_say(&mut h, "Commerce platform › Billing");
+        // Undo brings the owner and the lines back.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!(parent(&h, sales).as_deref(), Some("Commerce platform"), "{theme:?}: Models' move undone");
+        lines_say(&mut h, "Commerce platform");
+    }
+    crate::i18n::set_language("en");
+}
+
+/// A package moved back by Properties into a package whose diagram shows it already keeps that one
+/// card, and the move is not refused (AR-561); moved where it is not shown, it is not placed there,
+/// nor is a diagram made for its new owner (AR-568).
+#[test]
+fn a_package_moved_back_where_it_is_shown_keeps_its_one_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let id = |v: serde_json::Value| archforge_mof::Uuid::parse(v["id"].as_str().unwrap()).unwrap();
+        // Sales on the root's diagram, then moved into Billing: the move keeps its card there (AR-567).
+        let (top, sales, billing, card) = {
+            let s = h.state_mut().session.as_mut().unwrap();
+            let root = id(s.execute("uml.model.root", &serde_json::json!({})).unwrap().value).to_string();
+            let top = own_diagram(s, archforge_mof::Uuid::parse(&root).unwrap());
+            let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
+            let billing = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Billing" })).unwrap().value);
+            let at = serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 80, "y": 80, "width": 240, "height": 148 });
+            let card = id(s.execute("diagram.place", &at).unwrap().value);
+            s.execute("uml.package.move", &serde_json::json!({ "package": sales.to_string(), "to": billing.to_string() })).unwrap();
+            (top, sales, billing, card)
+        };
+        h.run();
+        // Where Sales is shown: the uuids of the diagrams of its cards, and of the cards.
+        let shown = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            let nodes = archforge_diagram::views_of(st, st.by_uuid(sales).unwrap()).2;
+            let mut on: Vec<_> =
+                nodes.into_iter().map(|n| (st.uuid(archforge_diagram::diagram_of(st, n).unwrap()).unwrap(), st.uuid(n).unwrap())).collect();
+            on.sort();
+            on
+        };
+        let parent = |h: &Harness<'static, Shell>| {
+            let st = h.state().session.as_ref().unwrap().doc();
+            archforge_uml::commands::package_of(st, st.by_uuid(sales).unwrap()).map(|o| archforge_core::name_of(st, o))
+        };
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: shown on the root's diagram alone");
+        let pick = |h: &mut Harness<'static, Shell>, to: &str| {
+            h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [sales.to_string()] })).unwrap();
+            h.state_mut().state.show_panel(crate::state::Panel::Properties);
+            h.run();
+            let at = rect_of(h, "workspace.properties.package.parent").center();
+            click(h, at);
+            let at = rect_of(h, &format!("workspace.properties.package.parent.{to}")).center();
+            click(h, at);
+        };
+        // Back into the root by Properties: moved, not refused, its one card kept.
+        pick(&mut h, "0");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: not refused");
+        assert_eq!(parent(&h).as_deref(), Some("Commerce platform"), "{theme:?}: back in the root");
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: the one card it had");
+        // One step: Undo takes Sales back into Billing, its card kept; Redo moves it again.
+        h.state_mut().session.as_mut().unwrap().undo().unwrap();
+        assert_eq!((parent(&h).as_deref(), shown(&h)), (Some("Billing"), vec![(top, card)]), "{theme:?}: undone");
+        h.state_mut().session.as_mut().unwrap().redo().unwrap();
+        assert_eq!(parent(&h).as_deref(), Some("Commerce platform"), "{theme:?}: redone");
+        // Into Billing, which has no diagram: moved, its one card kept, and Billing still has none.
+        pick(&mut h, "1");
+        assert_eq!(h.state().panels.notice, None, "{theme:?}: not refused");
+        assert_eq!(parent(&h).as_deref(), Some("Billing"), "{theme:?}: in Billing");
+        assert_eq!(shown(&h), vec![(top, card)], "{theme:?}: the one card it had, none placed");
         let st = h.state().session.as_ref().unwrap().doc();
-        let bd = archforge_uml::commands::diagram_of(st, st.by_uuid(billing).unwrap()).unwrap();
-        assert!(crate::editing::on_diagram(st, bd, st.by_uuid(sales).unwrap()), "{theme:?}: on Billing's diagram");
+        let none_yet = Ok(archforge_uml::defaults::DefaultDiagram::NoDiagramYet);
+        assert_eq!(archforge_uml::defaults::resolve(st, st.by_uuid(billing).unwrap()), none_yet, "{theme:?}: no diagram made");
     }
 }
 
@@ -9794,7 +10319,7 @@ fn going_back_from_a_package_returns_to_the_parent_diagram_it_was_entered_from()
             &serde_json::json!({ "diagram": second.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         )
         .unwrap();
-        s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap();
+        own_diagram(s, sales);
         (second, sales)
     };
     crate::canvas::open(h.state_mut(), second);
@@ -9826,7 +10351,8 @@ fn a_long_package_path_folds_its_first_ancestors_and_keeps_the_nearest_ones_clic
             parent = p.to_string();
             chain.push(p);
         }
-        let d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": parent })).unwrap().value);
+        // Each with its own diagram, which the path bar leads back to; entry makes none (AR-582).
+        let d = chain.iter().map(|p| own_diagram(s, *p)).last().unwrap();
         (chain, d)
     };
     crate::canvas::open(h.state_mut(), deepest);
@@ -9908,7 +10434,7 @@ fn package_preview_harness(
             "diagram.place",
             serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 200, "y": 160, "width": 240, "height": 148 }),
         );
-        let own = run("uml.package.diagram", serde_json::json!({ "package": sales.to_string() }));
+        let own = run("diagram.add", serde_json::json!({ "kind": "uml.class", "element": sales.to_string(), "name": "Sales" }));
         let order = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "Order" }));
         let line = run("uml.class.add", serde_json::json!({ "package": sales.to_string(), "name": "OrderLine" }));
         run("uml.association.add", serde_json::json!({ "from": order.to_string(), "to": line.to_string() }));
@@ -10010,6 +10536,223 @@ fn a_package_cards_thumbnail_is_its_own_diagram_scaled_and_follows_it() {
     assert!(painted(&h).iter().any(|t| t == "Empty diagram"));
 }
 
+/// A project whose root's structure diagram is open at 100 % (AR-565), with the root's id and the
+/// diagram's.
+fn owning_path_harness(theme: ThemeKind) -> (Harness<'static, Shell>, String, String) {
+    let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+    let root = owning_path_made(&mut h, "uml.model.root", serde_json::json!({}));
+    let kind = archforge_uml::STRUCTURE_DIAGRAM;
+    let top = owning_path_made(&mut h, "diagram.add", serde_json::json!({ "kind": kind, "element": root, "name": "Commerce platform" }));
+    crate::canvas::open(h.state_mut(), archforge_mof::Uuid::parse(&top).unwrap());
+    h.state_mut().canvas.fit_pending = false;
+    h.state_mut().canvas.zoom = 1.0;
+    h.state_mut().canvas.pan = egui::Vec2::ZERO;
+    h.run();
+    (h, root, top)
+}
+
+/// Runs `command` on the harness's project and gives the id it answers with.
+fn owning_path_made(h: &mut Harness<'static, Shell>, command: &str, params: serde_json::Value) -> String {
+    let value = h.state_mut().session.as_mut().unwrap().execute(command, &params).unwrap().value;
+    value["id"].as_str().unwrap().to_string()
+}
+
+/// A package of another branch says its whole owning path under its card, to a screen reader and
+/// on hover; the root's card says none (AR-565).
+#[test]
+fn a_package_card_says_where_its_package_lives_under_it_and_the_root_says_nothing() {
+    use egui_kittest::kittest::{NodeT, Queryable};
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        // Archive lives in Operations, another branch than the diagram's root; the root is shown too.
+        let operations = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Operations", "parent": root }));
+        let archive = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Archive", "parent": operations }));
+        let place = |element: &str, x: i64| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": 80, "width": 240, "height": 148 });
+        let card = owning_path_made(&mut h, "diagram.place", place(&archive, 80));
+        let root_card = owning_path_made(&mut h, "diagram.place", place(&root, 480));
+        h.run();
+        let whole = "Owner: Commerce platform › Operations";
+        let body = rect_of(&h, &format!("workspace.canvas.node.{card}"));
+        let path = rect_of(&h, &format!("workspace.canvas.node.{card}.path"));
+        assert!(
+            (path.top() - body.bottom() - 6.0).abs() < 0.5 && (path.left() - body.left()).abs() < 0.5,
+            "{theme:?}: under the card: {path:?} {body:?}"
+        );
+        assert!(path.width() <= body.width() + 0.5 && path.height() > 12.0, "{theme:?}: {path:?}");
+        assert!(painted(&h).iter().any(|t| t == whole), "{theme:?}: the whole path, said in words");
+        assert!(painted(&h).iter().any(|t| t == "Archive"), "{theme:?}: the name stays in the tab");
+        let said = h.get_by_label(whole).accesskit_node();
+        assert_eq!(said.role(), egui::accesskit::Role::Label, "{theme:?}: read out whole");
+        // The root, which no package owns, says no path.
+        let found = ids(&h);
+        assert!(found.contains(&format!("workspace.canvas.node.{root_card}.tab")), "{theme:?}: the root's card shows");
+        assert!(!found.contains(&format!("workspace.canvas.node.{root_card}.path")), "{theme:?}: but no path under it");
+        // The pointer on the path shows it whole.
+        let before = painted(&h).iter().filter(|t| *t == whole).count();
+        h.event(egui::Event::PointerMoved(path.center()));
+        for _ in 0..40 {
+            h.step();
+        }
+        assert_eq!(painted(&h).iter().filter(|t| *t == whole).count(), before + 1, "{theme:?}: its tooltip");
+    }
+}
+
+/// A path too long for its card folds its first owners into `…`; a card too narrow even for that
+/// shows the nearest owner alone, cut but legible; both say the whole path (AR-565).
+#[test]
+fn a_long_owning_path_folds_its_first_owners_and_a_narrow_card_keeps_the_nearest() {
+    use egui_kittest::kittest::Queryable;
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        let mut parent = root;
+        for name in ["Operations and logistics", "Regional fulfilment"] {
+            parent = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+        }
+        let place = |name: &str, x: i64, width: i64, h: &mut Harness<'static, Shell>| {
+            let p = owning_path_made(h, "uml.package.add", serde_json::json!({ "name": name, "parent": parent }));
+            owning_path_made(h, "diagram.place", serde_json::json!({ "diagram": top, "element": p, "x": x, "y": 80, "width": width, "height": 148 }))
+        };
+        let wide = place("Archive", 80, 240, &mut h);
+        let narrow = place("Ledger", 480, 100, &mut h);
+        h.run();
+        let whole = "Owner: Commerce platform › Operations and logistics › Regional fulfilment";
+        let badge = |h: &Harness<'static, Shell>, card: &str| {
+            h.state().canvas.path_badges.iter().find(|b| b.node.to_string() == card).cloned().unwrap_or_else(|| panic!("a path under {card}"))
+        };
+        // Too long for its card: the first owners fold, the nearest stays.
+        let long = badge(&h, &wide);
+        assert_eq!((long.shown.as_str(), long.whole.as_str()), ("Owner: … › Regional fulfilment", whole), "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{wide}"));
+        assert!(rect_of(&h, &format!("workspace.canvas.node.{wide}.path")).width() <= body.width() + 0.5, "{theme:?}");
+        assert!(painted(&h).iter().any(|t| t == "Archive"), "{theme:?}: the package's name stays in its tab");
+        // Too narrow even for that: the nearest owner alone, cut at its end, in the caption's size.
+        let short = badge(&h, &narrow);
+        assert_eq!((short.shown.as_str(), short.whole.as_str()), ("Owner: Regional fulfilment", whole), "{theme:?}");
+        let body = rect_of(&h, &format!("workspace.canvas.node.{narrow}"));
+        let path = rect_of(&h, &format!("workspace.canvas.node.{narrow}.path"));
+        assert!(path.width() <= body.width() + 0.5 && path.height() > 12.0, "{theme:?}: legible, inside the card's width: {path:?}");
+        let glyphs = texts_in(&h, path).into_iter().find(|(t, _)| t == "Owner: Regional fulfilment").map(|(_, g)| g);
+        assert!(glyphs.is_some_and(|g| g > 6 && g < "Owner: Regional fulfilment".chars().count()), "{theme:?}: cut, not gone: {glyphs:?}");
+        // Both read out whole.
+        assert_eq!(h.query_all_by_label(whole).count(), 2, "{theme:?}");
+    }
+}
+
+/// Where the last frame filled the rectangle `r`, in painting order.
+fn filled_at(h: &Harness<'static, Shell>, r: egui::Rect) -> Option<usize> {
+    /// Every shape `s` holds, nested lists opened, in painting order.
+    fn walk<'a>(s: &'a egui::Shape, out: &mut Vec<&'a egui::Shape>) {
+        match s {
+            egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, out)),
+            s => out.push(s),
+        }
+    }
+    let mut flat = Vec::new();
+    h.output().shapes.iter().for_each(|c| walk(&c.shape, &mut flat));
+    flat.iter()
+        .position(|s| matches!(s, egui::Shape::Rect(f) if f.fill.a() > 0 && f.rect.min.distance(r.min) < 0.5 && f.rect.max.distance(r.max) < 0.5))
+}
+
+/// A package selected with a class while its card lies out of view, dragged with the class until
+/// it covers another class: during the drag, the package's card is drawn under that class, as when
+/// it lies still (AR-570).
+#[test]
+fn a_package_dragged_into_view_stays_under_the_class_it_covers() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        // At 100 % with no pan, a diagram unit is a point from the canvas's corner: Sales lies
+        // just past its right edge, Stay 360 points to the left of where Sales lies.
+        let (canvas, w) = {
+            let c = rect_of(&h, "workspace.canvas");
+            (c, c.width() as i64)
+        };
+        let place = |element: &str, (x, y, width, height): (i64, i64, i64, i64)| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": y, "width": width, "height": height });
+        let mut cards = Vec::new();
+        for (name, at) in [("Stay", (w - 360, 160, 140, 100)), ("Mover", (500, 400, 120, 80))] {
+            let c = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": name }));
+            cards.push((c.clone(), owning_path_made(&mut h, "diagram.place", place(&c, at))));
+        }
+        let sales = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales", "parent": root }));
+        let card = owning_path_made(&mut h, "diagram.place", place(&sales, (w + 40, 120, 240, 148)));
+        let ((mover, mover_card), stay) = (cards[1].clone(), cards[0].1.clone());
+        h.state_mut().session.as_mut().unwrap().execute("view.select", &serde_json::json!({ "ids": [mover, sales] })).unwrap();
+        h.run();
+        assert!(!ids(&h).contains(&format!("workspace.canvas.node.{card}")), "{theme:?}: Sales lies out of view of {canvas:?}");
+        // Mover held 360 points to the left, Sales with it: its card now covers Stay.
+        let from = rect_of(&h, &format!("workspace.canvas.node.{mover_card}")).center();
+        let to = from - egui::vec2(360.0, 0.0);
+        h.event(egui::Event::PointerMoved(from));
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run();
+        h.event(egui::Event::PointerMoved(to));
+        h.run();
+        let (stay_rect, card_rect) = (rect_of(&h, &format!("workspace.canvas.node.{stay}")), rect_of(&h, &format!("workspace.canvas.node.{card}")));
+        assert!(card_rect.intersects(stay_rect), "{theme:?}: Sales covers Stay: {card_rect:?} {stay_rect:?}");
+        let (stay_at, card_at) = (filled_at(&h, stay_rect), filled_at(&h, card_rect));
+        assert!(card_at.is_some() && stay_at > card_at, "{theme:?}: Stay is painted after the card: {stay_at:?} {card_at:?}");
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run();
+    }
+}
+
+/// A class placed on a diagram before a package whose card and tab then cover it: the card is
+/// drawn first and the class over it, a press or a relationship's end on the class takes the class,
+/// on the card as on the tab, and a press on the card where nothing lies takes the package. Drawing
+/// and pressing leave the history and the rows as they were (AR-570).
+#[test]
+fn a_class_over_a_package_card_is_drawn_and_pressed_in_front_of_the_card() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let (mut h, root, top) = owning_path_harness(theme);
+        let invoice = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": "Invoice" }));
+        let place = |element: &str, (x, y, width, height): (i64, i64, i64, i64)| serde_json::json!({ "diagram": top, "element": element, "x": x, "y": y, "width": width, "height": height });
+        let class_card = owning_path_made(&mut h, "diagram.place", place(&invoice, (210, 120, 140, 100)));
+        let sales = owning_path_made(&mut h, "uml.package.add", serde_json::json!({ "name": "Sales", "parent": root }));
+        let card = owning_path_made(&mut h, "diagram.place", place(&sales, (200, 160, 320, 200)));
+        h.run();
+        let history = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            (s.revision(), s.undo_label().map(str::to_owned), s.can_redo())
+        };
+        let (rows, before) = (rows_now(&h), history(&h));
+        let (class_rect, card_rect) =
+            (rect_of(&h, &format!("workspace.canvas.node.{class_card}")), rect_of(&h, &format!("workspace.canvas.node.{card}")));
+        // Where the class covers the package's tab, above its card.
+        let on_tab = class_rect.intersect(rect_of(&h, &format!("workspace.canvas.node.{card}.tab"))).center();
+        assert!(card_rect.contains(class_rect.center()) && !card_rect.contains(on_tab), "{theme:?}: {class_rect:?} {card_rect:?} {on_tab:?}");
+        let (class_at, card_at) = (filled_at(&h, class_rect), filled_at(&h, card_rect));
+        assert!(card_at.is_some() && class_at > card_at, "{theme:?}: the class is painted after the card: {class_at:?} {card_at:?}");
+        let selected = |h: &Harness<'static, Shell>| {
+            let s = h.state().session.as_ref().unwrap();
+            s.view().selection.iter().filter_map(|o| s.doc().uuid(*o).ok()).map(|id| id.to_string()).collect::<Vec<_>>()
+        };
+        // Each press past egui's double-click window, so it is a click of its own.
+        for (at, takes) in [(class_rect.center(), &invoice), (on_tab, &invoice), (card_rect.max - egui::vec2(24.0, 24.0), &sales)] {
+            for _ in 0..40 {
+                h.step();
+            }
+            click(&mut h, at);
+            assert_eq!(selected(&h), std::slice::from_ref(takes), "{theme:?}: a press at {at:?}");
+        }
+        assert_eq!(history(&h), before, "{theme:?}: no step of its own");
+        assert!(*rows_now(&h) == *rows, "{theme:?}: the rows are as they were");
+        // A relationship dragged onto the class where it covers the tab ends at the class's card.
+        let party = owning_path_made(&mut h, "uml.class.add", serde_json::json!({ "package": root, "name": "Party" }));
+        let party_card = owning_path_made(&mut h, "diagram.place", place(&party, (700, 200, 120, 80)));
+        h.run();
+        h.state_mut().canvas.tool = crate::canvas::Tool::Connect("relationship");
+        let from = rect_of(&h, &format!("workspace.canvas.node.{party_card}")).center();
+        drag(&mut h, from, on_tab);
+        let st = h.state().session.as_ref().unwrap().doc();
+        let end = |e: archforge_mof::Obj, prop| st.get(e, prop).ok().and_then(|v| v.as_ref()).and_then(|n| st.uuid(n).ok()).map(|id| id.to_string());
+        let lines: Vec<_> = st
+            .alive()
+            .filter(|o| st.class_of(*o).ok() == Some(archforge_diagram::EDGE))
+            .map(|e| (end(e, archforge_diagram::edge::SOURCE), end(e, archforge_diagram::edge::TARGET)))
+            .collect();
+        assert_eq!(lines, [(Some(party_card), Some(class_card))], "{theme:?}: {:?}", h.state().canvas.notice);
+    }
+}
+
 #[test]
 fn a_click_on_a_packages_tab_selects_the_package_though_a_line_crosses_the_tab() {
     let (mut h, top, sales, card, _, _) = package_preview_harness(ThemeKind::Light);
@@ -10075,7 +10818,8 @@ fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of
     let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
     click(&mut h, at);
     assert_eq!(ids(&h), vec![under], "the class, drawn over the tab, takes the click");
-    // Sales placed again comes after the class, its tab drawn over the class's card: the tab takes it.
+    // Sales placed again comes after the class, but a package's card and tab stay under the other
+    // figures (AR-570): the class keeps the click.
     let card = {
         let s = h.state_mut().session.as_mut().unwrap();
         s.execute("diagram.unplace", &serde_json::json!({ "nodes": [card.to_string()] })).unwrap();
@@ -10094,7 +10838,7 @@ fn a_packages_tab_drawn_over_another_card_takes_the_click_and_the_card_on_top_of
     h.run();
     let at = rect_of(&h, &format!("workspace.canvas.node.{card}.tab")).center();
     click(&mut h, at);
-    assert_eq!(ids(&h), vec![sales], "the tab, drawn over the class, takes the click");
+    assert_eq!(ids(&h), vec![under], "the class, still drawn over the tab, takes the click");
     // A package nested in Sales's card, its tab over Sales's body: the nested tab, drawn after its
     // parent, takes the click.
     let (inner, inner_card) = {
@@ -10338,8 +11082,7 @@ fn zooming_out_to_ten_percent_climbs_one_level_per_gesture_each_at_a_hundred_and
                 id(s.execute("diagram.add", &serde_json::json!({ "kind": "uml.class", "element": root.to_string(), "name": "Top" })).unwrap().value);
             let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
             let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-            let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-            let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+            let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
             s.execute(
                 "diagram.place",
                 &serde_json::json!({ "diagram": top.to_string(), "element": sales.to_string(), "x": 100, "y": 100, "width": 240, "height": 148 }),
@@ -10420,8 +11163,7 @@ fn a_new_gesture_after_a_pause_goes_up_though_no_idle_frame_was_drawn_between() 
         let s = h.state_mut().session.as_mut().unwrap();
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
         (sales_d, orders_d)
     };
     crate::canvas::open(h.state_mut(), orders_d);
@@ -10452,8 +11194,7 @@ fn a_zoom_out_to_a_parent_without_the_packages_card_centres_the_parents_content(
         let s = h.state_mut().session.as_mut().unwrap();
         let sales = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Sales" })).unwrap().value);
         let orders = id(s.execute("uml.package.add", &serde_json::json!({ "name": "Orders", "parent": sales.to_string() })).unwrap().value);
-        let sales_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": sales.to_string() })).unwrap().value);
-        let orders_d = id(s.execute("uml.package.diagram", &serde_json::json!({ "package": orders.to_string() })).unwrap().value);
+        let (sales_d, orders_d) = (own_diagram(s, sales), own_diagram(s, orders));
         let ledger = id(s.execute("uml.class.add", &serde_json::json!({ "package": sales.to_string(), "name": "Ledger" })).unwrap().value);
         let card = id(s
             .execute("diagram.place", &serde_json::json!({ "diagram": sales_d.to_string(), "element": ledger.to_string(), "x": 2400, "y": 1800 }))
@@ -12400,6 +13141,7 @@ impl archforge_diagram::Notation for Sketch {
             slanted: false,
             braces: None,
             template: Vec::new(),
+            owner_path: Vec::new(),
         })
     }
     fn line(&self, _: &archforge_mof::Store, _: archforge_mof::Obj) -> Option<archforge_diagram::figure::Line> {
@@ -14378,6 +15120,33 @@ fn a_new_project_makes_a_class_diagram_in_three_steps_and_its_class_tool_places_
     let d = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_diagram::DIAGRAM)).unwrap();
     assert_eq!(st.get(d, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
     assert_eq!(st.list(d, archforge_diagram::diagram::NODE).unwrap().len(), 1);
+}
+
+/// The class diagram New diagram makes first is its package's default, bound as an agent's
+/// `diagram.add` binds it: `uml.package.default.get` answers it, and a second made the same way
+/// leaves the default where it was (AR-579). In both appearances.
+#[test]
+fn the_first_class_diagram_new_diagram_makes_is_its_packages_default() {
+    for theme in [ThemeKind::Light, ThemeKind::Dark] {
+        let mut h = workspace_harness(theme, egui::vec2(1600.0, 1000.0));
+        let mut made = |name: &str| {
+            for id in ["workspace.tabs.add", "workspace.new-diagram.type.uml.class", "workspace.new-diagram.continue"] {
+                let at = rect_of(&h, id).center();
+                click(&mut h, at);
+            }
+            h.state_mut().diagrams.new.as_mut().expect("the dialog is open").name = name.into();
+            let at = rect_of(&h, "workspace.new-diagram.create").center();
+            click(&mut h, at);
+            h.state().canvas.active.expect("the new diagram is open")
+        };
+        let (first, second) = (made("Domain"), made("Detail"));
+        assert_ne!(first, second, "{theme:?}");
+        let session = h.state_mut().session.as_mut().unwrap();
+        let root = archforge_uml::commands::root_package(session.doc()).map(|r| session.doc().uuid(r).unwrap().to_string()).unwrap();
+        let answer = session.execute("uml.package.default.get", &serde_json::json!({ "package": root })).unwrap().value;
+        assert_eq!((answer["state"].as_str(), answer["diagram"].as_str()), (Some("bound"), Some(first.to_string().as_str())), "{theme:?}");
+        assert_eq!(archforge_diagram::defaults::bindings(session.doc()).len(), 1, "{theme:?}: the second binds nothing");
+    }
 }
 
 #[test]

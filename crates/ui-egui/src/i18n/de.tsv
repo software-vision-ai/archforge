@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	Eine Spalte eines Aufzählungstyps 
 str		{name} follows no column.	{name} folgt keiner Spalte.
 plural		The table has {n} column.	Die Tabelle hat {n} Spalte.|Die Tabelle hat {n} Spalten.
 str		A package cannot go into itself or a package it holds.	Ein Paket kann nicht in sich selbst oder in ein Paket verschoben werden, das es enthält.
+str		The model's root package holds all the other packages, so it stays where it is.	Das Wurzelpaket des Modells enthält alle anderen Pakete und bleibt daher, wo es ist.
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	Das Paket {types} enthält die eingebauten Typen: Solange es sie enthält, behält es seinen Namen und bleibt unter dem Wurzelpaket.
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	Es gibt bereits ein Paket {types}, das die eingebauten Typen enthält; ein zweites kann nicht daneben stehen.
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	Im Paket trägt {what} den Namen {name}, den Namen eines eingebauten Typs, der in {types} diesen Typ bedeuten würde. Benennen Sie {name} zuerst um.
 str		The model cannot be changed at the moment; nothing was changed.	Das Modell kann gerade nicht geändert werden; nichts wurde geändert.
 str		There is nothing to undo.	Es gibt nichts rückgängig zu machen.
 str		There is nothing to redo.	Es gibt nichts zu wiederholen.
@@ -766,6 +770,19 @@ str		No stereotype is applied yet.	Es ist noch kein Stereotyp angewendet.
 str		Another change is still under way. Try again once it ends.	Eine andere Änderung läuft noch. Versuchen Sie es erneut, sobald sie beendet ist.
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	Das Modell konnte nach einem Fehler nicht wiederhergestellt werden. Öffnen Sie das Projekt erneut, um fortzufahren.
 str		Undo and redo cannot run as part of another change.	Rückgängig und Wiederholen können nicht Teil einer anderen Änderung sein.
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	Das Modell hat sich geändert, seit es gelesen wurde, oder ein anderes Projekt wurde gelesen. Lesen Sie es erneut und versuchen Sie es noch einmal. Es wurde nichts geändert.
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	Die Änderung gibt nicht an, für welchen Stand des Modells sie gedacht ist. Lesen Sie das Modell und versuchen Sie es noch einmal. Es wurde nichts geändert.
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	Das Paket hat Klassendiagramme, aber keines ist sein Standarddiagramm. Wählen Sie eines davon als Standarddiagramm.
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	Das Paket hat mehr als ein Standarddiagramm. Wählen Sie das Klassendiagramm, das sein Standarddiagramm bleibt.
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets existiert nicht mehr. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	Das Standarddiagramm des Pakets ist kein Klassendiagramm. Wählen Sie eines seiner Klassendiagramme als Standarddiagramm.
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	Das Standarddiagramm des Pakets gehört zu einem anderen Element. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	Dieses Diagramm ist das Standarddiagramm von {package}. Wählen Sie zuerst ein anderes Klassendiagramm als Standarddiagramm von {package}.
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} hat das Diagramm eines anderen Elements als Standarddiagramm, daher bleibt dieses Diagramm. Wählen Sie zuerst eines seiner eigenen Klassendiagramme.
+str		No package is given. Give its id.	Es ist kein Paket angegeben. Geben Sie seine ID an.
+str		{name} is not a package.	{name} ist kein Paket.
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} ist keines der Klassendiagramme von {package}. Wählen Sie eines seiner eigenen Klassendiagramme als Standarddiagramm.
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} hat noch kein Klassendiagramm, daher gibt es nichts zu öffnen. Erstellen Sie zuerst ein Klassendiagramm dafür.
 str		This could not be done because of an internal error. Nothing was changed.	Dies war wegen eines internen Fehlers nicht möglich. Es wurde nichts geändert.
 str		The text can't be empty.	Der Text darf nicht leer sein.
 str		It can't be longer than {max} characters.	Höchstens {max} Zeichen sind möglich.
@@ -1277,6 +1294,7 @@ str		Relationships carry no skills	Beziehungen tragen keine Skills
 str		Generalization sets carry no skills	Generalisierungsmengen tragen keine Skills
 str		This element carries no skills	Dieses Element trägt keine Skills
 str		Diagram	Diagramm
+str		Default diagram	Standarddiagramm
 str		Diagram · of {schema}	Diagramm · von {schema}
 str		This diagram	Dieses Diagramm
 str		On this diagram · {n}	Auf diesem Diagramm · {n}
@@ -1392,6 +1410,7 @@ str		Literal · model	Literal · Modell
 str		Attributes · {n}	Attribute · {n}
 str		Literals · {n}	Literale · {n}
 str		Owner	Besitzer
+str		Owner: {path}	Besitzer: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	Der Besitzer ist ein Paket oder ein Klassifizierer. Ein Wechsel behält die Identität, die Member, die Beziehungen von {name} und jeden Typ, der es verwendet.
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · verschachtelt in {owner} · Modell, in jedem Diagramm
 str		Nested classifiers · {n}	Verschachtelte Klassifizierer · {n}
@@ -1728,12 +1747,10 @@ str		Add package	Paket hinzufügen
 str		Place package	Paket platzieren
 str		Move package	Paket verschieben
 str		Parent package	Übergeordnetes Paket
-str		Move {what} into {where}	{what} nach {where} verschieben
 str		{what} moved into {where}	{what} nach {where} verschoben
 str		Open this package's diagram	Diagramm dieses Pakets öffnen
 str		Open this package's diagram (⌘↓)	Diagramm dieses Pakets öffnen (⌘↓)
 str		This is the top package: zooming out goes no further	Dies ist das oberste Paket: weiter hinauszoomen führt nirgendwohin
-str		Only a package this diagram's package holds goes on it	Nur ein Paket, das im Paket dieses Diagramms liegt, kann darauf
 # Klassen in Beziehung setzen
 str		A bound can be at most {max}.	Eine Grenze darf höchstens {max} sein.
 str		A class realizes only an interface	Eine Klasse realisiert nur eine Schnittstelle

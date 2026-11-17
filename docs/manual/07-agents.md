@@ -574,7 +574,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   change or a restore), a request that would change it is refused and says so, and a request sent
   before another version, branch or project took its place is refused rather than run on that one.
 - **Read the model and the skills**: `skill_list` and `skill_effective` as tools, and as MCP
-  resources `archforge://project` (the open project, its revision, the selection),
+  resources `archforge://project` (the open project, its undo history and revision, the selection),
   `archforge://skills`, `archforge://element/{id}` (a schema with its tables, a table, a diagram, or
   a class, an interface, an enumeration with its literals, a data type, a primitive type or an
   association class, each with its attributes, operations and description) and
@@ -583,6 +583,53 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   packages with `uml_package_list`, a class's relationships with `uml_relationship_list` and an
   element's constraints with `uml_constraint_list`, or, with `--compact`, `execute_command` given
   the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
+  `uml_package_list` gives each package's `path`: the names of the packages that own it, from the
+  root package down to its parent, empty for the root package itself.
+- **Packages on a class diagram**: `diagram_place` puts any package of the model on a class
+  diagram, wherever it is owned: one of another branch, the root package, the diagram's own
+  package or one that holds it. The package is shown there and keeps its owner; nothing is copied.
+  A package the diagram shows already is refused as shown already, an id that names no element of
+  this project as no element, and a profile's diagram shows no package.
+  A command that changes the model only on the revision the agent read takes `expected_revision`,
+  `{"history": h, "revision": r}` as `inspect_document` gives them. Another revision, another
+  history, or none at all is refused and changes nothing. While a drag in the window shows a
+  preview, the revision given is the preview's own, which never matches: read again once the drag
+  ends.
+- **A package's default diagram**: a package's first class diagram is its default from the
+  moment it is made: `diagram_add` binds it in the same undo step. A second class diagram leaves the default as it is, a profile's diagram is no one's
+  default, and a package that has class diagrams but no default gets none by adding another.
+  `uml_package_default_get` (`uml.package.default.get`) reads the
+  diagram a package opens to, from the one binding that names it, never the first diagram found.
+  It gives the package's id with `state` `bound` and the ids of the binding and the diagram,
+  `no_diagram_yet` for a package without a class diagram, or `does_not_apply` for a profile, which
+  has no default. A package whose binding is unsound (class diagrams but no default, more than one
+  default, a default that is gone, is no class diagram or belongs to another element) is refused
+  with the ids concerned and what to choose. Given `expected_revision`, it answers only on that
+  revision and refuses another as changed since read. It only reads. `uml_package_diagram`
+  (`uml.package.diagram`) gives `{"id": …}`, the diagram a package opens to: its default, the one
+  Open, ⌘↓ and zooming in reach in the window. It only reads and never makes a diagram, so its
+  answer no longer has `made`. A package with no class diagram yet is refused as having none, and
+  one whose binding is unsound is refused as `uml_package_default_get` refuses it; make a diagram
+  with `diagram_add` or choose one with `uml_package_default_set` first. A package's default diagram
+  is not removed: `diagram_remove` of it is refused, naming the package, until another of the
+  package's class diagrams is its default; its other diagrams are removed as before and leave the
+  default as it is. A diagram another package names as its default, which is unsound, is kept the
+  same way: `element_remove` of a package with no parent that holds it, its own package among them,
+  is refused, naming the package whose default it is, unless that package is removed in the same
+  call. Choose a default of that package's own first. A nested package hands the diagram up to its
+  parent and goes.
+- **Choosing a package's default diagram**: `uml_package_default_set`
+  (`uml.package.default.set`) makes one of the package's own class diagrams its default, given
+  `package`, `diagram` and `expected_revision`, which it needs: left out or changed since read, it
+  is refused and changes nothing. Something that is no package, a diagram that is gone, is no class
+  diagram (an ER diagram, say) or belongs to another element is refused the same way. The package
+  keeps one binding, the one its first class diagram came with, or one made now for a package that
+  has none; it keeps its id when another diagram is chosen. It is
+  also how a binding that `uml_package_default_get` refuses is mended; a package with more than one
+  default keeps the first binding, now naming the chosen diagram, and the others are removed. It
+  answers the ids of the package, the binding and the diagram, and those of the bindings removed.
+  Choosing the default a package with one binding has already changes nothing and adds no undo
+  step; any other choice, mending a duplicate included, is one undo step. While Archforge shows an earlier version, it is refused like every change.
 - **Constraints**: `uml_constraint_add`, `uml_constraint_set`, `uml_constraint_move` and
   `uml_constraint_show`, which shows a constraint on a class diagram as braces or as a linked
   note. The expression is kept exactly as sent and never evaluated; an empty one, or an element

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use archforge_engine::testing::round_trip;
 use archforge_engine::{
-    CommandError, CommandSpec, Ctx, EngineError, Facts, JournalEntry, Options, Params, Registry, Replace, Session, Snapshot, Snapshotted, View,
-    always, cmd,
+    CommandError, CommandSpec, Ctx, EXPECTED_REVISION, EngineError, Facts, JournalEntry, Options, Params, Reason, Registry, Replace, Revision,
+    Session, Snapshot, Snapshotted, View, always, cmd, expected_revision, history_start, seed_histories,
 };
 use serde_json::{Value, json};
 
@@ -87,7 +87,11 @@ fn select(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, Comman
     Ok(Value::Null)
 }
 
-fn count(ctx: &mut Ctx<'_, Doc, Selection>, _: &Params) -> Result<Value, CommandError> {
+/// How many items there are; given an `expected_revision`, only on that revision.
+fn count(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
+    if p.get(EXPECTED_REVISION).is_some() {
+        expected_revision(ctx, p)?;
+    }
     Ok(json!(ctx.doc.0.len()))
 }
 
@@ -130,6 +134,12 @@ fn label(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, Command
     Ok(Value::Null)
 }
 
+/// Renames an item, only on the revision its caller read.
+fn guarded(ctx: &mut Ctx<'_, Doc, Selection>, p: &Params) -> Result<Value, CommandError> {
+    expected_revision(ctx, p)?;
+    rename(ctx, p)
+}
+
 fn specs() -> Vec<CommandSpec<Doc, Selection>> {
     let mut s = archforge_engine::cmd::edit::specs();
     s.extend([
@@ -146,7 +156,7 @@ fn specs() -> Vec<CommandSpec<Doc, Selection>> {
             move_item
         ),
         cmd!(noundo "view.select", "Select", &["View"], None, "index: integer, 0..1000; which item", has_items, select),
-        cmd!(query "item.count", "Count items", &["Item"], None, "", always, count),
+        cmd!(query "item.count", "Count items", &["Item"], None, "expected_revision: object?; the history and revision read", always, count),
         cmd!("item.fail", "Fail", &["Item"], None, "", always, fail),
         cmd!("item.explode", "Explode", &["Item"], None, "", always, explode),
         cmd!(noundo "item.sneak", "Sneak", &["Item"], None, "", always, sneak),
@@ -160,6 +170,15 @@ fn specs() -> Vec<CommandSpec<Doc, Selection>> {
             "index: integer, 0..1000; which item\ntext: string; the name, a fresh id's when empty",
             has_items,
             label
+        ),
+        cmd!(
+            "item.guarded",
+            "Rename guarded",
+            &["Item"],
+            None,
+            "index: integer, 0..1000; which item\nname: string; its new name\nexpected_revision: object?; the history and revision read",
+            has_items,
+            guarded
         ),
     ]);
     s
@@ -1152,4 +1171,284 @@ fn a_session_is_not_made_read_only_during_a_gesture() {
     s.cancel().unwrap();
     s.set_read_only(true).unwrap();
     assert!(s.read_only());
+}
+
+/// The point in `s`'s history it is at now, as a caller reads it and as a refusal names it.
+fn read(s: &S) -> (Value, Revision) {
+    let at = s.token();
+    (json!({ "history": at.history, "revision": at.revision }), at)
+}
+
+/// `item.guarded` renaming item 0 to `name` for the revision `token`.
+fn guarded_call(s: &mut S, name: &str, token: Value) -> Result<archforge_engine::Outcome, EngineError> {
+    s.execute("item.guarded", &json!({ "index": 0, "name": name, "expected_revision": token }))
+}
+
+/// A change made for the revision its caller read runs. One made for another revision, another
+/// history, a token of another shape, a null one or none is refused, typed, about
+/// `expected_revision`, and leaves no undo step (AR-574).
+#[test]
+fn a_change_runs_only_on_the_revision_its_caller_read() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    let later = Revision { revision: at.revision + 1, ..at };
+    let other = Revision { history: at.history + 1, ..at };
+    for (given, expected) in [
+        (json!({ "history": later.history, "revision": later.revision }), Some(later)),
+        (json!({ "history": other.history, "revision": other.revision }), Some(other)),
+        (json!({ "history": at.history }), None),
+        (json!({ "history": at.history, "revision": -1 }), None),
+        (Value::Null, None),
+    ] {
+        let before = state(&s);
+        let Err(EngineError::Failed { error, .. }) = guarded_call(&mut s, "b", given.clone()) else { panic!("{given} ran") };
+        let stale = Reason::StaleRevision { expected, current: at };
+        assert_eq!((error.key.as_deref(), error.reason), (Some("expected_revision"), Some(stale)), "{given}");
+        assert_eq!(state(&s), before, "{given}");
+    }
+    let before = state(&s);
+    let Err(EngineError::Failed { error, .. }) = s.execute("item.guarded", &json!({ "index": 0, "name": "b" })) else { panic!("ran without") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: None, current: at }));
+    assert_eq!(state(&s), before);
+    guarded_call(&mut s, "b", token.clone()).unwrap();
+    assert_eq!((names(&s), s.undo_label()), (vec!["b"], Some("Rename guarded")));
+    assert!(guarded_call(&mut s, "c", token).is_err(), "the token read before the change is stale now");
+}
+
+/// A token from another session never matches, though both are at the same revision: each session
+/// has its own history (AR-574).
+#[test]
+fn a_token_from_another_session_is_refused() {
+    let (mut one, mut two) = (session(), session());
+    for s in [&mut one, &mut two] {
+        s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    }
+    assert_eq!(one.revision(), two.revision());
+    let before = state(&two);
+    assert!(guarded_call(&mut two, "b", read(&one).0).is_err());
+    assert_eq!(state(&two), before);
+    let own = read(&two).0;
+    guarded_call(&mut two, "b", own).unwrap();
+}
+
+/// A token read while a gesture shows a preview names that preview, never the state it previews
+/// from: once the gesture is cancelled it is refused, though the preview left the revision as it
+/// was, and so after a commit; a token read before the gesture, or while a refused preview shows the
+/// state before, matches after a cancel (AR-574).
+#[test]
+fn a_token_read_from_a_preview_never_matches() {
+    let mut s = session();
+    for name in ["a", "b"] {
+        s.execute("item.add", &json!({ "name": name })).unwrap();
+    }
+    let (before, at) = read(&s);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let (previewed, shown) = read(&s);
+    assert_eq!((names(&s), s.revision()), (vec!["b"], at.revision), "the preview leaves the revision as it was");
+    assert_ne!(shown, at);
+    s.preview(&json!({ "index": 5 })).unwrap_err();
+    assert_eq!(read(&s).1, at, "a refused preview shows the state before again");
+    s.preview(&json!({ "index": 0 })).unwrap();
+    s.cancel().unwrap();
+    let held = state(&s);
+    assert!(guarded_call(&mut s, "x", previewed).is_err());
+    assert_eq!(state(&s), held);
+    guarded_call(&mut s, "x", before).unwrap();
+    assert_eq!(names(&s), ["x", "b"]);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let previewed = read(&s).0;
+    s.commit().unwrap();
+    assert!(guarded_call(&mut s, "y", previewed).is_err(), "nor after a commit");
+}
+
+/// A query run while a gesture shows a preview runs on the preview's own revision: a token read
+/// before the gesture is refused then, and matches again once it is cancelled. The gesture's own
+/// command runs on the state before it, so a token read before the gesture matches each preview
+/// and the commit.
+#[test]
+fn a_query_during_a_preview_runs_on_the_preview() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    let count = |s: &mut S, token: &Value| s.execute("item.count", &json!({ "expected_revision": token })).map(|o| o.value);
+    s.begin_interaction("item.remove").unwrap();
+    s.preview(&json!({ "index": 0 })).unwrap();
+    let Err(EngineError::Failed { error, .. }) = count(&mut s, &token) else { panic!("a token read before the preview matched it") };
+    assert_eq!(error.reason, Some(Reason::StaleRevision { expected: Some(at), current: s.token() }));
+    let shown = read(&s).0;
+    assert_eq!(count(&mut s, &shown).unwrap(), json!(0), "the preview's own token matches");
+    s.cancel().unwrap();
+    assert_eq!(count(&mut s, &token).unwrap(), json!(1), "after a cancel, it matches again");
+    s.begin_interaction("item.guarded").unwrap();
+    for name in ["b", "c"] {
+        s.preview(&json!({ "index": 0, "name": name, "expected_revision": token })).unwrap();
+    }
+    s.commit().unwrap();
+    assert_eq!(names(&s), ["c"]);
+}
+
+/// Undo takes the model back to the earlier revision, so a token read before the undone change
+/// matches again; inside a batch, a token names the revision the batch began on (AR-574).
+#[test]
+fn undo_brings_back_the_revision_a_token_was_read_at() {
+    let mut s = session();
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    let (token, at) = read(&s);
+    s.execute("item.rename", &json!({ "index": 0, "name": "x" })).unwrap();
+    assert_ne!(read(&s).1, at);
+    s.undo().unwrap();
+    assert_eq!(read(&s).1, at);
+    guarded_call(&mut s, "b", token).unwrap();
+    let (token, _) = read(&s);
+    s.batch("Both", |b| {
+        b.execute("item.add", &json!({ "name": "c" }))?;
+        b.execute("item.guarded", &json!({ "index": 0, "name": "d", "expected_revision": token })).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!(names(&s), ["d", "c"]);
+}
+
+/// Two processes seeded from different entropy, even one apart, as two starts of the app a
+/// nanosecond apart, number their histories far apart, within the exact range of a JSON double.
+/// Seeding moves the next number there and never back, so a seed given again repeats no number
+/// (AR-574).
+#[test]
+fn histories_of_two_starts_do_not_meet() {
+    let starts = [0, 1, 1 << 32, u64::MAX].map(history_start);
+    for (i, a) in starts.iter().enumerate() {
+        assert!((1..1 << 52).contains(a), "{a}");
+        for b in &starts[i + 1..] {
+            assert!(a.abs_diff(*b) > 1 << 32, "{a} and {b} start close");
+        }
+    }
+    let entropy = 0x5eed;
+    seed_histories(entropy);
+    let first = session().history();
+    assert!(first >= history_start(entropy), "{first}");
+    seed_histories(entropy);
+    assert!(session().history() > first, "seeding again gives no number twice");
+}
+
+thread_local! {
+    /// How many times this test's thread ran the commit check.
+    static CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The commit check's refusal: the toy holds at most two items once a change is kept.
+fn too_many() -> CommandError {
+    CommandError::new("the project holds at most two items")
+}
+
+/// A commit check that counts its runs and refuses a state of more than two items.
+fn at_most_two(doc: &Doc, _: &Replace<Items>) -> Result<(), CommandError> {
+    CHECKS.with(|c| c.set(c.get() + 1));
+    if doc.0.len() > 2 { Err(too_many()) } else { Ok(()) }
+}
+
+/// A session whose registry checks every change with [`at_most_two`], holding `items` already.
+fn checked(items: &[&str]) -> S {
+    let registry = Registry::with_commit_check(specs(), at_most_two).unwrap();
+    CHECKS.with(|c| c.set(0));
+    Session::new(registry, Snapshotted::new(Items(items.iter().map(|i| i.to_string()).collect())), 1, Options::default())
+}
+
+/// The commit check's runs since the last call.
+fn checks() -> usize {
+    CHECKS.with(|c| c.replace(0))
+}
+
+/// Everything a refused commit must leave as it was, the counter, the revision, its token and the
+/// top undo step included.
+fn kept(s: &S) -> ((Doc, Selection, bool, bool, bool, usize), u64, u64, Revision, Option<String>) {
+    (state(s), s.counter(), s.revision(), s.token(), s.undo_label().map(str::to_string))
+}
+
+/// A command the commit check accepts is kept as before; one it refuses is rolled back whole,
+/// with no undo step, the counter, revision and token as they were, and the check's own refusal
+/// given back. Queries, view commands, undo and redo are not checked (AR-629).
+#[test]
+fn a_commit_check_keeps_a_command_it_accepts_and_takes_back_one_it_refuses() {
+    let mut s = checked(&[]);
+    s.execute("item.add", &json!({ "name": "a" })).unwrap();
+    assert_eq!((checks(), s.undo_label()), (1, Some("Add item")), "an accepted change is kept");
+    s.execute("item.tag", &json!({})).unwrap();
+    assert_eq!(checks(), 1);
+    let before = kept(&s);
+    for (id, params) in [("item.add", json!({ "name": "c" })), ("item.tag", json!({}))] {
+        let Err(EngineError::Failed { id: refused, error }) = s.execute(id, &params) else { panic!("{id} was kept") };
+        assert_eq!((refused.as_str(), error), (id, too_many()));
+        assert_eq!((checks(), kept(&s)), (1, before.clone()), "{id}");
+    }
+    s.execute("item.count", &json!({})).unwrap();
+    s.execute("view.select", &json!({ "index": 0 })).unwrap();
+    s.undo().unwrap();
+    s.redo().unwrap();
+    assert_eq!(checks(), 0, "only a change about to be kept is checked");
+}
+
+/// A batch is checked once, as a whole: it may pass through a state the check refuses when it
+/// ends in one it accepts, and one that ends refused is taken back whole, the coalescing chain
+/// left as it was (AR-629).
+#[test]
+fn a_commit_check_sees_a_batch_once_at_its_end() {
+    let mut s = checked(&["a", "b"]);
+    s.batch("Swap", |b| {
+        b.execute("item.add", &json!({ "name": "c" }))?;
+        b.execute("item.add", &json!({ "name": "d" }))?;
+        b.execute("item.remove", &json!({ "index": 0 }))?;
+        b.execute("item.remove", &json!({ "index": 0 })).map(|_| ())
+    })
+    .unwrap();
+    assert_eq!((checks(), names(&s), s.undo_label()), (1, vec!["c", "d"], Some("Swap")));
+    let rename = |name: &str| json!({ "index": 0, "name": name, "coalesce": "k" });
+    s.execute("item.rename", &rename("x")).unwrap();
+    let before = kept(&s);
+    let refused = s.batch("Grow", |b| {
+        b.execute("item.remove", &json!({ "index": 0 }))?;
+        b.execute("item.tag", &json!({}))?;
+        b.execute("item.add", &json!({ "name": "e" })).map(|_| ())
+    });
+    let Err(EngineError::Failed { id, error }) = refused else { panic!("the batch was kept: {refused:?}") };
+    assert_eq!((id.as_str(), error), ("a batch", too_many()));
+    assert_eq!((checks(), kept(&s)), (2, before), "the rename and the batch");
+    s.execute("item.rename", &rename("y")).unwrap();
+    s.undo().unwrap();
+    assert_eq!(names(&s), ["c", "d"], "a refused batch leaves a gesture's chain open, as a failing command does");
+}
+
+/// A gesture's previews are never checked, only its commit; a commit the check refuses ends the
+/// gesture at the state before it, with no undo step (AR-629).
+#[test]
+fn a_commit_check_sees_a_gesture_only_when_it_commits() {
+    let mut s = checked(&["a"]);
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "b" })).unwrap();
+    s.preview(&json!({ "name": "c" })).unwrap();
+    assert_eq!(checks(), 0, "a preview is not checked");
+    s.commit().unwrap();
+    assert_eq!((checks(), names(&s)), (1, vec!["a", "c"]));
+    let before = kept(&s);
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "d" })).unwrap();
+    assert_eq!((checks(), names(&s)), (0, vec!["a", "c", "d"]), "a preview may show a state the check refuses");
+    let Err(EngineError::Failed { id, error }) = s.commit() else { panic!("the gesture was kept") };
+    assert_eq!((id.as_str(), error), ("item.add", too_many()));
+    assert_eq!((checks(), kept(&s), s.interacting()), (1, before, false));
+}
+
+/// Without a commit check, a change the check would refuse is kept, as before (AR-629).
+#[test]
+fn without_a_commit_check_every_change_is_kept_as_before() {
+    let mut s = session();
+    for name in ["a", "b", "c"] {
+        s.execute("item.add", &json!({ "name": name })).unwrap();
+    }
+    s.batch("More", |b| b.execute("item.add", &json!({ "name": "d" })).map(|_| ())).unwrap();
+    s.begin_interaction("item.add").unwrap();
+    s.preview(&json!({ "name": "e" })).unwrap();
+    s.commit().unwrap();
+    assert_eq!((names(&s), checks()), (vec!["a", "b", "c", "d", "e"], 0));
 }

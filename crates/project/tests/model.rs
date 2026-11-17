@@ -874,6 +874,52 @@ fn template_bindings_are_saved_and_opened_again() {
     again.close().unwrap();
 }
 
+/// AR-586: a version opened to be looked at reports the default-diagram problems stored in that
+/// revision, not those of the work, and opens as it was saved; reading it changes nothing.
+#[test]
+fn a_version_reports_the_binding_problems_it_was_saved_with() {
+    let env = Env::new("defaults");
+    let schema = schema();
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Defaults", "test", &timestamp(1_761_670_800)).unwrap();
+    project.prepare_model(&schema).unwrap();
+    let mut s = archforge_notations::new_project_session("Defaults", ids(0)).unwrap();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    run(&mut s, "diagram.add", json!({ "kind": archforge_uml::STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let sound = rows_of(s.doc(), &schema);
+    // A second binding of Sales, as no command makes one: two defaults.
+    let mut st = archforge_notations::store(ids(1 << 40)).unwrap();
+    rows::restore(&mut st, &sound, schema.tables(), &schema.junctions()).unwrap();
+    let [binding] = archforge_diagram::defaults::bindings(&st)[..] else { panic!("Sales's diagram is bound") };
+    let model = st.alive().find(|o| st.class_of(*o).ok() == Some(archforge_core::MODEL)).unwrap();
+    let twin = st.create(archforge_diagram::DEFAULT_DIAGRAM_BINDING).unwrap();
+    use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
+    for prop in [OWNER_ELEMENT, DEFAULT_DIAGRAM] {
+        let end = st.get(binding, prop).unwrap();
+        st.set(twin, prop, end).unwrap();
+    }
+    st.push(model, archforge_core::model::MEMBER, Value::Ref(twin)).unwrap();
+    let duplicated = rows_of(&st, &schema);
+    project.write_model(&schema, &duplicated).unwrap();
+    assert!(project.commit("Two defaults").unwrap());
+    let version = head_of(&project);
+    project.write_model(&schema, &sound).unwrap();
+    assert!(project.commit("One default").unwrap());
+
+    let before = untouched(&project);
+    let problems = |read: &rows::Rows, rows: &rows::Rows| {
+        let mut opened = archforge_notations::session_from_rows_diagnosed(read, ids(1 << 41), |_| {}).unwrap();
+        opened.session.set_read_only(true).unwrap();
+        let st = opened.session.doc();
+        assert_eq!(&rows_of(st, &schema), rows, "opened as it was saved");
+        opened.problems.iter().map(|d| (d.owner.map(|o| archforge_core::name_of(st, o)), d.problem.to_string())).collect::<Vec<_>>()
+    };
+    let duplicate = archforge_uml::defaults::BindingProblem::Duplicate(Vec::new()).to_string();
+    assert_eq!(problems(&project.read_model_at(&schema, &version).unwrap(), &duplicated), [(Some("Sales".to_string()), duplicate)]);
+    assert_eq!(problems(&project.read_model(&schema).unwrap(), &sound), [], "the work's own bindings are sound");
+    assert_eq!(untouched(&project), before, "reading and opening a version change nothing");
+    project.close().unwrap();
+}
+
 #[test]
 fn a_long_text_in_any_script_is_written_and_read_back_whole() {
     let env = Env::new("long");

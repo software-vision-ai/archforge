@@ -315,31 +315,6 @@ fn model_root(ctx: &mut C<'_>, _p: &Params) -> R {
     Ok(json!({ "id": uuid_of(ctx.doc, root)? }))
 }
 
-/// The class diagram a package leads to (AR-95): the first of the package's class diagrams.
-pub fn diagram_of(store: &Store, package: Obj) -> Option<Obj> {
-    use archforge_diagram::diagram;
-    store.alive().find(|d| {
-        store.class_of(*d).ok() == Some(archforge_diagram::DIAGRAM)
-            && store.get(*d, diagram::KIND).ok().and_then(|v| v.as_str().map(|k| k == crate::STRUCTURE_DIAGRAM)).unwrap_or(false)
-            && store.get(*d, diagram::ELEMENT).ok().and_then(|v| v.as_ref()) == Some(package)
-    })
-}
-
-/// The package's diagram, made when it has none: a class diagram of the package named like it,
-/// beside the model's other diagrams. `made` says which.
-fn package_diagram(ctx: &mut C<'_>, p: &Params) -> R {
-    let pkg = id_of(ctx.doc, p, "package", PACKAGE, "package")?;
-    if let Some(d) = diagram_of(ctx.doc, pkg) {
-        return Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": false }));
-    }
-    let m = model(ctx.doc)?;
-    let name: String = name_of(ctx.doc, pkg).chars().take(archforge_diagram::rules::MAX_NAME).collect();
-    // Made as diagram.add makes one, its lines at right angles around the classes.
-    let d = archforge_diagram::commands::new_diagram(ctx.doc, crate::STRUCTURE_DIAGRAM, &name, Some(pkg), Some((m, archforge_core::model::MEMBER)))
-        .map_err(fail)?;
-    Ok(json!({ "id": uuid_of(ctx.doc, d)?, "made": true }))
-}
-
 /// Puts `pkg` into `parent`, or at the model's top level.
 fn place_package(store: &mut Store, pkg: Obj, parent: Option<Obj>) -> Result<(), CommandError> {
     match parent {
@@ -363,12 +338,12 @@ fn package_add(ctx: &mut C<'_>, p: &Params) -> R {
 
 /// `uml.package.rename`: a package renamed, the diagrams still named like it following. The
 /// package Types keeps its name while it holds built-in types, and a package becomes Types only as
-/// `members::types_problem` allows.
+/// `members::types_problem` allows, its refusal typed (AR-563).
 fn package_rename(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     let name = text(p, "name");
-    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg)) {
-        return Err(refuse("name", why));
+    if let Some(refused) = crate::members::types_problem(ctx.doc, pkg, name, package_of(ctx.doc, pkg), "name") {
+        return Err(refused);
     }
     check_name(ctx.doc, holder_of(ctx.doc, package_of(ctx.doc, pkg)), PACKAGE, name, Some(pkg))?;
     let old = name_of(ctx.doc, pkg);
@@ -398,13 +373,15 @@ fn detach(store: &mut Store, obj: Obj) -> Result<(), CommandError> {
     Ok(())
 }
 
-/// `uml.package.move`: a package into another, never into itself, its cards leaving its old home's
-/// diagrams. The package Types stays under the root while it holds built-in types, and a package
-/// named Types goes there only as `members::types_problem` allows.
+/// `uml.package.move`: a package into another, never into itself. Only its owner changes: every
+/// appearance of it stays where it is under its id, with its notes' links, and none is added to its
+/// new owner's diagram (Decision 26, AR-567). The root package stays where it is; the package Types
+/// stays under the root while it holds built-in types, and a package named Types goes there only as
+/// `members::types_problem` allows; each refusal typed (AR-563).
 fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     let pkg = id_of(ctx.doc, p, "package", PACKAGE, "a package")?;
     if Some(pkg) == root_package(ctx.doc) {
-        return Err(refuse("package", "the model's root package holds the others and stays where it is"));
+        return Err(refuse("package", "the model's root package holds the others and stays where it is").because(Reason::RootPackageStays));
     }
     let to = parent_param(ctx.doc, p, "to")?;
     if to.is_some_and(|t| is_within(ctx.doc, t, pkg)) {
@@ -413,8 +390,8 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     if to == package_of(ctx.doc, pkg) {
         return Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }));
     }
-    if let Some(why) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to) {
-        return Err(refuse("to", why));
+    if let Some(refused) = crate::members::types_problem(ctx.doc, pkg, &name_of(ctx.doc, pkg), to, "to") {
+        return Err(refused);
     }
     check_name(ctx.doc, holder_of(ctx.doc, to), PACKAGE, &name_of(ctx.doc, pkg), Some(pkg))?;
     if let Some(to) = to {
@@ -425,17 +402,6 @@ fn package_move(ctx: &mut C<'_>, p: &Params) -> R {
     }
     detach(ctx.doc, pkg)?;
     place_package(ctx.doc, pkg, to)?;
-    // Its cards go from the diagrams of a package that no longer holds it (AR-102): a class
-    // diagram shows the packages its own package holds. Its own diagram and what it holds stay.
-    let parent = package_of(ctx.doc, pkg);
-    let (_, _, nodes) = archforge_diagram::views_of(ctx.doc, pkg);
-    for n in nodes {
-        let shown_on = ctx.doc.container(n).map_err(fail)?.map(|(d, _)| d);
-        let of = shown_on.and_then(|d| ctx.doc.get(d, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref()));
-        if of != parent && ctx.doc.is_alive(n) {
-            archforge_diagram::destroy_node_with_edges(ctx.doc, n).map_err(fail)?;
-        }
-    }
     ctx.view.selection = vec![pkg];
     Ok(json!({ "id": uuid_of(ctx.doc, pkg)? }))
 }
@@ -599,8 +565,9 @@ fn association_class_move(ctx: &mut C<'_>, p: &Params) -> R {
     classifier_move(ctx, p, ASSOCIATION_CLASS, "association_class", "an association class")
 }
 
-/// `uml.package.list`: every package with its parent, its description (AR-186) and how many
-/// classes, interfaces, enumerations, data types, primitive types and association classes it holds.
+/// `uml.package.list`: every package with its parent, the names of its owners from the root down
+/// as its card gives them (`path`, AR-562), its description (AR-186) and how many classes,
+/// interfaces, enumerations, data types, primitive types and association classes it holds.
 fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
     let store = &*ctx.doc;
     let items: Vec<Json> = all_packages(store)
@@ -609,6 +576,7 @@ fn package_list(ctx: &mut C<'_>, _: &Params) -> R {
             let parent = package_of(store, pkg).and_then(|p| uuid_of(store, p).ok());
             json!({
                 "id": uuid_of(store, pkg).unwrap_or_default(), "name": name_of(store, pkg), "parent": parent,
+                "path": crate::figures::owner_path(store, pkg),
                 "description": crate::descriptions::description_of(store, pkg),
                 "classes": classes(store, pkg).len(), "interfaces": interfaces(store, pkg).len(),
                 "enumerations": enumerations(store, pkg).len(), "data_types": data_types(store, pkg).len(),
@@ -702,7 +670,8 @@ pub(crate) fn classifiers_within(store: &Store, pkg: Obj) -> Vec<Obj> {
 /// Why `parent` cannot take what `pkg` holds, when a name would clash there with one of its kind
 /// ([`crate::names`]), a built-in type's name would land in the package Types, or a package handed
 /// up would become a second Types or a Types holding such a name. A clash is typed, naming the
-/// element of `parent` that has the name.
+/// element of `parent` that has the name, as is a package handed up that would break the package
+/// Types' rules (AR-563).
 fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandError> {
     let up = |why: String| refuse("ids", format!("its contents cannot move up: {why}"));
     for o in held(store, pkg) {
@@ -715,9 +684,9 @@ fn hand_up_problem(store: &Store, pkg: Obj, parent: Obj) -> Result<(), CommandEr
             return Err(up(why));
         }
         if class == PACKAGE
-            && let Some(why) = crate::members::types_problem(store, o, &n, Some(parent))
+            && let Some(refused) = crate::members::types_problem(store, o, &n, Some(parent), "ids")
         {
-            return Err(up(why));
+            return Err(CommandError { message: format!("its contents cannot move up: {}", refused.message), ..refused });
         }
         // The package itself goes, so its own name is free for what it hands up.
         if let Some(s) = crate::names::clash(store, parent, class, &n, Some(pkg)) {
@@ -747,7 +716,11 @@ fn not_removable(store: &Store, o: Obj) -> CommandError {
 /// data type or an association class its attributes and operations, an association its ends) and the
 /// diagrams, nodes and lines that show them (`element.remove`, through [`crate::UmlNotation`]). A
 /// nested package hands what it holds, and its diagrams, up to its parent first (owner decision); a
-/// top-level package takes them along. A classifier takes the relationships that touch it along,
+/// top-level package takes them along. Either takes its default-diagram binding along, with no
+/// replacement, and a top-level one the bindings of what it holds; a parent's stays (AR-577). An
+/// element that would take along a diagram another element's binding names, unsoundly, is refused
+/// typed as [`Reason::DefaultDiagramOf`], unless that element goes too; the bindings of all that
+/// goes go before any diagram, in whatever order the elements are named (AR-578). A classifier takes the relationships that touch it along,
 /// and an association class among them takes its own ([`going_with`]); a member's type that goes is
 /// dropped from what had it, and so is a default that is a literal that goes (AR-126), as the
 /// property's own type would be. An element a constraint names leaves the constraint's elements, and
@@ -838,7 +811,20 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     // A classifier a binding that stays uses as an argument stays too (AR-131): the binding would
     // be left naming nothing for its parameter.
     let classes: Vec<Obj> = gone_classes.iter().copied().collect();
-    let going: Vec<Obj> = going_with(store, &classes).into_iter().chain(objs.iter().copied()).collect();
+    let with = going_with(store, &classes);
+    // Everything the removal takes along, whose bindings go with it (AR-578): each element with
+    // what it holds, and the relationships that go with the classifiers that go, an association
+    // class with what it holds, whose diagrams go too; a nested package goes alone, as it hands
+    // what it holds and its diagrams up. A diagram that goes stays while the binding of an element
+    // that stays names it, and so does what it is of.
+    let nested = |o: Obj| store.class_of(o).ok() == Some(PACKAGE) && package_of(store, o).is_some();
+    let roots = objs.iter().copied().filter(|o| store.is_alive(*o) && !nested(*o)).chain(with.iter().copied());
+    let doomed: std::collections::BTreeSet<Obj> = roots.flat_map(|o| archforge_diagram::within(store, o).unwrap_or_default()).collect();
+    let plan: std::collections::BTreeSet<Obj> = doomed.iter().copied().chain(objs.iter().copied().filter(|o| nested(*o))).collect();
+    if let Some(refused) = archforge_diagram::defaults::views_removal_problem(store, doomed.iter().copied(), "ids", |b| plan.contains(&b)) {
+        return Err(refused);
+    }
+    let going: Vec<Obj> = with.into_iter().chain(objs.iter().copied()).collect();
     if let Some(why) = crate::bindings::argument_removal_problem(store, &classes, &going) {
         return Err(refuse("ids", why));
     }
@@ -918,6 +904,9 @@ pub fn remove_elements(store: &mut Store, objs: &[Obj]) -> Result<usize, Command
     for profile in taken {
         crate::profiles::before_profile_removal(store, profile)?;
     }
+    // The bindings of everything that goes go first, so none names a diagram that goes before its
+    // owner, in whatever order the elements were selected (AR-578).
+    gone += archforge_diagram::defaults::remove_bindings_of(store, plan).map_err(fail)?;
     // A default that is a literal goes with the literal: an InstanceValue needs its instance.
     let defaults = crate::modifiers::literal_defaults(store);
     for o in all {
@@ -1029,20 +1018,20 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
         ),
         cmd!("uml.model.root", "Make the root package", &["Package"], None, "", always, model_root),
         cmd!(
-            "uml.package.diagram",
+            query "uml.package.diagram",
             "Package's diagram",
             &["Package", "Diagram"],
             None,
             "package: string; the package's id",
             has_packages,
-            package_diagram
+            crate::defaults::entry
         ),
         cmd!(
             "uml.package.move",
             "Move package",
             &["Package"],
             None,
-            "package: string; the package's id; the package Types stays directly under the root package while it holds the built-in types\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package; a package named Types goes directly under the root only while there is no package Types and it holds no classifier with a built-in type's name",
+            "package: string; the package's id; the package Types stays directly under the root package while it holds the built-in types\nto: string = \"\"; the id of the package it goes into, or nothing for the model's root package; only its owner changes: its appearances on diagrams stay where they are and none is added; a package named Types goes directly under the root only while there is no package Types and it holds no classifier with a built-in type's name",
             has_packages,
             package_move
         ),
@@ -1209,6 +1198,24 @@ pub fn specs() -> Vec<CommandSpec<Store, ProjectView>> {
             association_class_move
         ),
         cmd!(query "uml.package.list", "List packages", &["Package"], None, "", always, package_list),
+        cmd!(
+            query "uml.package.default.get",
+            "Package's default diagram",
+            &["Package", "Diagram"],
+            None,
+            "package: string; the id of the package, or of a profile, which has no default diagram\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; given, the default is read only on that revision",
+            always,
+            crate::defaults::default_get
+        ),
+        cmd!(
+            "uml.package.default.set",
+            "Set default diagram",
+            &["Package", "Diagram"],
+            None,
+            "package: string; the package's id\ndiagram: string; the id of one of the package's own class diagrams, its default from now on; the one it is already changes nothing; a package with more than one default keeps one, naming this diagram, and the others are removed\nexpected_revision: object?; the history and the revision the project state gives, {\"history\": h, \"revision\": r}; refused when left out or when the model changed since",
+            has_packages,
+            crate::defaults::default_set
+        ),
         cmd!(query "uml.class.list", "List classes", &["Class"], None, "package: string; the package's id", has_packages, class_list),
         cmd!(query "uml.interface.list", "List interfaces", &["Interface"], None, "package: string; the package's id", has_packages, interface_list),
         cmd!(

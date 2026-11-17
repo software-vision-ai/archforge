@@ -736,6 +736,10 @@ str		A column of an enum type takes no size.	列挙型の列にはサイズを�
 str		{name} follows no column.	{name} はどの列にも従っていません。
 plural		The table has {n} column.	テーブルには {n} 個の列があります。
 str		A package cannot go into itself or a package it holds.	パッケージは、それ自身やそれが含むパッケージの中には移動できません。
+str		The model's root package holds all the other packages, so it stays where it is.	モデルのルートパッケージは他のすべてのパッケージを含むため、今の場所から移動しません。
+str		The package {types} keeps the built-in types: while it holds them, it keeps its name and stays under the root package.	{types} パッケージは組み込み型を保持しています。保持している間は名前を変えず、ルートパッケージの下に残ります。
+str		There is a package {types} already, which keeps the built-in types; a second one can't sit beside it.	組み込み型を保持する {types} パッケージがすでにあります。その隣に 2 つ目を置くことはできません。
+str		The package holds {what} named {name}, a built-in type's name, which in {types} would mean that type. Rename {name} first.	このパッケージには {name} という名前の{what}があります。これは組み込み型の名前で、{types} ではその型を意味することになります。先に {name} の名前を変更してください。
 str		The model cannot be changed at the moment; nothing was changed.	現在モデルは変更できません。何も変更されていません。
 str		There is nothing to undo.	元に戻す操作はありません。
 str		There is nothing to redo.	やり直す操作はありません。
@@ -766,6 +770,19 @@ str		No stereotype is applied yet.	適用されたステレオタイプはまだ
 str		Another change is still under way. Try again once it ends.	別の変更がまだ進行中です。終わってからもう一度お試しください。
 str		The model could not be put back as it was after a failure. Reopen the project to go on.	失敗の後、モデルを元の状態に戻せませんでした。続けるにはプロジェクトを開き直してください。
 str		Undo and redo cannot run as part of another change.	元に戻すとやり直しは、別の変更の一部としては実行できません。
+str		The model has changed since it was read, or another project was read. Read it again and retry. Nothing was changed.	モデルは読み込まれた後に変更されたか、別のプロジェクトが読み込まれました。もう一度読み込んでから、再度お試しください。何も変更されていません。
+str		The change does not name the revision of the model it is for. Read the model and retry. Nothing was changed.	この変更には、どのリビジョンのモデルに対するものかが示されていません。モデルを読み込んでから、再度お試しください。何も変更されていません。
+str		The package has class diagrams, but none is its default. Choose one of them as its default diagram.	このパッケージにはクラス図がありますが、既定の図になっているものはありません。そのいずれかを既定の図として選んでください。
+str		The package has more than one default diagram. Choose the one of its class diagrams that stays its default.	このパッケージには既定の図が複数あります。既定の図として残すクラス図を選んでください。
+str		The package's default diagram no longer exists. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はもう存在しません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram is not a class diagram. Choose one of its class diagrams as its default diagram.	このパッケージの既定の図はクラス図ではありません。そのクラス図のいずれかを既定の図として選んでください。
+str		The package's default diagram belongs to another element. Choose one of its own class diagrams as its default diagram.	このパッケージの既定の図は別の要素のものです。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		This diagram is the default diagram of {package}. Choose another class diagram as the default of {package} first.	この図は {package} の既定の図です。先に別のクラス図を {package} の既定の図として選んでください。
+str		{package} has another element's diagram as its default, so that diagram stays. Choose one of its own class diagrams first.	{package} は別の要素の図を既定の図にしているため、その図は残ります。先に {package} 自身のクラス図のいずれかを選んでください。
+str		No package is given. Give its id.	パッケージが指定されていません。その ID を指定してください。
+str		{name} is not a package.	{name} はパッケージではありません。
+str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} は {package} のクラス図ではありません。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} にはまだクラス図がないため、開くものがありません。先にクラス図を作成してください。
 str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。
@@ -1277,6 +1294,7 @@ str		Relationships carry no skills	関係はスキルを持ちません
 str		Generalization sets carry no skills	汎化セットはスキルを持ちません
 str		This element carries no skills	この要素はスキルを持ちません
 str		Diagram	図
+str		Default diagram	既定の図
 str		Diagram · of {schema}	図 · {schema} の
 str		This diagram	この図
 str		On this diagram · {n}	この図に · {n}
@@ -1392,6 +1410,7 @@ str		Literal · model	リテラル · モデル
 str		Attributes · {n}	属性 · {n}
 str		Literals · {n}	リテラル · {n}
 str		Owner	所有者
+str		Owner: {path}	所有者: {path}
 str		Owner is a package or a classifier. Changing it keeps {name}'s identity, members, relationships and every type that uses it.	所有者はパッケージまたは分類子です。変更しても {name} の同一性、メンバー、リレーションシップ、それを使うすべての型は保たれます。
 str		{kind} · nested in {owner} · model, in every diagram	{kind} · {owner} の中に入れ子 · モデル、すべての図で
 str		Nested classifiers · {n}	入れ子の分類子 · {n}
@@ -1728,12 +1747,10 @@ str		Add package	パッケージを追加
 str		Place package	パッケージを配置
 str		Move package	パッケージを移動
 str		Parent package	親パッケージ
-str		Move {what} into {where}	{what} を {where} に移動
 str		{what} moved into {where}	{what} を {where} に移動しました
 str		Open this package's diagram	このパッケージの図を開く
 str		Open this package's diagram (⌘↓)	このパッケージの図を開く (⌘↓)
 str		This is the top package: zooming out goes no further	ここが最上位のパッケージです。これ以上ズームアウトしても上には移動しません
-str		Only a package this diagram's package holds goes on it	この図のパッケージに含まれるパッケージだけを置けます
 # クラスの関係
 str		A bound can be at most {max}.	境界は最大 {max} までです。
 str		A class realizes only an interface	クラスが実現できるのはインターフェースだけです

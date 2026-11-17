@@ -252,6 +252,8 @@ fn model_words_are_the_catalogues_rows_in_the_language_shown() {
         assert_eq!(kind_label(&universe, class), german(word), "{word}");
     }
     assert_eq!(kind_label(&universe, archforge_uml::GENERALIZATION), german("Generalization"), "UML's keeps its name");
+    // A package's default-diagram binding is the diagrams' one class a comparison lists as the model's.
+    assert_eq!(kind_label(&universe, archforge_diagram::DEFAULT_DIAGRAM_BINDING), german("Default diagram"));
     // A concrete class no notation creates, and a diagram's own, say the one word for the rest.
     assert_eq!(kind_label(&universe, archforge_uml::ACTOR), german("Element"));
     assert_eq!(kind_label(&universe, archforge_diagram::NODE), german("Element"));
@@ -328,8 +330,9 @@ fn every_class_the_notations_create_has_a_kind_word() {
     }
     assert!(created.contains("Interface realization"), "the scan found {created:?}; the scanner is broken");
     let kinds: Vec<String> = crate::model_words::KINDS.iter().map(|c| crate::model_words::words(&universe.class(*c).unwrap().name)).collect();
-    // What a notation draws is the diagram metamodel's: boxes, lines and their labels.
-    for class in created.iter().filter(|c| !["Node", "Edge", "Label"].contains(&c.as_str())) {
+    // What a notation draws is the diagram metamodel's: boxes, lines and their labels. A package's
+    // default-diagram binding is the diagram metamodel's too, worded Default diagram on its own (AR-553).
+    for class in created.iter().filter(|c| !["Node", "Edge", "Label", "Default diagram binding"].contains(&c.as_str())) {
         assert!(kinds.contains(class), "the notations create {class}, which has no kind word; add it to KINDS");
     }
     for class in crate::model_words::KINDS {

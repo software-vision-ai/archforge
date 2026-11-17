@@ -41,6 +41,7 @@ pub mod applications;
 pub mod bindings;
 pub mod commands;
 pub mod constraints;
+pub mod defaults;
 pub mod descriptions;
 pub mod figures;
 pub mod generalization_sets;
@@ -151,6 +152,12 @@ impl Notation for UmlNotation {
         true
     }
 
+    /// A package's first class diagram is its default (Decision 10); a profile, though a kind of
+    /// package, has none (AR-579).
+    fn binds_default(&self, kind: &str, class: ClassId) -> bool {
+        kind == STRUCTURE_DIAGRAM && class == PACKAGE
+    }
+
     /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
     /// association classes and packages as cards, constraints as braces or notes (AR-133), and an
     /// n-ary association as its diamond (AR-128).
@@ -159,7 +166,9 @@ impl Notation for UmlNotation {
     }
 
     /// A package's diagram shows its own classes and, as outsiders, classes of other packages; and
-    /// the packages it holds, each leading to its own diagram (AR-95).
+    /// any package of the model, each leading to its own diagram (AR-95): one of another branch,
+    /// the root, the diagram's own package or an owner of it, placed without changing its owner
+    /// (AR-562).
     fn may_show(&self, store: &Store, diagram: Obj, element: Obj) -> bool {
         let of = store.get(diagram, archforge_diagram::diagram::ELEMENT).ok().and_then(|v| v.as_ref());
         // A profile's diagram shows its stereotypes and the metaclasses they extend, and nothing
@@ -175,7 +184,7 @@ impl Notation for UmlNotation {
             return false;
         }
         match store.class_of(element).ok() {
-            Some(c) if c == PACKAGE => of.is_some() && commands::package_of(store, element) == of,
+            Some(c) if c == PACKAGE => of.is_some() && constraints::in_model(store, element),
             // A constraint shows on any class diagram: its elements may be on several.
             Some(c) if c == CONSTRAINT => of.is_some() && constraints::in_model(store, element),
             // An association is a node only as an n-ary one's diamond (AR-128); a binary one is a line.
