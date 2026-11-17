@@ -115,6 +115,7 @@ mod tests {
         steps.iter().map(|s| (s.source, s.destination)).collect()
     }
 
+    /// Entering A → B → A → B and zooming out returns B → A → B → A, each return consuming one step and adding none.
     #[test]
     fn a_return_walks_back_repeated_visits_in_order() {
         // A → B → A → B: three entries.
@@ -134,6 +135,7 @@ mod tests {
         assert_eq!(route.take_return(1, |_| true), Return::default());
     }
 
+    /// A route keeps 256 steps; the 257th drops the oldest and only it.
     #[test]
     fn a_route_keeps_the_newest_steps_up_to_its_bound() {
         let mut route = Route::default();
@@ -167,6 +169,7 @@ mod tests {
         assert_eq!(last, Some(entry(0).source));
     }
 
+    /// An entry whose source is its destination leaves the route as it was.
     #[test]
     fn entering_a_diagram_from_itself_records_nothing() {
         let mut route = Route::default();
@@ -178,6 +181,7 @@ mod tests {
         assert_eq!(route.take_return(1, |_| true).reached, Some(step(1, 2)));
     }
 
+    /// A return passes over one step whose source is gone, consumes it, and names it among the skipped.
     #[test]
     fn a_return_skips_one_source_that_is_gone() {
         let mut route = Route::default();
@@ -192,6 +196,7 @@ mod tests {
         assert_eq!(route.len(), 1);
     }
 
+    /// A return passes over several gone sources in a row, newest first, and stops at the nearest one left.
     #[test]
     fn a_return_skips_several_sources_that_are_gone_in_a_row() {
         let mut route = Route::default();
@@ -206,6 +211,7 @@ mod tests {
         assert_eq!(route.take_return(1, |_| true).reached, Some(step(1, 2)));
     }
 
+    /// When no source can be shown, a return reaches nothing, skips every step and leaves the route empty.
     #[test]
     fn a_route_with_no_source_left_ends_empty() {
         let mut route = Route::default();
@@ -218,6 +224,7 @@ mod tests {
         assert!(route.is_empty());
     }
 
+    /// A step made in another session history is skipped though its source passes the check.
     #[test]
     fn a_step_of_another_history_leads_nowhere() {
         let mut route = Route::default();
@@ -235,6 +242,7 @@ mod tests {
         assert_eq!(back.skipped, vec![step(1, 2)]);
     }
 
+    /// Clearing a route leaves nothing for a return to take.
     #[test]
     fn clear_forgets_every_step() {
         let mut route = Route::default();
