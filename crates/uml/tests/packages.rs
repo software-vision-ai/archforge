@@ -228,39 +228,37 @@ fn the_sweep_finds_no_command_that_breaks_the_store_with_packages_nested() {
     let _ = Value::Null;
 }
 
+/// A package leads to its default class diagram, the one its binding names: `uml.package.diagram`
+/// refuses a package with none yet and makes nothing, then gives its first diagram, and the one
+/// `uml.package.default.set` chooses once it is chosen, though another was made first. It only
+/// reads: no undo step (AR-582). A diagram named like its package follows the package's renames.
 #[test]
-fn a_package_leads_to_one_class_diagram_of_its_own_named_like_it() {
+fn a_package_leads_to_its_default_class_diagram_and_entry_never_makes_one() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
-    // The first ask makes it, as one undo step; the next ones find the same diagram.
-    let made = s.execute("uml.package.diagram", &json!({ "package": orders })).unwrap().value;
-    assert_eq!(made["made"], true);
-    let d = made["id"].as_str().unwrap().to_string();
-    let again = s.execute("uml.package.diagram", &json!({ "package": orders })).unwrap().value;
-    assert_eq!((again["id"].as_str().unwrap(), again["made"].as_bool()), (d.as_str(), Some(false)), "never a second");
-    let diagram = obj(&s, &d);
-    let st = s.doc();
-    assert_eq!(st.get(diagram, archforge_diagram::diagram::KIND).unwrap().as_str(), Some(archforge_uml::STRUCTURE_DIAGRAM));
-    assert_eq!(st.get(diagram, archforge_diagram::diagram::ELEMENT).unwrap().as_ref(), Some(obj(&s, &orders)));
-    assert_eq!(st.get(diagram, archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Orders"));
-    // Made as diagram.add makes one: its lines at right angles around the classes.
-    let look = st.get(diagram, archforge_diagram::diagram::STYLE).unwrap().as_ref().expect("its style");
-    assert_eq!(st.get(look, archforge_diagram::style::ROUTING).unwrap(), Value::Enum(archforge_diagram::Routing::RightAngled.index()));
-    assert_eq!(st.get(look, archforge_diagram::style::AVOID).unwrap(), Value::Bool(true));
-    assert_eq!(archforge_uml::commands::diagram_of(s.doc(), obj(&s, &orders)), Some(diagram));
+    refused(&mut s, "uml.package.diagram", json!({ "package": orders }), "has no class diagram yet, so none opens");
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }));
+    let detail = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": orders, "name": "Detail" }));
+    let entered = |s: &mut S| {
+        let (at, label) = (s.token(), s.undo_label().map(str::to_string));
+        let id = run(s, "uml.package.diagram", json!({ "package": orders }));
+        assert_eq!((s.token(), s.undo_label().map(str::to_string)), (at, label), "it only reads");
+        id
+    };
+    assert_eq!(entered(&mut s), d, "its first diagram, its default");
+    let at = s.token();
+    let token = json!({ "history": at.history, "revision": at.revision });
+    run(&mut s, "uml.package.default.set", json!({ "package": orders, "diagram": detail, "expected_revision": token }));
+    assert_eq!(entered(&mut s), detail, "the one chosen, though made second");
     s.undo().unwrap();
-    s.undo().unwrap();
-    assert!(!alive(&s, &d), "undo takes the diagram back");
-    s.redo().unwrap();
-    s.redo().unwrap();
+    assert_eq!(entered(&mut s), d, "undone, the first again");
     // Renamed, the package takes its diagram's name along while the diagram still has the old one.
     run(&mut s, "uml.package.rename", json!({ "package": orders, "name": "Ordering" }));
     assert_eq!(s.doc().get(obj(&s, &d), archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Ordering"));
     run(&mut s, "diagram.rename", json!({ "diagram": d, "name": "Order flow" }));
     run(&mut s, "uml.package.rename", json!({ "package": orders, "name": "Orders" }));
     assert_eq!(s.doc().get(obj(&s, &d), archforge_diagram::diagram::NAME).unwrap().as_str(), Some("Order flow"), "a name of its own stays");
-    round_trip(&mut s, "uml.package.diagram", json!({ "package": sales }));
 }
 
 /// A structure diagram shows any package of its model as a tabbed card, whichever package holds it

@@ -596,8 +596,7 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   preview, the revision given is the preview's own, which never matches: read again once the drag
   ends.
 - **A package's default diagram**: a package's first class diagram is its default from the
-  moment it is made: `diagram_add`, or `uml_package_diagram` when it makes one, binds it in the same
-  undo step. A second class diagram leaves the default as it is, a profile's diagram is no one's
+  moment it is made: `diagram_add` binds it in the same undo step. A second class diagram leaves the default as it is, a profile's diagram is no one's
   default, and a package that has class diagrams but no default gets none by adding another.
   `uml_package_default_get` (`uml.package.default.get`) reads the
   diagram a package opens to, from the one binding that names it, never the first diagram found.
@@ -606,7 +605,12 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   has no default. A package whose binding is unsound (class diagrams but no default, more than one
   default, a default that is gone, is no class diagram or belongs to another element) is refused
   with the ids concerned and what to choose. Given `expected_revision`, it answers only on that
-  revision and refuses another as changed since read. It only reads. A package's default diagram
+  revision and refuses another as changed since read. It only reads. `uml_package_diagram`
+  (`uml.package.diagram`) gives `{"id": …}`, the diagram a package opens to: its default, the one
+  Open, ⌘↓ and zooming in reach in the window. It only reads and never makes a diagram, so its
+  answer no longer has `made`. A package with no class diagram yet is refused as having none, and
+  one whose binding is unsound is refused as `uml_package_default_get` refuses it; make a diagram
+  with `diagram_add` or choose one with `uml_package_default_set` first. A package's default diagram
   is not removed: `diagram_remove` of it is refused, naming the package, until another of the
   package's class diagrams is its default; its other diagrams are removed as before and leave the
   default as it is. A diagram another package names as its default, which is unsound, is kept the

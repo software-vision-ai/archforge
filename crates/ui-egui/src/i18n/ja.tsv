@@ -782,6 +782,7 @@ str		{package} has another element's diagram as its default, so that diagram sta
 str		No package is given. Give its id.	パッケージが指定されていません。その ID を指定してください。
 str		{name} is not a package.	{name} はパッケージではありません。
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} は {package} のクラス図ではありません。このパッケージ自身のクラス図のいずれかを既定の図として選んでください。
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} にはまだクラス図がないため、開くものがありません。先にクラス図を作成してください。
 str		This could not be done because of an internal error. Nothing was changed.	内部エラーのため実行できませんでした。何も変更されていません。
 str		The text can't be empty.	テキストは空にできません。
 str		It can't be longer than {max} characters.	使えるのは {max} 文字までです。

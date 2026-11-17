@@ -3,7 +3,8 @@
 //! has none yet, or names what is wrong with its binding. It never falls back to the first diagram
 //! found, and it changes nothing. A profile has no default. `uml.package.default.get` answers it to
 //! agents (AR-576), and `uml.package.default.set` chooses it, the one explicit way to make or mend
-//! a binding (AR-580).
+//! a binding (AR-580). `uml.package.diagram` gives the diagram a package opens to from it, and
+//! makes none (AR-582).
 
 use archforge_diagram::default_diagram_binding::{DEFAULT_DIAGRAM, OWNER_ELEMENT};
 use archforge_diagram::{DEFAULT_DIAGRAM_BINDING, DIAGRAM, ProjectView, defaults, diagram};
@@ -125,6 +126,25 @@ pub(crate) fn default_get(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> 
         Err(problem) => return Err(invalid(store, package, &problem)),
     };
     Ok(json!({ "package": uuid_of(store, package)?, "state": state, "binding": binding, "diagram": diagram }))
+}
+
+/// `uml.package.diagram`: the id of the class diagram the package under `package` opens to, its
+/// default as [`resolve`] reads it from its one binding, the same target Open, keys and zoom
+/// reach. It only reads and never makes a diagram: a package with no structure diagram yet is
+/// refused as [`Reason::NoDiagramYet`], an unsound binding as [`Reason::InvalidBinding`] (AR-582).
+pub(crate) fn entry(ctx: &mut Ctx<'_, Store, ProjectView>, p: &Params) -> Result<Json, CommandError> {
+    let store = &*ctx.doc;
+    let package = id_of(store, p, "package", PACKAGE, "package")?;
+    match resolve(store, package) {
+        Ok(DefaultDiagram::Bound(d)) => Ok(json!({ "id": uuid_of(store, d)? })),
+        // A live package's default always applies, so `DoesNotApply` never comes here.
+        Ok(DefaultDiagram::NoDiagramYet | DefaultDiagram::DoesNotApply) => {
+            let named = name_or_id(store, package);
+            let said = format!("the package {named} has no class diagram yet, so none opens; make one for it with diagram.add first");
+            Err(CommandError::about("package", said).because(Reason::NoDiagramYet { package: named.into() }))
+        }
+        Err(problem) => Err(invalid(store, package, &problem)),
+    }
 }
 
 /// `uml.package.default.set`: makes the class diagram under `diagram` the default of the package

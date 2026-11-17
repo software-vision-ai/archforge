@@ -37,6 +37,7 @@ is and clears the history it belonged to.
 | `Reason::InvalidBinding`, `BindingFault` | a package's default diagram that cannot be read, as its default-diagram binding is unsound: `Missing` (diagrams but no default), `Duplicate`, `DeadTarget` (no diagram that exists), `WrongKind` or `WrongOwner` (another element's diagram); an interface says what to choose (AR-576) |
 | `Reason::DefaultDiagramOf` | a diagram that stays while a default-diagram binding names it: `package` (the binding's owner, by name or id) and `fault`, none for that package's own default and `WrongOwner` for another element's diagram; boxed text, so `Reason` stays 48 bytes (AR-578) |
 | `Reason::NotOwnDiagram` | a class diagram chosen as a package's default that is not one of that package's own: `diagram` and `package`, each by name or id, as boxed text (AR-580) |
+| `Reason::NoDiagramYet` | a package with no class diagram yet, so no default diagram to open: `package`, by name or id, as boxed text; one has to be made for it first (AR-582) |
 | `Session::execute` | `pub fn execute(&mut self, id: &str, params: &Value) -> Result<Outcome, EngineError>` |
 | `Session::{undo, redo, batch, replay}` | history, several commands as one step, a journal entry again |
 | `Session::{execute_from, batch_from}`, `Session::{undo_origin, redo_origin}` | a call or a batch on behalf of an origin (a chat): its step carries the origin, is labelled `<origin>: <label>` and never merges into another origin's step; the origin of the steps undo and redo would take |

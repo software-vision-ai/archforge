@@ -1,7 +1,9 @@
 //! Package navigation (AR-95, AR-110, from the design's "Canvas · A package on a class diagram,
 //! selected, with Open and the path bar", "Canvas · Inside a package: the path bar leads back" and
 //! "Package navigation · thresholds, keys and transitions" frames). Each package on a class
-//! diagram leads to its own class diagram, made with the package when it is placed.
+//! diagram leads to its default class diagram, the one its binding names (Decision 10); entering
+//! never makes one, and a package with none, or an unsound binding, opens nothing and says why
+//! (AR-582).
 //!
 //! - **In**: a selected package's Open, ⌘↓, or zooming in until one package covers
 //!   [`ENTER_COVER`] of the canvas opens the package's diagram at 100 %, its content centred.
@@ -112,8 +114,11 @@ fn run(shell: &mut Shell, id: &str, params: serde_json::Value) -> Result<serde_j
     crate::panels::run(shell, id, params)
 }
 
-/// The diagram `package` leads to, made when it has none.
-fn diagram_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
+/// The default diagram of `package`, which entry opens, as the query `uml.package.diagram` gives it
+/// to agents too; none for a package with no class diagram yet or an unsound binding, whose
+/// refusal the notice under the path bar says: what is wrong, and that a diagram has to be made
+/// or chosen first. Nothing is made (AR-582).
+fn default_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
     match run(shell, "uml.package.diagram", json!({ "package": package.to_string() })) {
         Ok(v) => v.get("id").and_then(|i| i.as_str()).and_then(Uuid::parse),
         Err(e) => {
@@ -126,7 +131,7 @@ fn diagram_of(shell: &mut Shell, package: Uuid) -> Option<Uuid> {
 /// Opens the diagram of `package`, fitted, keeping the view of the diagram left.
 pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
     let Some(from) = shell.canvas.active else { return };
-    let Some(d) = diagram_of(shell, package) else { return };
+    let Some(d) = default_of(shell, package) else { return };
     shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
     if d != from {
         shell.canvas.nav.came_from.insert(d, from);
@@ -145,8 +150,8 @@ pub(crate) fn enter(shell: &mut Shell, package: Uuid, now: f64) {
 /// package just left) at 100 % with that package centred; by the path bar or ⌘↑ as it was left.
 pub(crate) fn leave(shell: &mut Shell, package: Uuid, reveal: Option<Uuid>, now: f64) {
     let from = shell.canvas.active;
-    // The diagram of `package` the way in came through, while it is still of it; else its first.
-    let Some(d) = from.and_then(|f| entered_from(shell, f, package)).or_else(|| diagram_of(shell, package)) else { return };
+    // The diagram of `package` the way in came through, while it is still of it; else its default.
+    let Some(d) = from.and_then(|f| entered_from(shell, f, package)).or_else(|| default_of(shell, package)) else { return };
     if let Some(from) = from {
         shell.canvas.nav.views.insert(from, (shell.canvas.pan, shell.canvas.zoom));
     }

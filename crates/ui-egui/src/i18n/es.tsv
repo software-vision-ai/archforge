@@ -782,6 +782,7 @@ str		{package} has another element's diagram as its default, so that diagram sta
 str		No package is given. Give its id.	No se ha indicado ningún paquete. Indica su identificador.
 str		{name} is not a package.	{name} no es un paquete.
 str		{diagram} is not one of the class diagrams of {package}. Choose one of its own class diagrams as its default diagram.	{diagram} no es uno de los diagramas de clases de {package}. Elija uno de sus propios diagramas de clases como diagrama predeterminado.
+str		{package} has no class diagram yet, so there is nothing to open. Create a class diagram for it first.	{package} aún no tiene ningún diagrama de clases, así que no hay nada que abrir. Cree primero un diagrama de clases para él.
 str		This could not be done because of an internal error. Nothing was changed.	No se pudo hacer por un error interno. No se ha cambiado nada.
 str		The text can't be empty.	El texto no puede estar vacío.
 str		It can't be longer than {max} characters.	Se admiten como máximo {max} caracteres.
