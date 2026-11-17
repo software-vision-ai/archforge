@@ -1734,7 +1734,6 @@ str		Add package	Ajouter un paquetage
 str		Place package	Placer le paquetage
 str		Move package	Déplacer le paquetage
 str		Parent package	Paquetage parent
-str		Move {what} into {where}	Déplacer {what} dans {where}
 str		{what} moved into {where}	{what} déplacé dans {where}
 str		Open this package's diagram	Ouvrir le diagramme de ce paquetage
 str		Open this package's diagram (⌘↓)	Ouvrir le diagramme de ce paquetage (⌘↓)

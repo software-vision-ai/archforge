@@ -530,24 +530,20 @@ itself stays.
 
 ### Move a package
 
-A package moves into another package with everything it holds and its own diagram. Four ways
-lead there:
+A package moves into another package with everything it holds and its own diagram. Two ways lead
+there:
 
-- **On a diagram**, drag its card onto another package's card. While you hold it there, that
-  card is ringed and a label says what the drop does (*Move Sales into Billing*). Let go, and the
-  package leaves this diagram for the diagram of its new home, and a message at the bottom of the
-  canvas offers **Undo**.
-- **Up the path bar**: drag a card onto one of the packages named in the path bar, such as your
-  project's root, to move it up there.
 - **In Models**, drag its row onto another package's row, or onto a class there.
 - **In Properties**, select it and choose its **Parent package**. The menu
   lists every package it may go into, never itself nor one it holds.
 
 A package can't go into itself or into a package it holds. In Models, such a row is ringed in
-amber while you hold the package over it, and the drop is refused with the reason. A card you
-drag on a diagram and let go anywhere but on a package only changes its place on the diagram; the
-model is not changed. Each move is one step
-you can undo, and the project keeps it once saved.
+amber while you hold the package over it, and the drop is refused with the reason. Each move is
+one step you can undo, and the project keeps it once saved.
+
+Dragging a card on a diagram only arranges the diagram, wherever you let it go: over another
+package's card, or over a package named in the path bar, it keeps its package. Drag several
+selected cards at once, and one Undo puts them all back.
 
 <!-- picture: workspace-package-parent light | Properties for the package Sales: its Parent package menu lists the root and Billing -->
 
