@@ -91,8 +91,10 @@ fn parent_of(s: &S, id: &str) -> Option<archforge_mof::Obj> {
     archforge_uml::commands::package_of(s.doc(), obj(s, id))
 }
 
+/// Packages nest as deep as needed, a name told apart among siblings whatever the case; the list
+/// names each package's parent and its owners from the root down (AR-562).
 #[test]
-fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_each_parent() {
+fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_each_parent_and_path() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "sales" }));
     round_trip(&mut s, "uml.package.add", json!({ "name": "orders", "parent": sales }));
@@ -111,6 +113,9 @@ fn packages_nest_their_names_are_told_apart_among_siblings_and_the_list_names_ea
         [("Model", None), ("sales", Some(root)), ("orders", Some(sales.as_str())), ("lines", Some(orders.as_str())), ("orders", Some(root))],
         "a package with no parent goes into the root, which this unnamed model calls Model"
     );
+    // Each names its owners from the root down, as its card does; the root names none (AR-562).
+    let paths: Vec<Vec<&str>> = listed.iter().map(|p| p["path"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect()).collect();
+    assert_eq!(paths, [vec![], vec!["Model"], vec!["Model", "sales"], vec!["Model", "sales", "orders"], vec!["Model"]]);
     assert_eq!(parent_of(&s, &deep), Some(obj(&s, &orders)));
 }
 
@@ -258,19 +263,20 @@ fn a_package_leads_to_one_class_diagram_of_its_own_named_like_it() {
     round_trip(&mut s, "uml.package.diagram", json!({ "package": sales }));
 }
 
+/// A structure diagram shows any package of its model as a tabbed card, whichever package holds it
+/// (AR-562).
 #[test]
-fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
+fn a_structure_diagram_shows_packages_from_anywhere_in_its_model_as_tabbed_cards() {
     let mut s = session();
     let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
     let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
     let billing = run(&mut s, "uml.package.add", json!({ "name": "Billing" }));
     run(&mut s, "uml.class.add", json!({ "package": orders, "name": "Order" }));
     run(&mut s, "uml.package.add", json!({ "name": "Lines", "parent": orders }));
-    let d = run(&mut s, "diagram.add", json!({ "kind": "uml.class", "element": sales, "name": "Sales" }));
-    // A package Sales holds goes on its diagram; one it does not hold is refused.
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    // A package Sales holds goes on its diagram, and so does one it does not hold.
     let node = run(&mut s, "diagram.place", json!({ "diagram": d, "element": orders, "x": 0, "y": 0 }));
-    let e = s.execute("diagram.place", &json!({ "diagram": d, "element": billing, "x": 300, "y": 0 })).expect_err("another package's");
-    assert!(!e.to_string().is_empty());
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": billing, "x": 300, "y": 0 }));
     let st = s.doc();
     let n = obj(&s, &node);
     let b = archforge_diagram::grid::bounds_of(st, n);
@@ -280,6 +286,92 @@ fn a_class_diagram_shows_the_packages_its_package_holds_as_tabbed_cards() {
     assert_eq!(card.eyebrow, archforge_diagram::figure::Text::said("Package"));
     assert_eq!(card.name, "Orders");
     assert!(card.compartments.is_empty() && card.hidden == 0, "no rows: its card shows its own diagram instead (AR-113)");
+}
+
+/// The id of the root package.
+fn root_id(s: &S) -> String {
+    s.doc().uuid(archforge_uml::commands::root_package(s.doc()).unwrap()).unwrap().to_string()
+}
+
+/// The reason and the English sentence `cmd` is refused with; the store, the revision and the
+/// history as they were.
+fn refusal(s: &mut S, cmd: &str, p: Json) -> (Option<archforge_engine::Reason>, String) {
+    let (before, revision, label) = (snapshot(s), s.revision(), s.undo_label().map(str::to_string));
+    let Err(archforge_engine::EngineError::Failed { error, .. }) = s.execute(cmd, &p) else { panic!("{cmd} {p} is refused") };
+    assert_eq!((snapshot(s), s.revision(), s.undo_label().map(str::to_string)), (before, revision, label), "{cmd} {p} changed nothing");
+    (error.reason, error.message)
+}
+
+/// A package of another branch, the root, an owner of the diagram's package and that package
+/// itself are each placed by id as an appearance of the package there is: no package made, its
+/// owner kept, one undo step undone and redone exactly, and the rows read back the same (AR-562).
+#[test]
+fn a_package_from_another_branch_the_root_and_an_owner_appear_without_changing_owner() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let orders = run(&mut s, "uml.package.add", json!({ "name": "Orders", "parent": sales }));
+    let operations = run(&mut s, "uml.package.add", json!({ "name": "Operations" }));
+    let archive = run(&mut s, "uml.package.add", json!({ "name": "Archive", "parent": operations }));
+    let root = root_id(&s);
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": orders, "name": "Orders" }));
+    let count = archforge_uml::commands::all_packages(s.doc()).len();
+    for (i, id) in [&archive, &root, &sales, &orders].into_iter().enumerate() {
+        let owner = parent_of(&s, id);
+        round_trip(&mut s, "diagram.place", json!({ "diagram": d, "element": id, "x": 300 * i, "y": 0 }));
+        let (_, _, nodes) = archforge_diagram::views_of(s.doc(), obj(&s, id));
+        assert_eq!(nodes.len(), 1, "one appearance of {id}");
+        assert_eq!(archforge_diagram::diagram_of(s.doc(), nodes[0]), Some(obj(&s, &d)));
+        assert_eq!(parent_of(&s, id), owner, "{id} keeps its owner");
+        assert_eq!(archforge_uml::commands::all_packages(s.doc()).len(), count, "no package made");
+    }
+    assert_eq!(parent_of(&s, &archive), Some(obj(&s, &operations)));
+    assert_eq!(format!("{:?}", archforge_mof::rows::snapshot(&reread(&s), &tables().0, &tables().1).unwrap()), snapshot(&s), "rows read back");
+}
+
+/// A package placed twice is refused as shown already; an id from another project's store names
+/// no element here; a profile's diagram shows no package: each refusal typed, nothing changed and
+/// no undo step (AR-562).
+#[test]
+fn a_package_shown_already_one_of_another_project_and_one_on_a_profiles_diagram_are_refused() {
+    use archforge_engine::Reason;
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let archive = run(&mut s, "uml.package.add", json!({ "name": "Archive" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    run(&mut s, "diagram.place", json!({ "diagram": d, "element": archive, "x": 0, "y": 0 }));
+    let shown = refusal(&mut s, "diagram.place", json!({ "diagram": d, "element": archive, "x": 300, "y": 0 }));
+    assert_eq!(shown, (Some(Reason::ShownAlready { name: "Archive".into() }), "the diagram shows this element already".into()));
+    // Another project's ids are counted elsewhere, so none of its packages is found here.
+    let mut other = over({
+        let mut st = store(1 << 40);
+        st.create(archforge_core::MODEL).unwrap();
+        st
+    });
+    let elsewhere = run(&mut other, "uml.package.add", json!({ "name": "Elsewhere" }));
+    let foreign = refusal(&mut s, "diagram.place", json!({ "diagram": d, "element": elsewhere, "x": 300, "y": 0 }));
+    assert_eq!(foreign.0, Some(Reason::NoElement { id: elsewhere }));
+    // A profile's diagram shows its stereotypes and their metaclasses alone.
+    let profile = run(&mut s, "uml.profile.add", json!({ "name": "Audit", "package": sales }));
+    let pd = s.execute("uml.profile.diagram", &json!({ "profile": profile })).unwrap().value["id"].as_str().unwrap().to_string();
+    for id in [&archive, &sales, &root_id(&s)] {
+        let outside = refusal(&mut s, "diagram.place", json!({ "diagram": pd, "element": id, "x": 0, "y": 0 }));
+        assert!(matches!(outside.0, Some(Reason::OutsideDiagram { .. })), "{outside:?}");
+    }
+}
+
+/// A package outside the model, such as one left unowned in a store, is shown on no diagram
+/// (AR-562).
+#[test]
+fn a_package_outside_the_model_is_shown_on_no_diagram() {
+    let mut s = session();
+    let sales = run(&mut s, "uml.package.add", json!({ "name": "Sales" }));
+    let d = run(&mut s, "diagram.add", json!({ "kind": STRUCTURE_DIAGRAM, "element": sales, "name": "Sales" }));
+    let mut st = reread(&s);
+    let loose = st.create(PACKAGE).unwrap();
+    let diagram = st.by_uuid(Uuid::parse(&d).unwrap()).unwrap();
+    let ui = archforge_uml::UmlNotation;
+    assert!(!archforge_diagram::Notation::may_show(&ui, &st, diagram, loose), "no owner, no model");
+    assert!(archforge_diagram::Notation::may_show(&ui, &st, diagram, st.by_uuid(Uuid::parse(&sales).unwrap()).unwrap()));
 }
 
 #[test]

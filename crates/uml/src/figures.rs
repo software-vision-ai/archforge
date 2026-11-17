@@ -749,7 +749,7 @@ fn package_card(store: &Store, p: Obj) -> Card {
 /// The names of the packages that own the package `p`, from the model's root down to its parent:
 /// empty for the root, which has none. At most [`MAX_OWNERS`] of them, the nearest kept, since a
 /// card is built every frame.
-fn owner_path(store: &Store, p: Obj) -> Vec<String> {
+pub(crate) fn owner_path(store: &Store, p: Obj) -> Vec<String> {
     let mut owners = Vec::new();
     let mut at = p;
     while owners.len() < MAX_OWNERS {
