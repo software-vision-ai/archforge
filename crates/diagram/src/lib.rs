@@ -51,6 +51,12 @@ pub trait DiagramView: archforge_engine::View<Store> {
         let _ = kind;
         false
     }
+    /// Whether the first diagram of `kind` of an element of `class` becomes that element's default
+    /// as `diagram.add` makes it ([`crate::Notation::binds_default`]). None does by default.
+    fn binds_default(&self, kind: &str, class: ClassId) -> bool {
+        let _ = (kind, class);
+        false
+    }
     /// Whether a diagram of `kind` shows elements of `class` as nodes.
     fn shows(&self, kind: &str, class: ClassId) -> bool;
     /// Whether `diagram` may show `element`, beyond its class: a notation keeps a diagram to its own

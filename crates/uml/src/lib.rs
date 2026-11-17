@@ -152,6 +152,12 @@ impl Notation for UmlNotation {
         true
     }
 
+    /// A package's first class diagram is its default (Decision 10); a profile, though a kind of
+    /// package, has none (AR-579).
+    fn binds_default(&self, kind: &str, class: ClassId) -> bool {
+        kind == STRUCTURE_DIAGRAM && class == PACKAGE
+    }
+
     /// A class diagram shows classes, interfaces, enumerations, data types, primitive types,
     /// association classes and packages as cards, constraints as braces or notes (AR-133), and an
     /// n-ary association as its diamond (AR-128).
