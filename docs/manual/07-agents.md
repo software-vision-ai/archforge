@@ -583,6 +583,13 @@ start `archforge-cli` itself. Keep its other tools to what you trust it with.
   packages with `uml_package_list`, a class's relationships with `uml_relationship_list` and an
   element's constraints with `uml_constraint_list`, or, with `--compact`, `execute_command` given
   the command ids `uml.package.list`, `uml.relationship.list` and `uml.constraint.list`.
+  `uml_package_list` gives each package's `path`: the names of the packages that own it, from the
+  root package down to its parent, empty for the root package itself.
+- **Packages on a class diagram**: `diagram_place` puts any package of the model on a class
+  diagram, wherever it is owned: one of another branch, the root package, the diagram's own
+  package or one that holds it. The package is shown there and keeps its owner; nothing is copied.
+  A package the diagram shows already is refused as shown already, an id that names no element of
+  this project as no element, and a profile's diagram shows no package.
   A command that changes the model only on the revision the agent read takes `expected_revision`,
   `{"history": h, "revision": r}` as `inspect_document` gives them. Another revision, another
   history, or none at all is refused and changes nothing. While a drag in the window shows a
