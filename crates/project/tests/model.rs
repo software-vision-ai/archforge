@@ -11,7 +11,7 @@ use archforge_dolt::{Dolt, Home, ServerOptions};
 use archforge_mof::rows;
 use archforge_mof::{Store, Uuid, Value};
 use archforge_notations::Session;
-use archforge_project::{EARLIER_MODELS, Error, ModelSchema, Project, timestamp};
+use archforge_project::{EARLIER_MODELS, Error, MOST_UNKNOWN_KINDS, ModelSchema, Project, SafeBranch, timestamp};
 use mysql::prelude::Queryable;
 use serde_json::{Value as Json, json};
 
@@ -496,6 +496,37 @@ fn a_project_of_an_earlier_archforge_gets_the_columns_and_tables_added_since() {
     assert_eq!(in_use, 1);
     // Opened again, nothing more to add.
     project.prepare_model(&schema).unwrap();
+    drop(c);
+    project.close().unwrap();
+}
+
+/// The kinds outside the known ones are read raw, before the project is prepared: none without a
+/// diagram table; on a table of an earlier shape whose text compares without case, each kind once
+/// and apart from those differing only in case, an empty one as `""`, a long one cut, at most
+/// [`MOST_UNKNOWN_KINDS`]; another kind of table is refused. The reading writes nothing.
+#[test]
+fn the_diagram_kinds_outside_the_known_ones_are_read_raw_on_every_shape() {
+    let env = Env::new("kinds");
+    let project = Project::create(&env.dolt, &env.opts(), &env.base.join("Projects"), "Kinds", "test", &timestamp(1_761_670_800)).unwrap();
+    let (main, known) = (SafeBranch::default(), ["er", "uml.class"]);
+    assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), Vec::<String>::new(), "no diagram table");
+    let mut c = working(&project);
+    c.query_drop("CREATE TABLE diagram_diagram (id INT NOT NULL PRIMARY KEY, kind MEDIUMTEXT COLLATE utf8mb4_0900_ai_ci NULL, name MEDIUMTEXT NULL)")
+        .unwrap();
+    c.query_drop("INSERT INTO diagram_diagram (id, kind) VALUES (1, 'er'), (2, 'legacy.kind'), (3, 'legacy.kind'), (4, 'ER'), (5, NULL), (6, ''), (7, REPEAT('x', 300)), (8, 'uml.class')").unwrap();
+    let before = untouched(&project);
+    let long = "x".repeat(256);
+    assert_eq!(project.unknown_diagram_kinds(&main, &known).unwrap(), ["", "ER", "legacy.kind", long.as_str()]);
+    assert_eq!(untouched(&project), before, "nothing written");
+    for n in 0..20 {
+        c.exec_drop("INSERT INTO diagram_diagram (id, kind) VALUES (?, ?)", (100 + n, format!("k{n:02}"))).unwrap();
+    }
+    // Known kinds that none of the diagrams has leave every row read to the unknown ones.
+    let most = project.unknown_diagram_kinds(&main, &["absent.a", "absent.b"]).unwrap();
+    assert_eq!((most.len(), &most[..4]), (MOST_UNKNOWN_KINDS, &["".to_string(), "ER".into(), "er".into(), "k00".into()][..]));
+    c.query_drop("DROP TABLE diagram_diagram").unwrap();
+    c.query_drop("CREATE VIEW diagram_diagram AS SELECT 'legacy.kind' AS kind").unwrap();
+    assert!(matches!(project.unknown_diagram_kinds(&main, &known), Err(Error::Damaged { .. })));
     drop(c);
     project.close().unwrap();
 }
